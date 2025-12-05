@@ -20,7 +20,7 @@ Cm (シーマイナー) is a next-generation programming language designed for b
 
 ## Development Language
 
-- **C++17** (required)
+- **C++20** (required)
 - **Recommended**: Clang 17+ (fast compile, good errors)
 - **Alternative**: GCC 13+
 - MSVC 2017+ (Windows)
@@ -73,7 +73,7 @@ ctest --test-dir build -L integration
 
 ## Coding Conventions
 
-- **Language**: C++17
+- **Language**: C++20
 - **Naming**: `snake_case` for functions/variables, `PascalCase` for types
 - **Smart Pointers**: `std::unique_ptr` for AST/IR node ownership
 - **Variant**: `std::variant` for IR node types
@@ -82,7 +82,7 @@ ctest --test-dir build -L integration
 ## Key Design Decisions
 
 1. **Transpiler First**: HIR → Rust/WASM/TS (Phase 1)
-2. **C++17**: Wide compiler support, sufficient modern features
+2. **C++20**: Modern features (Concepts, Ranges, Coroutines)
 3. **Multi-Target HIR**: Designed for Rust ∩ TypeScript common subset
 4. **Future Native**: Cranelift or LLVM in Phase 3
 

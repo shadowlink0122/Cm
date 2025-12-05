@@ -5,8 +5,8 @@ project(Cm
     DESCRIPTION "Cm Programming Language Compiler"
 )
 
-# C++17 required
-set(CMAKE_CXX_STANDARD 17)
+# C++20 required
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
