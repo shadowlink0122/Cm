@@ -95,6 +95,16 @@ if(BUILD_TESTING)
         )
         target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
+
+        # Unit tests - MIR Lowering
+        add_executable(mir_lowering_test
+            tests/unit/mir_lowering_test.cpp
+            src/frontend/lexer/token.cpp
+            src/frontend/parser/parser_stmt.cpp
+            src/frontend/parser/parser_expr.cpp
+        )
+        target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
     else()
         message(STATUS "Google Test not found, skipping C++ tests")
         message(STATUS "Install with: brew install googletest (macOS)")
