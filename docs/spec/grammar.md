@@ -289,13 +289,14 @@ module_path     ::= IDENT { '::' IDENT }
 ## 予約語
 
 ```
-async, await, break, const, continue, delete, else, export, extern,
+async, await, break, const, continue, delete, else, enum, export, extern,
 false, for, if, impl, import, inline, interface, match, mutable, new,
-null, private, return, static, struct, this, true, void, volatile, while
+null, private, return, static, struct, this, true, void, volatile, while, with
 ```
 
 ## TODO
 
 - [ ] ジェネリクス制約 (`where T: Interface`)
-- [ ] 列挙型 (`enum`)
+- [x] 列挙型 (`enum`)
 - [ ] マクロ
+- [x] 自動実装 (`with` キーワード)

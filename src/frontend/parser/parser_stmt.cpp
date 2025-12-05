@@ -1,0 +1,164 @@
+#include "parser.hpp"
+
+namespace cm {
+
+// ============================================================
+// 文の解析
+// ============================================================
+ast::StmtPtr Parser::parse_stmt() {
+    debug::par::log(debug::par::Id::Stmt, "", debug::Level::Trace);
+    uint32_t start_pos = current().start;
+
+    // ブロック
+    if (check(TokenKind::LBrace)) {
+        auto stmts = parse_block();
+        return ast::make_block(std::move(stmts), Span{start_pos, previous().end});
+    }
+
+    // return
+    if (consume_if(TokenKind::KwReturn)) {
+        ast::ExprPtr value;
+        if (!check(TokenKind::Semicolon)) {
+            value = parse_expr();
+        }
+        expect(TokenKind::Semicolon);
+        return ast::make_return(std::move(value), Span{start_pos, previous().end});
+    }
+
+    // if
+    if (consume_if(TokenKind::KwIf)) {
+        expect(TokenKind::LParen);
+        auto cond = parse_expr();
+        expect(TokenKind::RParen);
+        auto then_block = parse_block();
+
+        std::vector<ast::StmtPtr> else_block;
+        if (consume_if(TokenKind::KwElse)) {
+            if (check(TokenKind::KwIf)) {
+                // else if
+                auto elif = parse_stmt();
+                else_block.push_back(std::move(elif));
+            } else {
+                else_block = parse_block();
+            }
+        }
+
+        return ast::make_if(std::move(cond), std::move(then_block), std::move(else_block),
+                            Span{start_pos, previous().end});
+    }
+
+    // while
+    if (consume_if(TokenKind::KwWhile)) {
+        expect(TokenKind::LParen);
+        auto cond = parse_expr();
+        expect(TokenKind::RParen);
+        auto body = parse_block();
+        return ast::make_while(std::move(cond), std::move(body), Span{start_pos, previous().end});
+    }
+
+    // for
+    if (consume_if(TokenKind::KwFor)) {
+        expect(TokenKind::LParen);
+
+        // 初期化
+        ast::StmtPtr init;
+        if (!check(TokenKind::Semicolon)) {
+            if (check(TokenKind::KwConst) || is_type_start()) {
+                init = parse_stmt();  // let文
+            } else {
+                auto expr = parse_expr();
+                expect(TokenKind::Semicolon);
+                init = ast::make_expr_stmt(std::move(expr));
+            }
+        } else {
+            expect(TokenKind::Semicolon);
+        }
+
+        // 条件
+        ast::ExprPtr cond;
+        if (!check(TokenKind::Semicolon)) {
+            cond = parse_expr();
+        }
+        expect(TokenKind::Semicolon);
+
+        // 更新
+        ast::ExprPtr update;
+        if (!check(TokenKind::RParen)) {
+            update = parse_expr();
+        }
+        expect(TokenKind::RParen);
+
+        auto body = parse_block();
+
+        auto stmt = std::make_unique<ast::ForStmt>(std::move(init), std::move(cond),
+                                                   std::move(update), std::move(body));
+        return std::make_unique<ast::Stmt>(std::move(stmt), Span{start_pos, previous().end});
+    }
+
+    // break
+    if (consume_if(TokenKind::KwBreak)) {
+        expect(TokenKind::Semicolon);
+        return ast::make_break(Span{start_pos, previous().end});
+    }
+
+    // continue
+    if (consume_if(TokenKind::KwContinue)) {
+        expect(TokenKind::Semicolon);
+        return ast::make_continue(Span{start_pos, previous().end});
+    }
+
+    // 変数宣言 (auto x = ... or type x ...)
+    if (check(TokenKind::KwConst) || is_type_start()) {
+        bool is_const = consume_if(TokenKind::KwConst);
+        auto type = parse_type();
+        std::string name = expect_ident();
+
+        ast::ExprPtr init;
+        if (consume_if(TokenKind::Eq)) {
+            init = parse_expr();
+        }
+
+        expect(TokenKind::Semicolon);
+        return ast::make_let(std::move(name), std::move(type), std::move(init), is_const,
+                             Span{start_pos, previous().end});
+    }
+
+    // 式文
+    auto expr = parse_expr();
+    expect(TokenKind::Semicolon);
+    return ast::make_expr_stmt(std::move(expr), Span{start_pos, previous().end});
+}
+
+// 型の開始かどうか
+bool Parser::is_type_start() {
+    switch (current().kind) {
+        case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwTiny:
+        case TokenKind::KwShort:
+        case TokenKind::KwInt:
+        case TokenKind::KwLong:
+        case TokenKind::KwUtiny:
+        case TokenKind::KwUshort:
+        case TokenKind::KwUint:
+        case TokenKind::KwUlong:
+        case TokenKind::KwFloat:
+        case TokenKind::KwDouble:
+        case TokenKind::KwChar:
+        case TokenKind::KwString:
+        case TokenKind::Star:
+        case TokenKind::Amp:
+        case TokenKind::LBracket:
+            return true;
+        case TokenKind::Ident:
+            // 識別子の後に識別子が来たら変数宣言
+            if (pos_ + 1 < tokens_.size()) {
+                return tokens_[pos_ + 1].kind == TokenKind::Ident;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+}  // namespace cm

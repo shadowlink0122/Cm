@@ -47,6 +47,8 @@
 | [technical_challenges.md](technical_challenges.md) | 技術的課題と解決策 |
 | [async.md](async.md) | 非同期処理 (Future型) |
 | [platform.md](platform.md) | プラットフォーム・ターゲット設計 |
+| [derive.md](derive.md) | 自動実装 (Debug, Clone, Default等) |
+| [editor.md](editor.md) | エディタ拡張、シンタックスハイライト |
 
 ## 設計原則
 

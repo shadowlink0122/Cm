@@ -78,6 +78,22 @@ ctest --test-dir build -L integration
 - **Smart Pointers**: `std::unique_ptr` for AST/IR node ownership
 - **Variant**: `std::variant` for IR node types
 - **Optional**: `std::optional` for nullable values
+- **Max lines per file**: ~1000行
+
+## Debug System
+
+```cpp
+// 使用法 (IDで出力)
+debug::debug_msg(debug::MsgId::LEX_START);
+debug::debug_msg(debug::MsgId::LEX_KEYWORD, "struct");
+
+// CLIオプション
+cm -d example.cm          // デバッグON
+cm -d=trace example.cm    // TRACEレベル
+cm --lang=ja example.cm   // 日本語メッセージ
+```
+
+Stages: `[LEXER]`, `[PARSER]`, `[AST]`, `[HIR]`, `[MIR]`, `[INTERP]`
 
 ## Key Design Decisions
 

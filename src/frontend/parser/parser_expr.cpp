@@ -1,0 +1,440 @@
+#include "parser.hpp"
+
+namespace cm {
+
+// ============================================================
+// 式の解析（演算子優先順位順）
+// ============================================================
+
+ast::ExprPtr Parser::parse_expr() {
+    debug::par::log(debug::par::Id::Expr, "", debug::Level::Trace);
+    return parse_assignment();
+}
+
+// 代入式 (右結合)
+ast::ExprPtr Parser::parse_assignment() {
+    auto left = parse_ternary();
+
+    if (check(TokenKind::Eq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::Assign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::PlusEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::AddAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::MinusEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::SubAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::StarEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::MulAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::SlashEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::DivAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::PercentEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::ModAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::AmpEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::BitAndAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::PipeEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::BitOrAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::CaretEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::BitXorAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::LtLtEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::ShlAssign, std::move(left), std::move(right));
+    }
+    if (check(TokenKind::GtGtEq)) {
+        advance();
+        auto right = parse_assignment();
+        return ast::make_binary(ast::BinaryOp::ShrAssign, std::move(left), std::move(right));
+    }
+
+    return left;
+}
+
+// 三項演算子
+ast::ExprPtr Parser::parse_ternary() {
+    auto cond = parse_logical_or();
+
+    if (consume_if(TokenKind::Question)) {
+        auto then_expr = parse_expr();
+        expect(TokenKind::Colon);
+        auto else_expr = parse_ternary();
+
+        auto ternary = std::make_unique<ast::TernaryExpr>(std::move(cond), std::move(then_expr),
+                                                          std::move(else_expr));
+        return std::make_unique<ast::Expr>(std::move(ternary));
+    }
+
+    return cond;
+}
+
+// 論理OR
+ast::ExprPtr Parser::parse_logical_or() {
+    auto left = parse_logical_and();
+
+    while (consume_if(TokenKind::PipePipe)) {
+        auto right = parse_logical_and();
+        left = ast::make_binary(ast::BinaryOp::Or, std::move(left), std::move(right));
+    }
+
+    return left;
+}
+
+// 論理AND
+ast::ExprPtr Parser::parse_logical_and() {
+    auto left = parse_bitwise_or();
+
+    while (consume_if(TokenKind::AmpAmp)) {
+        auto right = parse_bitwise_or();
+        left = ast::make_binary(ast::BinaryOp::And, std::move(left), std::move(right));
+    }
+
+    return left;
+}
+
+// ビットOR
+ast::ExprPtr Parser::parse_bitwise_or() {
+    auto left = parse_bitwise_xor();
+
+    while (consume_if(TokenKind::Pipe)) {
+        auto right = parse_bitwise_xor();
+        left = ast::make_binary(ast::BinaryOp::BitOr, std::move(left), std::move(right));
+    }
+
+    return left;
+}
+
+// ビットXOR
+ast::ExprPtr Parser::parse_bitwise_xor() {
+    auto left = parse_bitwise_and();
+
+    while (consume_if(TokenKind::Caret)) {
+        auto right = parse_bitwise_and();
+        left = ast::make_binary(ast::BinaryOp::BitXor, std::move(left), std::move(right));
+    }
+
+    return left;
+}
+
+// ビットAND
+ast::ExprPtr Parser::parse_bitwise_and() {
+    auto left = parse_equality();
+
+    while (consume_if(TokenKind::Amp)) {
+        auto right = parse_equality();
+        left = ast::make_binary(ast::BinaryOp::BitAnd, std::move(left), std::move(right));
+    }
+
+    return left;
+}
+
+// 等価比較
+ast::ExprPtr Parser::parse_equality() {
+    auto left = parse_relational();
+
+    while (true) {
+        if (consume_if(TokenKind::EqEq)) {
+            auto right = parse_relational();
+            left = ast::make_binary(ast::BinaryOp::Eq, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::BangEq)) {
+            auto right = parse_relational();
+            left = ast::make_binary(ast::BinaryOp::Ne, std::move(left), std::move(right));
+        } else {
+            break;
+        }
+    }
+
+    return left;
+}
+
+// 関係比較
+ast::ExprPtr Parser::parse_relational() {
+    auto left = parse_shift();
+
+    while (true) {
+        if (consume_if(TokenKind::Lt)) {
+            auto right = parse_shift();
+            left = ast::make_binary(ast::BinaryOp::Lt, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::Gt)) {
+            auto right = parse_shift();
+            left = ast::make_binary(ast::BinaryOp::Gt, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::LtEq)) {
+            auto right = parse_shift();
+            left = ast::make_binary(ast::BinaryOp::Le, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::GtEq)) {
+            auto right = parse_shift();
+            left = ast::make_binary(ast::BinaryOp::Ge, std::move(left), std::move(right));
+        } else {
+            break;
+        }
+    }
+
+    return left;
+}
+
+// シフト
+ast::ExprPtr Parser::parse_shift() {
+    auto left = parse_additive();
+
+    while (true) {
+        if (consume_if(TokenKind::LtLt)) {
+            auto right = parse_additive();
+            left = ast::make_binary(ast::BinaryOp::Shl, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::GtGt)) {
+            auto right = parse_additive();
+            left = ast::make_binary(ast::BinaryOp::Shr, std::move(left), std::move(right));
+        } else {
+            break;
+        }
+    }
+
+    return left;
+}
+
+// 加減算
+ast::ExprPtr Parser::parse_additive() {
+    auto left = parse_multiplicative();
+
+    while (true) {
+        if (consume_if(TokenKind::Plus)) {
+            auto right = parse_multiplicative();
+            left = ast::make_binary(ast::BinaryOp::Add, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::Minus)) {
+            auto right = parse_multiplicative();
+            left = ast::make_binary(ast::BinaryOp::Sub, std::move(left), std::move(right));
+        } else {
+            break;
+        }
+    }
+
+    return left;
+}
+
+// 乗除算
+ast::ExprPtr Parser::parse_multiplicative() {
+    auto left = parse_unary();
+
+    while (true) {
+        if (consume_if(TokenKind::Star)) {
+            auto right = parse_unary();
+            left = ast::make_binary(ast::BinaryOp::Mul, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::Slash)) {
+            auto right = parse_unary();
+            left = ast::make_binary(ast::BinaryOp::Div, std::move(left), std::move(right));
+        } else if (consume_if(TokenKind::Percent)) {
+            auto right = parse_unary();
+            left = ast::make_binary(ast::BinaryOp::Mod, std::move(left), std::move(right));
+        } else {
+            break;
+        }
+    }
+
+    return left;
+}
+
+// 単項演算子
+ast::ExprPtr Parser::parse_unary() {
+    if (consume_if(TokenKind::Minus)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::Neg, std::move(operand));
+    }
+    if (consume_if(TokenKind::Bang)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::Not, std::move(operand));
+    }
+    if (consume_if(TokenKind::Tilde)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::BitNot, std::move(operand));
+    }
+    if (consume_if(TokenKind::Amp)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::AddrOf, std::move(operand));
+    }
+    if (consume_if(TokenKind::Star)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::Deref, std::move(operand));
+    }
+    if (consume_if(TokenKind::PlusPlus)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::PreInc, std::move(operand));
+    }
+    if (consume_if(TokenKind::MinusMinus)) {
+        auto operand = parse_unary();
+        return ast::make_unary(ast::UnaryOp::PreDec, std::move(operand));
+    }
+
+    return parse_postfix();
+}
+
+// 後置演算子
+ast::ExprPtr Parser::parse_postfix() {
+    auto expr = parse_primary();
+
+    while (true) {
+        // 関数呼び出し
+        if (consume_if(TokenKind::LParen)) {
+            std::vector<ast::ExprPtr> args;
+            if (!check(TokenKind::RParen)) {
+                do {
+                    args.push_back(parse_expr());
+                } while (consume_if(TokenKind::Comma));
+            }
+            expect(TokenKind::RParen);
+            expr = ast::make_call(std::move(expr), std::move(args));
+            continue;
+        }
+
+        // 配列アクセス
+        if (consume_if(TokenKind::LBracket)) {
+            auto index = parse_expr();
+            expect(TokenKind::RBracket);
+            auto idx_expr = std::make_unique<ast::IndexExpr>(std::move(expr), std::move(index));
+            expr = std::make_unique<ast::Expr>(std::move(idx_expr));
+            continue;
+        }
+
+        // メンバアクセス
+        if (consume_if(TokenKind::Dot)) {
+            std::string member = expect_ident();
+
+            // メソッド呼び出し
+            if (consume_if(TokenKind::LParen)) {
+                auto mem_expr = std::make_unique<ast::MemberExpr>(std::move(expr), member);
+                mem_expr->is_method_call = true;
+
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        mem_expr->args.push_back(parse_expr());
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+                expr = std::make_unique<ast::Expr>(std::move(mem_expr));
+            } else {
+                auto mem_expr = std::make_unique<ast::MemberExpr>(std::move(expr), member);
+                expr = std::make_unique<ast::Expr>(std::move(mem_expr));
+            }
+            continue;
+        }
+
+        // 後置インクリメント/デクリメント
+        if (consume_if(TokenKind::PlusPlus)) {
+            expr = ast::make_unary(ast::UnaryOp::PostInc, std::move(expr));
+            continue;
+        }
+        if (consume_if(TokenKind::MinusMinus)) {
+            expr = ast::make_unary(ast::UnaryOp::PostDec, std::move(expr));
+            continue;
+        }
+
+        break;
+    }
+
+    return expr;
+}
+
+// 一次式
+ast::ExprPtr Parser::parse_primary() {
+    uint32_t start_pos = current().start;
+
+    // 数値リテラル
+    if (check(TokenKind::IntLiteral)) {
+        int64_t val = current().get_int();
+        advance();
+        return ast::make_int_literal(val, Span{start_pos, previous().end});
+    }
+
+    if (check(TokenKind::FloatLiteral)) {
+        double val = current().get_float();
+        advance();
+        return ast::make_float_literal(val, Span{start_pos, previous().end});
+    }
+
+    // 文字列リテラル
+    if (check(TokenKind::StringLiteral)) {
+        std::string val(current().get_string());
+        advance();
+        return ast::make_string_literal(std::move(val), Span{start_pos, previous().end});
+    }
+
+    // 文字リテラル
+    if (check(TokenKind::CharLiteral)) {
+        std::string s(current().get_string());
+        char val = s.empty() ? '\0' : s[0];
+        advance();
+        auto lit = std::make_unique<ast::LiteralExpr>(val);
+        return std::make_unique<ast::Expr>(std::move(lit), Span{start_pos, previous().end});
+    }
+
+    // true/false
+    if (consume_if(TokenKind::KwTrue)) {
+        return ast::make_bool_literal(true, Span{start_pos, previous().end});
+    }
+    if (consume_if(TokenKind::KwFalse)) {
+        return ast::make_bool_literal(false, Span{start_pos, previous().end});
+    }
+
+    // null
+    if (consume_if(TokenKind::KwNull)) {
+        return ast::make_null_literal(Span{start_pos, previous().end});
+    }
+
+    // new式
+    if (consume_if(TokenKind::KwNew)) {
+        auto type = parse_type();
+        std::vector<ast::ExprPtr> args;
+
+        if (consume_if(TokenKind::LParen)) {
+            if (!check(TokenKind::RParen)) {
+                do {
+                    args.push_back(parse_expr());
+                } while (consume_if(TokenKind::Comma));
+            }
+            expect(TokenKind::RParen);
+        }
+
+        auto new_expr = std::make_unique<ast::NewExpr>(std::move(type), std::move(args));
+        return std::make_unique<ast::Expr>(std::move(new_expr), Span{start_pos, previous().end});
+    }
+
+    // 識別子
+    if (check(TokenKind::Ident)) {
+        std::string name(current().get_string());
+        advance();
+        return ast::make_ident(std::move(name), Span{start_pos, previous().end});
+    }
+
+    // 括弧式
+    if (consume_if(TokenKind::LParen)) {
+        auto expr = parse_expr();
+        expect(TokenKind::RParen);
+        return expr;
+    }
+
+    error("Expected expression");
+    return ast::make_null_literal();
+}
+
+}  // namespace cm

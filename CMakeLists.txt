@@ -50,14 +50,23 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
-# Source files (to be added as development progresses)
-# add_subdirectory(src/common)
-# add_subdirectory(src/frontend)
-# add_subdirectory(src/middle)
-# add_subdirectory(src/backend)
+# Common library (header-only for now)
+add_library(cm_common INTERFACE)
+target_include_directories(cm_common INTERFACE ${CMAKE_SOURCE_DIR}/src/common)
 
-# Main executable (placeholder)
-# add_executable(cm src/main.cpp)
+# Frontend library (header-only for now)
+add_library(cm_frontend INTERFACE)
+target_include_directories(cm_frontend INTERFACE ${CMAKE_SOURCE_DIR}/src/frontend)
+target_link_libraries(cm_frontend INTERFACE cm_common)
+
+# Main executable
+add_executable(cm 
+    src/main.cpp
+    src/frontend/lexer/token.cpp
+    src/frontend/parser/parser_stmt.cpp
+    src/frontend/parser/parser_expr.cpp
+)
+target_link_libraries(cm cm_frontend)
 
 # Testing
 if(BUILD_TESTING)
@@ -69,28 +78,29 @@ if(BUILD_TESTING)
     if(GTest_FOUND)
         include(GoogleTest)
         
-        # Unit tests
-        # add_executable(lexer_test tests/unit/lexer/lexer_test.cpp)
-        # target_link_libraries(lexer_test GTest::gtest_main)
-        # gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
-        
-        # Integration tests
-        # add_executable(integration_test tests/integration/full_pipeline_test.cpp)
-        # target_link_libraries(integration_test GTest::gtest_main)
-        # gtest_discover_tests(integration_test PROPERTIES LABELS "integration")
+        # Unit tests - Lexer
+        add_executable(lexer_test
+            tests/unit/lexer_test.cpp
+            src/frontend/lexer/token.cpp
+        )
+        target_link_libraries(lexer_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
+
+        # Unit tests - HIR Lowering
+        add_executable(hir_lowering_test
+            tests/unit/hir_lowering_test.cpp
+            src/frontend/lexer/token.cpp
+            src/frontend/parser/parser_stmt.cpp
+            src/frontend/parser/parser_expr.cpp
+        )
+        target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
     else()
         message(STATUS "Google Test not found, skipping C++ tests")
+        message(STATUS "Install with: brew install googletest (macOS)")
     endif()
-    
-    # E2E tests (always available)
-    add_test(NAME e2e_tests
-        COMMAND ${CMAKE_COMMAND} -E env 
-            CM_BIN=$<TARGET_FILE:cm>
-            ${CMAKE_SOURCE_DIR}/tests/e2e/run_all.sh
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-    set_tests_properties(e2e_tests PROPERTIES LABELS "e2e")
 endif()
 
 # Installation
 # install(TARGETS cm RUNTIME DESTINATION bin)
+
