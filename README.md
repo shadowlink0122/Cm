@@ -6,64 +6,145 @@
 
 Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)の設計レベルからのリニューアルプロジェクトです。
 
-Cb言語では、HIR（High-level Intermediate Representation）などの中間表現が考慮されていない設計だったため、本プロジェクトでは現代的なコンパイラアーキテクチャを採用し、より拡張性・保守性の高い言語処理系を目指します。
+**OSなどの低レイヤーなソフトウェアから、ウェブフロントエンドまで**を単一の言語で記述できる、次世代のプログラミング言語を目指しています。
 
-## 設計目標
+### 特徴
 
-### Cbからの改善点
+- 🦀 **Rustトランスパイル**: Rust経由で高品質なネイティブバイナリを生成
+- 🌐 **Web対応**: WASM/TypeScript出力でブラウザ・Node.js対応
+- 🎸 **gen (弦)**: 統合パッケージマネージャ・バージョン管理
+- 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
 
-1. **HIR (High-level Intermediate Representation) の導入**
-   - ソースコードとバックエンドの間に位置する中間表現
-   - 型情報を保持した高レベルな最適化が可能
-   - より良いエラーメッセージの生成
+## コード例
 
-2. **段階的なコンパイルパイプライン**
-   ```
-   Source Code → Lexer → Parser → AST → HIR → Codegen/Interpreter
-   ```
-   ※ 将来的にはMIR（Mid-level IR）の追加も検討
+```cpp
+// 関数定義（C++風：戻り値型が先）
+int add(int a, int b) {
+    return a + b;
+}
 
-3. **モジュール化されたアーキテクチャ**
-   - 各フェーズが明確に分離された設計
-   - テスト容易性の向上
-   - 将来的なバックエンド追加の容易さ
+// ジェネリクス
+T identity<T>(T value) {
+    return value;
+}
 
-### 継承する機能（Cb言語より）
+// 構造体
+struct Point {
+    int x;
+    int y;
+};
 
-- 静的型付け
-- ジェネリクス
-- async/await
-- Interface/Implシステム
-- パターンマッチング
-- 文字列補間
-- モジュールシステム
+// インターフェースと実装
+interface Printable {
+    void print();
+};
 
-## プロジェクト構造（予定）
+impl Printable for Point {
+    void print() {
+        println("(${this.x}, ${this.y})");
+    }
+};
+
+// async/await
+async String fetchData(String url) {
+    Response res = await http::get(url);
+    return res.body;
+}
+
+// パターンマッチ
+int getValue(Option<int> opt) {
+    match (opt) {
+        Some(v) => return v;
+        None => return 0;
+    }
+}
+```
+
+## パイプライン
 
 ```
-Cm/
-├── src/
-│   ├── frontend/           # フロントエンド
-│   │   ├── lexer/         # 字句解析
-│   │   ├── parser/        # 構文解析
-│   │   └── ast/           # 抽象構文木
-│   ├── middle/            # 中間層
-│   │   ├── hir/           # High-level IR
-│   │   ├── type_check/    # 型検査
-│   │   └── lowering/      # HIR → 下位表現への変換
-│   ├── backend/           # バックエンド
-│   │   └── interpreter/   # インタープリター（初期実装）
-│   └── common/            # 共通ユーティリティ
-├── docs/                  # ドキュメント
-│   ├── design/           # 設計ドキュメント
-│   └── spec/             # 言語仕様
-├── tests/                 # テスト
-└── examples/              # サンプルコード
+Cm Source (.cm)
+    │
+    ▼
+Lexer → Parser → AST → TypeCheck → HIR
+                                    │
+           ┌────────────────────────┼────────────┐
+           ▼                        ▼            ▼
+       ┌──────┐              ┌──────────┐  ┌─────────┐
+       │ Rust │              │   WASM   │  │   TS    │
+       └──┬───┘              └────┬─────┘  └────┬────┘
+          ▼                       ▼             ▼
+      [rustc]                 [Browser]     [Node.js]
+          ▼
+       Native
 ```
 
-## ビルド方法
+## エコシステム: gen (弦)
 
-（開発中）
+> 💡 Cb/Cmが音楽（コード名）に由来することから、「弦」をモチーフにしています。
+
+### バージョン管理
+
+```bash
+gen install cm@1.0.0     # Cmバージョンインストール
+gen use 1.0.0            # グローバル設定
+gen use 0.9.0 --local    # プロジェクト固有設定
+```
+
+### パッケージ管理
+
+```bash
+# プロジェクト作成
+gen init my-app
+
+# 依存追加
+gen add cm-json
+gen add cm-http --dev
+
+# グローバルツール
+gen install -g cm-fmt
+gen install -g cm-lsp
+```
+
+### Cm.toml
+
+```toml
+[package]
+name = "my-app"
+version = "0.1.0"
+
+[dependencies]
+cm-std = "1.0"
+cm-json = "0.5"
+
+[target.native]
+backend = "rust"
+
+[target.web]
+backend = "wasm"
+```
+
+## ビルド
+
+```bash
+cm build                 # デバッグ
+cm build --release       # リリース
+cm build --target web    # WASM
+cm run                   # 実行
+cm run --debug           # デバッグログ付き
+```
+
+## 開発言語
+
+- **C++17** (Clang 5+, GCC 7+, MSVC 2017+)
+
+## ドキュメント
+
+- [設計ドキュメント](docs/design/README.md)
+- [アーキテクチャ](docs/design/architecture.md)
+- [HIR設計](docs/design/hir.md)
+- [バックエンド](docs/design/backends.md)
+- [パッケージマネージャ](docs/design/package_manager.md)
 
 ## 関連プロジェクト
 

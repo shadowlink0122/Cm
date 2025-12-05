@@ -1,0 +1,6 @@
+// tests/regression/basic/hello.cm
+// 基本的なHello Worldテスト
+
+void main() {
+    println("Hello, World!");
+}

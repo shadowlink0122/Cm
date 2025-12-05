@@ -1,5 +1,7 @@
 # Build artifacts
 build/
+build-*/
+target/
 *.o
 *.a
 *.so
@@ -19,6 +21,11 @@ Thumbs.db
 
 # Dependencies
 deps/
+cm_modules/
 
 # Test artifacts
 *.log
+coverage.info
+
+# Temp
+.tmp/

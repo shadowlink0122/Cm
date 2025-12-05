@@ -1,0 +1,98 @@
+services:
+  # 開発環境
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cm-dev:latest
+    container_name: cm-dev
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: bash
+
+  # ビルド（Clang）
+  build-clang:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cm-dev:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - CC=clang
+      - CXX=clang++
+    command: >
+      bash -c "
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
+        cmake --build build
+      "
+
+  # ビルド（GCC）
+  build-gcc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cm-dev:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - CC=gcc
+      - CXX=g++
+    command: >
+      bash -c "
+        cmake -B build-gcc -G Ninja -DCMAKE_BUILD_TYPE=Release &&
+        cmake --build build-gcc
+      "
+
+  # Lint
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cm-dev:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: >
+      bash -c "
+        find src -name '*.cpp' -o -name '*.hpp' | xargs clang-format --dry-run --Werror
+      "
+
+  # テスト
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cm-dev:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: >
+      bash -c "
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON &&
+        cmake --build build &&
+        ctest --test-dir build --output-on-failure
+      "
+
+  # カバレッジ
+  coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cm-dev:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: >
+      bash -c "
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON &&
+        cmake --build build &&
+        ctest --test-dir build &&
+        lcov --capture --directory build --output-file coverage.info &&
+        lcov --remove coverage.info '/usr/*' --output-file coverage.info
+      "

@@ -2,13 +2,23 @@
 
 ## 概要
 
-Cm言語処理系は、Cb言語の経験を踏まえ、HIR（High-level Intermediate Representation）を中心とした段階的なコンパイルパイプラインを採用します。
+Cm言語処理系は、HIR → Rust/WASM/TSトランスパイラとして実装します。将来的にはMIR最適化層とネイティブ直接生成を追加します。
 
-## コンパイルパイプライン
+**開発言語**: C++17 (Clang 5+, GCC 7+, MSVC 2017+)
+
+## 開発段階
+
+| Phase | 内容 | パイプライン |
+|-------|------|-------------|
+| **1 (現在)** | トランスパイラ | HIR → Rust/WASM/TS |
+| 2 | 最適化追加 | HIR → MIR → 出力 |
+| 3 | ネイティブ直接 | MIR → Cranelift/LLVM |
+
+## コンパイルパイプライン (Phase 1)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Cm Compiler Pipeline                          │
+│                        Cm Compiler Pipeline (Phase 1)                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │   Source Code (.cm)                                                         │
@@ -35,13 +45,22 @@ Cm言語処理系は、Cb言語の経験を踏まえ、HIR（High-level Intermed
 │         │                                                                   │
 │         ▼                                                                   │
 │   ┌─────────────┐                                                           │
-│   │    HIR      │  High-level IR: 型情報付き中間表現                        │
+│   │    HIR      │  High-level IR: 型情報付き、脱糖済み                       │
+│   │ (Rust∩TS)   │  マルチターゲット対応設計                                  │
 │   └─────────────┘                                                           │
 │         │                                                                   │
-│         ▼                                                                   │
-│   ┌─────────────┐                                                           │
-│   │ Interpreter │  実行: HIRの逐次実行（初期実装）                          │
-│   └─────────────┘                                                           │
+│         ├────────────────────────────────────────┬───────────────┐          │
+│         ▼                    ▼                   ▼               ▼          │
+│   ┌──────────┐        ┌──────────┐        ┌──────────┐    ┌───────────┐    │
+│   │   Rust   │        │   WASM   │        │    TS    │    │Interpreter│    │
+│   │  (主力)  │        │(Rust経由)│        │          │    │ (開発用)  │    │
+│   └────┬─────┘        └────┬─────┘        └────┬─────┘    └───────────┘    │
+│        │                   │                   │                            │
+│        ▼                   ▼                   ▼                            │
+│   [rustc/cargo]       [wasm-pack]          [tsc]                            │
+│        │                   │                   │                            │
+│        ▼                   ▼                   ▼                            │
+│     Native              Browser              Node.js                        │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -63,11 +82,46 @@ Cm言語処理系は、Cb言語の経験を踏まえ、HIR（High-level Intermed
 
 **入力**: トークン列
 **出力**: AST（抽象構文木）
+**実装**: 手書き再帰下降パーサ
 
 責務:
 - 文法規則に従った構文解析
 - 構文エラーの検出と報告
 - ASTノードの構築
+
+実装方針:
+- 文法規則ごとに `parse_*` 関数を定義
+- Pratt Parserで演算子優先順位を処理
+- エラー回復（同期トークンまでスキップ）
+
+```cpp
+// src/frontend/parser/parser.hpp
+class Parser {
+public:
+    explicit Parser(std::vector<Token> tokens);
+    std::unique_ptr<Ast> parse();
+
+private:
+    // トップレベル
+    std::unique_ptr<AstFunction> parse_function();
+    std::unique_ptr<AstStruct> parse_struct();
+    
+    // 文
+    std::unique_ptr<AstStmt> parse_stmt();
+    std::unique_ptr<AstStmt> parse_if_stmt();
+    std::unique_ptr<AstStmt> parse_for_stmt();
+    
+    // 式（Pratt Parser）
+    std::unique_ptr<AstExpr> parse_expr(int precedence = 0);
+    std::unique_ptr<AstExpr> parse_primary();
+    
+    // ユーティリティ
+    Token peek() const;
+    Token advance();
+    bool match(TokenKind kind);
+    void expect(TokenKind kind, std::string_view msg);
+};
+```
 
 ### 3. AST（抽象構文木）
 
@@ -89,57 +143,36 @@ Cm言語処理系は、Cb言語の経験を踏まえ、HIR（High-level Intermed
 - ジェネリクスのインスタンス化
 - 型エラーの検出と報告
 
-### 5. HIR（High-level Intermediate Representation）
+### 5. HIR（High-level IR）
 
-**Cbからの最大の改善点**
+**詳細**: [hir.md](hir.md)
 
 特徴:
-- 型情報が完全に付与された中間表現
-- 糖衣構文が脱糖（desugar）された形式
-- 制御フローが明示的
-- 最適化に適した形式
+- 型情報が完全に付与
+- 糖衣構文が脱糖済み
+- 名前解決済み
+- **Rust/TS両対応の共通表現**
 
-HIRで行う処理:
-- 定数畳み込み
-- 不要コード除去
-- インライン展開
+### 6. バックエンド
 
-### 6. Interpreter（インタープリター）
+**詳細**: [backends.md](backends.md)
 
-**入力**: HIR
-**出力**: 実行結果
-
-初期実装としてHIRを直接解釈実行するインタープリターを実装。
-将来的にはMIR→ネイティブコード生成も検討。
+| バックエンド | 用途 | 経路 |
+|-------------|------|------|
+| Rust (主力) | ネイティブ | HIR → Rust → rustc |
+| WASM | Web | HIR → Rust → wasm-pack |
+| TypeScript | JS統合 | HIR → TS → tsc |
+| Interpreter | 開発 | HIR直接実行 |
 
 ## Cb言語との設計比較
 
-### Cb言語の課題
-
-```
-Cb: Source → Parser → AST → Interpreter
-                              ↑
-                        型検査と実行が混在
-```
-
-問題点:
-- ASTを直接実行するため、実行時に型情報が必要
-- 最適化の機会が限られる
-- エラーメッセージが実行時まで遅延することがある
-
-### Cm言語の改善
-
-```
-Cm: Source → Parser → AST → Type Check → HIR → Interpreter
-                                          ↑
-                                    型付き中間表現
-```
-
-改善点:
-- 型検査が完了してからHIRに変換
-- HIRは型情報を持つため、実行時の型チェック不要
-- HIRレベルでの最適化が可能
-- より良いエラーメッセージの生成
+| 項目 | Cb | Cm |
+|------|-----|-----|
+| 中間表現 | なし | HIR (→ MIR in Phase 2) |
+| 最適化 | 限定的 | Phase 2でSSA最適化 |
+| ターゲット | インタプリタのみ | Rust/WASM/TS |
+| パッケージ管理 | なし | Cargo風 |
+| 開発言語 | C++ | C++17 |
 
 ## ディレクトリ構成
 
@@ -163,8 +196,14 @@ src/
 │   │   ├── types.hpp       # 型定義
 │   │   └── checker.hpp     # 型検査器
 │   └── lowering/
-│       └── ast_to_hir.hpp  # AST→HIR変換
+│       └── ast_to_hir.hpp  # AST→HIR
 ├── backend/
+│   ├── rust/
+│   │   └── emitter.hpp     # Rust出力
+│   ├── typescript/
+│   │   └── emitter.hpp     # TypeScript出力
+│   ├── wasm/
+│   │   └── emitter.hpp     # WASM設定生成
 │   └── interpreter/
 │       └── interpreter.hpp # HIRインタープリター
 └── common/
@@ -175,24 +214,23 @@ src/
 
 ## 将来の拡張
 
-### 1. MIR (Mid-level IR) の追加
-
-初期実装ではHIRから直接インタープリターを実行しますが、将来的にはMIRを導入する可能性があります。
+### Phase 2: MIR最適化
 
 ```
-現在: Source → AST → HIR → Interpreter
-将来: Source → AST → HIR → MIR → Codegen
+HIR → MIR (SSA/CFG) → 最適化パス → 各バックエンド
 ```
 
-MIRの特徴:
-- よりローレベルな最適化
-- バックエンド非依存の最適化
-- 制御フローグラフ（CFG）ベースの表現
+詳細: [mir.md](mir.md)
 
-2. **ネイティブコード生成**
-   - LLVM IRへの変換
-   - 直接的なアセンブリ生成
+### Phase 3: ネイティブ直接生成
 
-3. **LSP (Language Server Protocol)** 対応
-   - HIRを活用した高精度な補完
-   - リアルタイム型検査
+```
+MIR → LIR → Cranelift or LLVM → Native
+```
+
+詳細: [lir.md](lir.md)
+
+### その他
+
+- **LSP対応**: HIRを活用した高精度補完
+- **増分コンパイル**: 変更差分のみ再コンパイル
