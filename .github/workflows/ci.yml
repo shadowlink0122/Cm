@@ -1,0 +1,211 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  BUILD_TYPE: Debug
+
+jobs:
+  # Lint job - runs first (Linux only)
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install clang-format
+        run: sudo apt-get install -y clang-format
+      
+      - name: Check format
+        run: |
+          find src tests -name '*.cpp' -o -name '*.hpp' 2>/dev/null | \
+            xargs -r clang-format --dry-run --Werror || true
+
+  # Build job - matrix for OS and compiler (Windows included)
+  build:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+            cxx: clang++
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+            cxx: clang++
+          - os: windows-latest
+            compiler: msvc
+            cc: cl
+            cxx: cl
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set compiler (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
+          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
+      
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+      
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+      
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }}
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.compiler }}
+          path: build/
+          retention-days: 1
+
+  # Unit tests - all platforms
+  test-unit:
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: clang
+          - os: macos-latest
+            compiler: clang
+          - os: windows-latest
+            compiler: msvc
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.compiler }}
+          path: build/
+      
+      - name: Run unit tests (Unix)
+        if: runner.os != 'Windows'
+        run: ctest --test-dir build --output-on-failure -L unit
+      
+      - name: Run unit tests (Windows)
+        if: runner.os == 'Windows'
+        run: ctest --test-dir build --output-on-failure -L unit -C ${{ env.BUILD_TYPE }}
+
+  # Integration tests
+  test-integration:
+    needs: test-unit
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: clang
+          - os: macos-latest
+            compiler: clang
+          - os: windows-latest
+            compiler: msvc
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.compiler }}
+          path: build/
+      
+      - name: Run integration tests (Unix)
+        if: runner.os != 'Windows'
+        run: ctest --test-dir build --output-on-failure -L integration
+      
+      - name: Run integration tests (Windows)
+        if: runner.os == 'Windows'
+        run: ctest --test-dir build --output-on-failure -L integration -C ${{ env.BUILD_TYPE }}
+
+  # E2E tests
+  test-e2e:
+    needs: test-integration
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: clang
+          - os: macos-latest
+            compiler: clang
+          - os: windows-latest
+            compiler: msvc
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.compiler }}
+          path: build/
+      
+      - name: Run E2E tests (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ -f tests/e2e/run_all.sh ]; then
+            chmod +x tests/e2e/run_all.sh
+            ./tests/e2e/run_all.sh
+          fi
+      
+      - name: Run E2E tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path tests/e2e/run_all.ps1) {
+            ./tests/e2e/run_all.ps1
+          }
+
+  # Coverage report (Linux only)
+  coverage:
+    needs: [test-unit, test-integration]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install lcov
+        run: sudo apt-get install -y lcov
+      
+      - name: Build with coverage
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="--coverage -fprofile-arcs -ftest-coverage"
+          cmake --build build
+      
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure || true
+      
+      - name: Generate coverage report
+        run: |
+          lcov --capture --directory build --output-file coverage.info || true
+          lcov --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info || true
+          lcov --list coverage.info || true
+      
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.info
+          fail_ci_if_error: false

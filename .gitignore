@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+build-*/
+target/
+*.o
+*.a
+*.so
+*.dylib
+main
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Dependencies
+deps/
+cm_modules/
+
+# Test artifacts
+*.log
+coverage.info
+
+# Temp
+.tmp/
