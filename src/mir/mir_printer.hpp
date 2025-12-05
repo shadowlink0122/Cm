@@ -344,20 +344,18 @@ private:
     std::string type_to_string(hir::TypePtr type) {
         if (!type) return "?";
 
-        if (auto* prim = std::get_if<hir::PrimitiveType>(&type->kind)) {
-            switch (prim->kind) {
-                case hir::PrimitiveKind::Int: return "int";
-                case hir::PrimitiveKind::UInt: return "uint";
-                case hir::PrimitiveKind::Float: return "float";
-                case hir::PrimitiveKind::Double: return "double";
-                case hir::PrimitiveKind::Bool: return "bool";
-                case hir::PrimitiveKind::Char: return "char";
-                case hir::PrimitiveKind::Void: return "void";
-                default: return "?";
-            }
-        }
+        // 現時点では簡略化して型名を返す
+        // TODO: 実際の型システムに合わせて実装
+        if (type->name == "int") return "int";
+        if (type->name == "uint") return "uint";
+        if (type->name == "float") return "float";
+        if (type->name == "double") return "double";
+        if (type->name == "bool") return "bool";
+        if (type->name == "char") return "char";
+        if (type->name == "void") return "void";
+        if (type->name == "string") return "string";
 
-        return "T";  // その他の型
+        return type->name.empty() ? "T" : type->name;
     }
 };
 
