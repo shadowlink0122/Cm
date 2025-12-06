@@ -1,0 +1,29 @@
+// 4. 関数定義と呼び出し
+int add(int a, int b) {
+    return a + b;
+}
+
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+float circle_area(float radius) {
+    float pi = 3.14159;
+    return pi * radius * radius;
+}
+
+int main() {
+    int sum = add(5, 3);
+    print(sum);  // 8
+
+    int fact = factorial(5);
+    print(fact);  // 120
+
+    float area = circle_area(10.0);
+    print(area);  // 314.159
+
+    return 0;
+}

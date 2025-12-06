@@ -56,10 +56,12 @@ class Lexer {
 
     void init_keywords() {
         keywords_ = {
+            {"as", TokenKind::KwAs},
             {"async", TokenKind::KwAsync},
             {"await", TokenKind::KwAwait},
             {"break", TokenKind::KwBreak},
             {"const", TokenKind::KwConst},
+            {"constexpr", TokenKind::KwConstexpr},
             {"continue", TokenKind::KwContinue},
             {"delete", TokenKind::KwDelete},
             {"else", TokenKind::KwElse},
@@ -68,21 +70,28 @@ class Lexer {
             {"extern", TokenKind::KwExtern},
             {"false", TokenKind::KwFalse},
             {"for", TokenKind::KwFor},
+            {"from", TokenKind::KwFrom},
             {"if", TokenKind::KwIf},
             {"impl", TokenKind::KwImpl},
             {"import", TokenKind::KwImport},
             {"inline", TokenKind::KwInline},
             {"interface", TokenKind::KwInterface},
+            {"macro", TokenKind::KwMacro},
             {"match", TokenKind::KwMatch},
+            {"module", TokenKind::KwModule},
             {"mutable", TokenKind::KwMutable},
             {"new", TokenKind::KwNew},
             {"null", TokenKind::KwNull},
             {"private", TokenKind::KwPrivate},
+            {"pub", TokenKind::KwPub},
             {"return", TokenKind::KwReturn},
             {"static", TokenKind::KwStatic},
             {"struct", TokenKind::KwStruct},
+            {"template", TokenKind::KwTemplate},
             {"this", TokenKind::KwThis},
             {"true", TokenKind::KwTrue},
+            {"typename", TokenKind::KwTypename},
+            {"use", TokenKind::KwUse},
             {"void", TokenKind::KwVoid},
             {"volatile", TokenKind::KwVolatile},
             {"while", TokenKind::KwWhile},
@@ -277,7 +286,17 @@ class Lexer {
             case ';':
                 return make(TokenKind::Semicolon);
             case '.':
+                // Check for ellipsis ...
+                if (peek() == '.' && peek_next() == '.') {
+                    advance();  // consume second .
+                    advance();  // consume third .
+                    return make(TokenKind::Ellipsis);
+                }
                 return make(TokenKind::Dot);
+            case '@':
+                return make(TokenKind::At);
+            case '#':
+                return make(TokenKind::Hash);
             case '~':
                 return make(TokenKind::Tilde);
             case '?':

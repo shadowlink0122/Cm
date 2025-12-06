@@ -135,12 +135,14 @@ class HirLowering {
 
     // インポート
     HirDeclPtr lower_import(ast::ImportDecl& imp) {
-        debug::hir::log(debug::hir::Id::NodeCreate, "import " + imp.full_path(),
+        debug::hir::log(debug::hir::Id::NodeCreate, "import " + imp.path.to_string(),
                         debug::Level::Trace);
 
         auto hir_imp = std::make_unique<HirImport>();
-        hir_imp->path = imp.path;
-        hir_imp->alias = imp.alias;
+        // ModulePath を vector<string> に変換
+        hir_imp->path = imp.path.segments;
+        // TODO: 選択的インポートのサポート
+        hir_imp->alias = "";  // 一時的に空文字列
 
         return std::make_unique<HirDecl>(std::move(hir_imp));
     }

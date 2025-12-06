@@ -3,6 +3,9 @@
 #include "../mir_nodes.hpp"
 #include <string>
 #include <memory>
+#include <optional>
+#include <set>
+#include <iostream>
 
 namespace cm::mir::opt {
 

@@ -1,0 +1,44 @@
+// 新しいC++風マクロ構文のテスト
+
+// Cm言語ネイティブマクロ
+#macro void LOG_MESSAGE(string msg) {
+    println(msg);
+}
+
+// ブロックを受け取るマクロ
+#macro void WITH_TIMING(string label, block code) {
+    long start = get_time();
+    code;
+    long end = get_time();
+    printf("%s took %ld ms\n", label, end - start);
+}
+
+// constexpr関数
+constexpr int BUFFER_SIZE = 1024;
+
+constexpr int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int main() {
+    LOG_MESSAGE("Testing new macro syntax");
+
+    WITH_TIMING("calculation", {
+        int sum = 0;
+        for (int i = 0; i < 1000; i++) {
+            sum += i;
+        }
+    });
+
+    int buffer[BUFFER_SIZE];
+    int result = factorial(5);
+
+    return 0;
+}
+
+long get_time() {
+    return 0;  // 仮実装
+}

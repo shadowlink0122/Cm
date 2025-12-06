@@ -1,0 +1,6 @@
+// import with itemsのテスト
+import std.io.println;
+
+int main() {
+    return 0;
+}

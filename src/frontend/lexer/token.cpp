@@ -16,6 +16,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "identifier";
 
         // キーワード
+        case TokenKind::KwAs:
+            return "as";
         case TokenKind::KwAsync:
             return "async";
         case TokenKind::KwAwait:
@@ -24,6 +26,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "break";
         case TokenKind::KwConst:
             return "const";
+        case TokenKind::KwConstexpr:
+            return "constexpr";
         case TokenKind::KwContinue:
             return "continue";
         case TokenKind::KwDelete:
@@ -40,6 +44,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "false";
         case TokenKind::KwFor:
             return "for";
+        case TokenKind::KwFrom:
+            return "from";
         case TokenKind::KwIf:
             return "if";
         case TokenKind::KwImpl:
@@ -50,8 +56,12 @@ const char* token_kind_to_string(TokenKind kind) {
             return "inline";
         case TokenKind::KwInterface:
             return "interface";
+        case TokenKind::KwMacro:
+            return "macro";
         case TokenKind::KwMatch:
             return "match";
+        case TokenKind::KwModule:
+            return "module";
         case TokenKind::KwMutable:
             return "mutable";
         case TokenKind::KwNew:
@@ -60,16 +70,24 @@ const char* token_kind_to_string(TokenKind kind) {
             return "null";
         case TokenKind::KwPrivate:
             return "private";
+        case TokenKind::KwPub:
+            return "pub";
         case TokenKind::KwReturn:
             return "return";
         case TokenKind::KwStatic:
             return "static";
         case TokenKind::KwStruct:
             return "struct";
+        case TokenKind::KwTemplate:
+            return "template";
         case TokenKind::KwThis:
             return "this";
         case TokenKind::KwTrue:
             return "true";
+        case TokenKind::KwTypename:
+            return "typename";
+        case TokenKind::KwUse:
+            return "use";
         case TokenKind::KwVoid:
             return "void";
         case TokenKind::KwVolatile:
@@ -182,6 +200,12 @@ const char* token_kind_to_string(TokenKind kind) {
             return "::";
         case TokenKind::Arrow:
             return "=>";
+        case TokenKind::At:
+            return "@";
+        case TokenKind::Ellipsis:
+            return "...";
+        case TokenKind::Hash:
+            return "#";
 
         // 区切り
         case TokenKind::LParen:

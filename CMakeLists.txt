@@ -43,7 +43,7 @@ elseif(MSVC)
 endif()
 
 # Output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})  # cm実行ファイルをルートに配置
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
@@ -60,11 +60,12 @@ target_include_directories(cm_frontend INTERFACE ${CMAKE_SOURCE_DIR}/src/fronten
 target_link_libraries(cm_frontend INTERFACE cm_common)
 
 # Main executable
-add_executable(cm 
+add_executable(cm
     src/main.cpp
     src/frontend/lexer/token.cpp
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
+    src/frontend/parser/parser_module.cpp
 )
 target_link_libraries(cm cm_frontend)
 
@@ -92,6 +93,7 @@ if(BUILD_TESTING)
             src/frontend/lexer/token.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
+            src/frontend/parser/parser_module.cpp
         )
         target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
@@ -102,6 +104,7 @@ if(BUILD_TESTING)
             src/frontend/lexer/token.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
+            src/frontend/parser/parser_module.cpp
         )
         target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
@@ -112,6 +115,7 @@ if(BUILD_TESTING)
             src/frontend/lexer/token.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
+            src/frontend/parser/parser_module.cpp
         )
         target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")

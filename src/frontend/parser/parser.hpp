@@ -60,25 +60,65 @@ class Parser {
    private:
     // トップレベル宣言
     ast::DeclPtr parse_top_level() {
+        // アトリビュートチェック（マクロなど）
+        if (check(TokenKind::At)) {
+            auto saved_pos = pos_;
+            std::vector<ast::AttributeNode> attrs;
+            while (check(TokenKind::At)) {
+                attrs.push_back(parse_attribute());
+            }
+
+            // @[macro]の場合 (廃止予定 - #macroを使用してください)
+            for (const auto& attr : attrs) {
+                if (attr.name == "macro") {
+                    // このパスは廃止予定
+                    pos_ = saved_pos;  // 位置を戻す
+                    return nullptr;  // @[macro]はサポートしない
+                }
+            }
+
+            // その他のアトリビュート付き宣言
+            pos_ = saved_pos;  // 位置を戻す
+        }
+
+        // module宣言
+        if (check(TokenKind::KwModule)) {
+            return parse_module();
+        }
+
         // import
         if (check(TokenKind::KwImport)) {
-            return parse_import();
+            return parse_import_stmt();
+        }
+
+        // use
+        if (check(TokenKind::KwUse)) {
+            return parse_use();
+        }
+
+        // export
+        if (check(TokenKind::KwExport)) {
+            return parse_export();
+        }
+
+        // extern
+        if (check(TokenKind::KwExtern)) {
+            return parse_extern();
         }
 
         // 修飾子を収集
-        bool is_export = consume_if(TokenKind::KwExport);
         bool is_static = consume_if(TokenKind::KwStatic);
         bool is_inline = consume_if(TokenKind::KwInline);
         bool is_async = consume_if(TokenKind::KwAsync);
 
         // struct
         if (check(TokenKind::KwStruct)) {
-            return parse_struct(is_export);
+            return parse_struct(false);
         }
 
         // interface
         if (check(TokenKind::KwInterface)) {
-            return parse_interface(is_export);
+            return parse_interface(false);
         }
 
         // impl
@@ -86,35 +126,53 @@ class Parser {
             return parse_impl();
         }
 
+        // template
+        if (check(TokenKind::KwTemplate)) {
+            return parse_template_decl();
+        }
+
+        // enum
+        if (check(TokenKind::KwEnum)) {
+            return parse_enum_decl();
+        }
+
+        // #macro (新しいC++風マクロ構文)
+        if (check(TokenKind::Hash)) {
+            // #macroか他のディレクティブか確認
+            auto saved_pos = pos_;
+            advance();  // consume '#'
+
+            if (check(TokenKind::KwMacro)) {
+                pos_ = saved_pos;  // 位置を戻す
+                return parse_macro();
+            }
+
+            // その他のディレクティブ（#test, #bench, #deprecated等）
+            pos_ = saved_pos;  // 位置を戻す
+            std::vector<ast::AttributeNode> directives;
+            directives.push_back(parse_directive());
+
+            // ディレクティブ後の関数定義を解析
+            return parse_function(false, is_static, is_inline, is_async, std::move(directives));
+        }
+
+        // macro (旧構文 - 互換性のため)
+        if (check(TokenKind::KwMacro)) {
+            return parse_macro();
+        }
+
+        // constexpr
+        if (check(TokenKind::KwConstexpr)) {
+            return parse_constexpr();
+        }
+
         // 関数 (型 名前 ...)
-        return parse_function(is_export, is_static, is_inline, is_async);
-    }
-
-    // import文
-    ast::DeclPtr parse_import() {
-        uint32_t start_pos = current().start;
-        expect(TokenKind::KwImport);
-
-        std::vector<std::string> path;
-        path.push_back(expect_ident());
-
-        while (consume_if(TokenKind::ColonColon)) {
-            path.push_back(expect_ident());
-        }
-
-        std::string alias;
-        // "as" は識別子としてチェック
-        if (check(TokenKind::Ident) && current_text() == "as") {
-            advance();
-            alias = expect_ident();
-        }
-
-        expect(TokenKind::Semicolon);
-        return ast::make_import(std::move(path), std::move(alias), Span{start_pos, previous().end});
+        return parse_function(false, is_static, is_inline, is_async);
     }
 
     // 関数定義
-    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async) {
+    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async,
+                                std::vector<ast::AttributeNode> directives = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
 
@@ -134,6 +192,7 @@ class Parser {
         func->is_static = is_static;
         func->is_inline = is_inline;
         func->is_async = is_async;
+        func->attributes = std::move(directives);  // ディレクティブをアトリビュートとして保存
 
         return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
     }
@@ -366,6 +425,21 @@ class Parser {
         error("Expected type");
         return ast::make_error();
     }
+
+    // モジュール関連パーサ（parser_module.cppで実装）
+    ast::DeclPtr parse_module();
+    ast::DeclPtr parse_import_stmt();
+    ast::DeclPtr parse_export();
+    ast::DeclPtr parse_use();
+    ast::DeclPtr parse_macro();
+    ast::DeclPtr parse_extern();
+    ast::DeclPtr parse_extern_decl();
+    ast::AttributeNode parse_directive();
+    ast::AttributeNode parse_attribute();
+    ast::DeclPtr parse_const_decl();
+    ast::DeclPtr parse_constexpr();
+    ast::DeclPtr parse_template_decl();
+    ast::DeclPtr parse_enum_decl();
 
     // ユーティリティ
     const Token& current() const { return tokens_[pos_]; }

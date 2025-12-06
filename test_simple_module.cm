@@ -1,0 +1,6 @@
+// 単純なモジュールテスト
+module test;
+
+int main() {
+    return 0;
+}

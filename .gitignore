@@ -1,12 +1,22 @@
+# 実行ファイル
+/cm
+/cm.exe
+
 # Build artifacts
 build/
 build-*/
+cmake-build-*/
 target/
 *.o
 *.a
 *.so
 *.dylib
-main
+*.dll
+*.lib
+
+# テスト実行ファイル
+*_test
+*_test.exe
 
 # IDE/Editor
 .vscode/

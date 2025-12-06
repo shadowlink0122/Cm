@@ -1,0 +1,27 @@
+// 3. 制御フロー - if文とループ
+int main() {
+    int n = 10;
+
+    // if-else文
+    if (n > 0) {
+        print("Positive");
+    } else if (n < 0) {
+        print("Negative");
+    } else {
+        print("Zero");
+    }
+
+    // while文
+    int i = 0;
+    while (i < 5) {
+        print(i);
+        i = i + 1;
+    }
+
+    // for文（内部的にwhileに変換される）
+    for (int j = 0; j < 5; j = j + 1) {
+        print(j * 2);
+    }
+
+    return 0;
+}

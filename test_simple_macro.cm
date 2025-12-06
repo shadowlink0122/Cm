@@ -1,0 +1,10 @@
+// シンプルなマクロテスト
+
+#macro void PRINT_INT(int x) {
+    println(x);
+}
+
+int main() {
+    PRINT_INT(42);
+    return 0;
+}

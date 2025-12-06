@@ -19,6 +19,7 @@ enum class TokenKind {
     Ident,  // foo, bar
 
     // キーワード
+    KwAs,        // import alias
     KwAsync,
     KwAwait,
     KwBreak,
@@ -31,21 +32,29 @@ enum class TokenKind {
     KwExtern,
     KwFalse,
     KwFor,
+    KwFrom,      // re-export from
     KwIf,
     KwImpl,
     KwImport,
     KwInline,
     KwInterface,
+    KwMacro,     // macro definition
+    KwConstexpr, // constexpr keyword
     KwMatch,
+    KwModule,    // module declaration
     KwMutable,
     KwNew,
     KwNull,
     KwPrivate,
+    KwPub,       // public visibility
     KwReturn,
     KwStatic,
     KwStruct,
+    KwTemplate,  // template declaration
     KwThis,
     KwTrue,
+    KwTypename,  // template typename
+    KwUse,       // use statement (similar to import)
     KwVoid,
     KwVolatile,
     KwWhile,
@@ -104,6 +113,9 @@ enum class TokenKind {
     Colon,
     ColonColon,
     Arrow,
+    At,        // @ for attributes
+    Ellipsis,  // ... for variadic
+    Hash,      // # for preprocessor directives
 
     // 区切り
     LParen,

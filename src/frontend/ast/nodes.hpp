@@ -122,10 +122,16 @@ struct StructDecl;
 struct InterfaceDecl;
 struct ImplDecl;
 struct ImportDecl;
+struct ExportDecl;
+struct ModuleDecl;
+struct MacroDecl;
+struct UseDecl;
 
 using DeclKind = std::variant<std::unique_ptr<FunctionDecl>, std::unique_ptr<StructDecl>,
                               std::unique_ptr<InterfaceDecl>, std::unique_ptr<ImplDecl>,
-                              std::unique_ptr<ImportDecl>>;
+                              std::unique_ptr<ImportDecl>, std::unique_ptr<ExportDecl>,
+                              std::unique_ptr<ModuleDecl>, std::unique_ptr<MacroDecl>,
+                              std::unique_ptr<UseDecl>>;
 
 struct Decl : Node {
     DeclKind kind;
@@ -154,3 +160,6 @@ struct Program : Node {
 };
 
 }  // namespace cm::ast
+
+// モジュール関連の定義をインクルード
+#include "module.hpp"

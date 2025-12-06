@@ -1,0 +1,6 @@
+// importのテスト
+import std.io;
+
+int main() {
+    return 0;
+}

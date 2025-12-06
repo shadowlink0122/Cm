@@ -1,0 +1,5 @@
+// 1. Hello World - 基本的な関数とprint
+int main() {
+    print("Hello, Cm!");
+    return 0;
+}

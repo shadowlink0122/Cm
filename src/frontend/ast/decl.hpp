@@ -1,6 +1,7 @@
 #pragma once
 
 #include "expr.hpp"
+#include "module.hpp"  // for AttributeNode
 #include "nodes.hpp"
 #include "stmt.hpp"
 
@@ -28,6 +29,9 @@ struct FunctionDecl {
     bool is_static = false;
     bool is_inline = false;
     bool is_async = false;
+
+    // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
+    std::vector<AttributeNode> attributes;
 
     // ジェネリクス（将来用）
     std::vector<std::string> generic_params;
@@ -98,26 +102,7 @@ struct ImplDecl {
         : interface_name(std::move(iface)), target_type(std::move(target)) {}
 };
 
-// ============================================================
-// インポート
-// ============================================================
-struct ImportDecl {
-    std::vector<std::string> path;  // std::io など
-    std::string alias;              // as別名（省略可）
-
-    ImportDecl(std::vector<std::string> p, std::string a = "")
-        : path(std::move(p)), alias(std::move(a)) {}
-
-    std::string full_path() const {
-        std::string result;
-        for (size_t i = 0; i < path.size(); ++i) {
-            if (i > 0)
-                result += "::";
-            result += path[i];
-        }
-        return result;
-    }
-};
+// ImportDeclはmodule.hppに移動
 
 // ============================================================
 // 宣言作成ヘルパー
@@ -135,9 +120,10 @@ inline DeclPtr make_struct(std::string name, std::vector<Field> fields, Span s =
                                   s);
 }
 
-inline DeclPtr make_import(std::vector<std::string> path, std::string alias = "", Span s = {}) {
-    return std::make_unique<Decl>(std::make_unique<ImportDecl>(std::move(path), std::move(alias)),
-                                  s);
-}
+// TODO: パーサー更新時に修正
+// inline DeclPtr make_import(std::vector<std::string> path, std::string alias = "", Span s = {}) {
+//     return std::make_unique<Decl>(std::make_unique<ImportDecl>(std::move(path), std::move(alias)),
+//                                   s);
+// }
 
 }  // namespace cm::ast
