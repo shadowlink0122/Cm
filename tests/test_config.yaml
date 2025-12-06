@@ -1,0 +1,155 @@
+# Cm Test Configuration
+# テストシステムの設定ファイル
+
+backends:
+  interpreter:
+    enabled: true
+    command: "cm --run"
+    description: "MIR interpreter execution"
+    status: "implemented"
+
+  rust:
+    enabled: false  # 実装後にtrueに変更
+    command: "cm --emit-rust"
+    compiler: "rustc"
+    file_extension: ".rs"
+    description: "Rust transpilation and compilation"
+    status: "planned"
+    dependencies:
+      - rustc
+
+  typescript:
+    enabled: false
+    command: "cm --emit-typescript"
+    compiler: "tsc"
+    runtime: "node"
+    file_extension: ".ts"
+    description: "TypeScript transpilation"
+    status: "planned"
+    dependencies:
+      - tsc
+      - node
+
+  wasm:
+    enabled: false
+    command: "cm --emit-wasm"
+    runtime: "wasmtime"
+    file_extension: ".wasm"
+    description: "WebAssembly compilation"
+    status: "planned"
+    dependencies:
+      - wasmtime
+
+test_suites:
+  basic:
+    description: "基本機能テスト"
+    enabled: true
+    backends:
+      - interpreter
+      - rust
+      - typescript
+      - wasm
+    tests:
+      - hello_world
+      - arithmetic
+      - variables
+
+  control_flow:
+    description: "制御フローテスト"
+    enabled: true
+    backends:
+      - interpreter
+      - rust
+      - typescript
+      - wasm
+    tests:
+      - if_else
+      - while_loop
+      - for_loop  # 未実装
+
+  functions:
+    description: "関数テスト"
+    enabled: false  # 関数サポート後に有効化
+    backends:
+      - rust
+      - typescript
+      - wasm
+    tests:
+      - basic_func
+      - recursion
+      - function_overload
+
+  overload:
+    description: "オーバーロードテスト"
+    enabled: false
+    backends:
+      - rust
+      - typescript
+    tests:
+      - overload_func
+      - overload_constructor
+      - overload_operator
+
+  types:
+    description: "型システムテスト"
+    enabled: false
+    backends:
+      - rust
+      - typescript
+      - wasm
+    tests:
+      - struct
+      - typedef
+      - union_types
+      - generics
+
+  errors:
+    description: "エラーケーステスト"
+    enabled: false
+    backends:
+      - interpreter
+      - rust
+      - typescript
+      - wasm
+    tests:
+      - type_error
+      - syntax_error
+      - undefined_variable
+
+# テスト実行設定
+test_settings:
+  timeout: 30  # seconds
+  parallel: false  # 並列実行（将来）
+  verbose_on_failure: true
+  keep_artifacts: false
+  output_format: "simple"  # simple | json | junit
+
+# CI設定
+ci:
+  enabled: true
+  on_push: true
+  on_pull_request: true
+  required_pass_rate: 100  # %
+  backends_to_test:
+    - interpreter  # 現在はこれのみ
+    # - rust
+    # - typescript
+    # - wasm
+
+# 開発状況
+development_status:
+  interpreter:
+    basic: "completed"
+    control_flow: "partial"  # forループ未実装
+    functions: "builtin_only"
+    overload: "not_started"
+    types: "not_started"
+
+  rust:
+    all: "not_started"
+
+  typescript:
+    all: "not_started"
+
+  wasm:
+    all: "not_started"

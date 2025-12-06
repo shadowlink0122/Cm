@@ -1,116 +1,91 @@
-# CLAUDE.md - Cm Language Project
+# CLAUDE.md - Cm言語プロジェクトAIガイド
 
-## AI Development Guidelines
+## 重要：開発前に必ず確認
+1. `docs/design/CANONICAL_SPEC.md` - **正式言語仕様**（最優先）
+2. `docs/design/architecture.md` - システム設計
+3. `docs/PROJECT_STRUCTURE.md` - プロジェクト構造
 
-> [!IMPORTANT]
-> **Think-First Development**: 機能実装前に必ず以下を検討すること
-> 1. 既存設計との整合性（特に `docs/design/` 参照）
-> 2. クロスバックエンド互換性（Interpreter/Rust/TS）
-> 3. 技術的課題の確認（`docs/design/technical_challenges.md`）
-> 4. テスト戦略（`docs/design/testing.md`）
+## 言語仕様（必須）
 
-## Project Overview
+### 構文スタイル：C++風（Rust風禁止）
+```cm
+// ✓ 正しい
+int add(int a, int b) { return a + b; }
+<T: Ord> T max(T a, T b) { return a > b ? a : b; }
 
-Cm (シーマイナー) is a next-generation programming language designed for both low-level systems (OS, embedded) and web frontend development. It is a complete redesign of the [Cb language](https://github.com/shadowlink0122/Cb).
-
-**Goals:**
-- Write once, compile to native (via Rust transpilation) or web (WASM/TypeScript)
-- Modern type system with generics, async/await, pattern matching
-- Integrated package manager (gen)
-
-## Development Language
-
-- **C++20** (required)
-- **Recommended**: Clang 17+ (fast compile, good errors)
-- **Alternative**: GCC 13+
-- MSVC 2017+ (Windows)
-
-## Build Commands
-
-### Docker (Recommended)
-
-```bash
-docker compose run --rm dev           # 開発シェル
-docker compose run --rm build-clang   # Clangビルド
-docker compose run --rm lint          # Lint
-docker compose run --rm test          # テスト
+// ✗ 間違い（Rust風）
+fn add(a: int, b: int) -> int { }
 ```
 
-### Local
+### キーワード優先順位
+- `typedef` - 型エイリアス（`type`は使わない）
+- `#define` - 型付きコンパイル時定数
+- `#macro` - コードマクロ（`#define`マクロは使わない）
+- `overload` - 関数オーバーロード（明示的に必要）
+- `constexpr` - コンパイル時計算
+- `with` - 自動トレイト実装（`[[derive()]]`は使わない）
 
-```bash
-# Configure (Clang推奨)
-CC=clang CXX=clang++ cmake -B build -G Ninja
+## プロジェクトルール（厳守）
 
-# Build
-cmake --build build
-
-# Test
-ctest --test-dir build
+### ファイル配置
+```
+✗ プロジェクトルート禁止：*.cm, 実行ファイル, 個別ドキュメント
+✓ tests/        - 全テストファイル
+✓ docs/         - 全ドキュメント
+✓ src/          - ソースコード
+✓ examples/     - サンプルコード
 ```
 
-## Debug Mode
-
-```bash
-# Enable debug logging
-cm run example.cm --debug   # or -d
-cm run example.cm -d=trace  # TRACE level (most verbose)
-```
-
-Log levels: TRACE > DEBUG > INFO > WARN > ERROR
-
-## Testing
-
-```bash
-# All tests
-ctest --test-dir build
-
-# By category
-ctest --test-dir build -L unit
-ctest --test-dir build -L integration
-./tests/e2e/run_all.sh
-```
-
-## Coding Conventions
-
-- **Language**: C++20
-- **Naming**: `snake_case` for functions/variables, `PascalCase` for types
-- **Smart Pointers**: `std::unique_ptr` for AST/IR node ownership
-- **Variant**: `std::variant` for IR node types
-- **Optional**: `std::optional` for nullable values
-- **Max lines per file**: ~1000行
-
-## Debug System
-
+### デバッグ出力
 ```cpp
-// 使用法 (IDで出力)
-debug::debug_msg(debug::MsgId::LEX_START);
-debug::debug_msg(debug::MsgId::LEX_KEYWORD, "struct");
+// 正しい形式：[STAGE] のみ（1つのブラケット）
+[LEXER] Starting tokenization
+[PARSER] ERROR: Expected ';'
+[MIR] Lowering function: main
 
-// CLIオプション
-cm -d example.cm          // デバッグON
-cm -d=trace example.cm    // TRACEレベル
-cm --lang=ja example.cm   // 日本語メッセージ
+// ✗ 間違い：[STAGE] [LEVEL] （2つのブラケット）
 ```
 
-Stages: `[LEXER]`, `[PARSER]`, `[AST]`, `[HIR]`, `[MIR]`, `[INTERP]`
+## コンパイラパイプライン
 
-## Key Design Decisions
+```
+Lexer → Parser → AST → HIR → MIR → LIR → CodeGen
+                            ↑
+                        現在ここまで実装
+```
 
-1. **Transpiler First**: HIR → Rust/WASM/TS (Phase 1)
-2. **C++20**: Modern features (Concepts, Ranges, Coroutines)
-3. **Multi-Target HIR**: Designed for Rust ∩ TypeScript common subset
-4. **Future Native**: Cranelift or LLVM in Phase 3
+### 実装済み
+- ✓ Lexer/Parser（基本構文）
+- ✓ HIR（高レベル中間表現）
+- ✓ MIR（SSA形式、CFGベース）
+- ✓ 基本的な型システム
 
-## Important Files
+### 未実装
+- ✗ LIR（低レベル中間表現）
+- ✗ バックエンド（Rust/TS/WASM）
+- ✗ 完全なオーバーロード解決
+- ✗ ジェネリック特殊化
 
-- `docs/design/architecture.md` - Overall compiler architecture
-- `docs/design/hir.md` - HIR design (multi-target optimized)
-- `docs/design/backends.md` - Rust/WASM/TS backends
-- `docs/design/package_manager.md` - Package management system
-- `docs/design/debug.md` - Debug mode design
-- `docs/design/testing.md` - Testing strategy
+## ビルド・テスト
 
-## Related Projects
+```bash
+# ビルド
+cmake -B build && cmake --build build
 
-- [Cb Language](https://github.com/shadowlink0122/Cb) - Predecessor project
+# テスト
+ctest --test-dir build               # C++テスト
+./build/bin/cm tests/regression/*.cm # Cmテスト
+```
+
+## 開発時の注意
+
+1. **矛盾時は`CANONICAL_SPEC.md`が最優先**
+2. **C++20必須**（Clang 17+推奨）
+3. **テストは必ず`tests/`に配置**
+4. **新機能は設計文書を先に作成**
+
+## AI向けヒント
+- 思考は英語、コメントは日本語
+- エラーメッセージは具体的に
+- 実装前に既存コードを確認
+- テスト駆動開発を推奨

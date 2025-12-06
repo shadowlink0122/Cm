@@ -39,9 +39,12 @@ enum class TypeKind {
     Function,  // (T1, T2) -> R
 
     // 特殊
-    Generic,   // <T>
-    Error,     // 型エラー（エラー回復用）
-    Inferred,  // 型推論待ち
+    Generic,       // <T>
+    Error,         // 型エラー（エラー回復用）
+    Inferred,      // 型推論待ち
+    Union,         // タグ付きユニオン型
+    LiteralUnion,  // リテラルユニオン型（"a" | "b" | 100）
+    TypeAlias,     // typedef による型エイリアス
 };
 
 // ============================================================

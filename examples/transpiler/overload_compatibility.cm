@@ -1,0 +1,343 @@
+// トランスパイラ互換性を考慮したオーバーロード例
+
+// ============================================================
+// 基本的なオーバーロード（明示的なoverload修飾子）
+// ============================================================
+
+// 最初の宣言からoverloadが必要
+overload int add(int a, int b) {
+    return a + b;
+}
+
+overload double add(double a, double b) {
+    return a + b;
+}
+
+overload string add(string a, string b) {
+    return a + b;
+}
+
+// Vec用の特殊化
+overload <T> Vec<T> add(Vec<T> a, Vec<T> b) {
+    Vec<T> result = a;
+    for (T item : b) {
+        result.push(item);
+    }
+    return result;
+}
+
+// ============================================================
+// Rustトランスパイル例
+// ============================================================
+
+/*
+// 生成されるRustコード:
+
+// 方法1: トレイトベース
+trait AddOp<T> {
+    type Output;
+    fn add_op(self, other: T) -> Self::Output;
+}
+
+impl AddOp<i32> for i32 {
+    type Output = i32;
+    fn add_op(self, other: i32) -> i32 {
+        self + other
+    }
+}
+
+impl AddOp<String> for String {
+    type Output = String;
+    fn add_op(self, other: String) -> String {
+        format!("{}{}", self, other)
+    }
+}
+
+// 方法2: 名前マングリング
+fn add_i32_i32(a: i32, b: i32) -> i32 { a + b }
+fn add_f64_f64(a: f64, b: f64) -> f64 { a + b }
+fn add_String_String(a: String, b: String) -> String {
+    format!("{}{}", a, b)
+}
+*/
+
+// ============================================================
+// TypeScriptトランスパイル例
+// ============================================================
+
+/*
+// 生成されるTypeScriptコード:
+
+function add(a: number, b: number): number;
+function add(a: string, b: string): string;
+function add<T>(a: T[], b: T[]): T[];
+function add(a: any, b: any): any {
+    if (typeof a === 'number' && typeof b === 'number') {
+        return a + b;
+    }
+    if (typeof a === 'string' && typeof b === 'string') {
+        return a + b;
+    }
+    if (Array.isArray(a) && Array.isArray(b)) {
+        return [...a, ...b];
+    }
+    throw new Error('Invalid arguments');
+}
+*/
+
+// ============================================================
+// print関数ファミリー
+// ============================================================
+
+overload void print(int x) {
+    printf("%d\n", x);
+}
+
+overload void print(double x) {
+    printf("%.2f\n", x);
+}
+
+overload void print(string s) {
+    printf("%s\n", s.c_str());
+}
+
+overload void print(bool b) {
+    printf("%s\n", b ? "true" : "false");
+}
+
+// ポインタ版
+overload <T> void print(T* ptr) {
+    if (ptr == null) {
+        printf("null\n");
+    } else {
+        print(*ptr);  // 再帰的に実際の値をprint
+    }
+}
+
+// 配列版
+overload <T> void print(T[] arr, size_t size) {
+    printf("[");
+    for (size_t i = 0; i < size; i++) {
+        if (i > 0) printf(", ");
+        print(arr[i]);
+    }
+    printf("]\n");
+}
+
+// ============================================================
+// コンストラクタのオーバーロード
+// ============================================================
+
+struct Point {
+    double x;
+    double y;
+}
+
+impl Point {
+    // デフォルトコンストラクタ
+    self() {
+        this.x = 0.0;
+        this.y = 0.0;
+    }
+
+    // 座標指定
+    self(double x, double y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    // 極座標から
+    self(double r, double theta, bool polar) {
+        if (polar) {
+            this.x = r * cos(theta);
+            this.y = r * sin(theta);
+        } else {
+            this.x = r;
+            this.y = theta;
+        }
+    }
+
+    // コピーコンストラクタ
+    self(const Point& other) {
+        this.x = other.x;
+        this.y = other.y;
+    }
+}
+
+/*
+// Rustへの変換:
+impl Point {
+    fn new() -> Self {
+        Point { x: 0.0, y: 0.0 }
+    }
+
+    fn from_coords(x: f64, y: f64) -> Self {
+        Point { x, y }
+    }
+
+    fn from_polar(r: f64, theta: f64) -> Self {
+        Point {
+            x: r * theta.cos(),
+            y: r * theta.sin(),
+        }
+    }
+}
+
+// TypeScriptへの変換:
+class Point {
+    constructor();
+    constructor(x: number, y: number);
+    constructor(r: number, theta: number, polar: boolean);
+    constructor(other: Point);
+    constructor(...args: any[]) {
+        if (args.length === 0) {
+            this.x = 0;
+            this.y = 0;
+        } else if (args.length === 2) {
+            this.x = args[0];
+            this.y = args[1];
+        } else if (args.length === 3) {
+            // polar
+            this.x = args[0] * Math.cos(args[1]);
+            this.y = args[0] * Math.sin(args[1]);
+        } else if (args[0] instanceof Point) {
+            this.x = args[0].x;
+            this.y = args[0].y;
+        }
+    }
+}
+*/
+
+// ============================================================
+// ジェネリック特殊化
+// ============================================================
+
+// 基本ジェネリック版
+<T: Display> string to_string(T value) {
+    return value.to_string();
+}
+
+// 特殊化（数値用）
+overload string to_string(int value) {
+    return std::to_string(value);
+}
+
+overload string to_string(double value) {
+    char buffer[32];
+    sprintf(buffer, "%.2f", value);
+    return string(buffer);
+}
+
+// 特殊化（ポインタ用）
+overload <T> string to_string(T* ptr) {
+    if (ptr == null) {
+        return "null";
+    }
+    char buffer[32];
+    sprintf(buffer, "0x%p", ptr);
+    return string(buffer);
+}
+
+// ============================================================
+// 演算子オーバーロード
+// ============================================================
+
+struct Complex {
+    double real;
+    double imag;
+}
+
+// 複素数同士
+Complex operator+(const Complex& a, const Complex& b) {
+    return Complex{a.real + b.real, a.imag + b.imag};
+}
+
+// 複素数と実数
+Complex operator+(const Complex& a, double b) {
+    return Complex{a.real + b, a.imag};
+}
+
+Complex operator+(double a, const Complex& b) {
+    return Complex{a + b.real, b.imag};
+}
+
+// 複素数の乗算
+Complex operator*(const Complex& a, const Complex& b) {
+    return Complex{
+        a.real * b.real - a.imag * b.imag,
+        a.real * b.imag + a.imag * b.real
+    };
+}
+
+/*
+// Rust変換: トレイトを使用
+impl std::ops::Add for Complex {
+    type Output = Complex;
+    fn add(self, other: Complex) -> Complex {
+        Complex {
+            real: self.real + other.real,
+            imag: self.imag + other.imag,
+        }
+    }
+}
+
+impl std::ops::Add<f64> for Complex {
+    type Output = Complex;
+    fn add(self, other: f64) -> Complex {
+        Complex {
+            real: self.real + other,
+            imag: self.imag,
+        }
+    }
+}
+*/
+
+// ============================================================
+// 使用例
+// ============================================================
+
+int main() {
+    // 基本的なオーバーロード
+    int i = add(1, 2);              // 3
+    double d = add(3.14, 2.86);     // 6.0
+    string s = add("Hello", " World"); // "Hello World"
+
+    // Vecの例
+    Vec<int> v1 = {1, 2, 3};
+    Vec<int> v2 = {4, 5, 6};
+    Vec<int> v3 = add(v1, v2);     // {1, 2, 3, 4, 5, 6}
+
+    // print関数
+    print(42);
+    print(3.14);
+    print("Hello");
+    print(true);
+
+    int* ptr = &i;
+    print(ptr);
+
+    int arr[] = {1, 2, 3, 4, 5};
+    print(arr, 5);
+
+    // Point構造体
+    Point p1;                       // デフォルト
+    Point p2(3.0, 4.0);            // 座標
+    Point p3(5.0, M_PI/4, true);   // 極座標
+    Point p4(p2);                  // コピー
+
+    // to_string
+    string s1 = to_string(42);
+    string s2 = to_string(3.14);
+    string s3 = to_string(ptr);
+
+    // 複素数演算
+    Complex c1{3.0, 4.0};
+    Complex c2{1.0, 2.0};
+    Complex c3 = c1 + c2;          // (4, 6)
+    Complex c4 = c1 + 5.0;         // (8, 4)
+    Complex c5 = 5.0 + c1;         // (8, 4)
+    Complex c6 = c1 * c2;          // (-5, 10)
+
+    println("All tests completed!");
+    return 0;
+}

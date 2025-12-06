@@ -14,7 +14,9 @@ namespace cm {
 // ============================================================
 class TypeChecker {
    public:
-    TypeChecker() = default;
+    TypeChecker() {
+        register_builtins();
+    }
 
     // プログラム全体をチェック
     bool check(ast::Program& program) {
@@ -432,6 +434,45 @@ class TypeChecker {
     void error(Span span, const std::string& msg) {
         debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Error);
         diagnostics_.emplace_back(DiagKind::Error, span, msg);
+    }
+
+    // 組み込み関数を登録
+    void register_builtins() {
+        // println: 任意の型を受け取り、voidを返す
+        // 簡易実装：stringを受け取るバージョンと、intを受け取るバージョンを登録
+        scopes_.global().define_function(
+            "println",
+            {ast::make_string()},
+            ast::make_void()
+        );
+
+        // オーバーロード版（int）
+        scopes_.global().define_function(
+            "println",
+            {ast::make_int()},
+            ast::make_void()
+        );
+
+        // オーバーロード版（double）
+        scopes_.global().define_function(
+            "println",
+            {ast::make_double()},
+            ast::make_void()
+        );
+
+        // オーバーロード版（bool）
+        scopes_.global().define_function(
+            "println",
+            {ast::make_bool()},
+            ast::make_void()
+        );
+
+        // sqrt: doubleを受け取り、doubleを返す
+        scopes_.global().define_function(
+            "sqrt",
+            {ast::make_double()},
+            ast::make_double()
+        );
     }
 
     ScopeStack scopes_;

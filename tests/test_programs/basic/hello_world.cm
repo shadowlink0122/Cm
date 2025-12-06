@@ -1,0 +1,5 @@
+// 最も基本的なテスト
+int main() {
+    println("Hello, World!");
+    return 0;
+}

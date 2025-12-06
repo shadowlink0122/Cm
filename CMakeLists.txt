@@ -119,6 +119,17 @@ if(BUILD_TESTING)
         )
         target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
+
+        # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
+        # add_executable(mir_interpreter_test
+        #     tests/unit/mir_interpreter_test.cpp
+        #     src/frontend/lexer/token.cpp
+        #     src/frontend/parser/parser_stmt.cpp
+        #     src/frontend/parser/parser_expr.cpp
+        #     src/frontend/parser/parser_module.cpp
+        # )
+        # target_link_libraries(mir_interpreter_test GTest::gtest_main cm_frontend)
+        # gtest_discover_tests(mir_interpreter_test PROPERTIES LABELS "unit")
     else()
         message(STATUS "Google Test not found, skipping C++ tests")
         message(STATUS "Install with: brew install googletest (macOS)")

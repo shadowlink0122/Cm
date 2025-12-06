@@ -5,6 +5,7 @@
 #include "hir/hir_lowering.hpp"
 #include "mir/mir_lowering.hpp"
 #include "mir/mir_printer.hpp"
+#include "mir/mir_interpreter.hpp"
 #include "mir/optimizations/all_passes.hpp"
 
 #include <iostream>
@@ -41,7 +42,7 @@ void print_help(const char* program_name) {
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
     std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
     std::cout << "  --mir-opt             最適化されたMIRを表示\n";
-    std::cout << "  --run                 インタプリタで実行（開発中）\n";
+    std::cout << "  --run                 インタプリタで実行\n";
     std::cout << "  --emit-rust           Rustコードを生成（開発中）\n";
     std::cout << "  --check               構文と型チェックのみ実行\n";
     std::cout << "  -O<n>                 最適化レベル（0-2）\n";
@@ -265,8 +266,23 @@ int main(int argc, char* argv[]) {
         // ========== Backend ==========
         if (opts.run_interpreter) {
             std::cout << "=== Interpreter ===\n";
-            std::cout << "注意: インタプリタは開発中です\n";
-            // TODO: インタプリタを実装・統合
+            mir::MirInterpreter interpreter;
+            auto result = interpreter.execute(mir);
+
+            if (!result.success) {
+                std::cerr << "実行エラー: " << result.error_message << "\n";
+                return 1;
+            }
+
+            // 戻り値がある場合は表示
+            if (result.return_value.has_value()) {
+                if (result.return_value.type() == typeid(int64_t)) {
+                    std::cout << "プログラム終了コード: " << std::any_cast<int64_t>(result.return_value) << "\n";
+                } else if (result.return_value.type() == typeid(bool)) {
+                    std::cout << "プログラム終了コード: " << (std::any_cast<bool>(result.return_value) ? 1 : 0) << "\n";
+                }
+            }
+            std::cout << "✓ 実行完了\n";
         }
 
         if (opts.emit_rust) {

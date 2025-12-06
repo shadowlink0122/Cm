@@ -68,7 +68,14 @@ inline const char* level_str(Level l) {
 inline void log(Stage stage, Level level, const char* msg) {
     if (!g_debug_mode || level < g_debug_level)
         return;
-    std::cerr << "[" << stage_str(stage) << "] [" << level_str(level) << "] " << msg << std::endl;
+    // レベルに応じてプレフィックスを付加（ただし[]は1つだけ）
+    const char* prefix = "";
+    switch (level) {
+        case Level::Error: prefix = "ERROR: "; break;
+        case Level::Warn: prefix = "WARN: "; break;
+        default: break;
+    }
+    std::cerr << "[" << stage_str(stage) << "] " << prefix << msg << std::endl;
 }
 
 inline void log(Stage stage, Level level, const std::string& msg) {

@@ -1,0 +1,27 @@
+// 基本的な算術演算テスト
+int main() {
+    int a = 10;
+    int b = 20;
+
+    // 加算
+    int sum = a + b;
+    println(sum);
+
+    // 減算
+    int diff = b - a;
+    println(diff);
+
+    // 乗算
+    int prod = a * 2;
+    println(prod);
+
+    // 除算
+    int quot = b / 2;
+    println(quot);
+
+    // 剰余
+    int rem = b % 3;
+    println(rem);
+
+    return 0;
+}

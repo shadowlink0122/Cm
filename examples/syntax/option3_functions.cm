@@ -1,0 +1,306 @@
+// オプション3の関数構文例
+
+// ============================================================
+// 基本的なジェネリック関数
+// ============================================================
+
+// シンプルなケース
+<T> T identity(T value) {
+    return value;
+}
+
+// 型制約付き
+<T: Ord> T max(T a, T b) {
+    return a > b ? a : b;
+}
+
+<T: Ord> T min(T a, T b) {
+    return a < b ? a : b;
+}
+
+// 複数の型パラメータ
+<T, U> U convert(T from, U default_val) {
+    // 変換ロジック（仮）
+    return default_val;
+}
+
+// 複数の制約
+<T: Clone + Debug> T duplicate(T original) {
+    debug_print(original);
+    return original.clone();
+}
+
+// where句を使った複雑な制約
+<T, U> U transform(T input)
+where T: Into<U>, U: Default {
+    if (is_valid(input)) {
+        return input.into();
+    }
+    return U::default();
+}
+
+// ============================================================
+// デフォルト引数付き関数
+// ============================================================
+
+// 通常関数のデフォルト引数
+int add(int a, int b = 0) {
+    return a + b;
+}
+
+string greet(string name, string greeting = "Hello") {
+    return greeting + ", " + name + "!";
+}
+
+// ジェネリック関数のデフォルト引数
+<T: Default> T get_or_default(T* ptr, T default_val = T::default()) {
+    if (ptr != null) {
+        return *ptr;
+    }
+    return default_val;
+}
+
+<T> void fill_array(T[] arr, size_t size, T value = T()) {
+    for (size_t i = 0; i < size; i++) {
+        arr[i] = value;
+    }
+}
+
+// ============================================================
+// 高階関数
+// ============================================================
+
+// 関数を引数に取る
+<T, U> U[] map(T[] input, size_t len, U mapper(T)) {
+    U[] result = new U[len];
+    for (size_t i = 0; i < len; i++) {
+        result[i] = mapper(input[i]);
+    }
+    return result;
+}
+
+<T> T[] filter(T[] input, size_t len, bool predicate(T)) {
+    // 動的配列で実装（簡略化）
+    Vec<T> result;
+    for (size_t i = 0; i < len; i++) {
+        if (predicate(input[i])) {
+            result.push(input[i]);
+        }
+    }
+    return result.to_array();
+}
+
+<T, R> R fold(T[] input, size_t len, R init, R reducer(R, T)) {
+    R result = init;
+    for (size_t i = 0; i < len; i++) {
+        result = reducer(result, input[i]);
+    }
+    return result;
+}
+
+// ============================================================
+// 可変長引数
+// ============================================================
+
+// 基本的な可変長引数
+int sum(int... numbers) {
+    int total = 0;
+    for (int n : numbers) {
+        total += n;
+    }
+    return total;
+}
+
+// ジェネリック可変長引数
+<T: Add> T sum_generic(T... values) {
+    T result = T();
+    for (T val : values) {
+        result = result + val;
+    }
+    return result;
+}
+
+// フォーマット文字列（C風）
+void printf_safe(const string& format, ...) {
+    va_list args;
+    va_start(args, format);
+    vprintf(format.c_str(), args);
+    va_end(args);
+}
+
+// ============================================================
+// 演算子オーバーロード
+// ============================================================
+
+struct Complex {
+    double real;
+    double imag;
+}
+
+impl Complex {
+    self(double r = 0.0, double i = 0.0) {
+        this.real = r;
+        this.imag = i;
+    }
+}
+
+// 演算子も通常の関数として定義
+Complex operator+(const Complex& a, const Complex& b) {
+    return Complex(a.real + b.real, a.imag + b.imag);
+}
+
+Complex operator-(const Complex& a, const Complex& b) {
+    return Complex(a.real - b.real, a.imag - b.imag);
+}
+
+Complex operator*(const Complex& a, const Complex& b) {
+    return Complex(
+        a.real * b.real - a.imag * b.imag,
+        a.real * b.imag + a.imag * b.real
+    );
+}
+
+bool operator==(const Complex& a, const Complex& b) {
+    return a.real == b.real && a.imag == b.imag;
+}
+
+// ============================================================
+// 実用的な例：Option型
+// ============================================================
+
+enum OptionTag { Some, None }
+
+struct Option<T> {
+    private OptionTag tag;
+    private T value;  // Some の場合のみ有効
+}
+
+impl<T> Option<T> {
+    // Some コンストラクタ
+    self(T val) {
+        this.tag = Some;
+        this.value = move(val);
+    }
+
+    // None コンストラクタ
+    self() {
+        this.tag = None;
+    }
+}
+
+impl<T> Option<T> for OptionOps<T> {
+    bool is_some() {
+        return tag == Some;
+    }
+
+    bool is_none() {
+        return tag == None;
+    }
+
+    <T> T unwrap() {
+        if (tag != Some) {
+            panic("Called unwrap on None");
+        }
+        return value;
+    }
+
+    <T> T unwrap_or(T default_value) {
+        if (tag == Some) {
+            return value;
+        }
+        return default_value;
+    }
+
+    <U, T> Option<U> map(U mapper(T)) {
+        if (tag == Some) {
+            return Option<U>(mapper(value));
+        }
+        return Option<U>();
+    }
+
+    <T> Option<T> filter(bool predicate(T)) {
+        if (tag == Some && predicate(value)) {
+            return Option<T>(value);
+        }
+        return Option<T>();
+    }
+
+    <U, T> U fold(U default_val, U folder(T)) {
+        if (tag == Some) {
+            return folder(value);
+        }
+        return default_val;
+    }
+}
+
+// 便利な関数
+<T> Option<T> some(T value) {
+    return Option<T>(value);
+}
+
+<T> Option<T> none() {
+    return Option<T>();
+}
+
+// ============================================================
+// 使用例
+// ============================================================
+
+int main() {
+    // 基本的な関数
+    int x = identity(42);
+    string s = identity("Hello");
+
+    int max_val = max(10, 20);
+    int min_val = min(10, 20);
+
+    // デフォルト引数
+    int sum1 = add(5);        // 5 + 0 = 5
+    int sum2 = add(5, 3);     // 5 + 3 = 8
+
+    string msg1 = greet("Alice");              // "Hello, Alice!"
+    string msg2 = greet("Bob", "Hi");          // "Hi, Bob!"
+
+    // 高階関数
+    int numbers[] = {1, 2, 3, 4, 5};
+
+    // 2倍にする
+    int doubled[] = map(numbers, 5, (int n) -> n * 2);
+
+    // 偶数のみフィルタ
+    int evens[] = filter(numbers, 5, (int n) -> n % 2 == 0);
+
+    // 合計を計算
+    int total = fold(numbers, 5, 0, (int acc, int n) -> acc + n);
+
+    // 可変長引数
+    int sum_all = sum(1, 2, 3, 4, 5);  // 15
+
+    // 複素数演算
+    Complex c1(3.0, 4.0);
+    Complex c2(1.0, 2.0);
+    Complex c3 = c1 + c2;  // (4.0, 6.0)
+    Complex c4 = c1 * c2;  // (-5.0, 10.0)
+
+    // Option型
+    Option<int> opt1 = some(42);
+    Option<int> opt2 = none<int>();
+
+    int val1 = opt1.unwrap_or(0);  // 42
+    int val2 = opt2.unwrap_or(0);  // 0
+
+    // Optionのmap
+    Option<string> opt_str = opt1.map((int n) -> toString(n));
+
+    // Optionのfilter
+    Option<int> filtered = opt1.filter((int n) -> n > 40);
+
+    // チェーン操作
+    int result = some(10)
+        .map((int n) -> n * 2)
+        .filter((int n) -> n > 15)
+        .unwrap_or(0);  // 20
+
+    println("All tests completed!");
+    return 0;
+}

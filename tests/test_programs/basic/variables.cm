@@ -1,0 +1,21 @@
+// 変数宣言と代入のテスト
+int main() {
+    // 初期化付き宣言
+    int x = 42;
+    println(x);
+
+    // 代入
+    x = 100;
+    println(x);
+
+    // 複数の変数
+    int y = 20;
+    int z = x + y;
+    println(z);
+
+    // 再代入
+    z = z * 2;
+    println(z);
+
+    return 0;
+}

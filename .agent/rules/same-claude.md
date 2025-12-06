@@ -2,103 +2,107 @@
 trigger: always_on
 ---
 
-# CLAUDE.md - Cm Language Project
+# same-claude.md - 全プロジェクト共通AI設定
 
-## AI Development Guidelines
+## 基本ルール
 
-> [!IMPORTANT]
-> **Think-First Development**: 機能実装前に必ず以下を検討すること
-> 1. 既存設計との整合性（特に `docs/design/` 参照）
-> 2. クロスバックエンド互換性（Interpreter/Rust/TS）
-> 3. 技術的課題の確認（`docs/design/technical_challenges.md`）
-> 4. テスト戦略（`docs/design/testing.md`）
+### 思考と言語
+- **思考**: 英語で行う
+- **コメント**: 日本語で記述
+- **ドキュメント**: 日本語で作成
+- **エラーメッセージ**: 日本語で具体的に
 
-## Project Overview
-
-Cm (シーマイナー) is a next-generation programming language designed for both low-level systems (OS, embedded) and web frontend development. It is a complete redesign of the [Cb language](https://github.com/shadowlink0122/Cb).
-
-**Goals:**
-- Write once, compile to native (via Rust transpilation) or web (WASM/TypeScript)
-- Modern type system with generics, async/await, pattern matching
-- Integrated package manager (gen)
-
-## Development Language
-
-- **C++20** (required)
-- **Recommended**: Clang 17+ (fast compile, good errors)
-- **Alternative**: GCC 13+
-- MSVC 2017+ (Windows)
-
-## Build Commands
-
-### Docker (Recommended)
-
-```bash
-docker compose run --rm dev           # 開発シェル
-docker compose run --rm build-clang   # Clangビルド
-docker compose run --rm lint          # Lint
-docker compose run --rm test          # テスト
+### コーディング規約
+```
+関数/変数: snake_case
+型/クラス: PascalCase
+定数: UPPER_SNAKE_CASE
+ファイル: snake_case.ext
 ```
 
-### Local
-
-```bash
-# Configure (Clang推奨)
-CC=clang CXX=clang++ cmake -B build -G Ninja
-
-# Build
-cmake --build build
-
-# Test
-ctest --test-dir build
+### プロジェクト構造
+```
+project/
+├── src/          # ソースコード
+├── tests/        # テストコード
+├── docs/         # ドキュメント
+├── examples/     # サンプル
+└── .tmp/         # 一時ファイル（.gitignore）
 ```
 
-## Debug Mode
+## 開発フロー
 
-```bash
-# Enable debug logging
-cm run example.cm --debug   # or -d
-cm run example.cm -d=trace  # TRACE level (most verbose)
+1. **要件確認** → 既存コード確認 → 設計 → 実装 → テスト
+2. **既存コードとの整合性を最優先**
+3. **破壊的変更は事前に確認**
+
+## Git規約
+
+### コミットメッセージ
+```
+種別: 簡潔な説明
+
+- 詳細1
+- 詳細2
+
+Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
-Log levels: TRACE > DEBUG > INFO > WARN > ERROR
+種別: `feat`, `fix`, `docs`, `test`, `refactor`, `style`, `perf`
 
-## Testing
+### ブランチ
+- `main` - 安定版
+- `feature/*` - 新機能
+- `fix/*` - バグ修正
 
-```bash
-# All tests
-ctest --test-dir build
+## 品質基準
 
-# By category
-ctest --test-dir build -L unit
-ctest --test-dir build -L integration
-./tests/e2e/run_all.sh
+### コード
+- **Lint/Format実行必須**
+- **テストカバレッジ維持**
+- **ドキュメント更新**
+
+### エラー処理
+```cpp
+// 具体的なエラーメッセージ
+if (error) {
+    return Error("ファイル '{}' が見つかりません（パス: {}）",
+                 filename, full_path);
+}
 ```
 
-## Coding Conventions
+## 禁止事項
 
-- **Language**: C++20
-- **Naming**: `snake_case` for functions/variables, `PascalCase` for types
-- **Smart Pointers**: `std::unique_ptr` for AST/IR node ownership
-- **Variant**: `std::variant` for IR node types
-- **Optional**: `std::optional` for nullable values
+1. **プロジェクトルートにソースファイル配置**
+2. **テストなしのコミット**
+3. **ドキュメントなしの新機能**
+4. **ハードコードされたパス**
+5. **環境依存のコード**
 
-## Key Design Decisions
+## 推奨事項
 
-1. **Transpiler First**: HIR → Rust/WASM/TS (Phase 1)
-2. **C++20**: Modern features (Concepts, Ranges, Coroutines)
-3. **Multi-Target HIR**: Designed for Rust ∩ TypeScript common subset
-4. **Future Native**: Cranelift or LLVM in Phase 3
+1. **早期リターン**で可読性向上
+2. **RAII**でリソース管理
+3. **const正確性**の維持
+4. **小さな関数**（30行以内）
+5. **明確な名前付け**
 
-## Important Files
+## デバッグ支援
 
-- `docs/design/architecture.md` - Overall compiler architecture
-- `docs/design/hir.md` - HIR design (multi-target optimized)
-- `docs/design/backends.md` - Rust/WASM/TS backends
-- `docs/design/package_manager.md` - Package management system
-- `docs/design/debug.md` - Debug mode design
-- `docs/design/testing.md` - Testing strategy
+```cpp
+// アサーション活用
+assert(ptr != nullptr && "ポインタがnull");
 
-## Related Projects
+// ログ出力
+LOG(DEBUG, "処理開始: {}", param);
+```
 
-- [Cb Language](https://github.com/shadowlink0122/Cb) - Predecessor project
+## パフォーマンス
+
+- **計測してから最適化**
+- **プロファイリング結果を記録**
+- **ベンチマークテスト作成**
+
+---
+このファイルは全プロジェクトで共有される設定です。
+プロジェクト固有の設定は`CLAUDE.md`に記載してください。
