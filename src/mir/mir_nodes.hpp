@@ -2,6 +2,7 @@
 
 #include "../common/span.hpp"
 #include "../hir/hir_types.hpp"
+
 #include <memory>
 #include <optional>
 #include <variant>
@@ -45,16 +46,16 @@ constexpr BlockId INVALID_BLOCK = std::numeric_limits<uint32_t>::max();
 
 // Place投影（フィールドアクセス、配列インデックス等）
 enum class ProjectionKind {
-    Field,      // 構造体フィールド
-    Index,      // 配列/スライスのインデックス
-    Deref,      // ポインタ/参照の間接参照
+    Field,  // 構造体フィールド
+    Index,  // 配列/スライスのインデックス
+    Deref,  // ポインタ/参照の間接参照
 };
 
 struct PlaceProjection {
     ProjectionKind kind;
     union {
-        FieldId field_id;   // Field の場合
-        LocalId index_local; // Index の場合（インデックスを保持するローカル変数）
+        FieldId field_id;  // Field の場合
+        LocalId index_local;  // Index の場合（インデックスを保持するローカル変数）
     };
 
     static PlaceProjection field(FieldId id) {
@@ -90,14 +91,9 @@ struct MirPlace {
 // Operand（オペランド）- 値を表現
 // ============================================================
 struct MirConstant {
-    std::variant<
-        std::monostate,  // unit/void
-        bool,
-        int64_t,
-        double,
-        char,
-        std::string
-    > value;
+    std::variant<std::monostate,  // unit/void
+                 bool, int64_t, double, char, std::string>
+        value;
     hir::TypePtr type;
 };
 
@@ -140,16 +136,30 @@ struct MirOperand {
 // Rvalue（右辺値）
 // ============================================================
 enum class MirBinaryOp {
-    Add, Sub, Mul, Div, Mod,
-    BitAnd, BitOr, BitXor, Shl, Shr,
-    Eq, Ne, Lt, Le, Gt, Ge,
-    And, Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
 };
 
 enum class MirUnaryOp {
-    Neg,      // 算術否定
-    Not,      // 論理否定
-    BitNot,   // ビット否定
+    Neg,     // 算術否定
+    Not,     // 論理否定
+    BitNot,  // ビット否定
 };
 
 enum class BorrowKind {
@@ -160,9 +170,9 @@ enum class BorrowKind {
 // 集約型の種類
 struct AggregateKind {
     enum Type {
-        Array,    // 配列
-        Tuple,    // タプル
-        Struct,   // 構造体
+        Array,   // 配列
+        Tuple,   // タプル
+        Struct,  // 構造体
     };
 
     Type type;
@@ -216,14 +226,7 @@ struct MirRvalue {
         hir::TypePtr target_type;
     };
 
-    std::variant<
-        UseData,
-        BinaryOpData,
-        UnaryOpData,
-        RefData,
-        AggregateData,
-        CastData
-    > data;
+    std::variant<UseData, BinaryOpData, UnaryOpData, RefData, AggregateData, CastData> data;
 
     static MirRvaluePtr use(MirOperandPtr op) {
         auto rv = std::make_unique<MirRvalue>();
@@ -273,11 +276,9 @@ struct MirStatement {
         LocalId local;
     };
 
-    std::variant<
-        std::monostate,  // Nop
-        AssignData,
-        StorageData
-    > data;
+    std::variant<std::monostate,  // Nop
+                 AssignData, StorageData>
+        data;
 
     static MirStatementPtr assign(MirPlace place, MirRvaluePtr rvalue, Span s = {}) {
         auto stmt = std::make_unique<MirStatement>();
@@ -309,11 +310,11 @@ struct MirStatement {
 // ============================================================
 struct MirTerminator {
     enum Kind {
-        Goto,        // 無条件ジャンプ
-        SwitchInt,   // 整数値による分岐
-        Return,      // 関数からのリターン
-        Unreachable, // 到達不可能
-        Call,        // 関数呼び出し
+        Goto,         // 無条件ジャンプ
+        SwitchInt,    // 整数値による分岐
+        Return,       // 関数からのリターン
+        Unreachable,  // 到達不可能
+        Call,         // 関数呼び出し
     };
 
     Kind kind;
@@ -340,12 +341,9 @@ struct MirTerminator {
         std::optional<BlockId> unwind;        // パニック時の遷移先
     };
 
-    std::variant<
-        std::monostate,  // Return, Unreachable
-        GotoData,
-        SwitchIntData,
-        CallData
-    > data;
+    std::variant<std::monostate,  // Return, Unreachable
+                 GotoData, SwitchIntData, CallData>
+        data;
 
     static MirTerminatorPtr goto_block(BlockId target, Span s = {}) {
         auto term = std::make_unique<MirTerminator>();
@@ -369,20 +367,13 @@ struct MirTerminator {
         return term;
     }
 
-    static MirTerminatorPtr switch_int(
-        MirOperandPtr discriminant,
-        std::vector<std::pair<int64_t, BlockId>> targets,
-        BlockId otherwise,
-        Span s = {}
-    ) {
+    static MirTerminatorPtr switch_int(MirOperandPtr discriminant,
+                                       std::vector<std::pair<int64_t, BlockId>> targets,
+                                       BlockId otherwise, Span s = {}) {
         auto term = std::make_unique<MirTerminator>();
         term->kind = SwitchInt;
         term->span = s;
-        term->data = SwitchIntData{
-            std::move(discriminant),
-            std::move(targets),
-            otherwise
-        };
+        term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise};
         return term;
     }
 };
@@ -401,9 +392,7 @@ struct BasicBlock {
 
     BasicBlock(BlockId i) : id(i) {}
 
-    void add_statement(MirStatementPtr stmt) {
-        statements.push_back(std::move(stmt));
-    }
+    void add_statement(MirStatementPtr stmt) { statements.push_back(std::move(stmt)); }
 
     void set_terminator(MirTerminatorPtr term) {
         terminator = std::move(term);
@@ -412,7 +401,8 @@ struct BasicBlock {
 
     void update_successors() {
         successors.clear();
-        if (!terminator) return;
+        if (!terminator)
+            return;
 
         switch (terminator->kind) {
             case MirTerminator::Goto: {
@@ -447,7 +437,7 @@ struct BasicBlock {
 // ============================================================
 struct LocalDecl {
     LocalId id;
-    std::string name;      // デバッグ用の名前
+    std::string name;  // デバッグ用の名前
     hir::TypePtr type;
     bool is_mutable;
     bool is_user_variable;  // ユーザー定義の変数か、コンパイラ生成の一時変数か
@@ -461,14 +451,15 @@ struct LocalDecl {
 // ============================================================
 struct MirFunction {
     std::string name;
-    std::vector<LocalDecl> locals;           // ローカル変数（引数も含む）
-    std::vector<LocalId> arg_locals;         // 引数に対応するローカルID
-    LocalId return_local;                    // 戻り値用のローカル（_0）
+    std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
+    std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
+    LocalId return_local;             // 戻り値用のローカル（_0）
     std::vector<BasicBlockPtr> basic_blocks;
     BlockId entry_block = ENTRY_BLOCK;
 
     // ローカル変数の追加
-    LocalId add_local(std::string name, hir::TypePtr type, bool is_mutable = true, bool is_user = true) {
+    LocalId add_local(std::string name, hir::TypePtr type, bool is_mutable = true,
+                      bool is_user = true) {
         LocalId id = locals.size();
         locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user);
         return id;

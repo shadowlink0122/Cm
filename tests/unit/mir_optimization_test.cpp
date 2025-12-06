@@ -1,10 +1,11 @@
-#include <gtest/gtest.h>
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
 #include "../../src/hir/hir_lowering.hpp"
 #include "../../src/mir/mir_lowering.hpp"
-#include "../../src/mir/optimizations/all_passes.hpp"
 #include "../../src/mir/mir_printer.hpp"
+#include "../../src/mir/optimizations/all_passes.hpp"
+
+#include <gtest/gtest.h>
 #include <sstream>
 
 using namespace cm;
@@ -13,7 +14,7 @@ using namespace cm;
 // テストヘルパー
 // ============================================================
 class MirOptimizationTest : public ::testing::Test {
-protected:
+   protected:
     std::unique_ptr<mir::MirProgram> compile_to_mir(const std::string& code) {
         // レクサー → パーサー → HIR → MIR
         Lexer lex(code);
@@ -31,7 +32,8 @@ protected:
     }
 
     // 特定の最適化パスを実行
-    bool run_optimization(mir::MirProgram& program, std::unique_ptr<mir::opt::OptimizationPass> pass) {
+    bool run_optimization(mir::MirProgram& program,
+                          std::unique_ptr<mir::opt::OptimizationPass> pass) {
         return pass->run_on_program(program);
     }
 
@@ -39,13 +41,15 @@ protected:
     int count_constant_statements(const mir::MirFunction& func) {
         int count = 0;
         for (const auto& block : func.basic_blocks) {
-            if (!block) continue;
+            if (!block)
+                continue;
             for (const auto& stmt : block->statements) {
                 if (stmt->kind == mir::MirStatement::Assign) {
                     auto& data = std::get<mir::MirStatement::AssignData>(stmt->data);
                     if (data.rvalue && data.rvalue->kind == mir::MirRvalue::Use) {
                         auto& use_data = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
-                        if (use_data.operand && use_data.operand->kind == mir::MirOperand::Constant) {
+                        if (use_data.operand &&
+                            use_data.operand->kind == mir::MirOperand::Constant) {
                             count++;
                         }
                     }
@@ -59,7 +63,8 @@ protected:
     int count_nop_statements(const mir::MirFunction& func) {
         int count = 0;
         for (const auto& block : func.basic_blocks) {
-            if (!block) continue;
+            if (!block)
+                continue;
             for (const auto& stmt : block->statements) {
                 if (stmt->kind == mir::MirStatement::Nop) {
                     count++;
@@ -149,7 +154,8 @@ TEST_F(MirOptimizationTest, DeadCodeElimination_UnusedVariable) {
     // 最適化前の文の数をカウント
     int statements_before = 0;
     for (const auto& block : func.basic_blocks) {
-        if (block) statements_before += block->statements.size();
+        if (block)
+            statements_before += block->statements.size();
     }
 
     // デッドコード除去を実行
@@ -161,7 +167,8 @@ TEST_F(MirOptimizationTest, DeadCodeElimination_UnusedVariable) {
     // 最適化後の文の数をカウント
     int statements_after = 0;
     for (const auto& block : func.basic_blocks) {
-        if (block) statements_after += block->statements.size();
+        if (block)
+            statements_after += block->statements.size();
     }
 
     // unusedへの代入が削除されて文が減っているはず
@@ -181,7 +188,8 @@ TEST_F(MirOptimizationTest, DeadCodeElimination_UnreachableBlock) {
 
     size_t blocks_before = 0;
     for (const auto& block : func.basic_blocks) {
-        if (block) blocks_before++;
+        if (block)
+            blocks_before++;
     }
 
     // デッドコード除去を実行
@@ -191,7 +199,8 @@ TEST_F(MirOptimizationTest, DeadCodeElimination_UnreachableBlock) {
     // 到達不可能ブロックが削除されている可能性
     size_t blocks_after = 0;
     for (const auto& block : func.basic_blocks) {
-        if (block) blocks_after++;
+        if (block)
+            blocks_after++;
     }
 
     EXPECT_LE(blocks_after, blocks_before);
@@ -352,7 +361,7 @@ TEST_F(MirOptimizationTest, IntegrationTest_ComplexOptimization) {
     // フル最適化パイプライン
     mir::opt::OptimizationPipeline pipeline;
     pipeline.enable_debug_output(false);  // テストでは出力を抑制
-    pipeline.add_standard_passes(2);  // -O2レベル
+    pipeline.add_standard_passes(2);      // -O2レベル
     pipeline.run_until_fixpoint(*mir);
 
     // 最適化により、プログラムが大幅に簡略化されているはず

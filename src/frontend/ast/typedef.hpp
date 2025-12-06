@@ -1,9 +1,10 @@
 #pragma once
 
 #include "types.hpp"
+
 #include <string>
-#include <vector>
 #include <variant>
+#include <vector>
 
 namespace cm::ast {
 
@@ -11,11 +12,11 @@ namespace cm::ast {
 // リテラル型
 // ============================================================
 struct LiteralType {
-    std::variant<
-        std::string,  // 文字列リテラル
-        int64_t,      // 整数リテラル
-        double        // 浮動小数点リテラル
-    > value;
+    std::variant<std::string,  // 文字列リテラル
+                 int64_t,      // 整数リテラル
+                 double        // 浮動小数点リテラル
+                 >
+        value;
 
     LiteralType(std::string v) : value(std::move(v)) {}
     LiteralType(int64_t v) : value(v) {}
@@ -26,13 +27,12 @@ struct LiteralType {
 // ユニオン型のバリアント
 // ============================================================
 struct UnionVariant {
-    std::string tag;                        // タグ名（"ok", "err" など）
-    std::vector<TypePtr> fields;            // フィールドの型
-    std::vector<std::string> field_names;   // フィールド名（オプション）
+    std::string tag;                       // タグ名（"ok", "err" など）
+    std::vector<TypePtr> fields;           // フィールドの型
+    std::vector<std::string> field_names;  // フィールド名（オプション）
 
     UnionVariant(std::string t) : tag(std::move(t)) {}
-    UnionVariant(std::string t, std::vector<TypePtr> f)
-        : tag(std::move(t)), fields(std::move(f)) {}
+    UnionVariant(std::string t, std::vector<TypePtr> f) : tag(std::move(t)), fields(std::move(f)) {}
 };
 
 // ============================================================
@@ -43,9 +43,7 @@ struct UnionType : Type {
 
     UnionType() : Type(TypeKind::Union) {}
 
-    void add_variant(UnionVariant v) {
-        variants.push_back(std::move(v));
-    }
+    void add_variant(UnionVariant v) { variants.push_back(std::move(v)); }
 };
 
 // ============================================================
@@ -56,9 +54,7 @@ struct LiteralUnionType : Type {
 
     LiteralUnionType() : Type(TypeKind::LiteralUnion) {}
 
-    void add_literal(LiteralType lit) {
-        literals.push_back(std::move(lit));
-    }
+    void add_literal(LiteralType lit) { literals.push_back(std::move(lit)); }
 };
 
 // ============================================================
@@ -69,8 +65,7 @@ struct TypedefDecl {
     TypePtr type;                          // 実際の型
     std::vector<std::string> type_params;  // ジェネリックパラメータ
 
-    TypedefDecl(std::string n, TypePtr t)
-        : name(std::move(n)), type(std::move(t)) {}
+    TypedefDecl(std::string n, TypePtr t) : name(std::move(n)), type(std::move(t)) {}
 
     TypedefDecl(std::string n, std::vector<std::string> params, TypePtr t)
         : name(std::move(n)), type(std::move(t)), type_params(std::move(params)) {}

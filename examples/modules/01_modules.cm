@@ -1,15 +1,15 @@
 // モジュールシステムの使用例
 
 // 標準ライブラリからインポート
-import std.io.{print, println};
-import std.collections.Vec;
-import std.core.{Option, Result};
+import std::io::{print, println};
+import std::collections::Vec;
+import std::core::{Option, Result};
 
 // エイリアス付きインポート
-import std.collections.HashMap as Map;
+import std::collections::HashMap as Map;
 
 // マクロのインポート
-import std.macros.{assert, println, vec};
+import std::macros::{assert, println_macro, vec};
 
 int main() {
     // std.ioモジュールの関数を使用

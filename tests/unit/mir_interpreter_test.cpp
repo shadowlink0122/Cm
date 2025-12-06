@@ -1,6 +1,8 @@
-#include <gtest/gtest.h>
 #include "mir/mir_interpreter.hpp"
+
 #include "mir/mir_nodes.hpp"
+
+#include <gtest/gtest.h>
 
 using namespace cm::mir;
 
@@ -8,7 +10,7 @@ using namespace cm::mir;
 // テストヘルパー
 // ============================================================
 class MirInterpreterTest : public ::testing::Test {
-protected:
+   protected:
     MirInterpreter interpreter;
 
     // 簡単なMIRプログラムを作成
@@ -31,15 +33,8 @@ protected:
         stmt1->data = MirStatement::AssignData{
             MirPlace{1, {}},  // _1
             std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{int64_t(42)}
-                    })
-                }
-            })
-        };
+                MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(
+                                    MirOperand{MirOperand::Constant, MirConstant{int64_t(42)}})}})};
         bb0->statements.push_back(std::move(stmt1));
 
         // _0 = _1 (戻り値設定)
@@ -47,16 +42,9 @@ protected:
         stmt2->kind = MirStatement::Assign;
         stmt2->data = MirStatement::AssignData{
             MirPlace{0, {}},  // _0
-            std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Copy,
-                        MirPlace{1, {}}
-                    })
-                }
-            })
-        };
+            std::make_unique<MirRvalue>(
+                MirRvalue{MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(
+                                              MirOperand{MirOperand::Copy, MirPlace{1, {}}})}})};
         bb0->statements.push_back(std::move(stmt2));
 
         // return
@@ -87,15 +75,8 @@ protected:
         stmt1->data = MirStatement::AssignData{
             MirPlace{1, {}},
             std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{int64_t(10)}
-                    })
-                }
-            })
-        };
+                MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(
+                                    MirOperand{MirOperand::Constant, MirConstant{int64_t(10)}})}})};
         bb0->statements.push_back(std::move(stmt1));
 
         // _2 = 20
@@ -104,15 +85,8 @@ protected:
         stmt2->data = MirStatement::AssignData{
             MirPlace{2, {}},
             std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{int64_t(20)}
-                    })
-                }
-            })
-        };
+                MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(
+                                    MirOperand{MirOperand::Constant, MirConstant{int64_t(20)}})}})};
         bb0->statements.push_back(std::move(stmt2));
 
         // _0 = _1 + _2
@@ -124,17 +98,8 @@ protected:
                 MirRvalue::BinaryOp,
                 MirRvalue::BinaryOpData{
                     MirBinaryOp::Add,
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Copy,
-                        MirPlace{1, {}}
-                    }),
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Copy,
-                        MirPlace{2, {}}
-                    })
-                }
-            })
-        };
+                    std::make_unique<MirOperand>(MirOperand{MirOperand::Copy, MirPlace{1, {}}}),
+                    std::make_unique<MirOperand>(MirOperand{MirOperand::Copy, MirPlace{2, {}}})}})};
         bb0->statements.push_back(std::move(stmt3));
 
         // return
@@ -166,25 +131,15 @@ protected:
         stmt1->data = MirStatement::AssignData{
             MirPlace{1, {}},
             std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{true}
-                    })
-                }
-            })
-        };
+                MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(
+                                    MirOperand{MirOperand::Constant, MirConstant{true}})}})};
         bb0->statements.push_back(std::move(stmt1));
 
         // if _1 goto bb1; else goto bb2
         bb0->terminator = std::make_unique<MirTerminator>();
         bb0->terminator->kind = MirTerminator::SwitchInt;
         bb0->terminator->data = MirTerminator::SwitchIntData{
-            std::make_unique<MirOperand>(MirOperand{
-                MirOperand::Copy,
-                MirPlace{1, {}}
-            }),
+            std::make_unique<MirOperand>(MirOperand{MirOperand::Copy, MirPlace{1, {}}}),
             {{1, 1}},  // true -> BB1
             2          // false -> BB2
         };
@@ -199,15 +154,8 @@ protected:
         stmt2->data = MirStatement::AssignData{
             MirPlace{0, {}},
             std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{int64_t(100)}
-                    })
-                }
-            })
-        };
+                MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(MirOperand{
+                                    MirOperand::Constant, MirConstant{int64_t(100)}})}})};
         bb1->statements.push_back(std::move(stmt2));
 
         // goto bb3
@@ -225,15 +173,8 @@ protected:
         stmt3->data = MirStatement::AssignData{
             MirPlace{0, {}},
             std::make_unique<MirRvalue>(MirRvalue{
-                MirRvalue::Use,
-                MirRvalue::UseData{
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{int64_t(200)}
-                    })
-                }
-            })
-        };
+                MirRvalue::Use, MirRvalue::UseData{std::make_unique<MirOperand>(MirOperand{
+                                    MirOperand::Constant, MirConstant{int64_t(200)}})}})};
         bb2->statements.push_back(std::move(stmt3));
 
         // goto bb3
@@ -330,11 +271,8 @@ TEST_F(MirInterpreterTest, BinaryOperations) {
     };
 
     TestCase cases[] = {
-        {MirBinaryOp::Add, 10, 5, 15},
-        {MirBinaryOp::Sub, 10, 5, 5},
-        {MirBinaryOp::Mul, 10, 5, 50},
-        {MirBinaryOp::Div, 10, 5, 2},
-        {MirBinaryOp::Mod, 10, 3, 1},
+        {MirBinaryOp::Add, 10, 5, 15}, {MirBinaryOp::Sub, 10, 5, 5}, {MirBinaryOp::Mul, 10, 5, 50},
+        {MirBinaryOp::Div, 10, 5, 2},  {MirBinaryOp::Mod, 10, 3, 1},
     };
 
     for (const auto& tc : cases) {
@@ -354,19 +292,11 @@ TEST_F(MirInterpreterTest, BinaryOperations) {
             MirPlace{0, {}},
             std::make_unique<MirRvalue>(MirRvalue{
                 MirRvalue::BinaryOp,
-                MirRvalue::BinaryOpData{
-                    tc.op,
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{tc.lhs}
-                    }),
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{tc.rhs}
-                    })
-                }
-            })
-        };
+                MirRvalue::BinaryOpData{tc.op,
+                                        std::make_unique<MirOperand>(
+                                            MirOperand{MirOperand::Constant, MirConstant{tc.lhs}}),
+                                        std::make_unique<MirOperand>(MirOperand{
+                                            MirOperand::Constant, MirConstant{tc.rhs}})}})};
         bb0->statements.push_back(std::move(stmt));
 
         bb0->terminator = std::make_unique<MirTerminator>();
@@ -393,12 +323,9 @@ TEST_F(MirInterpreterTest, ComparisonOperations) {
     };
 
     TestCase cases[] = {
-        {MirBinaryOp::Eq, 10, 10, true},
-        {MirBinaryOp::Eq, 10, 5, false},
-        {MirBinaryOp::Ne, 10, 5, true},
-        {MirBinaryOp::Lt, 5, 10, true},
-        {MirBinaryOp::Le, 10, 10, true},
-        {MirBinaryOp::Gt, 10, 5, true},
+        {MirBinaryOp::Eq, 10, 10, true}, {MirBinaryOp::Eq, 10, 5, false},
+        {MirBinaryOp::Ne, 10, 5, true},  {MirBinaryOp::Lt, 5, 10, true},
+        {MirBinaryOp::Le, 10, 10, true}, {MirBinaryOp::Gt, 10, 5, true},
         {MirBinaryOp::Ge, 10, 10, true},
     };
 
@@ -419,19 +346,11 @@ TEST_F(MirInterpreterTest, ComparisonOperations) {
             MirPlace{0, {}},
             std::make_unique<MirRvalue>(MirRvalue{
                 MirRvalue::BinaryOp,
-                MirRvalue::BinaryOpData{
-                    tc.op,
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{tc.lhs}
-                    }),
-                    std::make_unique<MirOperand>(MirOperand{
-                        MirOperand::Constant,
-                        MirConstant{tc.rhs}
-                    })
-                }
-            })
-        };
+                MirRvalue::BinaryOpData{tc.op,
+                                        std::make_unique<MirOperand>(
+                                            MirOperand{MirOperand::Constant, MirConstant{tc.lhs}}),
+                                        std::make_unique<MirOperand>(MirOperand{
+                                            MirOperand::Constant, MirConstant{tc.rhs}})}})};
         bb0->statements.push_back(std::move(stmt));
 
         bb0->terminator = std::make_unique<MirTerminator>();

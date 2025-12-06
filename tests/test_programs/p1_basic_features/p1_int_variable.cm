@@ -1,0 +1,12 @@
+// Phase 1: 整数変数の宣言と初期化
+int main() {
+    int x = 42;
+    int y = 100;
+    int z = -50;
+
+    println(x);
+    println(y);
+    println(z);
+
+    return 0;
+}

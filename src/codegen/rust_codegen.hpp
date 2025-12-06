@@ -1,12 +1,13 @@
 #pragma once
 
-#include "../mir/mir_nodes.hpp"
 #include "../frontend/ast/module.hpp"
+#include "../mir/mir_nodes.hpp"
+
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
-#include <fstream>
 #include <unordered_map>
-#include <filesystem>
 
 namespace cm::codegen {
 
@@ -14,11 +15,11 @@ namespace cm::codegen {
 // Rustコード生成器（FFI対応）
 // ============================================================
 class RustCodegen {
-private:
+   private:
     struct Options {
-        bool use_ffi = true;           // FFIを使用
-        bool generate_cargo = true;     // Cargo.tomlを生成
-        bool split_modules = true;      // モジュール分割
+        bool use_ffi = true;         // FFIを使用
+        bool generate_cargo = true;  // Cargo.tomlを生成
+        bool split_modules = true;   // モジュール分割
         std::string output_dir = "target/rust";
         std::string crate_name = "cm_app";
     };
@@ -30,7 +31,7 @@ private:
     std::vector<std::string> ffi_functions;
     int indent_level = 0;
 
-public:
+   public:
     RustCodegen(const Options& options = {}) : opts(options) {}
 
     // MIRプログラムをRustコードに変換
@@ -52,7 +53,7 @@ public:
         }
     }
 
-private:
+   private:
     // 単一ファイル生成
     void generate_single_file(const mir::MirProgram& program) {
         emit_header();
@@ -198,12 +199,14 @@ private:
     std::string build_function_signature(const mir::MirFunction& func, bool is_pub) {
         std::ostringstream sig;
 
-        if (is_pub) sig << "pub ";
+        if (is_pub)
+            sig << "pub ";
         sig << "fn " << mangle_name(func.name) << "(";
 
         bool first = true;
         for (size_t i = 0; i < func.arg_locals.size(); ++i) {
-            if (!first) sig << ", ";
+            if (!first)
+                sig << ", ";
             first = false;
 
             const auto& local = func.locals[func.arg_locals[i]];
@@ -221,7 +224,8 @@ private:
 
         bool first = true;
         for (size_t i = 0; i < func.arg_locals.size(); ++i) {
-            if (!first) sig << ", ";
+            if (!first)
+                sig << ", ";
             first = false;
 
             const auto& local = func.locals[func.arg_locals[i]];
@@ -246,8 +250,8 @@ private:
 
             if (!is_arg && local.id != func.return_local) {
                 std::string mut_str = local.is_mutable ? "mut " : "";
-                emit_line("let " + mut_str + "_" + std::to_string(local.id) +
-                         ": " + type_to_rust(local.type) + ";");
+                emit_line("let " + mut_str + "_" + std::to_string(local.id) + ": " +
+                          type_to_rust(local.type) + ";");
             }
         }
 
@@ -311,7 +315,7 @@ private:
             case mir::MirTerminator::Goto:
                 // 単純なgotoは次のブロックへのフォールスルー
                 emit_line("// goto bb" +
-                    std::to_string(std::get<mir::MirTerminator::GotoData>(term.data).target));
+                          std::to_string(std::get<mir::MirTerminator::GotoData>(term.data).target));
                 break;
 
             case mir::MirTerminator::SwitchInt: {
@@ -344,7 +348,8 @@ private:
 
                 bool first = true;
                 for (const auto& arg : data.args) {
-                    if (!first) call += ", ";
+                    if (!first)
+                        call += ", ";
                     first = false;
                     call += operand_to_rust(*arg);
                 }
@@ -412,8 +417,7 @@ private:
             }
             case mir::MirRvalue::BinaryOp: {
                 auto& data = std::get<mir::MirRvalue::BinaryOpData>(rv.data);
-                return "(" + operand_to_rust(*data.lhs) + " " +
-                       binary_op_to_rust(data.op) + " " +
+                return "(" + operand_to_rust(*data.lhs) + " " + binary_op_to_rust(data.op) + " " +
                        operand_to_rust(*data.rhs) + ")";
             }
             case mir::MirRvalue::UnaryOp: {
@@ -454,27 +458,40 @@ private:
 
     // 型 → Rust
     std::string type_to_rust(hir::TypePtr type) {
-        if (!type) return "()";
+        if (!type)
+            return "()";
 
-        if (type->name == "int") return "i32";
-        if (type->name == "uint") return "u32";
-        if (type->name == "long") return "i64";
-        if (type->name == "ulong") return "u64";
-        if (type->name == "float") return "f32";
-        if (type->name == "double") return "f64";
-        if (type->name == "bool") return "bool";
-        if (type->name == "char") return "char";
-        if (type->name == "void") return "()";
-        if (type->name == "string") return "String";
+        if (type->name == "int")
+            return "i32";
+        if (type->name == "uint")
+            return "u32";
+        if (type->name == "long")
+            return "i64";
+        if (type->name == "ulong")
+            return "u64";
+        if (type->name == "float")
+            return "f32";
+        if (type->name == "double")
+            return "f64";
+        if (type->name == "bool")
+            return "bool";
+        if (type->name == "char")
+            return "char";
+        if (type->name == "void")
+            return "()";
+        if (type->name == "string")
+            return "String";
 
         return type->name;
     }
 
     // 型 → FFI
     std::string type_to_ffi(hir::TypePtr type) {
-        if (!type) return "()";
+        if (!type)
+            return "()";
 
-        if (type->name == "string") return "*const c_char";
+        if (type->name == "string")
+            return "*const c_char";
         // その他は通常のRust型と同じ
         return type_to_rust(type);
     }
@@ -482,42 +499,66 @@ private:
     // 二項演算子 → Rust
     std::string binary_op_to_rust(mir::MirBinaryOp op) {
         switch (op) {
-            case mir::MirBinaryOp::Add: return "+";
-            case mir::MirBinaryOp::Sub: return "-";
-            case mir::MirBinaryOp::Mul: return "*";
-            case mir::MirBinaryOp::Div: return "/";
-            case mir::MirBinaryOp::Mod: return "%";
-            case mir::MirBinaryOp::BitAnd: return "&";
-            case mir::MirBinaryOp::BitOr: return "|";
-            case mir::MirBinaryOp::BitXor: return "^";
-            case mir::MirBinaryOp::Shl: return "<<";
-            case mir::MirBinaryOp::Shr: return ">>";
-            case mir::MirBinaryOp::Eq: return "==";
-            case mir::MirBinaryOp::Ne: return "!=";
-            case mir::MirBinaryOp::Lt: return "<";
-            case mir::MirBinaryOp::Le: return "<=";
-            case mir::MirBinaryOp::Gt: return ">";
-            case mir::MirBinaryOp::Ge: return ">=";
-            case mir::MirBinaryOp::And: return "&&";
-            case mir::MirBinaryOp::Or: return "||";
-            default: return "?";
+            case mir::MirBinaryOp::Add:
+                return "+";
+            case mir::MirBinaryOp::Sub:
+                return "-";
+            case mir::MirBinaryOp::Mul:
+                return "*";
+            case mir::MirBinaryOp::Div:
+                return "/";
+            case mir::MirBinaryOp::Mod:
+                return "%";
+            case mir::MirBinaryOp::BitAnd:
+                return "&";
+            case mir::MirBinaryOp::BitOr:
+                return "|";
+            case mir::MirBinaryOp::BitXor:
+                return "^";
+            case mir::MirBinaryOp::Shl:
+                return "<<";
+            case mir::MirBinaryOp::Shr:
+                return ">>";
+            case mir::MirBinaryOp::Eq:
+                return "==";
+            case mir::MirBinaryOp::Ne:
+                return "!=";
+            case mir::MirBinaryOp::Lt:
+                return "<";
+            case mir::MirBinaryOp::Le:
+                return "<=";
+            case mir::MirBinaryOp::Gt:
+                return ">";
+            case mir::MirBinaryOp::Ge:
+                return ">=";
+            case mir::MirBinaryOp::And:
+                return "&&";
+            case mir::MirBinaryOp::Or:
+                return "||";
+            default:
+                return "?";
         }
     }
 
     // 単項演算子 → Rust
     std::string unary_op_to_rust(mir::MirUnaryOp op) {
         switch (op) {
-            case mir::MirUnaryOp::Neg: return "-";
-            case mir::MirUnaryOp::Not: return "!";
-            case mir::MirUnaryOp::BitNot: return "!";  // Rustでは!がビット反転
-            default: return "?";
+            case mir::MirUnaryOp::Neg:
+                return "-";
+            case mir::MirUnaryOp::Not:
+                return "!";
+            case mir::MirUnaryOp::BitNot:
+                return "!";  // Rustでは!がビット反転
+            default:
+                return "?";
         }
     }
 
     // 名前マングリング
     std::string mangle_name(const std::string& name) {
         // main関数は特別扱い
-        if (name == "main") return "main";
+        if (name == "main")
+            return "main";
 
         // Cm_ プレフィックスを付ける
         return "cm_" + name;
@@ -528,12 +569,24 @@ private:
         std::string result;
         for (char c : s) {
             switch (c) {
-                case '"': result += "\\\""; break;
-                case '\\': result += "\\\\"; break;
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                case '\t': result += "\\t"; break;
-                default: result += c; break;
+                case '"':
+                    result += "\\\"";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
+                default:
+                    result += c;
+                    break;
             }
         }
         return result;
@@ -602,9 +655,7 @@ private:
         current_output << line << "\n";
     }
 
-    void emit(const std::string& str) {
-        current_output << str;
-    }
+    void emit(const std::string& str) { current_output << str; }
 };
 
 }  // namespace cm::codegen

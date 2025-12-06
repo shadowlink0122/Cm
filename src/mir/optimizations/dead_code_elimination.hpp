@@ -1,9 +1,10 @@
 #pragma once
 
 #include "optimization_pass.hpp"
-#include <set>
-#include <queue>
+
 #include <algorithm>
+#include <queue>
+#include <set>
 
 namespace cm::mir::opt {
 
@@ -11,10 +12,8 @@ namespace cm::mir::opt {
 // デッドコード除去最適化
 // ============================================================
 class DeadCodeElimination : public OptimizationPass {
-public:
-    std::string name() const override {
-        return "Dead Code Elimination";
-    }
+   public:
+    std::string name() const override { return "Dead Code Elimination"; }
 
     bool run(MirFunction& func) override {
         bool changed = false;
@@ -31,7 +30,7 @@ public:
         return changed;
     }
 
-private:
+   private:
     // 到達不可能ブロックを除去
     bool remove_unreachable_blocks(MirFunction& func) {
         // 到達可能なブロックを探索
@@ -95,7 +94,8 @@ private:
 
         // 各ブロックを処理
         for (auto& block : func.basic_blocks) {
-            if (!block) continue;
+            if (!block)
+                continue;
 
             auto& stmts = block->statements;
             auto it = stmts.begin();
@@ -119,7 +119,7 @@ private:
                         }
                     }
                 } else if ((*it)->kind == MirStatement::StorageLive ||
-                          (*it)->kind == MirStatement::StorageDead) {
+                           (*it)->kind == MirStatement::StorageDead) {
                     auto& storage_data = std::get<MirStatement::StorageData>((*it)->data);
 
                     // 未使用変数のStorageLive/DeadもNopに
@@ -149,13 +149,14 @@ private:
         bool changed = false;
 
         for (auto& block : func.basic_blocks) {
-            if (!block) continue;
+            if (!block)
+                continue;
 
             auto& stmts = block->statements;
 
             // Nop文を除去
-            auto new_end = std::remove_if(stmts.begin(), stmts.end(),
-                [&changed](const MirStatementPtr& stmt) {
+            auto new_end =
+                std::remove_if(stmts.begin(), stmts.end(), [&changed](const MirStatementPtr& stmt) {
                     if (stmt->kind == MirStatement::Nop) {
                         changed = true;
                         return true;
@@ -172,7 +173,8 @@ private:
     // 使用されているローカル変数を収集
     void collect_used_locals(const MirFunction& func, std::set<LocalId>& used) {
         for (const auto& block : func.basic_blocks) {
-            if (!block) continue;
+            if (!block)
+                continue;
 
             // 文から収集
             for (const auto& stmt : block->statements) {
@@ -215,8 +217,10 @@ private:
             }
             case MirRvalue::BinaryOp: {
                 const auto& bin_data = std::get<MirRvalue::BinaryOpData>(rvalue.data);
-                if (bin_data.lhs) collect_used_locals_in_operand(*bin_data.lhs, used);
-                if (bin_data.rhs) collect_used_locals_in_operand(*bin_data.rhs, used);
+                if (bin_data.lhs)
+                    collect_used_locals_in_operand(*bin_data.lhs, used);
+                if (bin_data.rhs)
+                    collect_used_locals_in_operand(*bin_data.rhs, used);
                 break;
             }
             case MirRvalue::UnaryOp: {
@@ -239,7 +243,8 @@ private:
             case MirRvalue::Aggregate: {
                 const auto& agg_data = std::get<MirRvalue::AggregateData>(rvalue.data);
                 for (const auto& op : agg_data.operands) {
-                    if (op) collect_used_locals_in_operand(*op, used);
+                    if (op)
+                        collect_used_locals_in_operand(*op, used);
                 }
                 break;
             }
@@ -281,7 +286,8 @@ private:
                     collect_used_locals_in_operand(*call_data.func, used);
                 }
                 for (const auto& arg : call_data.args) {
-                    if (arg) collect_used_locals_in_operand(*arg, used);
+                    if (arg)
+                        collect_used_locals_in_operand(*arg, used);
                 }
                 break;
             }
@@ -292,7 +298,8 @@ private:
 
     // Rvalueが副作用を持つかチェック
     bool has_side_effects(const MirRvalue* rvalue) const {
-        if (!rvalue) return false;
+        if (!rvalue)
+            return false;
 
         // 現在の実装では、関数呼び出し以外は副作用なしと仮定
         // TODO: より詳細な副作用解析

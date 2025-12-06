@@ -1,9 +1,10 @@
 #pragma once
 
 #include "../ast/types.hpp"
-#include <string>
-#include <set>
+
 #include <map>
+#include <set>
+#include <string>
 
 namespace cm {
 
@@ -11,7 +12,7 @@ namespace cm {
 // ジェネリック型推論器
 // ============================================================
 class GenericInference {
-public:
+   public:
     // 型名がジェネリックパラメータかどうか判定
     static bool is_generic_param(const std::string& type_name,
                                  const std::set<std::string>& known_types) {
@@ -26,9 +27,7 @@ public:
         }
 
         // 2文字の大文字パターン（KV, TV など）
-        if (type_name.length() == 2 &&
-            std::isupper(type_name[0]) &&
-            std::isupper(type_name[1])) {
+        if (type_name.length() == 2 && std::isupper(type_name[0]) && std::isupper(type_name[1])) {
             return true;
         }
 
@@ -37,11 +36,9 @@ public:
     }
 
     // 関数シグネチャからジェネリックパラメータを抽出
-    static std::set<std::string> extract_generic_params(
-        const ast::TypePtr& return_type,
-        const std::vector<ast::Param>& params,
-        const std::set<std::string>& known_types) {
-
+    static std::set<std::string> extract_generic_params(const ast::TypePtr& return_type,
+                                                        const std::vector<ast::Param>& params,
+                                                        const std::set<std::string>& known_types) {
         std::set<std::string> generic_params;
 
         // 戻り値型から抽出
@@ -55,12 +52,12 @@ public:
         return generic_params;
     }
 
-private:
+   private:
     // 型から再帰的にジェネリックパラメータを抽出
-    static void extract_from_type(const ast::TypePtr& type,
-                                  std::set<std::string>& generic_params,
+    static void extract_from_type(const ast::TypePtr& type, std::set<std::string>& generic_params,
                                   const std::set<std::string>& known_types) {
-        if (!type) return;
+        if (!type)
+            return;
 
         switch (type->kind) {
             case ast::TypeKind::Generic:
@@ -106,17 +103,14 @@ class EnhancedParser {
     std::set<std::string> known_types;
     std::map<std::string, std::set<std::string>> function_generics;
 
-public:
+   public:
     EnhancedParser() {
         // 組み込み型を登録
-        known_types = {
-            "void", "bool", "int", "uint", "short", "ushort",
-            "long", "ulong", "float", "double", "char", "string",
-            "tiny", "utiny",
-            // 標準ライブラリ型
-            "Vec", "Map", "Set", "Option", "Result",
-            "String", "File", "Thread", "Mutex"
-        };
+        known_types = {"void", "bool", "int", "uint", "short", "ushort", "long", "ulong", "float",
+                       "double", "char", "string", "tiny", "utiny",
+                       // 標準ライブラリ型
+                       "Vec", "Map", "Set", "Option", "Result", "String", "File", "Thread",
+                       "Mutex"};
     }
 
     // 関数解析時の処理
@@ -130,9 +124,8 @@ public:
         expect(TokenKind::RParen);
 
         // ジェネリックパラメータを推論
-        auto generic_params = GenericInference::extract_generic_params(
-            return_type, params, known_types
-        );
+        auto generic_params =
+            GenericInference::extract_generic_params(return_type, params, known_types);
 
         // where句の解析（オプション）
         std::map<std::string, std::vector<std::string>> constraints;
@@ -143,12 +136,8 @@ public:
         auto body = parse_block();
 
         // 関数を作成
-        auto func = std::make_unique<ast::FunctionDecl>(
-            std::move(name),
-            std::move(params),
-            std::move(return_type),
-            std::move(body)
-        );
+        auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
+                                                        std::move(return_type), std::move(body));
 
         // ジェネリックパラメータを設定
         for (const auto& param : generic_params) {
@@ -167,8 +156,8 @@ public:
             for (const auto& p : generic_params) {
                 if (p.length() > 1) {
                     warning("'" + p + "' is inferred as generic. " +
-                           "Consider using single letter (e.g., 'T') " +
-                           "or add explicit generic declaration.");
+                            "Consider using single letter (e.g., 'T') " +
+                            "or add explicit generic declaration.");
                 }
             }
         }
@@ -202,9 +191,7 @@ public:
 
             // 型からジェネリックパラメータを抽出
             std::set<std::string> field_generics;
-            GenericInference::extract_from_type(
-                field_type, field_generics, known_types
-            );
+            GenericInference::extract_from_type(field_type, field_generics, known_types);
 
             // 明示的に宣言されていないものを追加
             for (const auto& g : field_generics) {
@@ -213,20 +200,14 @@ public:
                 }
             }
 
-            fields.push_back(ast::Field{
-                std::move(field_name),
-                std::move(field_type)
-            });
+            fields.push_back(ast::Field{std::move(field_name), std::move(field_type)});
 
             expect(TokenKind::Semicolon);
         }
 
         expect(TokenKind::RBrace);
 
-        auto struct_decl = std::make_unique<ast::StructDecl>(
-            std::move(name),
-            std::move(fields)
-        );
+        auto struct_decl = std::make_unique<ast::StructDecl>(std::move(name), std::move(fields));
 
         // すべてのジェネリックパラメータを設定
         for (const auto& g : explicit_generics) {
@@ -239,7 +220,7 @@ public:
         return std::make_unique<ast::Decl>(std::move(struct_decl));
     }
 
-private:
+   private:
     // 既存のパーサーメソッド（省略）
     ast::TypePtr parse_type();
     std::string expect_ident();

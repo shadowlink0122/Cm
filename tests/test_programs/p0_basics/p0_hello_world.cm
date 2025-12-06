@@ -1,0 +1,7 @@
+// Phase 0: 最も基本的なHello Worldテスト
+import std::io::println;
+
+int main() {
+    println("Hello, World!");
+    return 0;
+}

@@ -1,11 +1,12 @@
 #pragma once
 
 #include "../mir_nodes.hpp"
-#include <string>
+
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <set>
-#include <iostream>
+#include <string>
 
 namespace cm::mir::opt {
 
@@ -13,7 +14,7 @@ namespace cm::mir::opt {
 // 最適化パスの基底クラス
 // ============================================================
 class OptimizationPass {
-public:
+   public:
     virtual ~OptimizationPass() = default;
 
     // パス名を取得
@@ -31,49 +32,37 @@ public:
         return changed;
     }
 
-protected:
+   protected:
     // ユーティリティ関数
 
     // 使用されているローカル変数を収集
     void collect_used_locals(const MirFunction& func, std::set<LocalId>& used);
 
     // 定数値かどうかチェック
-    bool is_constant(const MirOperand& op) const {
-        return op.kind == MirOperand::Constant;
-    }
+    bool is_constant(const MirOperand& op) const { return op.kind == MirOperand::Constant; }
 
     // 二つの定数を評価
-    std::optional<MirConstant> eval_binary_op(
-        MirBinaryOp op,
-        const MirConstant& lhs,
-        const MirConstant& rhs
-    );
+    std::optional<MirConstant> eval_binary_op(MirBinaryOp op, const MirConstant& lhs,
+                                              const MirConstant& rhs);
 
     // 単項演算を評価
-    std::optional<MirConstant> eval_unary_op(
-        MirUnaryOp op,
-        const MirConstant& operand
-    );
+    std::optional<MirConstant> eval_unary_op(MirUnaryOp op, const MirConstant& operand);
 };
 
 // ============================================================
 // 最適化パイプライン
 // ============================================================
 class OptimizationPipeline {
-private:
+   private:
     std::vector<std::unique_ptr<OptimizationPass>> passes;
     bool debug_output = false;
 
-public:
+   public:
     // デバッグ出力を有効化
-    void enable_debug_output(bool enable = true) {
-        debug_output = enable;
-    }
+    void enable_debug_output(bool enable = true) { debug_output = enable; }
 
     // パスを追加
-    void add_pass(std::unique_ptr<OptimizationPass> pass) {
-        passes.push_back(std::move(pass));
-    }
+    void add_pass(std::unique_ptr<OptimizationPass> pass) { passes.push_back(std::move(pass)); }
 
     // 標準的な最適化パスを追加
     void add_standard_passes(int optimization_level = 1);
@@ -93,7 +82,7 @@ public:
 
             if (debug_output) {
                 std::cout << "[OPT] Pass " << pass->name()
-                         << (changed ? " made changes" : " made no changes") << "\n";
+                          << (changed ? " made changes" : " made no changes") << "\n";
             }
         }
 

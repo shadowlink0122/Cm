@@ -2,10 +2,12 @@
 
 #include "../../common/debug/tc.hpp"
 #include "../ast/decl.hpp"
+#include "../ast/module.hpp"
 #include "../parser/parser.hpp"
 #include "scope.hpp"
 
 #include <functional>
+#include <regex>
 
 namespace cm {
 
@@ -15,7 +17,7 @@ namespace cm {
 class TypeChecker {
    public:
     TypeChecker() {
-        register_builtins();
+        // 組み込み関数は import 時に登録される
     }
 
     // プログラム全体をチェック
@@ -46,6 +48,25 @@ class TypeChecker {
     }
 
    private:
+    // フォーマット文字列から変数名を抽出
+    std::vector<std::string> extract_format_variables(const std::string& format_str) {
+        std::vector<std::string> variables;
+        std::regex placeholder_regex(R"(\{([a-zA-Z_][a-zA-Z0-9_]*)\})");
+        std::smatch match;
+        std::string::const_iterator search_start(format_str.cbegin());
+
+        while (std::regex_search(search_start, format_str.cend(), match, placeholder_regex)) {
+            std::string var_name = match[1];
+            // 同じ変数を重複して追加しない
+            if (std::find(variables.begin(), variables.end(), var_name) == variables.end()) {
+                variables.push_back(var_name);
+            }
+            search_start = match.suffix().first;
+        }
+
+        return variables;
+    }
+
     // 宣言の登録（パス1）
     void register_declaration(ast::Decl& decl) {
         if (auto* func = decl.as<ast::FunctionDecl>()) {
@@ -66,7 +87,36 @@ class TypeChecker {
 
         if (auto* func = decl.as<ast::FunctionDecl>()) {
             check_function(*func);
+        } else if (auto* import = decl.as<ast::ImportDecl>()) {
+            check_import(*import);
         }
+    }
+
+    // インポートのチェックと解決
+    void check_import(ast::ImportDecl& import) {
+        // std::io::printlnのインポートを処理
+        if (import.path.to_string() == "std::io") {
+            // std::io全体のインポート
+            for (const auto& item : import.items) {
+                if (item.name == "println") {
+                    // printlnのオーバーロードを登録
+                    register_println();
+                } else if (item.name.empty()) {
+                    // モジュール全体をインポート
+                    register_println();
+                }
+            }
+        } else if (import.path.segments.size() >= 3 && import.path.segments[0] == "std" &&
+                   import.path.segments[1] == "io" && import.path.segments[2] == "println") {
+            // std::io::printlnの直接インポート
+            register_println();
+        }
+    }
+
+    void register_println() {
+        // printlnを特別な組み込み関数として登録
+        // 任意の型を受け取れるように、ダミーの型を使用
+        scopes_.global().define_function("println", {ast::make_void()}, ast::make_void());
     }
 
     // 関数チェック
@@ -363,7 +413,53 @@ class TypeChecker {
                 return ast::make_error();
             }
 
-            // 引数チェック
+            // println は特別扱い（可変長引数をサポート、変数の自動キャプチャ）
+            if (ident->name == "println") {
+                // 最低1つの引数が必要
+                if (call.args.empty()) {
+                    error(Span{}, "println expects at least 1 argument");
+                } else {
+                    // 第1引数の型チェック
+                    auto first_type = infer_type(*call.args[0]);
+
+                    // 第1引数が文字列リテラルの場合、変数を自動キャプチャ
+                    if (types_compatible(ast::make_string(), first_type) && call.args.size() == 1) {
+                        // 第1引数が文字列リテラルかチェック
+                        if (auto* lit_expr = std::get_if<std::unique_ptr<ast::LiteralExpr>>(
+                                &call.args[0]->kind)) {
+                            if ((*lit_expr)->is_string()) {
+                                std::string format_str = std::get<std::string>((*lit_expr)->value);
+                                auto captured_vars = extract_format_variables(format_str);
+
+                                // キャプチャした変数を引数として追加
+                                for (const auto& var_name : captured_vars) {
+                                    // 変数が存在するかチェック
+                                    auto sym = scopes_.current().lookup(var_name);
+                                    if (!sym.has_value()) {
+                                        error(Span{}, "Undefined variable '" + var_name +
+                                                          "' in format string");
+                                        continue;
+                                    }
+
+                                    // 変数参照を引数として追加
+                                    auto var_id = std::make_unique<ast::IdentExpr>(var_name);
+                                    auto var_expr =
+                                        std::make_unique<ast::Expr>(std::move(var_id), Span{});
+                                    call.args.push_back(std::move(var_expr));
+                                }
+                            }
+                        }
+                    }
+
+                    // 残りの引数の型も推論（エラーチェックのため）
+                    for (size_t i = 1; i < call.args.size(); ++i) {
+                        infer_type(*call.args[i]);
+                    }
+                }
+                return ast::make_void();
+            }
+
+            // 通常の関数の引数チェック
             if (call.args.size() != sym->param_types.size()) {
                 error(Span{}, "Function '" + ident->name + "' expects " +
                                   std::to_string(sym->param_types.size()) + " arguments, got " +
@@ -372,7 +468,10 @@ class TypeChecker {
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     auto arg_type = infer_type(*call.args[i]);
                     if (!types_compatible(sym->param_types[i], arg_type)) {
-                        error(Span{}, "Argument type mismatch in call to '" + ident->name + "'");
+                        std::string expected = ast::type_to_string(*sym->param_types[i]);
+                        std::string actual = ast::type_to_string(*arg_type);
+                        error(Span{}, "Argument type mismatch in call to '" + ident->name +
+                                          "': expected " + expected + ", got " + actual);
                     }
                 }
             }
@@ -434,45 +533,6 @@ class TypeChecker {
     void error(Span span, const std::string& msg) {
         debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Error);
         diagnostics_.emplace_back(DiagKind::Error, span, msg);
-    }
-
-    // 組み込み関数を登録
-    void register_builtins() {
-        // println: 任意の型を受け取り、voidを返す
-        // 簡易実装：stringを受け取るバージョンと、intを受け取るバージョンを登録
-        scopes_.global().define_function(
-            "println",
-            {ast::make_string()},
-            ast::make_void()
-        );
-
-        // オーバーロード版（int）
-        scopes_.global().define_function(
-            "println",
-            {ast::make_int()},
-            ast::make_void()
-        );
-
-        // オーバーロード版（double）
-        scopes_.global().define_function(
-            "println",
-            {ast::make_double()},
-            ast::make_void()
-        );
-
-        // オーバーロード版（bool）
-        scopes_.global().define_function(
-            "println",
-            {ast::make_bool()},
-            ast::make_void()
-        );
-
-        // sqrt: doubleを受け取り、doubleを返す
-        scopes_.global().define_function(
-            "sqrt",
-            {ast::make_double()},
-            ast::make_double()
-        );
     }
 
     ScopeStack scopes_;

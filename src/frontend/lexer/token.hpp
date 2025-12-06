@@ -19,7 +19,7 @@ enum class TokenKind {
     Ident,  // foo, bar
 
     // キーワード
-    KwAs,        // import alias
+    KwAs,  // import alias
     KwAsync,
     KwAwait,
     KwBreak,
@@ -32,21 +32,21 @@ enum class TokenKind {
     KwExtern,
     KwFalse,
     KwFor,
-    KwFrom,      // re-export from
+    KwFrom,  // re-export from
     KwIf,
     KwImpl,
     KwImport,
     KwInline,
     KwInterface,
-    KwMacro,     // macro definition
-    KwConstexpr, // constexpr keyword
+    KwMacro,      // macro definition
+    KwConstexpr,  // constexpr keyword
     KwMatch,
-    KwModule,    // module declaration
+    KwModule,  // module declaration
     KwMutable,
     KwNew,
     KwNull,
     KwPrivate,
-    KwPub,       // public visibility
+    KwPub,  // public visibility
     KwReturn,
     KwStatic,
     KwStruct,

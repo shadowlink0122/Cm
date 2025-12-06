@@ -1,0 +1,6 @@
+// エラーケース: 引数の数が不正
+int main() {
+    println();  // printlnは引数が必要
+    println(1, 2, 3);  // printlnは引数を1つだけ取る
+    return 0;
+}

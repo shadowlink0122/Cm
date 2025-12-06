@@ -1,0 +1,26 @@
+// Phase 2: whileループのテスト
+int main() {
+    // カウントアップ
+    int i = 0;
+    while (i < 5) {
+        println(i);
+        i = i + 1;
+    }
+
+    // カウントダウン
+    int j = 3;
+    while (j > 0) {
+        println(j);
+        j = j - 1;
+    }
+
+    // 条件が最初から偽
+    int k = 10;
+    while (k < 5) {
+        println(999);  // 実行されない
+    }
+
+    println(100);  // ループ後の処理
+
+    return 0;
+}

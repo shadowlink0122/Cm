@@ -1,0 +1,35 @@
+// Phase 1: 算術演算
+int main() {
+    int a = 10;
+    int b = 3;
+
+    // 加算
+    int sum = a + b;
+    println(sum);  // 13
+
+    // 減算
+    int diff = a - b;
+    println(diff); // 7
+
+    // 乗算
+    int prod = a * b;
+    println(prod); // 30
+
+    // 除算
+    int quot = a / b;
+    println(quot); // 3
+
+    // 剰余
+    int rem = a % b;
+    println(rem);  // 1
+
+    // 複合式
+    int result = (a + b) * 2;
+    println(result); // 26
+
+    // 優先順位
+    int priority = a + b * 2;
+    println(priority); // 16
+
+    return 0;
+}

@@ -1,0 +1,5 @@
+// エラーケース: 型の不一致
+int main() {
+    int x = "hello";  // 文字列をint変数に代入
+    return 0;
+}

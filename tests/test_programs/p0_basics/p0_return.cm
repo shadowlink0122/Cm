@@ -1,0 +1,4 @@
+// Phase 0: return文のテスト
+int main() {
+    return 42;  // 0以外の終了コード
+}

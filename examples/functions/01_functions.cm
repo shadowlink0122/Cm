@@ -1,4 +1,6 @@
 // 4. 関数定義と呼び出し
+import std::io::println;
+
 int add(int a, int b) {
     return a + b;
 }
@@ -10,20 +12,20 @@ int factorial(int n) {
     return n * factorial(n - 1);
 }
 
-float circle_area(float radius) {
-    float pi = 3.14159;
+double circle_area(double radius) {
+    double pi = 3.14159;
     return pi * radius * radius;
 }
 
 int main() {
     int sum = add(5, 3);
-    print(sum);  // 8
+    println("5 + 3 = {sum}");  // 8
 
     int fact = factorial(5);
-    print(fact);  // 120
+    println("5! = {fact}");  // 120
 
-    float area = circle_area(10.0);
-    print(area);  // 314.159
+    double area = circle_area(10.0);
+    println("Circle area with radius 10: {area}");  // 314.159
 
     return 0;
 }

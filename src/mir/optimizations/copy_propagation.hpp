@@ -1,6 +1,7 @@
 #pragma once
 
 #include "optimization_pass.hpp"
+
 #include <unordered_map>
 
 namespace cm::mir::opt {
@@ -9,10 +10,8 @@ namespace cm::mir::opt {
 // コピー伝播最適化
 // ============================================================
 class CopyPropagation : public OptimizationPass {
-public:
-    std::string name() const override {
-        return "Copy Propagation";
-    }
+   public:
+    std::string name() const override { return "Copy Propagation"; }
 
     bool run(MirFunction& func) override {
         bool changed = false;
@@ -23,19 +22,17 @@ public:
 
         // 各基本ブロックを処理
         for (auto& block : func.basic_blocks) {
-            if (!block) continue;
+            if (!block)
+                continue;
             changed |= process_block(*block, copies, func);
         }
 
         return changed;
     }
 
-private:
-    bool process_block(
-        BasicBlock& block,
-        std::unordered_map<LocalId, LocalId>& copies,
-        const MirFunction& func
-    ) {
+   private:
+    bool process_block(BasicBlock& block, std::unordered_map<LocalId, LocalId>& copies,
+                       const MirFunction& func) {
         bool changed = false;
 
         // 各文を処理
@@ -49,7 +46,6 @@ private:
                 // 単純なコピー代入を検出: _x = _y
                 if (assign_data.place.projections.empty() &&
                     assign_data.rvalue->kind == MirRvalue::Use) {
-
                     auto& use_data = std::get<MirRvalue::UseData>(assign_data.rvalue->data);
 
                     if (use_data.operand && use_data.operand->kind == MirOperand::Copy) {
@@ -84,10 +80,7 @@ private:
     }
 
     // コピーチェーンを解決（推移的なコピーを辿る）
-    LocalId resolve_copy_chain(
-        LocalId local,
-        const std::unordered_map<LocalId, LocalId>& copies
-    ) {
+    LocalId resolve_copy_chain(LocalId local, const std::unordered_map<LocalId, LocalId>& copies) {
         std::set<LocalId> visited;
         LocalId current = local;
 
@@ -104,10 +97,8 @@ private:
     }
 
     // Rvalue内のコピーを伝播
-    bool propagate_in_rvalue(
-        MirRvalue& rvalue,
-        const std::unordered_map<LocalId, LocalId>& copies
-    ) {
+    bool propagate_in_rvalue(MirRvalue& rvalue,
+                             const std::unordered_map<LocalId, LocalId>& copies) {
         bool changed = false;
 
         switch (rvalue.kind) {
@@ -120,8 +111,10 @@ private:
             }
             case MirRvalue::BinaryOp: {
                 auto& bin_data = std::get<MirRvalue::BinaryOpData>(rvalue.data);
-                if (bin_data.lhs) changed |= propagate_in_operand(*bin_data.lhs, copies);
-                if (bin_data.rhs) changed |= propagate_in_operand(*bin_data.rhs, copies);
+                if (bin_data.lhs)
+                    changed |= propagate_in_operand(*bin_data.lhs, copies);
+                if (bin_data.rhs)
+                    changed |= propagate_in_operand(*bin_data.rhs, copies);
                 break;
             }
             case MirRvalue::UnaryOp: {
@@ -139,7 +132,8 @@ private:
             case MirRvalue::Aggregate: {
                 auto& agg_data = std::get<MirRvalue::AggregateData>(rvalue.data);
                 for (auto& op : agg_data.operands) {
-                    if (op) changed |= propagate_in_operand(*op, copies);
+                    if (op)
+                        changed |= propagate_in_operand(*op, copies);
                 }
                 break;
             }
@@ -156,10 +150,8 @@ private:
     }
 
     // Operand内のコピーを伝播
-    bool propagate_in_operand(
-        MirOperand& operand,
-        const std::unordered_map<LocalId, LocalId>& copies
-    ) {
+    bool propagate_in_operand(MirOperand& operand,
+                              const std::unordered_map<LocalId, LocalId>& copies) {
         if (operand.kind == MirOperand::Copy || operand.kind == MirOperand::Move) {
             if (auto* place = std::get_if<MirPlace>(&operand.data)) {
                 return propagate_in_place(*place, copies);
@@ -169,10 +161,7 @@ private:
     }
 
     // Place内のコピーを伝播
-    bool propagate_in_place(
-        MirPlace& place,
-        const std::unordered_map<LocalId, LocalId>& copies
-    ) {
+    bool propagate_in_place(MirPlace& place, const std::unordered_map<LocalId, LocalId>& copies) {
         bool changed = false;
 
         // ベースのローカル変数を置き換え
@@ -197,10 +186,8 @@ private:
     }
 
     // 終端命令でのコピー伝播
-    bool propagate_in_terminator(
-        MirTerminator& term,
-        const std::unordered_map<LocalId, LocalId>& copies
-    ) {
+    bool propagate_in_terminator(MirTerminator& term,
+                                 const std::unordered_map<LocalId, LocalId>& copies) {
         bool changed = false;
 
         switch (term.kind) {
@@ -217,7 +204,8 @@ private:
                     changed |= propagate_in_operand(*call_data.func, copies);
                 }
                 for (auto& arg : call_data.args) {
-                    if (arg) changed |= propagate_in_operand(*arg, copies);
+                    if (arg)
+                        changed |= propagate_in_operand(*arg, copies);
                 }
                 if (call_data.destination) {
                     changed |= propagate_in_place(*call_data.destination, copies);

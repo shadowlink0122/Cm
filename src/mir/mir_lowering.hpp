@@ -2,6 +2,7 @@
 
 #include "../hir/hir_nodes.hpp"
 #include "mir_nodes.hpp"
+
 #include <stack>
 #include <unordered_map>
 
@@ -11,7 +12,7 @@ namespace cm::mir {
 // HIR → MIR 変換
 // ============================================================
 class MirLowering {
-public:
+   public:
     MirProgram lower(const hir::HirProgram& hir_program) {
         MirProgram mir_program;
         mir_program.filename = hir_program.filename;
@@ -28,13 +29,13 @@ public:
         return mir_program;
     }
 
-private:
+   private:
     // 現在の関数コンテキスト
     struct FunctionContext {
         MirFunction* func;
         BlockId current_block;
         std::unordered_map<std::string, LocalId> var_map;  // 変数名 → ローカルID
-        LocalId next_temp_id;  // 次の一時変数ID
+        LocalId next_temp_id;                              // 次の一時変数ID
 
         FunctionContext(MirFunction* f) : func(f), current_block(ENTRY_BLOCK), next_temp_id(0) {}
 
@@ -45,9 +46,7 @@ private:
         }
 
         // 現在のブロックを取得
-        BasicBlock* get_current_block() {
-            return func->get_block(current_block);
-        }
+        BasicBlock* get_current_block() { return func->get_block(current_block); }
 
         // 新しいブロックを作成して切り替え
         BlockId new_block() {
@@ -57,9 +56,7 @@ private:
         }
 
         // ブロックを切り替え
-        void switch_to_block(BlockId id) {
-            current_block = id;
-        }
+        void switch_to_block(BlockId id) { current_block = id; }
 
         // 文を現在のブロックに追加
         void push_statement(MirStatementPtr stmt) {
@@ -140,7 +137,8 @@ private:
     // let文のlowering
     void lower_let_stmt(FunctionContext& ctx, const hir::HirLet& let_stmt) {
         // 新しいローカル変数を作成
-        LocalId local_id = ctx.func->add_local(let_stmt.name, let_stmt.type, !let_stmt.is_const, true);
+        LocalId local_id =
+            ctx.func->add_local(let_stmt.name, let_stmt.type, !let_stmt.is_const, true);
         ctx.var_map[let_stmt.name] = local_id;
 
         // StorageLive
@@ -174,7 +172,8 @@ private:
             // 戻り値を_0に代入
             LocalId value_local = lower_expr(ctx, *ret.value);
             auto rvalue = MirRvalue::use(MirOperand::copy(MirPlace(value_local)));
-            ctx.push_statement(MirStatement::assign(MirPlace(ctx.func->return_local), std::move(rvalue)));
+            ctx.push_statement(
+                MirStatement::assign(MirPlace(ctx.func->return_local), std::move(rvalue)));
         }
 
         // return終端
@@ -318,7 +317,8 @@ private:
                 auto it = ctx.var_map.find((*var_ref)->name);
                 if (it != ctx.var_map.end()) {
                     auto rvalue = MirRvalue::use(MirOperand::copy(MirPlace(rhs_local)));
-                    ctx.push_statement(MirStatement::assign(MirPlace(it->second), std::move(rvalue)));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace(it->second), std::move(rvalue)));
                     return it->second;
                 }
             }
@@ -333,11 +333,8 @@ private:
         LocalId result = ctx.new_temp(type);
 
         MirBinaryOp mir_op = convert_binary_op(binary.op);
-        auto rvalue = MirRvalue::binary(
-            mir_op,
-            MirOperand::copy(MirPlace(lhs_local)),
-            MirOperand::copy(MirPlace(rhs_local))
-        );
+        auto rvalue = MirRvalue::binary(mir_op, MirOperand::copy(MirPlace(lhs_local)),
+                                        MirOperand::copy(MirPlace(rhs_local)));
         ctx.push_statement(MirStatement::assign(MirPlace(result), std::move(rvalue)));
 
         return result;
@@ -365,10 +362,39 @@ private:
         }
 
         // 戻り値用の一時変数
-        LocalId result = ctx.new_temp(type);
+        LocalId result = 0;
+        std::optional<MirPlace> destination;
 
-        // TODO: 関数呼び出しのMIR表現を実装
-        // 現在は簡略化のため、通常の文として処理
+        // 戻り値がvoidでない場合のみ一時変数を作成
+        if (type && type->kind != hir::TypeKind::Void) {
+            result = ctx.new_temp(type);
+            destination = MirPlace(result);
+        }
+
+        // 次のブロック
+        BlockId next_block = ctx.func->add_block();
+
+        // 関数呼び出しのターミネータを設定
+        // 関数名を定数として作成
+        MirConstant func_name_const;
+        func_name_const.value = call.func_name;
+        auto func_operand = MirOperand::constant(std::move(func_name_const));
+
+        // CallDataを作成
+        MirTerminator::CallData call_data;
+        call_data.func = std::move(func_operand);
+        call_data.args = std::move(args);
+        call_data.destination = destination;
+        call_data.success = next_block;
+        call_data.unwind = next_block;  // エラー時も同じブロックへ（簡略化）
+
+        auto terminator = std::make_unique<MirTerminator>();
+        terminator->kind = MirTerminator::Call;
+        terminator->data = std::move(call_data);
+        ctx.set_terminator(std::move(terminator));
+
+        // 次のブロックに切り替え
+        ctx.switch_to_block(next_block);
 
         return result;
     }
@@ -414,35 +440,58 @@ private:
     // HIR二項演算子をMIRに変換
     MirBinaryOp convert_binary_op(hir::HirBinaryOp op) {
         switch (op) {
-            case hir::HirBinaryOp::Add: return MirBinaryOp::Add;
-            case hir::HirBinaryOp::Sub: return MirBinaryOp::Sub;
-            case hir::HirBinaryOp::Mul: return MirBinaryOp::Mul;
-            case hir::HirBinaryOp::Div: return MirBinaryOp::Div;
-            case hir::HirBinaryOp::Mod: return MirBinaryOp::Mod;
-            case hir::HirBinaryOp::BitAnd: return MirBinaryOp::BitAnd;
-            case hir::HirBinaryOp::BitOr: return MirBinaryOp::BitOr;
-            case hir::HirBinaryOp::BitXor: return MirBinaryOp::BitXor;
-            case hir::HirBinaryOp::Shl: return MirBinaryOp::Shl;
-            case hir::HirBinaryOp::Shr: return MirBinaryOp::Shr;
-            case hir::HirBinaryOp::And: return MirBinaryOp::And;
-            case hir::HirBinaryOp::Or: return MirBinaryOp::Or;
-            case hir::HirBinaryOp::Eq: return MirBinaryOp::Eq;
-            case hir::HirBinaryOp::Ne: return MirBinaryOp::Ne;
-            case hir::HirBinaryOp::Lt: return MirBinaryOp::Lt;
-            case hir::HirBinaryOp::Gt: return MirBinaryOp::Gt;
-            case hir::HirBinaryOp::Le: return MirBinaryOp::Le;
-            case hir::HirBinaryOp::Ge: return MirBinaryOp::Ge;
-            default: return MirBinaryOp::Add;  // デフォルト
+            case hir::HirBinaryOp::Add:
+                return MirBinaryOp::Add;
+            case hir::HirBinaryOp::Sub:
+                return MirBinaryOp::Sub;
+            case hir::HirBinaryOp::Mul:
+                return MirBinaryOp::Mul;
+            case hir::HirBinaryOp::Div:
+                return MirBinaryOp::Div;
+            case hir::HirBinaryOp::Mod:
+                return MirBinaryOp::Mod;
+            case hir::HirBinaryOp::BitAnd:
+                return MirBinaryOp::BitAnd;
+            case hir::HirBinaryOp::BitOr:
+                return MirBinaryOp::BitOr;
+            case hir::HirBinaryOp::BitXor:
+                return MirBinaryOp::BitXor;
+            case hir::HirBinaryOp::Shl:
+                return MirBinaryOp::Shl;
+            case hir::HirBinaryOp::Shr:
+                return MirBinaryOp::Shr;
+            case hir::HirBinaryOp::And:
+                return MirBinaryOp::And;
+            case hir::HirBinaryOp::Or:
+                return MirBinaryOp::Or;
+            case hir::HirBinaryOp::Eq:
+                return MirBinaryOp::Eq;
+            case hir::HirBinaryOp::Ne:
+                return MirBinaryOp::Ne;
+            case hir::HirBinaryOp::Lt:
+                return MirBinaryOp::Lt;
+            case hir::HirBinaryOp::Gt:
+                return MirBinaryOp::Gt;
+            case hir::HirBinaryOp::Le:
+                return MirBinaryOp::Le;
+            case hir::HirBinaryOp::Ge:
+                return MirBinaryOp::Ge;
+            default:
+                return MirBinaryOp::Add;  // デフォルト
         }
     }
 
     // HIR単項演算子をMIRに変換
     MirUnaryOp convert_unary_op(hir::HirUnaryOp op) {
         switch (op) {
-            case hir::HirUnaryOp::Neg: return MirUnaryOp::Neg;
-            case hir::HirUnaryOp::Not: return MirUnaryOp::Not;
-            case hir::HirUnaryOp::BitNot: return MirUnaryOp::BitNot;
-            default: return MirUnaryOp::Neg;  // デフォルト
+            case hir::HirUnaryOp::Neg:
+                return MirUnaryOp::Neg;
+            case hir::HirUnaryOp::Not:
+                return MirUnaryOp::Not;
+            case hir::HirUnaryOp::BitNot:
+                return MirUnaryOp::BitNot;
+            default:
+                return MirUnaryOp::Neg;  // デフォルト
         }
     }
 };

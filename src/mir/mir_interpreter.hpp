@@ -1,11 +1,13 @@
 #pragma once
 
+#include "../common/format_string.hpp"
 #include "mir_nodes.hpp"
-#include <unordered_map>
-#include <stack>
+
 #include <any>
-#include <iostream>
 #include <functional>
+#include <iostream>
+#include <stack>
+#include <unordered_map>
 
 namespace cm::mir {
 
@@ -13,7 +15,7 @@ namespace cm::mir {
 // MIRインタープリタ
 // ============================================================
 class MirInterpreter {
-public:
+   public:
     // 値の表現
     using Value = std::any;
 
@@ -47,12 +49,15 @@ public:
         }
     }
 
-private:
+   private:
     // 実行コンテキスト
     struct ExecutionContext {
         const MirFunction* function;
         std::unordered_map<LocalId, Value> locals;  // ローカル変数の値
-        std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> builtins;  // 組み込み関数
+        std::unordered_map<
+            std::string,
+            std::function<Value(std::vector<Value>, const std::unordered_map<LocalId, Value>&)>>
+            builtins;  // 組み込み関数（ローカル変数へのアクセス付き）
 
         ExecutionContext(const MirFunction* func) : function(func) {
             // 組み込み関数を登録
@@ -60,25 +65,63 @@ private:
         }
 
         void register_builtins() {
-            // println関数
-            builtins["println"] = [](std::vector<Value> args) -> Value {
+            // println関数 - Rust風フォーマット文字列をサポート
+            builtins["println"] = [](std::vector<Value> args,
+                                     const std::unordered_map<LocalId, Value>& locals) -> Value {
+                if (args.empty()) {
+                    std::cout << std::endl;
+                    return Value{};
+                }
+
+                // 第1引数はフォーマット文字列かチェック
+                if (args[0].type() == typeid(std::string)) {
+                    // フォーマット文字列モード
+                    std::string format_str = std::any_cast<std::string>(args[0]);
+
+                    // プレースホルダーがあるかチェック
+                    if (format_str.find('{') != std::string::npos &&
+                        format_str.find('}') != std::string::npos) {
+                        // フォーマット引数を準備
+                        std::vector<std::any> format_args;
+                        for (size_t i = 1; i < args.size(); ++i) {
+                            format_args.push_back(args[i]);
+                        }
+
+                        // フォーマット処理
+                        std::string output = FormatStringFormatter::format(format_str, format_args);
+                        std::cout << output << std::endl;
+                        return Value{};
+                    } else {
+                        // プレースホルダーがない場合は単純出力
+                        std::cout << format_str << std::endl;
+                        return Value{};
+                    }
+                }
+
+                // 後方互換性: 非文字列引数またはフォーマットなしの出力
                 for (const auto& arg : args) {
                     if (arg.type() == typeid(std::string)) {
                         std::cout << std::any_cast<std::string>(arg);
                     } else if (arg.type() == typeid(int64_t)) {
                         std::cout << std::any_cast<int64_t>(arg);
+                    } else if (arg.type() == typeid(int32_t)) {
+                        std::cout << std::any_cast<int32_t>(arg);
                     } else if (arg.type() == typeid(double)) {
                         std::cout << std::any_cast<double>(arg);
+                    } else if (arg.type() == typeid(float)) {
+                        std::cout << std::any_cast<float>(arg);
                     } else if (arg.type() == typeid(bool)) {
                         std::cout << (std::any_cast<bool>(arg) ? "true" : "false");
                     }
                 }
                 std::cout << std::endl;
+
                 return Value{};
             };
 
             // 算術関数
-            builtins["sqrt"] = [](std::vector<Value> args) -> Value {
+            builtins["sqrt"] = [](std::vector<Value> args,
+                                  const std::unordered_map<LocalId, Value>&) -> Value {
                 if (!args.empty() && args[0].type() == typeid(double)) {
                     return Value(std::sqrt(std::any_cast<double>(args[0])));
                 }
@@ -196,9 +239,10 @@ private:
                 // 関数名を取得（簡略化：定数オペランドから）
                 if (data.func->kind == MirOperand::Constant) {
                     auto& constant = std::get<MirConstant>(data.func->data);
-                    if (constant.value.index() == 8) {  // std::string
-                        std::string func_name = std::any_cast<std::string>(
-                            std::get<std::string>(constant.value));
+                    // std::cerr << "Constant value index: " << constant.value.index() << std::endl;
+                    // std::stringを試行
+                    if (auto* str_ptr = std::get_if<std::string>(&constant.value)) {
+                        std::string func_name = *str_ptr;
 
                         // 引数を評価
                         std::vector<Value> args;
@@ -206,9 +250,13 @@ private:
                             args.push_back(evaluate_operand(ctx, *arg));
                         }
 
+                        // デバッグ出力
+                        // std::cerr << "Calling function: " << func_name << " with " << args.size()
+                        // << " args" << std::endl;
+
                         // 組み込み関数を呼び出し
                         if (ctx.builtins.count(func_name)) {
-                            Value result = ctx.builtins[func_name](args);
+                            Value result = ctx.builtins[func_name](args, ctx.locals);
                             if (data.destination) {
                                 store_to_place(ctx, *data.destination, result);
                             }
@@ -268,23 +316,25 @@ private:
 
     // 定数を値に変換
     Value constant_to_value(const MirConstant& constant) {
-        return std::visit([](auto&& val) -> Value {
-            using T = std::decay_t<decltype(val)>;
-            if constexpr (std::is_same_v<T, std::monostate>) {
+        return std::visit(
+            [](auto&& val) -> Value {
+                using T = std::decay_t<decltype(val)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    return Value{};
+                } else if constexpr (std::is_same_v<T, bool>) {
+                    return Value(val);
+                } else if constexpr (std::is_same_v<T, int64_t>) {
+                    return Value(val);
+                } else if constexpr (std::is_same_v<T, double>) {
+                    return Value(val);
+                } else if constexpr (std::is_same_v<T, char>) {
+                    return Value(static_cast<int64_t>(val));
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    return Value(val);
+                }
                 return Value{};
-            } else if constexpr (std::is_same_v<T, bool>) {
-                return Value(val);
-            } else if constexpr (std::is_same_v<T, int64_t>) {
-                return Value(val);
-            } else if constexpr (std::is_same_v<T, double>) {
-                return Value(val);
-            } else if constexpr (std::is_same_v<T, char>) {
-                return Value(static_cast<int64_t>(val));
-            } else if constexpr (std::is_same_v<T, std::string>) {
-                return Value(val);
-            }
-            return Value{};
-        }, constant.value);
+            },
+            constant.value);
     }
 
     // 二項演算を評価
@@ -295,18 +345,40 @@ private:
             int64_t r = std::any_cast<int64_t>(rhs);
 
             switch (op) {
-                case MirBinaryOp::Add: return Value(l + r);
-                case MirBinaryOp::Sub: return Value(l - r);
-                case MirBinaryOp::Mul: return Value(l * r);
-                case MirBinaryOp::Div: return Value(l / r);
-                case MirBinaryOp::Mod: return Value(l % r);
-                case MirBinaryOp::Eq: return Value(l == r);
-                case MirBinaryOp::Ne: return Value(l != r);
-                case MirBinaryOp::Lt: return Value(l < r);
-                case MirBinaryOp::Le: return Value(l <= r);
-                case MirBinaryOp::Gt: return Value(l > r);
-                case MirBinaryOp::Ge: return Value(l >= r);
-                default: break;
+                case MirBinaryOp::Add:
+                    return Value(l + r);
+                case MirBinaryOp::Sub:
+                    return Value(l - r);
+                case MirBinaryOp::Mul:
+                    return Value(l * r);
+                case MirBinaryOp::Div:
+                    return Value(l / r);
+                case MirBinaryOp::Mod:
+                    return Value(l % r);
+                case MirBinaryOp::Eq:
+                    return Value(l == r);
+                case MirBinaryOp::Ne:
+                    return Value(l != r);
+                case MirBinaryOp::Lt:
+                    return Value(l < r);
+                case MirBinaryOp::Le:
+                    return Value(l <= r);
+                case MirBinaryOp::Gt:
+                    return Value(l > r);
+                case MirBinaryOp::Ge:
+                    return Value(l >= r);
+                case MirBinaryOp::BitAnd:
+                    return Value(l & r);
+                case MirBinaryOp::BitOr:
+                    return Value(l | r);
+                case MirBinaryOp::BitXor:
+                    return Value(l ^ r);
+                case MirBinaryOp::Shl:
+                    return Value(l << r);
+                case MirBinaryOp::Shr:
+                    return Value(l >> r);
+                default:
+                    break;
             }
         }
 
@@ -316,11 +388,16 @@ private:
             double r = std::any_cast<double>(rhs);
 
             switch (op) {
-                case MirBinaryOp::Add: return Value(l + r);
-                case MirBinaryOp::Sub: return Value(l - r);
-                case MirBinaryOp::Mul: return Value(l * r);
-                case MirBinaryOp::Div: return Value(l / r);
-                default: break;
+                case MirBinaryOp::Add:
+                    return Value(l + r);
+                case MirBinaryOp::Sub:
+                    return Value(l - r);
+                case MirBinaryOp::Mul:
+                    return Value(l * r);
+                case MirBinaryOp::Div:
+                    return Value(l / r);
+                default:
+                    break;
             }
         }
 

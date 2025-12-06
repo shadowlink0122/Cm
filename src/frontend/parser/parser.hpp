@@ -73,7 +73,7 @@ class Parser {
                 if (attr.name == "macro") {
                     // このパスは廃止予定
                     pos_ = saved_pos;  // 位置を戻す
-                    return nullptr;  // @[macro]はサポートしない
+                    return nullptr;    // @[macro]はサポートしない
                 }
             }
 

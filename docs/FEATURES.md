@@ -79,7 +79,25 @@
 - [x] std/macros - 標準マクロ
 - [ ] std/sys - プラットフォーム依存実装
 
-### 5. **コード生成**
+### 5. **実行環境**
+
+#### MIRインタプリタ (v0.1.0新機能) ✅
+- [x] **MIR直接実行**
+- [x] **すべてのMIR命令サポート**
+- [x] **算術・論理演算**
+- [x] **ビット演算（&, |, ^, <<, >>）**
+- [x] **制御フロー（if, for, while）**
+- [x] **関数呼び出し**
+- [x] **組み込み関数**
+
+#### フォーマット文字列 (v0.1.0新機能) ✅
+- [x] **変数自動キャプチャ**: `println("x = {x}")`
+- [x] **位置引数**: `println("{}, {}", a, b)`
+- [x] **混合スタイル**: 名前付きと位置引数の混在
+- [x] **すべての数値型サポート**
+- [x] **Rust風のフォーマット構文**
+
+### 6. **コード生成**
 
 #### Rustトランスパイラ (設計済み)
 - [x] RustCodegen実装
@@ -88,21 +106,21 @@
 - [x] Cargo.toml生成
 - [ ] 実際のコンパイルテスト
 
-### 6. **デバッグ・開発支援**
+### 7. **デバッグ・開発支援**
 
 - [x] 多言語デバッグメッセージ（日本語/英語）
 - [x] ステージ別デバッグ出力
 - [x] デバッグレベル制御（TRACE、DEBUG、INFO等）
 - [x] ソース位置トラッキング
 
-### 7. **ビルドシステム**
+### 8. **ビルドシステム**
 
 - [x] CMake設定
 - [x] Google Test統合
 - [x] 実行ファイルのルート配置
 - [x] .gitignore設定
 
-### 8. **テスト**
+### 9. **テスト**
 
 - [x] レクサーテスト（13件）
 - [x] HIR Loweringテスト（12件）
@@ -165,22 +183,22 @@
 
 ```bash
 # ヘルプ
-./cm --help
+./cm help
+
+# プログラム実行（v0.1.0新機能）
+./cm run examples/basics/00_simple.cm
+./cm run examples/basics/00_simple.cm -d        # デバッグモード
+./cm run examples/basics/00_simple.cm --verbose # 詳細表示
 
 # 構文チェック
-./cm examples/basics/00_simple.cm --check
+./cm check examples/basics/00_simple.cm
 
-# AST表示
-./cm examples/basics/00_simple.cm --ast
+# コンパイル（将来実装）
+./cm compile examples/basics/00_simple.cm --emit-rust # Rust生成
+./cm compile examples/basics/00_simple.cm --emit-ts   # TypeScript生成
 
-# HIR表示（脱糖確認）
-./cm examples/control_flow/07_loop.cm --hir
-
-# MIR表示（最適化前）
-./cm examples/basics/00_simple.cm --mir
-
-# 最適化されたMIR表示
-./cm examples/optimization/06_optimization.cm -O2 --mir-opt
+# フォーマット文字列のサンプル実行（v0.1.0新機能）
+./cm run examples/basics/08_auto_variable_capture.cm
 ```
 
 ## 📁 プロジェクト構造

@@ -1,8 +1,9 @@
 #pragma once
 
 #include "optimization_pass.hpp"
-#include <unordered_map>
+
 #include <set>
+#include <unordered_map>
 
 namespace cm::mir::opt {
 
@@ -10,10 +11,8 @@ namespace cm::mir::opt {
 // 定数畳み込み最適化
 // ============================================================
 class ConstantFolding : public OptimizationPass {
-public:
-    std::string name() const override {
-        return "Constant Folding";
-    }
+   public:
+    std::string name() const override { return "Constant Folding"; }
 
     bool run(MirFunction& func) override {
         bool changed = false;
@@ -29,7 +28,7 @@ public:
         return changed;
     }
 
-private:
+   private:
     bool process_block(BasicBlock& block, std::unordered_map<LocalId, MirConstant>& constants) {
         bool changed = false;
 
@@ -90,13 +89,12 @@ private:
 
     // Rvalueを評価して定数を返す（可能な場合）
     std::optional<MirConstant> evaluate_rvalue(
-        const MirRvalue& rvalue,
-        const std::unordered_map<LocalId, MirConstant>& constants
-    ) {
+        const MirRvalue& rvalue, const std::unordered_map<LocalId, MirConstant>& constants) {
         switch (rvalue.kind) {
             case MirRvalue::Use: {
                 auto& use_data = std::get<MirRvalue::UseData>(rvalue.data);
-                if (!use_data.operand) return std::nullopt;
+                if (!use_data.operand)
+                    return std::nullopt;
 
                 return evaluate_operand(*use_data.operand, constants);
             }
@@ -137,9 +135,7 @@ private:
 
     // Operandを評価して定数を返す（可能な場合）
     std::optional<MirConstant> evaluate_operand(
-        const MirOperand& operand,
-        const std::unordered_map<LocalId, MirConstant>& constants
-    ) {
+        const MirOperand& operand, const std::unordered_map<LocalId, MirConstant>& constants) {
         if (operand.kind == MirOperand::Constant) {
             if (auto* constant = std::get_if<MirConstant>(&operand.data)) {
                 return *constant;
@@ -160,11 +156,8 @@ private:
     }
 
     // 二項演算を評価
-    std::optional<MirConstant> eval_binary_op(
-        MirBinaryOp op,
-        const MirConstant& lhs,
-        const MirConstant& rhs
-    ) {
+    std::optional<MirConstant> eval_binary_op(MirBinaryOp op, const MirConstant& lhs,
+                                              const MirConstant& rhs) {
         // 整数演算
         if (auto* lhs_int = std::get_if<int64_t>(&lhs.value)) {
             if (auto* rhs_int = std::get_if<int64_t>(&rhs.value)) {
@@ -266,10 +259,7 @@ private:
     }
 
     // 単項演算を評価
-    std::optional<MirConstant> eval_unary_op(
-        MirUnaryOp op,
-        const MirConstant& operand
-    ) {
+    std::optional<MirConstant> eval_unary_op(MirUnaryOp op, const MirConstant& operand) {
         MirConstant result;
         result.type = operand.type;
 

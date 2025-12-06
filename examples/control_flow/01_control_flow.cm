@@ -1,26 +1,29 @@
 // 3. 制御フロー - if文とループ
+import std::io::println;
+
 int main() {
     int n = 10;
 
     // if-else文
     if (n > 0) {
-        print("Positive");
+        println("Positive");
     } else if (n < 0) {
-        print("Negative");
+        println("Negative");
     } else {
-        print("Zero");
+        println("Zero");
     }
 
     // while文
     int i = 0;
     while (i < 5) {
-        print(i);
+        println("i = {i}");
         i = i + 1;
     }
 
     // for文（内部的にwhileに変換される）
     for (int j = 0; j < 5; j = j + 1) {
-        print(j * 2);
+        int result = j * 2;
+        println("j * 2 = {result}");
     }
 
     return 0;

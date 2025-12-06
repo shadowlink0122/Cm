@@ -1,9 +1,10 @@
 #pragma once
 
 #include "mir_nodes.hpp"
+
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
 
 namespace cm::mir {
 
@@ -11,7 +12,7 @@ namespace cm::mir {
 // MIRプリンター - デバッグ出力用
 // ============================================================
 class MirPrinter {
-public:
+   public:
     // MIRプログラムを出力
     void print(const MirProgram& program, std::ostream& out = std::cout) {
         out << "===== MIR Program: " << program.filename << " =====\n\n";
@@ -29,7 +30,8 @@ public:
         // 引数を出力
         bool first = true;
         for (LocalId arg_id : func.arg_locals) {
-            if (!first) out << ", ";
+            if (!first)
+                out << ", ";
             first = false;
 
             const auto& local = func.locals[arg_id];
@@ -60,7 +62,7 @@ public:
         out << "}\n";
     }
 
-private:
+   private:
     // 基本ブロックを出力
     void print_block(const BasicBlock& block, const MirFunction& func, std::ostream& out) {
         // ブロックヘッダ
@@ -71,7 +73,8 @@ private:
             out << "        // predecessors: [";
             bool first = true;
             for (BlockId pred : block.predecessors) {
-                if (!first) out << ", ";
+                if (!first)
+                    out << ", ";
                 first = false;
                 out << "bb" << pred;
             }
@@ -161,7 +164,8 @@ private:
 
                 bool first = true;
                 for (const auto& arg : data.args) {
-                    if (!first) out << ", ";
+                    if (!first)
+                        out << ", ";
                     first = false;
                     print_operand(*arg, out);
                 }
@@ -261,7 +265,8 @@ private:
 
                 bool first = true;
                 for (const auto& op : data.operands) {
-                    if (!first) out << ", ";
+                    if (!first)
+                        out << ", ";
                     first = false;
                     print_operand(*op, out);
                 }
@@ -308,52 +313,84 @@ private:
     // 二項演算子を文字列に
     std::string binary_op_to_string(MirBinaryOp op) {
         switch (op) {
-            case MirBinaryOp::Add: return "+";
-            case MirBinaryOp::Sub: return "-";
-            case MirBinaryOp::Mul: return "*";
-            case MirBinaryOp::Div: return "/";
-            case MirBinaryOp::Mod: return "%";
-            case MirBinaryOp::BitAnd: return "&";
-            case MirBinaryOp::BitOr: return "|";
-            case MirBinaryOp::BitXor: return "^";
-            case MirBinaryOp::Shl: return "<<";
-            case MirBinaryOp::Shr: return ">>";
-            case MirBinaryOp::Eq: return "==";
-            case MirBinaryOp::Ne: return "!=";
-            case MirBinaryOp::Lt: return "<";
-            case MirBinaryOp::Le: return "<=";
-            case MirBinaryOp::Gt: return ">";
-            case MirBinaryOp::Ge: return ">=";
-            case MirBinaryOp::And: return "&&";
-            case MirBinaryOp::Or: return "||";
-            default: return "?";
+            case MirBinaryOp::Add:
+                return "+";
+            case MirBinaryOp::Sub:
+                return "-";
+            case MirBinaryOp::Mul:
+                return "*";
+            case MirBinaryOp::Div:
+                return "/";
+            case MirBinaryOp::Mod:
+                return "%";
+            case MirBinaryOp::BitAnd:
+                return "&";
+            case MirBinaryOp::BitOr:
+                return "|";
+            case MirBinaryOp::BitXor:
+                return "^";
+            case MirBinaryOp::Shl:
+                return "<<";
+            case MirBinaryOp::Shr:
+                return ">>";
+            case MirBinaryOp::Eq:
+                return "==";
+            case MirBinaryOp::Ne:
+                return "!=";
+            case MirBinaryOp::Lt:
+                return "<";
+            case MirBinaryOp::Le:
+                return "<=";
+            case MirBinaryOp::Gt:
+                return ">";
+            case MirBinaryOp::Ge:
+                return ">=";
+            case MirBinaryOp::And:
+                return "&&";
+            case MirBinaryOp::Or:
+                return "||";
+            default:
+                return "?";
         }
     }
 
     // 単項演算子を文字列に
     std::string unary_op_to_string(MirUnaryOp op) {
         switch (op) {
-            case MirUnaryOp::Neg: return "-";
-            case MirUnaryOp::Not: return "!";
-            case MirUnaryOp::BitNot: return "~";
-            default: return "?";
+            case MirUnaryOp::Neg:
+                return "-";
+            case MirUnaryOp::Not:
+                return "!";
+            case MirUnaryOp::BitNot:
+                return "~";
+            default:
+                return "?";
         }
     }
 
     // 型を文字列に（簡略版）
     std::string type_to_string(hir::TypePtr type) {
-        if (!type) return "?";
+        if (!type)
+            return "?";
 
         // 現時点では簡略化して型名を返す
         // TODO: 実際の型システムに合わせて実装
-        if (type->name == "int") return "int";
-        if (type->name == "uint") return "uint";
-        if (type->name == "float") return "float";
-        if (type->name == "double") return "double";
-        if (type->name == "bool") return "bool";
-        if (type->name == "char") return "char";
-        if (type->name == "void") return "void";
-        if (type->name == "string") return "string";
+        if (type->name == "int")
+            return "int";
+        if (type->name == "uint")
+            return "uint";
+        if (type->name == "float")
+            return "float";
+        if (type->name == "double")
+            return "double";
+        if (type->name == "bool")
+            return "bool";
+        if (type->name == "char")
+            return "char";
+        if (type->name == "void")
+            return "void";
+        if (type->name == "string")
+            return "string";
 
         return type->name.empty() ? "T" : type->name;
     }

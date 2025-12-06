@@ -1,0 +1,11 @@
+# Cm Language Version Information
+VERSION=0.1.0
+RELEASE_TYPE=development
+RELEASE_DATE=2025-01-06
+
+# Version History
+# 0.1.0 - Initial development release
+#   - Basic interpreter with MIR execution
+#   - Format strings with auto variable capture
+#   - HIR and MIR infrastructure
+#   - Command-based CLI

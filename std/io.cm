@@ -1,0 +1,48 @@
+// 標準ライブラリ: I/Oモジュール
+module std::io;
+
+// Rust風フォーマット文字列対応のprintln
+// 可変長引数をサポート
+// 例:
+//   println("Hello, World!");  // 単純な文字列
+//   println("Value: {}", 42);  // 位置引数
+//   println("{} + {} = {}", 1, 2, 3);  // 複数の位置引数
+export void println(...) {
+    __builtin_println(...);
+}
+
+// 後方互換性のための単純な出力関数（廃止予定）
+export void println_string(string message) {
+    __builtin_println_string(message);
+}
+
+export void println_int(int value) {
+    __builtin_println_int(value);
+}
+
+export void println_double(double value) {
+    __builtin_println_double(value);
+}
+
+export void println_bool(bool value) {
+    __builtin_println_bool(value);
+}
+
+// 改行なし出力
+export void print(string message) {
+    __builtin_print_string(message);
+}
+
+export void print(int value) {
+    __builtin_print_int(value);
+}
+
+// 入力
+export string readln() {
+    return __builtin_readln();
+}
+
+// エラー出力
+export void eprintln(string message) {
+    __builtin_eprintln_string(message);
+}

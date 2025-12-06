@@ -23,6 +23,14 @@ int add(int a, int b) {
     return a + b;
 }
 
+// フォーマット文字列（変数自動キャプチャ）
+import std::io::println;
+int main() {
+    int x = 10, y = 20;
+    println("x = {x}, y = {y}");  // 変数を自動的にキャプチャ
+    return 0;
+}
+
 // ジェネリクス
 T identity<T>(T value) {
     return value;
@@ -124,14 +132,24 @@ backend = "rust"
 backend = "wasm"
 ```
 
-## ビルド
+## CLI使用方法
 
 ```bash
-cm build                 # デバッグ
-cm build --release       # リリース
-cm build --target web    # WASM
-cm run                   # 実行
-cm run --debug           # デバッグログ付き
+# 実行
+cm run example.cm          # プログラムを実行
+cm run example.cm -d       # デバッグログ付き
+cm run example.cm --verbose # 詳細表示
+
+# コンパイル
+cm compile example.cm      # ネイティブにコンパイル
+cm compile example.cm --emit-rust  # Rustコード生成
+cm compile example.cm --emit-ts    # TypeScript生成
+
+# 構文チェック
+cm check example.cm        # 型チェックのみ
+
+# ヘルプ
+cm help                    # ヘルプ表示
 ```
 
 ## 開発言語

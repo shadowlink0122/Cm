@@ -1,8 +1,10 @@
-#include <gtest/gtest.h>
+#include "../../src/mir/mir_lowering.hpp"
+
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
 #include "../../src/hir/hir_lowering.hpp"
-#include "../../src/mir/mir_lowering.hpp"
+
+#include <gtest/gtest.h>
 #include <sstream>
 
 using namespace cm;
@@ -11,7 +13,7 @@ using namespace cm;
 // テストヘルパー
 // ============================================================
 class MirLoweringTest : public ::testing::Test {
-protected:
+   protected:
     std::unique_ptr<mir::MirProgram> parse_and_lower(const std::string& code) {
         // レクサー → パーサー → HIR → MIR
         Lexer lex(code);
@@ -29,9 +31,7 @@ protected:
     }
 
     // 基本ブロックの数をカウント
-    size_t count_blocks(const mir::MirFunction& func) {
-        return func.basic_blocks.size();
-    }
+    size_t count_blocks(const mir::MirFunction& func) { return func.basic_blocks.size(); }
 
     // 特定のブロックの文の数をカウント
     size_t count_statements(const mir::MirFunction& func, mir::BlockId block_id) {
@@ -236,8 +236,7 @@ TEST_F(MirLoweringTest, CFGConnectivity) {
             if (succ_id < func.basic_blocks.size()) {
                 const auto& succ_block = func.basic_blocks[succ_id];
                 auto it = std::find(succ_block->predecessors.begin(),
-                                  succ_block->predecessors.end(),
-                                  block->id);
+                                    succ_block->predecessors.end(), block->id);
                 EXPECT_NE(it, succ_block->predecessors.end());
             }
         }

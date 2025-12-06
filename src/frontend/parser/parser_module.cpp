@@ -1,8 +1,8 @@
 // モジュール関連のパーサー実装
 
-#include "parser.hpp"
-#include "../ast/module.hpp"
 #include "../../common/debug/par.hpp"
+#include "../ast/module.hpp"
+#include "parser.hpp"
 
 namespace cm {
 
@@ -16,7 +16,7 @@ ast::DeclPtr Parser::parse_module() {
     ast::ModulePath path;
     path.segments.push_back(expect_ident());
 
-    while (consume_if(TokenKind::Dot)) {
+    while (consume_if(TokenKind::ColonColon)) {
         path.segments.push_back(expect_ident());
     }
 
@@ -36,14 +36,14 @@ ast::DeclPtr Parser::parse_import_stmt() {
     // モジュールパス
     ast::ModulePath path;
     path.segments.push_back(expect_ident());
-    while (consume_if(TokenKind::Dot)) {
+    while (consume_if(TokenKind::ColonColon)) {
         path.segments.push_back(expect_ident());
     }
 
     ast::ImportDecl import_decl(std::move(path));
 
     // インポートアイテム
-    if (consume_if(TokenKind::Dot)) {
+    if (consume_if(TokenKind::ColonColon)) {
         if (consume_if(TokenKind::Star)) {
             // ワイルドカードインポート: import std.io.*;
             import_decl.is_wildcard = true;
@@ -88,10 +88,8 @@ ast::DeclPtr Parser::parse_import_stmt() {
 
     expect(TokenKind::Semicolon);
 
-    return std::make_unique<ast::Decl>(
-        std::make_unique<ast::ImportDecl>(std::move(import_decl)),
-        Span{start_pos, previous().end}
-    );
+    return std::make_unique<ast::Decl>(std::make_unique<ast::ImportDecl>(std::move(import_decl)),
+                                       Span{start_pos, previous().end});
 }
 
 // ============================================================
@@ -143,10 +141,7 @@ ast::DeclPtr Parser::parse_export() {
 
     // ExportDeclでラップ
     auto export_decl = std::make_unique<ast::ExportDecl>(std::move(inner_decl));
-    return std::make_unique<ast::Decl>(
-        std::move(export_decl),
-        Span{start_pos, previous().end}
-    );
+    return std::make_unique<ast::Decl>(std::move(export_decl), Span{start_pos, previous().end});
 }
 
 // ============================================================
@@ -174,10 +169,8 @@ ast::DeclPtr Parser::parse_use() {
 
     expect(TokenKind::Semicolon);
 
-    return std::make_unique<ast::Decl>(
-        std::make_unique<ast::UseDecl>(std::move(use_decl)),
-        Span{start_pos, previous().end}
-    );
+    return std::make_unique<ast::Decl>(std::make_unique<ast::UseDecl>(std::move(use_decl)),
+                                       Span{start_pos, previous().end});
 }
 
 // ============================================================
@@ -229,7 +222,8 @@ ast::DeclPtr Parser::parse_macro() {
                     }
                 }
 
-                params.push_back(ast::MacroParam(std::move(param_name), std::move(type_hint), is_variadic));
+                params.push_back(
+                    ast::MacroParam(std::move(param_name), std::move(type_hint), is_variadic));
             } while (consume_if(TokenKind::Comma));
         }
         expect(TokenKind::RParen);
@@ -238,17 +232,11 @@ ast::DeclPtr Parser::parse_macro() {
         auto body = parse_block();
 
         // Function kind macroを作成
-        ast::MacroDecl macro_decl(
-            ast::MacroDecl::Function,
-            std::move(macro_name),
-            std::move(params),
-            std::move(body)
-        );
+        ast::MacroDecl macro_decl(ast::MacroDecl::Function, std::move(macro_name),
+                                  std::move(params), std::move(body));
 
-        return std::make_unique<ast::Decl>(
-            std::make_unique<ast::MacroDecl>(std::move(macro_decl)),
-            Span{start_pos, previous().end}
-        );
+        return std::make_unique<ast::Decl>(std::make_unique<ast::MacroDecl>(std::move(macro_decl)),
+                                           Span{start_pos, previous().end});
     }
 
     // 旧構文のmacroキーワード（互換性のために残す - 推奨されない）
@@ -285,24 +273,19 @@ ast::DeclPtr Parser::parse_macro() {
                     }
                 }
 
-                params.push_back(ast::MacroParam(std::move(param_name), std::move(type_hint), is_variadic));
+                params.push_back(
+                    ast::MacroParam(std::move(param_name), std::move(type_hint), is_variadic));
             } while (consume_if(TokenKind::Comma));
         }
         expect(TokenKind::RParen);
 
         auto body = parse_block();
 
-        ast::MacroDecl macro_decl(
-            ast::MacroDecl::Function,
-            std::move(macro_name),
-            std::move(params),
-            std::move(body)
-        );
+        ast::MacroDecl macro_decl(ast::MacroDecl::Function, std::move(macro_name),
+                                  std::move(params), std::move(body));
 
-        return std::make_unique<ast::Decl>(
-            std::make_unique<ast::MacroDecl>(std::move(macro_decl)),
-            Span{start_pos, previous().end}
-        );
+        return std::make_unique<ast::Decl>(std::make_unique<ast::MacroDecl>(std::move(macro_decl)),
+                                           Span{start_pos, previous().end});
     }
 
     return nullptr;
@@ -378,7 +361,8 @@ ast::AttributeNode Parser::parse_attribute() {
                     paren_count++;
                 } else if (check(TokenKind::RParen)) {
                     paren_count--;
-                    if (paren_count == 0) break;
+                    if (paren_count == 0)
+                        break;
                 }
                 condition += current_text() + " ";
                 advance();
@@ -418,9 +402,8 @@ ast::DeclPtr Parser::parse_const_decl() {
     expect(TokenKind::Semicolon);
 
     // 定数宣言用のASTノード（簡易的にLetStmtを流用）
-    auto let_stmt = std::make_unique<ast::LetStmt>(
-        std::move(name), std::move(type), std::move(init), true
-    );
+    auto let_stmt =
+        std::make_unique<ast::LetStmt>(std::move(name), std::move(type), std::move(init), true);
 
     // TODO: 専用のConstDeclノードを作成する
     return nullptr;  // 一時的な実装
@@ -444,9 +427,8 @@ ast::DeclPtr Parser::parse_constexpr() {
         expect(TokenKind::RParen);
         auto body = parse_block();
 
-        auto func = std::make_unique<ast::FunctionDecl>(
-            std::move(name), std::move(params), std::move(type), std::move(body)
-        );
+        auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
+                                                        std::move(type), std::move(body));
         // TODO: constexprフラグを設定
 
         return std::make_unique<ast::Decl>(std::move(func));
@@ -545,9 +527,9 @@ ast::DeclPtr Parser::parse_extern_decl() {
     expect(TokenKind::Semicolon);
 
     // extern関数として作成（bodyなし）
-    auto func = std::make_unique<ast::FunctionDecl>(
-        std::move(name), std::move(params), std::move(return_type),
-        std::vector<ast::StmtPtr>()  // 空のボディ
+    auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
+                                                    std::move(return_type),
+                                                    std::vector<ast::StmtPtr>()  // 空のボディ
     );
 
     // externフラグを設定（TODO: FunctionDeclにis_externフラグを追加）

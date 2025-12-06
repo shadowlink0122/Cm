@@ -1,7 +1,9 @@
-#include <gtest/gtest.h>
+#include "../../src/hir/hir_lowering.hpp"
+
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
-#include "../../src/hir/hir_lowering.hpp"
+
+#include <gtest/gtest.h>
 #include <sstream>
 
 using namespace cm;
@@ -10,7 +12,7 @@ using namespace cm;
 // テストヘルパー
 // ============================================================
 class HirLoweringTest : public ::testing::Test {
-protected:
+   protected:
     std::unique_ptr<hir::HirProgram> parse_and_lower(const std::string& code) {
         // レクサー
         Lexer lex(code);

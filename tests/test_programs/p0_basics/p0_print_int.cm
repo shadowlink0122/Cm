@@ -1,0 +1,9 @@
+// Phase 0: 整数の出力テスト
+import std::io::println;
+
+int main() {
+    println(42);
+    println(0);
+    println(-123);
+    return 0;
+}
