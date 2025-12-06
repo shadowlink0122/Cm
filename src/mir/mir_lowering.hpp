@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../frontend/ast/types.hpp"
 #include "../hir/hir_nodes.hpp"
 #include "mir_nodes.hpp"
 
@@ -356,10 +357,97 @@ class MirLowering {
     LocalId lower_call(FunctionContext& ctx, const hir::HirCall& call, hir::TypePtr type) {
         // 引数を評価
         std::vector<MirOperandPtr> args;
+        std::vector<LocalId> arg_locals;  // 引数のLocalIdを保存
+
+        // println/printの文字列補間処理
+        if ((call.func_name == "println" || call.func_name == "print") && !call.args.empty()) {
+            // 第1引数が文字列リテラルかチェック
+            if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&call.args[0]->kind)) {
+                if (auto* str_val = std::get_if<std::string>(&(*lit)->value)) {
+                    // 文字列補間のプレースホルダーを解析
+                    std::string str = *str_val;
+                    std::vector<std::string> interpolated_vars;
+
+                    // {変数名}パターンを検出
+                    size_t pos = 0;
+                    while ((pos = str.find('{', pos)) != std::string::npos) {
+                        size_t end = str.find('}', pos);
+                        if (end != std::string::npos) {
+                            // {{や}}はエスケープなのでスキップ
+                            if (pos + 1 < str.size() && str[pos + 1] == '{') {
+                                pos += 2;
+                                continue;
+                            }
+
+                            std::string var_name = str.substr(pos + 1, end - pos - 1);
+                            // 変数名が空でなく、コロンを含まない（フォーマット指定がない）場合
+                            if (!var_name.empty() && var_name.find(':') == std::string::npos &&
+                                !std::isdigit(
+                                    var_name[0])) {  // 数字で始まらない（位置引数ではない）
+                                interpolated_vars.push_back(var_name);
+                            }
+                            pos = end + 1;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // 補間変数がある場合は、文字列を直接定数として渡す
+                    if (!interpolated_vars.empty()) {
+                        // 文字列リテラルを定数として直接引数リストに追加
+                        MirConstant str_constant;
+                        str_constant.value = str;
+                        str_constant.type = call.args[0]->type;
+                        args.clear();  // 既存の引数をクリア
+                        args.push_back(MirOperand::constant(std::move(str_constant)));
+
+                        // 補間変数を引数として追加
+                        for (const auto& var_name : interpolated_vars) {
+                            auto it = ctx.var_map.find(var_name);
+                            if (it != ctx.var_map.end()) {
+                                // 変数が存在する場合、引数として追加
+                                args.push_back(MirOperand::copy(MirPlace(it->second)));
+                            } else {
+                                // 変数が見つからない場合、デフォルト値を追加
+                                // 文字列型のデフォルト値 "{missing}" を作成
+                                auto string_type = ast::make_string();
+                                LocalId temp = ctx.new_temp(string_type);
+                                MirConstant constant;
+                                constant.value = std::string("{missing}");
+                                constant.type = string_type;
+                                auto rvalue =
+                                    MirRvalue::use(MirOperand::constant(std::move(constant)));
+                                ctx.push_statement(
+                                    MirStatement::assign(MirPlace(temp), std::move(rvalue)));
+                                args.push_back(MirOperand::copy(MirPlace(temp)));
+                            }
+                        }
+                    } else {
+                        // 補間がない場合は通常通り処理
+                        LocalId arg_local = lower_expr(ctx, *call.args[0]);
+                        args.push_back(MirOperand::copy(MirPlace(arg_local)));
+                    }
+
+                    // 残りの引数を処理（もしあれば）
+                    for (size_t i = 1; i < call.args.size(); ++i) {
+                        LocalId arg_local = lower_expr(ctx, *call.args[i]);
+                        args.push_back(MirOperand::copy(MirPlace(arg_local)));
+                    }
+
+                    // ここで処理完了なので、後続の通常処理をスキップ
+                    goto skip_normal_args;
+                }
+            }
+        }
+
+        // 通常の引数処理（文字列補間がない場合）
         for (const auto& arg : call.args) {
             LocalId arg_local = lower_expr(ctx, *arg);
+            arg_locals.push_back(arg_local);
             args.push_back(MirOperand::copy(MirPlace(arg_local)));
         }
+
+    skip_normal_args:
 
         // 戻り値用の一時変数
         LocalId result = 0;
@@ -375,10 +463,8 @@ class MirLowering {
         BlockId next_block = ctx.func->add_block();
 
         // 関数呼び出しのターミネータを設定
-        // 関数名を定数として作成
-        MirConstant func_name_const;
-        func_name_const.value = call.func_name;
-        auto func_operand = MirOperand::constant(std::move(func_name_const));
+        // 関数名を関数参照として作成
+        auto func_operand = MirOperand::function_ref(call.func_name);
 
         // CallDataを作成
         MirTerminator::CallData call_data;

@@ -11,7 +11,7 @@ int main() {
     println("Welcome to {lang} language in {year}!");
 
     // 位置引数を使った出力
-    double version = 1.0;
+    string version = "v0.1.0";
     bool ready = true;
     println("Version: {version}, Ready: {ready}");
 

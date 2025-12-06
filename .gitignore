@@ -39,3 +39,13 @@ coverage.info
 
 # Temp
 .tmp/
+*.cm.tmp
+test_transpile.cm
+
+# Generated output directories
+cm_build_ts/
+target/
+
+# Test output
+*.out
+*.actual

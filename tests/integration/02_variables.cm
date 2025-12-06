@@ -1,0 +1,14 @@
+// Variables and assignments test
+int main() {
+    int x = 42;
+    int y = x;
+    x = 100;
+
+    println(x);  // Expected: 100
+    println(y);  // Expected: 42
+
+    int z = x + y;
+    println(z);  // Expected: 142
+
+    return 0;
+}

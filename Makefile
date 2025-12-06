@@ -176,7 +176,7 @@ test-compile-rust:
 	@echo "Testing Rust code generation..."
 	@echo "// Test Rust compilation" > /tmp/test.cm
 	@echo "int main() { return 42; }" >> /tmp/test.cm
-	@$(CM) compile /tmp/test.cm --emit-rust
+	@./cm compile /tmp/test.cm --emit-rust
 	@echo "Rust code generated successfully!"
 
 .PHONY: test-compile-ts
@@ -184,7 +184,7 @@ test-compile-ts:
 	@echo "Testing TypeScript code generation..."
 	@echo "// Test TypeScript compilation" > /tmp/test.cm
 	@echo "int main() { return 42; }" >> /tmp/test.cm
-	@$(CM) compile /tmp/test.cm --emit-ts
+	@./cm compile /tmp/test.cm --emit-ts
 	@echo "TypeScript code generated successfully!"
 
 .PHONY: test-compile-wasm

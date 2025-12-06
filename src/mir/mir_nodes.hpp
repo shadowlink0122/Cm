@@ -99,13 +99,14 @@ struct MirConstant {
 
 struct MirOperand {
     enum Kind {
-        Move,     // 所有権を移動
-        Copy,     // 値をコピー
-        Constant  // 定数
+        Move,        // 所有権を移動
+        Copy,        // 値をコピー
+        Constant,    // 定数
+        FunctionRef  // 関数参照
     };
 
     Kind kind;
-    std::variant<MirPlace, MirConstant> data;
+    std::variant<MirPlace, MirConstant, std::string> data;  // stringは関数名用
 
     // デフォルトコンストラクタ
     MirOperand() : kind(Constant), data(MirConstant{}) {}
@@ -128,6 +129,13 @@ struct MirOperand {
         auto op = std::make_unique<MirOperand>();
         op->kind = Constant;
         op->data = std::move(c);
+        return op;
+    }
+
+    static MirOperandPtr function_ref(std::string func_name) {
+        auto op = std::make_unique<MirOperand>();
+        op->kind = FunctionRef;
+        op->data = std::move(func_name);
         return op;
     }
 };

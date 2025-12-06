@@ -1,11 +1,15 @@
 #pragma once
 
+#include "../common/debug.hpp"
+#include "../common/debug_messages.hpp"
 #include "../frontend/ast/module.hpp"
 #include "../mir/mir_nodes.hpp"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <unordered_map>
 
@@ -20,7 +24,7 @@ class RustCodegen {
         bool use_ffi = true;         // FFIを使用
         bool generate_cargo = true;  // Cargo.tomlを生成
         bool split_modules = true;   // モジュール分割
-        std::string output_dir = "target/rust";
+        std::string output_dir = ".tmp/rust_build";
         std::string crate_name = "cm_app";
     };
 
@@ -30,12 +34,26 @@ class RustCodegen {
     std::vector<std::string> external_crates;
     std::vector<std::string> ffi_functions;
     int indent_level = 0;
+    std::map<size_t, std::string> inferred_types;  // 型推論結果を保持
 
    public:
-    RustCodegen(const Options& options = {}) : opts(options) {}
+    RustCodegen() = default;
+    RustCodegen(const Options& options) : opts(options) {}
 
     // MIRプログラムをRustコードに変換
     void generate(const mir::MirProgram& program, const std::string& output_path = "") {
+        if (debug::g_debug_mode) {
+            debug::log(debug::Stage::CodegenRust, debug::Level::Info,
+                       debug::msg(new const char* [] {
+                           "Starting Rust code generation", "Rustコード生成を開始"
+                       }));
+        }
+
+        // output_pathが指定されていればそれを使用
+        if (!output_path.empty()) {
+            opts.output_dir = output_path;
+        }
+
         std::filesystem::create_directories(opts.output_dir);
 
         if (opts.split_modules) {
@@ -50,6 +68,11 @@ class RustCodegen {
 
         if (opts.use_ffi) {
             generate_ffi_bindings();
+        }
+
+        if (debug::g_debug_mode) {
+            debug::log(debug::Stage::CodegenRust, debug::Level::Info,
+                       "Generated Rust code at: " + opts.output_dir);
         }
     }
 
@@ -152,6 +175,11 @@ class RustCodegen {
 
     // 関数生成
     void generate_function(const mir::MirFunction& func) {
+        if (debug::g_debug_mode) {
+            debug::log(debug::Stage::CodegenRust, debug::Level::Debug,
+                       "Generating function: " + func.name);
+        }
+
         std::string signature = build_function_signature(func, false);
         emit_line(signature + " {");
         indent_level++;
@@ -213,7 +241,12 @@ class RustCodegen {
             sig << "_" << local.id << ": " << type_to_rust(local.type);
         }
 
-        sig << ") -> " << type_to_rust(func.locals[func.return_local].type);
+        // main関数の特別処理 - Rustのmainは常に()を返す
+        if (func.name == "main") {
+            sig << ")";  // Rustのmainは()を返す
+        } else {
+            sig << ") -> " << type_to_rust(func.locals[func.return_local].type);
+        }
         return sig.str();
     }
 
@@ -236,8 +269,95 @@ class RustCodegen {
         return sig.str();
     }
 
-    // ローカル変数生成
+    // ローカル変数生成（型推論機能付き）
     void generate_locals(const mir::MirFunction& func) {
+        // 型推論のために文を先読みして定数の型を推定
+        // inferred_types はクラスメンバとして保持
+        inferred_types.clear();  // 関数ごとにクリア
+
+        // 複数パス: 定数から直接型を推論、その後伝播
+        for (int pass = 0; pass < 3; pass++) {
+            for (const auto& block : func.basic_blocks) {
+                if (!block)
+                    continue;
+                for (const auto& stmt : block->statements) {
+                    if (!stmt)
+                        continue;
+                    if (stmt->kind == mir::MirStatement::Assign) {
+                        auto& data = std::get<mir::MirStatement::AssignData>(stmt->data);
+                        size_t dest_local = data.place.local;
+
+                        // RValueがUseの場合
+                        if (data.rvalue && data.rvalue->kind == mir::MirRvalue::Use) {
+                            auto& use_data = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+                            if (use_data.operand) {
+                                // 定数から型を推論
+                                if (use_data.operand->kind == mir::MirOperand::Constant) {
+                                    auto& constant =
+                                        std::get<mir::MirConstant>(use_data.operand->data);
+
+                                    if (std::holds_alternative<bool>(constant.value)) {
+                                        inferred_types[dest_local] = "bool";
+                                    } else if (std::holds_alternative<double>(constant.value)) {
+                                        double val = std::get<double>(constant.value);
+                                        // 浮動小数点リテラルの判定
+                                        if (constant.type && constant.type->name == "double") {
+                                            inferred_types[dest_local] = "f64";
+                                        } else if (constant.type &&
+                                                   constant.type->name == "float") {
+                                            inferred_types[dest_local] = "f32";
+                                        } else if (val != std::floor(val)) {
+                                            // 小数点を含む値はデフォルトでf64
+                                            inferred_types[dest_local] = "f64";
+                                        } else {
+                                            // 整数値でも明示的にdouble型の場合はf64
+                                            inferred_types[dest_local] = "f64";
+                                        }
+                                    } else if (std::holds_alternative<char>(constant.value)) {
+                                        inferred_types[dest_local] = "char";
+                                    } else if (std::holds_alternative<std::string>(
+                                                   constant.value)) {
+                                        inferred_types[dest_local] = "String";
+                                    }
+                                }
+                                // 変数から変数への代入で型を伝播
+                                else if (use_data.operand->kind == mir::MirOperand::Copy ||
+                                         use_data.operand->kind == mir::MirOperand::Move) {
+                                    if (auto* place =
+                                            std::get_if<mir::MirPlace>(&use_data.operand->data)) {
+                                        size_t src_local = place->local;
+                                        if (inferred_types.count(src_local)) {
+                                            inferred_types[dest_local] = inferred_types[src_local];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // 比較演算の結果はbool
+                        else if (data.rvalue && data.rvalue->kind == mir::MirRvalue::BinaryOp) {
+                            auto& binop_data =
+                                std::get<mir::MirRvalue::BinaryOpData>(data.rvalue->data);
+                            if (binop_data.op >= mir::MirBinaryOp::Eq &&
+                                binop_data.op <= mir::MirBinaryOp::Ge) {
+                                inferred_types[dest_local] = "bool";
+                            }
+                            // 論理演算の結果もbool
+                            if (binop_data.op == mir::MirBinaryOp::And ||
+                                binop_data.op == mir::MirBinaryOp::Or) {
+                                inferred_types[dest_local] = "bool";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // mainの戻り値変数を明示的に宣言（main関数の特別処理）
+        if (func.name == "main") {
+            // _0は常にi32型として宣言（exit code用）
+            emit_line("let mut _0: i32;");
+        }
+
         for (const auto& local : func.locals) {
             // 引数とreturn値以外を宣言
             bool is_arg = false;
@@ -250,8 +370,29 @@ class RustCodegen {
 
             if (!is_arg && local.id != func.return_local) {
                 std::string mut_str = local.is_mutable ? "mut " : "";
-                emit_line("let " + mut_str + "_" + std::to_string(local.id) + ": " +
-                          type_to_rust(local.type) + ";");
+                std::string type_str;
+
+                // 型情報がある場合はそれを使用
+                if (local.type) {
+                    type_str = type_to_rust(local.type);
+                    // "()"が返ってきた場合は型情報なし
+                    if (type_str == "()") {
+                        type_str.clear();
+                    }
+                }
+
+                // 型推論の結果がある場合はそれを使用
+                if (type_str.empty() && inferred_types.count(local.id)) {
+                    type_str = inferred_types[local.id];
+                }
+
+                // どちらもない場合はデフォルトでi32
+                if (type_str.empty()) {
+                    type_str = "i32";
+                }
+
+                emit_line("let " + mut_str + "_" + std::to_string(local.id) + ": " + type_str +
+                          ";");
             }
         }
 
@@ -262,6 +403,11 @@ class RustCodegen {
 
     // 基本ブロック生成
     void generate_basic_block(const mir::BasicBlock& block, const mir::MirFunction& func) {
+        if (debug::g_debug_mode) {
+            debug::log(debug::Stage::CodegenRust, debug::Level::Trace,
+                       "Generating basic block: bb" + std::to_string(block.id));
+        }
+
         // ブロックラベル（将来のgoto用）
         emit_line("// bb" + std::to_string(block.id) + ":");
 
@@ -283,6 +429,23 @@ class RustCodegen {
                 auto& data = std::get<mir::MirStatement::AssignData>(stmt.data);
                 std::string lhs = place_to_rust(data.place);
                 std::string rhs = rvalue_to_rust(*data.rvalue);
+
+                // 文字列リテラルをString型に代入する場合の特別処理
+                if (data.rvalue && data.rvalue->kind == mir::MirRvalue::Use) {
+                    auto& use_data = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+                    if (use_data.operand && use_data.operand->kind == mir::MirOperand::Constant) {
+                        auto& constant = std::get<mir::MirConstant>(use_data.operand->data);
+                        if (std::holds_alternative<std::string>(constant.value)) {
+                            // 対象変数の型を確認
+                            mir::LocalId dest_local = data.place.local;
+                            if (inferred_types.count(dest_local) &&
+                                inferred_types[dest_local] == "String") {
+                                rhs += ".to_string()";
+                            }
+                        }
+                    }
+                }
+
                 emit_line(lhs + " = " + rhs + ";");
                 break;
             }
@@ -305,7 +468,16 @@ class RustCodegen {
     void generate_terminator(const mir::MirTerminator& term, const mir::MirFunction& func) {
         switch (term.kind) {
             case mir::MirTerminator::Return:
-                if (func.return_local != 0) {
+                // main関数の特別処理 - 戻り値をexit codeとして使用
+                if (func.name == "main" && func.return_local < func.locals.size()) {
+                    auto return_type = func.locals[func.return_local].type;
+                    if (return_type && return_type->name != "void") {
+                        emit_line("std::process::exit(_" + std::to_string(func.return_local) +
+                                  ");");
+                    } else {
+                        emit_line("return;");
+                    }
+                } else if (func.return_local != 0) {
                     emit_line("return _" + std::to_string(func.return_local) + ";");
                 } else {
                     emit_line("return;");
@@ -344,18 +516,135 @@ class RustCodegen {
 
             case mir::MirTerminator::Call: {
                 auto& data = std::get<mir::MirTerminator::CallData>(term.data);
-                std::string call = operand_to_rust(*data.func) + "(";
 
-                bool first = true;
-                for (const auto& arg : data.args) {
-                    if (!first)
-                        call += ", ";
-                    first = false;
-                    call += operand_to_rust(*arg);
+                // 関数名を取得（組み込み関数の特別処理）
+                std::string func_name;
+                if (data.func && data.func->kind == mir::MirOperand::Constant) {
+                    if (auto* constant = std::get_if<mir::MirConstant>(&data.func->data)) {
+                        if (auto* s = std::get_if<std::string>(&constant->value)) {
+                            // 組み込み関数の特別処理
+                            if (*s == "println") {
+                                func_name = "println!";  // Rustのマクロに変換
+                            } else if (*s == "print") {
+                                func_name = "print!";  // Rustのマクロに変換
+                            } else {
+                                func_name = *s;  // 通常の関数名
+                            }
+                        }
+                    }
                 }
-                call += ")";
 
-                if (data.destination) {
+                // 関数名が取得できなかった場合はデフォルト処理
+                if (func_name.empty()) {
+                    func_name = operand_to_rust(*data.func);
+                }
+
+                // 引数リストを構築
+                std::string call;
+
+                // println!/print!の特別処理
+                if (func_name == "println!" || func_name == "print!") {
+                    if (!data.args.empty()) {
+                        // 複数引数の場合（文字列補間を使用している場合）
+                        if (data.args.size() > 1) {
+                            // 第1引数の文字列から{変数名}を{}に置換したフォーマット文字列を作成
+                            // 第1引数の元の値を取得して処理（変数の場合は型推論結果から復元）
+                            std::string format_str = "";
+                            bool has_format_str = false;
+
+                            // 第1引数が定数文字列の場合
+                            if (data.args[0]->kind == mir::MirOperand::Constant) {
+                                if (auto* constant =
+                                        std::get_if<mir::MirConstant>(&data.args[0]->data)) {
+                                    if (auto* str_val =
+                                            std::get_if<std::string>(&constant->value)) {
+                                        format_str = *str_val;
+                                        has_format_str = true;
+                                    }
+                                }
+                            }
+
+                            // フォーマット文字列が取得できた場合、{変数名}を{}に置換
+                            if (has_format_str) {
+                                size_t pos = 0;
+                                while ((pos = format_str.find('{', pos)) != std::string::npos) {
+                                    size_t end = format_str.find('}', pos);
+                                    if (end != std::string::npos) {
+                                        // {{や}}はエスケープなのでスキップ
+                                        if (pos + 1 < format_str.size() &&
+                                            format_str[pos + 1] == '{') {
+                                            pos += 2;
+                                            continue;
+                                        }
+                                        std::string placeholder =
+                                            format_str.substr(pos + 1, end - pos - 1);
+                                        // 変数名のプレースホルダーを{}に置換
+                                        if (!placeholder.empty() &&
+                                            placeholder.find(':') == std::string::npos &&
+                                            !std::isdigit(placeholder[0])) {
+                                            format_str.replace(pos, end - pos + 1, "{}");
+                                            pos += 2;  // {}の長さ
+                                        } else {
+                                            pos = end + 1;
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else {
+                                // フォーマット文字列が取得できない場合、引数の数だけ{}を作成
+                                for (size_t i = 1; i < data.args.size(); ++i) {
+                                    if (i > 1)
+                                        format_str += " ";
+                                    format_str += "{}";
+                                }
+                            }
+
+                            // println!マクロの呼び出しを生成
+                            call = func_name + "(\"" + format_str + "\"";
+                            for (size_t i = 1; i < data.args.size(); ++i) {
+                                call += ", " + operand_to_rust(*data.args[i]);
+                            }
+                            call += ")";
+                        } else {
+                            // 単一引数の場合
+                            if (data.args[0]->kind == mir::MirOperand::Constant) {
+                                if (auto* constant =
+                                        std::get_if<mir::MirConstant>(&data.args[0]->data)) {
+                                    if (std::holds_alternative<std::string>(constant->value)) {
+                                        // 文字列リテラルはそのまま
+                                        call = func_name + "(" + constant_to_rust(*constant) + ")";
+                                    } else {
+                                        // その他の定数は"{}"フォーマットで
+                                        call = func_name + "(\"{}\", " +
+                                               operand_to_rust(*data.args[0]) + ")";
+                                    }
+                                }
+                            } else {
+                                // 変数の場合は"{}"フォーマットで
+                                call =
+                                    func_name + "(\"{}\", " + operand_to_rust(*data.args[0]) + ")";
+                            }
+                        }
+                    } else {
+                        // 引数なし
+                        call = func_name + "()";
+                    }
+                } else {
+                    // 通常の関数呼び出し
+                    call = func_name + "(";
+                    bool first = true;
+                    for (const auto& arg : data.args) {
+                        if (!first)
+                            call += ", ";
+                        first = false;
+                        call += operand_to_rust(*arg);
+                    }
+                    call += ")";
+                }
+
+                // println!/print!は値を返さないので、代入はスキップ
+                if (data.destination && func_name != "println!" && func_name != "print!") {
                     emit_line(place_to_rust(*data.destination) + " = " + call + ";");
                 } else {
                     emit_line(call + ";");
@@ -402,6 +691,18 @@ class RustCodegen {
             case mir::MirOperand::Constant:
                 if (auto* constant = std::get_if<mir::MirConstant>(&op.data)) {
                     return constant_to_rust(*constant);
+                }
+                break;
+            case mir::MirOperand::FunctionRef:
+                if (auto* func_name = std::get_if<std::string>(&op.data)) {
+                    // 組み込み関数の特別処理
+                    if (*func_name == "println") {
+                        return "println!";
+                    } else if (*func_name == "print") {
+                        return "print!";
+                    }
+                    // 通常の関数名
+                    return *func_name;
                 }
                 break;
         }
@@ -458,8 +759,14 @@ class RustCodegen {
 
     // 型 → Rust
     std::string type_to_rust(hir::TypePtr type) {
-        if (!type)
-            return "()";
+        if (!type) {
+            // 型情報がない場合はエラー
+            if (debug::g_debug_mode) {
+                debug::log(debug::Stage::CodegenRust, debug::Level::Error,
+                           "Missing type information - this is a compiler bug!");
+            }
+            return "()";  // Unit型を返す（本来はエラーとすべき）
+        }
 
         if (type->name == "int")
             return "i32";
@@ -594,6 +901,10 @@ class RustCodegen {
 
     // Cargo.toml生成
     void generate_cargo_toml() {
+        if (debug::g_debug_mode) {
+            debug::log(debug::Stage::CodegenRust, debug::Level::Debug, "Generating Cargo.toml");
+        }
+
         std::ofstream out(opts.output_dir + "/Cargo.toml");
 
         out << "[package]\n";
@@ -618,6 +929,10 @@ class RustCodegen {
 
     // FFIバインディング生成
     void generate_ffi_bindings() {
+        if (debug::g_debug_mode) {
+            debug::log(debug::Stage::CodegenRust, debug::Level::Debug, "Generating FFI bindings");
+        }
+
         std::ofstream out(opts.output_dir + "/ffi.rs");
 
         out << "// FFI bindings for Cm standard library\n\n";

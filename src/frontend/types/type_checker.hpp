@@ -407,56 +407,24 @@ class TypeChecker {
     ast::TypePtr infer_call(ast::CallExpr& call) {
         // 呼び出し先の型を取得
         if (auto* ident = call.callee->as<ast::IdentExpr>()) {
+            // 組み込み関数の特別処理
+            if (ident->name == "println" || ident->name == "print") {
+                // println/print は特別扱い（可変長引数をサポート）
+
+                // 引数の型チェック（すべての型を受け入れる）
+                for (auto& arg : call.args) {
+                    infer_type(*arg);
+                }
+
+                // printlnは改行あり、printは改行なし
+                return ast::make_void();
+            }
+
+            // 通常の関数はシンボルテーブルから検索
             auto sym = scopes_.current().lookup(ident->name);
             if (!sym || !sym->is_function) {
                 error(Span{}, "'" + ident->name + "' is not a function");
                 return ast::make_error();
-            }
-
-            // println は特別扱い（可変長引数をサポート、変数の自動キャプチャ）
-            if (ident->name == "println") {
-                // 最低1つの引数が必要
-                if (call.args.empty()) {
-                    error(Span{}, "println expects at least 1 argument");
-                } else {
-                    // 第1引数の型チェック
-                    auto first_type = infer_type(*call.args[0]);
-
-                    // 第1引数が文字列リテラルの場合、変数を自動キャプチャ
-                    if (types_compatible(ast::make_string(), first_type) && call.args.size() == 1) {
-                        // 第1引数が文字列リテラルかチェック
-                        if (auto* lit_expr = std::get_if<std::unique_ptr<ast::LiteralExpr>>(
-                                &call.args[0]->kind)) {
-                            if ((*lit_expr)->is_string()) {
-                                std::string format_str = std::get<std::string>((*lit_expr)->value);
-                                auto captured_vars = extract_format_variables(format_str);
-
-                                // キャプチャした変数を引数として追加
-                                for (const auto& var_name : captured_vars) {
-                                    // 変数が存在するかチェック
-                                    auto sym = scopes_.current().lookup(var_name);
-                                    if (!sym.has_value()) {
-                                        error(Span{}, "Undefined variable '" + var_name +
-                                                          "' in format string");
-                                        continue;
-                                    }
-
-                                    // 変数参照を引数として追加
-                                    auto var_id = std::make_unique<ast::IdentExpr>(var_name);
-                                    auto var_expr =
-                                        std::make_unique<ast::Expr>(std::move(var_id), Span{});
-                                    call.args.push_back(std::move(var_expr));
-                                }
-                            }
-                        }
-                    }
-
-                    // 残りの引数の型も推論（エラーチェックのため）
-                    for (size_t i = 1; i < call.args.size(); ++i) {
-                        infer_type(*call.args[i]);
-                    }
-                }
-                return ast::make_void();
             }
 
             // 通常の関数の引数チェック

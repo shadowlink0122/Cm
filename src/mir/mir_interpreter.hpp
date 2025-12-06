@@ -236,30 +236,38 @@ class MirInterpreter {
             case MirTerminator::Call: {
                 auto& data = std::get<MirTerminator::CallData>(term.data);
 
-                // 関数名を取得（簡略化：定数オペランドから）
-                if (data.func->kind == MirOperand::Constant) {
+                std::string func_name;
+
+                // 関数名を取得（FunctionRefまたはConstantから）
+                if (data.func->kind == MirOperand::FunctionRef) {
+                    // 新しいFunctionRef形式
+                    if (auto* str_ptr = std::get_if<std::string>(&data.func->data)) {
+                        func_name = *str_ptr;
+                    }
+                } else if (data.func->kind == MirOperand::Constant) {
+                    // 後方互換性のためConstantもサポート
                     auto& constant = std::get<MirConstant>(data.func->data);
-                    // std::cerr << "Constant value index: " << constant.value.index() << std::endl;
-                    // std::stringを試行
                     if (auto* str_ptr = std::get_if<std::string>(&constant.value)) {
-                        std::string func_name = *str_ptr;
+                        func_name = *str_ptr;
+                    }
+                }
 
-                        // 引数を評価
-                        std::vector<Value> args;
-                        for (const auto& arg : data.args) {
-                            args.push_back(evaluate_operand(ctx, *arg));
-                        }
+                if (!func_name.empty()) {
+                    // 引数を評価
+                    std::vector<Value> args;
+                    for (const auto& arg : data.args) {
+                        args.push_back(evaluate_operand(ctx, *arg));
+                    }
 
-                        // デバッグ出力
-                        // std::cerr << "Calling function: " << func_name << " with " << args.size()
-                        // << " args" << std::endl;
+                    // デバッグ出力
+                    // std::cerr << "Calling function: " << func_name << " with " << args.size()
+                    // << " args" << std::endl;
 
-                        // 組み込み関数を呼び出し
-                        if (ctx.builtins.count(func_name)) {
-                            Value result = ctx.builtins[func_name](args, ctx.locals);
-                            if (data.destination) {
-                                store_to_place(ctx, *data.destination, result);
-                            }
+                    // 組み込み関数を呼び出し
+                    if (ctx.builtins.count(func_name)) {
+                        Value result = ctx.builtins[func_name](args, ctx.locals);
+                        if (data.destination) {
+                            store_to_place(ctx, *data.destination, result);
                         }
                     }
                 }

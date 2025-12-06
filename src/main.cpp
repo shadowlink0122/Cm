@@ -1,3 +1,5 @@
+#include "codegen/rust_codegen.hpp"
+#include "codegen/typescript_codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
@@ -8,11 +10,13 @@
 #include "mir/mir_printer.hpp"
 #include "mir/optimizations/all_passes.hpp"
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <sys/wait.h>
 #include <vector>
 
 namespace cm {
@@ -42,6 +46,7 @@ struct Options {
     bool emit_rust = false;
     bool emit_ts = false;  // TypeScript出力
     bool emit_llvm = false;
+    bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 0;
     bool debug = false;
     std::string debug_level = "info";
@@ -69,6 +74,7 @@ void print_help(const char* program_name) {
     std::cout << "  --emit-rust           Rustコードを生成\n";
     std::cout << "  --emit-ts             TypeScriptコードを生成\n";
     std::cout << "  --emit-llvm           LLVM IRを生成（開発中）\n";
+    std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
     std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
@@ -136,6 +142,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_ts = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
+        } else if (arg == "--run") {
+            opts.run_after_emit = true;
         } else if (arg == "-o") {
             if (i + 1 < argc) {
                 opts.output_file = argv[++i];
@@ -421,14 +429,87 @@ int main(int argc, char* argv[]) {
                 if (opts.verbose) {
                     std::cout << "=== Rust Code Generation ===\n";
                 }
-                std::cout << "注意: Rustコード生成は開発中です\n";
-                // TODO: Rustコード生成を実装・統合
+
+                // Rustコード生成
+                std::string output_dir =
+                    opts.output_file.empty() ? ".tmp/rust_build" : opts.output_file;
+                codegen::RustCodegen rust_codegen;
+                rust_codegen.generate(mir, output_dir);
+
+                if (opts.verbose) {
+                    std::cout << "✓ Rustコード生成完了: " << output_dir << "\n";
+                }
+
+                // rustcでオブジェクトファイルを生成
+                std::string main_rs = output_dir + "/main.rs";
+                std::string output_bin = output_dir + "/main";
+                std::string rustc_cmd =
+                    "rustc " + main_rs + " -o " + output_bin + " --edition=2021";
+
+                if (opts.verbose) {
+                    std::cout << "rustcでコンパイル中: " << rustc_cmd << "\n";
+                }
+
+                int rustc_result = std::system(rustc_cmd.c_str());
+                if (rustc_result == 0) {
+                    if (opts.verbose) {
+                        std::cout << "✓ オブジェクトファイル生成完了: " << output_bin << "\n";
+                    }
+
+                    // --runオプションがある場合は実行
+                    if (opts.run_after_emit) {
+                        if (opts.verbose) {
+                            std::cout << "実行中: " << output_bin << "\n";
+                        }
+                        int exec_result = std::system(output_bin.c_str());
+                        return WEXITSTATUS(exec_result);
+                    }
+                } else {
+                    std::cerr << "rustcでのコンパイルに失敗しました\n";
+                    return 1;
+                }
             } else if (opts.emit_ts) {
                 if (opts.verbose) {
                     std::cout << "=== TypeScript Code Generation ===\n";
                 }
-                std::cout << "注意: TypeScriptコード生成は開発中です\n";
-                // TODO: TypeScriptコード生成を実装・統合
+
+                // TypeScriptコード生成
+                codegen::TypeScriptCodegen ts_codegen;
+                std::string output_dir =
+                    opts.output_file.empty() ? ".tmp/ts_build" : opts.output_file;
+                ts_codegen.generate(mir, output_dir);
+
+                if (opts.verbose) {
+                    std::cout << "✓ TypeScriptコード生成完了: " << output_dir << "\n";
+                }
+
+                // --runオプションがある場合はビルドして実行
+                if (opts.run_after_emit) {
+                    // pnpmでビルド (--silentを削除してエラーを確認可能に)
+                    std::string build_cmd =
+                        "cd " + output_dir + " && pnpm install 2>&1 && pnpm run build 2>&1";
+                    if (opts.verbose) {
+                        std::cout << "TypeScriptをビルド中...\n";
+                    }
+
+                    int build_result = std::system(build_cmd.c_str());
+                    if (build_result == 0) {
+                        if (opts.verbose) {
+                            std::cout << "✓ ビルド完了\n";
+                            std::cout << "実行中...\n";
+                        }
+                        std::string run_cmd = "cd " + output_dir + " && node main.js";
+                        int exec_result = std::system(run_cmd.c_str());
+                        return WEXITSTATUS(exec_result);
+                    } else {
+                        std::cerr << "TypeScriptのビルドに失敗しました\n";
+                        return 1;
+                    }
+                } else if (opts.verbose) {
+                    std::cout << "ビルド方法: cd " << output_dir
+                              << " && pnpm install && pnpm run build\n";
+                    std::cout << "実行方法: cd " << output_dir << " && node main.js\n";
+                }
             } else if (opts.emit_llvm) {
                 if (opts.verbose) {
                     std::cout << "=== LLVM IR Generation ===\n";
