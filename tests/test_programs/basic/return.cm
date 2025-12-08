@@ -1,0 +1,7 @@
+// Phase 0: return文のテスト
+import std::io::println;
+
+int main() {
+    println("Testing error: non-zero exit code");
+    return 42;  // 0以外の終了コード
+}

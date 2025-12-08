@@ -4,8 +4,11 @@
 #include "mir_nodes.hpp"
 
 #include <any>
+#include <bitset>
 #include <functional>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <stack>
 #include <unordered_map>
 
@@ -65,8 +68,9 @@ class MirInterpreter {
         }
 
         void register_builtins() {
-            // println関数 - Rust風フォーマット文字列をサポート
-            builtins["println"] = [](std::vector<Value> args,
+            // std::io::println関数 - 外部モジュールとして提供
+            // printlnは直接使用不可、std::ioからインポートが必要
+            builtins["std::io::println"] = [](std::vector<Value> args,
                                      const std::unordered_map<LocalId, Value>& locals) -> Value {
                 if (args.empty()) {
                     std::cout << std::endl;
@@ -126,6 +130,94 @@ class MirInterpreter {
                     return Value(std::sqrt(std::any_cast<double>(args[0])));
                 }
                 return Value(0.0);
+            };
+
+            // フォーマット変換関数
+
+            // 16進数変換（小文字）
+            builtins["toHex"] = [](std::vector<Value> args,
+                                   const std::unordered_map<LocalId, Value>&) -> Value {
+                if (!args.empty()) {
+                    std::stringstream ss;
+                    if (args[0].type() == typeid(int64_t)) {
+                        ss << std::hex << std::any_cast<int64_t>(args[0]);
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        ss << std::hex << std::any_cast<int32_t>(args[0]);
+                    }
+                    return Value(ss.str());
+                }
+                return Value(std::string(""));
+            };
+
+            // 16進数変換（大文字）
+            builtins["toHexUpper"] = [](std::vector<Value> args,
+                                        const std::unordered_map<LocalId, Value>&) -> Value {
+                if (!args.empty()) {
+                    std::stringstream ss;
+                    if (args[0].type() == typeid(int64_t)) {
+                        ss << std::hex << std::uppercase << std::any_cast<int64_t>(args[0]);
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        ss << std::hex << std::uppercase << std::any_cast<int32_t>(args[0]);
+                    }
+                    return Value(ss.str());
+                }
+                return Value(std::string(""));
+            };
+
+            // 2進数変換
+            builtins["toBin"] = [](std::vector<Value> args,
+                                   const std::unordered_map<LocalId, Value>&) -> Value {
+                if (!args.empty()) {
+                    if (args[0].type() == typeid(int64_t)) {
+                        return Value(std::string("0b") + std::bitset<64>(std::any_cast<int64_t>(args[0])).to_string().substr(
+                            std::bitset<64>(std::any_cast<int64_t>(args[0])).to_string().find('1')));
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        auto val = std::any_cast<int32_t>(args[0]);
+                        if (val == 0) return Value(std::string("0b0"));
+                        std::string binary = std::bitset<32>(val).to_string();
+                        size_t firstOne = binary.find('1');
+                        if (firstOne != std::string::npos) {
+                            return Value(std::string("0b") + binary.substr(firstOne));
+                        }
+                    }
+                }
+                return Value(std::string("0b0"));
+            };
+
+            // 8進数変換
+            builtins["toOct"] = [](std::vector<Value> args,
+                                   const std::unordered_map<LocalId, Value>&) -> Value {
+                if (!args.empty()) {
+                    std::stringstream ss;
+                    if (args[0].type() == typeid(int64_t)) {
+                        ss << std::oct << std::any_cast<int64_t>(args[0]);
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        ss << std::oct << std::any_cast<int32_t>(args[0]);
+                    }
+                    return Value(ss.str());
+                }
+                return Value(std::string(""));
+            };
+
+            // 文字列変換（汎用）
+            builtins["toString"] = [](std::vector<Value> args,
+                                      const std::unordered_map<LocalId, Value>&) -> Value {
+                if (!args.empty()) {
+                    if (args[0].type() == typeid(std::string)) {
+                        return args[0];
+                    } else if (args[0].type() == typeid(int64_t)) {
+                        return Value(std::to_string(std::any_cast<int64_t>(args[0])));
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        return Value(std::to_string(std::any_cast<int32_t>(args[0])));
+                    } else if (args[0].type() == typeid(double)) {
+                        return Value(std::to_string(std::any_cast<double>(args[0])));
+                    } else if (args[0].type() == typeid(float)) {
+                        return Value(std::to_string(std::any_cast<float>(args[0])));
+                    } else if (args[0].type() == typeid(bool)) {
+                        return Value(std::string(std::any_cast<bool>(args[0]) ? "true" : "false"));
+                    }
+                }
+                return Value(std::string(""));
             };
         }
     };
@@ -300,6 +392,11 @@ class MirInterpreter {
                 Value operand = evaluate_operand(ctx, *data.operand);
                 return evaluate_unary_op(data.op, operand);
             }
+            case MirRvalue::FormatConvert: {
+                auto& data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
+                Value operand = evaluate_operand(ctx, *data.operand);
+                return apply_format_conversion(operand, data.format_spec);
+            }
             default:
                 return Value{};
         }
@@ -345,8 +442,143 @@ class MirInterpreter {
             constant.value);
     }
 
+    // フォーマット変換を適用
+    Value apply_format_conversion(Value value, const std::string& format_spec) {
+        std::stringstream ss;
+
+        if (format_spec == "x") {
+            // 16進数小文字
+            if (value.type() == typeid(int64_t)) {
+                ss << std::hex << std::any_cast<int64_t>(value);
+            } else if (value.type() == typeid(int32_t)) {
+                ss << std::hex << std::any_cast<int32_t>(value);
+            }
+        } else if (format_spec == "X") {
+            // 16進数大文字
+            if (value.type() == typeid(int64_t)) {
+                ss << std::hex << std::uppercase << std::any_cast<int64_t>(value);
+            } else if (value.type() == typeid(int32_t)) {
+                ss << std::hex << std::uppercase << std::any_cast<int32_t>(value);
+            }
+        } else if (format_spec == "b") {
+            // 2進数
+            if (value.type() == typeid(int64_t)) {
+                int64_t val = std::any_cast<int64_t>(value);
+                if (val == 0) {
+                    ss << "0";
+                } else {
+                    std::string binary = std::bitset<64>(val).to_string();
+                    size_t firstOne = binary.find('1');
+                    if (firstOne != std::string::npos) {
+                        ss << binary.substr(firstOne);
+                    }
+                }
+            } else if (value.type() == typeid(int32_t)) {
+                int32_t val = std::any_cast<int32_t>(value);
+                if (val == 0) {
+                    ss << "0";
+                } else {
+                    std::string binary = std::bitset<32>(val).to_string();
+                    size_t firstOne = binary.find('1');
+                    if (firstOne != std::string::npos) {
+                        ss << binary.substr(firstOne);
+                    }
+                }
+            }
+        } else if (format_spec == "o") {
+            // 8進数
+            if (value.type() == typeid(int64_t)) {
+                ss << std::oct << std::any_cast<int64_t>(value);
+            } else if (value.type() == typeid(int32_t)) {
+                ss << std::oct << std::any_cast<int32_t>(value);
+            }
+        } else if (format_spec.size() > 1 && format_spec[0] == '.') {
+            // 浮動小数点精度指定
+            if (value.type() == typeid(double)) {
+                int precision = std::stoi(format_spec.substr(1));
+                ss << std::fixed << std::setprecision(precision) << std::any_cast<double>(value);
+            } else if (value.type() == typeid(float)) {
+                int precision = std::stoi(format_spec.substr(1));
+                ss << std::fixed << std::setprecision(precision) << std::any_cast<float>(value);
+            }
+        } else {
+            // デフォルト：通常の文字列変換
+            if (value.type() == typeid(std::string)) {
+                return value;
+            } else if (value.type() == typeid(int64_t)) {
+                ss << std::any_cast<int64_t>(value);
+            } else if (value.type() == typeid(int32_t)) {
+                ss << std::any_cast<int32_t>(value);
+            } else if (value.type() == typeid(double)) {
+                ss << std::any_cast<double>(value);
+            } else if (value.type() == typeid(float)) {
+                ss << std::any_cast<float>(value);
+            } else if (value.type() == typeid(bool)) {
+                ss << (std::any_cast<bool>(value) ? "true" : "false");
+            }
+        }
+
+        return Value(ss.str());
+    }
+
     // 二項演算を評価
     Value evaluate_binary_op(MirBinaryOp op, Value lhs, Value rhs) {
+        // 文字列連結（Add演算のみ）
+        if (op == MirBinaryOp::Add) {
+            // 左辺または右辺が文字列の場合、文字列連結として処理
+            if (lhs.type() == typeid(std::string) || rhs.type() == typeid(std::string)) {
+                std::string left_str, right_str;
+
+                // 左辺を文字列に変換
+                if (lhs.type() == typeid(std::string)) {
+                    left_str = std::any_cast<std::string>(lhs);
+                } else if (lhs.type() == typeid(int64_t)) {
+                    left_str = std::to_string(std::any_cast<int64_t>(lhs));
+                } else if (lhs.type() == typeid(int32_t)) {
+                    left_str = std::to_string(std::any_cast<int32_t>(lhs));
+                } else if (lhs.type() == typeid(double)) {
+                    left_str = std::to_string(std::any_cast<double>(lhs));
+                } else if (lhs.type() == typeid(bool)) {
+                    left_str = std::any_cast<bool>(lhs) ? "true" : "false";
+                }
+
+                // 右辺を文字列に変換
+                if (rhs.type() == typeid(std::string)) {
+                    right_str = std::any_cast<std::string>(rhs);
+                } else if (rhs.type() == typeid(int64_t)) {
+                    right_str = std::to_string(std::any_cast<int64_t>(rhs));
+                } else if (rhs.type() == typeid(int32_t)) {
+                    right_str = std::to_string(std::any_cast<int32_t>(rhs));
+                } else if (rhs.type() == typeid(double)) {
+                    right_str = std::to_string(std::any_cast<double>(rhs));
+                } else if (rhs.type() == typeid(bool)) {
+                    right_str = std::any_cast<bool>(rhs) ? "true" : "false";
+                }
+
+                return Value(left_str + right_str);
+            }
+        }
+
+        // 論理演算（bool型）
+        if (lhs.type() == typeid(bool) && rhs.type() == typeid(bool)) {
+            bool l = std::any_cast<bool>(lhs);
+            bool r = std::any_cast<bool>(rhs);
+
+            switch (op) {
+                case MirBinaryOp::And:
+                    return Value(l && r);
+                case MirBinaryOp::Or:
+                    return Value(l || r);
+                case MirBinaryOp::Eq:
+                    return Value(l == r);
+                case MirBinaryOp::Ne:
+                    return Value(l != r);
+                default:
+                    // bool型の他の演算は整数に変換して処理
+                    return evaluate_binary_op(op, Value(static_cast<int64_t>(l)), Value(static_cast<int64_t>(r)));
+            }
+        }
+
         // 整数演算
         if (lhs.type() == typeid(int64_t) && rhs.type() == typeid(int64_t)) {
             int64_t l = std::any_cast<int64_t>(lhs);
@@ -385,6 +617,10 @@ class MirInterpreter {
                     return Value(l << r);
                 case MirBinaryOp::Shr:
                     return Value(l >> r);
+                case MirBinaryOp::And:
+                    return Value(l != 0 && r != 0);
+                case MirBinaryOp::Or:
+                    return Value(l != 0 || r != 0);
                 default:
                     break;
             }

@@ -34,6 +34,7 @@ help:
 	@echo "Code Generation Tests:"
 	@echo "  make test-compile-rust - Rustコード生成テスト"
 	@echo "  make test-compile-ts   - TypeScriptコード生成テスト"
+	@echo "  make test-compile-cpp  - C++コード生成テスト"
 	@echo "  make test-compile-wasm - WASMコード生成テスト"
 	@echo ""
 	@echo "Analysis Commands:"
@@ -159,40 +160,63 @@ run-format:
 .PHONY: run-all-examples
 run-all-examples:
 	@echo "Running all examples..."
-	@for file in examples/basics/*.cm; do \
-		echo "========================================"; \
-		echo "Running $$file"; \
-		echo "========================================"; \
-		$(CM) run $$file || true; \
-		echo ""; \
+	@for file in examples/basics/*.cm examples/formatting/*.cm; do \
+		if [ -f "$$file" ]; then \
+			echo "========================================"; \
+			echo "Running $$file"; \
+			echo "========================================"; \
+			$(CM) run $$file 2>&1 | grep -v "^\[.*\]" || true; \
+			echo ""; \
+		fi \
 	done
 
 # ========================================
 # Code Generation Tests
 # ========================================
 
+.PHONY: test-interpreter
+test-interpreter:
+	@echo "Testing interpreter execution with unified test suite..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b interpreter
+
 .PHONY: test-compile-rust
 test-compile-rust:
-	@echo "Testing Rust code generation..."
-	@echo "// Test Rust compilation" > /tmp/test.cm
-	@echo "int main() { return 42; }" >> /tmp/test.cm
-	@./cm compile /tmp/test.cm --emit-rust
-	@echo "Rust code generated successfully!"
+	@echo "Testing Rust code generation with unified test suite..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b rust
 
 .PHONY: test-compile-ts
 test-compile-ts:
-	@echo "Testing TypeScript code generation..."
-	@echo "// Test TypeScript compilation" > /tmp/test.cm
-	@echo "int main() { return 42; }" >> /tmp/test.cm
-	@./cm compile /tmp/test.cm --emit-ts
-	@echo "TypeScript code generated successfully!"
+	@echo "Testing TypeScript code generation with unified test suite..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b typescript
+
+# 全バックエンドテスト
+.PHONY: test-all-backends
+test-all-backends:
+	@echo "Testing all backends with unified test suite..."
+	@chmod +x tests/unified_test_runner.sh
+	@echo "========== INTERPRETER =========="
+	@tests/unified_test_runner.sh -b interpreter
+	@echo ""
+	@echo "========== TYPESCRIPT =========="
+	@tests/unified_test_runner.sh -b typescript
+	@echo ""
+	@echo "========== RUST =========="
+	@tests/unified_test_runner.sh -b rust
+
+.PHONY: test-compile-cpp
+test-compile-cpp:
+	@echo "========== C++ CODE GENERATION TEST =========="
+	@tests/unified_test_runner.sh -b cpp
 
 .PHONY: test-compile-wasm
 test-compile-wasm:
 	@echo "Testing WASM code generation..."
 	@echo "// Test WASM compilation" > /tmp/test.cm
 	@echo "int main() { return 42; }" >> /tmp/test.cm
-	@$(CM) compile /tmp/test.cm --emit-wasm
+	@./cm compile /tmp/test.cm --emit-wasm
 	@echo "WASM code generated successfully!"
 
 # ========================================

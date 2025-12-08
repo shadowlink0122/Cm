@@ -1,6 +1,0 @@
-// import with bracesのテスト
-import std.io.{println, print};
-
-int main() {
-    return 0;
-}

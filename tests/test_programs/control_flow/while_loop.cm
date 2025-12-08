@@ -1,4 +1,5 @@
 // whileループのテスト
+import std::io::println;
 int main() {
     // 基本的なwhileループ
     int i = 0;

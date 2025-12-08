@@ -196,6 +196,7 @@ struct MirRvalue {
         Ref,        // 借用
         Aggregate,  // 集約型の構築
         Cast,       // 型変換
+        FormatConvert, // フォーマット変換
     };
 
     Kind kind;
@@ -234,7 +235,12 @@ struct MirRvalue {
         hir::TypePtr target_type;
     };
 
-    std::variant<UseData, BinaryOpData, UnaryOpData, RefData, AggregateData, CastData> data;
+    struct FormatConvertData {
+        MirOperandPtr operand;
+        std::string format_spec;  // "x", "X", "b", "o", ".2" など
+    };
+
+    std::variant<UseData, BinaryOpData, UnaryOpData, RefData, AggregateData, CastData, FormatConvertData> data;
 
     static MirRvaluePtr use(MirOperandPtr op) {
         auto rv = std::make_unique<MirRvalue>();
@@ -254,6 +260,13 @@ struct MirRvalue {
         auto rv = std::make_unique<MirRvalue>();
         rv->kind = UnaryOp;
         rv->data = UnaryOpData{op, std::move(operand)};
+        return rv;
+    }
+
+    static MirRvaluePtr format_convert(MirOperandPtr op, const std::string& format_spec) {
+        auto rv = std::make_unique<MirRvalue>();
+        rv->kind = FormatConvert;
+        rv->data = FormatConvertData{std::move(op), format_spec};
         return rv;
     }
 };

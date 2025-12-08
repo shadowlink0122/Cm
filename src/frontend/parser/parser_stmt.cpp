@@ -56,6 +56,44 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_while(std::move(cond), std::move(body), Span{start_pos, previous().end});
     }
 
+    // switch
+    if (consume_if(TokenKind::KwSwitch)) {
+        expect(TokenKind::LParen);
+        auto expr = parse_expr();
+        expect(TokenKind::RParen);
+        expect(TokenKind::LBrace);
+
+        std::vector<ast::SwitchCase> cases;
+        bool has_else = false;
+
+        while (!check(TokenKind::RBrace) && !is_at_end()) {
+            if (consume_if(TokenKind::KwCase)) {
+                // case(pattern) { stmts }
+                expect(TokenKind::LParen);
+                auto pattern = parse_pattern();
+                expect(TokenKind::RParen);
+
+                auto stmts = parse_block();
+                cases.emplace_back(std::move(pattern), std::move(stmts));
+            } else if (consume_if(TokenKind::KwElse)) {
+                if (has_else) {
+                    error("重複するelse節");
+                }
+                has_else = true;
+
+                // else { stmts }
+                auto stmts = parse_block();
+                cases.emplace_back(nullptr, std::move(stmts));
+            } else {
+                error("switch文内にはcaseまたはelseが必要です");
+            }
+        }
+
+        expect(TokenKind::RBrace);
+        return ast::make_switch(std::move(expr), std::move(cases),
+                               Span{start_pos, previous().end});
+    }
+
     // for
     if (consume_if(TokenKind::KwFor)) {
         expect(TokenKind::LParen);
@@ -159,6 +197,44 @@ bool Parser::is_type_start() {
         default:
             return false;
     }
+}
+
+// パターンの解析（switch文用）
+std::unique_ptr<ast::Pattern> Parser::parse_pattern() {
+    std::vector<std::unique_ptr<ast::Pattern>> or_patterns;
+
+    // 最初のパターン要素を解析
+    auto first_pattern = parse_pattern_element();
+    or_patterns.push_back(std::move(first_pattern));
+
+    // ORパターン（|）をチェック
+    while (consume_if(TokenKind::Pipe)) {
+        auto next_pattern = parse_pattern_element();
+        or_patterns.push_back(std::move(next_pattern));
+    }
+
+    // 単一パターンの場合はそのまま返す
+    if (or_patterns.size() == 1) {
+        return std::move(or_patterns[0]);
+    }
+
+    // 複数パターンの場合はORパターンとして返す
+    return ast::Pattern::make_or(std::move(or_patterns));
+}
+
+// パターン要素の解析（単一値または範囲）
+std::unique_ptr<ast::Pattern> Parser::parse_pattern_element() {
+    // 値を解析
+    auto first_value = parse_primary();  // リテラルまたは識別子
+
+    // 範囲パターン（...）をチェック
+    if (consume_if(TokenKind::Ellipsis)) {
+        auto end_value = parse_primary();
+        return ast::Pattern::make_range(std::move(first_value), std::move(end_value));
+    }
+
+    // 単一値パターン
+    return ast::Pattern::make_value(std::move(first_value));
 }
 
 }  // namespace cm

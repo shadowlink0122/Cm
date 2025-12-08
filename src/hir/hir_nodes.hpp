@@ -173,11 +173,40 @@ struct HirBlock {
     std::vector<HirStmtPtr> stmts;
 };
 
+// switch文のパターン条件
+struct HirSwitchPattern {
+    enum Kind {
+        SingleValue,  // 単一値
+        Range,        // 範囲
+        Or            // ORで結合された複数パターン
+    } kind;
+
+    HirExprPtr value;              // 単一値の場合
+    HirExprPtr range_start;        // 範囲の開始値
+    HirExprPtr range_end;          // 範囲の終了値
+    std::vector<std::unique_ptr<HirSwitchPattern>> or_patterns;  // ORパターンのリスト
+};
+
+// switch文のケース
+struct HirSwitchCase {
+    std::unique_ptr<HirSwitchPattern> pattern;  // nullptr for else/default case
+    std::vector<HirStmtPtr> stmts;             // ケース内の文（独立スコープ）
+
+    // 旧互換性のためのヘルパー
+    HirExprPtr value;  // 単一値パターンの場合のみ使用（後方互換性）
+};
+
+// switch文
+struct HirSwitch {
+    HirExprPtr expr;
+    std::vector<HirSwitchCase> cases;
+};
+
 using HirStmtKind =
     std::variant<std::unique_ptr<HirLet>, std::unique_ptr<HirAssign>, std::unique_ptr<HirReturn>,
                  std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirBreak>,
                  std::unique_ptr<HirContinue>, std::unique_ptr<HirExprStmt>,
-                 std::unique_ptr<HirBlock>>;
+                 std::unique_ptr<HirBlock>, std::unique_ptr<HirSwitch>>;
 
 struct HirStmt {
     HirStmtKind kind;

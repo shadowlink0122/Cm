@@ -143,22 +143,93 @@ class Parser {
             advance();  // consume '#'
 
             if (check(TokenKind::KwMacro)) {
-                pos_ = saved_pos;  // 位置を戻す
-                return parse_macro();
+                // マクロは未実装
+                error("Macro definitions (#macro) are not yet implemented");
+                // マクロ定義全体をスキップ
+                advance();  // consume 'macro'
+
+                // 安全なスキップ: 最大100トークンまでスキップ
+                int token_count = 0;
+                int brace_count = 0;
+                bool in_block = false;
+
+                while (!is_at_end() && token_count < 100) {
+                    if (current().kind == TokenKind::LBrace) {
+                        in_block = true;
+                        brace_count++;
+                    } else if (current().kind == TokenKind::RBrace && in_block) {
+                        brace_count--;
+                        if (brace_count == 0) {
+                            advance();  // consume final '}'
+                            break;
+                        }
+                    }
+                    advance();
+                    token_count++;
+                }
+
+                // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
+                if (token_count >= 100) {
+                    error("Failed to skip macro definition - too many tokens");
+                }
+                return nullptr;
             }
 
             // その他のディレクティブ（#test, #bench, #deprecated等）
-            pos_ = saved_pos;  // 位置を戻す
-            std::vector<ast::AttributeNode> directives;
-            directives.push_back(parse_directive());
+            // 現在未実装のディレクティブをチェック
+            if (check(TokenKind::Ident)) {
+                std::string directive_name = std::string(current().get_string());
+                if (directive_name == "test" || directive_name == "bench" ||
+                    directive_name == "deprecated" || directive_name == "inline" ||
+                    directive_name == "optimize") {
+                    // 未実装のディレクティブ
+                    error("Directive '#" + directive_name + "' is not yet implemented");
+                    // エラー後はスキップして続行
+                    while (!is_at_end() && current().kind != TokenKind::Semicolon &&
+                           current().kind != TokenKind::LBrace) {
+                        advance();
+                    }
+                    return nullptr;
+                }
+            }
 
-            // ディレクティブ後の関数定義を解析
-            return parse_function(false, is_static, is_inline, is_async, std::move(directives));
+            pos_ = saved_pos;  // 位置を戻す
+            // 未知のディレクティブ
+            error("Unknown or invalid directive after '#'");
+            return nullptr;
         }
 
         // macro (旧構文 - 互換性のため)
         if (check(TokenKind::KwMacro)) {
-            return parse_macro();
+            // マクロは未実装
+            error("Macro definitions (macro keyword) are not yet implemented");
+            advance();  // consume 'macro'
+
+            // 安全なスキップ: 最大100トークンまでスキップ
+            int token_count = 0;
+            int brace_count = 0;
+            bool in_block = false;
+
+            while (!is_at_end() && token_count < 100) {
+                if (current().kind == TokenKind::LBrace) {
+                    in_block = true;
+                    brace_count++;
+                } else if (current().kind == TokenKind::RBrace && in_block) {
+                    brace_count--;
+                    if (brace_count == 0) {
+                        advance();  // consume final '}'
+                        break;
+                    }
+                }
+                advance();
+                token_count++;
+            }
+
+            // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
+            if (token_count >= 100) {
+                error("Failed to skip macro definition - too many tokens");
+            }
+            return nullptr;
         }
 
         // constexpr
@@ -320,6 +391,10 @@ class Parser {
 
     // 文
     ast::StmtPtr parse_stmt();
+
+    // パターン（switch文用）
+    std::unique_ptr<ast::Pattern> parse_pattern();
+    std::unique_ptr<ast::Pattern> parse_pattern_element();
 
     // 式
     ast::ExprPtr parse_expr();
@@ -501,6 +576,7 @@ class Parser {
                 case TokenKind::KwImpl:
                 case TokenKind::KwImport:
                 case TokenKind::KwExport:
+                case TokenKind::Hash:  // ディレクティブの開始位置で停止
                     return;
                 default:
                     advance();

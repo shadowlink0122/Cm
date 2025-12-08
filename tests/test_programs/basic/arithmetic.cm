@@ -1,4 +1,5 @@
 // 基本的な算術演算テスト
+import std::io::println;
 int main() {
     int a = 10;
     int b = 20;

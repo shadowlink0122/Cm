@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -71,7 +72,194 @@ class TypeScriptCodegen {
         emit_line("");
         emit_line("const println = (...args: any[]): void => {");
         indent_level++;
-        emit_line("console.log(...args);");
+        emit_line("if (args.length === 0) {");
+        indent_level++;
+        emit_line("console.log();");
+        indent_level--;
+        emit_line("} else if (typeof args[0] === 'string' && (args[0].includes('{') || args[0].includes('}'))) {");
+        indent_level++;
+        emit_line("// フォーマット文字列の処理");
+        emit_line("let result = args[0];");
+        emit_line("let argIndex = 1;");
+        emit_line("");
+        emit_line("// エスケープされた波括弧を一時的に置換");
+        emit_line("result = result.replace(/{{/g, '\\x00LBRACE\\x00');");
+        emit_line("result = result.replace(/}}/g, '\\x00RBRACE\\x00');");
+        emit_line("");
+        emit_line("// フォーマット指定子のパターン");
+        emit_line("const formatRegex = /{([^}]*)}/g;");
+        emit_line("");
+        emit_line("result = result.replace(formatRegex, (match, spec) => {");
+        indent_level++;
+        emit_line("if (argIndex >= args.length) return match;");
+        emit_line("const value = args[argIndex++];");
+        emit_line("");
+        emit_line("// 空の指定子の場合");
+        emit_line("if (!spec) {");
+        indent_level++;
+        emit_line("// 浮動小数点数のデフォルトフォーマット");
+        emit_line("if (typeof value === 'number' && value % 1 !== 0) {");
+        indent_level++;
+        emit_line("const str = value.toString();");
+        emit_line("const dotIndex = str.indexOf('.');");
+        emit_line("if (dotIndex >= 0) {");
+        indent_level++;
+        emit_line("// 小数点以下5桁に制限");
+        emit_line("let result = str.substring(0, Math.min(str.length, dotIndex + 6));");
+        emit_line("// 末尾のゼロを削除");
+        emit_line("if (result.includes('.')) {");
+        indent_level++;
+        emit_line("result = result.replace(/0+$/, '');");
+        emit_line("result = result.replace(/\\.$/, '');");
+        indent_level--;
+        emit_line("}");
+        emit_line("return result;");
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
+        emit_line("return String(value);");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("// フォーマット指定子をパース");
+        emit_line("// 形式: :[[fill]align][width][.precision][type]");
+        emit_line("let fill = ' ';");
+        emit_line("let align = '';");
+        emit_line("let width = 0;");
+        emit_line("let precision = -1;");
+        emit_line("let type = '';");
+        emit_line("");
+        emit_line("// コロンで始まる場合はスキップ");
+        emit_line("if (spec.startsWith(':')) {");
+        indent_level++;
+        emit_line("spec = spec.substring(1);");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("// ゼロパディングの検出 (0>5 形式)");
+        emit_line("const zeroPadMatch = spec.match(/^0>(\\d+)/);");
+        emit_line("if (zeroPadMatch) {");
+        indent_level++;
+        emit_line("fill = '0';");
+        emit_line("align = '>';");
+        emit_line("width = parseInt(zeroPadMatch[1]);");
+        emit_line("spec = spec.substring(zeroPadMatch[0].length);");
+        indent_level--;
+        emit_line("} else {");
+        indent_level++;
+        emit_line("// アラインメント検出 (<, >, ^)");
+        emit_line("const alignMatch = spec.match(/^([<>^])(\\d+)/);");
+        emit_line("if (alignMatch) {");
+        indent_level++;
+        emit_line("align = alignMatch[1];");
+        emit_line("width = parseInt(alignMatch[2]);");
+        emit_line("spec = spec.substring(alignMatch[0].length);");
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("// 精度の検出");
+        emit_line("const precisionMatch = spec.match(/^\\.(\\d+)/);");
+        emit_line("if (precisionMatch) {");
+        indent_level++;
+        emit_line("precision = parseInt(precisionMatch[1]);");
+        emit_line("spec = spec.substring(precisionMatch[0].length);");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("// タイプ指定子");
+        emit_line("if (spec) type = spec;");
+        emit_line("");
+        emit_line("// 値のフォーマット");
+        emit_line("let formatted = String(value);");
+        emit_line("");
+        emit_line("// タイプごとの変換");
+        emit_line("if (typeof value === 'number') {");
+        indent_level++;
+        emit_line("switch (type) {");
+        indent_level++;
+        emit_line("case 'x': formatted = value.toString(16).toLowerCase(); break;");
+        emit_line("case 'X': formatted = value.toString(16).toUpperCase(); break;");
+        emit_line("case 'b': formatted = '0b' + value.toString(2); break;");
+        emit_line("case 'o': formatted = value.toString(8); break;");
+        emit_line("case 'e':");
+        indent_level++;
+        emit_line("formatted = value.toExponential(precision >= 0 ? precision : 6);");
+        emit_line("// 指数部分をゼロパディング (e+0 -> e+00)");
+        emit_line("formatted = formatted.replace(/e([+-])(\\d)$/, 'e$10$2');");
+        emit_line("break;");
+        indent_level--;
+        emit_line("case 'E':");
+        indent_level++;
+        emit_line("formatted = value.toExponential(precision >= 0 ? precision : 6).toUpperCase();");
+        emit_line("// 指数部分をゼロパディング (E+0 -> E+00)");
+        emit_line("formatted = formatted.replace(/E([+-])(\\d)$/, 'E$10$2');");
+        emit_line("break;");
+        indent_level--;
+        emit_line("default:");
+        indent_level++;
+        emit_line("if (precision >= 0 && value % 1 !== 0) {");
+        indent_level++;
+        emit_line("formatted = value.toFixed(precision);");
+        indent_level--;
+        emit_line("} else if (precision >= 0) {");
+        indent_level++;
+        emit_line("formatted = value.toFixed(precision);");
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("// パディングとアラインメント");
+        emit_line("if (width > 0) {");
+        indent_level++;
+        emit_line("const padLength = width - formatted.length;");
+        emit_line("if (padLength > 0) {");
+        indent_level++;
+        emit_line("const padding = fill.repeat(padLength);");
+        emit_line("switch (align) {");
+        indent_level++;
+        emit_line("case '<': formatted = formatted + padding; break;");
+        emit_line("case '>': formatted = padding + formatted; break;");
+        emit_line("case '^':");
+        indent_level++;
+        emit_line("const leftPad = Math.floor(padLength / 2);");
+        emit_line("const rightPad = padLength - leftPad;");
+        emit_line("formatted = fill.repeat(leftPad) + formatted + fill.repeat(rightPad);");
+        emit_line("break;");
+        indent_level--;
+        emit_line("default:");
+        indent_level++;
+        emit_line("formatted = padding + formatted; // デフォルトは右寄せ");
+        indent_level--;
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("return formatted;");
+        indent_level--;
+        emit_line("});");
+        emit_line("");
+        emit_line("// エスケープされた波括弧を単一の括弧に変換");
+        emit_line("result = result.replace(/\\x00LBRACE\\x00/g, '{');");
+        emit_line("result = result.replace(/\\x00RBRACE\\x00/g, '}');");
+        emit_line("");
+        emit_line("console.log(result);");
+        indent_level--;
+        emit_line("} else {");
+        indent_level++;
+        emit_line("// 複数引数の場合はスペースなしで連結");
+        emit_line("console.log(args.join(''));");
+        indent_level--;
+        emit_line("}");
         indent_level--;
         emit_line("};");
         emit_line("");
@@ -140,12 +328,31 @@ class TypeScriptCodegen {
             emit_line("");
         }
 
-        // 基本ブロックの処理
+        // ステートマシンで基本ブロックを処理
+        emit_line("let __bb = 0;");
+        emit_line("while (true) {");
+        indent_level++;
+        emit_line("switch (__bb) {");
+        indent_level++;
+
         for (const auto& block : func.basic_blocks) {
             if (block) {
+                emit_line("case " + std::to_string(block->id) + ":");
+                indent_level++;
                 generate_basic_block(*block, func);
+                indent_level--;
             }
         }
+
+        emit_line("default:");
+        indent_level++;
+        emit_line("throw new Error('Invalid basic block');");
+        indent_level--;
+
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
 
         indent_level--;
         emit_line("}");
@@ -198,31 +405,34 @@ class TypeScriptCodegen {
                 break;
 
             case mir::MirTerminator::Goto:
-                emit_line("// goto bb" +
-                          std::to_string(std::get<mir::MirTerminator::GotoData>(term.data).target));
+                emit_line("__bb = " +
+                          std::to_string(std::get<mir::MirTerminator::GotoData>(term.data).target) + ";");
+                emit_line("break;");
                 break;
 
             case mir::MirTerminator::SwitchInt: {
                 auto& data = std::get<mir::MirTerminator::SwitchIntData>(term.data);
-                emit_line("switch (" + operand_to_ts(*data.discriminant) + ") {");
+                // JavaScriptではbooleanと数値の比較が厳密なので、booleanを数値に変換
+                emit_line("switch (Number(" + operand_to_ts(*data.discriminant) + ")) {");
                 indent_level++;
 
                 for (const auto& [value, target] : data.targets) {
                     emit_line("case " + std::to_string(value) + ":");
                     indent_level++;
-                    emit_line("// goto bb" + std::to_string(target));
+                    emit_line("__bb = " + std::to_string(target) + ";");
                     emit_line("break;");
                     indent_level--;
                 }
 
                 emit_line("default:");
                 indent_level++;
-                emit_line("// goto bb" + std::to_string(data.otherwise));
+                emit_line("__bb = " + std::to_string(data.otherwise) + ";");
                 emit_line("break;");
                 indent_level--;
 
                 indent_level--;
                 emit_line("}");
+                emit_line("break;");
                 break;
             }
 
@@ -232,96 +442,26 @@ class TypeScriptCodegen {
                 // 関数名を取得
                 std::string func_name = operand_to_ts(*data.func);
 
-                // println/print の特別処理（文字列補間）
-                if ((func_name == "println" || func_name == "print") && data.args.size() > 1) {
-                    // 第1引数がフォーマット文字列
-                    std::string format_str = "";
-                    bool has_format = false;
-
-                    if (data.args[0]->kind == mir::MirOperand::Constant) {
-                        if (auto* constant = std::get_if<mir::MirConstant>(&data.args[0]->data)) {
-                            if (auto* str_val = std::get_if<std::string>(&constant->value)) {
-                                format_str = *str_val;
-                                has_format = true;
-                            }
-                        }
-                    }
-
-                    if (has_format) {
-                        // {変数名}を${変数}に置換してテンプレートリテラルを作成
-                        std::vector<std::string> args_to_interpolate;
-                        for (size_t i = 1; i < data.args.size(); ++i) {
-                            args_to_interpolate.push_back(operand_to_ts(*data.args[i]));
-                        }
-
-                        std::string template_literal = format_str;
-                        size_t arg_index = 0;
-                        size_t pos = 0;
-
-                        while ((pos = template_literal.find('{', pos)) != std::string::npos) {
-                            size_t end = template_literal.find('}', pos);
-                            if (end != std::string::npos) {
-                                // {{や}}はエスケープなのでスキップ
-                                if (pos + 1 < template_literal.size() &&
-                                    template_literal[pos + 1] == '{') {
-                                    pos += 2;
-                                    continue;
-                                }
-
-                                std::string placeholder =
-                                    template_literal.substr(pos + 1, end - pos - 1);
-                                // 変数名のプレースホルダーを${変数}に置換
-                                if (!placeholder.empty() &&
-                                    placeholder.find(':') == std::string::npos &&
-                                    !std::isdigit(placeholder[0]) &&
-                                    arg_index < args_to_interpolate.size()) {
-                                    template_literal.replace(
-                                        pos, end - pos + 1,
-                                        "${" + args_to_interpolate[arg_index] + "}");
-                                    pos += args_to_interpolate[arg_index].length() +
-                                           3;  // ${}の長さを考慮
-                                    arg_index++;
-                                } else {
-                                    pos = end + 1;
-                                }
-                            } else {
-                                break;
-                            }
-                        }
-
-                        // バッククォートを使ったテンプレートリテラルとして出力
-                        emit_line(func_name + "(`" + template_literal + "`);");
-                    } else {
-                        // フォーマット文字列が取得できない場合は通常の呼び出し
-                        std::string call = func_name + "(";
-                        bool first = true;
-                        for (const auto& arg : data.args) {
-                            if (!first)
-                                call += ", ";
-                            first = false;
-                            call += operand_to_ts(*arg);
-                        }
-                        call += ")";
-                        emit_line(call + ";");
-                    }
-                } else {
-                    // 通常の関数呼び出し
-                    std::string call = func_name + "(";
-                    bool first = true;
-                    for (const auto& arg : data.args) {
-                        if (!first)
-                            call += ", ";
-                        first = false;
-                        call += operand_to_ts(*arg);
-                    }
-                    call += ")";
-
-                    if (data.destination) {
-                        emit_line(place_to_ts(*data.destination) + " = " + call + ";");
-                    } else {
-                        emit_line(call + ";");
-                    }
+                // 通常の関数呼び出し（println/printも実行時に処理される）
+                std::string call = func_name + "(";
+                bool first = true;
+                for (const auto& arg : data.args) {
+                    if (!first)
+                        call += ", ";
+                    first = false;
+                    call += operand_to_ts(*arg);
                 }
+                call += ")";
+
+                if (data.destination) {
+                    emit_line(place_to_ts(*data.destination) + " = " + call + ";");
+                } else {
+                    emit_line(call + ";");
+                }
+
+                // 成功時の次のブロックへジャンプ
+                emit_line("__bb = " + std::to_string(data.success) + ";");
+                emit_line("break;");
                 break;
             }
 
@@ -366,7 +506,13 @@ class TypeScriptCodegen {
                 break;
             case mir::MirOperand::FunctionRef:
                 if (auto* func_name = std::get_if<std::string>(&op.data)) {
-                    // TypeScriptでは通常の関数呼び出し
+                    // std::io::println/print を TypeScript のグローバル関数にマップ
+                    if (*func_name == "std::io::println") {
+                        return "println";
+                    } else if (*func_name == "std::io::print") {
+                        return "print";
+                    }
+                    // その他の関数はそのまま
                     return *func_name;
                 }
                 break;
@@ -399,6 +545,28 @@ class TypeScriptCodegen {
                 // TypeScriptでは型キャストはas演算子を使用
                 return operand_to_ts(*data.operand);
             }
+            case mir::MirRvalue::FormatConvert: {
+                auto& data = std::get<mir::MirRvalue::FormatConvertData>(rv.data);
+                std::string operand = operand_to_ts(*data.operand);
+
+                // フォーマット指定子に応じて変換
+                if (data.format_spec == "x") {
+                    return "(" + operand + ").toString(16)";
+                } else if (data.format_spec == "X") {
+                    return "(" + operand + ").toString(16).toUpperCase()";
+                } else if (data.format_spec == "b") {
+                    return "(" + operand + ").toString(2)";
+                } else if (data.format_spec == "o") {
+                    return "(" + operand + ").toString(8)";
+                } else if (data.format_spec.size() > 1 && data.format_spec[0] == '.') {
+                    // 浮動小数点精度
+                    int precision = std::stoi(data.format_spec.substr(1));
+                    return "(" + operand + ").toFixed(" + std::to_string(precision) + ")";
+                } else {
+                    // デフォルト：文字列変換
+                    return "String(" + operand + ")";
+                }
+            }
             default:
                 return "undefined";
         }
@@ -412,7 +580,18 @@ class TypeScriptCodegen {
         } else if (auto* i = std::get_if<int64_t>(&constant.value)) {
             return std::to_string(*i);
         } else if (auto* d = std::get_if<double>(&constant.value)) {
-            return std::to_string(*d);
+            // 高精度で浮動小数点を出力（最大15桁の有効数字）
+            std::ostringstream oss;
+            oss << std::setprecision(15) << std::noshowpoint << *d;
+            std::string result = oss.str();
+            // 不要な末尾のゼロを削除
+            if (result.find('.') != std::string::npos) {
+                result.erase(result.find_last_not_of('0') + 1);
+                if (result.back() == '.') {
+                    result.pop_back();
+                }
+            }
+            return result;
         } else if (auto* c = std::get_if<char>(&constant.value)) {
             return "'" + std::string(1, *c) + "'";
         } else if (auto* s = std::get_if<std::string>(&constant.value)) {

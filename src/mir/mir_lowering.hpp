@@ -31,12 +31,19 @@ class MirLowering {
     }
 
    private:
+    // ループコンテキスト
+    struct LoopContext {
+        BlockId header;  // ループヘッダ（continue先）
+        BlockId exit;    // ループ出口（break先）
+    };
+
     // 現在の関数コンテキスト
     struct FunctionContext {
         MirFunction* func;
         BlockId current_block;
         std::unordered_map<std::string, LocalId> var_map;  // 変数名 → ローカルID
         LocalId next_temp_id;                              // 次の一時変数ID
+        std::vector<LoopContext> loop_stack;               // ループコンテキストのスタック
 
         FunctionContext(MirFunction* f) : func(f), current_block(ENTRY_BLOCK), next_temp_id(0) {}
 
@@ -124,14 +131,28 @@ class MirLowering {
             lower_if_stmt(ctx, **if_stmt);
         } else if (auto* loop_stmt = std::get_if<std::unique_ptr<hir::HirLoop>>(&stmt.kind)) {
             lower_loop_stmt(ctx, **loop_stmt);
+        } else if (auto* switch_stmt = std::get_if<std::unique_ptr<hir::HirSwitch>>(&stmt.kind)) {
+            lower_switch_stmt(ctx, **switch_stmt);
         } else if (auto* expr_stmt = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&stmt.kind)) {
             lower_expr(ctx, *(*expr_stmt)->expr);
         } else if (auto* block = std::get_if<std::unique_ptr<hir::HirBlock>>(&stmt.kind)) {
             lower_block_stmt(ctx, **block);
         } else if (std::get_if<std::unique_ptr<hir::HirBreak>>(&stmt.kind)) {
-            // TODO: break文の処理（ループコンテキストが必要）
+            // break文の処理
+            if (!ctx.loop_stack.empty()) {
+                BlockId exit = ctx.loop_stack.back().exit;
+                ctx.set_terminator(MirTerminator::goto_block(exit));
+                // 新しいブロックを作成（到達不可能だが必要）
+                ctx.switch_to_block(ctx.func->add_block());
+            }
         } else if (std::get_if<std::unique_ptr<hir::HirContinue>>(&stmt.kind)) {
-            // TODO: continue文の処理（ループコンテキストが必要）
+            // continue文の処理
+            if (!ctx.loop_stack.empty()) {
+                BlockId header = ctx.loop_stack.back().header;
+                ctx.set_terminator(MirTerminator::goto_block(header));
+                // 新しいブロックを作成（到達不可能だが必要）
+                ctx.switch_to_block(ctx.func->add_block());
+            }
         }
     }
 
@@ -234,7 +255,8 @@ class MirLowering {
         ctx.set_terminator(MirTerminator::goto_block(loop_header));
         ctx.switch_to_block(loop_header);
 
-        // TODO: ループコンテキストの管理（break/continue用）
+        // ループコンテキストをスタックにプッシュ
+        ctx.loop_stack.push_back({loop_header, loop_exit});
 
         // ループ本体を処理
         for (const auto& stmt : loop.body) {
@@ -248,8 +270,268 @@ class MirLowering {
             }
         }
 
+        // ループコンテキストをポップ
+        ctx.loop_stack.pop_back();
+
         // ループ出口に切り替え
         ctx.switch_to_block(loop_exit);
+    }
+
+    // switch文のlowering（パターン展開とスコープ管理付き）
+    void lower_switch_stmt(FunctionContext& ctx, const hir::HirSwitch& switch_stmt) {
+        // switch式を評価
+        LocalId expr_local = lower_expr(ctx, *switch_stmt.expr);
+
+        // 終了ブロックを作成
+        BlockId merge_block = ctx.func->add_block();
+
+        // 各caseのブロックを作成
+        std::vector<BlockId> case_blocks;
+        for (size_t i = 0; i < switch_stmt.cases.size(); i++) {
+            case_blocks.push_back(ctx.func->add_block());
+        }
+
+        // else/defaultブロックを事前に特定
+        BlockId else_block = merge_block;  // デフォルトはmergeブロックへ
+        for (size_t i = 0; i < switch_stmt.cases.size(); i++) {
+            if (!switch_stmt.cases[i].pattern && !switch_stmt.cases[i].value) {
+                else_block = case_blocks[i];
+                break;
+            }
+        }
+
+        // 各caseのチェックブロックを作成
+        std::vector<BlockId> check_blocks;
+        for (size_t i = 0; i < switch_stmt.cases.size(); i++) {
+            if (switch_stmt.cases[i].pattern || switch_stmt.cases[i].value) {
+                check_blocks.push_back(ctx.func->add_block());
+            } else {
+                check_blocks.push_back(INVALID_BLOCK);  // elseケースはチェック不要
+            }
+        }
+
+        // 現在のブロック（エントリーブロック）を保存
+        BlockId entry_block = ctx.current_block;
+
+        // パターンマッチングの生成（前から順に処理）
+        for (size_t i = 0; i < switch_stmt.cases.size(); i++) {
+            const auto& case_ = switch_stmt.cases[i];
+
+            // elseケースの場合はスキップ（既に処理済み）
+            if (!case_.pattern && !case_.value) {
+                continue;
+            }
+
+            // 次のチェックブロックまたはelse_blockを決定
+            BlockId next_block = else_block;
+            for (size_t j = i + 1; j < switch_stmt.cases.size(); j++) {
+                if (check_blocks[j] != INVALID_BLOCK) {
+                    next_block = check_blocks[j];
+                    break;
+                }
+            }
+
+            // チェックブロックに切り替え
+            ctx.switch_to_block(check_blocks[i]);
+
+            // パターンに応じた条件生成
+            if (case_.pattern) {
+                generate_pattern_check(ctx, *case_.pattern, expr_local, case_blocks[i], next_block);
+            } else if (case_.value) {
+                // 後方互換性: 旧式の単一値パターン
+                generate_simple_value_check(ctx, *case_.value, expr_local, case_blocks[i], next_block);
+            }
+        }
+
+        // エントリーブロックに戻る
+        ctx.switch_to_block(entry_block);
+
+        // エントリーから最初のチェックへジャンプ
+        BlockId first_check = else_block;
+        for (size_t i = 0; i < check_blocks.size(); i++) {
+            if (check_blocks[i] != INVALID_BLOCK) {
+                first_check = check_blocks[i];
+                break;
+            }
+        }
+        ctx.set_terminator(MirTerminator::goto_block(first_check));
+
+        // 各caseブロックの本体を処理
+        for (size_t i = 0; i < switch_stmt.cases.size(); i++) {
+            ctx.switch_to_block(case_blocks[i]);
+
+            // スコープ開始（各caseは独立したスコープ）
+            // 現在の変数マップのサイズを記録（スコープ開始時点）
+            size_t scope_start_vars = ctx.var_map.size();
+            // TODO: より精密な実装では、このスコープで宣言される変数を追跡
+
+            // case内の文を処理
+            for (const auto& stmt : switch_stmt.cases[i].stmts) {
+                lower_statement(ctx, *stmt);
+            }
+
+            // 自動的にbreak（フォールスルーなし）
+            if (auto* block = ctx.get_current_block()) {
+                if (!block->terminator) {
+                    // スコープ終了処理
+                    // TODO: スコープ内で宣言された変数にStorageDeadを発行
+                    // 現在は簡易実装（将来的にdeferやデストラクタの処理も必要）
+
+                    ctx.set_terminator(MirTerminator::goto_block(merge_block));
+                }
+            }
+
+            // スコープ終了
+            // 注: 完全な実装にはStorageDeadの発行が必要
+        }
+
+        // mergeブロックに切り替え
+        ctx.switch_to_block(merge_block);
+    }
+
+    // 単純な値チェック（後方互換性）
+    void generate_simple_value_check(FunctionContext& ctx, const hir::HirExpr& value_expr,
+                                     LocalId expr_local, BlockId match_block, BlockId else_block) {
+        LocalId value_local = lower_expr(ctx, value_expr);
+        LocalId cmp_result = ctx.new_temp(hir::make_bool());
+
+        // 比較演算
+        auto cmp_rvalue = MirRvalue::binary(
+            MirBinaryOp::Eq,
+            MirOperand::copy(MirPlace(expr_local)),
+            MirOperand::copy(MirPlace(value_local))
+        );
+        ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+
+        // 条件分岐
+        auto discriminant = MirOperand::copy(MirPlace(cmp_result));
+        std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
+        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+    }
+
+    // パターンチェックの生成
+    void generate_pattern_check(FunctionContext& ctx, const hir::HirSwitchPattern& pattern,
+                                LocalId expr_local, BlockId match_block, BlockId else_block) {
+        switch (pattern.kind) {
+            case hir::HirSwitchPattern::SingleValue: {
+                // 単一値: expr == value
+                if (pattern.value) {
+                    LocalId value_local = lower_expr(ctx, *pattern.value);
+                    LocalId cmp_result = ctx.new_temp(hir::make_bool());
+
+                    // 比較演算
+                    auto cmp_rvalue = MirRvalue::binary(
+                        MirBinaryOp::Eq,
+                        MirOperand::copy(MirPlace(expr_local)),
+                        MirOperand::copy(MirPlace(value_local))
+                    );
+                    ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+
+                    // 条件分岐
+                    auto discriminant = MirOperand::copy(MirPlace(cmp_result));
+                    std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
+                    ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+                }
+                break;
+            }
+
+            case hir::HirSwitchPattern::Range: {
+                // 範囲: start <= expr && expr <= end
+                if (pattern.range_start && pattern.range_end) {
+                    LocalId start_local = lower_expr(ctx, *pattern.range_start);
+                    LocalId end_local = lower_expr(ctx, *pattern.range_end);
+
+                    // expr >= start
+                    LocalId ge_result = ctx.new_temp(hir::make_bool());
+                    auto ge_rvalue = MirRvalue::binary(
+                        MirBinaryOp::Ge,
+                        MirOperand::copy(MirPlace(expr_local)),
+                        MirOperand::copy(MirPlace(start_local))
+                    );
+                    ctx.push_statement(MirStatement::assign(MirPlace(ge_result), std::move(ge_rvalue)));
+
+                    // expr <= end
+                    LocalId le_result = ctx.new_temp(hir::make_bool());
+                    auto le_rvalue = MirRvalue::binary(
+                        MirBinaryOp::Le,
+                        MirOperand::copy(MirPlace(expr_local)),
+                        MirOperand::copy(MirPlace(end_local))
+                    );
+                    ctx.push_statement(MirStatement::assign(MirPlace(le_result), std::move(le_rvalue)));
+
+                    // ge_result && le_result
+                    LocalId and_result = ctx.new_temp(hir::make_bool());
+                    auto and_rvalue = MirRvalue::binary(
+                        MirBinaryOp::And,
+                        MirOperand::copy(MirPlace(ge_result)),
+                        MirOperand::copy(MirPlace(le_result))
+                    );
+                    ctx.push_statement(MirStatement::assign(MirPlace(and_result), std::move(and_rvalue)));
+
+                    // 条件分岐
+                    auto discriminant = MirOperand::copy(MirPlace(and_result));
+                    std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
+                    ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+                }
+                break;
+            }
+
+            case hir::HirSwitchPattern::Or: {
+                // OR: pattern1 || pattern2 || ...
+                // 各パターンをインラインで展開し、順次チェック
+
+                // 最後のパターン以外を処理
+                for (size_t i = 0; i < pattern.or_patterns.size() - 1; i++) {
+                    // 単一値パターンのみサポート（簡易実装）
+                    if (pattern.or_patterns[i]->kind == hir::HirSwitchPattern::SingleValue) {
+                        LocalId value_local = lower_expr(ctx, *pattern.or_patterns[i]->value);
+                        LocalId cmp_result = ctx.new_temp(hir::make_bool());
+
+                        // 比較演算
+                        auto cmp_rvalue = MirRvalue::binary(
+                            MirBinaryOp::Eq,
+                            MirOperand::copy(MirPlace(expr_local)),
+                            MirOperand::copy(MirPlace(value_local))
+                        );
+                        ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+
+                        // 次のチェック用ブロック
+                        BlockId next_check_block = ctx.func->add_block();
+
+                        // 条件分岐（マッチしたらmatch_block、しなければ次のチェックへ）
+                        auto discriminant = MirOperand::copy(MirPlace(cmp_result));
+                        std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
+                        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, next_check_block));
+
+                        // 次のチェックブロックに移動
+                        ctx.switch_to_block(next_check_block);
+                    }
+                }
+
+                // 最後のパターンを処理（else_blockへの分岐を含む）
+                if (!pattern.or_patterns.empty()) {
+                    size_t last_idx = pattern.or_patterns.size() - 1;
+                    if (pattern.or_patterns[last_idx]->kind == hir::HirSwitchPattern::SingleValue) {
+                        LocalId value_local = lower_expr(ctx, *pattern.or_patterns[last_idx]->value);
+                        LocalId cmp_result = ctx.new_temp(hir::make_bool());
+
+                        // 比較演算
+                        auto cmp_rvalue = MirRvalue::binary(
+                            MirBinaryOp::Eq,
+                            MirOperand::copy(MirPlace(expr_local)),
+                            MirOperand::copy(MirPlace(value_local))
+                        );
+                        ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+
+                        // 最後の条件分岐（マッチしたらmatch_block、しなければelse_block）
+                        auto discriminant = MirOperand::copy(MirPlace(cmp_result));
+                        std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
+                        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+                    }
+                }
+                break;
+            }
+        }
     }
 
     // ブロック文のlowering
@@ -281,8 +563,221 @@ class MirLowering {
         return ctx.new_temp(expr.type);
     }
 
+    // 文字列補間を処理するヘルパー関数
+    LocalId process_string_interpolation(FunctionContext& ctx, const std::string& str, hir::TypePtr type) {
+        // エスケープシーケンスを一時的にプレースホルダーに置換
+        std::string processed = str;
+
+        // {{ -> \x01LBRACE\x02
+        size_t pos = 0;
+        while ((pos = processed.find("{{", pos)) != std::string::npos) {
+            processed.replace(pos, 2, "\x01LBRACE\x02");
+            pos += 8;  // プレースホルダーは8バイト
+        }
+
+        // }} -> \x01RBRACE\x02
+        pos = 0;
+        while ((pos = processed.find("}}", pos)) != std::string::npos) {
+            processed.replace(pos, 2, "\x01RBRACE\x02");
+            pos += 8;  // プレースホルダーは8バイト
+        }
+
+        // 構造体：テキスト、変数名、フォーマット指定子
+        struct InterpolationPart {
+            std::string text;
+            std::string var_name;
+            std::string format_spec;
+        };
+        std::vector<InterpolationPart> parts;
+        std::string current_text;
+        pos = 0;
+
+        while (pos < processed.length()) {
+            size_t brace_start = processed.find('{', pos);
+
+            if (brace_start == std::string::npos) {
+                // 残りのテキストを追加
+                current_text += processed.substr(pos);
+                if (!current_text.empty() || parts.empty()) {
+                    parts.push_back({current_text, "", ""});
+                }
+                break;
+            }
+
+            // { の前のテキストを追加
+            current_text += processed.substr(pos, brace_start - pos);
+
+            // } を探す
+            size_t brace_end = processed.find('}', brace_start);
+            if (brace_end == std::string::npos) {
+                // } が見つからない場合は、{ を通常の文字として扱う
+                current_text += '{';
+                pos = brace_start + 1;
+                continue;
+            }
+
+            // 変数名とフォーマット指定子を抽出
+            std::string var_content = processed.substr(brace_start + 1, brace_end - brace_start - 1);
+
+            // フォーマット指定子を分離
+            size_t colon_pos = var_content.find(':');
+            std::string var_name;
+            std::string format_spec;
+
+            if (colon_pos != std::string::npos) {
+                var_name = var_content.substr(0, colon_pos);
+                format_spec = var_content.substr(colon_pos + 1);
+            } else {
+                var_name = var_content;
+                format_spec = "";
+            }
+
+            // 変数名が有効かチェック
+            // 空の{}や数字で始まる場合は変数埋め込みとして扱わない
+            if (!var_content.empty() && !std::isdigit(var_content[0]) &&
+                var_name.find_first_not_of(" \t\n\r") != std::string::npos) {
+                // テキスト部分があれば追加
+                if (!current_text.empty()) {
+                    parts.push_back({current_text, "", ""});
+                    current_text.clear();
+                }
+                // 変数部分を追加（フォーマット指定子付き）
+                parts.push_back({"", var_name, format_spec});
+            } else {
+                // 無効な変数名の場合は、そのまま文字列として扱う
+                current_text += processed.substr(brace_start, brace_end - brace_start + 1);
+            }
+
+            pos = brace_end + 1;
+        }
+
+        // プレースホルダーを元の文字に戻す関数
+        auto restore_placeholders = [](std::string& text) {
+            size_t ph_pos = 0;
+            while ((ph_pos = text.find("\x01LBRACE\x02", ph_pos)) != std::string::npos) {
+                text.replace(ph_pos, 8, "{");  // 8バイトを1文字に置換
+                ph_pos += 1;
+            }
+            ph_pos = 0;
+            while ((ph_pos = text.find("\x01RBRACE\x02", ph_pos)) != std::string::npos) {
+                text.replace(ph_pos, 8, "}");  // 8バイトを1文字に置換
+                ph_pos += 1;
+            }
+        };
+
+        // すべてのパーツのプレースホルダーを元に戻す
+        for (auto& part : parts) {
+            restore_placeholders(part.text);
+        }
+
+        // 補間がない場合は通常のリテラルとして処理
+        if (parts.size() == 1 && parts[0].var_name.empty()) {
+            LocalId temp = ctx.new_temp(type);
+            MirConstant constant;
+            constant.value = parts[0].text;
+            constant.type = type;
+            auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
+            ctx.push_statement(MirStatement::assign(MirPlace(temp), std::move(rvalue)));
+            return temp;
+        }
+
+        // 文字列連結を生成
+        LocalId result = 0;
+        for (size_t i = 0; i < parts.size(); ++i) {
+            LocalId current;
+
+            if (!parts[i].var_name.empty()) {
+                // 変数参照
+                auto it = ctx.var_map.find(parts[i].var_name);
+                if (it != ctx.var_map.end()) {
+                    // フォーマット指定子がある場合はFormatConvert演算を生成
+                    if (!parts[i].format_spec.empty()) {
+                        current = ctx.new_temp(type);
+                        auto format_rvalue = MirRvalue::format_convert(
+                            MirOperand::copy(MirPlace(it->second)),
+                            parts[i].format_spec
+                        );
+                        ctx.push_statement(MirStatement::assign(MirPlace(current), std::move(format_rvalue)));
+                    } else {
+                        current = it->second;
+                    }
+                } else {
+                    // 変数が見つからない場合、空文字列
+                    current = ctx.new_temp(type);
+                    MirConstant constant;
+                    constant.value = std::string("");
+                    constant.type = type;
+                    auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
+                    ctx.push_statement(MirStatement::assign(MirPlace(current), std::move(rvalue)));
+                }
+            } else {
+                // テキストリテラル
+                current = ctx.new_temp(type);
+                MirConstant constant;
+                constant.value = parts[i].text;
+                constant.type = type;
+                auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
+                ctx.push_statement(MirStatement::assign(MirPlace(current), std::move(rvalue)));
+            }
+
+            if (i == 0) {
+                result = current;
+            } else {
+                // 文字列連結
+                LocalId concat_result = ctx.new_temp(type);
+                auto concat_rvalue = MirRvalue::binary(
+                    MirBinaryOp::Add,
+                    MirOperand::copy(MirPlace(result)),
+                    MirOperand::copy(MirPlace(current))
+                );
+                ctx.push_statement(MirStatement::assign(MirPlace(concat_result), std::move(concat_rvalue)));
+                result = concat_result;
+            }
+        }
+
+        return result;
+    }
+
     // リテラルのlowering
     LocalId lower_literal(FunctionContext& ctx, const hir::HirLiteral& lit, hir::TypePtr type) {
+        // 文字列リテラルの場合、変数埋め込みがあるかチェック
+        if (auto* str_val = std::get_if<std::string>(&lit.value)) {
+            // 変数埋め込みパターン {varname} があり、その変数が存在する場合のみ処理
+            bool has_valid_interpolation = false;
+            size_t pos = 0;
+            while ((pos = str_val->find('{', pos)) != std::string::npos) {
+                // {{ はエスケープなのでスキップ
+                if (pos + 1 < str_val->size() && (*str_val)[pos + 1] == '{') {
+                    pos += 2;
+                    continue;
+                }
+
+                size_t end = str_val->find('}', pos);
+                if (end != std::string::npos) {
+                    std::string content = str_val->substr(pos + 1, end - pos - 1);
+                    // :がある場合は前の部分を変数名とする
+                    size_t colon = content.find(':');
+                    std::string var_name = (colon != std::string::npos)
+                        ? content.substr(0, colon)
+                        : content;
+
+                    // 空でない変数名で、数字で始まらず、実際に変数が存在する場合
+                    if (!var_name.empty() && !std::isdigit(var_name[0]) &&
+                        ctx.var_map.find(var_name) != ctx.var_map.end()) {
+                        has_valid_interpolation = true;
+                        break;
+                    }
+                }
+                pos++;
+            }
+
+            // 有効な変数埋め込みがある場合のみ処理
+            if (has_valid_interpolation) {
+                return process_string_interpolation(ctx, *str_val, type);
+            }
+        }
+
+        // 通常のリテラル処理
         LocalId temp = ctx.new_temp(type);
 
         MirConstant constant;
@@ -343,6 +838,60 @@ class MirLowering {
 
     // 単項演算のlowering
     LocalId lower_unary(FunctionContext& ctx, const hir::HirUnary& unary, hir::TypePtr type) {
+        // インクリメント/デクリメント演算子の脱糖
+        if (unary.op == hir::HirUnaryOp::PreInc || unary.op == hir::HirUnaryOp::PreDec ||
+            unary.op == hir::HirUnaryOp::PostInc || unary.op == hir::HirUnaryOp::PostDec) {
+
+            // 変数への参照を取得（現在は変数のみサポート）
+            if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&unary.operand->kind)) {
+                auto it = ctx.var_map.find((*var_ref)->name);
+                if (it != ctx.var_map.end()) {
+                    LocalId var_local = it->second;
+                    LocalId result = ctx.new_temp(type);
+
+                    // 前置か後置かで処理が異なる
+                    bool is_post = (unary.op == hir::HirUnaryOp::PostInc ||
+                                   unary.op == hir::HirUnaryOp::PostDec);
+                    bool is_inc = (unary.op == hir::HirUnaryOp::PreInc ||
+                                  unary.op == hir::HirUnaryOp::PostInc);
+
+                    if (is_post) {
+                        // 後置: 元の値を保存してから更新
+                        auto save_rvalue = MirRvalue::use(MirOperand::copy(MirPlace(var_local)));
+                        ctx.push_statement(MirStatement::assign(MirPlace(result), std::move(save_rvalue)));
+                    }
+
+                    // 1を表すリテラル
+                    LocalId one = ctx.new_temp(type);
+                    MirConstant one_const;
+                    one_const.value = 1;
+                    one_const.type = type;
+                    auto one_rvalue = MirRvalue::use(MirOperand::constant(std::move(one_const)));
+                    ctx.push_statement(MirStatement::assign(MirPlace(one), std::move(one_rvalue)));
+
+                    // インクリメント/デクリメント実行
+                    MirBinaryOp op = is_inc ? MirBinaryOp::Add : MirBinaryOp::Sub;
+                    auto update_rvalue = MirRvalue::binary(op,
+                        MirOperand::copy(MirPlace(var_local)),
+                        MirOperand::copy(MirPlace(one)));
+                    ctx.push_statement(MirStatement::assign(MirPlace(var_local), std::move(update_rvalue)));
+
+                    if (!is_post) {
+                        // 前置: 更新後の値を返す
+                        auto ret_rvalue = MirRvalue::use(MirOperand::copy(MirPlace(var_local)));
+                        ctx.push_statement(MirStatement::assign(MirPlace(result), std::move(ret_rvalue)));
+                    }
+
+                    return result;
+                }
+            }
+
+            // 変数以外のインクリメント/デクリメントはエラー
+            // TODO: エラー処理
+            return ctx.new_temp(type);
+        }
+
+        // 通常の単項演算
         LocalId operand_local = lower_expr(ctx, *unary.operand);
         LocalId result = ctx.new_temp(type);
 
@@ -464,7 +1013,14 @@ class MirLowering {
 
         // 関数呼び出しのターミネータを設定
         // 関数名を関数参照として作成
-        auto func_operand = MirOperand::function_ref(call.func_name);
+        // println/printはstd::ioモジュールからインポートされた関数として扱う
+        std::string func_name = call.func_name;
+        if (func_name == "println") {
+            func_name = "std::io::println";
+        } else if (func_name == "print") {
+            func_name = "std::io::print";
+        }
+        auto func_operand = MirOperand::function_ref(func_name);
 
         // CallDataを作成
         MirTerminator::CallData call_data;

@@ -1,4 +1,5 @@
 // if-else文のテスト
+import std::io::println;
 int main() {
     int x = 10;
 

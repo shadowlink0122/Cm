@@ -1,0 +1,48 @@
+// 文字列埋め込みのテストケース
+import std::io::println;
+
+int main() {
+    // 基本的な文字列埋め込み
+    string name = "Alice";
+    int age = 25;
+
+    // println での埋め込み（現在動作）
+    println("Hello, {name}!");
+    println("{name} is {age} years old");
+
+    // 文字列変数での埋め込み（実装予定）
+    string greeting = "Hello, {name}!";
+    println(greeting);  // "Hello, Alice!"
+
+    // 複数の埋め込み
+    string info = "Name: {name}, Age: {age}";
+    println(info);  // "Name: Alice, Age: 25"
+
+    // フォーマット指定子付き
+    int value = 255;
+    string hex_str = "Value in hex: {value:x}";
+    println(hex_str);  // "Value in hex: ff"
+
+    string hex_upper = "Value in HEX: {value:X}";
+    println(hex_upper);  // "Value in HEX: FF"
+
+    string binary = "Binary: {value:b}";
+    println(binary);  // "Binary: 11111111"
+
+    // 浮動小数点のフォーマット
+    double pi = 3.14159265359;
+    string pi_str = "PI = {pi:.2}";
+    println(pi_str);  // "PI = 3.14"
+
+    // エスケープシーケンス
+    string escaped = "Literal braces: {{ and }}";
+    println(escaped);  // "Literal braces: { and }"
+
+    // 計算式の埋め込み（将来的な拡張）
+    int x = 10;
+    int y = 20;
+    // string sum = "Sum: {x + y}";  // 将来実装予定
+    // println(sum);  // "Sum: 30"
+
+    return 0;
+}

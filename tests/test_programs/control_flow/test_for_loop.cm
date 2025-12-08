@@ -1,0 +1,37 @@
+import std::io::println;
+
+int main() {
+    // 基本的なforループテスト
+    println("Basic for loop:");
+    for (int i = 0; i < 5; i++) {
+        println("i = " + i);
+    }
+
+    // ネストされたforループ
+    println("\nNested for loops:");
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            println("i=" + i + ", j=" + j);
+        }
+    }
+
+    // breakとcontinueのテスト
+    println("\nBreak and continue:");
+    for (int i = 0; i < 10; i++) {
+        if (i == 2) {
+            continue;  // 2をスキップ
+        }
+        if (i == 7) {
+            break;     // 7で終了
+        }
+        println("i = " + i);
+    }
+
+    // 逆順ループ
+    println("\nReverse loop:");
+    for (int i = 5; i > 0; i--) {
+        println("i = " + i);
+    }
+
+    return 0;
+}

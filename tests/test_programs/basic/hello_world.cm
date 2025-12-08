@@ -1,4 +1,5 @@
 // 最も基本的なテスト
+import std::io::println;
 int main() {
     println("Hello, World!");
     return 0;

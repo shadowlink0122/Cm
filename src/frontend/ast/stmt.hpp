@@ -83,6 +83,68 @@ struct BlockStmt {
 };
 
 // ============================================================
+// switch文のパターン
+// ============================================================
+enum class PatternKind {
+    Value,      // 単一値
+    Range,      // 範囲 (val...val2)
+    Or          // OR結合されたパターン
+};
+
+struct Pattern {
+    PatternKind kind;
+    ExprPtr value;           // Value pattern
+    ExprPtr range_start;     // Range pattern start
+    ExprPtr range_end;       // Range pattern end
+    std::vector<std::unique_ptr<Pattern>> or_patterns;  // OR patterns
+
+    // 単一値パターン
+    static std::unique_ptr<Pattern> make_value(ExprPtr val) {
+        auto p = std::make_unique<Pattern>();
+        p->kind = PatternKind::Value;
+        p->value = std::move(val);
+        return p;
+    }
+
+    // 範囲パターン
+    static std::unique_ptr<Pattern> make_range(ExprPtr start, ExprPtr end) {
+        auto p = std::make_unique<Pattern>();
+        p->kind = PatternKind::Range;
+        p->range_start = std::move(start);
+        p->range_end = std::move(end);
+        return p;
+    }
+
+    // ORパターン
+    static std::unique_ptr<Pattern> make_or(std::vector<std::unique_ptr<Pattern>> patterns) {
+        auto p = std::make_unique<Pattern>();
+        p->kind = PatternKind::Or;
+        p->or_patterns = std::move(patterns);
+        return p;
+    }
+};
+
+// ============================================================
+// switch文
+// ============================================================
+struct SwitchCase {
+    std::unique_ptr<Pattern> pattern;  // nullptr for else case
+    std::vector<StmtPtr> stmts;
+
+    SwitchCase() = default;  // else case
+    explicit SwitchCase(std::unique_ptr<Pattern> p, std::vector<StmtPtr> s)
+        : pattern(std::move(p)), stmts(std::move(s)) {}
+};
+
+struct SwitchStmt {
+    ExprPtr expr;
+    std::vector<SwitchCase> cases;
+
+    SwitchStmt(ExprPtr e, std::vector<SwitchCase> c)
+        : expr(std::move(e)), cases(std::move(c)) {}
+};
+
+// ============================================================
 // break / continue
 // ============================================================
 struct BreakStmt {};
@@ -117,6 +179,10 @@ inline StmtPtr make_while(ExprPtr cond, std::vector<StmtPtr> body, Span s = {}) 
 
 inline StmtPtr make_block(std::vector<StmtPtr> stmts, Span s = {}) {
     return std::make_unique<Stmt>(std::make_unique<BlockStmt>(std::move(stmts)), s);
+}
+
+inline StmtPtr make_switch(ExprPtr expr, std::vector<SwitchCase> cases, Span s = {}) {
+    return std::make_unique<Stmt>(std::make_unique<SwitchStmt>(std::move(expr), std::move(cases)), s);
 }
 
 inline StmtPtr make_break(Span s = {}) {

@@ -290,6 +290,13 @@ class MirPrinter {
                 out << " as " << type_to_string(data.target_type);
                 break;
             }
+            case MirRvalue::FormatConvert: {
+                auto& data = std::get<MirRvalue::FormatConvertData>(rv.data);
+                out << "format(";
+                print_operand(*data.operand, out);
+                out << ", \"" << data.format_spec << "\")";
+                break;
+            }
         }
     }
 

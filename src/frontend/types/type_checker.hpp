@@ -351,7 +351,20 @@ class TypeChecker {
                 }
                 return ltype;
 
-            // 算術演算子 → 共通型
+            // 加算演算子 - 文字列連結もサポート
+            case ast::BinaryOp::Add:
+                // 少なくとも一方が文字列の場合、文字列連結として扱う
+                if (ltype->kind == ast::TypeKind::String || rtype->kind == ast::TypeKind::String) {
+                    return ast::make_string();
+                }
+                // 両方が数値の場合は通常の加算
+                if (ltype->is_numeric() && rtype->is_numeric()) {
+                    return common_type(ltype, rtype);
+                }
+                error(Span{}, "Add operator requires numeric operands or string concatenation");
+                return ast::make_error();
+
+            // その他の算術演算子 → 共通型
             default:
                 if (!ltype->is_numeric() || !rtype->is_numeric()) {
                     error(Span{}, "Arithmetic operators require numeric operands");

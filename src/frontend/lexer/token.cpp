@@ -24,12 +24,16 @@ const char* token_kind_to_string(TokenKind kind) {
             return "await";
         case TokenKind::KwBreak:
             return "break";
+        case TokenKind::KwCase:
+            return "case";
         case TokenKind::KwConst:
             return "const";
         case TokenKind::KwConstexpr:
             return "constexpr";
         case TokenKind::KwContinue:
             return "continue";
+        case TokenKind::KwDefault:
+            return "default";
         case TokenKind::KwDelete:
             return "delete";
         case TokenKind::KwElse:
@@ -78,6 +82,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "static";
         case TokenKind::KwStruct:
             return "struct";
+        case TokenKind::KwSwitch:
+            return "switch";
         case TokenKind::KwTemplate:
             return "template";
         case TokenKind::KwThis:

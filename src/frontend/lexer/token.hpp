@@ -23,8 +23,10 @@ enum class TokenKind {
     KwAsync,
     KwAwait,
     KwBreak,
+    KwCase,      // switch case
     KwConst,
     KwContinue,
+    KwDefault,   // switch default
     KwDelete,
     KwElse,
     KwEnum,
@@ -50,6 +52,7 @@ enum class TokenKind {
     KwReturn,
     KwStatic,
     KwStruct,
+    KwSwitch,    // switch statement
     KwTemplate,  // template declaration
     KwThis,
     KwTrue,

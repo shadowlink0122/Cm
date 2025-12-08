@@ -1,0 +1,63 @@
+import std::io::println;
+
+// FizzBuzzのswitch文版
+// switch文のORパターンと範囲パターンを活用
+
+int main() {
+    println("FizzBuzz with switch (1 to 30):");
+
+    for (int i = 1; i <= 30; i++) {
+        // 15の倍数を先にチェック
+        int mod15 = i % 15;
+        int mod3 = i % 3;
+        int mod5 = i % 5;
+
+        // mod15の値でswitch
+        switch(mod15) {
+            case(0) {
+                println("FizzBuzz");
+            }
+            else {
+                // mod15が0でない場合、mod3とmod5をチェック
+                switch(mod3) {
+                    case(0) {
+                        println("Fizz");
+                    }
+                    else {
+                        switch(mod5) {
+                            case(0) {
+                                println("Buzz");
+                            }
+                            else {
+                                println(i);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println("\n範囲パターンを使った数値分類:");
+    for (int i = 1; i <= 20; i++) {
+        switch(i) {
+            case(1...5) {
+                println(i + " is in range 1-5");
+            }
+            case(6...10) {
+                println(i + " is in range 6-10");
+            }
+            case(11...15) {
+                println(i + " is in range 11-15");
+            }
+            case(16...20) {
+                println(i + " is in range 16-20");
+            }
+            else {
+                println(i + " is out of range");
+            }
+        }
+    }
+
+    return 0;
+}

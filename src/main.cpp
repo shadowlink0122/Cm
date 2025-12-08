@@ -1,5 +1,11 @@
+#include "codegen/cpp_codegen.hpp"
+// #include "codegen/cpp_codegen_v2.hpp"  // TODO: 開発中
 #include "codegen/rust_codegen.hpp"
+#include "codegen/rust_codegen_v2.hpp"
 #include "codegen/typescript_codegen.hpp"
+#include "codegen/typescript_codegen_v2.hpp"
+// #include "mir_cpp/hir_to_mir_cpp.hpp"  // TODO: 開発中
+// #include "mir_cpp/mir_cpp_nodes.hpp"   // TODO: 開発中
 #include "common/debug_messages.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
@@ -44,7 +50,11 @@ struct Options {
     bool show_mir = false;
     bool show_mir_opt = false;
     bool emit_rust = false;
+    bool emit_rust_v2 = false;  // 新しいRustコード生成（ステートマシン方式）
     bool emit_ts = false;  // TypeScript出力
+    bool emit_ts_v2 = false;  // 新しいTypeScriptコード生成（ステートマシン方式）
+    bool emit_cpp = false;  // C++出力
+    bool emit_cpp_v2 = false;  // 新しいC++コード生成（ネイティブ制御フロー）
     bool emit_llvm = false;
     bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 0;
@@ -72,7 +82,11 @@ void print_help(const char* program_name) {
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n\n";
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --emit-rust           Rustコードを生成\n";
+    std::cout << "  --emit-rust-v2        Rustコードを生成（ステートマシン方式）\n";
     std::cout << "  --emit-ts             TypeScriptコードを生成\n";
+    std::cout << "  --emit-ts-v2          TypeScriptコードを生成（ステートマシン方式）\n";
+    std::cout << "  --emit-cpp            C++コードを生成\n";
+    std::cout << "  --emit-cpp-v2         C++コードを生成（ネイティブ制御フロー）\n";
     std::cout << "  --emit-llvm           LLVM IRを生成（開発中）\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
@@ -111,10 +125,10 @@ Options parse_options(int argc, char* argv[]) {
         std::cout << "Cm言語コンパイラ v0.1.0 (開発版)\n";
         std::exit(0);
     } else if (cmd[0] != '-') {
-        // 後方互換性: 旧形式の使用（警告付き）
-        std::cerr << "警告: 古い形式です。'cm run " << cmd << "' を使用してください\n";
-        opts.command = Command::Run;
-        opts.input_file = cmd;
+        // 旧形式は使用不可 - ヘルプを表示
+        std::cerr << "エラー: 不正なコマンド形式です\n";
+        std::cerr << "ファイル '" << cmd << "' を実行するには 'cm run " << cmd << "' を使用してください\n\n";
+        opts.command = Command::Help;
         return opts;
     } else {
         std::cerr << "不明なコマンド: " << cmd << "\n";
@@ -138,8 +152,16 @@ Options parse_options(int argc, char* argv[]) {
             opts.show_mir_opt = true;
         } else if (arg == "--emit-rust") {
             opts.emit_rust = true;
+        } else if (arg == "--emit-rust-v2") {
+            opts.emit_rust_v2 = true;
         } else if (arg == "--emit-ts") {
             opts.emit_ts = true;
+        } else if (arg == "--emit-ts-v2") {
+            opts.emit_ts_v2 = true;
+        } else if (arg == "--emit-cpp") {
+            opts.emit_cpp = true;
+        } else if (arg == "--emit-cpp-v2") {
+            opts.emit_cpp_v2 = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
         } else if (arg == "--run") {
@@ -509,6 +531,253 @@ int main(int argc, char* argv[]) {
                     std::cout << "ビルド方法: cd " << output_dir
                               << " && pnpm install && pnpm run build\n";
                     std::cout << "実行方法: cd " << output_dir << " && node main.js\n";
+                }
+            } else if (opts.emit_rust_v2) {
+                if (opts.verbose) {
+                    std::cout << "=== Rust Code Generation V2 (State Machine) ===\n";
+                }
+
+                // Rustコード生成（V2: ステートマシン方式）
+                codegen::RustCodeGeneratorV2 rust_gen_v2;
+                std::string rust_code = rust_gen_v2.generate(mir);
+
+                // 出力ファイル名を決定
+                std::string output_file = opts.output_file.empty() ?
+                    opts.input_file.substr(0, opts.input_file.rfind('.')) + ".rs" :
+                    opts.output_file;
+
+                // ファイルに書き出し
+                std::ofstream out_file(output_file);
+                if (!out_file) {
+                    std::cerr << "エラー: 出力ファイルを作成できません: " << output_file << "\n";
+                    return 1;
+                }
+                out_file << rust_code;
+                out_file.close();
+
+                if (opts.verbose) {
+                    std::cout << "✓ Rustコード生成完了: " << output_file << "\n";
+                }
+
+                // rustcでコンパイル
+                if (opts.run_after_emit) {
+                    std::string output_bin = output_file.substr(0, output_file.rfind('.'));
+                    std::string rustc_cmd = "rustc " + output_file + " -o " + output_bin +
+                                          " --edition=2021 2>&1";
+
+                    if (opts.verbose) {
+                        std::cout << "rustcでコンパイル中: " << rustc_cmd << "\n";
+                    }
+
+                    int rustc_result = std::system(rustc_cmd.c_str());
+                    if (rustc_result == 0) {
+                        if (opts.verbose) {
+                            std::cout << "✓ 実行ファイル生成完了: " << output_bin << "\n";
+                            std::cout << "実行中...\n";
+                        }
+                        int exec_result = std::system(output_bin.c_str());
+                        return WEXITSTATUS(exec_result);
+                    } else {
+                        std::cerr << "rustcでのコンパイルに失敗しました\n";
+                        return 1;
+                    }
+                }
+            } else if (opts.emit_ts_v2) {
+                if (opts.verbose) {
+                    std::cout << "=== TypeScript Code Generation V2 (State Machine) ===\n";
+                }
+
+                // TypeScriptコード生成（V2: ステートマシン方式）
+                codegen::TypeScriptCodeGeneratorV2 ts_gen_v2;
+                std::string ts_code = ts_gen_v2.generate(mir);
+
+                // 出力ファイル名を決定
+                std::string output_file = opts.output_file.empty() ?
+                    opts.input_file.substr(0, opts.input_file.rfind('.')) + ".ts" :
+                    opts.output_file;
+
+                // ファイルに書き出し
+                std::ofstream out_file(output_file);
+                if (!out_file) {
+                    std::cerr << "エラー: 出力ファイルを作成できません: " << output_file << "\n";
+                    return 1;
+                }
+                out_file << ts_code;
+                out_file.close();
+
+                if (opts.verbose) {
+                    std::cout << "✓ TypeScriptコード生成完了: " << output_file << "\n";
+                }
+
+                // nodeで実行
+                if (opts.run_after_emit) {
+                    std::string node_cmd = "node " + output_file;
+
+                    if (opts.verbose) {
+                        std::cout << "実行中: " << node_cmd << "\n";
+                    }
+
+                    int exec_result = std::system(node_cmd.c_str());
+                    return WEXITSTATUS(exec_result);
+                }
+            } else if (opts.emit_cpp) {
+                if (opts.verbose) {
+                    std::cout << "=== C++ Code Generation ===\n";
+                }
+
+                // C++コード生成
+                codegen::CppCodeGenerator::Options cpp_opts;
+                cpp_opts.output_dir = opts.output_file.empty() ? ".tmp/cpp_build" : opts.output_file;
+                cpp_opts.optimize = (opts.optimization_level > 0);
+                cpp_opts.debug_info = opts.debug;
+
+                codegen::CppCodeGenerator cpp_gen(cpp_opts);
+                std::string cpp_code = cpp_gen.generate(mir);
+
+                // 出力ディレクトリを作成
+                std::string output_dir = cpp_opts.output_dir;
+                std::system(("mkdir -p " + output_dir).c_str());
+
+                // C++ファイルに書き出し
+                std::string cpp_file = output_dir + "/main.cpp";
+                std::ofstream out_file(cpp_file);
+                if (!out_file) {
+                    std::cerr << "エラー: 出力ファイルを作成できません: " << cpp_file << "\n";
+                    return 1;
+                }
+                out_file << cpp_code;
+                out_file.close();
+
+                if (opts.verbose) {
+                    std::cout << "✓ C++コード生成完了: " << cpp_file << "\n";
+                }
+
+                // g++でコンパイル
+                if (opts.run_after_emit || opts.command == Command::Compile) {
+                    std::string output_bin = output_dir + "/main";
+                    std::string compile_cmd = "g++ -std=c++17 ";
+
+                    // 最適化レベルを設定
+                    if (opts.optimization_level > 0) {
+                        compile_cmd += "-O" + std::to_string(opts.optimization_level) + " ";
+                    }
+
+                    compile_cmd += cpp_file + " -o " + output_bin + " 2>&1";
+
+                    if (opts.verbose) {
+                        std::cout << "g++でコンパイル中: " << compile_cmd << "\n";
+                    }
+
+                    int compile_result = std::system(compile_cmd.c_str());
+                    if (compile_result == 0) {
+                        if (opts.verbose) {
+                            std::cout << "✓ 実行ファイル生成完了: " << output_bin << "\n";
+                        }
+
+                        // 実行
+                        if (opts.run_after_emit) {
+                            if (opts.verbose) {
+                                std::cout << "実行中: " << output_bin << "\n";
+                            }
+                            int exec_result = std::system(output_bin.c_str());
+                            return WEXITSTATUS(exec_result);
+                        }
+                    } else {
+                        std::cerr << "g++でのコンパイルに失敗しました\n";
+                        return 1;
+                    }
+                } else if (opts.verbose) {
+                    std::cout << "コンパイル方法: g++ -std=c++17 " << cpp_file << " -o "
+                              << output_dir << "/main\n";
+                    std::cout << "実行方法: " << output_dir << "/main\n";
+                }
+            } else if (opts.emit_cpp_v2) {
+                if (opts.verbose) {
+                    std::cout << "=== C++ Code Generation V2 (Native Control Flow) ===\n";
+                }
+
+                // TODO: MIR-C++実装を修正中
+                std::cerr << "C++ V2 code generation is under development\n";
+                return 1;
+
+                /*
+                // HIR → MIR-C++ 変換 (HIR Lowering produces hir::Program)
+                mir_cpp::HirToMirCppConverter converter;
+                hir::Program hir_program;
+                // HirProgramをhir::Programに変換
+                for (const auto& decl : hir.declarations) {
+                    if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
+                        hir::Function f;
+                        f.name = (*func)->name;
+                        f.params = (*func)->params;
+                        f.return_type = (*func)->return_type;
+                        f.body.statements = std::move((*func)->body);
+                        hir_program.functions.push_back(std::move(f));
+                    }
+                }
+                auto mir_cpp_program = converter.convert(hir_program);
+
+                // MIR-C++ → C++コード生成
+                codegen::CppCodeGeneratorV2 cpp_gen_v2;
+                std::string cpp_code = cpp_gen_v2.generate(mir_cpp_program);
+                */
+
+                // 出力ディレクトリを決定
+                std::string output_dir = opts.output_file.empty() ? ".tmp/cpp_v2_build" : opts.output_file;
+                std::system(("mkdir -p " + output_dir).c_str());
+
+                // C++ファイルに書き出し
+                std::string cpp_file = output_dir + "/main.cpp";
+                std::ofstream out_file(cpp_file);
+                if (!out_file) {
+                    std::cerr << "エラー: 出力ファイルを作成できません: " << cpp_file << "\n";
+                    return 1;
+                }
+                out_file << "// C++ V2 code generation under development\n";
+                out_file.close();
+
+                if (opts.verbose) {
+                    std::cout << "✓ C++コード生成完了: " << cpp_file << "\n";
+                }
+
+                // g++でコンパイル
+                if (opts.run_after_emit || opts.command == Command::Compile) {
+                    std::string output_bin = output_dir + "/main";
+                    std::string compile_cmd = "g++ -std=c++17 ";
+
+                    // 最適化レベルを設定
+                    if (opts.optimization_level > 0) {
+                        compile_cmd += "-O" + std::to_string(opts.optimization_level) + " ";
+                    }
+
+                    compile_cmd += cpp_file + " -o " + output_bin + " 2>&1";
+
+                    if (opts.verbose) {
+                        std::cout << "g++でコンパイル中: " << compile_cmd << "\n";
+                    }
+
+                    int compile_result = std::system(compile_cmd.c_str());
+                    if (compile_result == 0) {
+                        if (opts.verbose) {
+                            std::cout << "✓ 実行ファイル生成完了: " << output_bin << "\n";
+                        }
+
+                        // 実行
+                        if (opts.run_after_emit) {
+                            if (opts.verbose) {
+                                std::cout << "実行中: " << output_bin << "\n";
+                            }
+                            int exec_result = std::system(output_bin.c_str());
+                            return WEXITSTATUS(exec_result);
+                        }
+                    } else {
+                        std::cerr << "g++でのコンパイルに失敗しました\n";
+                        return 1;
+                    }
+                } else if (opts.verbose) {
+                    std::cout << "コンパイル方法: g++ -std=c++17 " << cpp_file << " -o "
+                              << output_dir << "/main\n";
+                    std::cout << "実行方法: " << output_dir << "/main\n";
                 }
             } else if (opts.emit_llvm) {
                 if (opts.verbose) {
