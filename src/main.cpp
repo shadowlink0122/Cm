@@ -1,5 +1,5 @@
 #include "codegen/cpp_codegen.hpp"
-// #include "codegen/cpp_codegen_v2.hpp"  // TODO: 開発中
+#include "codegen/cpp_codegen_v2.hpp"  // 新しいCPP-MIRパイプライン
 #include "codegen/rust_codegen.hpp"
 #include "codegen/rust_codegen_v2.hpp"
 #include "codegen/typescript_codegen.hpp"
@@ -696,31 +696,9 @@ int main(int argc, char* argv[]) {
                     std::cout << "=== C++ Code Generation V2 (Native Control Flow) ===\n";
                 }
 
-                // TODO: MIR-C++実装を修正中
-                std::cerr << "C++ V2 code generation is under development\n";
-                return 1;
-
-                /*
-                // HIR → MIR-C++ 変換 (HIR Lowering produces hir::Program)
-                mir_cpp::HirToMirCppConverter converter;
-                hir::Program hir_program;
-                // HirProgramをhir::Programに変換
-                for (const auto& decl : hir.declarations) {
-                    if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
-                        hir::Function f;
-                        f.name = (*func)->name;
-                        f.params = (*func)->params;
-                        f.return_type = (*func)->return_type;
-                        f.body.statements = std::move((*func)->body);
-                        hir_program.functions.push_back(std::move(f));
-                    }
-                }
-                auto mir_cpp_program = converter.convert(hir_program);
-
-                // MIR-C++ → C++コード生成
+                // HIR → CPP-MIR → C++ 変換（新アーキテクチャ）
                 codegen::CppCodeGeneratorV2 cpp_gen_v2;
-                std::string cpp_code = cpp_gen_v2.generate(mir_cpp_program);
-                */
+                std::string cpp_code = cpp_gen_v2.generate(hir, opts.verbose);
 
                 // 出力ディレクトリを決定
                 std::string output_dir = opts.output_file.empty() ? ".tmp/cpp_v2_build" : opts.output_file;
@@ -733,7 +711,7 @@ int main(int argc, char* argv[]) {
                     std::cerr << "エラー: 出力ファイルを作成できません: " << cpp_file << "\n";
                     return 1;
                 }
-                out_file << "// C++ V2 code generation under development\n";
+                out_file << cpp_code;
                 out_file.close();
 
                 if (opts.verbose) {
