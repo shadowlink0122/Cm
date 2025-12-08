@@ -93,6 +93,20 @@ class CppCodeGenerator {
             generateStatement(stmt);
         }
 
+        // main関数で明示的なreturnがない場合、return 0;を追加
+        if (func.name == "main" && func.return_type == Type::INT) {
+            bool has_return = false;
+            for (const auto& stmt : func.body) {
+                if (stmt.kind == StatementKind::RETURN) {
+                    has_return = true;
+                    break;
+                }
+            }
+            if (!has_return) {
+                emit("return 0;");
+            }
+        }
+
         indent_level--;
         emit("}");
         emit("");
@@ -162,8 +176,10 @@ class CppCodeGenerator {
                 code += "(" + expressionToString(arg) + " ? \"true\" : \"false\")";
             } else if (arg.type == Type::STRING) {
                 // std::stringの場合は.c_str()を追加
+                // ただし、文字列リテラル（"で始まる）は追加不要
                 std::string expr_str = expressionToString(arg);
-                if (expr_str.find(".c_str()") == std::string::npos) {
+                if (expr_str.find(".c_str()") == std::string::npos && !expr_str.empty() &&
+                    expr_str[0] != '"') {
                     code += expr_str + ".c_str()";
                 } else {
                     code += expr_str;
@@ -255,6 +271,9 @@ class CppCodeGenerator {
             if (for_loop.update->kind == StatementKind::ASSIGNMENT) {
                 const auto& assign = for_loop.update->assign_data;
                 for_header += assign.target + " = " + expressionToString(assign.value);
+            } else if (for_loop.update->kind == StatementKind::EXPRESSION) {
+                // 式文（++i, i++, i = i + 1 等）
+                for_header += expressionToString(for_loop.update->expr_data);
             }
         }
 

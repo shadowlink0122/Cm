@@ -152,8 +152,22 @@ struct HirIf {
     std::vector<HirStmtPtr> else_block;
 };
 
-// loop (脱糖後のfor/while)
+// loop (無限ループ)
 struct HirLoop {
+    std::vector<HirStmtPtr> body;
+};
+
+// while文
+struct HirWhile {
+    HirExprPtr cond;
+    std::vector<HirStmtPtr> body;
+};
+
+// for文
+struct HirFor {
+    HirStmtPtr init;    // 初期化（nullptrの場合あり）
+    HirExprPtr cond;    // 条件（nullptrの場合は無限ループ）
+    HirExprPtr update;  // 更新式（nullptrの場合あり）
     std::vector<HirStmtPtr> body;
 };
 
@@ -181,16 +195,16 @@ struct HirSwitchPattern {
         Or            // ORで結合された複数パターン
     } kind;
 
-    HirExprPtr value;              // 単一値の場合
-    HirExprPtr range_start;        // 範囲の開始値
-    HirExprPtr range_end;          // 範囲の終了値
+    HirExprPtr value;                                            // 単一値の場合
+    HirExprPtr range_start;                                      // 範囲の開始値
+    HirExprPtr range_end;                                        // 範囲の終了値
     std::vector<std::unique_ptr<HirSwitchPattern>> or_patterns;  // ORパターンのリスト
 };
 
 // switch文のケース
 struct HirSwitchCase {
     std::unique_ptr<HirSwitchPattern> pattern;  // nullptr for else/default case
-    std::vector<HirStmtPtr> stmts;             // ケース内の文（独立スコープ）
+    std::vector<HirStmtPtr> stmts;              // ケース内の文（独立スコープ）
 
     // 旧互換性のためのヘルパー
     HirExprPtr value;  // 単一値パターンの場合のみ使用（後方互換性）
@@ -204,9 +218,10 @@ struct HirSwitch {
 
 using HirStmtKind =
     std::variant<std::unique_ptr<HirLet>, std::unique_ptr<HirAssign>, std::unique_ptr<HirReturn>,
-                 std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirBreak>,
-                 std::unique_ptr<HirContinue>, std::unique_ptr<HirExprStmt>,
-                 std::unique_ptr<HirBlock>, std::unique_ptr<HirSwitch>>;
+                 std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirWhile>,
+                 std::unique_ptr<HirFor>, std::unique_ptr<HirBreak>, std::unique_ptr<HirContinue>,
+                 std::unique_ptr<HirExprStmt>, std::unique_ptr<HirBlock>,
+                 std::unique_ptr<HirSwitch>>;
 
 struct HirStmt {
     HirStmtKind kind;

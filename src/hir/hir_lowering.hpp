@@ -29,9 +29,6 @@ class HirLowering {
     }
 
    private:
-    // forループのbodyを処理中かどうかを追跡
-    bool in_for_body = false;
-
     // 宣言の変換
     HirDeclPtr lower_decl(ast::Decl& decl) {
         if (auto* func = decl.as<ast::FunctionDecl>()) {
@@ -171,12 +168,7 @@ class HirLowering {
         } else if (stmt.as<ast::BreakStmt>()) {
             return std::make_unique<HirStmt>(std::make_unique<HirBreak>());
         } else if (stmt.as<ast::ContinueStmt>()) {
-            // forループのbody内でのcontinueはbreakとして扱う（内側のループから抜ける）
-            if (in_for_body) {
-                return std::make_unique<HirStmt>(std::make_unique<HirBreak>());
-            } else {
-                return std::make_unique<HirStmt>(std::make_unique<HirContinue>());
-            }
+            return std::make_unique<HirStmt>(std::make_unique<HirContinue>());
         }
         return nullptr;
     }
@@ -235,136 +227,47 @@ class HirLowering {
         return std::make_unique<HirStmt>(std::move(hir_if));
     }
 
-    // while文 → loop + if + break に脱糖
+    // while文 → HirWhileを直接生成（制御フロー構造を保持）
     HirStmtPtr lower_while(ast::WhileStmt& while_stmt) {
-        // while (cond) { body } → loop { if (!cond) break; body }
-        auto hir_loop = std::make_unique<HirLoop>();
+        auto hir_while = std::make_unique<HirWhile>();
+        hir_while->cond = lower_expr(*while_stmt.condition);
 
-        // if (!cond) break;
-        auto not_cond = std::make_unique<HirUnary>();
-        not_cond->op = HirUnaryOp::Not;
-        not_cond->operand = lower_expr(*while_stmt.condition);
-
-        auto break_if = std::make_unique<HirIf>();
-        break_if->cond = std::make_unique<HirExpr>(std::move(not_cond), make_bool());
-        break_if->then_block.push_back(std::make_unique<HirStmt>(std::make_unique<HirBreak>()));
-
-        hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(break_if)));
-
-        // body
         for (auto& s : while_stmt.body) {
             if (auto hs = lower_stmt(*s)) {
-                hir_loop->body.push_back(std::move(hs));
+                hir_while->body.push_back(std::move(hs));
             }
         }
 
-        return std::make_unique<HirStmt>(std::move(hir_loop));
+        return std::make_unique<HirStmt>(std::move(hir_while));
     }
 
-    // for文 → let + loop + if + break + update に脱糖
+    // for文 → HirForを直接生成（制御フロー構造を保持）
     HirStmtPtr lower_for(ast::ForStmt& for_stmt) {
-        // for (init; cond; update) { body }
-        // → { init; loop { if (!cond) break; loop { body; break; } update; } }
-        //
-        // bodyを内側のループで囲むことで、continueが内側のループを抜けて
-        // updateに到達するようにする
+        auto hir_for = std::make_unique<HirFor>();
 
-        // initがある場合はブロックで囲む必要がある
+        // init（nullable）
         if (for_stmt.init) {
-            auto outer_block = std::make_unique<HirBlock>();
-
-            // initを追加
-            if (auto init_stmt = lower_stmt(*for_stmt.init)) {
-                outer_block->stmts.push_back(std::move(init_stmt));
-            }
-
-            // ループを作成
-            auto hir_loop = std::make_unique<HirLoop>();
-
-            // if (!cond) { break; }
-            if (for_stmt.condition) {
-                auto not_cond = std::make_unique<HirUnary>();
-                not_cond->op = HirUnaryOp::Not;
-                not_cond->operand = lower_expr(*for_stmt.condition);
-
-                auto break_if = std::make_unique<HirIf>();
-                break_if->cond = std::make_unique<HirExpr>(std::move(not_cond), make_bool());
-                break_if->then_block.push_back(std::make_unique<HirStmt>(std::make_unique<HirBreak>()));
-
-                hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(break_if)));
-            }
-
-            // bodyを内側のループで囲む（continue対応）
-            auto body_loop = std::make_unique<HirLoop>();
-
-            // body（forループのbody内であることを記録）
-            in_for_body = true;
-            for (auto& s : for_stmt.body) {
-                if (auto hs = lower_stmt(*s)) {
-                    body_loop->body.push_back(std::move(hs));
-                }
-            }
-            in_for_body = false;
-
-            // bodyループは通常1回だけ実行して終了
-            body_loop->body.push_back(std::make_unique<HirStmt>(std::make_unique<HirBreak>()));
-
-            hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(body_loop)));
-
-            // update（bodyループの後に実行される）
-            if (for_stmt.update) {
-                auto update_stmt = std::make_unique<HirExprStmt>();
-                update_stmt->expr = lower_expr(*for_stmt.update);
-                hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(update_stmt)));
-            }
-
-            // ループをブロックに追加
-            outer_block->stmts.push_back(std::make_unique<HirStmt>(std::move(hir_loop)));
-
-            return std::make_unique<HirStmt>(std::move(outer_block));
-        } else {
-            // initがない場合はループだけ返す
-            auto hir_loop = std::make_unique<HirLoop>();
-
-            // if (!cond) { break; }
-            if (for_stmt.condition) {
-                auto not_cond = std::make_unique<HirUnary>();
-                not_cond->op = HirUnaryOp::Not;
-                not_cond->operand = lower_expr(*for_stmt.condition);
-
-                auto break_if = std::make_unique<HirIf>();
-                break_if->cond = std::make_unique<HirExpr>(std::move(not_cond), make_bool());
-                break_if->then_block.push_back(std::make_unique<HirStmt>(std::make_unique<HirBreak>()));
-
-                hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(break_if)));
-            }
-
-            // bodyを内側のループで囲む（continue対応）
-            auto body_loop = std::make_unique<HirLoop>();
-
-            // body（forループのbody内であることを記録）
-            in_for_body = true;
-            for (auto& s : for_stmt.body) {
-                if (auto hs = lower_stmt(*s)) {
-                    body_loop->body.push_back(std::move(hs));
-                }
-            }
-            in_for_body = false;
-
-            // bodyループは通常1回だけ実行して終了
-            body_loop->body.push_back(std::make_unique<HirStmt>(std::make_unique<HirBreak>()));
-
-            hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(body_loop)));
-
-            // update（bodyループの後に実行される）
-            if (for_stmt.update) {
-                auto update_stmt = std::make_unique<HirExprStmt>();
-                update_stmt->expr = lower_expr(*for_stmt.update);
-                hir_loop->body.push_back(std::make_unique<HirStmt>(std::move(update_stmt)));
-            }
-
-            return std::make_unique<HirStmt>(std::move(hir_loop));
+            hir_for->init = lower_stmt(*for_stmt.init);
         }
+
+        // cond（nullable - nullptrの場合は無限ループ）
+        if (for_stmt.condition) {
+            hir_for->cond = lower_expr(*for_stmt.condition);
+        }
+
+        // update（nullable）
+        if (for_stmt.update) {
+            hir_for->update = lower_expr(*for_stmt.update);
+        }
+
+        // body
+        for (auto& s : for_stmt.body) {
+            if (auto hs = lower_stmt(*s)) {
+                hir_for->body.push_back(std::move(hs));
+            }
+        }
+
+        return std::make_unique<HirStmt>(std::move(hir_for));
     }
 
     // switch文

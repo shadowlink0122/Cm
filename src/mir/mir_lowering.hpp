@@ -131,6 +131,10 @@ class MirLowering {
             lower_if_stmt(ctx, **if_stmt);
         } else if (auto* loop_stmt = std::get_if<std::unique_ptr<hir::HirLoop>>(&stmt.kind)) {
             lower_loop_stmt(ctx, **loop_stmt);
+        } else if (auto* while_stmt = std::get_if<std::unique_ptr<hir::HirWhile>>(&stmt.kind)) {
+            lower_while_stmt(ctx, **while_stmt);
+        } else if (auto* for_stmt = std::get_if<std::unique_ptr<hir::HirFor>>(&stmt.kind)) {
+            lower_for_stmt(ctx, **for_stmt);
         } else if (auto* switch_stmt = std::get_if<std::unique_ptr<hir::HirSwitch>>(&stmt.kind)) {
             lower_switch_stmt(ctx, **switch_stmt);
         } else if (auto* expr_stmt = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&stmt.kind)) {
@@ -269,6 +273,110 @@ class MirLowering {
                 ctx.set_terminator(MirTerminator::goto_block(loop_header));
             }
         }
+
+        // ループコンテキストをポップ
+        ctx.loop_stack.pop_back();
+
+        // ループ出口に切り替え
+        ctx.switch_to_block(loop_exit);
+    }
+
+    // while文のlowering
+    void lower_while_stmt(FunctionContext& ctx, const hir::HirWhile& while_stmt) {
+        // ブロックを作成: ループヘッダ（条件チェック）、ループ本体、ループ出口
+        BlockId loop_header = ctx.func->add_block();
+        BlockId loop_body = ctx.func->add_block();
+        BlockId loop_exit = ctx.func->add_block();
+
+        // ループヘッダへジャンプ
+        ctx.set_terminator(MirTerminator::goto_block(loop_header));
+        ctx.switch_to_block(loop_header);
+
+        // 条件式を評価
+        LocalId cond_local = lower_expr(ctx, *while_stmt.cond);
+
+        // 条件分岐: trueならloop_body、falseならloop_exit
+        auto discriminant = MirOperand::copy(MirPlace(cond_local));
+        std::vector<std::pair<int64_t, BlockId>> targets = {{1, loop_body}};  // true -> loop_body
+        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, loop_exit));
+
+        // ループコンテキストをスタックにプッシュ
+        ctx.loop_stack.push_back({loop_header, loop_exit});
+
+        // ループ本体を処理
+        ctx.switch_to_block(loop_body);
+        for (const auto& stmt : while_stmt.body) {
+            lower_statement(ctx, *stmt);
+        }
+
+        // ループヘッダへ戻る（終端がない場合）
+        if (auto* block = ctx.get_current_block()) {
+            if (!block->terminator) {
+                ctx.set_terminator(MirTerminator::goto_block(loop_header));
+            }
+        }
+
+        // ループコンテキストをポップ
+        ctx.loop_stack.pop_back();
+
+        // ループ出口に切り替え
+        ctx.switch_to_block(loop_exit);
+    }
+
+    // for文のlowering
+    void lower_for_stmt(FunctionContext& ctx, const hir::HirFor& for_stmt) {
+        // ブロックを作成: 初期化後、ループヘッダ（条件チェック）、ループ本体、更新部、ループ出口
+        BlockId loop_header = ctx.func->add_block();
+        BlockId loop_body = ctx.func->add_block();
+        BlockId loop_update = ctx.func->add_block();
+        BlockId loop_exit = ctx.func->add_block();
+
+        // 初期化を処理
+        if (for_stmt.init) {
+            lower_statement(ctx, *for_stmt.init);
+        }
+
+        // ループヘッダへジャンプ
+        ctx.set_terminator(MirTerminator::goto_block(loop_header));
+        ctx.switch_to_block(loop_header);
+
+        // 条件式を評価
+        if (for_stmt.cond) {
+            LocalId cond_local = lower_expr(ctx, *for_stmt.cond);
+
+            // 条件分岐: trueならloop_body、falseならloop_exit
+            auto discriminant = MirOperand::copy(MirPlace(cond_local));
+            std::vector<std::pair<int64_t, BlockId>> targets = {{1, loop_body}};  // true -> loop_body
+            ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, loop_exit));
+        } else {
+            // 条件がない場合は常にloop_bodyへ
+            ctx.set_terminator(MirTerminator::goto_block(loop_body));
+        }
+
+        // ループコンテキストをスタックにプッシュ（continueはloop_updateへ）
+        ctx.loop_stack.push_back({loop_update, loop_exit});
+
+        // ループ本体を処理
+        ctx.switch_to_block(loop_body);
+        for (const auto& stmt : for_stmt.body) {
+            lower_statement(ctx, *stmt);
+        }
+
+        // 更新部へジャンプ（終端がない場合）
+        if (auto* block = ctx.get_current_block()) {
+            if (!block->terminator) {
+                ctx.set_terminator(MirTerminator::goto_block(loop_update));
+            }
+        }
+
+        // 更新部を処理
+        ctx.switch_to_block(loop_update);
+        if (for_stmt.update) {
+            lower_expr(ctx, *for_stmt.update);
+        }
+
+        // ループヘッダへ戻る
+        ctx.set_terminator(MirTerminator::goto_block(loop_header));
 
         // ループコンテキストをポップ
         ctx.loop_stack.pop_back();

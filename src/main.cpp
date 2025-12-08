@@ -51,10 +51,9 @@ struct Options {
     bool show_mir_opt = false;
     bool emit_rust = false;
     bool emit_rust_v2 = false;  // 新しいRustコード生成（ステートマシン方式）
-    bool emit_ts = false;  // TypeScript出力
+    bool emit_ts = false;       // TypeScript出力
     bool emit_ts_v2 = false;  // 新しいTypeScriptコード生成（ステートマシン方式）
-    bool emit_cpp = false;  // C++出力
-    bool emit_cpp_v2 = false;  // 新しいC++コード生成（ネイティブ制御フロー）
+    bool emit_cpp = false;    // C++出力
     bool emit_llvm = false;
     bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 0;
@@ -86,7 +85,6 @@ void print_help(const char* program_name) {
     std::cout << "  --emit-ts             TypeScriptコードを生成\n";
     std::cout << "  --emit-ts-v2          TypeScriptコードを生成（ステートマシン方式）\n";
     std::cout << "  --emit-cpp            C++コードを生成\n";
-    std::cout << "  --emit-cpp-v2         C++コードを生成（ネイティブ制御フロー）\n";
     std::cout << "  --emit-llvm           LLVM IRを生成（開発中）\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
@@ -127,7 +125,8 @@ Options parse_options(int argc, char* argv[]) {
     } else if (cmd[0] != '-') {
         // 旧形式は使用不可 - ヘルプを表示
         std::cerr << "エラー: 不正なコマンド形式です\n";
-        std::cerr << "ファイル '" << cmd << "' を実行するには 'cm run " << cmd << "' を使用してください\n\n";
+        std::cerr << "ファイル '" << cmd << "' を実行するには 'cm run " << cmd
+                  << "' を使用してください\n\n";
         opts.command = Command::Help;
         return opts;
     } else {
@@ -160,8 +159,6 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_ts_v2 = true;
         } else if (arg == "--emit-cpp") {
             opts.emit_cpp = true;
-        } else if (arg == "--emit-cpp-v2") {
-            opts.emit_cpp_v2 = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
         } else if (arg == "--run") {
@@ -542,9 +539,10 @@ int main(int argc, char* argv[]) {
                 std::string rust_code = rust_gen_v2.generate(mir);
 
                 // 出力ファイル名を決定
-                std::string output_file = opts.output_file.empty() ?
-                    opts.input_file.substr(0, opts.input_file.rfind('.')) + ".rs" :
-                    opts.output_file;
+                std::string output_file =
+                    opts.output_file.empty()
+                        ? opts.input_file.substr(0, opts.input_file.rfind('.')) + ".rs"
+                        : opts.output_file;
 
                 // ファイルに書き出し
                 std::ofstream out_file(output_file);
@@ -562,8 +560,8 @@ int main(int argc, char* argv[]) {
                 // rustcでコンパイル
                 if (opts.run_after_emit) {
                     std::string output_bin = output_file.substr(0, output_file.rfind('.'));
-                    std::string rustc_cmd = "rustc " + output_file + " -o " + output_bin +
-                                          " --edition=2021 2>&1";
+                    std::string rustc_cmd =
+                        "rustc " + output_file + " -o " + output_bin + " --edition=2021 2>&1";
 
                     if (opts.verbose) {
                         std::cout << "rustcでコンパイル中: " << rustc_cmd << "\n";
@@ -592,9 +590,10 @@ int main(int argc, char* argv[]) {
                 std::string ts_code = ts_gen_v2.generate(mir);
 
                 // 出力ファイル名を決定
-                std::string output_file = opts.output_file.empty() ?
-                    opts.input_file.substr(0, opts.input_file.rfind('.')) + ".ts" :
-                    opts.output_file;
+                std::string output_file =
+                    opts.output_file.empty()
+                        ? opts.input_file.substr(0, opts.input_file.rfind('.')) + ".ts"
+                        : opts.output_file;
 
                 // ファイルに書き出し
                 std::ofstream out_file(output_file);
@@ -625,83 +624,13 @@ int main(int argc, char* argv[]) {
                     std::cout << "=== C++ Code Generation ===\n";
                 }
 
-                // C++コード生成
-                codegen::CppCodeGenerator::Options cpp_opts;
-                cpp_opts.output_dir = opts.output_file.empty() ? ".tmp/cpp_build" : opts.output_file;
-                cpp_opts.optimize = (opts.optimization_level > 0);
-                cpp_opts.debug_info = opts.debug;
-
-                codegen::CppCodeGenerator cpp_gen(cpp_opts);
-                std::string cpp_code = cpp_gen.generate(mir);
-
-                // 出力ディレクトリを作成
-                std::string output_dir = cpp_opts.output_dir;
-                std::system(("mkdir -p " + output_dir).c_str());
-
-                // C++ファイルに書き出し
-                std::string cpp_file = output_dir + "/main.cpp";
-                std::ofstream out_file(cpp_file);
-                if (!out_file) {
-                    std::cerr << "エラー: 出力ファイルを作成できません: " << cpp_file << "\n";
-                    return 1;
-                }
-                out_file << cpp_code;
-                out_file.close();
-
-                if (opts.verbose) {
-                    std::cout << "✓ C++コード生成完了: " << cpp_file << "\n";
-                }
-
-                // g++でコンパイル
-                if (opts.run_after_emit || opts.command == Command::Compile) {
-                    std::string output_bin = output_dir + "/main";
-                    std::string compile_cmd = "g++ -std=c++17 ";
-
-                    // 最適化レベルを設定
-                    if (opts.optimization_level > 0) {
-                        compile_cmd += "-O" + std::to_string(opts.optimization_level) + " ";
-                    }
-
-                    compile_cmd += cpp_file + " -o " + output_bin + " 2>&1";
-
-                    if (opts.verbose) {
-                        std::cout << "g++でコンパイル中: " << compile_cmd << "\n";
-                    }
-
-                    int compile_result = std::system(compile_cmd.c_str());
-                    if (compile_result == 0) {
-                        if (opts.verbose) {
-                            std::cout << "✓ 実行ファイル生成完了: " << output_bin << "\n";
-                        }
-
-                        // 実行
-                        if (opts.run_after_emit) {
-                            if (opts.verbose) {
-                                std::cout << "実行中: " << output_bin << "\n";
-                            }
-                            int exec_result = std::system(output_bin.c_str());
-                            return WEXITSTATUS(exec_result);
-                        }
-                    } else {
-                        std::cerr << "g++でのコンパイルに失敗しました\n";
-                        return 1;
-                    }
-                } else if (opts.verbose) {
-                    std::cout << "コンパイル方法: g++ -std=c++17 " << cpp_file << " -o "
-                              << output_dir << "/main\n";
-                    std::cout << "実行方法: " << output_dir << "/main\n";
-                }
-            } else if (opts.emit_cpp_v2) {
-                if (opts.verbose) {
-                    std::cout << "=== C++ Code Generation V2 (Native Control Flow) ===\n";
-                }
-
                 // HIR → CPP-MIR → C++ 変換（新アーキテクチャ）
-                codegen::CppCodeGeneratorV2 cpp_gen_v2;
-                std::string cpp_code = cpp_gen_v2.generate(hir, opts.verbose);
+                codegen::CppCodeGeneratorV2 cpp_gen;
+                std::string cpp_code = cpp_gen.generate(hir, opts.verbose);
 
                 // 出力ディレクトリを決定
-                std::string output_dir = opts.output_file.empty() ? ".tmp/cpp_v2_build" : opts.output_file;
+                std::string output_dir =
+                    opts.output_file.empty() ? ".tmp/cpp_build" : opts.output_file;
                 std::system(("mkdir -p " + output_dir).c_str());
 
                 // C++ファイルに書き出し
@@ -757,6 +686,7 @@ int main(int argc, char* argv[]) {
                               << output_dir << "/main\n";
                     std::cout << "実行方法: " << output_dir << "/main\n";
                 }
+
             } else if (opts.emit_llvm) {
                 if (opts.verbose) {
                     std::cout << "=== LLVM IR Generation ===\n";
