@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../common/debug.hpp"
-#include "../hir/hir_types.hpp"
-#include "../mir/mir_nodes.hpp"
+#include "../../common/debug.hpp"
+#include "../../hir/hir_types.hpp"
+#include "../../mir/mir_nodes.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -184,7 +184,7 @@ class TypeScriptCodegen {
         indent_level++;
         emit_line("case 'x': formatted = value.toString(16).toLowerCase(); break;");
         emit_line("case 'X': formatted = value.toString(16).toUpperCase(); break;");
-        emit_line("case 'b': formatted = '0b' + value.toString(2); break;");
+        emit_line("case 'b': formatted = value.toString(2); break;");
         emit_line("case 'o': formatted = value.toString(8); break;");
         emit_line("case 'e':");
         indent_level++;

@@ -1,0 +1,28 @@
+// bool型のテスト
+import std::io::println;
+
+int main() {
+    // bool (true/false)
+    bool t = true;
+    bool f = false;
+
+    println("true: {}", t);
+    println("false: {}", f);
+
+    // 論理演算
+    bool and_result = t && f;
+    bool or_result = t || f;
+    bool not_result = !t;
+
+    println("true && false = {}", and_result);
+    println("true || false = {}", or_result);
+    println("!true = {}", not_result);
+
+    // 比較から得られるbool
+    int a = 5;
+    int b = 10;
+    bool less = a < b;
+    println("{} < {} = {}", a, b, less);
+
+    return 0;
+}

@@ -27,7 +27,7 @@ int main() {
     println(hex_upper);  // "Value in HEX: FF"
 
     string binary = "Binary: {value:b}";
-    println(binary);  // "Binary: 11111111"
+    println(binary);  // "Binary: 0b11111111"
 
     // 浮動小数点のフォーマット
     double pi = 3.14159265359;

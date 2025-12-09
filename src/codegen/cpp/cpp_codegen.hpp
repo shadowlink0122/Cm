@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../common/debug.hpp"
-#include "../hir/hir_nodes.hpp"
-#include "../mir/mir_nodes.hpp"
+#include "../../common/debug.hpp"
+#include "../../hir/hir_nodes.hpp"
+#include "../../mir/mir_nodes.hpp"
 
 #include <bitset>
 #include <fstream>
@@ -553,9 +553,10 @@ class CppCodeGenerator {
         emit_line("} else if (spec == \":b\") {");
         indent_level++;
         emit_line(
-            "if constexpr (std::is_integral_v<decltype(rest)>) { oss << \"0b\" << "
-            "std::bitset<32>(rest).to_string().substr(std::bitset<32>(rest).to_string().find('1'));"
-            " }");
+            "if constexpr (std::is_integral_v<decltype(rest)>) { "
+            "auto s = std::bitset<32>(rest).to_string(); "
+            "auto pos = s.find('1'); "
+            "oss << (pos != std::string::npos ? s.substr(pos) : \"0\"); }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec == \":o\") {");
@@ -1181,8 +1182,7 @@ class CppCodeGenerator {
                                                           " << std::nouppercase << std::dec << \"";
                                             } else if (fmt == "b") {
                                                 result +=
-                                                    "\" << \"0b\" << [&]{ std::bitset<32> bs(" +
-                                                    arg +
+                                                    "\" << [&]{ std::bitset<32> bs(" + arg +
                                                     "); std::string s = bs.to_string(); s.erase(0, "
                                                     "s.find_first_not_of('0')); return s.empty() ? "
                                                     "\"0\" : s; }() << \"";
@@ -1259,8 +1259,7 @@ class CppCodeGenerator {
                                                           " << std::nouppercase << std::dec << \"";
                                             } else if (fmt == "b") {
                                                 result +=
-                                                    "\" << \"0b\" << [&]{ std::bitset<32> bs(" +
-                                                    arg +
+                                                    "\" << [&]{ std::bitset<32> bs(" + arg +
                                                     "); std::string s = bs.to_string(); s.erase(0, "
                                                     "s.find_first_not_of('0')); return s.empty() ? "
                                                     "\"0\" : s; }() << \"";

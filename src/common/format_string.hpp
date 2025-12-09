@@ -303,6 +303,9 @@ class FormatStringFormatter {
         } else if (value.type() == typeid(bool)) {
             bool v = std::any_cast<bool>(value);
             ss << (v ? "true" : "false");
+        } else if (value.type() == typeid(char)) {
+            char v = std::any_cast<char>(value);
+            ss << v;  // 文字として出力
         } else if (value.type() == typeid(std::string)) {
             ss << std::any_cast<std::string>(value);
         } else {
@@ -318,7 +321,7 @@ class FormatStringFormatter {
 
         switch (placeholder.spec) {
             case FormatSpec::Binary: {
-                ss << "0b";
+                // 2進数（プレフィックスなし）
                 for (int i = sizeof(T) * 8 - 1; i >= 0; --i) {
                     if ((value >> i) & 1 || i == 0) {
                         for (; i >= 0; --i) {

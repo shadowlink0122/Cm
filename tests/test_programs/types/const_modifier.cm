@@ -1,0 +1,18 @@
+// const修飾子のテスト
+import std::io::println;
+
+int main() {
+    // const変数
+    const int MAX = 100;
+    println("const MAX = {}", MAX);
+
+    // const double
+    const double PI = 3.14159;
+    println("const PI = {}", PI);
+
+    // const string
+    const string GREETING = "Hello";
+    println("const GREETING = {}", GREETING);
+
+    return 0;
+}

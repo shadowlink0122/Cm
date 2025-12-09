@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../hir/hir_nodes.hpp"
-#include "../hir/hir_types.hpp"
+#include "../../hir/hir_nodes.hpp"
+#include "../../hir/hir_types.hpp"
 #include "cpp_mir.hpp"
 
 #include <regex>
@@ -18,6 +18,7 @@ class HirToCppMirConverter {
 
         // 標準ヘッダーの追加
         program.includes.push_back("cstdio");
+        program.includes.push_back("cstdint");  // int8_t, uint32_t等のため
 
         // 各関数を変換
         for (const auto& decl : hir_program.declarations) {
@@ -50,16 +51,13 @@ class HirToCppMirConverter {
     // 変数の型情報を保持
     std::unordered_map<std::string, Type> variable_types;
 
-    // switch文の一意ID（マッチフラグ変数名生成用）
-    int switch_counter = 0;
-
     Function convertFunction(const hir::HirFunction& hir_func) {
         Function func;
         func.name = (hir_func.name == "main") ? "main" : hir_func.name;
 
         // C++ではmainはint型を返す必要がある
         if (hir_func.name == "main") {
-            func.return_type = Type::INT;
+            func.return_type = Type::INT32;
         } else {
             func.return_type = convertType(hir_func.return_type);
         }
@@ -280,14 +278,13 @@ class HirToCppMirConverter {
                     }
 
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirSwitch>>) {
-                    // switch文 - if-else if-else連鎖に変換
+                    // switch文 - if-else if-else連鎖に変換（最適化版）
                     auto& sw = *s;
                     auto switch_expr = convertExpression(*sw.expr);
 
-                    // matchedフラグを使用して排他的実行を保証
-                    std::string match_flag = "_switch_matched_" + std::to_string(switch_counter++);
-                    body.push_back(Statement::Declare(Type::BOOL, match_flag,
-                                                      Expression::Literal("false", Type::BOOL)));
+                    // else if チェーン用の構造を構築
+                    std::vector<std::pair<Expression, std::vector<StatementPtr>>> if_chain;
+                    std::vector<StatementPtr> else_body;
 
                     for (size_t i = 0; i < sw.cases.size(); ++i) {
                         const auto& case_stmt = sw.cases[i];
@@ -300,10 +297,6 @@ class HirToCppMirConverter {
                                 case_body.push_back(std::make_shared<Statement>(std::move(st)));
                             }
                         }
-
-                        // マッチしたらフラグを設定
-                        case_body.push_back(std::make_shared<Statement>(Statement::Assign(
-                            match_flag, Expression::Literal("true", Type::BOOL))));
 
                         // パターンから条件式を生成
                         std::string cond_str;
@@ -321,15 +314,45 @@ class HirToCppMirConverter {
                         }
 
                         if (has_condition) {
-                            // if (!_matched && condition) { body; _matched = true; }
-                            std::string full_cond = "(!" + match_flag + " && " + cond_str + ")";
-                            auto cond = Expression::BinaryOp(full_cond, Type::BOOL);
-                            body.push_back(Statement::If(cond, std::move(case_body)));
+                            // 条件付きケース
+                            auto cond = Expression::BinaryOp(cond_str, Type::BOOL);
+                            if_chain.push_back({cond, std::move(case_body)});
                         } else {
-                            // else/defaultケース: if (!_matched) { body; }
-                            std::string default_cond = "(!" + match_flag + ")";
-                            auto cond = Expression::BinaryOp(default_cond, Type::BOOL);
-                            body.push_back(Statement::If(cond, std::move(case_body)));
+                            // else/defaultケース
+                            else_body = std::move(case_body);
+                        }
+                    }
+
+                    // if-else if-else チェーンを生成
+                    if (!if_chain.empty()) {
+                        // 最初のif
+                        auto& first = if_chain[0];
+                        if (if_chain.size() == 1 && else_body.empty()) {
+                            // 単純なif
+                            body.push_back(Statement::If(first.first, std::move(first.second)));
+                        } else {
+                            // if-else if-else構造を構築
+                            // 最後のelse部分から逆順に構築
+                            std::vector<StatementPtr> current_else = std::move(else_body);
+
+                            // 後ろから処理（else if チェーンを構築）
+                            for (int j = if_chain.size() - 1; j >= 1; --j) {
+                                auto& chain_item = if_chain[j];
+                                std::vector<StatementPtr> if_else_body;
+                                if_else_body.push_back(std::make_shared<Statement>(
+                                    Statement::If(chain_item.first, std::move(chain_item.second),
+                                                  std::move(current_else))));
+                                current_else = std::move(if_else_body);
+                            }
+
+                            // 最初のifを追加
+                            body.push_back(Statement::If(first.first, std::move(first.second),
+                                                         std::move(current_else)));
+                        }
+                    } else if (!else_body.empty()) {
+                        // elseのみ（全てdefault）
+                        for (auto& stmt : else_body) {
+                            body.push_back(std::move(*stmt));
                         }
                     }
                 }
@@ -359,18 +382,24 @@ class HirToCppMirConverter {
                         }
                         return Expression::Literal("\"" + processed + "\"", Type::STRING);
                     } else if (auto* int_val = std::get_if<int64_t>(&lit.value)) {
-                        return Expression::Literal(std::to_string(*int_val), Type::INT);
+                        return Expression::Literal(std::to_string(*int_val), Type::INT32);
                     } else if (auto* bool_val = std::get_if<bool>(&lit.value)) {
                         return Expression::Literal(*bool_val ? "true" : "false", Type::BOOL);
                     } else if (auto* double_val = std::get_if<double>(&lit.value)) {
                         return Expression::Literal(std::to_string(*double_val), Type::DOUBLE);
+                    } else if (auto* char_val = std::get_if<char>(&lit.value)) {
+                        // C++のchar型はシングルクォートで表現
+                        std::string char_str = "'";
+                        char_str += *char_val;
+                        char_str += "'";
+                        return Expression::Literal(char_str, Type::CHAR);
                     }
-                    return Expression::Literal("0", Type::INT);
+                    return Expression::Literal("0", Type::INT32);
 
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirVarRef>>) {
                     auto& var = *e;
                     auto it = variable_types.find(var.name);
-                    Type type = (it != variable_types.end()) ? it->second : Type::INT;
+                    Type type = (it != variable_types.end()) ? it->second : Type::INT32;
                     return Expression::Variable(var.name, type);
 
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirCall>>) {
@@ -511,7 +540,7 @@ class HirToCppMirConverter {
                     std::string result_str = exprToString(obj) + "[" + exprToString(index) + "]";
                     Expression result;
                     result.kind = Expression::VARIABLE;
-                    result.type = Type::INT;  // TODO: 正確な型を推論
+                    result.type = Type::INT32;  // TODO: 正確な型を推論
                     result.value = result_str;
                     return result;
 
@@ -522,7 +551,7 @@ class HirToCppMirConverter {
                     std::string result_str = exprToString(obj) + "." + mem.member;
                     Expression result;
                     result.kind = Expression::VARIABLE;
-                    result.type = Type::INT;  // TODO: 正確な型を推論
+                    result.type = Type::INT32;  // TODO: 正確な型を推論
                     result.value = result_str;
                     return result;
 
@@ -538,7 +567,7 @@ class HirToCppMirConverter {
                     return Expression::BinaryOp(result_str, then_expr.type);
                 }
 
-                return Expression::Literal("0", Type::INT);
+                return Expression::Literal("0", Type::INT32);
             },
             expr.kind);
     }
@@ -553,14 +582,32 @@ class HirToCppMirConverter {
                 return Type::VOID;
             case ast::TypeKind::Bool:
                 return Type::BOOL;
+            case ast::TypeKind::Char:
+                return Type::CHAR;
+            case ast::TypeKind::Tiny:
+                return Type::INT8;
+            case ast::TypeKind::Short:
+                return Type::INT16;
             case ast::TypeKind::Int:
-                return Type::INT;
+                return Type::INT32;
+            case ast::TypeKind::Long:
+                return Type::INT64;
+            case ast::TypeKind::UTiny:
+                return Type::UINT8;
+            case ast::TypeKind::UShort:
+                return Type::UINT16;
+            case ast::TypeKind::UInt:
+                return Type::UINT32;
+            case ast::TypeKind::ULong:
+                return Type::UINT64;
+            case ast::TypeKind::Float:
+                return Type::FLOAT;
             case ast::TypeKind::Double:
                 return Type::DOUBLE;
             case ast::TypeKind::String:
                 return Type::STRING;
             default:
-                return Type::INT;
+                return Type::INT32;
         }
     }
 
@@ -577,7 +624,16 @@ class HirToCppMirConverter {
                 }
                 // 既にstd::stringの変数や式の場合はそのまま
                 return base;
-            case Type::INT:
+            case Type::INT8:
+            case Type::INT16:
+            case Type::INT32:
+            case Type::INT64:
+            case Type::UINT8:
+            case Type::UINT16:
+            case Type::UINT32:
+            case Type::UINT64:
+                return "std::to_string(" + base + ")";
+            case Type::FLOAT:
                 return "std::to_string(" + base + ")";
             case Type::DOUBLE:
                 return "std::to_string(" + base + ")";
@@ -744,15 +800,15 @@ class HirToCppMirConverter {
                             // バイナリ形式の特別処理
                             if (format_spec == "b") {
                                 format_str += "%s";
-                                // バイナリ変換のためのラムダ式を使用
+                                // バイナリ変換のためのラムダ式を使用（プレフィックスなし）
                                 Expression binary_expr;
                                 binary_expr.kind = Expression::BINARY_OP;
                                 binary_expr.type = Type::STRING;
                                 binary_expr.value =
                                     "[&]{ std::string r; int _v = " + exprToString(arg) +
                                     "; if(_v==0)return std::string(\"0\"); "
-                                    "while(_v>0){r=(char)('0'+(_v&1))+r;_v>>=1;} return "
-                                    "std::string(\"0b\")+r; }().c_str()";
+                                    "while(_v>0){r=(char)('0'+(_v&1))+r;_v>>=1;} return r; "
+                                    "}().c_str()";
                                 args.push_back(binary_expr);
                                 if (current_function)
                                     current_function->uses_string = true;
@@ -796,7 +852,7 @@ class HirToCppMirConverter {
                         format_str += convertFormatSpec(format_spec);
 
                         auto it = variable_types.find(actual_var);
-                        Type type = (it != variable_types.end()) ? it->second : Type::INT;
+                        Type type = (it != variable_types.end()) ? it->second : Type::INT32;
                         args.push_back(Expression::Variable(actual_var, type));
                     } else {
                         // {変数名}形式 - 変数参照
@@ -926,14 +982,28 @@ class HirToCppMirConverter {
 
     std::string getFormatSpecifier(Type type) {
         switch (type) {
-            case Type::INT:
+            case Type::INT8:
+            case Type::INT16:
+            case Type::INT32:
                 return "%d";
+            case Type::INT64:
+                return "%lld";
+            case Type::UINT8:
+            case Type::UINT16:
+            case Type::UINT32:
+                return "%u";
+            case Type::UINT64:
+                return "%llu";
+            case Type::FLOAT:
+                return "%g";  // floatも%gで十分な精度
             case Type::DOUBLE:
                 return "%g";  // %gは不要な末尾ゼロを省略
             case Type::STRING:
                 return "%s";
             case Type::BOOL:
                 return "%s";  // true/false として出力
+            case Type::CHAR:
+                return "%c";
             case Type::CHAR_PTR:
                 return "%s";
             default:
@@ -1156,7 +1226,7 @@ class HirToCppMirConverter {
         switch (type) {
             case Type::STRING:
                 return var_name;
-            case Type::INT:
+            case Type::INT32:
                 return "std::to_string(" + var_name + ")";
             case Type::DOUBLE:
                 return "std::to_string(" + var_name + ")";

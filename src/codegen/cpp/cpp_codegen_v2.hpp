@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../common/debug.hpp"
-#include "../hir/hir_nodes.hpp"
+#include "../../common/debug.hpp"
+#include "../../hir/hir_nodes.hpp"
 #include "cpp_mir_codegen.hpp"
 #include "cpp_mir_converter.hpp"
 

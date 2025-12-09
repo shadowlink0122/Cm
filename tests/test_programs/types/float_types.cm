@@ -1,0 +1,23 @@
+// 浮動小数点型のテスト：float, double
+import std::io::println;
+
+int main() {
+    // float (32bit)
+    float f = 3.14;
+    println("float: {}", f);
+
+    // double (64bit)
+    double d = 3.141592653589793;
+    println("double: {}", d);
+
+    // 演算テスト（同一型）
+    double d2 = 3.14;
+    double sum = d2 + d;
+    println("double + double = {}", sum);
+
+    // 精度テスト
+    double pi = 3.14159;
+    println("pi (5 decimals): {:.5}", pi);
+
+    return 0;
+}

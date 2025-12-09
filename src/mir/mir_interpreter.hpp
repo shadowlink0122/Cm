@@ -31,6 +31,9 @@ class MirInterpreter {
 
     // MIRプログラムを実行
     ExecutionResult execute(const MirProgram& program, const std::string& entry_point = "main") {
+        // プログラムへの参照を保存
+        current_program_ = &program;
+
         // main関数を探す
         const MirFunction* main_func = nullptr;
         for (const auto& func : program.functions) {
@@ -53,6 +56,21 @@ class MirInterpreter {
     }
 
    private:
+    // 現在実行中のプログラム
+    const MirProgram* current_program_ = nullptr;
+
+    // 関数を名前で検索
+    const MirFunction* find_function(const std::string& name) const {
+        if (!current_program_)
+            return nullptr;
+        for (const auto& func : current_program_->functions) {
+            if (func->name == name) {
+                return func.get();
+            }
+        }
+        return nullptr;
+    }
+
     // 実行コンテキスト
     struct ExecutionContext {
         const MirFunction* function;
@@ -117,6 +135,8 @@ class MirInterpreter {
                         std::cout << std::any_cast<float>(arg);
                     } else if (arg.type() == typeid(bool)) {
                         std::cout << (std::any_cast<bool>(arg) ? "true" : "false");
+                    } else if (arg.type() == typeid(char)) {
+                        std::cout << std::any_cast<char>(arg);
                     }
                 }
                 std::cout << std::endl;
@@ -170,24 +190,26 @@ class MirInterpreter {
                                    const std::unordered_map<LocalId, Value>&) -> Value {
                 if (!args.empty()) {
                     if (args[0].type() == typeid(int64_t)) {
-                        return Value(std::string("0b") +
-                                     std::bitset<64>(std::any_cast<int64_t>(args[0]))
-                                         .to_string()
-                                         .substr(std::bitset<64>(std::any_cast<int64_t>(args[0]))
-                                                     .to_string()
-                                                     .find('1')));
+                        auto val = std::any_cast<int64_t>(args[0]);
+                        if (val == 0)
+                            return Value(std::string("0"));
+                        std::string binary = std::bitset<64>(val).to_string();
+                        size_t firstOne = binary.find('1');
+                        if (firstOne != std::string::npos) {
+                            return Value(binary.substr(firstOne));
+                        }
                     } else if (args[0].type() == typeid(int32_t)) {
                         auto val = std::any_cast<int32_t>(args[0]);
                         if (val == 0)
-                            return Value(std::string("0b0"));
+                            return Value(std::string("0"));
                         std::string binary = std::bitset<32>(val).to_string();
                         size_t firstOne = binary.find('1');
                         if (firstOne != std::string::npos) {
-                            return Value(std::string("0b") + binary.substr(firstOne));
+                            return Value(binary.substr(firstOne));
                         }
                     }
                 }
-                return Value(std::string("0b0"));
+                return Value(std::string("0"));
             };
 
             // 8進数変換
@@ -367,6 +389,15 @@ class MirInterpreter {
                         if (data.destination) {
                             store_to_place(ctx, *data.destination, result);
                         }
+                    } else {
+                        // ユーザー定義関数を呼び出し
+                        const MirFunction* user_func = find_function(func_name);
+                        if (user_func) {
+                            Value result = execute_function(*user_func, args);
+                            if (data.destination) {
+                                store_to_place(ctx, *data.destination, result);
+                            }
+                        }
                     }
                 }
 
@@ -439,7 +470,7 @@ class MirInterpreter {
                 } else if constexpr (std::is_same_v<T, double>) {
                     return Value(val);
                 } else if constexpr (std::is_same_v<T, char>) {
-                    return Value(static_cast<int64_t>(val));
+                    return Value(val);  // charとして保持
                 } else if constexpr (std::is_same_v<T, std::string>) {
                     return Value(val);
                 }
@@ -467,7 +498,7 @@ class MirInterpreter {
                 ss << std::hex << std::uppercase << std::any_cast<int32_t>(value);
             }
         } else if (format_spec == "b") {
-            // 2進数
+            // 2進数（プレフィックスなし）
             if (value.type() == typeid(int64_t)) {
                 int64_t val = std::any_cast<int64_t>(value);
                 if (val == 0) {

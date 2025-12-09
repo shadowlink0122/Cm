@@ -48,6 +48,9 @@ class CppCodeGenerator {
         output << code << "\n";
     }
 
+    // 改行なしで出力（else if用）
+    void emitInline(const std::string& code) { output << code; }
+
     void generateHeaders(const Program& program) {
         // 標準ヘッダー
         for (const auto& header : program.includes) {
@@ -94,7 +97,7 @@ class CppCodeGenerator {
         }
 
         // main関数で明示的なreturnがない場合、return 0;を追加
-        if (func.name == "main" && func.return_type == Type::INT) {
+        if (func.name == "main" && func.return_type == Type::INT32) {
             bool has_return = false;
             for (const auto& stmt : func.body) {
                 if (stmt.kind == StatementKind::RETURN) {
@@ -211,16 +214,68 @@ class CppCodeGenerator {
         indent_level--;
 
         if (!if_else.else_body.empty()) {
-            emit("} else {");
-            indent_level++;
-            for (const auto& s : if_else.else_body) {
-                if (s)
-                    generateStatement(*s);
+            // else_bodyの最初の要素がIF_ELSEの場合は "} else if" として出力
+            if (if_else.else_body.size() == 1 && if_else.else_body[0] &&
+                if_else.else_body[0]->kind == StatementKind::IF_ELSE) {
+                // インデント出力
+                for (int i = 0; i < indent_level; ++i) {
+                    output << indent_str;
+                }
+                emitInline("} else ");
+                // generateStatementを呼ぶと"if (...)"から始まるので、そのまま続けられる
+                generateIfElseInline(*if_else.else_body[0]);
+            } else {
+                emit("} else {");
+                indent_level++;
+                for (const auto& s : if_else.else_body) {
+                    if (s)
+                        generateStatement(*s);
+                }
+                indent_level--;
+                emit("}");
             }
-            indent_level--;
+        } else {
+            emit("}");
         }
+    }
 
-        emit("}");
+    // else if チェーン用のインライン生成（} else if 形式）
+    void generateIfElseInline(const Statement& stmt) {
+        if (!stmt.if_data)
+            return;
+        const auto& if_else = *stmt.if_data;
+
+        // "if (...) {"をインラインで出力（emitを使わない）
+        output << "if (" << expressionToString(if_else.condition) << ") {\n";
+        indent_level++;
+        for (const auto& s : if_else.then_body) {
+            if (s)
+                generateStatement(*s);
+        }
+        indent_level--;
+
+        if (!if_else.else_body.empty()) {
+            // 再帰的にelse ifを処理
+            if (if_else.else_body.size() == 1 && if_else.else_body[0] &&
+                if_else.else_body[0]->kind == StatementKind::IF_ELSE) {
+                for (int i = 0; i < indent_level; ++i) {
+                    output << indent_str;
+                }
+                emitInline("} else ");
+                generateIfElseInline(*if_else.else_body[0]);
+            } else {
+                emit("} else {");
+                indent_level++;
+                for (const auto& s : if_else.else_body) {
+                    if (s)
+                        generateStatement(*s);
+                }
+                indent_level--;
+                emit("}");
+            }
+        } else {
+            emit("}");
+        }
     }
 
     void generateWhile(const Statement& stmt) {
@@ -332,8 +387,26 @@ class CppCodeGenerator {
                 return "void";
             case Type::BOOL:
                 return "bool";
-            case Type::INT:
-                return "int";
+            case Type::CHAR:
+                return "char";
+            case Type::INT8:
+                return "int8_t";
+            case Type::INT16:
+                return "int16_t";
+            case Type::INT32:
+                return "int32_t";
+            case Type::INT64:
+                return "int64_t";
+            case Type::UINT8:
+                return "uint8_t";
+            case Type::UINT16:
+                return "uint16_t";
+            case Type::UINT32:
+                return "uint32_t";
+            case Type::UINT64:
+                return "uint64_t";
+            case Type::FLOAT:
+                return "float";
             case Type::DOUBLE:
                 return "double";
             case Type::STRING:
@@ -341,7 +414,7 @@ class CppCodeGenerator {
             case Type::CHAR_PTR:
                 return "const char*";
             default:
-                return "int";
+                return "int32_t";
         }
     }
 };

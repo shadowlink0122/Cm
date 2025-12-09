@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../common/debug.hpp"
-#include "../common/debug_messages.hpp"
-#include "../frontend/ast/module.hpp"
-#include "../mir/mir_nodes.hpp"
+#include "../../common/debug.hpp"
+#include "../../common/debug_messages.hpp"
+#include "../../frontend/ast/module.hpp"
+#include "../../mir/mir_nodes.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -936,14 +936,6 @@ class RustCodegen {
 
                             // フォーマット文字列が取得できた場合、{変数名}を{}に置換
                             if (has_format_str) {
-                                // バイナリ形式の場合は0bプレフィックスを追加
-                                size_t bin_pos = 0;
-                                while ((bin_pos = format_str.find("{:b}", bin_pos)) !=
-                                       std::string::npos) {
-                                    format_str.replace(bin_pos, 4, "0b{:b}");
-                                    bin_pos += 6;  // "0b{:b}"の長さ
-                                }
-
                                 size_t pos = 0;
                                 while ((pos = format_str.find('{', pos)) != std::string::npos) {
                                     // {{の場合はスキップ

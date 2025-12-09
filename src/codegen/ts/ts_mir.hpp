@@ -6,19 +6,23 @@
 #include <vector>
 
 namespace cm {
-namespace cpp_mir {
+namespace ts_mir {
 
-// CPP-MIRの基本型
+// ============================================================
+// TS-MIRの基本型
+// ============================================================
 enum class Type {
-    VOID,
-    BOOL,
-    INT,
-    DOUBLE,
-    STRING,
-    CHAR_PTR  // const char* for string literals
+    VOID,     // void
+    BOOLEAN,  // boolean
+    NUMBER,   // number
+    STRING,   // string
+    ANY,      // any
+    UNKNOWN   // unknown
 };
 
-// CPP-MIR式
+// ============================================================
+// TS-MIR式
+// ============================================================
 struct Expression {
     enum Kind {
         LITERAL,       // リテラル値
@@ -26,24 +30,57 @@ struct Expression {
         BINARY_OP,     // 二項演算
         UNARY_OP,      // 単項演算
         CALL,          // 関数呼び出し
-        CAST,          // 型変換
-        STRING_FORMAT  // フォーマット済み文字列
+        METHOD_CALL,   // メソッド呼び出し
+        TEMPLATE_LIT,  // テンプレートリテラル
+        ARROW_FUNC,    // アロー関数
+        TERNARY        // 三項演算子
     };
 
     Kind kind = LITERAL;
-    Type type = Type::INT;
+    Type type = Type::NUMBER;
+    std::string value;  // 生成済みのTSコード
 
-    // データを文字列として保持（シンプル化）
-    std::string value;  // LITERAL, VARIABLE, BINARY_OP, UNARY_OP, CAST用
-
-    // CALL用のデータ
+    // CALL/METHOD_CALL用
     std::string func_name;
     std::vector<Expression> args;
 
+    // METHOD_CALL用
+    std::string method_name;
+    std::unique_ptr<Expression> receiver;
+
     // デフォルトコンストラクタ
     Expression() = default;
+    Expression(const Expression& other)
+        : kind(other.kind),
+          type(other.type),
+          value(other.value),
+          func_name(other.func_name),
+          args(other.args),
+          method_name(other.method_name) {
+        if (other.receiver) {
+            receiver = std::make_unique<Expression>(*other.receiver);
+        }
+    }
+    Expression& operator=(const Expression& other) {
+        if (this != &other) {
+            kind = other.kind;
+            type = other.type;
+            value = other.value;
+            func_name = other.func_name;
+            args = other.args;
+            method_name = other.method_name;
+            if (other.receiver) {
+                receiver = std::make_unique<Expression>(*other.receiver);
+            } else {
+                receiver.reset();
+            }
+        }
+        return *this;
+    }
+    Expression(Expression&&) = default;
+    Expression& operator=(Expression&&) = default;
 
-    // 便利なファクトリメソッド
+    // ファクトリメソッド
     static Expression Literal(const std::string& val, Type t) {
         Expression e;
         e.kind = LITERAL;
@@ -60,36 +97,49 @@ struct Expression {
         return e;
     }
 
-    static Expression Call(const std::string& func, const std::vector<Expression>& call_args) {
+    static Expression BinaryOp(const std::string& expr_str, Type t) {
+        Expression e;
+        e.kind = BINARY_OP;
+        e.type = t;
+        e.value = expr_str;
+        return e;
+    }
+
+    static Expression Call(const std::string& func, const std::vector<Expression>& call_args,
+                           Type ret_type = Type::VOID) {
         Expression e;
         e.kind = CALL;
-        e.type = Type::VOID;
+        e.type = ret_type;
         e.func_name = func;
         e.args = call_args;
         return e;
     }
 
-    static Expression BinaryOp(const std::string& op_str, Type t) {
+    static Expression TemplateLiteral(const std::string& template_str) {
         Expression e;
-        e.kind = BINARY_OP;
-        e.type = t;
-        e.value = op_str;
+        e.kind = TEMPLATE_LIT;
+        e.type = Type::STRING;
+        e.value = template_str;
         return e;
     }
 };
 
-// CPP-MIR文の種類
+// ============================================================
+// TS-MIR文の種類
+// ============================================================
 enum class StatementKind {
-    DECLARATION,  // 変数宣言
+    CONST,        // const宣言
+    LET,          // let宣言
     ASSIGNMENT,   // 代入
-    PRINTF,       // printf呼び出し（最適化済み）
     EXPRESSION,   // 式文
+    CONSOLE_LOG,  // console.log（最適化済み）
     IF_ELSE,      // if-else文
     WHILE,        // whileループ
     FOR,          // forループ
-    RETURN,       // return文
-    BREAK,        // break文
-    CONTINUE      // continue文
+    FOR_OF,       // for...of
+    RETURN,       // return
+    BREAK,        // break
+    CONTINUE      // continue
 };
 
 // 前方宣言
@@ -97,9 +147,10 @@ struct Statement;
 using StatementPtr = std::shared_ptr<Statement>;
 
 // 変数宣言
-struct Declaration {
-    Type type = Type::INT;
+struct VarDecl {
+    Type type = Type::NUMBER;
     std::string name;
+    bool is_const = true;
     std::optional<Expression> init;
 };
 
@@ -109,9 +160,8 @@ struct Assignment {
     Expression value;
 };
 
-// Printf
-struct Printf {
-    std::string format;
+// Console.log
+struct ConsoleLog {
     std::vector<Expression> args;
 };
 
@@ -133,7 +183,7 @@ struct While {
     std::vector<StatementPtr> body;
 };
 
-// For
+// For (C-style)
 struct For {
     StatementPtr init;  // nullptr可
     std::optional<Expression> condition;
@@ -141,29 +191,47 @@ struct For {
     std::vector<StatementPtr> body;
 };
 
-// CPP-MIR文
+// For...of
+struct ForOf {
+    std::string var_name;
+    Expression iterable;
+    std::vector<StatementPtr> body;
+};
+
+// ============================================================
+// TS-MIR文
+// ============================================================
 struct Statement {
     StatementKind kind = StatementKind::EXPRESSION;
 
-    // 各種データ（union風に使用）
-    Declaration decl_data;
+    // 各種データ
+    VarDecl var_data;
     Assignment assign_data;
-    Printf printf_data;
     Expression expr_data;
+    ConsoleLog console_data;
     std::shared_ptr<IfElse> if_data;
     std::shared_ptr<While> while_data;
     std::shared_ptr<For> for_data;
+    std::shared_ptr<ForOf> for_of_data;
     Return return_data;
 
     // デフォルトコンストラクタ
     Statement() = default;
 
     // ファクトリメソッド
-    static Statement Declare(Type type, const std::string& name,
-                             std::optional<Expression> init = std::nullopt) {
+    static Statement Const(Type type, const std::string& name,
+                           std::optional<Expression> init = std::nullopt) {
         Statement stmt;
-        stmt.kind = StatementKind::DECLARATION;
-        stmt.decl_data = Declaration{type, name, init};
+        stmt.kind = StatementKind::CONST;
+        stmt.var_data = VarDecl{type, name, true, init};
+        return stmt;
+    }
+
+    static Statement Let(Type type, const std::string& name, bool is_const = false,
+                         std::optional<Expression> init = std::nullopt) {
+        Statement stmt;
+        stmt.kind = is_const ? StatementKind::CONST : StatementKind::LET;
+        stmt.var_data = VarDecl{type, name, is_const, init};
         return stmt;
     }
 
@@ -174,10 +242,10 @@ struct Statement {
         return stmt;
     }
 
-    static Statement PrintF(const std::string& format, const std::vector<Expression>& args) {
+    static Statement Log(const std::vector<Expression>& args) {
         Statement stmt;
-        stmt.kind = StatementKind::PRINTF;
-        stmt.printf_data = Printf{format, args};
+        stmt.kind = StatementKind::CONSOLE_LOG;
+        stmt.console_data = ConsoleLog{args};
         return stmt;
     }
 
@@ -220,6 +288,17 @@ struct Statement {
         return stmt;
     }
 
+    static Statement ForOfLoop(const std::string& var, const Expression& iterable,
+                               std::vector<StatementPtr> body) {
+        Statement stmt;
+        stmt.kind = StatementKind::FOR_OF;
+        stmt.for_of_data = std::make_shared<ForOf>();
+        stmt.for_of_data->var_name = var;
+        stmt.for_of_data->iterable = iterable;
+        stmt.for_of_data->body = std::move(body);
+        return stmt;
+    }
+
     static Statement ReturnVoid() {
         Statement stmt;
         stmt.kind = StatementKind::RETURN;
@@ -247,91 +326,28 @@ struct Statement {
     }
 };
 
-// CPP-MIR関数
+// ============================================================
+// TS-MIR関数
+// ============================================================
 struct Function {
     std::string name;
     Type return_type = Type::VOID;
     std::vector<std::pair<Type, std::string>> parameters;
     std::vector<Statement> body;
 
-    // メタデータ（最適化ヒント）
-    bool is_linear = true;     // 線形フローか
-    bool uses_printf = false;  // printfを使用するか
-    bool uses_string = false;  // std::stringを使用するか
-    bool uses_format = false;  // フォーマット文字列を使用するか
+    // メタデータ
+    bool is_main = false;
+    bool is_async = false;
+    bool is_exported = false;
 };
 
-// CPP-MIRプログラム
+// ============================================================
+// TS-MIRプログラム
+// ============================================================
 struct Program {
-    std::vector<std::string> includes;  // 必要なヘッダファイル
     std::vector<Function> functions;
-
-    // ヘルパー関数が必要か
-    bool needs_format_helpers = false;
-    bool needs_string_helpers = false;
+    std::vector<std::string> imports;
 };
 
-// 文字列補間の解析結果
-struct FormatSpec {
-    enum SpecType {
-        STRING,      // %s
-        INTEGER,     // %d
-        HEX,         // %x
-        OCTAL,       // %o
-        BINARY,      // カスタム（ヘルパー関数使用）
-        FLOAT,       // %f
-        SCIENTIFIC,  // %e
-        BOOL         // カスタム（"true"/"false"）
-    };
-
-    SpecType spec_type = INTEGER;
-    std::string flags;  // "-", "+", " ", "#", "0"
-    std::optional<int> width;
-    std::optional<int> precision;
-
-    std::string toPrintfSpec() const {
-        std::string spec = "%";
-        spec += flags;
-        if (width)
-            spec += std::to_string(*width);
-        if (precision)
-            spec += "." + std::to_string(*precision);
-
-        switch (spec_type) {
-            case STRING:
-                return spec + "s";
-            case INTEGER:
-                return spec + "d";
-            case HEX:
-                return spec + "x";
-            case OCTAL:
-                return spec + "o";
-            case FLOAT:
-                return spec + "f";
-            case SCIENTIFIC:
-                return spec + "e";
-            case BINARY:
-                return "%s";  // ヘルパー関数で処理
-            case BOOL:
-                return "%s";  // "true"/"false"
-        }
-        return spec + "d";
-    }
-};
-
-// 文字列補間パーサー
-class StringInterpolationParser {
-   public:
-    struct InterpolationPart {
-        bool is_literal = true;
-        std::string content;
-        std::optional<FormatSpec> format;
-    };
-
-    static std::vector<InterpolationPart> parse(const std::string& str);
-    static std::pair<std::string, std::vector<Expression>> buildPrintfCall(
-        const std::string& interpolated, const std::vector<Expression>& args);
-};
-
-}  // namespace cpp_mir
+}  // namespace ts_mir
 }  // namespace cm

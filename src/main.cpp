@@ -1,11 +1,18 @@
-#include "codegen/cpp_codegen.hpp"
-#include "codegen/cpp_codegen_v2.hpp"  // 新しいCPP-MIRパイプライン
-#include "codegen/rust_codegen.hpp"
-#include "codegen/rust_codegen_v2.hpp"
-#include "codegen/typescript_codegen.hpp"
-#include "codegen/typescript_codegen_v2.hpp"
-// #include "mir_cpp/hir_to_mir_cpp.hpp"  // TODO: 開発中
-// #include "mir_cpp/mir_cpp_nodes.hpp"   // TODO: 開発中
+// C++ codegen
+#include "codegen/cpp/cpp_codegen.hpp"
+#include "codegen/cpp/cpp_codegen_v2.hpp"
+
+// Rust codegen
+#include "codegen/rust/rust_codegen.hpp"
+#include "codegen/rust/rust_mir.hpp"
+#include "codegen/rust/rust_mir_codegen.hpp"
+#include "codegen/rust/rust_mir_converter.hpp"
+
+// TypeScript codegen
+#include "codegen/ts/ts_mir.hpp"
+#include "codegen/ts/ts_mir_codegen.hpp"
+#include "codegen/ts/ts_mir_converter.hpp"
+#include "codegen/ts/typescript_codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
@@ -50,10 +57,8 @@ struct Options {
     bool show_mir = false;
     bool show_mir_opt = false;
     bool emit_rust = false;
-    bool emit_rust_v2 = false;  // 新しいRustコード生成（ステートマシン方式）
-    bool emit_ts = false;       // TypeScript出力
-    bool emit_ts_v2 = false;  // 新しいTypeScriptコード生成（ステートマシン方式）
-    bool emit_cpp = false;    // C++出力
+    bool emit_ts = false;   // TypeScript出力
+    bool emit_cpp = false;  // C++出力
     bool emit_llvm = false;
     bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 0;
@@ -151,12 +156,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.show_mir_opt = true;
         } else if (arg == "--emit-rust") {
             opts.emit_rust = true;
-        } else if (arg == "--emit-rust-v2") {
-            opts.emit_rust_v2 = true;
         } else if (arg == "--emit-ts") {
             opts.emit_ts = true;
-        } else if (arg == "--emit-ts-v2") {
-            opts.emit_ts_v2 = true;
         } else if (arg == "--emit-cpp") {
             opts.emit_cpp = true;
         } else if (arg == "--emit-llvm") {
@@ -446,14 +447,22 @@ int main(int argc, char* argv[]) {
         if (opts.command == Command::Compile) {
             if (opts.emit_rust) {
                 if (opts.verbose) {
-                    std::cout << "=== Rust Code Generation ===\n";
+                    std::cout << "=== Rust Code Generation (MIR Pipeline) ===\n";
                 }
 
-                // Rustコード生成
+                // HIR → Rust-MIR → Rustコード生成
                 std::string output_dir =
                     opts.output_file.empty() ? ".tmp/rust_build" : opts.output_file;
-                codegen::RustCodegen rust_codegen;
-                rust_codegen.generate(mir, output_dir);
+
+                // HIRをRust-MIRに変換
+                rust_mir::HirToRustMirConverter converter;
+                auto rust_mir_program = converter.convert(hir);
+
+                // Rust-MIRをRustコードに生成
+                rust_mir::RustMirCodegen::Options rust_opts;
+                rust_opts.output_dir = output_dir;
+                rust_mir::RustMirCodegen codegen(rust_opts);
+                codegen.generate(rust_mir_program);
 
                 if (opts.verbose) {
                     std::cout << "✓ Rustコード生成完了: " << output_dir << "\n";
@@ -489,135 +498,50 @@ int main(int argc, char* argv[]) {
                 }
             } else if (opts.emit_ts) {
                 if (opts.verbose) {
-                    std::cout << "=== TypeScript Code Generation ===\n";
+                    std::cout << "=== TypeScript Code Generation (MIR Pipeline) ===\n";
                 }
 
-                // TypeScriptコード生成
-                codegen::TypeScriptCodegen ts_codegen;
+                // HIR → TS-MIR → TypeScriptコード生成
                 std::string output_dir =
                     opts.output_file.empty() ? ".tmp/ts_build" : opts.output_file;
-                ts_codegen.generate(mir, output_dir);
+
+                // HIRをTS-MIRに変換
+                ts_mir::HirToTsMirConverter ts_converter;
+                auto ts_mir_program = ts_converter.convert(hir);
+
+                // TS-MIRをTypeScriptコードに生成
+                ts_mir::TsMirCodegen::Options ts_opts;
+                ts_opts.output_dir = output_dir;
+                ts_mir::TsMirCodegen ts_codegen(ts_opts);
+                ts_codegen.generate(ts_mir_program);
 
                 if (opts.verbose) {
                     std::cout << "✓ TypeScriptコード生成完了: " << output_dir << "\n";
                 }
 
-                // --runオプションがある場合はビルドして実行
+                // --runオプションがある場合はtscでコンパイルして実行
                 if (opts.run_after_emit) {
-                    // pnpmでビルド (--silentを削除してエラーを確認可能に)
-                    std::string build_cmd =
-                        "cd " + output_dir + " && pnpm install 2>&1 && pnpm run build 2>&1";
+                    // npx tscでコンパイル
+                    std::string compile_cmd =
+                        "cd " + output_dir + " && npx -y tsc main.ts --outDir . 2>&1";
                     if (opts.verbose) {
-                        std::cout << "TypeScriptをビルド中...\n";
+                        std::cout << "TypeScriptをコンパイル中...\n";
                     }
 
-                    int build_result = std::system(build_cmd.c_str());
-                    if (build_result == 0) {
-                        if (opts.verbose) {
-                            std::cout << "✓ ビルド完了\n";
-                            std::cout << "実行中...\n";
-                        }
-                        std::string run_cmd = "cd " + output_dir + " && node main.js";
-                        int exec_result = std::system(run_cmd.c_str());
-                        return WEXITSTATUS(exec_result);
-                    } else {
-                        std::cerr << "TypeScriptのビルドに失敗しました\n";
+                    int compile_result = std::system(compile_cmd.c_str());
+                    if (compile_result != 0) {
+                        std::cerr << "TypeScriptのコンパイルに失敗しました\n";
                         return 1;
                     }
-                } else if (opts.verbose) {
-                    std::cout << "ビルド方法: cd " << output_dir
-                              << " && pnpm install && pnpm run build\n";
-                    std::cout << "実行方法: cd " << output_dir << " && node main.js\n";
-                }
-            } else if (opts.emit_rust_v2) {
-                if (opts.verbose) {
-                    std::cout << "=== Rust Code Generation V2 (State Machine) ===\n";
-                }
 
-                // Rustコード生成（V2: ステートマシン方式）
-                codegen::RustCodeGeneratorV2 rust_gen_v2;
-                std::string rust_code = rust_gen_v2.generate(mir);
-
-                // 出力ファイル名を決定
-                std::string output_file =
-                    opts.output_file.empty()
-                        ? opts.input_file.substr(0, opts.input_file.rfind('.')) + ".rs"
-                        : opts.output_file;
-
-                // ファイルに書き出し
-                std::ofstream out_file(output_file);
-                if (!out_file) {
-                    std::cerr << "エラー: 出力ファイルを作成できません: " << output_file << "\n";
-                    return 1;
-                }
-                out_file << rust_code;
-                out_file.close();
-
-                if (opts.verbose) {
-                    std::cout << "✓ Rustコード生成完了: " << output_file << "\n";
-                }
-
-                // rustcでコンパイル
-                if (opts.run_after_emit) {
-                    std::string output_bin = output_file.substr(0, output_file.rfind('.'));
-                    std::string rustc_cmd =
-                        "rustc " + output_file + " -o " + output_bin + " --edition=2021 2>&1";
-
+                    // nodeで実行
+                    std::string run_cmd = "cd " + output_dir + " && node main.js";
                     if (opts.verbose) {
-                        std::cout << "rustcでコンパイル中: " << rustc_cmd << "\n";
+                        std::cout << "TypeScriptを実行中...\n";
                     }
 
-                    int rustc_result = std::system(rustc_cmd.c_str());
-                    if (rustc_result == 0) {
-                        if (opts.verbose) {
-                            std::cout << "✓ 実行ファイル生成完了: " << output_bin << "\n";
-                            std::cout << "実行中...\n";
-                        }
-                        int exec_result = std::system(output_bin.c_str());
-                        return WEXITSTATUS(exec_result);
-                    } else {
-                        std::cerr << "rustcでのコンパイルに失敗しました\n";
-                        return 1;
-                    }
-                }
-            } else if (opts.emit_ts_v2) {
-                if (opts.verbose) {
-                    std::cout << "=== TypeScript Code Generation V2 (State Machine) ===\n";
-                }
-
-                // TypeScriptコード生成（V2: ステートマシン方式）
-                codegen::TypeScriptCodeGeneratorV2 ts_gen_v2;
-                std::string ts_code = ts_gen_v2.generate(mir);
-
-                // 出力ファイル名を決定
-                std::string output_file =
-                    opts.output_file.empty()
-                        ? opts.input_file.substr(0, opts.input_file.rfind('.')) + ".ts"
-                        : opts.output_file;
-
-                // ファイルに書き出し
-                std::ofstream out_file(output_file);
-                if (!out_file) {
-                    std::cerr << "エラー: 出力ファイルを作成できません: " << output_file << "\n";
-                    return 1;
-                }
-                out_file << ts_code;
-                out_file.close();
-
-                if (opts.verbose) {
-                    std::cout << "✓ TypeScriptコード生成完了: " << output_file << "\n";
-                }
-
-                // nodeで実行
-                if (opts.run_after_emit) {
-                    std::string node_cmd = "node " + output_file;
-
-                    if (opts.verbose) {
-                        std::cout << "実行中: " << node_cmd << "\n";
-                    }
-
-                    int exec_result = std::system(node_cmd.c_str());
-                    return WEXITSTATUS(exec_result);
+                    int run_result = std::system(run_cmd.c_str());
+                    return WEXITSTATUS(run_result);
                 }
             } else if (opts.emit_cpp) {
                 if (opts.verbose) {

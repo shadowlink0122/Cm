@@ -90,7 +90,7 @@ fi
 
 # カテゴリー設定
 if [ -z "$CATEGORIES" ]; then
-    CATEGORIES="basic control_flow errors formatting"
+    CATEGORIES="basic control_flow errors formatting types functions"
     # マクロとモジュールは未実装なので、インタプリタ以外ではスキップ
     if [ "$BACKEND" = "interpreter" ]; then
         CATEGORIES="$CATEGORIES macros modules"
@@ -120,8 +120,14 @@ run_single_test() {
     local test_name="$(basename "${test_file%.cm}")"
     local category="$(basename "$(dirname "$test_file")")"
     local expect_file="${test_file%.cm}.expect"
+    local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local output_file="$TEMP_DIR/${category}_${test_name}.out"
     local error_file="$TEMP_DIR/${category}_${test_name}.err"
+
+    # バックエンド固有のexpectファイルがあれば優先して使用
+    if [ -f "$backend_expect_file" ]; then
+        expect_file="$backend_expect_file"
+    fi
 
     # expectファイルがない場合はスキップ
     if [ ! -f "$expect_file" ]; then

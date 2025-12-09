@@ -8,11 +8,11 @@ Hex: ff
 HEX: FF
 Binary: 11111111
 Octal: 377
-Default: 3.14159
+Default: 3.141593
 2 decimal places: 3.14
 4 decimal places: 3.1416
-Scientific: 3.141593e+00
-SCIENTIFIC: 3.141593E+00
+Scientific: 3.141593e0
+SCIENTIFIC: 3.141593E0
 Left:   |test      |
 Right:  |      test|
 Center: |   test   |
