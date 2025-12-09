@@ -53,13 +53,13 @@ TEST_F(MirLoweringTest, SimpleFunctionWithReturn) {
     )";
 
     auto mir = parse_and_lower(code);
-    ASSERT_EQ(mir->functions.size(), 1);
+    ASSERT_EQ(mir->functions.size(), 1u);
 
     const auto& func = *mir->functions[0];
     EXPECT_EQ(func.name, "main");
 
     // エントリーブロック (bb0) が存在
-    EXPECT_GE(func.basic_blocks.size(), 1);
+    EXPECT_GE(func.basic_blocks.size(), 1u);
 
     // return文があるはず
     auto* entry_block = func.basic_blocks[0].get();
@@ -84,7 +84,7 @@ TEST_F(MirLoweringTest, VariableDeclaration) {
     const auto& func = *mir->functions[0];
 
     // ローカル変数が作成されているか
-    EXPECT_GE(func.locals.size(), 3);  // _0(戻り値), x, y + 一時変数
+    EXPECT_GE(func.locals.size(), 3u);  // _0(戻り値), x, y + 一時変数
 
     // StorageLive文があるはず
     auto* entry_block = func.basic_blocks[0].get();
@@ -119,7 +119,7 @@ TEST_F(MirLoweringTest, IfStatementCFG) {
 
     // if文により複数のブロックが生成される
     // bb0: entry, bb1: then, bb2: else, bb3: merge
-    EXPECT_GE(func.basic_blocks.size(), 4);
+    EXPECT_GE(func.basic_blocks.size(), 4u);
 
     // エントリーブロックはSwitchInt終端を持つはず
     auto* entry_block = func.basic_blocks[0].get();
@@ -174,7 +174,7 @@ TEST_F(MirLoweringTest, LoopStructure) {
 
     // ループは複数のブロックを生成
     // bb0: entry, bb1: loop_header, bb2: loop_exit
-    EXPECT_GE(func.basic_blocks.size(), 3);
+    EXPECT_GE(func.basic_blocks.size(), 3u);
 
     // ループヘッダはgotoで自己参照するはず
     bool has_back_edge = false;
@@ -206,7 +206,7 @@ TEST_F(MirLoweringTest, TernaryOperator) {
     const auto& func = *mir->functions[0];
 
     // 三項演算子は分岐構造を生成
-    EXPECT_GE(func.basic_blocks.size(), 4);  // entry, then, else, merge
+    EXPECT_GE(func.basic_blocks.size(), 4u);  // entry, then, else, merge
 }
 
 // ============================================================
@@ -256,7 +256,7 @@ TEST_F(MirLoweringTest, EmptyFunction) {
     const auto& func = *mir->functions[0];
 
     // 少なくとも1つのブロック（エントリー）
-    EXPECT_GE(func.basic_blocks.size(), 1);
+    EXPECT_GE(func.basic_blocks.size(), 1u);
 
     // Return終端を持つ
     auto* entry = func.basic_blocks[0].get();
@@ -284,7 +284,7 @@ TEST_F(MirLoweringTest, LocalVariableScope) {
     const auto& func = *mir->functions[0];
 
     // ブロックスコープ内の変数も正しく処理される
-    EXPECT_GE(func.locals.size(), 3);  // _0, x, y
+    EXPECT_GE(func.locals.size(), 3u);  // _0, x, y
 }
 
 // ============================================================
@@ -302,11 +302,11 @@ TEST_F(MirLoweringTest, MultipleFunctions) {
     )";
 
     auto mir = parse_and_lower(code);
-    EXPECT_EQ(mir->functions.size(), 2);
+    EXPECT_EQ(mir->functions.size(), 2u);
 
     // 各関数が正しく変換されているか
     for (const auto& func : mir->functions) {
         EXPECT_FALSE(func->name.empty());
-        EXPECT_GE(func->basic_blocks.size(), 1);
+        EXPECT_GE(func->basic_blocks.size(), 1u);
     }
 }

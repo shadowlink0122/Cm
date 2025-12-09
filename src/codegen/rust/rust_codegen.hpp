@@ -740,7 +740,7 @@ class RustCodegen {
     }
 
     // 文の生成
-    void generate_statement(const mir::MirStatement& stmt, const mir::MirFunction& func) {
+    void generate_statement(const mir::MirStatement& stmt, const mir::MirFunction& /* func */) {
         switch (stmt.kind) {
             case mir::MirStatement::Assign: {
                 auto& data = std::get<mir::MirStatement::AssignData>(stmt.data);

@@ -4,9 +4,11 @@
 // 各ステージのメッセージを一括インクルード
 
 #include "debug/ast.hpp"
+#include "debug/codegen.hpp"
 #include "debug/hir.hpp"
 #include "debug/interp.hpp"
 #include "debug/lex.hpp"
+#include "debug/mir.hpp"
 #include "debug/par.hpp"
 #include "debug/tc.hpp"
 

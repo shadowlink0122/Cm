@@ -10,22 +10,22 @@
 namespace cm::mir::opt {
 
 // OptimizationPassの基底クラスに不足している実装を追加
-inline void OptimizationPass::collect_used_locals(const MirFunction& func,
-                                                  std::set<LocalId>& used) {
+inline void OptimizationPass::collect_used_locals(const MirFunction& /* func */,
+                                                  std::set<LocalId>& /* used */) {
     // この実装はDeadCodeEliminationから移動
     // 実装の詳細は各最適化パスで必要に応じてオーバーライド
 }
 
-inline std::optional<MirConstant> OptimizationPass::eval_binary_op(MirBinaryOp op,
-                                                                   const MirConstant& lhs,
-                                                                   const MirConstant& rhs) {
+inline std::optional<MirConstant> OptimizationPass::eval_binary_op(MirBinaryOp /* op */,
+                                                                   const MirConstant& /* lhs */,
+                                                                   const MirConstant& /* rhs */) {
     // この実装はConstantFoldingから移動
     // 基本的な実装を提供
     return std::nullopt;
 }
 
-inline std::optional<MirConstant> OptimizationPass::eval_unary_op(MirUnaryOp op,
-                                                                  const MirConstant& operand) {
+inline std::optional<MirConstant> OptimizationPass::eval_unary_op(
+    MirUnaryOp /* op */, const MirConstant& /* operand */) {
     // この実装はConstantFoldingから移動
     // 基本的な実装を提供
     return std::nullopt;

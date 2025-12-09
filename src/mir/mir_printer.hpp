@@ -180,7 +180,7 @@ class MirPrinter {
     }
 
     // Placeを出力
-    void print_place(const MirPlace& place, const MirFunction& func, std::ostream& out) {
+    void print_place(const MirPlace& place, const MirFunction& /* func */, std::ostream& out) {
         out << "_" << place.local;
 
         for (const auto& proj : place.projections) {
@@ -215,6 +215,12 @@ class MirPrinter {
             case MirOperand::Constant:
                 if (auto* constant = std::get_if<MirConstant>(&op.data)) {
                     print_constant(*constant, out);
+                }
+                break;
+            case MirOperand::FunctionRef:
+                // 関数参照を出力
+                if (auto* func_name = std::get_if<std::string>(&op.data)) {
+                    out << "fn " << *func_name;
                 }
                 break;
         }

@@ -1,11 +1,14 @@
 #pragma once
 
+#include "../common/debug/mir.hpp"
 #include "../frontend/ast/types.hpp"
 #include "../hir/hir_nodes.hpp"
 #include "mir_nodes.hpp"
 
+#include <optional>
 #include <stack>
 #include <unordered_map>
+#include <variant>
 
 namespace cm::mir {
 
@@ -15,6 +18,8 @@ namespace cm::mir {
 class MirLowering {
    public:
     MirProgram lower(const hir::HirProgram& hir_program) {
+        cm::debug::mir::log(cm::debug::mir::Id::LowerStart);
+
         MirProgram mir_program;
         mir_program.filename = hir_program.filename;
 
@@ -33,6 +38,8 @@ class MirLowering {
             }
         }
 
+        cm::debug::mir::log(cm::debug::mir::Id::LowerEnd,
+                            std::to_string(mir_program.functions.size()) + " functions");
         return mir_program;
     }
 
@@ -68,7 +75,6 @@ class MirLowering {
         return std::nullopt;
     }
 
-   private:
     // ループコンテキスト
     struct LoopContext {
         BlockId header;  // ループヘッダ（continue先）
@@ -121,6 +127,13 @@ class MirLowering {
 
     // 関数のlowering
     MirFunctionPtr lower_function(const hir::HirFunction& hir_func) {
+        cm::debug::mir::log(cm::debug::mir::Id::FunctionLower, hir_func.name,
+                            cm::debug::Level::Debug);
+        cm::debug::mir::log(cm::debug::mir::Id::FunctionAnalyze,
+                            "params=" + std::to_string(hir_func.params.size()) +
+                                ", stmts=" + std::to_string(hir_func.body.size()),
+                            cm::debug::Level::Trace);
+
         auto mir_func = std::make_unique<MirFunction>();
         mir_func->name = hir_func.name;
 
@@ -128,30 +141,49 @@ class MirLowering {
 
         // 戻り値用のローカル変数 _0 を作成
         ctx.func->return_local = ctx.func->add_local("_0", hir_func.return_type, true, false);
+        cm::debug::mir::log(
+            cm::debug::mir::Id::LocalAlloc,
+            "_0 (return value) : " +
+                (hir_func.return_type ? hir::type_to_string(*hir_func.return_type) : "void"),
+            cm::debug::Level::Trace);
 
         // パラメータをローカル変数として登録
         for (const auto& param : hir_func.params) {
             LocalId param_id = ctx.func->add_local(param.name, param.type, true, true);
             ctx.func->arg_locals.push_back(param_id);
             ctx.var_map[param.name] = param_id;
+            cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc,
+                                param.name + " (param) : " +
+                                    (param.type ? hir::type_to_string(*param.type) : "auto") +
+                                    " -> _" + std::to_string(param_id),
+                                cm::debug::Level::Trace);
         }
 
         // エントリーブロックを作成
         ctx.func->add_block();  // bb0
+        cm::debug::mir::log(cm::debug::mir::Id::BasicBlockCreate, "bb0 (entry)",
+                            cm::debug::Level::Trace);
 
         // 関数本体を変換
-        for (const auto& stmt : hir_func.body) {
-            lower_statement(ctx, *stmt);
+        for (size_t i = 0; i < hir_func.body.size(); i++) {
+            cm::debug::mir::log(cm::debug::mir::Id::StatementLower,
+                                "stmt[" + std::to_string(i) + "]", cm::debug::Level::Trace);
+            lower_statement(ctx, *hir_func.body[i]);
         }
 
         // 現在のブロックに終端がない場合、returnを追加
         if (auto* block = ctx.get_current_block()) {
             if (!block->terminator) {
+                cm::debug::mir::log(cm::debug::mir::Id::InstReturn, "Adding implicit return",
+                                    cm::debug::Level::Trace);
                 block->set_terminator(MirTerminator::return_value());
             }
         }
 
         // CFGを構築
+        cm::debug::mir::log(cm::debug::mir::Id::CFGBuild,
+                            "blocks=" + std::to_string(mir_func->basic_blocks.size()),
+                            cm::debug::Level::Trace);
         mir_func->build_cfg();
 
         return mir_func;
@@ -200,21 +232,38 @@ class MirLowering {
 
     // let文のlowering
     void lower_let_stmt(FunctionContext& ctx, const hir::HirLet& let_stmt) {
+        cm::debug::mir::log(cm::debug::mir::Id::StatementLower,
+                            "let " + let_stmt.name + (let_stmt.is_const ? " (const)" : ""),
+                            cm::debug::Level::Debug);
+
         // 新しいローカル変数を作成
         LocalId local_id =
             ctx.func->add_local(let_stmt.name, let_stmt.type, !let_stmt.is_const, true);
         ctx.var_map[let_stmt.name] = local_id;
+        cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc,
+                            let_stmt.name + " -> _" + std::to_string(local_id) +
+                                (let_stmt.type ? " : " + hir::type_to_string(*let_stmt.type) : ""),
+                            cm::debug::Level::Trace);
 
         // StorageLive
         ctx.push_statement(MirStatement::storage_live(local_id));
+        cm::debug::mir::log(cm::debug::mir::Id::StorageLive, "_" + std::to_string(local_id),
+                            cm::debug::Level::Trace);
 
         // 初期値がある場合は代入
         if (let_stmt.init) {
+            cm::debug::mir::log(cm::debug::mir::Id::InitExpr,
+                                "Evaluating initializer for " + let_stmt.name,
+                                cm::debug::Level::Trace);
             LocalId init_local = lower_expr(ctx, *let_stmt.init);
 
             // place = use(init_local)
             auto rvalue = MirRvalue::use(MirOperand::copy(MirPlace(init_local)));
             ctx.push_statement(MirStatement::assign(MirPlace(local_id), std::move(rvalue)));
+            cm::debug::mir::log(
+                cm::debug::mir::Id::InstStore,
+                "_" + std::to_string(local_id) + " = _" + std::to_string(init_local),
+                cm::debug::Level::Trace);
         }
     }
 
@@ -289,6 +338,8 @@ class MirLowering {
 
     // ループのlowering
     void lower_loop_stmt(FunctionContext& ctx, const hir::HirLoop& loop) {
+        cm::debug::mir::log(cm::debug::mir::Id::BasicBlockCreate, "loop_header",
+                            cm::debug::Level::Trace);
         // ループヘッダとループ本体ブロックを作成
         BlockId loop_header = ctx.func->add_block();
         BlockId loop_exit = ctx.func->add_block();
@@ -510,9 +561,8 @@ class MirLowering {
             ctx.switch_to_block(case_blocks[i]);
 
             // スコープ開始（各caseは独立したスコープ）
-            // 現在の変数マップのサイズを記録（スコープ開始時点）
-            size_t scope_start_vars = ctx.var_map.size();
             // TODO: より精密な実装では、このスコープで宣言される変数を追跡
+            // size_t scope_start_vars = ctx.var_map.size(); // 将来の実装で使用
 
             // case内の文を処理
             for (const auto& stmt : switch_stmt.cases[i].stmts) {
@@ -689,23 +739,39 @@ class MirLowering {
 
     // 式のlowering（結果を一時変数に格納し、そのLocalIdを返す）
     LocalId lower_expr(FunctionContext& ctx, const hir::HirExpr& expr) {
+        cm::debug::mir::log(cm::debug::mir::Id::ExprLower, "", cm::debug::Level::Trace);
+
         if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::LiteralExpr, "Literal",
+                                cm::debug::Level::Trace);
             return lower_literal(ctx, **lit, expr.type);
         } else if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::VarRef, (*var)->name, cm::debug::Level::Debug);
             return lower_var_ref(ctx, **var, expr.type);
         } else if (auto* binary = std::get_if<std::unique_ptr<hir::HirBinary>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::InstBinary, "Binary op",
+                                cm::debug::Level::Debug);
             return lower_binary(ctx, **binary, expr.type);
         } else if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::InstUnary, "Unary op", cm::debug::Level::Debug);
             return lower_unary(ctx, **unary, expr.type);
         } else if (auto* call = std::get_if<std::unique_ptr<hir::HirCall>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::InstCall, (*call)->func_name,
+                                cm::debug::Level::Debug);
             return lower_call(ctx, **call, expr.type);
         } else if (auto* ternary = std::get_if<std::unique_ptr<hir::HirTernary>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::TernaryExpr, "Ternary",
+                                cm::debug::Level::Debug);
             return lower_ternary(ctx, **ternary, expr.type);
         } else if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&expr.kind)) {
+            cm::debug::mir::log(cm::debug::mir::Id::FieldAccess, (*member)->member,
+                                cm::debug::Level::Debug);
             return lower_member(ctx, **member, expr.type);
         }
 
         // デフォルトは一時変数を返す
+        cm::debug::mir::log(cm::debug::mir::Id::Warning, "Unknown expression type",
+                            cm::debug::Level::Warn);
         return ctx.new_temp(expr.type);
     }
 

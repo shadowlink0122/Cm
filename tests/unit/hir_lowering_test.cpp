@@ -43,13 +43,13 @@ TEST_F(HirLoweringTest, SimpleFunctionDecl) {
     )";
 
     auto hir = parse_and_lower(code);
-    ASSERT_EQ(hir->declarations.size(), 1);
+    ASSERT_EQ(hir->declarations.size(), 1u);
 
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_NE(func, nullptr);
     EXPECT_EQ(func->name, "main");
-    EXPECT_EQ(func->params.size(), 0);
-    EXPECT_EQ(func->body.size(), 1);
+    EXPECT_EQ(func->params.size(), 0u);
+    EXPECT_EQ(func->body.size(), 1u);
 }
 
 // 関数パラメータのテスト
@@ -61,12 +61,12 @@ TEST_F(HirLoweringTest, FunctionWithParams) {
     )";
 
     auto hir = parse_and_lower(code);
-    ASSERT_EQ(hir->declarations.size(), 1);
+    ASSERT_EQ(hir->declarations.size(), 1u);
 
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_NE(func, nullptr);
     EXPECT_EQ(func->name, "add");
-    EXPECT_EQ(func->params.size(), 2);
+    EXPECT_EQ(func->params.size(), 2u);
     EXPECT_EQ(func->params[0].name, "x");
     EXPECT_EQ(func->params[1].name, "y");
 }
@@ -83,12 +83,12 @@ TEST_F(HirLoweringTest, StructDecl) {
     )";
 
     auto hir = parse_and_lower(code);
-    ASSERT_EQ(hir->declarations.size(), 1);
+    ASSERT_EQ(hir->declarations.size(), 1u);
 
     auto* st = std::get<std::unique_ptr<hir::HirStruct>>(hir->declarations[0]->kind).get();
     ASSERT_NE(st, nullptr);
     EXPECT_EQ(st->name, "Point");
-    EXPECT_EQ(st->fields.size(), 2);
+    EXPECT_EQ(st->fields.size(), 2u);
     EXPECT_EQ(st->fields[0].name, "x");
     EXPECT_EQ(st->fields[1].name, "y");
 }
@@ -108,7 +108,7 @@ TEST_F(HirLoweringTest, LetStatement) {
 
     auto hir = parse_and_lower(code);
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
-    ASSERT_EQ(func->body.size(), 2);
+    ASSERT_EQ(func->body.size(), 2u);
 
     // 最初のlet文
     auto* let1 = std::get<std::unique_ptr<hir::HirLet>>(func->body[0]->kind).get();
@@ -138,13 +138,13 @@ TEST_F(HirLoweringTest, IfStatement) {
 
     auto hir = parse_and_lower(code);
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
-    ASSERT_EQ(func->body.size(), 1);
+    ASSERT_EQ(func->body.size(), 1u);
 
     auto* if_stmt = std::get<std::unique_ptr<hir::HirIf>>(func->body[0]->kind).get();
     ASSERT_NE(if_stmt, nullptr);
     ASSERT_NE(if_stmt->cond, nullptr);
-    EXPECT_EQ(if_stmt->then_block.size(), 1);
-    EXPECT_EQ(if_stmt->else_block.size(), 1);
+    EXPECT_EQ(if_stmt->then_block.size(), 1u);
+    EXPECT_EQ(if_stmt->else_block.size(), 1u);
 }
 
 // ============================================================
@@ -180,7 +180,7 @@ TEST_F(HirLoweringTest, CompoundAssignmentDesugaring) {
 
     auto hir = parse_and_lower(code);
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
-    ASSERT_EQ(func->body.size(), 2);
+    ASSERT_EQ(func->body.size(), 2u);
 
     // x += 5 は x = x + 5 に脱糖される
     auto* expr_stmt = std::get<std::unique_ptr<hir::HirExprStmt>>(func->body[1]->kind).get();
@@ -209,7 +209,7 @@ TEST_F(HirLoweringTest, WhileLoopDesugaring) {
 
     auto hir = parse_and_lower(code);
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
-    ASSERT_EQ(func->body.size(), 2);
+    ASSERT_EQ(func->body.size(), 2u);
 
     // whileは HirWhileに変換される
     auto* while_stmt = std::get<std::unique_ptr<hir::HirWhile>>(func->body[1]->kind).get();
@@ -217,7 +217,7 @@ TEST_F(HirLoweringTest, WhileLoopDesugaring) {
     // 条件式が存在する
     ASSERT_NE(while_stmt->cond, nullptr);
     // ループ本体が存在する
-    EXPECT_GE(while_stmt->body.size(), 1);
+    EXPECT_GE(while_stmt->body.size(), 1u);
 }
 
 // for文の脱糖
@@ -234,7 +234,7 @@ TEST_F(HirLoweringTest, ForLoopDesugaring) {
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
 
     // forループはHirForとして保持される
-    ASSERT_GE(func->body.size(), 1);
+    ASSERT_GE(func->body.size(), 1u);
 
     // for文を取得
     auto* for_stmt = std::get_if<std::unique_ptr<hir::HirFor>>(&func->body[0]->kind);
@@ -245,7 +245,7 @@ TEST_F(HirLoweringTest, ForLoopDesugaring) {
     EXPECT_NE((*for_stmt)->cond, nullptr);
     EXPECT_NE((*for_stmt)->update, nullptr);
     // ループ本体が存在する
-    EXPECT_GE((*for_stmt)->body.size(), 1);
+    EXPECT_GE((*for_stmt)->body.size(), 1u);
 }
 
 // ============================================================
@@ -263,11 +263,11 @@ TEST_F(HirLoweringTest, BlockStatement) {
 
     auto hir = parse_and_lower(code);
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
-    ASSERT_EQ(func->body.size(), 1);
+    ASSERT_EQ(func->body.size(), 1u);
 
     auto* block = std::get<std::unique_ptr<hir::HirBlock>>(func->body[0]->kind).get();
     ASSERT_NE(block, nullptr);
-    EXPECT_EQ(block->stmts.size(), 2);
+    EXPECT_EQ(block->stmts.size(), 2u);
 }
 
 // ============================================================
@@ -278,7 +278,7 @@ TEST_F(HirLoweringTest, BlockStatement) {
 TEST_F(HirLoweringTest, EmptyProgram) {
     const std::string code = "";
     auto hir = parse_and_lower(code);
-    EXPECT_EQ(hir->declarations.size(), 0);
+    EXPECT_EQ(hir->declarations.size(), 0u);
 }
 
 // ============================================================
@@ -301,5 +301,5 @@ TEST_F(HirLoweringTest, MultipleDeclarations) {
     )";
 
     auto hir = parse_and_lower(code);
-    EXPECT_EQ(hir->declarations.size(), 3);
+    EXPECT_EQ(hir->declarations.size(), 3u);
 }

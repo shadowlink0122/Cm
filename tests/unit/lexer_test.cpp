@@ -15,13 +15,13 @@ class LexerTest : public ::testing::Test {
 // 基本的なトークン化
 TEST_F(LexerTest, EmptySource) {
     auto tokens = tokenize("");
-    ASSERT_EQ(tokens.size(), 1);
+    ASSERT_EQ(tokens.size(), 1u);
     EXPECT_EQ(tokens[0].kind, TokenKind::Eof);
 }
 
 TEST_F(LexerTest, Identifier) {
     auto tokens = tokenize("foo bar _baz");
-    ASSERT_EQ(tokens.size(), 4);  // foo, bar, _baz, Eof
+    ASSERT_EQ(tokens.size(), 4u);  // foo, bar, _baz, Eof
     EXPECT_EQ(tokens[0].kind, TokenKind::Ident);
     EXPECT_EQ(tokens[0].get_string(), "foo");
     EXPECT_EQ(tokens[1].kind, TokenKind::Ident);
@@ -137,7 +137,7 @@ TEST_F(LexerTest, Delimiters) {
 // コメント
 TEST_F(LexerTest, Comments) {
     auto tokens = tokenize("foo // comment\nbar /* block */ baz");
-    ASSERT_EQ(tokens.size(), 4);
+    ASSERT_EQ(tokens.size(), 4u);
     EXPECT_EQ(tokens[0].get_string(), "foo");
     EXPECT_EQ(tokens[1].get_string(), "bar");
     EXPECT_EQ(tokens[2].get_string(), "baz");

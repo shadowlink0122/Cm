@@ -16,10 +16,25 @@ class Lexer {
 
     std::vector<Token> tokenize() {
         debug::lex::log(debug::lex::Id::Start);
+        debug::lex::log(debug::lex::Id::SourceLength, std::to_string(source_.size()),
+                        debug::Level::Debug);
 
         std::vector<Token> tokens;
         while (!is_at_end()) {
+            // 現在の位置をログ
+            debug::lex::dump_position(get_line_number(pos_), get_column_number(pos_),
+                                      "Scanning at pos " + std::to_string(pos_));
+
             Token tok = next_token();
+
+            // 生成されたトークンをログ
+            std::string tok_value = "";
+            if (tok.kind == TokenKind::Ident) {
+                tok_value = std::string(tok.get_string());
+            }
+            debug::lex::dump_token(token_kind_to_string(tok.kind), tok_value,
+                                   get_line_number(tok.start), get_column_number(tok.start));
+
             tokens.push_back(tok);
             if (tok.kind == TokenKind::Eof)
                 break;
@@ -143,69 +158,117 @@ class Lexer {
     }
 
     Token scan_identifier(uint32_t start) {
-        while (!is_at_end() && is_alnum(peek()))
+        debug::lex::log(debug::lex::Id::ScanStart, "identifier", debug::Level::Trace);
+
+        while (!is_at_end() && is_alnum(peek())) {
+            char c = peek();
             advance();
+            debug::lex::log(debug::lex::Id::CharScan, std::string(1, c), debug::Level::Trace);
+        }
+
         std::string text(source_.substr(start, pos_ - start));
+        debug::lex::log(debug::lex::Id::TokenText, text, debug::Level::Trace);
 
         auto it = keywords_.find(text);
         if (it != keywords_.end()) {
-            debug::lex::log(debug::lex::Id::Keyword, text, debug::Level::Trace);
+            debug::lex::log(debug::lex::Id::Keyword, text, debug::Level::Debug);
+            debug::lex::log(debug::lex::Id::KeywordMatch,
+                            text + " -> " + token_kind_to_string(it->second), debug::Level::Trace);
             return Token(it->second, start, pos_);
         }
 
-        debug::lex::log(debug::lex::Id::Ident, text, debug::Level::Trace);
+        debug::lex::log(debug::lex::Id::Ident, text, debug::Level::Debug);
+        debug::lex::log(debug::lex::Id::IdentCreate, "Variable/Function name: " + text,
+                        debug::Level::Trace);
         return Token(TokenKind::Ident, start, pos_, std::move(text));
     }
 
     Token scan_number(uint32_t start) {
+        debug::lex::log(debug::lex::Id::ScanStart, "number", debug::Level::Trace);
         bool is_float = false;
 
+        // 16進数チェック
         if (source_[start] == '0' && (peek() == 'x' || peek() == 'X')) {
+            debug::lex::log(debug::lex::Id::HexNumber, "detected hex prefix", debug::Level::Trace);
             advance();
-            while (!is_at_end() && is_hex_digit(peek()))
+            while (!is_at_end() && is_hex_digit(peek())) {
+                debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()),
+                                debug::Level::Trace);
                 advance();
+            }
             std::string text(source_.substr(start, pos_ - start));
             int64_t val = std::stoll(text, nullptr, 16);
-            debug::lex::log(debug::lex::Id::Number, text, debug::Level::Trace);
+            debug::lex::log(debug::lex::Id::Number, text + " = " + std::to_string(val),
+                            debug::Level::Debug);
             return Token(TokenKind::IntLiteral, start, pos_, val);
         }
 
+        // 2進数チェック
         if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
+            debug::lex::log(debug::lex::Id::BinaryNumber, "detected binary prefix",
+                            debug::Level::Trace);
             advance();
-            while (!is_at_end() && (peek() == '0' || peek() == '1'))
+            while (!is_at_end() && (peek() == '0' || peek() == '1')) {
+                debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()),
+                                debug::Level::Trace);
                 advance();
+            }
             std::string text(source_.substr(start + 2, pos_ - start - 2));
             int64_t val = std::stoll(text, nullptr, 2);
-            debug::lex::log(debug::lex::Id::Number, "0b" + text, debug::Level::Trace);
+            debug::lex::log(debug::lex::Id::Number, "0b" + text + " = " + std::to_string(val),
+                            debug::Level::Debug);
             return Token(TokenKind::IntLiteral, start, pos_, val);
         }
 
-        while (!is_at_end() && is_digit(peek()))
+        // 10進数の整数部分
+        while (!is_at_end() && is_digit(peek())) {
+            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
-
-        if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
-            is_float = true;
-            advance();
-            while (!is_at_end() && is_digit(peek()))
-                advance();
         }
 
+        // 小数点チェック
+        if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
+            is_float = true;
+            debug::lex::log(debug::lex::Id::FloatDetected, "decimal point found",
+                            debug::Level::Trace);
+            advance();
+            while (!is_at_end() && is_digit(peek())) {
+                debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()),
+                                debug::Level::Trace);
+                advance();
+            }
+        }
+
+        // 指数部チェック
         if (!is_at_end() && (peek() == 'e' || peek() == 'E')) {
             is_float = true;
+            debug::lex::log(debug::lex::Id::ExponentDetected, "exponent notation found",
+                            debug::Level::Trace);
             advance();
-            if (peek() == '+' || peek() == '-')
+            if (peek() == '+' || peek() == '-') {
+                debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()),
+                                debug::Level::Trace);
                 advance();
-            while (!is_at_end() && is_digit(peek()))
+            }
+            while (!is_at_end() && is_digit(peek())) {
+                debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()),
+                                debug::Level::Trace);
                 advance();
+            }
         }
 
         std::string text(source_.substr(start, pos_ - start));
-        debug::lex::log(debug::lex::Id::Number, text, debug::Level::Trace);
 
         if (is_float) {
-            return Token(TokenKind::FloatLiteral, start, pos_, std::stod(text));
+            double val = std::stod(text);
+            debug::lex::log(debug::lex::Id::Number, text + " (float) = " + std::to_string(val),
+                            debug::Level::Debug);
+            return Token(TokenKind::FloatLiteral, start, pos_, val);
         } else {
-            return Token(TokenKind::IntLiteral, start, pos_, std::stoll(text));
+            int64_t val = std::stoll(text);
+            debug::lex::log(debug::lex::Id::Number, text + " (int) = " + std::to_string(val),
+                            debug::Level::Debug);
+            return Token(TokenKind::IntLiteral, start, pos_, val);
         }
     }
 
@@ -353,6 +416,25 @@ class Lexer {
 
     bool is_at_end() const { return pos_ >= source_.size(); }
     char peek() const { return is_at_end() ? '\0' : source_[pos_]; }
+
+    int get_line_number(uint32_t position) const {
+        int line = 1;
+        for (uint32_t i = 0; i < position && i < source_.size(); ++i) {
+            if (source_[i] == '\n')
+                line++;
+        }
+        return line;
+    }
+
+    int get_column_number(uint32_t position) const {
+        int col = 1;
+        for (uint32_t i = position; i > 0; --i) {
+            if (source_[i - 1] == '\n')
+                break;
+            col++;
+        }
+        return col;
+    }
     char peek_next() const { return pos_ + 1 >= source_.size() ? '\0' : source_[pos_ + 1]; }
     char advance() { return source_[pos_++]; }
     bool match(char expected) {

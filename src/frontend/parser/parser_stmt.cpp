@@ -17,6 +17,7 @@ ast::StmtPtr Parser::parse_stmt() {
 
     // return
     if (consume_if(TokenKind::KwReturn)) {
+        debug::par::log(debug::par::Id::ReturnStmt, "", debug::Level::Trace);
         ast::ExprPtr value;
         if (!check(TokenKind::Semicolon)) {
             value = parse_expr();
@@ -27,6 +28,7 @@ ast::StmtPtr Parser::parse_stmt() {
 
     // if
     if (consume_if(TokenKind::KwIf)) {
+        debug::par::log(debug::par::Id::IfStmt, "", debug::Level::Trace);
         expect(TokenKind::LParen);
         auto cond = parse_expr();
         expect(TokenKind::RParen);
@@ -147,15 +149,37 @@ ast::StmtPtr Parser::parse_stmt() {
     // 変数宣言 (auto x = ... or type x ...)
     if (check(TokenKind::KwConst) || is_type_start()) {
         bool is_const = consume_if(TokenKind::KwConst);
+        if (is_const) {
+            debug::par::log(debug::par::Id::ConstDecl, "Found const variable declaration",
+                            debug::Level::Debug);
+        } else {
+            debug::par::log(debug::par::Id::VarDecl, "Found variable declaration",
+                            debug::Level::Debug);
+        }
+
         auto type = parse_type();
         std::string name = expect_ident();
+        debug::par::log(debug::par::Id::VarName, "Variable name: " + name, debug::Level::Debug);
 
         ast::ExprPtr init;
         if (consume_if(TokenKind::Eq)) {
+            debug::par::log(debug::par::Id::VarInit, "Variable has initializer",
+                            debug::Level::Debug);
             init = parse_expr();
+            debug::par::log(debug::par::Id::VarInitComplete,
+                            "Variable initialization expression parsed", debug::Level::Debug);
+        } else {
+            debug::par::log(debug::par::Id::VarNoInit, "Variable declared without initializer",
+                            debug::Level::Debug);
         }
 
         expect(TokenKind::Semicolon);
+        std::string decl_msg = "Variable declaration complete: ";
+        if (is_const) {
+            decl_msg += "const ";
+        }
+        decl_msg += name;
+        debug::par::log(debug::par::Id::VarDeclComplete, decl_msg, debug::Level::Debug);
         return ast::make_let(std::move(name), std::move(type), std::move(init), is_const,
                              Span{start_pos, previous().end});
     }

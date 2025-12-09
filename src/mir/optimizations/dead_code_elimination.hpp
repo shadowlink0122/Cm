@@ -248,6 +248,13 @@ class DeadCodeElimination : public OptimizationPass {
                 }
                 break;
             }
+            case MirRvalue::FormatConvert: {
+                const auto& fmt_data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
+                if (fmt_data.operand) {
+                    collect_used_locals_in_operand(*fmt_data.operand, used);
+                }
+                break;
+            }
             case MirRvalue::Cast: {
                 const auto& cast_data = std::get<MirRvalue::CastData>(rvalue.data);
                 if (cast_data.operand) {

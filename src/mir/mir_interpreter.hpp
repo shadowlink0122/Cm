@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../common/debug/interp.hpp"
 #include "../common/format_string.hpp"
 #include "mir_nodes.hpp"
 
@@ -31,26 +32,50 @@ class MirInterpreter {
 
     // MIRプログラムを実行
     ExecutionResult execute(const MirProgram& program, const std::string& entry_point = "main") {
+        debug::interp::log(debug::interp::Id::Start, "Starting interpreter execution",
+                           debug::Level::Info);
+        debug::interp::log(debug::interp::Id::EntryPoint, "Entry point: " + entry_point,
+                           debug::Level::Debug);
+
         // プログラムへの参照を保存
         current_program_ = &program;
+        debug::interp::log(
+            debug::interp::Id::ProgramLoad,
+            "Program loaded with " + std::to_string(program.functions.size()) + " functions",
+            debug::Level::Debug);
 
         // main関数を探す
         const MirFunction* main_func = nullptr;
+        debug::interp::log(debug::interp::Id::FunctionSearch,
+                           "Searching for function: " + entry_point, debug::Level::Debug);
         for (const auto& func : program.functions) {
+            debug::interp::log(debug::interp::Id::FunctionCheck, "Checking function: " + func->name,
+                               debug::Level::Trace);
             if (func->name == entry_point) {
                 main_func = func.get();
+                debug::interp::log(debug::interp::Id::FunctionFound,
+                                   "Found entry point function: " + entry_point,
+                                   debug::Level::Debug);
                 break;
             }
         }
 
         if (!main_func) {
+            debug::interp::log(debug::interp::Id::Error,
+                               "Entry point '" + entry_point + "' not found", debug::Level::Error);
             return {false, Value{}, "エントリポイント '" + entry_point + "' が見つかりません"};
         }
 
         try {
+            debug::interp::log(debug::interp::Id::ExecuteStart,
+                               "Executing function: " + entry_point, debug::Level::Info);
             Value result = execute_function(*main_func, {});
+            debug::interp::log(debug::interp::Id::ExecuteEnd, "Execution completed successfully",
+                               debug::Level::Info);
             return {true, result, ""};
         } catch (const std::exception& e) {
+            debug::interp::log(debug::interp::Id::Exception,
+                               std::string("Exception caught: ") + e.what(), debug::Level::Error);
             return {false, Value{}, e.what()};
         }
     }
@@ -90,7 +115,7 @@ class MirInterpreter {
             // printlnは直接使用不可、std::ioからインポートが必要
             builtins["std::io::println"] =
                 [](std::vector<Value> args,
-                   const std::unordered_map<LocalId, Value>& locals) -> Value {
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
                 if (args.empty()) {
                     std::cout << std::endl;
                     return Value{};
@@ -252,39 +277,80 @@ class MirInterpreter {
 
     // 関数を実行
     Value execute_function(const MirFunction& func, std::vector<Value> args) {
+        debug::interp::log(debug::interp::Id::FunctionEnter, "Entering function: " + func.name,
+                           debug::Level::Info);
+        debug::interp::log(debug::interp::Id::FunctionArgs,
+                           "Arguments count: " + std::to_string(args.size()), debug::Level::Debug);
+
         ExecutionContext ctx(&func);
 
         // 引数をローカル変数に設定
         for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); i++) {
+            debug::interp::log(debug::interp::Id::ArgStore,
+                               "Storing argument " + std::to_string(i) + " to local _" +
+                                   std::to_string(func.arg_locals[i]),
+                               debug::Level::Trace);
             ctx.locals[func.arg_locals[i]] = args[i];
+            debug::interp::dump_value("Argument value", args[i]);
         }
 
         // 戻り値用のローカル変数を初期化
+        debug::interp::log(debug::interp::Id::ReturnInit,
+                           "Initializing return local _" + std::to_string(func.return_local),
+                           debug::Level::Trace);
         ctx.locals[func.return_local] = Value{};
 
         // エントリブロックから実行開始
+        debug::interp::log(debug::interp::Id::BlockEnter,
+                           "Starting from entry block: bb" + std::to_string(func.entry_block),
+                           debug::Level::Debug);
         execute_block(ctx, func.entry_block);
 
         // 戻り値を返す
-        return ctx.locals[func.return_local];
+        Value ret_val = ctx.locals[func.return_local];
+        debug::interp::log(debug::interp::Id::FunctionExit, "Exiting function: " + func.name,
+                           debug::Level::Info);
+        debug::interp::dump_value("Return value", ret_val);
+        return ret_val;
     }
 
     // 基本ブロックを実行
     void execute_block(ExecutionContext& ctx, BlockId block_id) {
+        debug::interp::log(debug::interp::Id::BlockExecute,
+                           "Executing block: bb" + std::to_string(block_id), debug::Level::Debug);
+
         if (block_id >= ctx.function->basic_blocks.size()) {
+            debug::interp::log(debug::interp::Id::Error,
+                               "Invalid block ID: " + std::to_string(block_id),
+                               debug::Level::Error);
             throw std::runtime_error("無効なブロックID: " + std::to_string(block_id));
         }
 
         const BasicBlock* block = ctx.function->basic_blocks[block_id].get();
+        debug::interp::log(debug::interp::Id::BlockStats,
+                           "Block has " + std::to_string(block->statements.size()) + " statements",
+                           debug::Level::Trace);
 
         // ステートメントを順次実行
+        int stmt_idx = 0;
         for (const auto& stmt : block->statements) {
+            debug::interp::log(debug::interp::Id::StmtExecute,
+                               "Executing statement " + std::to_string(stmt_idx++) + " in bb" +
+                                   std::to_string(block_id),
+                               debug::Level::Trace);
             execute_statement(ctx, *stmt);
         }
 
         // 終端命令を実行
         if (block->terminator) {
+            debug::interp::log(debug::interp::Id::TerminatorExecute,
+                               "Executing terminator in bb" + std::to_string(block_id),
+                               debug::Level::Debug);
             execute_terminator(ctx, *block->terminator);
+        } else {
+            debug::interp::log(debug::interp::Id::NoTerminator,
+                               "Block bb" + std::to_string(block_id) + " has no terminator",
+                               debug::Level::Trace);
         }
     }
 
@@ -292,22 +358,48 @@ class MirInterpreter {
     void execute_statement(ExecutionContext& ctx, const MirStatement& stmt) {
         switch (stmt.kind) {
             case MirStatement::Assign: {
+                debug::interp::log(debug::interp::Id::Assign, "Executing assignment",
+                                   debug::Level::Debug);
                 auto& data = std::get<MirStatement::AssignData>(stmt.data);
+
+                // 代入先の情報をログ
+                std::string place_str = "Place: _" + std::to_string(data.place.local);
+                if (!data.place.projections.empty()) {
+                    place_str += " with projection";
+                }
+                debug::interp::log(debug::interp::Id::AssignDest, place_str, debug::Level::Trace);
+
+                // 値を評価
+                debug::interp::log(debug::interp::Id::RvalueEval, "Evaluating rvalue",
+                                   debug::Level::Trace);
                 Value value = evaluate_rvalue(ctx, *data.rvalue);
+                debug::interp::dump_value("Computed value", value);
+
+                // 格納
+                debug::interp::log(debug::interp::Id::Store, "Storing value to " + place_str,
+                                   debug::Level::Debug);
                 store_to_place(ctx, data.place, value);
                 break;
             }
             case MirStatement::StorageLive: {
+                auto& data = std::get<MirStatement::StorageData>(stmt.data);
+                debug::interp::log(debug::interp::Id::StorageLive,
+                                   "Variable _" + std::to_string(data.local) + " becomes live",
+                                   debug::Level::Trace);
                 // 変数の有効範囲開始（インタープリタでは特に処理不要）
                 break;
             }
             case MirStatement::StorageDead: {
                 // 変数の有効範囲終了
                 auto& data = std::get<MirStatement::StorageData>(stmt.data);
+                debug::interp::log(debug::interp::Id::StorageDead,
+                                   "Variable _" + std::to_string(data.local) + " becomes dead",
+                                   debug::Level::Trace);
                 ctx.locals.erase(data.local);
                 break;
             }
             case MirStatement::Nop: {
+                debug::interp::log(debug::interp::Id::Nop, "NOP statement", debug::Level::Trace);
                 // 何もしない
                 break;
             }
@@ -319,26 +411,55 @@ class MirInterpreter {
         switch (term.kind) {
             case MirTerminator::Goto: {
                 auto& data = std::get<MirTerminator::GotoData>(term.data);
+                debug::interp::log(debug::interp::Id::Goto,
+                                   "Unconditional jump to bb" + std::to_string(data.target),
+                                   debug::Level::Debug);
                 execute_block(ctx, data.target);
                 break;
             }
             case MirTerminator::SwitchInt: {
                 auto& data = std::get<MirTerminator::SwitchIntData>(term.data);
+                debug::interp::log(debug::interp::Id::SwitchInt, "Evaluating switch condition",
+                                   debug::Level::Debug);
                 Value discriminant = evaluate_operand(ctx, *data.discriminant);
+                debug::interp::dump_value("Switch discriminant", discriminant);
 
                 // 条件分岐
                 if (discriminant.type() == typeid(int64_t)) {
                     int64_t value = std::any_cast<int64_t>(discriminant);
+                    debug::interp::log(debug::interp::Id::SwitchValue,
+                                       "Switch on integer: " + std::to_string(value),
+                                       debug::Level::Debug);
                     for (const auto& [case_value, target] : data.targets) {
+                        debug::interp::log(debug::interp::Id::SwitchCase,
+                                           "Checking case: " + std::to_string(case_value) +
+                                               " -> bb" + std::to_string(target),
+                                           debug::Level::Trace);
                         if (value == case_value) {
+                            debug::interp::log(
+                                debug::interp::Id::SwitchMatch,
+                                "Match found! Jumping to bb" + std::to_string(target),
+                                debug::Level::Debug);
                             execute_block(ctx, target);
                             return;
                         }
                     }
                 } else if (discriminant.type() == typeid(bool)) {
                     bool value = std::any_cast<bool>(discriminant);
+                    debug::interp::log(
+                        debug::interp::Id::SwitchValue,
+                        "Switch on boolean: " + std::string(value ? "true" : "false"),
+                        debug::Level::Debug);
                     for (const auto& [case_value, target] : data.targets) {
+                        debug::interp::log(debug::interp::Id::SwitchCase,
+                                           "Checking case: " + std::to_string(case_value) +
+                                               " -> bb" + std::to_string(target),
+                                           debug::Level::Trace);
                         if ((case_value != 0) == value) {
+                            debug::interp::log(
+                                debug::interp::Id::SwitchMatch,
+                                "Match found! Jumping to bb" + std::to_string(target),
+                                debug::Level::Debug);
                             execute_block(ctx, target);
                             return;
                         }
@@ -346,14 +467,22 @@ class MirInterpreter {
                 }
 
                 // デフォルトブランチ
+                debug::interp::log(
+                    debug::interp::Id::SwitchDefault,
+                    "No match, taking default branch to bb" + std::to_string(data.otherwise),
+                    debug::Level::Debug);
                 execute_block(ctx, data.otherwise);
                 break;
             }
             case MirTerminator::Return: {
+                debug::interp::log(debug::interp::Id::Return, "Return from function",
+                                   debug::Level::Debug);
                 // 関数から戻る（既に戻り値は_0に設定済み）
                 break;
             }
             case MirTerminator::Call: {
+                debug::interp::log(debug::interp::Id::Call, "Processing function call",
+                                   debug::Level::Debug);
                 auto& data = std::get<MirTerminator::CallData>(term.data);
 
                 std::string func_name;
@@ -373,35 +502,69 @@ class MirInterpreter {
                 }
 
                 if (!func_name.empty()) {
+                    debug::interp::log(debug::interp::Id::CallTarget,
+                                       "Calling function: " + func_name, debug::Level::Info);
+
                     // 引数を評価
                     std::vector<Value> args;
+                    debug::interp::log(
+                        debug::interp::Id::CallArgs,
+                        "Evaluating " + std::to_string(data.args.size()) + " arguments",
+                        debug::Level::Debug);
+                    int arg_idx = 0;
                     for (const auto& arg : data.args) {
-                        args.push_back(evaluate_operand(ctx, *arg));
+                        debug::interp::log(debug::interp::Id::CallArgEval,
+                                           "Evaluating argument " + std::to_string(arg_idx++),
+                                           debug::Level::Trace);
+                        Value arg_val = evaluate_operand(ctx, *arg);
+                        debug::interp::dump_value("Argument " + std::to_string(arg_idx - 1),
+                                                  arg_val);
+                        args.push_back(arg_val);
                     }
-
-                    // デバッグ出力
-                    // std::cerr << "Calling function: " << func_name << " with " << args.size()
-                    // << " args" << std::endl;
 
                     // 組み込み関数を呼び出し
                     if (ctx.builtins.count(func_name)) {
+                        debug::interp::log(debug::interp::Id::CallBuiltin,
+                                           "Calling built-in function: " + func_name,
+                                           debug::Level::Debug);
                         Value result = ctx.builtins[func_name](args, ctx.locals);
+                        debug::interp::dump_value("Built-in function result", result);
                         if (data.destination) {
+                            debug::interp::log(debug::interp::Id::CallStore,
+                                               "Storing result to destination",
+                                               debug::Level::Debug);
                             store_to_place(ctx, *data.destination, result);
                         }
                     } else {
                         // ユーザー定義関数を呼び出し
                         const MirFunction* user_func = find_function(func_name);
                         if (user_func) {
+                            debug::interp::log(debug::interp::Id::CallUser,
+                                               "Calling user-defined function: " + func_name,
+                                               debug::Level::Debug);
                             Value result = execute_function(*user_func, args);
+                            debug::interp::dump_value("Function result", result);
                             if (data.destination) {
+                                debug::interp::log(debug::interp::Id::CallStore,
+                                                   "Storing result to destination",
+                                                   debug::Level::Debug);
                                 store_to_place(ctx, *data.destination, result);
                             }
+                        } else {
+                            debug::interp::log(debug::interp::Id::CallNotFound,
+                                               "Function not found: " + func_name,
+                                               debug::Level::Error);
                         }
                     }
+                } else {
+                    debug::interp::log(debug::interp::Id::CallNoName,
+                                       "Could not determine function name", debug::Level::Error);
                 }
 
                 // 次のブロックへ
+                debug::interp::log(debug::interp::Id::CallSuccess,
+                                   "Continuing to success block bb" + std::to_string(data.success),
+                                   debug::Level::Debug);
                 execute_block(ctx, data.success);
                 break;
             }
@@ -413,45 +576,90 @@ class MirInterpreter {
 
     // Rvalueを評価
     Value evaluate_rvalue(ExecutionContext& ctx, const MirRvalue& rvalue) {
+        debug::interp::log(debug::interp::Id::RvalueType, "Evaluating rvalue", debug::Level::Trace);
         switch (rvalue.kind) {
             case MirRvalue::Use: {
+                debug::interp::log(debug::interp::Id::RvalueUse, "Rvalue type: Use",
+                                   debug::Level::Trace);
                 auto& data = std::get<MirRvalue::UseData>(rvalue.data);
-                return evaluate_operand(ctx, *data.operand);
+                Value result = evaluate_operand(ctx, *data.operand);
+                debug::interp::dump_value("Use result", result);
+                return result;
             }
             case MirRvalue::BinaryOp: {
                 auto& data = std::get<MirRvalue::BinaryOpData>(rvalue.data);
+                debug::interp::log(debug::interp::Id::BinaryOp,
+                                   "Binary operation: " + mir_binop_to_string(data.op),
+                                   debug::Level::Debug);
+                debug::interp::log(debug::interp::Id::BinaryLhs, "Evaluating LHS",
+                                   debug::Level::Trace);
                 Value lhs = evaluate_operand(ctx, *data.lhs);
+                debug::interp::dump_value("LHS value", lhs);
+                debug::interp::log(debug::interp::Id::BinaryRhs, "Evaluating RHS",
+                                   debug::Level::Trace);
                 Value rhs = evaluate_operand(ctx, *data.rhs);
-                return evaluate_binary_op(data.op, lhs, rhs);
+                debug::interp::dump_value("RHS value", rhs);
+                Value result = evaluate_binary_op(data.op, lhs, rhs);
+                debug::interp::dump_value("Binary operation result", result);
+                return result;
             }
             case MirRvalue::UnaryOp: {
                 auto& data = std::get<MirRvalue::UnaryOpData>(rvalue.data);
+                debug::interp::log(debug::interp::Id::UnaryOp,
+                                   "Unary operation: " + mir_unop_to_string(data.op),
+                                   debug::Level::Debug);
                 Value operand = evaluate_operand(ctx, *data.operand);
-                return evaluate_unary_op(data.op, operand);
+                debug::interp::dump_value("Unary operand", operand);
+                Value result = evaluate_unary_op(data.op, operand);
+                debug::interp::dump_value("Unary operation result", result);
+                return result;
             }
             case MirRvalue::FormatConvert: {
                 auto& data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
+                debug::interp::log(debug::interp::Id::FormatConvert,
+                                   "Format conversion: " + data.format_spec, debug::Level::Debug);
                 Value operand = evaluate_operand(ctx, *data.operand);
-                return apply_format_conversion(operand, data.format_spec);
+                Value result = apply_format_conversion(operand, data.format_spec);
+                debug::interp::dump_value("Format conversion result", result);
+                return result;
             }
             default:
+                debug::interp::log(debug::interp::Id::RvalueUnknown, "Unknown rvalue type",
+                                   debug::Level::Error);
                 return Value{};
         }
     }
 
     // オペランドを評価
     Value evaluate_operand(ExecutionContext& ctx, const MirOperand& operand) {
+        debug::interp::log(debug::interp::Id::OperandEval, "Evaluating operand",
+                           debug::Level::Trace);
         switch (operand.kind) {
             case MirOperand::Move:
+                debug::interp::log(debug::interp::Id::OperandMove, "Move operand",
+                                   debug::Level::Trace);
+                [[fallthrough]];
             case MirOperand::Copy: {
+                if (operand.kind == MirOperand::Copy) {
+                    debug::interp::log(debug::interp::Id::OperandCopy, "Copy operand",
+                                       debug::Level::Trace);
+                }
                 const MirPlace& place = std::get<MirPlace>(operand.data);
-                return load_from_place(ctx, place);
+                Value result = load_from_place(ctx, place);
+                debug::interp::dump_value("Loaded value", result);
+                return result;
             }
             case MirOperand::Constant: {
+                debug::interp::log(debug::interp::Id::OperandConst, "Constant operand",
+                                   debug::Level::Trace);
                 const MirConstant& constant = std::get<MirConstant>(operand.data);
-                return constant_to_value(constant);
+                Value result = constant_to_value(constant);
+                debug::interp::dump_value("Constant value", result);
+                return result;
             }
             default:
+                debug::interp::log(debug::interp::Id::OperandUnknown, "Unknown operand type",
+                                   debug::Level::Error);
                 return Value{};
         }
     }
@@ -713,56 +921,148 @@ class MirInterpreter {
     // 構造体の値を表現（フィールド名 → 値のマップ）
     using StructValue = std::unordered_map<FieldId, Value>;
 
+    // デバッグ用: 二項演算子を文字列に変換
+    std::string mir_binop_to_string(MirBinaryOp op) {
+        switch (op) {
+            case MirBinaryOp::Add:
+                return "Add";
+            case MirBinaryOp::Sub:
+                return "Sub";
+            case MirBinaryOp::Mul:
+                return "Mul";
+            case MirBinaryOp::Div:
+                return "Div";
+            case MirBinaryOp::Mod:
+                return "Mod";
+            case MirBinaryOp::Eq:
+                return "Eq";
+            case MirBinaryOp::Ne:
+                return "Ne";
+            case MirBinaryOp::Lt:
+                return "Lt";
+            case MirBinaryOp::Gt:
+                return "Gt";
+            case MirBinaryOp::Le:
+                return "Le";
+            case MirBinaryOp::Ge:
+                return "Ge";
+            case MirBinaryOp::BitAnd:
+                return "BitAnd";
+            case MirBinaryOp::BitOr:
+                return "BitOr";
+            case MirBinaryOp::BitXor:
+                return "BitXor";
+            case MirBinaryOp::Shl:
+                return "Shl";
+            case MirBinaryOp::Shr:
+                return "Shr";
+            default:
+                return "Unknown";
+        }
+    }
+
+    // デバッグ用: 単項演算子を文字列に変換
+    std::string mir_unop_to_string(MirUnaryOp op) {
+        switch (op) {
+            case MirUnaryOp::Not:
+                return "Not";
+            case MirUnaryOp::Neg:
+                return "Neg";
+            case MirUnaryOp::BitNot:
+                return "BitNot";
+            default:
+                return "Unknown";
+        }
+    }
+
     // Placeから値を読み込み
     Value load_from_place(ExecutionContext& ctx, const MirPlace& place) {
+        debug::interp::log(debug::interp::Id::Load,
+                           "Loading from local _" + std::to_string(place.local),
+                           debug::Level::Trace);
+
         auto it = ctx.locals.find(place.local);
         if (it == ctx.locals.end()) {
+            debug::interp::log(debug::interp::Id::LoadNotFound,
+                               "Local _" + std::to_string(place.local) + " not found",
+                               debug::Level::Debug);
             return Value{};
         }
 
         Value result = it->second;
+        debug::interp::dump_value("Initial value from _" + std::to_string(place.local), result);
 
         // プロジェクションを適用
         for (const auto& proj : place.projections) {
             if (proj.kind == ProjectionKind::Field) {
+                debug::interp::log(debug::interp::Id::FieldAccess,
+                                   "Accessing field " + std::to_string(proj.field_id),
+                                   debug::Level::Trace);
                 // 構造体のフィールドアクセス
                 if (result.type() == typeid(StructValue)) {
                     auto& struct_val = std::any_cast<StructValue&>(result);
                     auto field_it = struct_val.find(proj.field_id);
                     if (field_it != struct_val.end()) {
                         result = field_it->second;
+                        debug::interp::dump_value("Field value", result);
                     } else {
+                        debug::interp::log(debug::interp::Id::FieldNotFound,
+                                           "Field " + std::to_string(proj.field_id) + " not found",
+                                           debug::Level::Debug);
                         return Value{};  // フィールドが見つからない
                     }
                 } else {
+                    debug::interp::log(debug::interp::Id::NotStruct, "Value is not a struct",
+                                       debug::Level::Debug);
                     return Value{};  // 構造体ではない
                 }
             }
             // TODO: Index, Deref
         }
 
+        debug::interp::log(debug::interp::Id::LoadComplete, "Load complete", debug::Level::Trace);
         return result;
     }
 
     // Placeに値を格納
     void store_to_place(ExecutionContext& ctx, const MirPlace& place, Value value) {
+        debug::interp::log(debug::interp::Id::Store,
+                           "Storing to local _" + std::to_string(place.local), debug::Level::Debug);
+        debug::interp::dump_value("Value to store", value);
+
         if (place.projections.empty()) {
             // プロジェクションがない場合は直接格納
+            debug::interp::log(debug::interp::Id::StoreDirect,
+                               "Direct store to _" + std::to_string(place.local),
+                               debug::Level::Trace);
             ctx.locals[place.local] = value;
+            debug::interp::log(debug::interp::Id::StoreComplete, "Store complete",
+                               debug::Level::Trace);
         } else {
             // プロジェクションがある場合
+            debug::interp::log(debug::interp::Id::StoreProjection, "Store with projection",
+                               debug::Level::Trace);
             // まずローカル変数を取得（なければ作成）
             auto it = ctx.locals.find(place.local);
             if (it == ctx.locals.end()) {
                 // 構造体として初期化
+                debug::interp::log(debug::interp::Id::StoreInitStruct,
+                                   "Initializing new struct for _" + std::to_string(place.local),
+                                   debug::Level::Trace);
                 ctx.locals[place.local] = Value(StructValue{});
                 it = ctx.locals.find(place.local);
             }
 
             // フィールドアクセスの場合
             if (place.projections[0].kind == ProjectionKind::Field) {
+                debug::interp::log(
+                    debug::interp::Id::StoreField,
+                    "Storing to field " + std::to_string(place.projections[0].field_id),
+                    debug::Level::Debug);
                 if (it->second.type() != typeid(StructValue)) {
                     // 構造体ではない場合は初期化
+                    debug::interp::log(debug::interp::Id::StoreConvertStruct,
+                                       "Converting to struct type", debug::Level::Trace);
                     it->second = Value(StructValue{});
                 }
                 auto& struct_val = std::any_cast<StructValue&>(it->second);

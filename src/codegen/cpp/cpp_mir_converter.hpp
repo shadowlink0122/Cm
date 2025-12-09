@@ -821,7 +821,8 @@ class HirToCppMirConverter {
                             } else if (format_spec.length() > 1 && format_spec[0] == '^') {
                                 // 中央揃え {:^10} 形式
                                 std::string width = format_spec.substr(1);
-                                int w = std::stoi(width);
+                                // widthの妥当性を確認（例外は上位でキャッチされる）
+                                std::stoi(width);
                                 // 中央揃えをラムダで実装
                                 format_str += "%s";
                                 Expression center_expr;

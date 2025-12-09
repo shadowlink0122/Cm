@@ -32,7 +32,7 @@ class CopyPropagation : public OptimizationPass {
 
    private:
     bool process_block(BasicBlock& block, std::unordered_map<LocalId, LocalId>& copies,
-                       const MirFunction& func) {
+                       const MirFunction& /* func */) {
         bool changed = false;
 
         // 各文を処理
@@ -134,6 +134,13 @@ class CopyPropagation : public OptimizationPass {
                 for (auto& op : agg_data.operands) {
                     if (op)
                         changed |= propagate_in_operand(*op, copies);
+                }
+                break;
+            }
+            case MirRvalue::FormatConvert: {
+                auto& fmt_data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
+                if (fmt_data.operand) {
+                    changed |= propagate_in_operand(*fmt_data.operand, copies);
                 }
                 break;
             }
