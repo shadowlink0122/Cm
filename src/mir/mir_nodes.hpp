@@ -190,13 +190,13 @@ struct AggregateKind {
 
 struct MirRvalue {
     enum Kind {
-        Use,        // オペランドの使用
-        BinaryOp,   // 二項演算
-        UnaryOp,    // 単項演算
-        Ref,        // 借用
-        Aggregate,  // 集約型の構築
-        Cast,       // 型変換
-        FormatConvert, // フォーマット変換
+        Use,            // オペランドの使用
+        BinaryOp,       // 二項演算
+        UnaryOp,        // 単項演算
+        Ref,            // 借用
+        Aggregate,      // 集約型の構築
+        Cast,           // 型変換
+        FormatConvert,  // フォーマット変換
     };
 
     Kind kind;
@@ -240,7 +240,9 @@ struct MirRvalue {
         std::string format_spec;  // "x", "X", "b", "o", ".2" など
     };
 
-    std::variant<UseData, BinaryOpData, UnaryOpData, RefData, AggregateData, CastData, FormatConvertData> data;
+    std::variant<UseData, BinaryOpData, UnaryOpData, RefData, AggregateData, CastData,
+                 FormatConvertData>
+        data;
 
     static MirRvaluePtr use(MirOperandPtr op) {
         auto rv = std::make_unique<MirRvalue>();

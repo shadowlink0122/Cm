@@ -211,11 +211,13 @@ TEST_F(HirLoweringTest, WhileLoopDesugaring) {
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_EQ(func->body.size(), 2);
 
-    // whileは HirLoopに変換される
-    auto* loop = std::get<std::unique_ptr<hir::HirLoop>>(func->body[1]->kind).get();
-    ASSERT_NE(loop, nullptr);
-    // ループ本体には条件チェックとbreak、そして本体が含まれる
-    EXPECT_GE(loop->body.size(), 2);
+    // whileは HirWhileに変換される
+    auto* while_stmt = std::get<std::unique_ptr<hir::HirWhile>>(func->body[1]->kind).get();
+    ASSERT_NE(while_stmt, nullptr);
+    // 条件式が存在する
+    ASSERT_NE(while_stmt->cond, nullptr);
+    // ループ本体が存在する
+    EXPECT_GE(while_stmt->body.size(), 1);
 }
 
 // for文の脱糖
@@ -231,17 +233,19 @@ TEST_F(HirLoweringTest, ForLoopDesugaring) {
     auto hir = parse_and_lower(code);
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
 
-    // forループは初期化文とループに分解される
-    // 最初の文は初期化（int i = 0）
+    // forループはHirForとして保持される
     ASSERT_GE(func->body.size(), 1);
 
-    // 2番目の文はloop
-    if (func->body.size() >= 2) {
-        auto* loop = std::get_if<std::unique_ptr<hir::HirLoop>>(&func->body[1]->kind);
-        if (loop && *loop) {
-            EXPECT_GE((*loop)->body.size(), 2);  // 条件チェック、本体、更新
-        }
-    }
+    // for文を取得
+    auto* for_stmt = std::get_if<std::unique_ptr<hir::HirFor>>(&func->body[0]->kind);
+    ASSERT_NE(for_stmt, nullptr);
+    ASSERT_NE(*for_stmt, nullptr);
+    // 初期化、条件、更新が存在する
+    EXPECT_NE((*for_stmt)->init, nullptr);
+    EXPECT_NE((*for_stmt)->cond, nullptr);
+    EXPECT_NE((*for_stmt)->update, nullptr);
+    // ループ本体が存在する
+    EXPECT_GE((*for_stmt)->body.size(), 1);
 }
 
 // ============================================================

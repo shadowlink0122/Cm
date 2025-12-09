@@ -1,10 +1,11 @@
 #pragma once
 
+#include "../hir/hir_nodes.hpp"
+
 #include <memory>
 #include <string>
 #include <variant>
 #include <vector>
-#include "../hir/hir_nodes.hpp"
 
 namespace cm::mir_cpp {
 
@@ -17,15 +18,7 @@ using StmtPtr = std::shared_ptr<Statement>;
 using BlockPtr = std::shared_ptr<Block>;
 
 // 式の種類
-enum class ExprKind {
-    Literal,
-    Variable,
-    Binary,
-    Unary,
-    Call,
-    Cast,
-    StringInterpolation
-};
+enum class ExprKind { Literal, Variable, Binary, Unary, Call, Cast, StringInterpolation };
 
 // リテラル
 struct Literal {
@@ -42,10 +35,24 @@ struct Variable {
 // 二項演算
 struct BinaryOp {
     enum Op {
-        Add, Sub, Mul, Div, Mod,
-        Eq, Ne, Lt, Le, Gt, Ge,
-        And, Or,
-        BitAnd, BitOr, BitXor, Shl, Shr
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Mod,
+        Eq,
+        Ne,
+        Lt,
+        Le,
+        Gt,
+        Ge,
+        And,
+        Or,
+        BitAnd,
+        BitOr,
+        BitXor,
+        Shl,
+        Shr
     };
     Op op;
     ExprPtr left;
@@ -76,8 +83,8 @@ struct CastExpr {
 struct StringInterpolation {
     struct Part {
         std::string text;
-        ExprPtr expr;           // nullptr if text only
-        std::string format_spec; // e.g., "x", ".2", "<10"
+        ExprPtr expr;             // nullptr if text only
+        std::string format_spec;  // e.g., "x", ".2", "<10"
     };
     std::vector<Part> parts;
 };
@@ -85,15 +92,8 @@ struct StringInterpolation {
 // 式
 struct Expression {
     ExprKind kind;
-    std::variant<
-        Literal,
-        Variable,
-        BinaryOp,
-        UnaryOp,
-        CallExpr,
-        CastExpr,
-        StringInterpolation
-    > data;
+    std::variant<Literal, Variable, BinaryOp, UnaryOp, CallExpr, CastExpr, StringInterpolation>
+        data;
     hir::TypePtr type;
 };
 
@@ -140,9 +140,9 @@ struct WhileStmt {
 
 // for文
 struct ForStmt {
-    StmtPtr init;      // 初期化（変数宣言など）
+    StmtPtr init;  // 初期化（変数宣言など）
     ExprPtr condition;
-    StmtPtr update;    // 更新式
+    StmtPtr update;  // 更新式
     BlockPtr body;
 };
 
@@ -154,17 +154,13 @@ struct ReturnStmt {
 // 文
 struct Statement {
     StmtKind kind;
-    std::variant<
-        VarDecl,
-        Assignment,
-        ExprPtr,      // 式文
-        IfStmt,
-        WhileStmt,
-        ForStmt,
-        ReturnStmt,
-        std::monostate,  // Break, Continue
-        BlockPtr      // ブロック文
-    > data;
+    std::variant<VarDecl, Assignment,
+                 ExprPtr,  // 式文
+                 IfStmt, WhileStmt, ForStmt, ReturnStmt,
+                 std::monostate,  // Break, Continue
+                 BlockPtr         // ブロック文
+                 >
+        data;
 };
 
 // ブロック

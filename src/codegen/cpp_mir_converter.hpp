@@ -105,12 +105,15 @@ class HirToCppMirConverter {
                     if (let.init) {
                         // 文字列リテラルの補間処理
                         if (type == Type::STRING) {
-                            if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&let.init->kind)) {
+                            if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(
+                                    &let.init->kind)) {
                                 if (auto* str_val = std::get_if<std::string>(&(*lit)->value)) {
                                     // 補間が必要かチェック
-                                    auto interpolated_expr = processStringLiteralInterpolation(*str_val);
+                                    auto interpolated_expr =
+                                        processStringLiteralInterpolation(*str_val);
                                     if (interpolated_expr) {
-                                        body.push_back(Statement::Declare(type, let.name, *interpolated_expr));
+                                        body.push_back(
+                                            Statement::Declare(type, let.name, *interpolated_expr));
                                         return;
                                     }
                                 }
@@ -737,7 +740,7 @@ class HirToCppMirConverter {
                         std::string format_spec = placeholder.substr(1);
                         if (arg_index < original_args.size()) {
                             const auto& arg = original_args[arg_index++];
-                            
+
                             // バイナリ形式の特別処理
                             if (format_spec == "b") {
                                 format_str += "%s";
@@ -745,10 +748,16 @@ class HirToCppMirConverter {
                                 Expression binary_expr;
                                 binary_expr.kind = Expression::BINARY_OP;
                                 binary_expr.type = Type::STRING;
-                                binary_expr.value = "[&]{ std::string r; int _v = " + exprToString(arg) + "; if(_v==0)return std::string(\"0\"); while(_v>0){r=(char)('0'+(_v&1))+r;_v>>=1;} return std::string(\"0b\")+r; }().c_str()";
+                                binary_expr.value =
+                                    "[&]{ std::string r; int _v = " + exprToString(arg) +
+                                    "; if(_v==0)return std::string(\"0\"); "
+                                    "while(_v>0){r=(char)('0'+(_v&1))+r;_v>>=1;} return "
+                                    "std::string(\"0b\")+r; }().c_str()";
                                 args.push_back(binary_expr);
-                                if (current_function) current_function->uses_string = true;
-                            } else if (format_spec.length() > 2 && format_spec[0] == '0' && format_spec[1] == '>') {
+                                if (current_function)
+                                    current_function->uses_string = true;
+                            } else if (format_spec.length() > 2 && format_spec[0] == '0' &&
+                                       format_spec[1] == '>') {
                                 // ゼロパディング {:0>5} 形式
                                 std::string width = format_spec.substr(2);
                                 format_str += "%0" + width + "d";
@@ -762,9 +771,15 @@ class HirToCppMirConverter {
                                 Expression center_expr;
                                 center_expr.kind = Expression::BINARY_OP;
                                 center_expr.type = Type::STRING;
-                                center_expr.value = "[&]{ std::string s = " + exprToString(arg) + "; int w = " + width + "; int pad = (w > (int)s.length()) ? w - s.length() : 0; int left = pad / 2; int right = pad - left; return std::string(left, ' ') + s + std::string(right, ' '); }().c_str()";
+                                center_expr.value = "[&]{ std::string s = " + exprToString(arg) +
+                                                    "; int w = " + width +
+                                                    "; int pad = (w > (int)s.length()) ? w - "
+                                                    "s.length() : 0; int left = pad / 2; int right "
+                                                    "= pad - left; return std::string(left, ' ') + "
+                                                    "s + std::string(right, ' '); }().c_str()";
                                 args.push_back(center_expr);
-                                if (current_function) current_function->uses_string = true;
+                                if (current_function)
+                                    current_function->uses_string = true;
                             } else {
                                 format_str += convertFormatSpec(format_spec);
                                 args.push_back(arg);
@@ -1040,9 +1055,8 @@ class HirToCppMirConverter {
                 std::string var_content = str.substr(pos + 1, end - pos - 1);
                 // 変数名を取得（フォーマット指定子を除く）
                 size_t colon = var_content.find(':');
-                std::string var_name = (colon != std::string::npos) 
-                    ? var_content.substr(0, colon) 
-                    : var_content;
+                std::string var_name =
+                    (colon != std::string::npos) ? var_content.substr(0, colon) : var_content;
                 // 変数が存在するかチェック
                 if (!var_name.empty() && variable_types.find(var_name) != variable_types.end()) {
                     needs_interpolation = true;
@@ -1064,14 +1078,16 @@ class HirToCppMirConverter {
         while (pos < str.length()) {
             // エスケープされたブレースの処理
             if (str[pos] == '{' && pos + 1 < str.length() && str[pos + 1] == '{') {
-                if (!first) result_expr += " + ";
+                if (!first)
+                    result_expr += " + ";
                 first = false;
                 result_expr += "std::string(\"{\")";
                 pos += 2;
                 continue;
             }
             if (str[pos] == '}' && pos + 1 < str.length() && str[pos + 1] == '}') {
-                if (!first) result_expr += " + ";
+                if (!first)
+                    result_expr += " + ";
                 first = false;
                 result_expr += "std::string(\"}\")";
                 pos += 2;
@@ -1083,21 +1099,21 @@ class HirToCppMirConverter {
                 if (end != std::string::npos) {
                     std::string var_content = str.substr(pos + 1, end - pos - 1);
                     size_t colon = var_content.find(':');
-                    std::string var_name = (colon != std::string::npos) 
-                        ? var_content.substr(0, colon) 
-                        : var_content;
-                    std::string format_spec = (colon != std::string::npos)
-                        ? var_content.substr(colon + 1)
-                        : "";
+                    std::string var_name =
+                        (colon != std::string::npos) ? var_content.substr(0, colon) : var_content;
+                    std::string format_spec =
+                        (colon != std::string::npos) ? var_content.substr(colon + 1) : "";
 
                     auto it = variable_types.find(var_name);
                     if (it != variable_types.end()) {
-                        if (!first) result_expr += " + ";
+                        if (!first)
+                            result_expr += " + ";
                         first = false;
-                        
+
                         // フォーマット指定子がある場合はカスタム処理
                         if (!format_spec.empty()) {
-                            result_expr += formatVariableForConcat(var_name, it->second, format_spec);
+                            result_expr +=
+                                formatVariableForConcat(var_name, it->second, format_spec);
                         } else {
                             // 通常の変数連結
                             result_expr += convertToStdString(var_name, it->second);
@@ -1113,10 +1129,11 @@ class HirToCppMirConverter {
             if (next_brace == std::string::npos) {
                 next_brace = str.length();
             }
-            
+
             std::string text_part = str.substr(pos, next_brace - pos);
             if (!text_part.empty()) {
-                if (!first) result_expr += " + ";
+                if (!first)
+                    result_expr += " + ";
                 first = false;
                 result_expr += "std::string(\"" + escapeString(text_part) + "\")";
             }
@@ -1151,28 +1168,36 @@ class HirToCppMirConverter {
     }
 
     // フォーマット指定子付きの変数を文字列連結用に変換
-    std::string formatVariableForConcat(const std::string& var_name, Type type, const std::string& spec) {
+    std::string formatVariableForConcat(const std::string& var_name, Type type,
+                                        const std::string& spec) {
         // フォーマット指定子を解析
         if (spec == "x") {
             // 16進数小文字
-            return "[&]{ char buf[32]; snprintf(buf, sizeof(buf), \"%x\", " + var_name + "); return std::string(buf); }()";
+            return "[&]{ char buf[32]; snprintf(buf, sizeof(buf), \"%x\", " + var_name +
+                   "); return std::string(buf); }()";
         } else if (spec == "X") {
             // 16進数大文字
-            return "[&]{ char buf[32]; snprintf(buf, sizeof(buf), \"%X\", " + var_name + "); return std::string(buf); }()";
+            return "[&]{ char buf[32]; snprintf(buf, sizeof(buf), \"%X\", " + var_name +
+                   "); return std::string(buf); }()";
         } else if (spec == "o") {
             // 8進数
-            return "[&]{ char buf[32]; snprintf(buf, sizeof(buf), \"%o\", " + var_name + "); return std::string(buf); }()";
+            return "[&]{ char buf[32]; snprintf(buf, sizeof(buf), \"%o\", " + var_name +
+                   "); return std::string(buf); }()";
         } else if (spec == "b") {
             // 2進数（カスタム処理）
-            return "[&]{ std::string r; int n = " + var_name + "; if(n==0)return std::string(\"0\"); while(n>0){r=(char)('0'+(n&1))+r;n>>=1;} return r; }()";
+            return "[&]{ std::string r; int n = " + var_name +
+                   "; if(n==0)return std::string(\"0\"); while(n>0){r=(char)('0'+(n&1))+r;n>>=1;} "
+                   "return r; }()";
         } else if (spec.length() > 0 && spec[0] == '.') {
             // 精度指定（浮動小数点）
             std::string precision = spec.substr(1);
-            return "[&]{ char buf[64]; snprintf(buf, sizeof(buf), \"%." + precision + "f\", " + var_name + "); return std::string(buf); }()";
+            return "[&]{ char buf[64]; snprintf(buf, sizeof(buf), \"%." + precision + "f\", " +
+                   var_name + "); return std::string(buf); }()";
         } else if (spec.length() > 2 && spec[0] == '0' && spec[1] == '>') {
             // ゼロパディング（例: 0>5）
             std::string width = spec.substr(2);
-            return "[&]{ char buf[64]; snprintf(buf, sizeof(buf), \"%0" + width + "d\", " + var_name + "); return std::string(buf); }()";
+            return "[&]{ char buf[64]; snprintf(buf, sizeof(buf), \"%0" + width + "d\", " +
+                   var_name + "); return std::string(buf); }()";
         }
         // デフォルト
         return convertToStdString(var_name, type);
@@ -1183,12 +1208,24 @@ class HirToCppMirConverter {
         std::string result;
         for (char c : str) {
             switch (c) {
-                case '\\': result += "\\\\"; break;
-                case '"': result += "\\\""; break;
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                case '\t': result += "\\t"; break;
-                default: result += c; break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '"':
+                    result += "\\\"";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
+                default:
+                    result += c;
+                    break;
             }
         }
         return result;

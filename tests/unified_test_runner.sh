@@ -166,8 +166,8 @@ run_single_test() {
             local ts_dir="$TEMP_DIR/ts_${test_name}"
             rm -rf "$ts_dir"
 
-            # コンパイル
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-ts "$test_file" -o "$ts_dir" > /dev/null 2>&1 || exit_code=$?
+            # コンパイル（エラー時は出力ファイルにエラーメッセージを書き込む）
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-ts "$test_file" -o "$ts_dir" > "$output_file" 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # TypeScriptプロジェクトのビルドと実行
@@ -188,8 +188,8 @@ run_single_test() {
             local rust_dir="$TEMP_DIR/rust_${test_name}"
             rm -rf "$rust_dir"
 
-            # コンパイル
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-rust "$test_file" -o "$rust_dir" > /dev/null 2>&1 || exit_code=$?
+            # コンパイル（エラー時は出力ファイルにエラーメッセージを書き込む）
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-rust "$test_file" -o "$rust_dir" > "$output_file" 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # Rustコンパイルと実行

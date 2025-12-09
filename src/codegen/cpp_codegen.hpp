@@ -1,5 +1,9 @@
 #pragma once
 
+#include "../common/debug.hpp"
+#include "../hir/hir_nodes.hpp"
+#include "../mir/mir_nodes.hpp"
+
 #include <bitset>
 #include <fstream>
 #include <iomanip>
@@ -9,22 +13,18 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../common/debug.hpp"
-#include "../hir/hir_nodes.hpp"
-#include "../mir/mir_nodes.hpp"
-
 namespace cm::codegen {
 
 // C++コード生成器
 class CppCodeGenerator {
-public:
+   public:
     struct Options {
         std::string output_dir = "";
         bool optimize = false;
         bool debug_info = false;
     };
 
-private:
+   private:
     Options opts;
     std::ostringstream output;
     int indent_level = 0;
@@ -57,7 +57,8 @@ private:
                     // 型が不明な場合は変数の型を推論
                     if (!type || type->name == "T" || type->name.empty()) {
                         // 推論された型から判断
-                        if (inferred_types.count(place.local) && !inferred_types[place.local].empty()) {
+                        if (inferred_types.count(place.local) &&
+                            !inferred_types[place.local].empty()) {
                             const auto& inferred = inferred_types[place.local];
                             if (inferred == "string" || inferred == "std::string") {
                                 return hir::make_string();
@@ -99,31 +100,47 @@ private:
 
     // Type → C++
     std::string type_to_cpp(hir::TypePtr type) {
-        if (!type) return "int";
+        if (!type)
+            return "int";
 
         // TypeKindを使って判定（プリミティブ型はnameが空）
         switch (type->kind) {
-            case hir::TypeKind::Void: return "void";
-            case hir::TypeKind::Bool: return "bool";
-            case hir::TypeKind::Tiny: return "int8_t";
-            case hir::TypeKind::Short: return "int16_t";
-            case hir::TypeKind::Int: return "int";
-            case hir::TypeKind::Long: return "long";
-            case hir::TypeKind::UTiny: return "uint8_t";
-            case hir::TypeKind::UShort: return "uint16_t";
-            case hir::TypeKind::UInt: return "unsigned int";
-            case hir::TypeKind::ULong: return "unsigned long";
-            case hir::TypeKind::Float: return "float";
-            case hir::TypeKind::Double: return "double";
-            case hir::TypeKind::Char: return "char";
-            case hir::TypeKind::String: return "std::string";
+            case hir::TypeKind::Void:
+                return "void";
+            case hir::TypeKind::Bool:
+                return "bool";
+            case hir::TypeKind::Tiny:
+                return "int8_t";
+            case hir::TypeKind::Short:
+                return "int16_t";
+            case hir::TypeKind::Int:
+                return "int";
+            case hir::TypeKind::Long:
+                return "long";
+            case hir::TypeKind::UTiny:
+                return "uint8_t";
+            case hir::TypeKind::UShort:
+                return "uint16_t";
+            case hir::TypeKind::UInt:
+                return "unsigned int";
+            case hir::TypeKind::ULong:
+                return "unsigned long";
+            case hir::TypeKind::Float:
+                return "float";
+            case hir::TypeKind::Double:
+                return "double";
+            case hir::TypeKind::Char:
+                return "char";
+            case hir::TypeKind::String:
+                return "std::string";
             case hir::TypeKind::Pointer:
                 return type_to_cpp(type->element_type) + "*";
             case hir::TypeKind::Reference:
                 return type_to_cpp(type->element_type) + "&";
             case hir::TypeKind::Array:
                 if (type->array_size) {
-                    return type_to_cpp(type->element_type) + "[" + std::to_string(*type->array_size) + "]";
+                    return type_to_cpp(type->element_type) + "[" +
+                           std::to_string(*type->array_size) + "]";
                 } else {
                     return "std::vector<" + type_to_cpp(type->element_type) + ">";
                 }
@@ -237,12 +254,24 @@ private:
             // 通常の文字エスケープ
             char c = str[i];
             switch (c) {
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                case '\t': result += "\\t"; break;
-                case '\\': result += "\\\\"; break;
-                case '"': result += "\\\""; break;
-                default: result += c; break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '"':
+                    result += "\\\"";
+                    break;
+                default:
+                    result += c;
+                    break;
             }
             i++;
         }
@@ -292,8 +321,7 @@ private:
                 }
 
                 // 通常の二項演算
-                return operand_to_cpp(*data.lhs) + " " +
-                       binary_op_to_cpp(data.op) + " " +
+                return operand_to_cpp(*data.lhs) + " " + binary_op_to_cpp(data.op) + " " +
                        operand_to_cpp(*data.rhs);
             }
             case mir::MirRvalue::UnaryOp: {
@@ -307,16 +335,21 @@ private:
                 // ラムダ式を使って即座にフォーマット変換を実行
                 if (data.format_spec == "x") {
                     // 16進数小文字
-                    return "[&]{ std::stringstream ss; ss << std::hex << " + operand + "; return ss.str(); }()";
+                    return "[&]{ std::stringstream ss; ss << std::hex << " + operand +
+                           "; return ss.str(); }()";
                 } else if (data.format_spec == "X") {
                     // 16進数大文字
-                    return "[&]{ std::stringstream ss; ss << std::hex << std::uppercase << " + operand + "; std::string s = ss.str(); return s; }()";
+                    return "[&]{ std::stringstream ss; ss << std::hex << std::uppercase << " +
+                           operand + "; std::string s = ss.str(); return s; }()";
                 } else if (data.format_spec == "b") {
                     // 2進数
-                    return "[&]{ std::bitset<32> bs(" + operand + "); std::string s = bs.to_string(); s.erase(0, s.find_first_not_of('0')); return s.empty() ? \"0\" : s; }()";
+                    return "[&]{ std::bitset<32> bs(" + operand +
+                           "); std::string s = bs.to_string(); s.erase(0, "
+                           "s.find_first_not_of('0')); return s.empty() ? \"0\" : s; }()";
                 } else if (data.format_spec == "o") {
                     // 8進数
-                    return "[&]{ std::stringstream ss; ss << std::oct << " + operand + "; return ss.str(); }()";
+                    return "[&]{ std::stringstream ss; ss << std::oct << " + operand +
+                           "; return ss.str(); }()";
                 } else if (data.format_spec.size() > 1 && data.format_spec[0] == '.') {
                     // 小数点精度
                     int precision = std::stoi(data.format_spec.substr(1));
@@ -335,45 +368,69 @@ private:
     // 二項演算子 → C++
     std::string binary_op_to_cpp(mir::MirBinaryOp op) {
         switch (op) {
-            case mir::MirBinaryOp::Add: return "+";
-            case mir::MirBinaryOp::Sub: return "-";
-            case mir::MirBinaryOp::Mul: return "*";
-            case mir::MirBinaryOp::Div: return "/";
-            case mir::MirBinaryOp::Mod: return "%";
-            case mir::MirBinaryOp::BitAnd: return "&";
-            case mir::MirBinaryOp::BitOr: return "|";
-            case mir::MirBinaryOp::BitXor: return "^";
-            case mir::MirBinaryOp::Shl: return "<<";
-            case mir::MirBinaryOp::Shr: return ">>";
-            case mir::MirBinaryOp::Eq: return "==";
-            case mir::MirBinaryOp::Ne: return "!=";
-            case mir::MirBinaryOp::Lt: return "<";
-            case mir::MirBinaryOp::Le: return "<=";
-            case mir::MirBinaryOp::Gt: return ">";
-            case mir::MirBinaryOp::Ge: return ">=";
-            case mir::MirBinaryOp::And: return "&&";
-            case mir::MirBinaryOp::Or: return "||";
-            default: return "+";
+            case mir::MirBinaryOp::Add:
+                return "+";
+            case mir::MirBinaryOp::Sub:
+                return "-";
+            case mir::MirBinaryOp::Mul:
+                return "*";
+            case mir::MirBinaryOp::Div:
+                return "/";
+            case mir::MirBinaryOp::Mod:
+                return "%";
+            case mir::MirBinaryOp::BitAnd:
+                return "&";
+            case mir::MirBinaryOp::BitOr:
+                return "|";
+            case mir::MirBinaryOp::BitXor:
+                return "^";
+            case mir::MirBinaryOp::Shl:
+                return "<<";
+            case mir::MirBinaryOp::Shr:
+                return ">>";
+            case mir::MirBinaryOp::Eq:
+                return "==";
+            case mir::MirBinaryOp::Ne:
+                return "!=";
+            case mir::MirBinaryOp::Lt:
+                return "<";
+            case mir::MirBinaryOp::Le:
+                return "<=";
+            case mir::MirBinaryOp::Gt:
+                return ">";
+            case mir::MirBinaryOp::Ge:
+                return ">=";
+            case mir::MirBinaryOp::And:
+                return "&&";
+            case mir::MirBinaryOp::Or:
+                return "||";
+            default:
+                return "+";
         }
     }
 
     // 単項演算子 → C++
     std::string unary_op_to_cpp(mir::MirUnaryOp op) {
         switch (op) {
-            case mir::MirUnaryOp::Neg: return "-";
-            case mir::MirUnaryOp::Not: return "!";
-            case mir::MirUnaryOp::BitNot: return "~";
-            default: return "";
+            case mir::MirUnaryOp::Neg:
+                return "-";
+            case mir::MirUnaryOp::Not:
+                return "!";
+            case mir::MirUnaryOp::BitNot:
+                return "~";
+            default:
+                return "";
         }
     }
 
-public:
+   public:
     CppCodeGenerator(const Options& options) : opts(options) {}
 
     // MIRプログラムからC++コードを生成
     std::string generate(const mir::MirProgram& program) {
         if (debug::g_debug_mode) {
-            debug::log(debug::Stage::CodegenCpp, debug::Level::Info, "Starting C++ code generation");
+            debug::log(debug::Stage::CodegenCpp, debug::Level::Info,
+                       "Starting C++ code generation");
         }
 
         // ヘッダー
@@ -452,7 +509,9 @@ public:
         emit_line("} else {");
         indent_level++;
         emit_line("// Check if first argument is a string with {}");
-        emit_line("if constexpr (std::is_convertible_v<decltype(std::get<0>(args_tuple)), std::string>) {");
+        emit_line(
+            "if constexpr (std::is_convertible_v<decltype(std::get<0>(args_tuple)), std::string>) "
+            "{");
         indent_level++;
         emit_line("std::string fmt = std::get<0>(args_tuple);");
         emit_line("if (fmt.find('{') != std::string::npos) {");
@@ -479,38 +538,53 @@ public:
         emit_line("if (spec.empty() || spec == \"\") { oss << to_string_fmt(rest); }");
         emit_line("else if (spec == \":x\") {");
         indent_level++;
-        emit_line("if constexpr (std::is_integral_v<decltype(rest)>) { oss << std::hex << rest << std::dec; }");
+        emit_line(
+            "if constexpr (std::is_integral_v<decltype(rest)>) { oss << std::hex << rest << "
+            "std::dec; }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec == \":X\") {");
         indent_level++;
-        emit_line("if constexpr (std::is_integral_v<decltype(rest)>) { oss << std::hex << std::uppercase << rest << std::nouppercase << std::dec; }");
+        emit_line(
+            "if constexpr (std::is_integral_v<decltype(rest)>) { oss << std::hex << std::uppercase "
+            "<< rest << std::nouppercase << std::dec; }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec == \":b\") {");
         indent_level++;
-        emit_line("if constexpr (std::is_integral_v<decltype(rest)>) { oss << \"0b\" << std::bitset<32>(rest).to_string().substr(std::bitset<32>(rest).to_string().find('1')); }");
+        emit_line(
+            "if constexpr (std::is_integral_v<decltype(rest)>) { oss << \"0b\" << "
+            "std::bitset<32>(rest).to_string().substr(std::bitset<32>(rest).to_string().find('1'));"
+            " }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec == \":o\") {");
         indent_level++;
-        emit_line("if constexpr (std::is_integral_v<decltype(rest)>) { oss << std::oct << rest << std::dec; }");
+        emit_line(
+            "if constexpr (std::is_integral_v<decltype(rest)>) { oss << std::oct << rest << "
+            "std::dec; }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec.size() > 2 && spec[0] == ':' && spec[1] == '.') {");
         indent_level++;
         emit_line("int prec = std::stoi(spec.substr(2));");
-        emit_line("if constexpr (std::is_floating_point_v<decltype(rest)>) { oss << std::fixed << std::setprecision(prec) << rest; }");
+        emit_line(
+            "if constexpr (std::is_floating_point_v<decltype(rest)>) { oss << std::fixed << "
+            "std::setprecision(prec) << rest; }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec == \":e\") {");
         indent_level++;
-        emit_line("if constexpr (std::is_floating_point_v<decltype(rest)>) { oss << std::scientific << rest; }");
+        emit_line(
+            "if constexpr (std::is_floating_point_v<decltype(rest)>) { oss << std::scientific << "
+            "rest; }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec == \":E\") {");
         indent_level++;
-        emit_line("if constexpr (std::is_floating_point_v<decltype(rest)>) { oss << std::scientific << std::uppercase << rest << std::nouppercase; }");
+        emit_line(
+            "if constexpr (std::is_floating_point_v<decltype(rest)>) { oss << std::scientific << "
+            "std::uppercase << rest << std::nouppercase; }");
         emit_line("else { oss << rest; }");
         indent_level--;
         emit_line("} else if (spec.size() > 2 && spec[0] == ':' && spec[1] == '<') {");
@@ -528,7 +602,8 @@ public:
         emit_line("int width = std::stoi(spec.substr(2));");
         emit_line("std::string s = to_string_fmt(rest);");
         emit_line("int pad = (width - s.length()) / 2;");
-        emit_line("oss << std::string(pad, ' ') << s << std::string(width - s.length() - pad, ' ');");
+        emit_line(
+            "oss << std::string(pad, ' ') << s << std::string(width - s.length() - pad, ' ');");
         indent_level--;
         emit_line("} else if (spec.size() > 4 && spec.substr(0, 4) == \":0>\") {");
         indent_level++;
@@ -583,7 +658,8 @@ public:
         }
 
         // main関数のラッパー（エントリーポイント）
-        if (!program.functions.empty() && program.functions[0] && program.functions[0]->name == "main") {
+        if (!program.functions.empty() && program.functions[0] &&
+            program.functions[0]->name == "main") {
             emit_line("// Entry point");
             emit_line("int main(int argc, char* argv[]) {");
             indent_level++;
@@ -663,144 +739,157 @@ public:
 
         // 型推論を複数回実行して伝播を完全にする
         for (int pass = 0; pass < 3; pass++) {
-        // 定数と演算から型を推論
-        for (const auto& block : func.basic_blocks) {
-            if (!block) continue;
-            for (const auto& stmt : block->statements) {
-                if (!stmt) continue;
-                if (stmt->kind == mir::MirStatement::Assign) {
-                    auto& data = std::get<mir::MirStatement::AssignData>(stmt->data);
-                    size_t dest_local = data.place.local;
+            // 定数と演算から型を推論
+            for (const auto& block : func.basic_blocks) {
+                if (!block)
+                    continue;
+                for (const auto& stmt : block->statements) {
+                    if (!stmt)
+                        continue;
+                    if (stmt->kind == mir::MirStatement::Assign) {
+                        auto& data = std::get<mir::MirStatement::AssignData>(stmt->data);
+                        size_t dest_local = data.place.local;
 
-                    // 比較演算の結果はbool
-                    if (data.rvalue && data.rvalue->kind == mir::MirRvalue::BinaryOp) {
-                        auto& binop_data = std::get<mir::MirRvalue::BinaryOpData>(data.rvalue->data);
-                        if (binop_data.op >= mir::MirBinaryOp::Eq &&
-                            binop_data.op <= mir::MirBinaryOp::Ge) {
-                            inferred_types[dest_local] = "bool";
-                            if (debug::g_debug_mode) {
-                                debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                          "Inferred bool type for _" + std::to_string(dest_local) +
-                                          " from comparison op");
-                            }
-                        }
-                        // 文字列連結の結果はstring
-                        else if (binop_data.op == mir::MirBinaryOp::Add) {
-                            // いずれかのオペランドが文字列型かどうかをチェック
-                            bool is_string_concat = false;
-
-                            // 左辺のチェック
-                            if (binop_data.lhs) {
-                                if (binop_data.lhs->kind == mir::MirOperand::Constant) {
-                                    auto& constant = std::get<mir::MirConstant>(binop_data.lhs->data);
-                                    if (std::holds_alternative<std::string>(constant.value)) {
-                                        is_string_concat = true;
-                                    }
-                                } else if (binop_data.lhs->kind == mir::MirOperand::Copy ||
-                                          binop_data.lhs->kind == mir::MirOperand::Move) {
-                                    auto& place = std::get<mir::MirPlace>(binop_data.lhs->data);
-                                    if (inferred_types.count(place.local) &&
-                                        (inferred_types[place.local] == "std::string" ||
-                                         inferred_types[place.local] == "string")) {
-                                        is_string_concat = true;
-                                    }
-                                }
-                            }
-
-                            // 右辺のチェック
-                            if (!is_string_concat && binop_data.rhs) {
-                                if (binop_data.rhs->kind == mir::MirOperand::Constant) {
-                                    auto& constant = std::get<mir::MirConstant>(binop_data.rhs->data);
-                                    if (std::holds_alternative<std::string>(constant.value)) {
-                                        is_string_concat = true;
-                                    }
-                                } else if (binop_data.rhs->kind == mir::MirOperand::Copy ||
-                                          binop_data.rhs->kind == mir::MirOperand::Move) {
-                                    auto& place = std::get<mir::MirPlace>(binop_data.rhs->data);
-                                    if (inferred_types.count(place.local) &&
-                                        (inferred_types[place.local] == "std::string" ||
-                                         inferred_types[place.local] == "string")) {
-                                        is_string_concat = true;
-                                    }
-                                }
-                            }
-
-                            if (is_string_concat) {
-                                inferred_types[dest_local] = "std::string";
-                                if (debug::g_debug_mode) {
-                                    debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                              "Inferred std::string type for _" + std::to_string(dest_local) +
-                                              " from string concatenation");
-                                }
-                            }
-                        }
-                    }
-                    // Use文の処理
-                    else if (data.rvalue && data.rvalue->kind == mir::MirRvalue::Use) {
-                        auto& use_data = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
-
-                        // 定数の場合
-                        if (use_data.operand && use_data.operand->kind == mir::MirOperand::Constant) {
-                            auto& constant = std::get<mir::MirConstant>(use_data.operand->data);
-
-                            if (std::holds_alternative<bool>(constant.value)) {
+                        // 比較演算の結果はbool
+                        if (data.rvalue && data.rvalue->kind == mir::MirRvalue::BinaryOp) {
+                            auto& binop_data =
+                                std::get<mir::MirRvalue::BinaryOpData>(data.rvalue->data);
+                            if (binop_data.op >= mir::MirBinaryOp::Eq &&
+                                binop_data.op <= mir::MirBinaryOp::Ge) {
                                 inferred_types[dest_local] = "bool";
-                            } else if (std::holds_alternative<int64_t>(constant.value)) {
-                                inferred_types[dest_local] = "int";
-                            } else if (std::holds_alternative<double>(constant.value)) {
-                                // 整数値の場合
-                                double val = std::get<double>(constant.value);
-                                if (val == std::floor(val)) {
+                                if (debug::g_debug_mode) {
+                                    debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
+                                               "Inferred bool type for _" +
+                                                   std::to_string(dest_local) +
+                                                   " from comparison op");
+                                }
+                            }
+                            // 文字列連結の結果はstring
+                            else if (binop_data.op == mir::MirBinaryOp::Add) {
+                                // いずれかのオペランドが文字列型かどうかをチェック
+                                bool is_string_concat = false;
+
+                                // 左辺のチェック
+                                if (binop_data.lhs) {
+                                    if (binop_data.lhs->kind == mir::MirOperand::Constant) {
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(binop_data.lhs->data);
+                                        if (std::holds_alternative<std::string>(constant.value)) {
+                                            is_string_concat = true;
+                                        }
+                                    } else if (binop_data.lhs->kind == mir::MirOperand::Copy ||
+                                               binop_data.lhs->kind == mir::MirOperand::Move) {
+                                        auto& place = std::get<mir::MirPlace>(binop_data.lhs->data);
+                                        if (inferred_types.count(place.local) &&
+                                            (inferred_types[place.local] == "std::string" ||
+                                             inferred_types[place.local] == "string")) {
+                                            is_string_concat = true;
+                                        }
+                                    }
+                                }
+
+                                // 右辺のチェック
+                                if (!is_string_concat && binop_data.rhs) {
+                                    if (binop_data.rhs->kind == mir::MirOperand::Constant) {
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(binop_data.rhs->data);
+                                        if (std::holds_alternative<std::string>(constant.value)) {
+                                            is_string_concat = true;
+                                        }
+                                    } else if (binop_data.rhs->kind == mir::MirOperand::Copy ||
+                                               binop_data.rhs->kind == mir::MirOperand::Move) {
+                                        auto& place = std::get<mir::MirPlace>(binop_data.rhs->data);
+                                        if (inferred_types.count(place.local) &&
+                                            (inferred_types[place.local] == "std::string" ||
+                                             inferred_types[place.local] == "string")) {
+                                            is_string_concat = true;
+                                        }
+                                    }
+                                }
+
+                                if (is_string_concat) {
+                                    inferred_types[dest_local] = "std::string";
+                                    if (debug::g_debug_mode) {
+                                        debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
+                                                   "Inferred std::string type for _" +
+                                                       std::to_string(dest_local) +
+                                                       " from string concatenation");
+                                    }
+                                }
+                            }
+                        }
+                        // Use文の処理
+                        else if (data.rvalue && data.rvalue->kind == mir::MirRvalue::Use) {
+                            auto& use_data = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+
+                            // 定数の場合
+                            if (use_data.operand &&
+                                use_data.operand->kind == mir::MirOperand::Constant) {
+                                auto& constant = std::get<mir::MirConstant>(use_data.operand->data);
+
+                                if (std::holds_alternative<bool>(constant.value)) {
+                                    inferred_types[dest_local] = "bool";
+                                } else if (std::holds_alternative<int64_t>(constant.value)) {
                                     inferred_types[dest_local] = "int";
-                                } else {
-                                    inferred_types[dest_local] = "double";
+                                } else if (std::holds_alternative<double>(constant.value)) {
+                                    // 整数値の場合
+                                    double val = std::get<double>(constant.value);
+                                    if (val == std::floor(val)) {
+                                        inferred_types[dest_local] = "int";
+                                    } else {
+                                        inferred_types[dest_local] = "double";
+                                    }
+                                } else if (std::holds_alternative<char>(constant.value)) {
+                                    inferred_types[dest_local] = "char";
+                                } else if (std::holds_alternative<std::string>(constant.value)) {
+                                    inferred_types[dest_local] = "std::string";
+                                    // 定数文字列の値を保存
+                                    const_strings[dest_local] =
+                                        std::get<std::string>(constant.value);
+                                    if (debug::g_debug_mode) {
+                                        debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
+                                                   "Inferred std::string type for _" +
+                                                       std::to_string(dest_local) +
+                                                       " from string constant");
+                                    }
                                 }
-                            } else if (std::holds_alternative<char>(constant.value)) {
-                                inferred_types[dest_local] = "char";
-                            } else if (std::holds_alternative<std::string>(constant.value)) {
-                                inferred_types[dest_local] = "std::string";
-                                // 定数文字列の値を保存
-                                const_strings[dest_local] = std::get<std::string>(constant.value);
-                                if (debug::g_debug_mode) {
-                                    debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                              "Inferred std::string type for _" + std::to_string(dest_local) +
-                                              " from string constant");
+                            }
+                            // 変数からのコピーの場合、型を伝播
+                            else if (use_data.operand &&
+                                     (use_data.operand->kind == mir::MirOperand::Copy ||
+                                      use_data.operand->kind == mir::MirOperand::Move)) {
+                                auto& place = std::get<mir::MirPlace>(use_data.operand->data);
+                                if (inferred_types.count(place.local)) {
+                                    inferred_types[dest_local] = inferred_types[place.local];
+                                    if (debug::g_debug_mode) {
+                                        debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
+                                                   "Propagated type " +
+                                                       inferred_types[place.local] + " from _" +
+                                                       std::to_string(place.local) + " to _" +
+                                                       std::to_string(dest_local));
+                                    }
+                                }
+                                // 定数文字列の値も伝播
+                                if (const_strings.count(place.local)) {
+                                    const_strings[dest_local] = const_strings[place.local];
                                 }
                             }
                         }
-                        // 変数からのコピーの場合、型を伝播
-                        else if (use_data.operand &&
-                                (use_data.operand->kind == mir::MirOperand::Copy ||
-                                 use_data.operand->kind == mir::MirOperand::Move)) {
-                            auto& place = std::get<mir::MirPlace>(use_data.operand->data);
-                            if (inferred_types.count(place.local)) {
-                                inferred_types[dest_local] = inferred_types[place.local];
-                                if (debug::g_debug_mode) {
-                                    debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                              "Propagated type " + inferred_types[place.local] +
-                                              " from _" + std::to_string(place.local) +
-                                              " to _" + std::to_string(dest_local));
-                                }
+                        // フォーマット変換の結果は常にstd::string
+                        else if (data.rvalue &&
+                                 data.rvalue->kind == mir::MirRvalue::FormatConvert) {
+                            inferred_types[dest_local] = "std::string";
+                            if (debug::g_debug_mode) {
+                                debug::log(
+                                    debug::Stage::CodegenCpp, debug::Level::Debug,
+                                    "Inferred std::string type for format conversion result _" +
+                                        std::to_string(dest_local));
                             }
-                            // 定数文字列の値も伝播
-                            if (const_strings.count(place.local)) {
-                                const_strings[dest_local] = const_strings[place.local];
-                            }
-                        }
-                    }
-                    // フォーマット変換の結果は常にstd::string
-                    else if (data.rvalue && data.rvalue->kind == mir::MirRvalue::FormatConvert) {
-                        inferred_types[dest_local] = "std::string";
-                        if (debug::g_debug_mode) {
-                            debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                      "Inferred std::string type for format conversion result _" +
-                                      std::to_string(dest_local));
                         }
                     }
                 }
             }
-        }
-        } // 型推論パスのループ終了
+        }  // 型推論パスのループ終了
 
         // ローカル変数宣言
         for (const auto& local : func.locals) {
@@ -825,13 +914,14 @@ public:
                             std::string hir_type = type_to_cpp(local.type);
                             if (hir_type != type_str) {
                                 debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                          "Overriding HIR type " + hir_type + " with inferred type " + type_str +
-                                          " for local _" + std::to_string(local.id));
+                                           "Overriding HIR type " + hir_type +
+                                               " with inferred type " + type_str + " for local _" +
+                                               std::to_string(local.id));
                             }
                         } else {
                             debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                      "Using inferred type " + type_str + " for local _" + std::to_string(local.id) +
-                                      " (no HIR type)");
+                                       "Using inferred type " + type_str + " for local _" +
+                                           std::to_string(local.id) + " (no HIR type)");
                         }
                     }
                 } else if (local.type) {
@@ -843,10 +933,11 @@ public:
                         local.name.find("lt") != std::string::npos ||
                         local.name.find("le") != std::string::npos ||
                         local.name.find("gt") != std::string::npos ||
-                        local.name.find("ge") != std::string::npos ||
-                        type_str == "bool") {
-                        std::cerr << "[CPP] Local _" << local.id << " (" << local.name << ") has type: "
-                                  << type_str << " (HIR type: " << (local.type ? local.type->name : "null") << ")" << std::endl;
+                        local.name.find("ge") != std::string::npos || type_str == "bool") {
+                        std::cerr << "[CPP] Local _" << local.id << " (" << local.name
+                                  << ") has type: " << type_str
+                                  << " (HIR type: " << (local.type ? local.type->name : "null")
+                                  << ")" << std::endl;
                     }
                 }
 
@@ -854,8 +945,8 @@ public:
                 if (type_str.empty()) {
                     if (debug::g_debug_mode) {
                         debug::log(debug::Stage::CodegenCpp, debug::Level::Debug,
-                                  "WARNING: No type info for local _" + std::to_string(local.id) +
-                                  " (" + local.name + "), defaulting to int");
+                                   "WARNING: No type info for local _" + std::to_string(local.id) +
+                                       " (" + local.name + "), defaulting to int");
                     }
                     type_str = "int";
                 }
@@ -864,8 +955,8 @@ public:
                 std::string default_val;
                 if (type_str == "bool") {
                     default_val = " = false";
-                } else if (type_str == "int" || type_str == "long" ||
-                           type_str == "unsigned int" || type_str == "unsigned long") {
+                } else if (type_str == "int" || type_str == "long" || type_str == "unsigned int" ||
+                           type_str == "unsigned long") {
                     default_val = " = 0";
                 } else if (type_str == "float" || type_str == "double") {
                     default_val = " = 0.0";
@@ -942,7 +1033,8 @@ public:
             case mir::MirTerminator::Return: {
                 if (func.name == "main" && func.return_local < func.locals.size()) {
                     auto return_type = func.locals[func.return_local].type;
-                    if (return_type && return_type->kind != hir::TypeKind::Void && return_type->name != "void") {
+                    if (return_type && return_type->kind != hir::TypeKind::Void &&
+                        return_type->name != "void") {
                         emit_line("return _" + std::to_string(func.return_local) + ";");
                     } else {
                         emit_line("return 0;");
@@ -995,212 +1087,267 @@ public:
                     // 関数名を取得
                     std::string func_name = operand_to_cpp(*data.func);
 
-                // println/printの特別処理
-                if (func_name == "println" || func_name == "print") {
-                    // 引数が0の場合の処理
-                    if (data.args.empty()) {
-                        if (func_name == "println") {
-                            emit_line("println();");  // 空行を出力
-                        }
-                        // printの場合は何も出力しない
-                        break;
-                    }
-                    std::string format_str;
-                    bool has_format_str = false;
-
-                    // デバッグ出力
-                    emit_line("// DEBUG: println detected with " + std::to_string(data.args.size()) + " args");
-
-                    // 第1引数が文字列定数の場合
-                    if (data.args[0]->kind == mir::MirOperand::Constant) {
-                        if (auto* constant = std::get_if<mir::MirConstant>(&data.args[0]->data)) {
-                            if (auto* str_val = std::get_if<std::string>(&constant->value)) {
-                                format_str = *str_val;
-                                has_format_str = true;
+                    // println/printの特別処理
+                    if (func_name == "println" || func_name == "print") {
+                        // 引数が0の場合の処理
+                        if (data.args.empty()) {
+                            if (func_name == "println") {
+                                emit_line("println();");  // 空行を出力
                             }
+                            // printの場合は何も出力しない
+                            break;
                         }
-                    }
-                    // 第1引数が変数の場合、保存された定数文字列を確認
-                    else if (data.args[0]->kind == mir::MirOperand::Copy ||
-                             data.args[0]->kind == mir::MirOperand::Move) {
-                        if (auto* place = std::get_if<mir::MirPlace>(&data.args[0]->data)) {
-                            emit_line("// DEBUG: Looking for const_string for local " + std::to_string(place->local));
-                            if (const_strings.count(place->local)) {
-                                format_str = const_strings[place->local];
-                                has_format_str = true;
-                                // エスケープ処理: 改行を \\n に置換してデバッグ出力
-                                std::string escaped_str = format_str;
-                                size_t pos = 0;
-                                while ((pos = escaped_str.find('\n', pos)) != std::string::npos) {
-                                    escaped_str.replace(pos, 1, "\\n");
-                                    pos += 2;
+                        std::string format_str;
+                        bool has_format_str = false;
+
+                        // デバッグ出力
+                        emit_line("// DEBUG: println detected with " +
+                                  std::to_string(data.args.size()) + " args");
+
+                        // 第1引数が文字列定数の場合
+                        if (data.args[0]->kind == mir::MirOperand::Constant) {
+                            if (auto* constant =
+                                    std::get_if<mir::MirConstant>(&data.args[0]->data)) {
+                                if (auto* str_val = std::get_if<std::string>(&constant->value)) {
+                                    format_str = *str_val;
+                                    has_format_str = true;
                                 }
-                                emit_line("// DEBUG: Found const_string: " + escaped_str);
-                            } else {
-                                emit_line("// DEBUG: No const_string found");
                             }
                         }
-                    }
-
-                    if (has_format_str) {
-                                std::vector<std::string> processed_args;
-                                size_t arg_index = 1;
-
-                                // フォーマット文字列を解析して処理
-                                size_t pos = 0;
-                                std::string result;
-                                while (pos < format_str.length()) {
-                                    if (format_str[pos] == '{') {
-                                        if (pos + 1 < format_str.length() && format_str[pos + 1] == '{') {
-                                            // {{ はエスケープ
-                                            result += '{';
-                                            pos += 2;
-                                            continue;
-                                        }
-
-                                        size_t end_pos = format_str.find('}', pos);
-                                        if (end_pos != std::string::npos && arg_index < data.args.size()) {
-                                            // フォーマット指定子を抽出
-                                            std::string spec = format_str.substr(pos + 1, end_pos - pos - 1);
-                                            std::string arg = operand_to_cpp(*data.args[arg_index]);
-
-                                            // フォーマット指定子に基づいて処理
-                                            if (spec.empty()) {
-                                                // 通常の置換 {}
-                                                result += "\"; print_value(" + arg + "); std::cout << \"";
-                                            } else if (spec[0] == ':') {
-                                                // フォーマット指定子のみ {:x}, {:.2} など
-                                                std::string fmt = spec.substr(1);
-
-                                                if (fmt == "x") {
-                                                    result += "\" << std::hex << " + arg + " << std::dec << \"";
-                                                } else if (fmt == "X") {
-                                                    result += "\" << std::hex << std::uppercase << " + arg + " << std::nouppercase << std::dec << \"";
-                                                } else if (fmt == "b") {
-                                                    result += "\" << \"0b\" << [&]{ std::bitset<32> bs(" + arg + "); std::string s = bs.to_string(); s.erase(0, s.find_first_not_of('0')); return s.empty() ? \"0\" : s; }() << \"";
-                                                } else if (fmt == "o") {
-                                                    result += "\" << std::oct << " + arg + " << std::dec << \"";
-                                                } else if (fmt.size() > 1 && fmt[0] == '.') {
-                                                    // 小数点精度
-                                                    std::string precision = fmt.substr(1);
-                                                    result += "\" << std::fixed << std::setprecision(" + precision + ") << " + arg + " << \"";
-                                                } else if (fmt == "e") {
-                                                    // 科学記法（小文字）- デフォルト精度6にリセット
-                                                    result += "\" << std::setprecision(6) << std::scientific << " + arg + " << \"";
-                                                } else if (fmt == "E") {
-                                                    // 科学記法（大文字）- デフォルト精度6にリセット
-                                                    result += "\" << std::setprecision(6) << std::scientific << std::uppercase << " + arg + " << std::nouppercase << \"";
-                                                } else if (fmt[0] == '<' || fmt[0] == '>' || fmt[0] == '^') {
-                                                    // アライメント
-                                                    char align = fmt[0];
-                                                    std::string width = fmt.substr(1);
-                                                    if (align == '<') {
-                                                        result += "\" << std::left << std::setw(" + width + ") << " + arg + " << \"";
-                                                    } else if (align == '>') {
-                                                        result += "\" << std::right << std::setw(" + width + ") << " + arg + " << \"";
-                                                    } else if (align == '^') {
-                                                        // 中央揃えの実装
-                                                        result += "\" << [&]{ std::string s = to_string_fmt(" + arg + "); "
-                                                                 "int pad = " + width + " - s.length(); "
-                                                                 "int left = pad / 2; int right = pad - left; "
-                                                                 "return std::string(left, ' ') + s + std::string(right, ' '); }() << \"";
-                                                    }
-                                                } else if (fmt.size() > 2 && fmt[0] == '0' && fmt[1] == '>') {
-                                                    // ゼロパディング
-                                                    std::string width = fmt.substr(2);
-                                                    result += "\" << std::setfill('0') << std::setw(" + width + ") << " + arg + " << std::setfill(' ') << \"";
-                                                } else {
-                                                    // 不明なフォーマット
-                                                    result += "\"; print_value(" + arg + "); std::cout << \"";
-                                                }
-                                            } else if (spec.find(':') != std::string::npos) {
-                                                // 変数名:フォーマット指定子 {name:x} など
-                                                size_t colon_pos = spec.find(':');
-                                                std::string fmt = spec.substr(colon_pos + 1);
-
-                                                // 上記と同じフォーマット処理（変数名は無視して処理）
-                                                if (fmt == "x") {
-                                                    result += "\" << std::hex << " + arg + " << std::dec << \"";
-                                                } else if (fmt == "X") {
-                                                    result += "\" << std::hex << std::uppercase << " + arg + " << std::nouppercase << std::dec << \"";
-                                                } else if (fmt == "b") {
-                                                    result += "\" << \"0b\" << [&]{ std::bitset<32> bs(" + arg + "); std::string s = bs.to_string(); s.erase(0, s.find_first_not_of('0')); return s.empty() ? \"0\" : s; }() << \"";
-                                                } else if (fmt == "o") {
-                                                    result += "\" << std::oct << " + arg + " << std::dec << \"";
-                                                } else if (fmt.size() > 1 && fmt[0] == '.') {
-                                                    std::string precision = fmt.substr(1);
-                                                    result += "\" << std::fixed << std::setprecision(" + precision + ") << " + arg + " << \"";
-                                                } else {
-                                                    result += "\"; print_value(" + arg + "); std::cout << \"";
-                                                }
-                                            } else {
-                                                // 変数名のみ {name} など
-                                                result += "\"; print_value(" + arg + "); std::cout << \"";
-                                            }
-
-                                            arg_index++;
-                                            pos = end_pos + 1;
-                                        } else {
-                                            result += format_str[pos];
-                                            pos++;
-                                        }
-                                    } else if (format_str[pos] == '}' && pos + 1 < format_str.length() && format_str[pos + 1] == '}') {
-                                        // }} はエスケープ
-                                        result += '}';
+                        // 第1引数が変数の場合、保存された定数文字列を確認
+                        else if (data.args[0]->kind == mir::MirOperand::Copy ||
+                                 data.args[0]->kind == mir::MirOperand::Move) {
+                            if (auto* place = std::get_if<mir::MirPlace>(&data.args[0]->data)) {
+                                emit_line("// DEBUG: Looking for const_string for local " +
+                                          std::to_string(place->local));
+                                if (const_strings.count(place->local)) {
+                                    format_str = const_strings[place->local];
+                                    has_format_str = true;
+                                    // エスケープ処理: 改行を \\n に置換してデバッグ出力
+                                    std::string escaped_str = format_str;
+                                    size_t pos = 0;
+                                    while ((pos = escaped_str.find('\n', pos)) !=
+                                           std::string::npos) {
+                                        escaped_str.replace(pos, 1, "\\n");
                                         pos += 2;
+                                    }
+                                    emit_line("// DEBUG: Found const_string: " + escaped_str);
+                                } else {
+                                    emit_line("// DEBUG: No const_string found");
+                                }
+                            }
+                        }
+
+                        if (has_format_str) {
+                            std::vector<std::string> processed_args;
+                            size_t arg_index = 1;
+
+                            // フォーマット文字列を解析して処理
+                            size_t pos = 0;
+                            std::string result;
+                            while (pos < format_str.length()) {
+                                if (format_str[pos] == '{') {
+                                    if (pos + 1 < format_str.length() &&
+                                        format_str[pos + 1] == '{') {
+                                        // {{ はエスケープ
+                                        result += '{';
+                                        pos += 2;
+                                        continue;
+                                    }
+
+                                    size_t end_pos = format_str.find('}', pos);
+                                    if (end_pos != std::string::npos &&
+                                        arg_index < data.args.size()) {
+                                        // フォーマット指定子を抽出
+                                        std::string spec =
+                                            format_str.substr(pos + 1, end_pos - pos - 1);
+                                        std::string arg = operand_to_cpp(*data.args[arg_index]);
+
+                                        // フォーマット指定子に基づいて処理
+                                        if (spec.empty()) {
+                                            // 通常の置換 {}
+                                            result +=
+                                                "\"; print_value(" + arg + "); std::cout << \"";
+                                        } else if (spec[0] == ':') {
+                                            // フォーマット指定子のみ {:x}, {:.2} など
+                                            std::string fmt = spec.substr(1);
+
+                                            if (fmt == "x") {
+                                                result += "\" << std::hex << " + arg +
+                                                          " << std::dec << \"";
+                                            } else if (fmt == "X") {
+                                                result += "\" << std::hex << std::uppercase << " +
+                                                          arg +
+                                                          " << std::nouppercase << std::dec << \"";
+                                            } else if (fmt == "b") {
+                                                result +=
+                                                    "\" << \"0b\" << [&]{ std::bitset<32> bs(" +
+                                                    arg +
+                                                    "); std::string s = bs.to_string(); s.erase(0, "
+                                                    "s.find_first_not_of('0')); return s.empty() ? "
+                                                    "\"0\" : s; }() << \"";
+                                            } else if (fmt == "o") {
+                                                result += "\" << std::oct << " + arg +
+                                                          " << std::dec << \"";
+                                            } else if (fmt.size() > 1 && fmt[0] == '.') {
+                                                // 小数点精度
+                                                std::string precision = fmt.substr(1);
+                                                result += "\" << std::fixed << std::setprecision(" +
+                                                          precision + ") << " + arg + " << \"";
+                                            } else if (fmt == "e") {
+                                                // 科学記法（小文字）- デフォルト精度6にリセット
+                                                result +=
+                                                    "\" << std::setprecision(6) << std::scientific "
+                                                    "<< " +
+                                                    arg + " << \"";
+                                            } else if (fmt == "E") {
+                                                // 科学記法（大文字）- デフォルト精度6にリセット
+                                                result +=
+                                                    "\" << std::setprecision(6) << std::scientific "
+                                                    "<< std::uppercase << " +
+                                                    arg + " << std::nouppercase << \"";
+                                            } else if (fmt[0] == '<' || fmt[0] == '>' ||
+                                                       fmt[0] == '^') {
+                                                // アライメント
+                                                char align = fmt[0];
+                                                std::string width = fmt.substr(1);
+                                                if (align == '<') {
+                                                    result += "\" << std::left << std::setw(" +
+                                                              width + ") << " + arg + " << \"";
+                                                } else if (align == '>') {
+                                                    result += "\" << std::right << std::setw(" +
+                                                              width + ") << " + arg + " << \"";
+                                                } else if (align == '^') {
+                                                    // 中央揃えの実装
+                                                    result +=
+                                                        "\" << [&]{ std::string s = "
+                                                        "to_string_fmt(" +
+                                                        arg +
+                                                        "); "
+                                                        "int pad = " +
+                                                        width +
+                                                        " - s.length(); "
+                                                        "int left = pad / 2; int right = pad - "
+                                                        "left; "
+                                                        "return std::string(left, ' ') + s + "
+                                                        "std::string(right, ' '); }() << \"";
+                                                }
+                                            } else if (fmt.size() > 2 && fmt[0] == '0' &&
+                                                       fmt[1] == '>') {
+                                                // ゼロパディング
+                                                std::string width = fmt.substr(2);
+                                                result += "\" << std::setfill('0') << std::setw(" +
+                                                          width + ") << " + arg +
+                                                          " << std::setfill(' ') << \"";
+                                            } else {
+                                                // 不明なフォーマット
+                                                result +=
+                                                    "\"; print_value(" + arg + "); std::cout << \"";
+                                            }
+                                        } else if (spec.find(':') != std::string::npos) {
+                                            // 変数名:フォーマット指定子 {name:x} など
+                                            size_t colon_pos = spec.find(':');
+                                            std::string fmt = spec.substr(colon_pos + 1);
+
+                                            // 上記と同じフォーマット処理（変数名は無視して処理）
+                                            if (fmt == "x") {
+                                                result += "\" << std::hex << " + arg +
+                                                          " << std::dec << \"";
+                                            } else if (fmt == "X") {
+                                                result += "\" << std::hex << std::uppercase << " +
+                                                          arg +
+                                                          " << std::nouppercase << std::dec << \"";
+                                            } else if (fmt == "b") {
+                                                result +=
+                                                    "\" << \"0b\" << [&]{ std::bitset<32> bs(" +
+                                                    arg +
+                                                    "); std::string s = bs.to_string(); s.erase(0, "
+                                                    "s.find_first_not_of('0')); return s.empty() ? "
+                                                    "\"0\" : s; }() << \"";
+                                            } else if (fmt == "o") {
+                                                result += "\" << std::oct << " + arg +
+                                                          " << std::dec << \"";
+                                            } else if (fmt.size() > 1 && fmt[0] == '.') {
+                                                std::string precision = fmt.substr(1);
+                                                result += "\" << std::fixed << std::setprecision(" +
+                                                          precision + ") << " + arg + " << \"";
+                                            } else {
+                                                result +=
+                                                    "\"; print_value(" + arg + "); std::cout << \"";
+                                            }
+                                        } else {
+                                            // 変数名のみ {name} など
+                                            result +=
+                                                "\"; print_value(" + arg + "); std::cout << \"";
+                                        }
+
+                                        arg_index++;
+                                        pos = end_pos + 1;
                                     } else {
                                         result += format_str[pos];
                                         pos++;
                                     }
+                                } else if (format_str[pos] == '}' &&
+                                           pos + 1 < format_str.length() &&
+                                           format_str[pos + 1] == '}') {
+                                    // }} はエスケープ
+                                    result += '}';
+                                    pos += 2;
+                                } else {
+                                    result += format_str[pos];
+                                    pos++;
                                 }
+                            }
 
-                                // 生成されたコード
-                                if (arg_index > 1) {
-                                    // フォーマット処理された出力
-                                    emit_line("std::cout << \"" + result + "\"" +
-                                             (func_name == "println" ? " << std::endl;" : " << std::flush;"));
-                                    emit_line("__bb = " + std::to_string(data.success) + ";");
-                                    emit_line("break;");
-                                    break;
-                                }
-                    }
+                            // 生成されたコード
+                            if (arg_index > 1) {
+                                // フォーマット処理された出力
+                                emit_line("std::cout << \"" + result + "\"" +
+                                          (func_name == "println" ? " << std::endl;"
+                                                                  : " << std::flush;"));
+                                emit_line("__bb = " + std::to_string(data.success) + ";");
+                                emit_line("break;");
+                                break;
+                            }
+                        }
 
-                // 通常の関数呼び出し
-                std::string call = func_name + "(";
-                bool first = true;
-                for (const auto& arg : data.args) {
-                    if (!first) call += ", ";
-                    first = false;
-                    call += operand_to_cpp(*arg);
+                        // 通常の関数呼び出し
+                        std::string call = func_name + "(";
+                        bool first = true;
+                        for (const auto& arg : data.args) {
+                            if (!first)
+                                call += ", ";
+                            first = false;
+                            call += operand_to_cpp(*arg);
+                        }
+                        call += ")";
+
+                        // println/printは値を返さないので代入はスキップ
+                        if (data.destination && func_name != "println" && func_name != "print") {
+                            emit_line(place_to_cpp(*data.destination) + " = " + call + ";");
+                        } else {
+                            emit_line(call + ";");
+                        }
+
+                        // 次のブロックへ遷移
+                        emit_line("__bb = " + std::to_string(data.success) + ";");
+                        emit_line("break;");
+                    }  // 内部スコープの終了
+                    break;
+                }  // Call caseの終了
+
+                case mir::MirTerminator::Unreachable: {
+                    emit_line("std::abort();");
+                    break;
                 }
-                call += ")";
 
-                // println/printは値を返さないので代入はスキップ
-                if (data.destination && func_name != "println" && func_name != "print") {
-                    emit_line(place_to_cpp(*data.destination) + " = " + call + ";");
-                } else {
-                    emit_line(call + ";");
+                default: {
+                    emit_line("// Unknown terminator kind");
+                    break;
                 }
-
-                // 次のブロックへ遷移
-                emit_line("__bb = " + std::to_string(data.success) + ";");
-                emit_line("break;");
-                }  // 内部スコープの終了
-                break;
-            }  // Call caseの終了
-
-            case mir::MirTerminator::Unreachable: {
-                emit_line("std::abort();");
-                break;
-            }
-
-            default: {
-                emit_line("// Unknown terminator kind");
-                break;
             }
         }
-    }
-};
+    };
 
 };  // Extra semicolon to fix compiler error
 

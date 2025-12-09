@@ -1,22 +1,21 @@
 #pragma once
 
-#include "mir_cpp_nodes.hpp"
-#include "../hir/hir_nodes.hpp"
 #include "../common/debug.hpp"
+#include "../hir/hir_nodes.hpp"
+#include "mir_cpp_nodes.hpp"
+
 #include <unordered_map>
 
 namespace cm::mir_cpp {
 
 class HirToMirCppConverter {
-private:
+   private:
     std::unordered_map<std::string, hir::TypePtr> variable_types;
     int temp_counter = 0;
 
-    std::string gen_temp_name() {
-        return "_tmp" + std::to_string(temp_counter++);
-    }
+    std::string gen_temp_name() { return "_tmp" + std::to_string(temp_counter++); }
 
-public:
+   public:
     Program convert(const hir::Program& hir_program) {
         Program program;
 
@@ -36,7 +35,7 @@ public:
         return program;
     }
 
-private:
+   private:
     Function convert_function(const hir::Function& hir_func) {
         Function func;
         func.name = hir_func.name;
@@ -208,24 +207,60 @@ private:
 
                 BinaryOp::Op op;
                 switch (bin.op) {
-                    case hir::BinaryOp::Add: op = BinaryOp::Add; break;
-                    case hir::BinaryOp::Sub: op = BinaryOp::Sub; break;
-                    case hir::BinaryOp::Mul: op = BinaryOp::Mul; break;
-                    case hir::BinaryOp::Div: op = BinaryOp::Div; break;
-                    case hir::BinaryOp::Mod: op = BinaryOp::Mod; break;
-                    case hir::BinaryOp::Eq:  op = BinaryOp::Eq; break;
-                    case hir::BinaryOp::Ne:  op = BinaryOp::Ne; break;
-                    case hir::BinaryOp::Lt:  op = BinaryOp::Lt; break;
-                    case hir::BinaryOp::Le:  op = BinaryOp::Le; break;
-                    case hir::BinaryOp::Gt:  op = BinaryOp::Gt; break;
-                    case hir::BinaryOp::Ge:  op = BinaryOp::Ge; break;
-                    case hir::BinaryOp::And: op = BinaryOp::And; break;
-                    case hir::BinaryOp::Or:  op = BinaryOp::Or; break;
-                    case hir::BinaryOp::BitAnd: op = BinaryOp::BitAnd; break;
-                    case hir::BinaryOp::BitOr:  op = BinaryOp::BitOr; break;
-                    case hir::BinaryOp::BitXor: op = BinaryOp::BitXor; break;
-                    case hir::BinaryOp::Shl: op = BinaryOp::Shl; break;
-                    case hir::BinaryOp::Shr: op = BinaryOp::Shr; break;
+                    case hir::BinaryOp::Add:
+                        op = BinaryOp::Add;
+                        break;
+                    case hir::BinaryOp::Sub:
+                        op = BinaryOp::Sub;
+                        break;
+                    case hir::BinaryOp::Mul:
+                        op = BinaryOp::Mul;
+                        break;
+                    case hir::BinaryOp::Div:
+                        op = BinaryOp::Div;
+                        break;
+                    case hir::BinaryOp::Mod:
+                        op = BinaryOp::Mod;
+                        break;
+                    case hir::BinaryOp::Eq:
+                        op = BinaryOp::Eq;
+                        break;
+                    case hir::BinaryOp::Ne:
+                        op = BinaryOp::Ne;
+                        break;
+                    case hir::BinaryOp::Lt:
+                        op = BinaryOp::Lt;
+                        break;
+                    case hir::BinaryOp::Le:
+                        op = BinaryOp::Le;
+                        break;
+                    case hir::BinaryOp::Gt:
+                        op = BinaryOp::Gt;
+                        break;
+                    case hir::BinaryOp::Ge:
+                        op = BinaryOp::Ge;
+                        break;
+                    case hir::BinaryOp::And:
+                        op = BinaryOp::And;
+                        break;
+                    case hir::BinaryOp::Or:
+                        op = BinaryOp::Or;
+                        break;
+                    case hir::BinaryOp::BitAnd:
+                        op = BinaryOp::BitAnd;
+                        break;
+                    case hir::BinaryOp::BitOr:
+                        op = BinaryOp::BitOr;
+                        break;
+                    case hir::BinaryOp::BitXor:
+                        op = BinaryOp::BitXor;
+                        break;
+                    case hir::BinaryOp::Shl:
+                        op = BinaryOp::Shl;
+                        break;
+                    case hir::BinaryOp::Shr:
+                        op = BinaryOp::Shr;
+                        break;
                 }
 
                 return make_binary(op, left, right);
@@ -237,9 +272,15 @@ private:
 
                 UnaryOp::Op op;
                 switch (un.op) {
-                    case hir::UnaryOp::Neg: op = UnaryOp::Neg; break;
-                    case hir::UnaryOp::Not: op = UnaryOp::Not; break;
-                    case hir::UnaryOp::BitNot: op = UnaryOp::BitNot; break;
+                    case hir::UnaryOp::Neg:
+                        op = UnaryOp::Neg;
+                        break;
+                    case hir::UnaryOp::Not:
+                        op = UnaryOp::Not;
+                        break;
+                    case hir::UnaryOp::BitNot:
+                        op = UnaryOp::BitNot;
+                        break;
                 }
 
                 auto expr = std::make_shared<Expression>();

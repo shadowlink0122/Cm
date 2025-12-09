@@ -70,8 +70,9 @@ class MirInterpreter {
         void register_builtins() {
             // std::io::println関数 - 外部モジュールとして提供
             // printlnは直接使用不可、std::ioからインポートが必要
-            builtins["std::io::println"] = [](std::vector<Value> args,
-                                     const std::unordered_map<LocalId, Value>& locals) -> Value {
+            builtins["std::io::println"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& locals) -> Value {
                 if (args.empty()) {
                     std::cout << std::endl;
                     return Value{};
@@ -169,11 +170,16 @@ class MirInterpreter {
                                    const std::unordered_map<LocalId, Value>&) -> Value {
                 if (!args.empty()) {
                     if (args[0].type() == typeid(int64_t)) {
-                        return Value(std::string("0b") + std::bitset<64>(std::any_cast<int64_t>(args[0])).to_string().substr(
-                            std::bitset<64>(std::any_cast<int64_t>(args[0])).to_string().find('1')));
+                        return Value(std::string("0b") +
+                                     std::bitset<64>(std::any_cast<int64_t>(args[0]))
+                                         .to_string()
+                                         .substr(std::bitset<64>(std::any_cast<int64_t>(args[0]))
+                                                     .to_string()
+                                                     .find('1')));
                     } else if (args[0].type() == typeid(int32_t)) {
                         auto val = std::any_cast<int32_t>(args[0]);
-                        if (val == 0) return Value(std::string("0b0"));
+                        if (val == 0)
+                            return Value(std::string("0b0"));
                         std::string binary = std::bitset<32>(val).to_string();
                         size_t firstOne = binary.find('1');
                         if (firstOne != std::string::npos) {
@@ -575,7 +581,8 @@ class MirInterpreter {
                     return Value(l != r);
                 default:
                     // bool型の他の演算は整数に変換して処理
-                    return evaluate_binary_op(op, Value(static_cast<int64_t>(l)), Value(static_cast<int64_t>(r)));
+                    return evaluate_binary_op(op, Value(static_cast<int64_t>(l)),
+                                              Value(static_cast<int64_t>(r)));
             }
         }
 
@@ -672,18 +679,66 @@ class MirInterpreter {
         return Value{};
     }
 
+    // 構造体の値を表現（フィールド名 → 値のマップ）
+    using StructValue = std::unordered_map<FieldId, Value>;
+
     // Placeから値を読み込み
     Value load_from_place(ExecutionContext& ctx, const MirPlace& place) {
         auto it = ctx.locals.find(place.local);
-        if (it != ctx.locals.end()) {
-            return it->second;
+        if (it == ctx.locals.end()) {
+            return Value{};
         }
-        return Value{};
+
+        Value result = it->second;
+
+        // プロジェクションを適用
+        for (const auto& proj : place.projections) {
+            if (proj.kind == ProjectionKind::Field) {
+                // 構造体のフィールドアクセス
+                if (result.type() == typeid(StructValue)) {
+                    auto& struct_val = std::any_cast<StructValue&>(result);
+                    auto field_it = struct_val.find(proj.field_id);
+                    if (field_it != struct_val.end()) {
+                        result = field_it->second;
+                    } else {
+                        return Value{};  // フィールドが見つからない
+                    }
+                } else {
+                    return Value{};  // 構造体ではない
+                }
+            }
+            // TODO: Index, Deref
+        }
+
+        return result;
     }
 
     // Placeに値を格納
     void store_to_place(ExecutionContext& ctx, const MirPlace& place, Value value) {
-        ctx.locals[place.local] = value;
+        if (place.projections.empty()) {
+            // プロジェクションがない場合は直接格納
+            ctx.locals[place.local] = value;
+        } else {
+            // プロジェクションがある場合
+            // まずローカル変数を取得（なければ作成）
+            auto it = ctx.locals.find(place.local);
+            if (it == ctx.locals.end()) {
+                // 構造体として初期化
+                ctx.locals[place.local] = Value(StructValue{});
+                it = ctx.locals.find(place.local);
+            }
+
+            // フィールドアクセスの場合
+            if (place.projections[0].kind == ProjectionKind::Field) {
+                if (it->second.type() != typeid(StructValue)) {
+                    // 構造体ではない場合は初期化
+                    it->second = Value(StructValue{});
+                }
+                auto& struct_val = std::any_cast<StructValue&>(it->second);
+                struct_val[place.projections[0].field_id] = value;
+            }
+            // TODO: 複数のプロジェクション、Index, Deref
+        }
     }
 };
 

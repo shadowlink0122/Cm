@@ -82,6 +82,7 @@ class RustCodegen {
     void generate_single_file(const mir::MirProgram& program) {
         emit_header();
         emit_imports();
+        emit_float_format_helper();
 
         for (const auto& func : program.functions) {
             generate_function(*func);
@@ -97,6 +98,7 @@ class RustCodegen {
         current_output.str("");
         emit_header();
         emit_module_imports();
+        emit_float_format_helper();
 
         // main関数を探す
         for (const auto& func : program.functions) {
@@ -130,6 +132,57 @@ class RustCodegen {
         emit_line("#![allow(dead_code)]");
         emit_line("#![allow(unused_variables)]");
         emit_line("#![allow(non_snake_case)]");
+        emit_line("");
+    }
+
+    // 浮動小数点フォーマットヘルパー関数を出力
+    void emit_float_format_helper() {
+        emit_line("// Helper function to format floats like C's %g (6 significant digits)");
+        emit_line("fn _fmt_float(f: f64) -> String {");
+        indent_level++;
+        emit_line("if f == 0.0 { return \"0\".to_string(); }");
+        emit_line("let abs_f = f.abs();");
+        emit_line("// Use scientific notation for very large or very small numbers");
+        emit_line("if abs_f >= 1e6 || (abs_f < 1e-4 && abs_f > 0.0) {");
+        indent_level++;
+        emit_line("return _fmt_sci(f);");
+        indent_level--;
+        emit_line("}");
+        emit_line("// Calculate precision based on significant digits (like %g with 6 sig figs)");
+        emit_line("let log10 = abs_f.log10().floor() as i32;");
+        emit_line(
+            "let precision = if log10 >= 0 { (5 - log10).max(0) as usize } else { 5 + (-log10) as "
+            "usize };");
+        emit_line("let s = format!(\"{:.prec$}\", f, prec = precision.min(15));");
+        emit_line("let s = s.trim_end_matches('0');");
+        emit_line("let s = s.trim_end_matches('.');");
+        emit_line("s.to_string()");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("fn _fmt_sci(f: f64) -> String {");
+        indent_level++;
+        emit_line("let s = format!(\"{:e}\", f);");
+        emit_line("// Convert e0 to e+00 format");
+        emit_line("if let Some(pos) = s.find('e') {");
+        indent_level++;
+        emit_line("let (mantissa, exp) = s.split_at(pos);");
+        emit_line("let exp_num: i32 = exp[1..].parse().unwrap_or(0);");
+        emit_line("format!(\"{}e{:+03}\", mantissa, exp_num)");
+        indent_level--;
+        emit_line("} else {");
+        indent_level++;
+        emit_line("s");
+        indent_level--;
+        emit_line("}");
+        indent_level--;
+        emit_line("}");
+        emit_line("");
+        emit_line("fn _fmt_sci_upper(f: f64) -> String {");
+        indent_level++;
+        emit_line("_fmt_sci(f).replace(\"e\", \"E\")");
+        indent_level--;
+        emit_line("}");
         emit_line("");
     }
 
@@ -338,7 +391,8 @@ class RustCodegen {
                                                    constant.value)) {
                                         inferred_types[dest_local] = "String";
                                         // 定数文字列の値も保存
-                                        const_strings[dest_local] = std::get<std::string>(constant.value);
+                                        const_strings[dest_local] =
+                                            std::get<std::string>(constant.value);
                                     }
                                 }
                                 // 変数から変数への代入で型を伝播
@@ -368,7 +422,7 @@ class RustCodegen {
                             }
                             // 論理演算の結果もbool
                             else if (binop_data.op == mir::MirBinaryOp::And ||
-                                binop_data.op == mir::MirBinaryOp::Or) {
+                                     binop_data.op == mir::MirBinaryOp::Or) {
                                 inferred_types[dest_local] = "bool";
                             }
                             // 文字列連結の場合、結果はString
@@ -379,13 +433,15 @@ class RustCodegen {
                                 // 左辺のチェック
                                 if (binop_data.lhs) {
                                     if (binop_data.lhs->kind == mir::MirOperand::Constant) {
-                                        auto& constant = std::get<mir::MirConstant>(binop_data.lhs->data);
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(binop_data.lhs->data);
                                         if (std::holds_alternative<std::string>(constant.value)) {
                                             is_string_concat = true;
                                         }
                                     } else if (binop_data.lhs->kind == mir::MirOperand::Copy ||
-                                              binop_data.lhs->kind == mir::MirOperand::Move) {
-                                        if (auto* place = std::get_if<mir::MirPlace>(&binop_data.lhs->data)) {
+                                               binop_data.lhs->kind == mir::MirOperand::Move) {
+                                        if (auto* place =
+                                                std::get_if<mir::MirPlace>(&binop_data.lhs->data)) {
                                             if (inferred_types.count(place->local) &&
                                                 inferred_types[place->local] == "String") {
                                                 is_string_concat = true;
@@ -397,13 +453,15 @@ class RustCodegen {
                                 // 右辺のチェック
                                 if (!is_string_concat && binop_data.rhs) {
                                     if (binop_data.rhs->kind == mir::MirOperand::Constant) {
-                                        auto& constant = std::get<mir::MirConstant>(binop_data.rhs->data);
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(binop_data.rhs->data);
                                         if (std::holds_alternative<std::string>(constant.value)) {
                                             is_string_concat = true;
                                         }
                                     } else if (binop_data.rhs->kind == mir::MirOperand::Copy ||
-                                              binop_data.rhs->kind == mir::MirOperand::Move) {
-                                        if (auto* place = std::get_if<mir::MirPlace>(&binop_data.rhs->data)) {
+                                               binop_data.rhs->kind == mir::MirOperand::Move) {
+                                        if (auto* place =
+                                                std::get_if<mir::MirPlace>(&binop_data.rhs->data)) {
                                             if (inferred_types.count(place->local) &&
                                                 inferred_types[place->local] == "String") {
                                                 is_string_concat = true;
@@ -420,16 +478,20 @@ class RustCodegen {
                                     if (binop_data.lhs) {
                                         if (binop_data.lhs->kind == mir::MirOperand::Copy ||
                                             binop_data.lhs->kind == mir::MirOperand::Move) {
-                                            if (auto* place = std::get_if<mir::MirPlace>(&binop_data.lhs->data)) {
+                                            if (auto* place = std::get_if<mir::MirPlace>(
+                                                    &binop_data.lhs->data)) {
                                                 if (inferred_types.count(place->local)) {
                                                     op_type = inferred_types[place->local];
                                                 }
                                             }
-                                        } else if (binop_data.lhs->kind == mir::MirOperand::Constant) {
-                                            auto& constant = std::get<mir::MirConstant>(binop_data.lhs->data);
+                                        } else if (binop_data.lhs->kind ==
+                                                   mir::MirOperand::Constant) {
+                                            auto& constant =
+                                                std::get<mir::MirConstant>(binop_data.lhs->data);
                                             if (std::holds_alternative<double>(constant.value)) {
                                                 op_type = "f64";
-                                            } else if (std::holds_alternative<int64_t>(constant.value)) {
+                                            } else if (std::holds_alternative<int64_t>(
+                                                           constant.value)) {
                                                 op_type = "i32";
                                             }
                                         }
@@ -439,16 +501,20 @@ class RustCodegen {
                                     if (binop_data.rhs && op_type != "f64") {
                                         if (binop_data.rhs->kind == mir::MirOperand::Copy ||
                                             binop_data.rhs->kind == mir::MirOperand::Move) {
-                                            if (auto* place = std::get_if<mir::MirPlace>(&binop_data.rhs->data)) {
+                                            if (auto* place = std::get_if<mir::MirPlace>(
+                                                    &binop_data.rhs->data)) {
                                                 if (inferred_types.count(place->local)) {
-                                                    std::string rhs_type = inferred_types[place->local];
+                                                    std::string rhs_type =
+                                                        inferred_types[place->local];
                                                     if (rhs_type == "f64" || rhs_type == "f32") {
                                                         op_type = rhs_type;
                                                     }
                                                 }
                                             }
-                                        } else if (binop_data.rhs->kind == mir::MirOperand::Constant) {
-                                            auto& constant = std::get<mir::MirConstant>(binop_data.rhs->data);
+                                        } else if (binop_data.rhs->kind ==
+                                                   mir::MirOperand::Constant) {
+                                            auto& constant =
+                                                std::get<mir::MirConstant>(binop_data.rhs->data);
                                             if (std::holds_alternative<double>(constant.value)) {
                                                 op_type = "f64";
                                             }
@@ -467,16 +533,19 @@ class RustCodegen {
                                 if (binop_data.lhs) {
                                     if (binop_data.lhs->kind == mir::MirOperand::Copy ||
                                         binop_data.lhs->kind == mir::MirOperand::Move) {
-                                        if (auto* place = std::get_if<mir::MirPlace>(&binop_data.lhs->data)) {
+                                        if (auto* place =
+                                                std::get_if<mir::MirPlace>(&binop_data.lhs->data)) {
                                             if (inferred_types.count(place->local)) {
                                                 op_type = inferred_types[place->local];
                                             }
                                         }
                                     } else if (binop_data.lhs->kind == mir::MirOperand::Constant) {
-                                        auto& constant = std::get<mir::MirConstant>(binop_data.lhs->data);
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(binop_data.lhs->data);
                                         if (std::holds_alternative<double>(constant.value)) {
                                             op_type = "f64";
-                                        } else if (std::holds_alternative<int64_t>(constant.value)) {
+                                        } else if (std::holds_alternative<int64_t>(
+                                                       constant.value)) {
                                             op_type = "i32";
                                         }
                                     }
@@ -486,7 +555,8 @@ class RustCodegen {
                                 if (binop_data.rhs && op_type != "f64") {
                                     if (binop_data.rhs->kind == mir::MirOperand::Copy ||
                                         binop_data.rhs->kind == mir::MirOperand::Move) {
-                                        if (auto* place = std::get_if<mir::MirPlace>(&binop_data.rhs->data)) {
+                                        if (auto* place =
+                                                std::get_if<mir::MirPlace>(&binop_data.rhs->data)) {
                                             if (inferred_types.count(place->local)) {
                                                 std::string rhs_type = inferred_types[place->local];
                                                 if (rhs_type == "f64" || rhs_type == "f32") {
@@ -495,7 +565,8 @@ class RustCodegen {
                                             }
                                         }
                                     } else if (binop_data.rhs->kind == mir::MirOperand::Constant) {
-                                        auto& constant = std::get<mir::MirConstant>(binop_data.rhs->data);
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(binop_data.rhs->data);
                                         if (std::holds_alternative<double>(constant.value)) {
                                             op_type = "f64";
                                         }
@@ -509,14 +580,16 @@ class RustCodegen {
                         }
                         // 単項演算の結果の型を推論
                         else if (data.rvalue && data.rvalue->kind == mir::MirRvalue::UnaryOp) {
-                            auto& unop_data = std::get<mir::MirRvalue::UnaryOpData>(data.rvalue->data);
+                            auto& unop_data =
+                                std::get<mir::MirRvalue::UnaryOpData>(data.rvalue->data);
                             // 論理否定の結果はbool
                             if (unop_data.op == mir::MirUnaryOp::Not) {
                                 // オペランドの型をチェック
                                 if (unop_data.operand) {
                                     if (unop_data.operand->kind == mir::MirOperand::Copy ||
                                         unop_data.operand->kind == mir::MirOperand::Move) {
-                                        if (auto* place = std::get_if<mir::MirPlace>(&unop_data.operand->data)) {
+                                        if (auto* place = std::get_if<mir::MirPlace>(
+                                                &unop_data.operand->data)) {
                                             if (inferred_types.count(place->local)) {
                                                 std::string src_type = inferred_types[place->local];
                                                 // boolの否定はbool
@@ -529,8 +602,10 @@ class RustCodegen {
                                                 }
                                             }
                                         }
-                                    } else if (unop_data.operand->kind == mir::MirOperand::Constant) {
-                                        auto& constant = std::get<mir::MirConstant>(unop_data.operand->data);
+                                    } else if (unop_data.operand->kind ==
+                                               mir::MirOperand::Constant) {
+                                        auto& constant =
+                                            std::get<mir::MirConstant>(unop_data.operand->data);
                                         if (std::holds_alternative<bool>(constant.value)) {
                                             inferred_types[dest_local] = "bool";
                                         }
@@ -542,9 +617,11 @@ class RustCodegen {
                                 if (unop_data.operand) {
                                     if (unop_data.operand->kind == mir::MirOperand::Copy ||
                                         unop_data.operand->kind == mir::MirOperand::Move) {
-                                        if (auto* place = std::get_if<mir::MirPlace>(&unop_data.operand->data)) {
+                                        if (auto* place = std::get_if<mir::MirPlace>(
+                                                &unop_data.operand->data)) {
                                             if (inferred_types.count(place->local)) {
-                                                inferred_types[dest_local] = inferred_types[place->local];
+                                                inferred_types[dest_local] =
+                                                    inferred_types[place->local];
                                             }
                                         }
                                     }
@@ -552,7 +629,8 @@ class RustCodegen {
                             }
                         }
                         // フォーマット変換の結果は常にString
-                        else if (data.rvalue && data.rvalue->kind == mir::MirRvalue::FormatConvert) {
+                        else if (data.rvalue &&
+                                 data.rvalue->kind == mir::MirRvalue::FormatConvert) {
                             inferred_types[dest_local] = "String";
                         }
                     }
@@ -567,7 +645,8 @@ class RustCodegen {
             bool is_void = true;
             if (func.return_local < func.locals.size()) {
                 auto return_type = func.locals[func.return_local].type;
-                if (return_type && return_type->name != "void" && return_type->kind != hir::TypeKind::Void) {
+                if (return_type && return_type->name != "void" &&
+                    return_type->kind != hir::TypeKind::Void) {
                     is_void = false;
                 }
             }
@@ -616,7 +695,8 @@ class RustCodegen {
                 std::string default_val;
                 if (type_str == "bool") {
                     default_val = " = false";
-                } else if (type_str == "i32" || type_str == "i64" || type_str == "u32" || type_str == "u64") {
+                } else if (type_str == "i32" || type_str == "i64" || type_str == "u32" ||
+                           type_str == "u64") {
                     default_val = " = 0";
                 } else if (type_str == "f32" || type_str == "f64") {
                     default_val = " = 0.0";
@@ -844,7 +924,7 @@ class RustCodegen {
                             }
                             // 第1引数が変数の場合、保存された定数文字列を確認
                             else if (data.args[0]->kind == mir::MirOperand::Copy ||
-                                    data.args[0]->kind == mir::MirOperand::Move) {
+                                     data.args[0]->kind == mir::MirOperand::Move) {
                                 if (auto* place = std::get_if<mir::MirPlace>(&data.args[0]->data)) {
                                     // 定数文字列が保存されているか確認
                                     if (const_strings.count(place->local)) {
@@ -858,7 +938,8 @@ class RustCodegen {
                             if (has_format_str) {
                                 // バイナリ形式の場合は0bプレフィックスを追加
                                 size_t bin_pos = 0;
-                                while ((bin_pos = format_str.find("{:b}", bin_pos)) != std::string::npos) {
+                                while ((bin_pos = format_str.find("{:b}", bin_pos)) !=
+                                       std::string::npos) {
                                     format_str.replace(bin_pos, 4, "0b{:b}");
                                     bin_pos += 6;  // "0b{:b}"の長さ
                                 }
@@ -879,14 +960,17 @@ class RustCodegen {
                                         // 変数名のみの場合は{}に置換
                                         if (!placeholder.empty()) {
                                             // :で始まる場合はフォーマット指定子なのでそのまま保持
-                                            if (placeholder[0] == ':' || std::isdigit(placeholder[0])) {
+                                            if (placeholder[0] == ':' ||
+                                                std::isdigit(placeholder[0])) {
                                                 // フォーマット指定子はそのまま
                                                 pos = end + 1;
                                             } else if (placeholder.find(':') != std::string::npos) {
                                                 // 変数名:フォーマット の形式は、変数名部分を削除
                                                 size_t colon_pos = placeholder.find(':');
-                                                std::string format_spec = placeholder.substr(colon_pos);
-                                                format_str.replace(pos, end - pos + 1, "{" + format_spec + "}");
+                                                std::string format_spec =
+                                                    placeholder.substr(colon_pos);
+                                                format_str.replace(pos, end - pos + 1,
+                                                                   "{" + format_spec + "}");
                                                 pos += format_spec.length() + 2;
                                             } else {
                                                 // 単純な変数名は{}に置換
@@ -911,16 +995,102 @@ class RustCodegen {
                             // println!マクロの呼び出しを生成
                             // has_format_strがtrueの場合は第1引数がフォーマット文字列
                             // {}または{:で始まるフォーマット指定子を含む場合はフォーマット文字列
-                            bool is_format_string = has_format_str &&
-                                (format_str.find("{}") != std::string::npos ||
-                                 format_str.find("{:") != std::string::npos);
+                            bool is_format_string =
+                                has_format_str && (format_str.find("{}") != std::string::npos ||
+                                                   format_str.find("{:") != std::string::npos);
 
                             if (is_format_string) {
+                                // 科学表記と浮動小数点のカスタム処理
+                                // {:e}を{}に置き換え、対応する引数を_fmt_sciでラップ
+                                // {:E}を{}に置き換え、対応する引数を_fmt_sci_upperでラップ
+
+                                // フォーマット指定子を解析してインデックスを特定
+                                std::vector<std::pair<std::string, size_t>>
+                                    format_specs;  // (spec, arg_index)
+                                size_t arg_idx = 1;  // 引数は1から始まる（0はフォーマット文字列）
+                                std::string modified_format = "";
+                                size_t pos = 0;
+                                while (pos < format_str.length()) {
+                                    if (format_str[pos] == '{') {
+                                        if (pos + 1 < format_str.length() &&
+                                            format_str[pos + 1] == '{') {
+                                            modified_format += "{{";
+                                            pos += 2;
+                                            continue;
+                                        }
+                                        size_t end = format_str.find('}', pos);
+                                        if (end != std::string::npos) {
+                                            std::string placeholder =
+                                                format_str.substr(pos, end - pos + 1);
+                                            std::string spec =
+                                                format_str.substr(pos + 1, end - pos - 1);
+
+                                            if (spec == ":e" || spec == ":E") {
+                                                format_specs.push_back({spec, arg_idx});
+                                                modified_format += "{}";
+                                            } else if (spec.empty() || spec[0] != ':') {
+                                                // デフォルト浮動小数点
+                                                if (arg_idx < data.args.size()) {
+                                                    // 浮動小数点チェック
+                                                    bool is_float = false;
+                                                    if (data.args[arg_idx]->kind ==
+                                                            mir::MirOperand::Copy ||
+                                                        data.args[arg_idx]->kind ==
+                                                            mir::MirOperand::Move) {
+                                                        if (auto* place =
+                                                                std::get_if<mir::MirPlace>(
+                                                                    &data.args[arg_idx]->data)) {
+                                                            if (inferred_types.count(
+                                                                    place->local)) {
+                                                                std::string t =
+                                                                    inferred_types[place->local];
+                                                                is_float =
+                                                                    (t == "f64" || t == "f32");
+                                                            }
+                                                        }
+                                                    }
+                                                    if (is_float) {
+                                                        format_specs.push_back({"float", arg_idx});
+                                                    }
+                                                }
+                                                modified_format += placeholder;
+                                            } else {
+                                                modified_format += placeholder;
+                                            }
+                                            arg_idx++;
+                                            pos = end + 1;
+                                            continue;
+                                        }
+                                    }
+                                    if (format_str[pos] == '}' && pos + 1 < format_str.length() &&
+                                        format_str[pos + 1] == '}') {
+                                        modified_format += "}}";
+                                        pos += 2;
+                                        continue;
+                                    }
+                                    modified_format += format_str[pos];
+                                    pos++;
+                                }
+
                                 // フォーマット文字列として使用し、残りの引数をパラメータとして追加
-                                call = func_name + "(\"" + format_str + "\"";
+                                call = func_name + "(\"" + modified_format + "\"";
                                 // 第1引数はすでにフォーマット文字列として使用したので、第2引数から追加
                                 for (size_t i = 1; i < data.args.size(); ++i) {
-                                    call += ", " + operand_to_rust(*data.args[i]);
+                                    std::string arg_str = operand_to_rust(*data.args[i]);
+                                    // 科学表記または浮動小数点の変換が必要かチェック
+                                    for (const auto& [spec, idx] : format_specs) {
+                                        if (idx == i) {
+                                            if (spec == ":e") {
+                                                arg_str = "_fmt_sci(" + arg_str + ")";
+                                            } else if (spec == ":E") {
+                                                arg_str = "_fmt_sci_upper(" + arg_str + ")";
+                                            } else if (spec == "float") {
+                                                arg_str = "_fmt_float(" + arg_str + ")";
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    call += ", " + arg_str;
                                 }
                                 call += ")";
                             } else {
@@ -944,6 +1114,10 @@ class RustCodegen {
                                     if (std::holds_alternative<std::string>(constant->value)) {
                                         // 文字列リテラルはそのまま
                                         call = func_name + "(" + constant_to_rust(*constant) + ")";
+                                    } else if (std::holds_alternative<double>(constant->value)) {
+                                        // 浮動小数点はカスタムフォーマット（末尾ゼロを除去）
+                                        call = func_name + "(\"{}\", " +
+                                               operand_to_rust(*data.args[0]) + ")";
                                     } else {
                                         // その他の定数は"{}"フォーマットで
                                         call = func_name + "(\"{}\", " +
@@ -951,9 +1125,34 @@ class RustCodegen {
                                     }
                                 }
                             } else {
-                                // 変数の場合は"{}"フォーマットで
-                                call =
-                                    func_name + "(\"{}\", " + operand_to_rust(*data.args[0]) + ")";
+                                // 変数の場合
+                                // 型情報を使ってフォーマットを決定
+                                if (data.args[0]->kind == mir::MirOperand::Copy ||
+                                    data.args[0]->kind == mir::MirOperand::Move) {
+                                    if (auto* place =
+                                            std::get_if<mir::MirPlace>(&data.args[0]->data)) {
+                                        if (inferred_types.count(place->local)) {
+                                            std::string var_type = inferred_types[place->local];
+                                            if (var_type == "f64" || var_type == "f32") {
+                                                // 浮動小数点はカスタムフォーマット（末尾ゼロを除去）
+                                                call = func_name + "(\"{}\", _fmt_float(" +
+                                                       operand_to_rust(*data.args[0]) + "))";
+                                            } else {
+                                                call = func_name + "(\"{}\", " +
+                                                       operand_to_rust(*data.args[0]) + ")";
+                                            }
+                                        } else {
+                                            call = func_name + "(\"{}\", " +
+                                                   operand_to_rust(*data.args[0]) + ")";
+                                        }
+                                    } else {
+                                        call = func_name + "(\"{}\", " +
+                                               operand_to_rust(*data.args[0]) + ")";
+                                    }
+                                } else {
+                                    call = func_name + "(\"{}\", " +
+                                           operand_to_rust(*data.args[0]) + ")";
+                                }
                             }
                         }
                     } else {
@@ -1061,7 +1260,8 @@ class RustCodegen {
                     bool rhs_is_string = false;
 
                     // オペランドから型を推論
-                    if (data.lhs->kind == mir::MirOperand::Copy || data.lhs->kind == mir::MirOperand::Move) {
+                    if (data.lhs->kind == mir::MirOperand::Copy ||
+                        data.lhs->kind == mir::MirOperand::Move) {
                         if (auto* place = std::get_if<mir::MirPlace>(&data.lhs->data)) {
                             if (inferred_types.count(place->local)) {
                                 auto& type = inferred_types[place->local];
@@ -1070,7 +1270,8 @@ class RustCodegen {
                         }
                     }
 
-                    if (data.rhs->kind == mir::MirOperand::Copy || data.rhs->kind == mir::MirOperand::Move) {
+                    if (data.rhs->kind == mir::MirOperand::Copy ||
+                        data.rhs->kind == mir::MirOperand::Move) {
                         if (auto* place = std::get_if<mir::MirPlace>(&data.rhs->data)) {
                             if (inferred_types.count(place->local)) {
                                 auto& type = inferred_types[place->local];

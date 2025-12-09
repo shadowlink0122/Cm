@@ -76,7 +76,9 @@ class TypeScriptCodegen {
         indent_level++;
         emit_line("console.log();");
         indent_level--;
-        emit_line("} else if (typeof args[0] === 'string' && (args[0].includes('{') || args[0].includes('}'))) {");
+        emit_line(
+            "} else if (typeof args[0] === 'string' && (args[0].includes('{') || "
+            "args[0].includes('}'))) {");
         indent_level++;
         emit_line("// フォーマット文字列の処理");
         emit_line("let result = args[0];");
@@ -406,7 +408,8 @@ class TypeScriptCodegen {
 
             case mir::MirTerminator::Goto:
                 emit_line("__bb = " +
-                          std::to_string(std::get<mir::MirTerminator::GotoData>(term.data).target) + ";");
+                          std::to_string(std::get<mir::MirTerminator::GotoData>(term.data).target) +
+                          ";");
                 emit_line("break;");
                 break;
 

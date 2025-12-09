@@ -1,11 +1,12 @@
 #pragma once
 
-#include "cpp_mir_converter.hpp"
-#include "cpp_mir_codegen.hpp"
-#include "../hir/hir_nodes.hpp"
 #include "../common/debug.hpp"
-#include <string>
+#include "../hir/hir_nodes.hpp"
+#include "cpp_mir_codegen.hpp"
+#include "cpp_mir_converter.hpp"
+
 #include <iostream>
+#include <string>
 
 namespace cm {
 namespace codegen {
@@ -17,7 +18,7 @@ namespace codegen {
  * ステートマシンを使わず、効率的なC++コードを生成
  */
 class CppCodeGeneratorV2 {
-public:
+   public:
     // HIRプログラムからC++コードを生成
     std::string generate(const hir::HirProgram& hir_program, bool verbose = false) {
         if (verbose) {
@@ -38,14 +39,14 @@ public:
         std::string cpp_code = codegen.generate(cpp_mir);
 
         if (verbose) {
-            std::cerr << "[CPP-CODEGEN-V2] Generated C++ code ("
-                     << countLines(cpp_code) << " lines)\n";
+            std::cerr << "[CPP-CODEGEN-V2] Generated C++ code (" << countLines(cpp_code)
+                      << " lines)\n";
         }
 
         return cpp_code;
     }
 
-private:
+   private:
     void printCppMirInfo(const cpp_mir::Program& program) {
         std::cerr << "  - Headers: ";
         for (const auto& header : program.includes) {
@@ -66,11 +67,12 @@ private:
     int countLines(const std::string& str) {
         int count = 0;
         for (char c : str) {
-            if (c == '\n') count++;
+            if (c == '\n')
+                count++;
         }
         return count;
     }
 };
 
-} // namespace codegen
-} // namespace cm
+}  // namespace codegen
+}  // namespace cm

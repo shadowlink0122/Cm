@@ -86,16 +86,16 @@ struct BlockStmt {
 // switch文のパターン
 // ============================================================
 enum class PatternKind {
-    Value,      // 単一値
-    Range,      // 範囲 (val...val2)
-    Or          // OR結合されたパターン
+    Value,  // 単一値
+    Range,  // 範囲 (val...val2)
+    Or      // OR結合されたパターン
 };
 
 struct Pattern {
     PatternKind kind;
-    ExprPtr value;           // Value pattern
-    ExprPtr range_start;     // Range pattern start
-    ExprPtr range_end;       // Range pattern end
+    ExprPtr value;                                      // Value pattern
+    ExprPtr range_start;                                // Range pattern start
+    ExprPtr range_end;                                  // Range pattern end
     std::vector<std::unique_ptr<Pattern>> or_patterns;  // OR patterns
 
     // 単一値パターン
@@ -140,8 +140,7 @@ struct SwitchStmt {
     ExprPtr expr;
     std::vector<SwitchCase> cases;
 
-    SwitchStmt(ExprPtr e, std::vector<SwitchCase> c)
-        : expr(std::move(e)), cases(std::move(c)) {}
+    SwitchStmt(ExprPtr e, std::vector<SwitchCase> c) : expr(std::move(e)), cases(std::move(c)) {}
 };
 
 // ============================================================
@@ -182,7 +181,8 @@ inline StmtPtr make_block(std::vector<StmtPtr> stmts, Span s = {}) {
 }
 
 inline StmtPtr make_switch(ExprPtr expr, std::vector<SwitchCase> cases, Span s = {}) {
-    return std::make_unique<Stmt>(std::make_unique<SwitchStmt>(std::move(expr), std::move(cases)), s);
+    return std::make_unique<Stmt>(std::make_unique<SwitchStmt>(std::move(expr), std::move(cases)),
+                                  s);
 }
 
 inline StmtPtr make_break(Span s = {}) {

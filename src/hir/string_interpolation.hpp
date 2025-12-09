@@ -2,20 +2,21 @@
 
 #include "../frontend/ast/nodes.hpp"
 #include "hir_nodes.hpp"
+
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 namespace cm::hir {
 
 // 文字列埋め込み処理用のユーティリティ
 class StringInterpolationProcessor {
-public:
+   public:
     // 埋め込み変数の情報
     struct InterpolatedVar {
-        std::string name;           // 変数名
-        std::string format_spec;    // フォーマット指定子（オプション）
-        size_t position;            // 元の文字列内の位置
+        std::string name;         // 変数名
+        std::string format_spec;  // フォーマット指定子（オプション）
+        size_t position;          // 元の文字列内の位置
     };
 
     // 文字列に埋め込み式が含まれているかチェック
@@ -148,17 +149,13 @@ public:
     static HirExprPtr createInterpolatedStringExpr(
         const std::string& str,
         const std::function<HirExprPtr(const std::string&)>& resolveVariable) {
-
         auto parts = splitInterpolatedString(str);
 
         if (parts.size() == 1 && parts[0].type == StringPart::LITERAL) {
             // 埋め込みがない単純な文字列リテラル
             auto lit = std::make_unique<HirLiteral>();
             lit->value = parts[0].content;
-            return std::make_unique<HirExpr>(
-                std::move(lit),
-                make_string()
-            );
+            return std::make_unique<HirExpr>(std::move(lit), make_string());
         }
 
         // 文字列連結式を構築
@@ -171,10 +168,7 @@ public:
                 // リテラル部分
                 auto lit = std::make_unique<HirLiteral>();
                 lit->value = part.content;
-                part_expr = std::make_unique<HirExpr>(
-                    std::move(lit),
-                    make_string()
-                );
+                part_expr = std::make_unique<HirExpr>(std::move(lit), make_string());
             } else {
                 // 埋め込み変数部分
                 auto var_expr = resolveVariable(part.content);
@@ -199,7 +193,7 @@ public:
         return result;
     }
 
-private:
+   private:
     // 値を文字列に変換
     static HirExprPtr convertToString(HirExprPtr expr) {
         // toString関数呼び出しを生成

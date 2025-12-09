@@ -23,10 +23,10 @@ enum class TokenKind {
     KwAsync,
     KwAwait,
     KwBreak,
-    KwCase,      // switch case
+    KwCase,  // switch case
     KwConst,
     KwContinue,
-    KwDefault,   // switch default
+    KwDefault,  // switch default
     KwDelete,
     KwElse,
     KwEnum,

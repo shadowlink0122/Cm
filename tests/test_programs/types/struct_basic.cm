@@ -1,0 +1,15 @@
+// 基本的な構造体テスト
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p;
+    p.x = 10;
+    p.y = 20;
+    println("Point: x={p.x}, y={p.y}");
+    return 0;
+}

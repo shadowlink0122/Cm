@@ -90,8 +90,7 @@ ast::StmtPtr Parser::parse_stmt() {
         }
 
         expect(TokenKind::RBrace);
-        return ast::make_switch(std::move(expr), std::move(cases),
-                               Span{start_pos, previous().end});
+        return ast::make_switch(std::move(expr), std::move(cases), Span{start_pos, previous().end});
     }
 
     // for

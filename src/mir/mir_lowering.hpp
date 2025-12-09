@@ -18,16 +18,54 @@ class MirLowering {
         MirProgram mir_program;
         mir_program.filename = hir_program.filename;
 
+        // まず構造体定義を収集
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* st = std::get_if<std::unique_ptr<hir::HirStruct>>(&decl->kind)) {
+                register_struct(**st);
+            }
+        }
+
         for (const auto& decl : hir_program.declarations) {
             if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
                 if (auto mir_func = lower_function(**func)) {
                     mir_program.functions.push_back(std::move(mir_func));
                 }
             }
-            // TODO: 構造体、インターフェースなどの処理
         }
 
         return mir_program;
+    }
+
+   private:
+    // 構造体定義情報
+    struct StructInfo {
+        std::string name;
+        std::vector<std::pair<std::string, hir::TypePtr>> fields;  // (field_name, type)
+    };
+    std::unordered_map<std::string, StructInfo> struct_defs;
+
+    // 構造体定義を登録
+    void register_struct(const hir::HirStruct& st) {
+        StructInfo info;
+        info.name = st.name;
+        for (const auto& field : st.fields) {
+            info.fields.push_back({field.name, field.type});
+        }
+        struct_defs[st.name] = std::move(info);
+    }
+
+    // フィールドインデックスを取得
+    std::optional<FieldId> get_field_index(const std::string& struct_name,
+                                           const std::string& field_name) {
+        auto it = struct_defs.find(struct_name);
+        if (it == struct_defs.end())
+            return std::nullopt;
+        for (size_t i = 0; i < it->second.fields.size(); ++i) {
+            if (it->second.fields[i].first == field_name) {
+                return static_cast<FieldId>(i);
+            }
+        }
+        return std::nullopt;
     }
 
    private:
@@ -43,7 +81,7 @@ class MirLowering {
         BlockId current_block;
         std::unordered_map<std::string, LocalId> var_map;  // 変数名 → ローカルID
         LocalId next_temp_id;                              // 次の一時変数ID
-        std::vector<LoopContext> loop_stack;               // ループコンテキストのスタック
+        std::vector<LoopContext> loop_stack;  // ループコンテキストのスタック
 
         FunctionContext(MirFunction* f) : func(f), current_block(ENTRY_BLOCK), next_temp_id(0) {}
 
@@ -346,8 +384,10 @@ class MirLowering {
 
             // 条件分岐: trueならloop_body、falseならloop_exit
             auto discriminant = MirOperand::copy(MirPlace(cond_local));
-            std::vector<std::pair<int64_t, BlockId>> targets = {{1, loop_body}};  // true -> loop_body
-            ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, loop_exit));
+            std::vector<std::pair<int64_t, BlockId>> targets = {
+                {1, loop_body}};  // true -> loop_body
+            ctx.set_terminator(
+                MirTerminator::switch_int(std::move(discriminant), targets, loop_exit));
         } else {
             // 条件がない場合は常にloop_bodyへ
             ctx.set_terminator(MirTerminator::goto_block(loop_body));
@@ -447,7 +487,8 @@ class MirLowering {
                 generate_pattern_check(ctx, *case_.pattern, expr_local, case_blocks[i], next_block);
             } else if (case_.value) {
                 // 後方互換性: 旧式の単一値パターン
-                generate_simple_value_check(ctx, *case_.value, expr_local, case_blocks[i], next_block);
+                generate_simple_value_check(ctx, *case_.value, expr_local, case_blocks[i],
+                                            next_block);
             }
         }
 
@@ -504,11 +545,8 @@ class MirLowering {
         LocalId cmp_result = ctx.new_temp(hir::make_bool());
 
         // 比較演算
-        auto cmp_rvalue = MirRvalue::binary(
-            MirBinaryOp::Eq,
-            MirOperand::copy(MirPlace(expr_local)),
-            MirOperand::copy(MirPlace(value_local))
-        );
+        auto cmp_rvalue = MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(expr_local)),
+                                            MirOperand::copy(MirPlace(value_local)));
         ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
 
         // 条件分岐
@@ -528,17 +566,17 @@ class MirLowering {
                     LocalId cmp_result = ctx.new_temp(hir::make_bool());
 
                     // 比較演算
-                    auto cmp_rvalue = MirRvalue::binary(
-                        MirBinaryOp::Eq,
-                        MirOperand::copy(MirPlace(expr_local)),
-                        MirOperand::copy(MirPlace(value_local))
-                    );
-                    ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+                    auto cmp_rvalue =
+                        MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(expr_local)),
+                                          MirOperand::copy(MirPlace(value_local)));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
 
                     // 条件分岐
                     auto discriminant = MirOperand::copy(MirPlace(cmp_result));
                     std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
-                    ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+                    ctx.set_terminator(
+                        MirTerminator::switch_int(std::move(discriminant), targets, else_block));
                 }
                 break;
             }
@@ -551,35 +589,33 @@ class MirLowering {
 
                     // expr >= start
                     LocalId ge_result = ctx.new_temp(hir::make_bool());
-                    auto ge_rvalue = MirRvalue::binary(
-                        MirBinaryOp::Ge,
-                        MirOperand::copy(MirPlace(expr_local)),
-                        MirOperand::copy(MirPlace(start_local))
-                    );
-                    ctx.push_statement(MirStatement::assign(MirPlace(ge_result), std::move(ge_rvalue)));
+                    auto ge_rvalue =
+                        MirRvalue::binary(MirBinaryOp::Ge, MirOperand::copy(MirPlace(expr_local)),
+                                          MirOperand::copy(MirPlace(start_local)));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace(ge_result), std::move(ge_rvalue)));
 
                     // expr <= end
                     LocalId le_result = ctx.new_temp(hir::make_bool());
-                    auto le_rvalue = MirRvalue::binary(
-                        MirBinaryOp::Le,
-                        MirOperand::copy(MirPlace(expr_local)),
-                        MirOperand::copy(MirPlace(end_local))
-                    );
-                    ctx.push_statement(MirStatement::assign(MirPlace(le_result), std::move(le_rvalue)));
+                    auto le_rvalue =
+                        MirRvalue::binary(MirBinaryOp::Le, MirOperand::copy(MirPlace(expr_local)),
+                                          MirOperand::copy(MirPlace(end_local)));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace(le_result), std::move(le_rvalue)));
 
                     // ge_result && le_result
                     LocalId and_result = ctx.new_temp(hir::make_bool());
-                    auto and_rvalue = MirRvalue::binary(
-                        MirBinaryOp::And,
-                        MirOperand::copy(MirPlace(ge_result)),
-                        MirOperand::copy(MirPlace(le_result))
-                    );
-                    ctx.push_statement(MirStatement::assign(MirPlace(and_result), std::move(and_rvalue)));
+                    auto and_rvalue =
+                        MirRvalue::binary(MirBinaryOp::And, MirOperand::copy(MirPlace(ge_result)),
+                                          MirOperand::copy(MirPlace(le_result)));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace(and_result), std::move(and_rvalue)));
 
                     // 条件分岐
                     auto discriminant = MirOperand::copy(MirPlace(and_result));
                     std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
-                    ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+                    ctx.set_terminator(
+                        MirTerminator::switch_int(std::move(discriminant), targets, else_block));
                 }
                 break;
             }
@@ -597,11 +633,10 @@ class MirLowering {
 
                         // 比較演算
                         auto cmp_rvalue = MirRvalue::binary(
-                            MirBinaryOp::Eq,
-                            MirOperand::copy(MirPlace(expr_local)),
-                            MirOperand::copy(MirPlace(value_local))
-                        );
-                        ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+                            MirBinaryOp::Eq, MirOperand::copy(MirPlace(expr_local)),
+                            MirOperand::copy(MirPlace(value_local)));
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
 
                         // 次のチェック用ブロック
                         BlockId next_check_block = ctx.func->add_block();
@@ -609,7 +644,8 @@ class MirLowering {
                         // 条件分岐（マッチしたらmatch_block、しなければ次のチェックへ）
                         auto discriminant = MirOperand::copy(MirPlace(cmp_result));
                         std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
-                        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, next_check_block));
+                        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant),
+                                                                     targets, next_check_block));
 
                         // 次のチェックブロックに移動
                         ctx.switch_to_block(next_check_block);
@@ -620,21 +656,22 @@ class MirLowering {
                 if (!pattern.or_patterns.empty()) {
                     size_t last_idx = pattern.or_patterns.size() - 1;
                     if (pattern.or_patterns[last_idx]->kind == hir::HirSwitchPattern::SingleValue) {
-                        LocalId value_local = lower_expr(ctx, *pattern.or_patterns[last_idx]->value);
+                        LocalId value_local =
+                            lower_expr(ctx, *pattern.or_patterns[last_idx]->value);
                         LocalId cmp_result = ctx.new_temp(hir::make_bool());
 
                         // 比較演算
                         auto cmp_rvalue = MirRvalue::binary(
-                            MirBinaryOp::Eq,
-                            MirOperand::copy(MirPlace(expr_local)),
-                            MirOperand::copy(MirPlace(value_local))
-                        );
-                        ctx.push_statement(MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
+                            MirBinaryOp::Eq, MirOperand::copy(MirPlace(expr_local)),
+                            MirOperand::copy(MirPlace(value_local)));
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace(cmp_result), std::move(cmp_rvalue)));
 
                         // 最後の条件分岐（マッチしたらmatch_block、しなければelse_block）
                         auto discriminant = MirOperand::copy(MirPlace(cmp_result));
                         std::vector<std::pair<int64_t, BlockId>> targets = {{1, match_block}};
-                        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, else_block));
+                        ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant),
+                                                                     targets, else_block));
                     }
                 }
                 break;
@@ -664,15 +701,63 @@ class MirLowering {
             return lower_call(ctx, **call, expr.type);
         } else if (auto* ternary = std::get_if<std::unique_ptr<hir::HirTernary>>(&expr.kind)) {
             return lower_ternary(ctx, **ternary, expr.type);
+        } else if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&expr.kind)) {
+            return lower_member(ctx, **member, expr.type);
         }
-        // TODO: Index, Member
 
         // デフォルトは一時変数を返す
         return ctx.new_temp(expr.type);
     }
 
+    // メンバーアクセスのlowering
+    LocalId lower_member(FunctionContext& ctx, const hir::HirMember& member, hir::TypePtr type) {
+        // オブジェクトを評価
+        LocalId obj_local = lower_expr(ctx, *member.object);
+
+        // オブジェクトの型から構造体名を取得
+        std::string struct_name;
+        if (member.object->type && member.object->type->kind == ast::TypeKind::Struct) {
+            struct_name = member.object->type->name;
+        }
+
+        // 変数参照の場合、変数の型を直接確認
+        if (struct_name.empty()) {
+            if (auto* var_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&member.object->kind)) {
+                auto it = ctx.var_map.find((*var_ref)->name);
+                if (it != ctx.var_map.end()) {
+                    LocalId local_id = it->second;
+                    if (local_id < ctx.func->locals.size()) {
+                        const auto& local = ctx.func->locals[local_id];
+                        if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                            struct_name = local.type->name;
+                        }
+                    }
+                }
+            }
+        }
+
+        // フィールドインデックスを取得
+        auto field_idx = get_field_index(struct_name, member.member);
+        if (!field_idx) {
+            // フィールドが見つからない場合はダミーの一時変数を返す
+            return ctx.new_temp(type);
+        }
+
+        // MirPlaceにフィールドプロジェクションを追加
+        MirPlace place(obj_local, {PlaceProjection::field(*field_idx)});
+
+        // 結果を一時変数にコピー
+        LocalId result = ctx.new_temp(type);
+        auto rvalue = MirRvalue::use(MirOperand::copy(place));
+        ctx.push_statement(MirStatement::assign(MirPlace(result), std::move(rvalue)));
+
+        return result;
+    }
+
     // 文字列補間を処理するヘルパー関数
-    LocalId process_string_interpolation(FunctionContext& ctx, const std::string& str, hir::TypePtr type) {
+    LocalId process_string_interpolation(FunctionContext& ctx, const std::string& str,
+                                         hir::TypePtr type) {
         // エスケープシーケンスを一時的にプレースホルダーに置換
         std::string processed = str;
 
@@ -725,7 +810,8 @@ class MirLowering {
             }
 
             // 変数名とフォーマット指定子を抽出
-            std::string var_content = processed.substr(brace_start + 1, brace_end - brace_start - 1);
+            std::string var_content =
+                processed.substr(brace_start + 1, brace_end - brace_start - 1);
 
             // フォーマット指定子を分離
             size_t colon_pos = var_content.find(':');
@@ -795,28 +881,93 @@ class MirLowering {
             LocalId current;
 
             if (!parts[i].var_name.empty()) {
-                // 変数参照
-                auto it = ctx.var_map.find(parts[i].var_name);
-                if (it != ctx.var_map.end()) {
-                    // フォーマット指定子がある場合はFormatConvert演算を生成
-                    if (!parts[i].format_spec.empty()) {
-                        current = ctx.new_temp(type);
-                        auto format_rvalue = MirRvalue::format_convert(
-                            MirOperand::copy(MirPlace(it->second)),
-                            parts[i].format_spec
-                        );
-                        ctx.push_statement(MirStatement::assign(MirPlace(current), std::move(format_rvalue)));
+                // メンバーアクセス（"obj.field"形式）かどうかチェック
+                size_t dot_pos = parts[i].var_name.find('.');
+                if (dot_pos != std::string::npos) {
+                    // メンバーアクセス
+                    std::string obj_name = parts[i].var_name.substr(0, dot_pos);
+                    std::string field_name = parts[i].var_name.substr(dot_pos + 1);
+
+                    auto it = ctx.var_map.find(obj_name);
+                    if (it != ctx.var_map.end()) {
+                        LocalId obj_local = it->second;
+
+                        // オブジェクトの型を取得
+                        std::string struct_name;
+                        if (obj_local < ctx.func->locals.size()) {
+                            const auto& local = ctx.func->locals[obj_local];
+                            if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                                struct_name = local.type->name;
+                            }
+                        }
+
+                        // フィールドインデックスを取得
+                        auto field_idx = get_field_index(struct_name, field_name);
+                        if (field_idx) {
+                            // フィールドから値を取得
+                            MirPlace place(obj_local, {PlaceProjection::field(*field_idx)});
+                            current = ctx.new_temp(type);
+
+                            // フォーマット指定子がある場合
+                            if (!parts[i].format_spec.empty()) {
+                                LocalId field_val = ctx.new_temp(type);
+                                auto use_rvalue = MirRvalue::use(MirOperand::copy(place));
+                                ctx.push_statement(MirStatement::assign(MirPlace(field_val),
+                                                                        std::move(use_rvalue)));
+
+                                auto format_rvalue = MirRvalue::format_convert(
+                                    MirOperand::copy(MirPlace(field_val)), parts[i].format_spec);
+                                ctx.push_statement(MirStatement::assign(MirPlace(current),
+                                                                        std::move(format_rvalue)));
+                            } else {
+                                auto use_rvalue = MirRvalue::use(MirOperand::copy(place));
+                                ctx.push_statement(
+                                    MirStatement::assign(MirPlace(current), std::move(use_rvalue)));
+                            }
+                        } else {
+                            // フィールドが見つからない
+                            current = ctx.new_temp(type);
+                            MirConstant constant;
+                            constant.value = std::string("{missing}");
+                            constant.type = type;
+                            auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
+                            ctx.push_statement(
+                                MirStatement::assign(MirPlace(current), std::move(rvalue)));
+                        }
                     } else {
-                        current = it->second;
+                        // オブジェクトが見つからない
+                        current = ctx.new_temp(type);
+                        MirConstant constant;
+                        constant.value = std::string("{missing}");
+                        constant.type = type;
+                        auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace(current), std::move(rvalue)));
                     }
                 } else {
-                    // 変数が見つからない場合、空文字列
-                    current = ctx.new_temp(type);
-                    MirConstant constant;
-                    constant.value = std::string("");
-                    constant.type = type;
-                    auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
-                    ctx.push_statement(MirStatement::assign(MirPlace(current), std::move(rvalue)));
+                    // 通常の変数参照
+                    auto it = ctx.var_map.find(parts[i].var_name);
+                    if (it != ctx.var_map.end()) {
+                        // フォーマット指定子がある場合はFormatConvert演算を生成
+                        if (!parts[i].format_spec.empty()) {
+                            current = ctx.new_temp(type);
+                            auto format_rvalue = MirRvalue::format_convert(
+                                MirOperand::copy(MirPlace(it->second)), parts[i].format_spec);
+                            ctx.push_statement(
+                                MirStatement::assign(MirPlace(current), std::move(format_rvalue)));
+                        } else {
+                            current = it->second;
+                        }
+                    } else {
+                        // 変数が見つからない場合、{missing}
+                        current = ctx.new_temp(type);
+                        MirConstant constant;
+                        constant.value = std::string("{missing}");
+                        constant.type = type;
+                        auto rvalue = MirRvalue::use(MirOperand::constant(std::move(constant)));
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace(current), std::move(rvalue)));
+                    }
                 }
             } else {
                 // テキストリテラル
@@ -833,12 +984,11 @@ class MirLowering {
             } else {
                 // 文字列連結
                 LocalId concat_result = ctx.new_temp(type);
-                auto concat_rvalue = MirRvalue::binary(
-                    MirBinaryOp::Add,
-                    MirOperand::copy(MirPlace(result)),
-                    MirOperand::copy(MirPlace(current))
-                );
-                ctx.push_statement(MirStatement::assign(MirPlace(concat_result), std::move(concat_rvalue)));
+                auto concat_rvalue =
+                    MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                      MirOperand::copy(MirPlace(current)));
+                ctx.push_statement(
+                    MirStatement::assign(MirPlace(concat_result), std::move(concat_rvalue)));
                 result = concat_result;
             }
         }
@@ -865,13 +1015,17 @@ class MirLowering {
                     std::string content = str_val->substr(pos + 1, end - pos - 1);
                     // :がある場合は前の部分を変数名とする
                     size_t colon = content.find(':');
-                    std::string var_name = (colon != std::string::npos)
-                        ? content.substr(0, colon)
-                        : content;
+                    std::string var_name =
+                        (colon != std::string::npos) ? content.substr(0, colon) : content;
+
+                    // メンバーアクセスの場合はオブジェクト名を抽出
+                    size_t dot_pos = var_name.find('.');
+                    std::string lookup_name =
+                        (dot_pos != std::string::npos) ? var_name.substr(0, dot_pos) : var_name;
 
                     // 空でない変数名で、数字で始まらず、実際に変数が存在する場合
-                    if (!var_name.empty() && !std::isdigit(var_name[0]) &&
-                        ctx.var_map.find(var_name) != ctx.var_map.end()) {
+                    if (!lookup_name.empty() && !std::isdigit(lookup_name[0]) &&
+                        ctx.var_map.find(lookup_name) != ctx.var_map.end()) {
                         has_valid_interpolation = true;
                         break;
                     }
@@ -926,6 +1080,46 @@ class MirLowering {
                     return it->second;
                 }
             }
+            // 左辺がメンバーアクセスの場合
+            else if (auto* member =
+                         std::get_if<std::unique_ptr<hir::HirMember>>(&binary.lhs->kind)) {
+                // オブジェクトを評価
+                LocalId obj_local = lower_expr(ctx, *(*member)->object);
+
+                // オブジェクトの型から構造体名を取得
+                std::string struct_name;
+                if ((*member)->object->type &&
+                    (*member)->object->type->kind == ast::TypeKind::Struct) {
+                    struct_name = (*member)->object->type->name;
+                }
+
+                // 変数参照の場合、変数の型を直接確認
+                if (struct_name.empty()) {
+                    if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(
+                            &(*member)->object->kind)) {
+                        auto it = ctx.var_map.find((*var_ref)->name);
+                        if (it != ctx.var_map.end()) {
+                            LocalId local_id = it->second;
+                            if (local_id < ctx.func->locals.size()) {
+                                const auto& local = ctx.func->locals[local_id];
+                                if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                                    struct_name = local.type->name;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // フィールドインデックスを取得
+                auto field_idx = get_field_index(struct_name, (*member)->member);
+                if (field_idx) {
+                    // MirPlaceにフィールドプロジェクションを追加して代入
+                    MirPlace place(obj_local, {PlaceProjection::field(*field_idx)});
+                    auto rvalue = MirRvalue::use(MirOperand::copy(MirPlace(rhs_local)));
+                    ctx.push_statement(MirStatement::assign(place, std::move(rvalue)));
+                    return rhs_local;
+                }
+            }
 
             return rhs_local;
         }
@@ -949,9 +1143,9 @@ class MirLowering {
         // インクリメント/デクリメント演算子の脱糖
         if (unary.op == hir::HirUnaryOp::PreInc || unary.op == hir::HirUnaryOp::PreDec ||
             unary.op == hir::HirUnaryOp::PostInc || unary.op == hir::HirUnaryOp::PostDec) {
-
             // 変数への参照を取得（現在は変数のみサポート）
-            if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&unary.operand->kind)) {
+            if (auto* var_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&unary.operand->kind)) {
                 auto it = ctx.var_map.find((*var_ref)->name);
                 if (it != ctx.var_map.end()) {
                     LocalId var_local = it->second;
@@ -959,14 +1153,15 @@ class MirLowering {
 
                     // 前置か後置かで処理が異なる
                     bool is_post = (unary.op == hir::HirUnaryOp::PostInc ||
-                                   unary.op == hir::HirUnaryOp::PostDec);
+                                    unary.op == hir::HirUnaryOp::PostDec);
                     bool is_inc = (unary.op == hir::HirUnaryOp::PreInc ||
-                                  unary.op == hir::HirUnaryOp::PostInc);
+                                   unary.op == hir::HirUnaryOp::PostInc);
 
                     if (is_post) {
                         // 後置: 元の値を保存してから更新
                         auto save_rvalue = MirRvalue::use(MirOperand::copy(MirPlace(var_local)));
-                        ctx.push_statement(MirStatement::assign(MirPlace(result), std::move(save_rvalue)));
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace(result), std::move(save_rvalue)));
                     }
 
                     // 1を表すリテラル
@@ -979,15 +1174,16 @@ class MirLowering {
 
                     // インクリメント/デクリメント実行
                     MirBinaryOp op = is_inc ? MirBinaryOp::Add : MirBinaryOp::Sub;
-                    auto update_rvalue = MirRvalue::binary(op,
-                        MirOperand::copy(MirPlace(var_local)),
-                        MirOperand::copy(MirPlace(one)));
-                    ctx.push_statement(MirStatement::assign(MirPlace(var_local), std::move(update_rvalue)));
+                    auto update_rvalue = MirRvalue::binary(
+                        op, MirOperand::copy(MirPlace(var_local)), MirOperand::copy(MirPlace(one)));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace(var_local), std::move(update_rvalue)));
 
                     if (!is_post) {
                         // 前置: 更新後の値を返す
                         auto ret_rvalue = MirRvalue::use(MirOperand::copy(MirPlace(var_local)));
-                        ctx.push_statement(MirStatement::assign(MirPlace(result), std::move(ret_rvalue)));
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace(result), std::move(ret_rvalue)));
                     }
 
                     return result;
@@ -1060,23 +1256,85 @@ class MirLowering {
 
                         // 補間変数を引数として追加
                         for (const auto& var_name : interpolated_vars) {
-                            auto it = ctx.var_map.find(var_name);
-                            if (it != ctx.var_map.end()) {
-                                // 変数が存在する場合、引数として追加
-                                args.push_back(MirOperand::copy(MirPlace(it->second)));
+                            // メンバーアクセス（"obj.field"形式）かどうかチェック
+                            size_t dot_pos = var_name.find('.');
+                            if (dot_pos != std::string::npos) {
+                                // メンバーアクセス
+                                std::string obj_name = var_name.substr(0, dot_pos);
+                                std::string field_name = var_name.substr(dot_pos + 1);
+
+                                auto it = ctx.var_map.find(obj_name);
+                                if (it != ctx.var_map.end()) {
+                                    LocalId obj_local = it->second;
+
+                                    // オブジェクトの型を取得
+                                    std::string struct_name_for_field;
+                                    if (obj_local < ctx.func->locals.size()) {
+                                        const auto& local = ctx.func->locals[obj_local];
+                                        if (local.type &&
+                                            local.type->kind == ast::TypeKind::Struct) {
+                                            struct_name_for_field = local.type->name;
+                                        }
+                                    }
+
+                                    // フィールドインデックスを取得
+                                    auto field_idx =
+                                        get_field_index(struct_name_for_field, field_name);
+                                    if (field_idx) {
+                                        // フィールドの値を取得
+                                        MirPlace place(obj_local,
+                                                       {PlaceProjection::field(*field_idx)});
+                                        auto string_type = ast::make_string();
+                                        LocalId temp = ctx.new_temp(string_type);
+                                        auto use_rvalue = MirRvalue::use(MirOperand::copy(place));
+                                        ctx.push_statement(MirStatement::assign(
+                                            MirPlace(temp), std::move(use_rvalue)));
+                                        args.push_back(MirOperand::copy(MirPlace(temp)));
+                                    } else {
+                                        // フィールドが見つからない
+                                        auto string_type = ast::make_string();
+                                        LocalId temp = ctx.new_temp(string_type);
+                                        MirConstant constant;
+                                        constant.value = std::string("{missing}");
+                                        constant.type = string_type;
+                                        auto rvalue = MirRvalue::use(
+                                            MirOperand::constant(std::move(constant)));
+                                        ctx.push_statement(MirStatement::assign(MirPlace(temp),
+                                                                                std::move(rvalue)));
+                                        args.push_back(MirOperand::copy(MirPlace(temp)));
+                                    }
+                                } else {
+                                    // オブジェクトが見つからない
+                                    auto string_type = ast::make_string();
+                                    LocalId temp = ctx.new_temp(string_type);
+                                    MirConstant constant;
+                                    constant.value = std::string("{missing}");
+                                    constant.type = string_type;
+                                    auto rvalue =
+                                        MirRvalue::use(MirOperand::constant(std::move(constant)));
+                                    ctx.push_statement(
+                                        MirStatement::assign(MirPlace(temp), std::move(rvalue)));
+                                    args.push_back(MirOperand::copy(MirPlace(temp)));
+                                }
                             } else {
-                                // 変数が見つからない場合、デフォルト値を追加
-                                // 文字列型のデフォルト値 "{missing}" を作成
-                                auto string_type = ast::make_string();
-                                LocalId temp = ctx.new_temp(string_type);
-                                MirConstant constant;
-                                constant.value = std::string("{missing}");
-                                constant.type = string_type;
-                                auto rvalue =
-                                    MirRvalue::use(MirOperand::constant(std::move(constant)));
-                                ctx.push_statement(
-                                    MirStatement::assign(MirPlace(temp), std::move(rvalue)));
-                                args.push_back(MirOperand::copy(MirPlace(temp)));
+                                // 通常の変数参照
+                                auto it = ctx.var_map.find(var_name);
+                                if (it != ctx.var_map.end()) {
+                                    // 変数が存在する場合、引数として追加
+                                    args.push_back(MirOperand::copy(MirPlace(it->second)));
+                                } else {
+                                    // 変数が見つからない場合、デフォルト値を追加
+                                    auto string_type = ast::make_string();
+                                    LocalId temp = ctx.new_temp(string_type);
+                                    MirConstant constant;
+                                    constant.value = std::string("{missing}");
+                                    constant.type = string_type;
+                                    auto rvalue =
+                                        MirRvalue::use(MirOperand::constant(std::move(constant)));
+                                    ctx.push_statement(
+                                        MirStatement::assign(MirPlace(temp), std::move(rvalue)));
+                                    args.push_back(MirOperand::copy(MirPlace(temp)));
+                                }
                             }
                         }
                     } else {

@@ -18,7 +18,19 @@ enum class Level { Trace, Debug, Info, Warn, Error };
 inline Level g_debug_level = Level::Debug;
 
 /// コンパイラの処理段階
-enum class Stage { Lexer, Parser, Ast, TypeCheck, Hir, Mir, Lir, Interp, CodegenRust, CodegenTs, CodegenCpp };
+enum class Stage {
+    Lexer,
+    Parser,
+    Ast,
+    TypeCheck,
+    Hir,
+    Mir,
+    Lir,
+    Interp,
+    CodegenRust,
+    CodegenTs,
+    CodegenCpp
+};
 
 /// 段階を文字列に変換
 inline const char* stage_str(Stage s) {
