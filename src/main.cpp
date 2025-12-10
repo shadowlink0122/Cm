@@ -1,19 +1,3 @@
-// C++ codegen
-#include "codegen/cpp/cpp_codegen.hpp"
-#include "codegen/cpp/cpp_codegen_v2.hpp"
-
-// Rust codegen
-#include "codegen/rust/rust_codegen.hpp"
-#include "codegen/rust/rust_mir.hpp"
-#include "codegen/rust/rust_mir_codegen.hpp"
-#include "codegen/rust/rust_mir_converter.hpp"
-
-// TypeScript codegen
-#include "codegen/ts/ts_mir.hpp"
-#include "codegen/ts/ts_mir_codegen.hpp"
-#include "codegen/ts/ts_mir_converter.hpp"
-#include "codegen/ts/typescript_codegen.hpp"
-
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
 #include "codegen/llvm/llvm_codegen.hpp"
@@ -62,12 +46,8 @@ struct Options {
     bool show_hir = false;
     bool show_mir = false;
     bool show_mir_opt = false;
-    bool emit_rust = false;
-    bool emit_ts = false;   // TypeScript出力
-    bool emit_cpp = false;  // C++出力
     bool emit_llvm = false;
-    std::string backend = "llvm";  // バックエンド指定 (デフォルト: llvm)
-    std::string target = "";       // ターゲット (native, wasm, bm)
+    std::string target = "";       // ターゲット (native, wasm)
     bool run_after_emit = false;   // 生成後に実行
     int optimization_level = 0;
     bool debug = false;
@@ -78,12 +58,12 @@ struct Options {
 
 // ヘルプメッセージを表示
 void print_help(const char* program_name) {
-    std::cout << "Cm言語コンパイラ v" << get_version() << " (開発版)\n\n";
+    std::cout << "Cm言語コンパイラ v" << get_version() << "\n\n";
     std::cout << "使用方法:\n";
     std::cout << "  " << program_name << " <コマンド> [オプション] <ファイル>\n\n";
     std::cout << "コマンド:\n";
-    std::cout << "  run <file>            プログラムを実行\n";
-    std::cout << "  compile <file>        プログラムをコンパイル\n";
+    std::cout << "  run <file>            プログラムを実行（インタプリタ）\n";
+    std::cout << "  compile <file>        プログラムをコンパイル（LLVM）\n";
     std::cout << "  check <file>          構文と型チェックのみ実行\n";
     std::cout << "  help                  このヘルプを表示\n\n";
     std::cout << "オプション:\n";
@@ -93,16 +73,9 @@ void print_help(const char* program_name) {
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n\n";
     std::cout << "コンパイル時オプション:\n";
-    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/bm)\n";
+    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm)\n";
     std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
     std::cout << "                        wasm:   WebAssembly\n";
-    std::cout << "                        bm:     ベアメタル（ARM）\n";
-    std::cout << "  --emit-rust           Rustコードを生成\n";
-    std::cout << "  --emit-rust-v2        Rustコードを生成（ステートマシン方式）\n";
-    std::cout << "  --emit-ts             TypeScriptコードを生成\n";
-    std::cout << "  --emit-ts-v2          TypeScriptコードを生成（ステートマシン方式）\n";
-    std::cout << "  --emit-cpp            C++コードを生成\n";
-    std::cout << "  --backend=<backend>   バックエンド選択（llvm/interpreter、デフォルト: llvm）\n";
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
@@ -171,16 +144,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.show_mir = true;
         } else if (arg == "--mir-opt") {
             opts.show_mir_opt = true;
-        } else if (arg == "--emit-rust") {
-            opts.emit_rust = true;
-        } else if (arg == "--emit-ts") {
-            opts.emit_ts = true;
-        } else if (arg == "--emit-cpp") {
-            opts.emit_cpp = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
-        } else if (arg.substr(0, 10) == "--backend=") {
-            opts.backend = arg.substr(10);
         } else if (arg.substr(0, 9) == "--target=") {
             opts.target = arg.substr(9);
         } else if (arg == "--run") {
@@ -466,256 +431,73 @@ int main(int argc, char* argv[]) {
 
         // コンパイルコマンドの場合
         if (opts.command == Command::Compile) {
-            if (opts.emit_rust) {
-                if (opts.verbose) {
-                    std::cout << "=== Rust Code Generation (MIR Pipeline) ===\n";
-                }
-
-                // HIR → Rust-MIR → Rustコード生成
-                std::string output_dir =
-                    opts.output_file.empty() ? ".tmp/rust_build" : opts.output_file;
-
-                // HIRをRust-MIRに変換
-                rust_mir::HirToRustMirConverter converter;
-                auto rust_mir_program = converter.convert(hir);
-
-                // Rust-MIRをRustコードに生成
-                rust_mir::RustMirCodegen::Options rust_opts;
-                rust_opts.output_dir = output_dir;
-                rust_mir::RustMirCodegen codegen(rust_opts);
-                codegen.generate(rust_mir_program);
-
-                if (opts.verbose) {
-                    std::cout << "✓ Rustコード生成完了: " << output_dir << "\n";
-                }
-
-                // rustcでオブジェクトファイルを生成
-                std::string main_rs = output_dir + "/main.rs";
-                std::string output_bin = output_dir + "/main";
-                std::string rustc_cmd =
-                    "rustc " + main_rs + " -o " + output_bin + " --edition=2021";
-
-                if (opts.verbose) {
-                    std::cout << "rustcでコンパイル中: " << rustc_cmd << "\n";
-                }
-
-                int rustc_result = std::system(rustc_cmd.c_str());
-                if (rustc_result == 0) {
-                    if (opts.verbose) {
-                        std::cout << "✓ オブジェクトファイル生成完了: " << output_bin << "\n";
-                    }
-
-                    // --runオプションがある場合は実行
-                    if (opts.run_after_emit) {
-                        if (opts.verbose) {
-                            std::cout << "実行中: " << output_bin << "\n";
-                        }
-                        int exec_result = std::system(output_bin.c_str());
-                        return WEXITSTATUS(exec_result);
-                    }
-                } else {
-                    std::cerr << "rustcでのコンパイルに失敗しました\n";
-                    return 1;
-                }
-            } else if (opts.emit_ts) {
-                if (opts.verbose) {
-                    std::cout << "=== TypeScript Code Generation (MIR Pipeline) ===\n";
-                }
-
-                // HIR → TS-MIR → TypeScriptコード生成
-                std::string output_dir =
-                    opts.output_file.empty() ? ".tmp/ts_build" : opts.output_file;
-
-                // HIRをTS-MIRに変換
-                ts_mir::HirToTsMirConverter ts_converter;
-                auto ts_mir_program = ts_converter.convert(hir);
-
-                // TS-MIRをTypeScriptコードに生成
-                ts_mir::TsMirCodegen::Options ts_opts;
-                ts_opts.output_dir = output_dir;
-                ts_mir::TsMirCodegen ts_codegen(ts_opts);
-                ts_codegen.generate(ts_mir_program);
-
-                if (opts.verbose) {
-                    std::cout << "✓ TypeScriptコード生成完了: " << output_dir << "\n";
-                }
-
-                // --runオプションがある場合はtscでコンパイルして実行
-                if (opts.run_after_emit) {
-                    // npx tscでコンパイル
-                    std::string compile_cmd =
-                        "cd " + output_dir + " && npx -y tsc main.ts --outDir . 2>&1";
-                    if (opts.verbose) {
-                        std::cout << "TypeScriptをコンパイル中...\n";
-                    }
-
-                    int compile_result = std::system(compile_cmd.c_str());
-                    if (compile_result != 0) {
-                        std::cerr << "TypeScriptのコンパイルに失敗しました\n";
-                        return 1;
-                    }
-
-                    // nodeで実行
-                    std::string run_cmd = "cd " + output_dir + " && node main.js";
-                    if (opts.verbose) {
-                        std::cout << "TypeScriptを実行中...\n";
-                    }
-
-                    int run_result = std::system(run_cmd.c_str());
-                    return WEXITSTATUS(run_result);
-                }
-            } else if (opts.emit_cpp) {
-                if (opts.verbose) {
-                    std::cout << "=== C++ Code Generation ===\n";
-                }
-
-                // HIR → CPP-MIR → C++ 変換（新アーキテクチャ）
-                codegen::CppCodeGeneratorV2 cpp_gen;
-                std::string cpp_code = cpp_gen.generate(hir, opts.verbose);
-
-                // 出力ディレクトリを決定
-                std::string output_dir =
-                    opts.output_file.empty() ? ".tmp/cpp_build" : opts.output_file;
-                std::system(("mkdir -p " + output_dir).c_str());
-
-                // C++ファイルに書き出し
-                std::string cpp_file = output_dir + "/main.cpp";
-                std::ofstream out_file(cpp_file);
-                if (!out_file) {
-                    std::cerr << "エラー: 出力ファイルを作成できません: " << cpp_file << "\n";
-                    return 1;
-                }
-                out_file << cpp_code;
-                out_file.close();
-
-                if (opts.verbose) {
-                    std::cout << "✓ C++コード生成完了: " << cpp_file << "\n";
-                }
-
-                // g++でコンパイル
-                if (opts.run_after_emit || opts.command == Command::Compile) {
-                    std::string output_bin = output_dir + "/main";
-                    std::string compile_cmd = "g++ -std=c++17 ";
-
-                    // 最適化レベルを設定
-                    if (opts.optimization_level > 0) {
-                        compile_cmd += "-O" + std::to_string(opts.optimization_level) + " ";
-                    }
-
-                    compile_cmd += cpp_file + " -o " + output_bin + " 2>&1";
-
-                    if (opts.verbose) {
-                        std::cout << "g++でコンパイル中: " << compile_cmd << "\n";
-                    }
-
-                    int compile_result = std::system(compile_cmd.c_str());
-                    if (compile_result == 0) {
-                        if (opts.verbose) {
-                            std::cout << "✓ 実行ファイル生成完了: " << output_bin << "\n";
-                        }
-
-                        // 実行
-                        if (opts.run_after_emit) {
-                            if (opts.verbose) {
-                                std::cout << "実行中: " << output_bin << "\n";
-                            }
-                            int exec_result = std::system(output_bin.c_str());
-                            return WEXITSTATUS(exec_result);
-                        }
-                    } else {
-                        std::cerr << "g++でのコンパイルに失敗しました\n";
-                        return 1;
-                    }
-                } else if (opts.verbose) {
-                    std::cout << "コンパイル方法: g++ -std=c++17 " << cpp_file << " -o "
-                              << output_dir << "/main\n";
-                    std::cout << "実行方法: " << output_dir << "/main\n";
-                }
-
-            } else if (opts.emit_llvm || opts.backend == "llvm") {
 #ifdef CM_LLVM_ENABLED
-                if (opts.verbose) {
-                    std::cout << "=== LLVM Code Generation ===\n";
-                }
-
-                // LLVM バックエンドオプション設定
-                cm::codegen::llvm_backend::LLVMCodeGen::Options llvm_opts;
-
-                // ターゲット設定
-                if (opts.target == "wasm") {
-                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
-                    // WASMは実行可能ファイル形式で出力（wasm-ldでリンク）
-                    llvm_opts.format =
-                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
-                } else if (opts.target == "bm" || opts.target == "baremetal") {
-                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Baremetal;
-                    llvm_opts.format =
-                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
-                } else if (!opts.target.empty() && opts.target != "native") {
-                    std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
-                    std::cerr << "有効なターゲット: native, wasm, bm\n";
-                    return 1;
-                } else {
-                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
-                    llvm_opts.format =
-                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
-                }
-
-                // 出力ファイル設定
-                if (opts.output_file.empty()) {
-                    // ターゲットに応じたデフォルトファイル名
-                    if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
-                        llvm_opts.outputFile = "a.wasm";
-                    } else if (llvm_opts.target ==
-                               cm::codegen::llvm_backend::BuildTarget::Baremetal) {
-                        llvm_opts.outputFile = "a.o";
-                    } else {
-                        llvm_opts.outputFile = "a.out";
-                    }
-                } else {
-                    llvm_opts.outputFile = opts.output_file;
-                }
-
-                // 最適化レベル
-                llvm_opts.optimizationLevel = opts.optimization_level;
-                llvm_opts.debugInfo = opts.debug;
-                llvm_opts.verbose = opts.verbose || opts.debug;
-                llvm_opts.verifyIR = true;
-
-                // LLVM コード生成
-                try {
-                    cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
-                    codegen.compile(mir);
-
-                    if (opts.verbose) {
-                        std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
-                    }
-
-                    // --runオプションがある場合は実行
-                    if (opts.run_after_emit &&
-                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
-                        if (opts.verbose) {
-                            std::cout << "実行中: " << llvm_opts.outputFile << "\n";
-                        }
-                        int exec_result = std::system(llvm_opts.outputFile.c_str());
-                        return WEXITSTATUS(exec_result);
-                    }
-                } catch (const std::exception& e) {
-                    std::cerr << "LLVM コード生成エラー: " << e.what() << "\n";
-                    return 1;
-                }
-#else
-                std::cerr << "エラー: LLVM バックエンドが有効になっていません。\n";
-                std::cerr << "CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n";
-                return 1;
-#endif
-            } else {
-                // デフォルトはネイティブコード（将来実装）
-                if (opts.verbose) {
-                    std::cout << "✓ コンパイル成功\n";
-                    std::cout << "注意: ネイティブコード生成は開発中です\n";
-                }
+            if (opts.verbose) {
+                std::cout << "=== LLVM Code Generation ===\n";
             }
+
+            // LLVM バックエンドオプション設定
+            cm::codegen::llvm_backend::LLVMCodeGen::Options llvm_opts;
+
+            // ターゲット設定
+            if (opts.target == "wasm") {
+                llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
+                llvm_opts.format =
+                    cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+            } else if (!opts.target.empty() && opts.target != "native") {
+                std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
+                std::cerr << "有効なターゲット: native, wasm\n";
+                return 1;
+            } else {
+                llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
+                llvm_opts.format =
+                    cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+            }
+
+            // 出力ファイル設定
+            if (opts.output_file.empty()) {
+                if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
+                    llvm_opts.outputFile = "a.wasm";
+                } else {
+                    llvm_opts.outputFile = "a.out";
+                }
+            } else {
+                llvm_opts.outputFile = opts.output_file;
+            }
+
+            // 最適化レベル
+            llvm_opts.optimizationLevel = opts.optimization_level;
+            llvm_opts.debugInfo = opts.debug;
+            llvm_opts.verbose = opts.verbose || opts.debug;
+            llvm_opts.verifyIR = true;
+
+            // LLVM コード生成
+            try {
+                cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
+                codegen.compile(mir);
+
+                if (opts.verbose) {
+                    std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                }
+
+                // --runオプションがある場合は実行
+                if (opts.run_after_emit &&
+                    llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
+                    if (opts.verbose) {
+                        std::cout << "実行中: " << llvm_opts.outputFile << "\n";
+                    }
+                    int exec_result = std::system(llvm_opts.outputFile.c_str());
+                    return WEXITSTATUS(exec_result);
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "LLVM コード生成エラー: " << e.what() << "\n";
+                return 1;
+            }
+#else
+            std::cerr << "エラー: LLVM バックエンドが有効になっていません。\n";
+            std::cerr << "CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n";
+            return 1;
+#endif
         }
 
     } catch (const std::exception& e) {
