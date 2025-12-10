@@ -646,8 +646,9 @@ int main(int argc, char* argv[]) {
                 // ターゲット設定
                 if (opts.target == "wasm32" || opts.target == "wasm") {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
+                    // WASMは実行可能ファイル形式で出力（wasm-ldでリンク）
                     llvm_opts.format =
-                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Bitcode;
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
                 } else if (opts.target == "baremetal-arm" || opts.target == "baremetal") {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Baremetal;
                     llvm_opts.format =

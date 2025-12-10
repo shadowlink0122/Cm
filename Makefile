@@ -27,6 +27,7 @@ help:
 	@echo ""
 	@echo "Test Commands (LLVM Backend):"
 	@echo "  make test-llvm        - LLVM ネイティブテスト"
+	@echo "  make test-llvm-wasm   - LLVM WebAssemblyテスト"
 	@echo "  make test-llvm-all    - すべてのLLVMテスト"
 	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
@@ -40,6 +41,7 @@ help:
 	@echo "  make t   - test"
 	@echo "  make ta  - test-all"
 	@echo "  make tl  - test-llvm"
+	@echo "  make tlw - test-llvm-wasm"
 	@echo "  make tla - test-llvm-all"
 
 # ========================================
@@ -131,9 +133,16 @@ test-llvm:
 	@chmod +x tests/unified_test_runner.sh
 	@tests/unified_test_runner.sh -b llvm
 
+# LLVM WebAssemblyテスト
+.PHONY: test-llvm-wasm
+test-llvm-wasm:
+	@echo "Running LLVM WebAssembly code generation tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b llvm-wasm
+
 # すべてのLLVMテストを実行
 .PHONY: test-llvm-all
-test-llvm-all: test-llvm
+test-llvm-all: test-llvm test-llvm-wasm
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All LLVM tests completed!"
@@ -204,6 +213,9 @@ c: clean
 
 .PHONY: tl
 tl: test-llvm
+
+.PHONY: tlw
+tlw: test-llvm-wasm
 
 .PHONY: tla
 tla: test-llvm-all

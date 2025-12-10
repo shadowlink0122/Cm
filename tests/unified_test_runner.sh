@@ -46,7 +46,7 @@ fi
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm|llvm-wasm (default: interpreter)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: all)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
@@ -91,9 +91,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm|llvm-wasm)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, typescript, rust, cpp, llvm"
+    echo "Valid backends: interpreter, typescript, rust, cpp, llvm, llvm-wasm"
     exit 1
 fi
 
@@ -251,6 +251,64 @@ run_single_test() {
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # 実行
                 "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+            fi
+            ;;
+
+        llvm-wasm)
+            # LLVMバックエンドでWebAssemblyにコンパイルして実行
+            local wasm_file="$TEMP_DIR/wasm_${test_name}.wasm"
+            rm -f "$wasm_file"
+
+            # LLVM経由でWebAssembly生成（エラー時は出力ファイルにエラーメッセージを書き込む）
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_file" -o "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
+                # WASMランタイムで実行
+                # 優先順位: wasmtime > node (with wasm wrapper) > wasmer
+                if command -v wasmtime >/dev/null 2>&1; then
+                    # wasmtimeを使用
+                    run_with_timeout wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                elif command -v node >/dev/null 2>&1; then
+                    # nodeを使用（WASMラッパースクリプトを生成）
+                    local wrapper_js="$TEMP_DIR/wasm_wrapper_${test_name}.js"
+                    cat > "$wrapper_js" << 'EOJS'
+const fs = require('fs');
+const wasmBuffer = fs.readFileSync(process.argv[2]);
+
+WebAssembly.instantiate(wasmBuffer, {
+    wasi_snapshot_preview1: {
+        proc_exit: (code) => process.exit(code),
+        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
+            // 簡易的なstdout実装
+            if (fd === 1) {
+                // stdout処理（簡易実装）
+                return 0;
+            }
+            return -1;
+        }
+    }
+}).then(result => {
+    // _startまたはmain関数を呼び出し
+    if (result.instance.exports._start) {
+        result.instance.exports._start();
+    } else if (result.instance.exports.main) {
+        result.instance.exports.main();
+    }
+}).catch(err => {
+    console.error(err);
+    process.exit(1);
+});
+EOJS
+                    run_with_timeout node "$wrapper_js" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                    rm -f "$wrapper_js"
+                elif command -v wasmer >/dev/null 2>&1; then
+                    # wasmerを使用
+                    run_with_timeout wasmer run "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                else
+                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No WASM runtime found (install wasmtime, node, or wasmer)"
+                    ((SKIPPED++))
+                    return
+                fi
             fi
             ;;
     esac
