@@ -146,6 +146,13 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_continue(Span{start_pos, previous().end});
     }
 
+    // defer
+    if (consume_if(TokenKind::KwDefer)) {
+        // defer後の文を取得（セミコロンはその文で処理）
+        auto body = parse_stmt();
+        return ast::make_defer(std::move(body), Span{start_pos, previous().end});
+    }
+
     // 変数宣言 (auto x = ... or type x ...)
     if (check(TokenKind::KwConst) || is_type_start()) {
         bool is_const = consume_if(TokenKind::KwConst);

@@ -76,13 +76,13 @@ usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
     echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm|llvm-wasm (default: interpreter)"
-    echo "  -c, --category <category>  Test categories (comma-separated, default: all)"
+    echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
     echo "  -t, --timeout <seconds>    Test timeout in seconds (default: 5)"
     echo "  -h, --help                 Show this help message"
     echo ""
-    echo "Categories: basic, control_flow, errors, formatting, functions, structs, macros, modules, overload, types"
+    echo "Categories are auto-detected from directories in tests/test_programs/"
     exit 0
 }
 
@@ -128,16 +128,19 @@ fi
 
 # カテゴリー設定
 if [ -z "$CATEGORIES" ]; then
-    # llvmとllvm-wasmは同じカテゴリを使用
-    if [ "$BACKEND" = "llvm" ] || [ "$BACKEND" = "llvm-wasm" ]; then
-        CATEGORIES="basic control_flow errors formatting types functions structs"
-    else
-        CATEGORIES="basic control_flow errors formatting types functions structs"
-        # マクロとモジュールは未実装なので、インタプリタ以外ではスキップ
-        if [ "$BACKEND" = "interpreter" ]; then
-            CATEGORIES="$CATEGORIES macros modules"
+    # test_programsディレクトリ内の全サブディレクトリを自動検出
+    CATEGORIES=""
+    for dir in "$TEST_DIR"/*/; do
+        if [ -d "$dir" ]; then
+            dirname="$(basename "$dir")"
+            # .cmファイルがあるディレクトリのみ追加
+            if ls "$dir"/*.cm 1> /dev/null 2>&1; then
+                CATEGORIES="$CATEGORIES $dirname"
+            fi
         fi
-    fi
+    done
+    # 先頭のスペースを削除
+    CATEGORIES="${CATEGORIES# }"
 fi
 
 # 一時ディレクトリ作成

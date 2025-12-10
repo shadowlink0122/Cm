@@ -80,6 +80,7 @@ class Lexer {
             {"constexpr", TokenKind::KwConstexpr},
             {"continue", TokenKind::KwContinue},
             {"default", TokenKind::KwDefault},
+            {"defer", TokenKind::KwDefer},
             {"delete", TokenKind::KwDelete},
             {"else", TokenKind::KwElse},
             {"enum", TokenKind::KwEnum},

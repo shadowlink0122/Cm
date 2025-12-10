@@ -34,6 +34,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "continue";
         case TokenKind::KwDefault:
             return "default";
+        case TokenKind::KwDefer:
+            return "defer";
         case TokenKind::KwDelete:
             return "delete";
         case TokenKind::KwElse:

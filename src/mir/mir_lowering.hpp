@@ -149,8 +149,9 @@ class MirLowering {
 
     // ループコンテキスト
     struct LoopContext {
-        BlockId header;  // ループヘッダ（continue先）
-        BlockId exit;    // ループ出口（break先）
+        BlockId header;      // ループヘッダ（continue先）
+        BlockId exit;        // ループ出口（break先）
+        size_t scope_depth;  // ループ開始時のスコープ深さ
     };
 
     // 現在の関数コンテキスト
@@ -161,7 +162,83 @@ class MirLowering {
         LocalId next_temp_id;                              // 次の一時変数ID
         std::vector<LoopContext> loop_stack;  // ループコンテキストのスタック
 
-        FunctionContext(MirFunction* f) : func(f), current_block(ENTRY_BLOCK), next_temp_id(0) {}
+        // スコープ管理
+        struct Scope {
+            std::vector<LocalId> locals;               // このスコープで宣言された変数
+            std::vector<const hir::HirDefer*> defers;  // defer文（逆順実行用）
+        };
+        std::vector<Scope> scope_stack;  // スコープスタック
+
+        // defer文実行用のコールバック（MirLoweringのメンバ関数を呼ぶため）
+        std::function<void(FunctionContext&, const hir::HirStmt&)> defer_executor;
+
+        FunctionContext(MirFunction* f) : func(f), current_block(ENTRY_BLOCK), next_temp_id(0) {
+            // 関数全体のスコープを開始
+            push_scope();
+        }
+
+        // スコープを開始
+        void push_scope() { scope_stack.push_back(Scope{}); }
+
+        // スコープを終了（defer実行 + StorageDeadを発行）
+        void pop_scope() {
+            if (scope_stack.empty())
+                return;
+
+            auto& scope = scope_stack.back();
+
+            // defer文を逆順で実行
+            for (auto it = scope.defers.rbegin(); it != scope.defers.rend(); ++it) {
+                if (*it && (*it)->body && defer_executor) {
+                    defer_executor(*this, *(*it)->body);
+                }
+            }
+
+            // スコープ内の変数にStorageDeadを発行
+            for (auto it = scope.locals.rbegin(); it != scope.locals.rend(); ++it) {
+                push_statement(MirStatement::storage_dead(*it));
+            }
+
+            scope_stack.pop_back();
+        }
+
+        // 現在のスコープに変数を登録
+        void register_local_in_scope(LocalId local) {
+            if (!scope_stack.empty()) {
+                scope_stack.back().locals.push_back(local);
+            }
+        }
+
+        // 現在のスコープにdefer文を登録
+        void register_defer(const hir::HirDefer& defer) {
+            if (!scope_stack.empty()) {
+                scope_stack.back().defers.push_back(&defer);
+            }
+        }
+
+        // ループ開始時のスコープ深さを記録
+        size_t get_scope_depth() const { return scope_stack.size(); }
+
+        // break/continue用：指定した深さまでスコープのdeferとStorageDeadを発行（スコープ構造は維持）
+        void emit_scope_cleanup_until(size_t target_depth) {
+            // 現在のスコープから target_depth まで、defer と StorageDead を発行
+            // ただしスコープ自体はpopしない（break/continue後は到達不能なため）
+            for (size_t i = scope_stack.size(); i > target_depth; --i) {
+                auto& scope = scope_stack[i - 1];
+
+                // defer文を逆順で実行
+                for (auto it = scope.defers.rbegin(); it != scope.defers.rend(); ++it) {
+                    if (*it && (*it)->body && defer_executor) {
+                        defer_executor(*this, *(*it)->body);
+                    }
+                }
+
+                // スコープ内の変数にStorageDeadを発行
+                for (auto it = scope.locals.rbegin(); it != scope.locals.rend(); ++it) {
+                    push_statement(MirStatement::storage_dead(*it));
+                }
+            }
+        }
 
         // 新しい一時変数を生成
         LocalId new_temp(hir::TypePtr type) {
@@ -211,6 +288,11 @@ class MirLowering {
 
         FunctionContext ctx(mir_func.get());
 
+        // defer実行用のコールバックを設定
+        ctx.defer_executor = [this](FunctionContext& c, const hir::HirStmt& stmt) {
+            lower_statement(c, stmt);
+        };
+
         // 戻り値用のローカル変数 _0 を作成
         ctx.func->return_local = ctx.func->add_local("_0", hir_func.return_type, true, false);
         cm::debug::mir::log(
@@ -242,6 +324,9 @@ class MirLowering {
                                 "stmt[" + std::to_string(i) + "]", cm::debug::Level::Trace);
             lower_statement(ctx, *hir_func.body[i]);
         }
+
+        // 関数スコープを終了（StorageDeadを発行）
+        ctx.pop_scope();
 
         // 現在のブロックに終端がない場合、returnを追加
         if (auto* block = ctx.get_current_block()) {
@@ -283,19 +368,26 @@ class MirLowering {
             lower_expr(ctx, *(*expr_stmt)->expr);
         } else if (auto* block = std::get_if<std::unique_ptr<hir::HirBlock>>(&stmt.kind)) {
             lower_block_stmt(ctx, **block);
+        } else if (auto* defer_stmt = std::get_if<std::unique_ptr<hir::HirDefer>>(&stmt.kind)) {
+            // defer文: スコープにHIR文を保存（スコープ終了時に実行）
+            ctx.register_defer(**defer_stmt);
         } else if (std::get_if<std::unique_ptr<hir::HirBreak>>(&stmt.kind)) {
             // break文の処理
             if (!ctx.loop_stack.empty()) {
-                BlockId exit = ctx.loop_stack.back().exit;
-                ctx.set_terminator(MirTerminator::goto_block(exit));
+                auto& loop = ctx.loop_stack.back();
+                // ループ開始時のスコープまでdeferとStorageDeadを発行（スコープ構造は維持）
+                ctx.emit_scope_cleanup_until(loop.scope_depth);
+                ctx.set_terminator(MirTerminator::goto_block(loop.exit));
                 // 新しいブロックを作成（到達不可能だが必要）
                 ctx.switch_to_block(ctx.func->add_block());
             }
         } else if (std::get_if<std::unique_ptr<hir::HirContinue>>(&stmt.kind)) {
             // continue文の処理
             if (!ctx.loop_stack.empty()) {
-                BlockId header = ctx.loop_stack.back().header;
-                ctx.set_terminator(MirTerminator::goto_block(header));
+                auto& loop = ctx.loop_stack.back();
+                // ループ本体のスコープのdeferとStorageDeadを発行（スコープ構造は維持）
+                ctx.emit_scope_cleanup_until(loop.scope_depth);
+                ctx.set_terminator(MirTerminator::goto_block(loop.header));
                 // 新しいブロックを作成（到達不可能だが必要）
                 ctx.switch_to_block(ctx.func->add_block());
             }
@@ -316,6 +408,9 @@ class MirLowering {
                             let_stmt.name + " -> _" + std::to_string(local_id) +
                                 (let_stmt.type ? " : " + hir::type_to_string(*let_stmt.type) : ""),
                             cm::debug::Level::Trace);
+
+        // スコープに変数を登録（StorageDead用）
+        ctx.register_local_in_scope(local_id);
 
         // StorageLive
         ctx.push_statement(MirStatement::storage_live(local_id));
@@ -382,9 +477,11 @@ class MirLowering {
 
         // thenブロックを処理
         ctx.switch_to_block(then_block);
+        ctx.push_scope();  // thenスコープ開始
         for (const auto& stmt : if_stmt.then_block) {
             lower_statement(ctx, *stmt);
         }
+        ctx.pop_scope();  // thenスコープ終了
         // 終端がなければmergeブロックへジャンプ
         if (auto* block = ctx.get_current_block()) {
             if (!block->terminator) {
@@ -394,9 +491,11 @@ class MirLowering {
 
         // elseブロックを処理
         ctx.switch_to_block(else_block);
+        ctx.push_scope();  // elseスコープ開始
         for (const auto& stmt : if_stmt.else_block) {
             lower_statement(ctx, *stmt);
         }
+        ctx.pop_scope();  // elseスコープ終了
         // 終端がなければmergeブロックへジャンプ
         if (auto* block = ctx.get_current_block()) {
             if (!block->terminator) {
@@ -420,13 +519,19 @@ class MirLowering {
         ctx.set_terminator(MirTerminator::goto_block(loop_header));
         ctx.switch_to_block(loop_header);
 
-        // ループコンテキストをスタックにプッシュ
-        ctx.loop_stack.push_back({loop_header, loop_exit});
+        // ループコンテキストをスタックにプッシュ（スコープ深さを記録）
+        ctx.loop_stack.push_back({loop_header, loop_exit, ctx.get_scope_depth()});
+
+        // ループ本体スコープを開始
+        ctx.push_scope();
 
         // ループ本体を処理
         for (const auto& stmt : loop.body) {
             lower_statement(ctx, *stmt);
         }
+
+        // スコープ終了
+        ctx.pop_scope();
 
         // ループヘッダへ戻る
         if (auto* block = ctx.get_current_block()) {
@@ -461,14 +566,16 @@ class MirLowering {
         std::vector<std::pair<int64_t, BlockId>> targets = {{1, loop_body}};  // true -> loop_body
         ctx.set_terminator(MirTerminator::switch_int(std::move(discriminant), targets, loop_exit));
 
-        // ループコンテキストをスタックにプッシュ
-        ctx.loop_stack.push_back({loop_header, loop_exit});
+        // ループコンテキストをスタックにプッシュ（スコープ深さを記録）
+        ctx.loop_stack.push_back({loop_header, loop_exit, ctx.get_scope_depth()});
 
         // ループ本体を処理
         ctx.switch_to_block(loop_body);
+        ctx.push_scope();  // ループ本体スコープ開始
         for (const auto& stmt : while_stmt.body) {
             lower_statement(ctx, *stmt);
         }
+        ctx.pop_scope();  // ループ本体スコープ終了
 
         // ループヘッダへ戻る（終端がない場合）
         if (auto* block = ctx.get_current_block()) {
@@ -486,6 +593,9 @@ class MirLowering {
 
     // for文のlowering
     void lower_for_stmt(FunctionContext& ctx, const hir::HirFor& for_stmt) {
+        // for文全体のスコープ（初期化変数を含む）
+        ctx.push_scope();
+
         // ブロックを作成: 初期化後、ループヘッダ（条件チェック）、ループ本体、更新部、ループ出口
         BlockId loop_header = ctx.func->add_block();
         BlockId loop_body = ctx.func->add_block();
@@ -516,14 +626,16 @@ class MirLowering {
             ctx.set_terminator(MirTerminator::goto_block(loop_body));
         }
 
-        // ループコンテキストをスタックにプッシュ（continueはloop_updateへ）
-        ctx.loop_stack.push_back({loop_update, loop_exit});
+        // ループコンテキストをスタックにプッシュ（continueはloop_updateへ、スコープ深さを記録）
+        ctx.loop_stack.push_back({loop_update, loop_exit, ctx.get_scope_depth()});
 
         // ループ本体を処理
         ctx.switch_to_block(loop_body);
+        ctx.push_scope();  // ループ本体スコープ開始
         for (const auto& stmt : for_stmt.body) {
             lower_statement(ctx, *stmt);
         }
+        ctx.pop_scope();  // ループ本体スコープ終了
 
         // 更新部へジャンプ（終端がない場合）
         if (auto* block = ctx.get_current_block()) {
@@ -546,6 +658,9 @@ class MirLowering {
 
         // ループ出口に切り替え
         ctx.switch_to_block(loop_exit);
+
+        // for文全体のスコープを終了（loop_exitで）
+        ctx.pop_scope();
     }
 
     // switch文のlowering（パターン展開とスコープ管理付き）
@@ -633,8 +748,7 @@ class MirLowering {
             ctx.switch_to_block(case_blocks[i]);
 
             // スコープ開始（各caseは独立したスコープ）
-            // TODO: より精密な実装では、このスコープで宣言される変数を追跡
-            // size_t scope_start_vars = ctx.var_map.size(); // 将来の実装で使用
+            ctx.push_scope();
 
             // case内の文を処理
             for (const auto& stmt : switch_stmt.cases[i].stmts) {
@@ -644,16 +758,17 @@ class MirLowering {
             // 自動的にbreak（フォールスルーなし）
             if (auto* block = ctx.get_current_block()) {
                 if (!block->terminator) {
-                    // スコープ終了処理
-                    // TODO: スコープ内で宣言された変数にStorageDeadを発行
-                    // 現在は簡易実装（将来的にdeferやデストラクタの処理も必要）
+                    // スコープ終了処理（StorageDeadを発行）
+                    ctx.pop_scope();
 
                     ctx.set_terminator(MirTerminator::goto_block(merge_block));
+                } else {
+                    // 既にreturnなどで終了している場合もスコープは閉じる
+                    ctx.pop_scope();
                 }
+            } else {
+                ctx.pop_scope();
             }
-
-            // スコープ終了
-            // 注: 完全な実装にはStorageDeadの発行が必要
         }
 
         // mergeブロックに切り替え
@@ -803,10 +918,16 @@ class MirLowering {
 
     // ブロック文のlowering
     void lower_block_stmt(FunctionContext& ctx, const hir::HirBlock& block) {
-        // そのまま文を処理
+        // 新しいスコープを開始
+        ctx.push_scope();
+
+        // ブロック内の文を処理
         for (const auto& stmt : block.stmts) {
             lower_statement(ctx, *stmt);
         }
+
+        // スコープを終了（StorageDeadを発行）
+        ctx.pop_scope();
     }
 
     // 式のlowering（結果を一時変数に格納し、そのLocalIdを返す）

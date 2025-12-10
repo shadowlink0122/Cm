@@ -150,6 +150,16 @@ struct BreakStmt {};
 struct ContinueStmt {};
 
 // ============================================================
+// defer文
+// ============================================================
+struct DeferStmt {
+    StmtPtr body;  // 遅延実行する文
+
+    DeferStmt() = default;
+    explicit DeferStmt(StmtPtr b) : body(std::move(b)) {}
+};
+
+// ============================================================
 // 文作成ヘルパー
 // ============================================================
 inline StmtPtr make_let(std::string name, TypePtr type, ExprPtr init, bool is_const = false,
@@ -191,6 +201,10 @@ inline StmtPtr make_break(Span s = {}) {
 
 inline StmtPtr make_continue(Span s = {}) {
     return std::make_unique<Stmt>(std::make_unique<ContinueStmt>(), s);
+}
+
+inline StmtPtr make_defer(StmtPtr body, Span s = {}) {
+    return std::make_unique<Stmt>(std::make_unique<DeferStmt>(std::move(body)), s);
 }
 
 }  // namespace cm::ast

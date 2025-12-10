@@ -184,8 +184,19 @@ class HirLowering {
             return std::make_unique<HirStmt>(std::make_unique<HirBreak>());
         } else if (stmt.as<ast::ContinueStmt>()) {
             return std::make_unique<HirStmt>(std::make_unique<HirContinue>());
+        } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
+            return lower_defer(*defer_stmt);
         }
         return nullptr;
+    }
+
+    // defer文
+    HirStmtPtr lower_defer(ast::DeferStmt& defer) {
+        auto hir_defer = std::make_unique<HirDefer>();
+        if (defer.body) {
+            hir_defer->body = lower_stmt(*defer.body);
+        }
+        return std::make_unique<HirStmt>(std::move(hir_defer));
     }
 
     // ブロック文

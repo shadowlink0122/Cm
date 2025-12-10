@@ -27,6 +27,7 @@ enum class TokenKind {
     KwConst,
     KwContinue,
     KwDefault,  // switch default
+    KwDefer,    // defer statement
     KwDelete,
     KwElse,
     KwEnum,

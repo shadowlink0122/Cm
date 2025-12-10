@@ -177,6 +177,11 @@ struct HirBreak {};
 // continue
 struct HirContinue {};
 
+// defer
+struct HirDefer {
+    HirStmtPtr body;
+};
+
 // 式文
 struct HirExprStmt {
     HirExprPtr expr;
@@ -220,7 +225,7 @@ using HirStmtKind =
     std::variant<std::unique_ptr<HirLet>, std::unique_ptr<HirAssign>, std::unique_ptr<HirReturn>,
                  std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirWhile>,
                  std::unique_ptr<HirFor>, std::unique_ptr<HirBreak>, std::unique_ptr<HirContinue>,
-                 std::unique_ptr<HirExprStmt>, std::unique_ptr<HirBlock>,
+                 std::unique_ptr<HirDefer>, std::unique_ptr<HirExprStmt>, std::unique_ptr<HirBlock>,
                  std::unique_ptr<HirSwitch>>;
 
 struct HirStmt {

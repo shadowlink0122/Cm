@@ -14,25 +14,138 @@
 - ✅ コマンドベースCLI
 - ✅ デバッグシステム
 - ✅ LLVMバックエンド基本実装
+- ✅ LLVM Native/WASM出力
+- ✅ 構造体定義とフィールドアクセス
+- ✅ switch文（整数型、char型対応）
+- ✅ 基本型システム（int, uint, char, string, bool, double, etc.）
 
-## Version 0.2.0 - 構造体とメソッド
+## Version 0.2.0 - スコープとリソース管理 ✅
 
 ### 目標
-構造体定義とメソッド呼び出しの完全サポート
+ブロックスコープの完全サポートとリソース管理基盤の構築
 
 ### 実装項目
 | 機能 | インタプリタ | LLVM | テスト |
 |------|-------------|------|--------|
-| 構造体定義 | ⬜ | ⬜ | ⬜ |
-| フィールドアクセス | ⬜ | ⬜ | ⬜ |
-| メソッド定義 | ⬜ | ⬜ | ⬜ |
-| コンストラクタ | ⬜ | ⬜ | ⬜ |
-| selfポインタ | ⬜ | ⬜ | ⬜ |
+| スコープトラッキング | ✅ | ✅ | ✅ |
+| StorageDead自動発行 | ✅ | ✅ | ✅ |
+| defer文 | ✅ | ✅ | ✅ |
+| ブロック終了時処理 | ✅ | ✅ | ✅ |
 
-### 成功基準
-- 同一のCmコードがインタプリタとLLVMコンパイル後で同じ結果を出力
+### 技術詳細
+```cm
+// defer: ブロック終了時に逆順で実行
+void example() {
+    defer println("3rd");
+    defer println("2nd");
+    defer println("1st");
+    // 出力: 1st, 2nd, 3rd
+}
 
-## Version 0.3.0 - エラーハンドリングとResult型
+// スコープによる変数の有効範囲
+void scope_test() {
+    {
+        int x = 10;
+        // StorageLive(x)
+    }
+    // StorageDead(x) - ここで自動発行
+}
+```
+
+## Version 0.3.0 - Interface/Impl/Self（現在の目標）
+
+### 目標
+型に振る舞いを付与するインターフェースシステムの実装
+
+### 設計原則
+- **構造体には直接メソッドを定義できない**
+- 全てのメソッドは`interface`を通じて定義される
+- `impl Type for Interface`で実装を提供
+
+### 実装項目
+| 機能 | インタプリタ | LLVM | テスト |
+|------|-------------|------|--------|
+| interface定義 | ⬜ | ⬜ | ⬜ |
+| impl Type for Interface | ⬜ | ⬜ | ⬜ |
+| selfキーワード | ⬜ | ⬜ | ⬜ |
+| メソッド呼び出し | ⬜ | ⬜ | ⬜ |
+| 静的ディスパッチ | ⬜ | ⬜ | ⬜ |
+
+### 構文例
+```cm
+// インターフェース定義
+interface Printable {
+    void print();
+}
+
+interface Container<T> {
+    void push(T item);
+    T pop();
+    bool is_empty();
+}
+
+// 構造体定義（メソッドは書けない）
+struct Point {
+    double x;
+    double y;
+}
+
+// インターフェース実装
+impl Point for Printable {
+    void print() {
+        println("({}, {})", self.x, self.y);
+    }
+}
+```
+
+## Version 0.4.0 - コンストラクタ/デストラクタ
+
+### 目標
+オブジェクトのライフサイクル管理
+
+### 実装項目
+| 機能 | インタプリタ | LLVM | テスト |
+|------|-------------|------|--------|
+| impl Type（基本impl） | ⬜ | ⬜ | ⬜ |
+| self()コンストラクタ | ⬜ | ⬜ | ⬜ |
+| ~self()デストラクタ | ⬜ | ⬜ | ⬜ |
+| overloadコンストラクタ | ⬜ | ⬜ | ⬜ |
+| RAII自動呼び出し | ⬜ | ⬜ | ⬜ |
+
+### 構文例
+```cm
+struct Vec<T> {
+    private T* data;
+    private size_t size;
+    private size_t capacity;
+}
+
+// コンストラクタ/デストラクタ専用impl
+impl<T> Vec<T> {
+    self() {
+        this.data = null;
+        this.size = 0;
+    }
+
+    overload self(size_t capacity) {
+        this.data = new T[capacity];
+        this.size = 0;
+        this.capacity = capacity;
+    }
+
+    ~self() {
+        delete[] this.data;
+    }
+}
+
+// メソッドはinterfaceを通じて実装
+impl<T> Vec<T> for Container<T> {
+    void push(T item) { /* ... */ }
+    T pop() { /* ... */ }
+}
+```
+
+## Version 0.5.0 - エラーハンドリングとResult型
 
 ### 目標
 安全なエラーハンドリングの実装
@@ -45,7 +158,7 @@
 | ?演算子 | ⬜ | ⬜ | ⬜ |
 | パニックハンドリング | ⬜ | ⬜ | ⬜ |
 
-## Version 0.4.0 - 配列とコレクション
+## Version 0.6.0 - 配列とコレクション
 
 ### 目標
 動的・静的配列とベクター型の実装
@@ -59,21 +172,7 @@
 | スライス操作 | ⬜ | ⬜ | ⬜ |
 | イテレータ | ⬜ | ⬜ | ⬜ |
 
-## Version 0.5.0 - インターフェースとトレイト
-
-### 目標
-抽象化メカニズムの実装
-
-### 実装項目
-| 機能 | インタプリタ | LLVM | テスト |
-|------|-------------|------|--------|
-| interface定義 | ⬜ | ⬜ | ⬜ |
-| impl for構文 | ⬜ | ⬜ | ⬜ |
-| デフォルト実装 | ⬜ | ⬜ | ⬜ |
-| トレイト境界 | ⬜ | ⬜ | ⬜ |
-| 自動derive | ⬜ | ⬜ | ⬜ |
-
-## Version 0.6.0 - ジェネリクス
+## Version 0.7.0 - ジェネリクス
 
 ### 目標
 型パラメータとジェネリックプログラミング
@@ -87,7 +186,7 @@
 | 関連型 | ⬜ | ⬜ | ⬜ |
 | 型推論強化 | ⬜ | ⬜ | ⬜ |
 
-## Version 0.7.0 - モジュールシステム
+## Version 0.8.0 - モジュールシステム
 
 ### 目標
 完全なモジュールとパッケージ管理
@@ -101,7 +200,7 @@
 | genパッケージマネージャ | ⬜ | ⬜ | ⬜ |
 | 依存関係管理 | ⬜ | ⬜ | ⬜ |
 
-## Version 0.8.0 - パターンマッチング
+## Version 0.9.0 - パターンマッチングと列挙型
 
 ### 目標
 強力なパターンマッチング機能
@@ -115,7 +214,7 @@
 | 構造化束縛 | ⬜ | ⬜ | ⬜ |
 | 網羅性チェック | ⬜ | ⬜ | ⬜ |
 
-## Version 0.9.0 - 非同期処理
+## Version 0.10.0 - 非同期処理
 
 ### 目標
 async/awaitとFuture型の実装
@@ -128,19 +227,6 @@ async/awaitとFuture型の実装
 | Future型 | ⬜ | ⬜ | ⬜ |
 | ランタイム統合 | ⬜ | ⬜ | ⬜ |
 | 並行処理 | ⬜ | ⬜ | ⬜ |
-
-## Version 0.10.0 - WebAssemblyターゲット
-
-### 目標
-LLVM経由でのWebAssembly出力
-
-### 実装項目
-| 機能 | LLVM→WASM | テスト |
-|------|-----------|--------|
-| 基本WASM出力 | ⬜ | ⬜ |
-| WASI対応 | ⬜ | ⬜ |
-| DOM API連携 | ⬜ | ⬜ |
-| JavaScript相互運用 | ⬜ | ⬜ |
 
 ## Version 1.0.0 - 安定版リリース
 
@@ -204,14 +290,21 @@ test:
 
 ## 次のアクション（v0.2.0に向けて）
 
-1. **構造体のAST定義** - 1週間
-2. **HIR/MIRへの構造体サポート追加** - 1週間
-3. **インタプリタでの構造体実行** - 2週間
-4. **LLVMでの構造体コード生成** - 2週間
-5. **テストスイート作成** - 1週間
-6. **ドキュメント更新** - 3日
+1. **スコープトラッキング実装** - 1週間
+   - FunctionContextにスコープスタック追加
+   - ブロック開始/終了でスコープをpush/pop
 
-**目標リリース日**: 2025年1月中旬
+2. **StorageDead自動発行** - 1週間
+   - ブロック終了時にスコープ内変数にStorageDeadを発行
+   - インタプリタでの検証
+
+3. **defer文の実装** - 2週間
+   - AST/HIR/MIRへの追加
+   - 逆順実行の保証
+
+4. **テストスイート作成** - 1週間
+
+**目標リリース日**: 2025年1月上旬
 
 ---
 
@@ -225,3 +318,52 @@ test:
 
 これらの機能のソースコードは参考のため保持されていますが、
 今後のメンテナンスや機能追加は行われません。
+
+---
+
+## 設計原則（重要）
+
+### メソッドは必ずinterfaceを通じて定義
+```cm
+// ❌ 間違い：構造体に直接メソッドを定義
+struct Point {
+    double x;
+    double y;
+
+    void print() { }  // これは許可されない
+}
+
+// ✅ 正しい：interfaceを通じて定義
+interface Printable {
+    void print();
+}
+
+struct Point {
+    double x;
+    double y;
+}
+
+impl Point for Printable {
+    void print() {
+        println("({}, {})", self.x, self.y);
+    }
+}
+```
+
+### self と this の使い分け
+- `self`: implブロック内でのインスタンス参照
+- `this`: コンストラクタ/デストラクタ内でのインスタンス参照
+
+```cm
+impl<T> Vec<T> {
+    self() {
+        this.data = null;  // コンストラクタ内では this
+    }
+}
+
+impl<T> Vec<T> for Container<T> {
+    void push(T item) {
+        self.data[self.size++] = item;  // メソッド内では self
+    }
+}
+```
