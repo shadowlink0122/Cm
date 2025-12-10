@@ -99,10 +99,15 @@ fi
 
 # カテゴリー設定
 if [ -z "$CATEGORIES" ]; then
-    CATEGORIES="basic control_flow errors formatting types functions"
-    # マクロとモジュールは未実装なので、インタプリタ以外ではスキップ
-    if [ "$BACKEND" = "interpreter" ]; then
-        CATEGORIES="$CATEGORIES macros modules"
+    # llvmとllvm-wasmは同じカテゴリを使用
+    if [ "$BACKEND" = "llvm" ] || [ "$BACKEND" = "llvm-wasm" ]; then
+        CATEGORIES="basic control_flow errors formatting types functions"
+    else
+        CATEGORIES="basic control_flow errors formatting types functions"
+        # マクロとモジュールは未実装なので、インタプリタ以外ではスキップ
+        if [ "$BACKEND" = "interpreter" ]; then
+            CATEGORIES="$CATEGORIES macros modules"
+        fi
     fi
 fi
 
@@ -275,27 +280,84 @@ run_single_test() {
 const fs = require('fs');
 const wasmBuffer = fs.readFileSync(process.argv[2]);
 
+// テキストデコーダ
+const decoder = new TextDecoder();
+let outputBuffer = '';
+
 WebAssembly.instantiate(wasmBuffer, {
     wasi_snapshot_preview1: {
-        proc_exit: (code) => process.exit(code),
-        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
-            // 簡易的なstdout実装
-            if (fd === 1) {
-                // stdout処理（簡易実装）
-                return 0;
+        proc_exit: (code) => {
+            // バッファに残っている出力を吐き出す
+            if (outputBuffer) {
+                process.stdout.write(outputBuffer);
             }
-            return -1;
-        }
+            process.exit(code);
+        },
+        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
+            const memory = result.instance.exports.memory;
+            const dataView = new DataView(memory.buffer);
+
+            // fd=1 は標準出力
+            if (fd === 1) {
+                let totalWritten = 0;
+
+                // 各IOVを処理
+                for (let i = 0; i < iovs_len; i++) {
+                    const iov_offset = iovs_ptr + (i * 8);
+                    const buf_ptr = dataView.getUint32(iov_offset, true);
+                    const buf_len = dataView.getUint32(iov_offset + 4, true);
+
+                    // バッファからデータを読み取る
+                    const bytes = new Uint8Array(memory.buffer, buf_ptr, buf_len);
+                    const str = decoder.decode(bytes);
+
+                    // 出力バッファに追加
+                    outputBuffer += str;
+                    totalWritten += buf_len;
+                }
+
+                // 改行があったら出力
+                const lines = outputBuffer.split('\n');
+                if (lines.length > 1) {
+                    for (let i = 0; i < lines.length - 1; i++) {
+                        console.log(lines[i]);
+                    }
+                    outputBuffer = lines[lines.length - 1];
+                }
+
+                // 書き込んだバイト数を設定
+                dataView.setUint32(nwritten_ptr, totalWritten, true);
+                return 0; // 成功
+            }
+            return -1; // エラー
+        },
+        // その他のWASI関数のスタブ
+        fd_close: () => 0,
+        fd_seek: () => 0,
+        fd_read: () => 0,
+        environ_sizes_get: () => 0,
+        environ_get: () => 0,
+        args_sizes_get: () => 0,
+        args_get: () => 0,
+        random_get: () => 0,
+        clock_time_get: () => 0,
+        proc_raise: () => 0
     }
-}).then(result => {
+}).then(res => {
+    result = res;
     // _startまたはmain関数を呼び出し
     if (result.instance.exports._start) {
         result.instance.exports._start();
     } else if (result.instance.exports.main) {
-        result.instance.exports.main();
+        const ret = result.instance.exports.main();
+        // バッファに残っている出力を吐き出す
+        if (outputBuffer) {
+            process.stdout.write(outputBuffer);
+        }
+        process.exit(ret);
     }
 }).catch(err => {
-    console.error(err);
+    console.error('WASM Error:', err);
     process.exit(1);
 });
 EOJS

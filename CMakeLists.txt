@@ -175,7 +175,7 @@ if(CM_USE_LLVM)
     # Cランタイムをコンパイルしてbuild/lib/に配置
     set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/runtime.c)
     set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
-    
+
     add_custom_command(
         OUTPUT ${CM_RUNTIME_OUTPUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
@@ -183,13 +183,26 @@ if(CM_USE_LLVM)
         DEPENDS ${CM_RUNTIME_SOURCE}
         COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
     )
-    
-    add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT})
+
+    # Build WASM runtime library
+    set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/runtime_wasm.c)
+    set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+
+    add_custom_command(
+        OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+        COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
+        DEPENDS ${CM_RUNTIME_WASM_SOURCE}
+        COMMENT "Building Cm WASM runtime library"
+    )
+
+    add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
     add_dependencies(cm cm_runtime)
     
     # ランタイムライブラリのパスをコンパイル時に埋め込む
-    target_compile_definitions(cm PRIVATE 
+    target_compile_definitions(cm PRIVATE
         CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+        CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
     )
 endif()
 

@@ -333,107 +333,246 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                     if (firstType->isPointerTy()) {
                         // 最初の引数が文字列の場合：フォーマット文字列として処理
-                        llvm::Value* currentStr = firstArg;
+                        llvm::Value* formattedStr = nullptr;
 
-                        // 各値について処理
-                        for (size_t i = 1; i < callData.args.size(); ++i) {
-                            auto value = convertOperand(*callData.args[i]);
-                            auto valueType = value->getType();
-                            auto hirType = getOperandType(*callData.args[i]);
-
-                            if (valueType->isPointerTy()) {
-                                // 文字列型：cm_format_replace_string を使用
-                                auto replaceFunc = module->getOrInsertFunction(
-                                    "cm_format_replace_string",
-                                    llvm::FunctionType::get(ctx.getPtrType(),
-                                                            {ctx.getPtrType(), ctx.getPtrType()},
-                                                            false));
-                                currentStr = builder->CreateCall(replaceFunc, {currentStr, value});
-                            } else if (valueType->isFloatingPointTy()) {
-                                // 浮動小数点型：cm_format_replace_double を使用
-                                auto doubleVal = value;
-                                if (valueType->isFloatTy()) {
-                                    doubleVal = builder->CreateFPExt(value, ctx.getF64Type());
-                                }
-                                auto replaceFunc = module->getOrInsertFunction(
-                                    "cm_format_replace_double",
-                                    llvm::FunctionType::get(ctx.getPtrType(),
-                                                            {ctx.getPtrType(), ctx.getF64Type()},
-                                                            false));
-                                currentStr =
-                                    builder->CreateCall(replaceFunc, {currentStr, doubleVal});
-                            } else if (valueType->isIntegerTy()) {
-                                auto intType = llvm::cast<llvm::IntegerType>(valueType);
-
-                                // 型情報を使用して bool/char/整数を判定
-                                bool isBoolType = hirType && hirType->kind == hir::TypeKind::Bool;
-                                bool isCharType = hirType && hirType->kind == hir::TypeKind::Char;
-                                bool isUnsigned =
-                                    hirType && (hirType->kind == hir::TypeKind::UTiny ||
-                                                hirType->kind == hir::TypeKind::UShort ||
-                                                hirType->kind == hir::TypeKind::UInt ||
-                                                hirType->kind == hir::TypeKind::ULong);
-
-                                if (isBoolType && intType->getBitWidth() == 8) {
-                                    // bool型：true/false として出力
-                                    auto formatBoolFunc = module->getOrInsertFunction(
-                                        "cm_format_bool",
-                                        llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()},
-                                                                false));
-                                    auto boolStr = builder->CreateCall(formatBoolFunc, {value});
-                                    auto replaceFunc = module->getOrInsertFunction(
-                                        "cm_format_replace",
-                                        llvm::FunctionType::get(
-                                            ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()},
-                                            false));
-                                    currentStr =
-                                        builder->CreateCall(replaceFunc, {currentStr, boolStr});
-                                } else if (isCharType && intType->getBitWidth() == 8) {
-                                    // char型：文字として出力
-                                    auto formatCharFunc = module->getOrInsertFunction(
-                                        "cm_format_char",
-                                        llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()},
-                                                                false));
-                                    auto charStr = builder->CreateCall(formatCharFunc, {value});
-                                    auto replaceFunc = module->getOrInsertFunction(
-                                        "cm_format_replace",
-                                        llvm::FunctionType::get(
-                                            ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()},
-                                            false));
-                                    currentStr =
-                                        builder->CreateCall(replaceFunc, {currentStr, charStr});
-                                } else {
-                                    // 整数型：符号なしの場合はcm_format_replace_uint、符号付きはcm_format_replace_intを使用
-                                    auto intVal = value;
-                                    if (valueType->getIntegerBitWidth() != 32) {
-                                        if (isUnsigned) {
-                                            intVal = builder->CreateZExt(value, ctx.getI32Type());
-                                        } else {
-                                            intVal = builder->CreateSExt(value, ctx.getI32Type());
-                                        }
-                                    }
-                                    if (isUnsigned) {
-                                        auto replaceFunc = module->getOrInsertFunction(
-                                            "cm_format_replace_uint",
-                                            llvm::FunctionType::get(
-                                                ctx.getPtrType(),
-                                                {ctx.getPtrType(), ctx.getI32Type()}, false));
-                                        currentStr =
-                                            builder->CreateCall(replaceFunc, {currentStr, intVal});
-                                    } else {
-                                        auto replaceFunc = module->getOrInsertFunction(
-                                            "cm_format_replace_int",
-                                            llvm::FunctionType::get(
-                                                ctx.getPtrType(),
-                                                {ctx.getPtrType(), ctx.getI32Type()}, false));
-                                        currentStr =
-                                            builder->CreateCall(replaceFunc, {currentStr, intVal});
+                        // フォーマット指定子（{:}）があるかチェック
+                        bool hasFormatSpecifiers = false;
+                        if (firstArg->getType()->isPointerTy()) {
+                            // firstArgがGlobalStringPtrの場合、文字列を取得してチェック
+                            if (auto globalStr = llvm::dyn_cast<llvm::GlobalVariable>(
+                                    firstArg->stripPointerCasts())) {
+                                if (globalStr->hasInitializer()) {
+                                    if (auto constData = llvm::dyn_cast<llvm::ConstantDataArray>(
+                                            globalStr->getInitializer())) {
+                                        std::string str = constData->getAsString().str();
+                                        hasFormatSpecifiers = str.find("{:") != std::string::npos;
                                     }
                                 }
                             }
                         }
 
-                        auto formattedStr = currentStr;
+                        // WASM用の特別処理：cm_format_string_1/2/3/4を使用（フォーマット指定子がない場合のみ）
+                        if (ctx.getTargetConfig().target == BuildTarget::Wasm &&
+                            callData.args.size() >= 2 && callData.args.size() <= 5 &&
+                            !hasFormatSpecifiers) {
+                            // 引数を文字列に変換
+                            std::vector<llvm::Value*> stringArgs;
+                            stringArgs.push_back(firstArg);  // フォーマット文字列
+
+                            for (size_t i = 1; i < callData.args.size(); ++i) {
+                                auto value = convertOperand(*callData.args[i]);
+                                auto valueType = value->getType();
+                                auto hirType = getOperandType(*callData.args[i]);
+
+                                llvm::Value* strValue = nullptr;
+
+                                if (valueType->isPointerTy()) {
+                                    strValue = value;
+                                } else if (valueType->isIntegerTy()) {
+                                    auto intType = llvm::cast<llvm::IntegerType>(valueType);
+                                    bool isBoolType =
+                                        hirType && hirType->kind == hir::TypeKind::Bool;
+                                    bool isCharType =
+                                        hirType && hirType->kind == hir::TypeKind::Char;
+
+                                    if (isBoolType && intType->getBitWidth() == 8) {
+                                        auto formatFunc = module->getOrInsertFunction(
+                                            "cm_format_bool",
+                                            llvm::FunctionType::get(ctx.getPtrType(),
+                                                                    {ctx.getI8Type()}, false));
+                                        strValue = builder->CreateCall(formatFunc, {value});
+                                    } else if (isCharType && intType->getBitWidth() == 8) {
+                                        auto formatFunc = module->getOrInsertFunction(
+                                            "cm_format_char",
+                                            llvm::FunctionType::get(ctx.getPtrType(),
+                                                                    {ctx.getI8Type()}, false));
+                                        strValue = builder->CreateCall(formatFunc, {value});
+                                    } else {
+                                        // 整数を文字列に変換
+                                        bool isUnsigned =
+                                            hirType && (hirType->kind == hir::TypeKind::UTiny ||
+                                                        hirType->kind == hir::TypeKind::UShort ||
+                                                        hirType->kind == hir::TypeKind::UInt ||
+                                                        hirType->kind == hir::TypeKind::ULong);
+                                        auto intVal = value;
+                                        if (valueType->getIntegerBitWidth() != 32) {
+                                            if (isUnsigned) {
+                                                intVal =
+                                                    builder->CreateZExt(value, ctx.getI32Type());
+                                            } else {
+                                                intVal =
+                                                    builder->CreateSExt(value, ctx.getI32Type());
+                                            }
+                                        }
+                                        auto formatFunc = module->getOrInsertFunction(
+                                            isUnsigned ? "cm_format_uint" : "cm_format_int",
+                                            llvm::FunctionType::get(ctx.getPtrType(),
+                                                                    {ctx.getI32Type()}, false));
+                                        strValue = builder->CreateCall(formatFunc, {intVal});
+                                    }
+                                } else if (valueType->isFloatingPointTy()) {
+                                    auto doubleVal = value;
+                                    if (valueType->isFloatTy()) {
+                                        doubleVal = builder->CreateFPExt(value, ctx.getF64Type());
+                                    }
+                                    auto formatFunc = module->getOrInsertFunction(
+                                        "cm_format_double",
+                                        llvm::FunctionType::get(ctx.getPtrType(),
+                                                                {ctx.getF64Type()}, false));
+                                    strValue = builder->CreateCall(formatFunc, {doubleVal});
+                                }
+
+                                if (strValue) {
+                                    stringArgs.push_back(strValue);
+                                }
+                            }
+
+                            // 引数の数に応じて適切な関数を呼び出す
+                            if (stringArgs.size() == 2) {
+                                auto formatFunc = module->getOrInsertFunction(
+                                    "cm_format_string_1",
+                                    llvm::FunctionType::get(ctx.getPtrType(),
+                                                            {ctx.getPtrType(), ctx.getPtrType()},
+                                                            false));
+                                formattedStr = builder->CreateCall(formatFunc, stringArgs);
+                            } else if (stringArgs.size() == 3) {
+                                auto formatFunc = module->getOrInsertFunction(
+                                    "cm_format_string_2",
+                                    llvm::FunctionType::get(
+                                        ctx.getPtrType(),
+                                        {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType()},
+                                        false));
+                                formattedStr = builder->CreateCall(formatFunc, stringArgs);
+                            } else if (stringArgs.size() == 4) {
+                                auto formatFunc = module->getOrInsertFunction(
+                                    "cm_format_string_3",
+                                    llvm::FunctionType::get(ctx.getPtrType(),
+                                                            {ctx.getPtrType(), ctx.getPtrType(),
+                                                             ctx.getPtrType(), ctx.getPtrType()},
+                                                            false));
+                                formattedStr = builder->CreateCall(formatFunc, stringArgs);
+                            } else if (stringArgs.size() == 5) {
+                                auto formatFunc = module->getOrInsertFunction(
+                                    "cm_format_string_4",
+                                    llvm::FunctionType::get(
+                                        ctx.getPtrType(),
+                                        {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType(),
+                                         ctx.getPtrType(), ctx.getPtrType()},
+                                        false));
+                                formattedStr = builder->CreateCall(formatFunc, stringArgs);
+                            }
+                        }
+
+                        // WASMで処理されなかった場合は従来の処理
+                        if (!formattedStr) {
+                            // 非WASM または 4引数以上の場合は従来の処理
+                            llvm::Value* currentStr = firstArg;
+
+                            // 各値について処理
+                            for (size_t i = 1; i < callData.args.size(); ++i) {
+                                auto value = convertOperand(*callData.args[i]);
+                                auto valueType = value->getType();
+                                auto hirType = getOperandType(*callData.args[i]);
+
+                                if (valueType->isPointerTy()) {
+                                    // 文字列型：cm_format_replace_string を使用
+                                    auto replaceFunc = module->getOrInsertFunction(
+                                        "cm_format_replace_string",
+                                        llvm::FunctionType::get(
+                                            ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                                    currentStr =
+                                        builder->CreateCall(replaceFunc, {currentStr, value});
+                                } else if (valueType->isFloatingPointTy()) {
+                                    // 浮動小数点型：cm_format_replace_double を使用
+                                    auto doubleVal = value;
+                                    if (valueType->isFloatTy()) {
+                                        doubleVal = builder->CreateFPExt(value, ctx.getF64Type());
+                                    }
+                                    auto replaceFunc = module->getOrInsertFunction(
+                                        "cm_format_replace_double",
+                                        llvm::FunctionType::get(
+                                            ctx.getPtrType(), {ctx.getPtrType(), ctx.getF64Type()},
+                                            false));
+                                    currentStr =
+                                        builder->CreateCall(replaceFunc, {currentStr, doubleVal});
+                                } else if (valueType->isIntegerTy()) {
+                                    auto intType = llvm::cast<llvm::IntegerType>(valueType);
+
+                                    // 型情報を使用して bool/char/整数を判定
+                                    bool isBoolType =
+                                        hirType && hirType->kind == hir::TypeKind::Bool;
+                                    bool isCharType =
+                                        hirType && hirType->kind == hir::TypeKind::Char;
+                                    bool isUnsigned =
+                                        hirType && (hirType->kind == hir::TypeKind::UTiny ||
+                                                    hirType->kind == hir::TypeKind::UShort ||
+                                                    hirType->kind == hir::TypeKind::UInt ||
+                                                    hirType->kind == hir::TypeKind::ULong);
+
+                                    if (isBoolType && intType->getBitWidth() == 8) {
+                                        // bool型：true/false として出力
+                                        auto formatBoolFunc = module->getOrInsertFunction(
+                                            "cm_format_bool",
+                                            llvm::FunctionType::get(ctx.getPtrType(),
+                                                                    {ctx.getI8Type()}, false));
+                                        auto boolStr = builder->CreateCall(formatBoolFunc, {value});
+                                        auto replaceFunc = module->getOrInsertFunction(
+                                            "cm_format_replace",
+                                            llvm::FunctionType::get(
+                                                ctx.getPtrType(),
+                                                {ctx.getPtrType(), ctx.getPtrType()}, false));
+                                        currentStr =
+                                            builder->CreateCall(replaceFunc, {currentStr, boolStr});
+                                    } else if (isCharType && intType->getBitWidth() == 8) {
+                                        // char型：文字として出力
+                                        auto formatCharFunc = module->getOrInsertFunction(
+                                            "cm_format_char",
+                                            llvm::FunctionType::get(ctx.getPtrType(),
+                                                                    {ctx.getI8Type()}, false));
+                                        auto charStr = builder->CreateCall(formatCharFunc, {value});
+                                        auto replaceFunc = module->getOrInsertFunction(
+                                            "cm_format_replace",
+                                            llvm::FunctionType::get(
+                                                ctx.getPtrType(),
+                                                {ctx.getPtrType(), ctx.getPtrType()}, false));
+                                        currentStr =
+                                            builder->CreateCall(replaceFunc, {currentStr, charStr});
+                                    } else {
+                                        // 整数型：符号なしの場合はcm_format_replace_uint、符号付きはcm_format_replace_intを使用
+                                        auto intVal = value;
+                                        if (valueType->getIntegerBitWidth() != 32) {
+                                            if (isUnsigned) {
+                                                intVal =
+                                                    builder->CreateZExt(value, ctx.getI32Type());
+                                            } else {
+                                                intVal =
+                                                    builder->CreateSExt(value, ctx.getI32Type());
+                                            }
+                                        }
+                                        if (isUnsigned) {
+                                            auto replaceFunc = module->getOrInsertFunction(
+                                                "cm_format_replace_uint",
+                                                llvm::FunctionType::get(
+                                                    ctx.getPtrType(),
+                                                    {ctx.getPtrType(), ctx.getI32Type()}, false));
+                                            currentStr = builder->CreateCall(replaceFunc,
+                                                                             {currentStr, intVal});
+                                        } else {
+                                            auto replaceFunc = module->getOrInsertFunction(
+                                                "cm_format_replace_int",
+                                                llvm::FunctionType::get(
+                                                    ctx.getPtrType(),
+                                                    {ctx.getPtrType(), ctx.getI32Type()}, false));
+                                            currentStr = builder->CreateCall(replaceFunc,
+                                                                             {currentStr, intVal});
+                                        }
+                                    }
+                                }
+                            }
+
+                            formattedStr = currentStr;
+                        }
 
                         // 出力
                         auto printFunc =

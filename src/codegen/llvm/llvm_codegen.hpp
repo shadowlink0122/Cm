@@ -327,7 +327,11 @@ class LLVMCodeGen {
             linkCmd = "arm-none-eabi-ld -T link.ld " + objFile + " -o " + options.outputFile;
         } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
             // WebAssembly：wasm-ld使用
-            linkCmd = "wasm-ld --no-entry --export-all " + objFile + " -o " + options.outputFile;
+            // WASMランタイムライブラリのパスを検索
+            std::string runtimePath = findRuntimeLibrary();
+            // WASI用：_startはランタイムから提供される
+            linkCmd = "wasm-ld --entry=_start " + objFile + " " + runtimePath + " -o " +
+                      options.outputFile;
         } else {
             // ネイティブ：システムリンカ使用
 
@@ -367,6 +371,19 @@ class LLVMCodeGen {
    private:
     /// ランタイムライブラリのパスを検索
     std::string findRuntimeLibrary() {
+        // WASMターゲットの場合は専用ランタイムを使用
+        if (context->getTargetConfig().target == BuildTarget::Wasm) {
+#ifdef CM_RUNTIME_WASM_PATH
+            if (std::filesystem::exists(CM_RUNTIME_WASM_PATH)) {
+                return CM_RUNTIME_WASM_PATH;
+            }
+#endif
+            // フォールバック: build/lib/cm_runtime_wasm.o
+            if (std::filesystem::exists("build/lib/cm_runtime_wasm.o")) {
+                return "build/lib/cm_runtime_wasm.o";
+            }
+        }
+
 // 1. コンパイル時に埋め込まれたパス（CMake定義）
 #ifdef CM_RUNTIME_PATH
         if (std::filesystem::exists(CM_RUNTIME_PATH)) {

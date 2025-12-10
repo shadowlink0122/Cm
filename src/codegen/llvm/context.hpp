@@ -53,7 +53,7 @@ struct TargetConfig {
     static TargetConfig getWasm() {
         return {
             .target = BuildTarget::Wasm,
-            .triple = "wasm32-unknown-unknown",
+            .triple = "wasm32-unknown-wasi",  // WASI用のトリプル
             .cpu = "generic",
             .features = "+simd128",
             .dataLayout = "e-m:e-p:32:32-i64:64-n32:64-S128",

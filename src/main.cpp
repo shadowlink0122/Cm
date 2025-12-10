@@ -66,9 +66,9 @@ struct Options {
     bool emit_ts = false;   // TypeScript出力
     bool emit_cpp = false;  // C++出力
     bool emit_llvm = false;
-    std::string backend = "";       // バックエンド指定 (llvm, etc)
-    std::string target = "native";  // ターゲット (native, wasm32, baremetal-arm)
-    bool run_after_emit = false;    // 生成後に実行
+    std::string backend = "llvm";  // バックエンド指定 (デフォルト: llvm)
+    std::string target = "";       // ターゲット (native, wasm, bm)
+    bool run_after_emit = false;   // 生成後に実行
     int optimization_level = 0;
     bool debug = false;
     std::string debug_level = "info";
@@ -93,12 +93,17 @@ void print_help(const char* program_name) {
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n\n";
     std::cout << "コンパイル時オプション:\n";
+    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/bm)\n";
+    std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
+    std::cout << "                        wasm:   WebAssembly\n";
+    std::cout << "                        bm:     ベアメタル（ARM）\n";
     std::cout << "  --emit-rust           Rustコードを生成\n";
     std::cout << "  --emit-rust-v2        Rustコードを生成（ステートマシン方式）\n";
     std::cout << "  --emit-ts             TypeScriptコードを生成\n";
     std::cout << "  --emit-ts-v2          TypeScriptコードを生成（ステートマシン方式）\n";
     std::cout << "  --emit-cpp            C++コードを生成\n";
-    std::cout << "  --emit-llvm           LLVM IRを生成（開発中）\n";
+    std::cout << "  --backend=<backend>   バックエンド選択（llvm/interpreter、デフォルト: llvm）\n";
+    std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -110,6 +115,10 @@ void print_help(const char* program_name) {
     std::cout << "例:\n";
     std::cout << "  " << program_name << " run examples/hello.cm\n";
     std::cout << "  " << program_name << " compile -O2 -o output src/main.cm\n";
+    std::cout << "  " << program_name
+              << " compile --backend=llvm --target=wasm -o app.wasm main.cm\n";
+    std::cout << "  " << program_name
+              << " compile --backend=llvm --target=bm -o firmware.o main.cm\n";
     std::cout << "  " << program_name << " check --verbose src/lib.cm\n";
 }
 
@@ -172,9 +181,6 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_llvm = true;
         } else if (arg.substr(0, 10) == "--backend=") {
             opts.backend = arg.substr(10);
-            if (opts.backend == "llvm") {
-                opts.emit_llvm = true;
-            }
         } else if (arg.substr(0, 9) == "--target=") {
             opts.target = arg.substr(9);
         } else if (arg == "--run") {
@@ -626,7 +632,7 @@ int main(int argc, char* argv[]) {
                     std::cout << "実行方法: " << output_dir << "/main\n";
                 }
 
-            } else if (opts.emit_llvm) {
+            } else if (opts.emit_llvm || opts.backend == "llvm") {
 #ifdef CM_LLVM_ENABLED
                 if (opts.verbose) {
                     std::cout << "=== LLVM Code Generation ===\n";
@@ -635,28 +641,39 @@ int main(int argc, char* argv[]) {
                 // LLVM バックエンドオプション設定
                 cm::codegen::llvm_backend::LLVMCodeGen::Options llvm_opts;
 
-                // 出力ファイル設定
-                if (opts.output_file.empty()) {
-                    // デフォルトは実行ファイル名
-                    llvm_opts.outputFile = "a.out";
-                } else {
-                    llvm_opts.outputFile = opts.output_file;
-                }
-
                 // ターゲット設定
-                if (opts.target == "wasm32" || opts.target == "wasm") {
+                if (opts.target == "wasm") {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
                     // WASMは実行可能ファイル形式で出力（wasm-ldでリンク）
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
-                } else if (opts.target == "baremetal-arm" || opts.target == "baremetal") {
+                } else if (opts.target == "bm" || opts.target == "baremetal") {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Baremetal;
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
+                } else if (!opts.target.empty() && opts.target != "native") {
+                    std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
+                    std::cerr << "有効なターゲット: native, wasm, bm\n";
+                    return 1;
                 } else {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                }
+
+                // 出力ファイル設定
+                if (opts.output_file.empty()) {
+                    // ターゲットに応じたデフォルトファイル名
+                    if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
+                        llvm_opts.outputFile = "a.wasm";
+                    } else if (llvm_opts.target ==
+                               cm::codegen::llvm_backend::BuildTarget::Baremetal) {
+                        llvm_opts.outputFile = "a.o";
+                    } else {
+                        llvm_opts.outputFile = "a.out";
+                    }
+                } else {
+                    llvm_opts.outputFile = opts.output_file;
                 }
 
                 // 最適化レベル
