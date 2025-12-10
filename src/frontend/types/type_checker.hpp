@@ -20,6 +20,17 @@ class TypeChecker {
         // 組み込み関数は import 時に登録される
     }
 
+    // 構造体定義を登録
+    void register_struct(const std::string& name, const ast::StructDecl& decl) {
+        struct_defs_[name] = &decl;
+    }
+
+    // 構造体定義を取得
+    const ast::StructDecl* get_struct(const std::string& name) const {
+        auto it = struct_defs_.find(name);
+        return it != struct_defs_.end() ? it->second : nullptr;
+    }
+
     // プログラム全体をチェック
     bool check(ast::Program& program) {
         debug::tc::log(debug::tc::Id::Start);
@@ -78,6 +89,8 @@ class TypeChecker {
         } else if (auto* st = decl.as<ast::StructDecl>()) {
             // 構造体を型として登録
             scopes_.global().define(st->name, ast::make_named(st->name));
+            // 構造体定義を保存（フィールドアクセス用）
+            register_struct(st->name, *st);
         }
     }
 
@@ -477,7 +490,35 @@ class TypeChecker {
     // メンバアクセス
     ast::TypePtr infer_member(ast::MemberExpr& member) {
         auto obj_type = infer_type(*member.object);
-        // TODO: 構造体フィールド解決
+        if (!obj_type) {
+            return ast::make_error();
+        }
+
+        // 構造体型の場合、フィールドの型を解決
+        if (obj_type->kind == ast::TypeKind::Struct) {
+            std::string struct_name = obj_type->name;
+            const ast::StructDecl* struct_decl = get_struct(struct_name);
+
+            if (struct_decl) {
+                // フィールドを検索
+                for (const auto& field : struct_decl->fields) {
+                    if (field.name == member.member) {
+                        debug::tc::log(debug::tc::Id::Resolved,
+                                       struct_name + "." + member.member + " : " +
+                                           ast::type_to_string(*field.type),
+                                       debug::Level::Trace);
+                        return field.type;
+                    }
+                }
+                error(Span{},
+                      "Unknown field '" + member.member + "' in struct '" + struct_name + "'");
+            } else {
+                error(Span{}, "Unknown struct type '" + struct_name + "'");
+            }
+        } else {
+            error(Span{}, "Member access on non-struct type");
+        }
+
         return ast::make_error();
     }
 
@@ -530,6 +571,7 @@ class TypeChecker {
     ScopeStack scopes_;
     ast::TypePtr current_return_type_;
     std::vector<Diagnostic> diagnostics_;
+    std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
 };
 
 }  // namespace cm

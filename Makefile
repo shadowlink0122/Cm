@@ -211,6 +211,9 @@ ta: test-all
 .PHONY: c
 c: clean
 
+.PHONY: ti
+ti: test-interpreter
+
 .PHONY: tl
 tl: test-llvm
 

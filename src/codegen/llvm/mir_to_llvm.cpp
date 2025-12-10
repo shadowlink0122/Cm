@@ -68,6 +68,22 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     // ヘルパー関数は不要（ランタイムライブラリを使用）
 
+    // 構造体型を先に定義
+    for (const auto& structDef : program.structs) {
+        // 構造体定義を保存
+        structDefs[structDef->name] = structDef.get();
+
+        // LLVM構造体型を作成
+        std::vector<llvm::Type*> fieldTypes;
+        for (const auto& field : structDef->fields) {
+            fieldTypes.push_back(convertType(field.type));
+        }
+
+        // 構造体型を作成（名前付き）
+        auto structType = llvm::StructType::create(ctx.getContext(), fieldTypes, structDef->name);
+        structTypes[structDef->name] = structType;
+    }
+
     // 関数宣言（先に全て宣言）
     for (const auto& func : program.functions) {
         auto llvmFunc = convertFunctionSignature(*func, module, ctx);
@@ -185,6 +201,10 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         // i1からi8への変換が必要な場合（bool値の格納）
                         if (sourceType->isIntegerTy(1) && targetType->isIntegerTy(8)) {
                             rvalue = builder->CreateZExt(rvalue, ctx.getI8Type(), "bool_ext");
+                        }
+                        // i1からの拡張は常にゼロ拡張
+                        else if (sourceType->isIntegerTy(1) && targetType->isIntegerTy()) {
+                            rvalue = builder->CreateZExt(rvalue, targetType, "bool_zext");
                         }
                         // 整数型間の変換
                         else if (sourceType->isIntegerTy() && targetType->isIntegerTy()) {
@@ -901,9 +921,11 @@ llvm::Value* MIRToLLVM::convertFormatConvert(llvm::Value* value, const std::stri
             return builder->CreateCall(formatFunc, {value});
         } else if (valueType->isIntegerTy()) {
             formatFunc = module->getOrInsertFunction(
-                "cm_format_int", llvm::FunctionType::get(stringType, {ctx.getI64Type()}, false));
-            if (valueType->getIntegerBitWidth() < 64) {
-                value = builder->CreateSExt(value, ctx.getI64Type());
+                "cm_format_int", llvm::FunctionType::get(stringType, {ctx.getI32Type()}, false));
+            if (valueType->getIntegerBitWidth() > 32) {
+                value = builder->CreateTrunc(value, ctx.getI32Type());
+            } else if (valueType->getIntegerBitWidth() < 32) {
+                value = builder->CreateSExt(value, ctx.getI32Type());
             }
             return builder->CreateCall(formatFunc, {value});
         } else {
@@ -919,6 +941,43 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
         case mir::MirOperand::Copy:
         case mir::MirOperand::Move: {
             auto& place = std::get<mir::MirPlace>(operand.data);
+
+            // プロジェクションがある場合（フィールドアクセスなど）
+            if (!place.projections.empty()) {
+                auto addr = convertPlaceToAddress(place);
+                if (addr) {
+                    // フィールドの型を取得してロード
+                    llvm::Type* fieldType = nullptr;
+
+                    // 最後のプロジェクションからフィールド型を取得
+                    const auto& lastProj = place.projections.back();
+                    if (lastProj.kind == mir::ProjectionKind::Field) {
+                        // ローカル変数の型情報から構造体定義を取得
+                        if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                            auto& local = currentMIRFunction->locals[place.local];
+                            if (local.type && local.type->kind == hir::TypeKind::Struct) {
+                                auto structIt = structDefs.find(local.type->name);
+                                if (structIt != structDefs.end()) {
+                                    auto& fields = structIt->second->fields;
+                                    if (lastProj.field_id < fields.size()) {
+                                        fieldType = convertType(fields[lastProj.field_id].type);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!fieldType) {
+                        // フォールバック: i32として扱う
+                        fieldType = ctx.getI32Type();
+                    }
+
+                    return builder->CreateLoad(fieldType, addr, "field_load");
+                }
+                return nullptr;
+            }
+
+            // 通常のローカル変数
             auto local = place.local;
             auto val = locals[local];
             if (val && llvm::isa<llvm::AllocaInst>(val)) {
@@ -950,7 +1009,47 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
     for (const auto& proj : place.projections) {
         switch (proj.kind) {
             case mir::ProjectionKind::Field: {
-                // 構造体フィールド（未実装）
+                // 構造体フィールドアクセス
+                if (!addr) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                            "Field projection on null address",
+                                            cm::debug::Level::Error);
+                    return nullptr;
+                }
+
+                // GEP (GetElementPtr) を使用してフィールドのアドレスを取得
+                // 現在のローカル変数の型を取得
+                llvm::Type* structType = nullptr;
+                if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                    auto& local = currentMIRFunction->locals[place.local];
+                    if (local.type && local.type->kind == hir::TypeKind::Struct) {
+                        auto it = structTypes.find(local.type->name);
+                        if (it != structTypes.end()) {
+                            structType = it->second;
+                        }
+                    }
+                }
+
+                if (!structType) {
+                    // 型情報が取得できない場合は、addrの型から推測
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                        structType = allocaInst->getAllocatedType();
+                    }
+                }
+
+                if (!structType) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                            "Cannot determine struct type for field access",
+                                            cm::debug::Level::Error);
+                    return nullptr;
+                }
+
+                std::vector<llvm::Value*> indices;
+                indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));  // 構造体ベース
+                indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(),
+                                                         proj.field_id));  // フィールドインデックス
+
+                addr = builder->CreateGEP(structType, addr, indices, "field_ptr");
                 break;
             }
             case mir::ProjectionKind::Index: {
@@ -963,6 +1062,11 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 break;
             }
         }
+    }
+
+    // プロジェクションがある場合はGEPの結果をそのまま返す
+    if (!place.projections.empty() && addr) {
+        return addr;
     }
 
     // allocaインストラクションの場合はそのまま返す
@@ -1011,6 +1115,15 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             auto elemType = convertType(type->element_type);
             size_t size = type->array_size.value_or(0);
             return llvm::ArrayType::get(elemType, size);
+        }
+        case hir::TypeKind::Struct: {
+            // 構造体型を検索
+            auto it = structTypes.find(type->name);
+            if (it != structTypes.end()) {
+                return it->second;
+            }
+            // 見つからない場合は不透明型として扱う
+            return llvm::StructType::create(ctx.getContext(), type->name);
         }
         default:
             return ctx.getI32Type();
@@ -1162,36 +1275,122 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
         }
 
         // 比較演算
-        case mir::MirBinaryOp::Eq:
+        case mir::MirBinaryOp::Eq: {
             if (lhs->getType()->isFloatingPointTy()) {
                 return builder->CreateFCmpOEQ(lhs, rhs, "feq");
             }
+            // 文字列比較（両方がポインタ型の場合）
+            if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                // strcmp(lhs, rhs) == 0
+                auto strcmpFunc = module->getOrInsertFunction(
+                    "strcmp", llvm::FunctionType::get(ctx.getI32Type(),
+                                                      {ctx.getPtrType(), ctx.getPtrType()}, false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "strcmp");
+                return builder->CreateICmpEQ(cmpResult, llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                             "streq");
+            }
+            // 整数型のビット幅を揃える
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateICmpEQ(lhs, rhs, "eq");
-        case mir::MirBinaryOp::Ne:
+        }
+        case mir::MirBinaryOp::Ne: {
             if (lhs->getType()->isFloatingPointTy()) {
                 return builder->CreateFCmpONE(lhs, rhs, "fne");
             }
+            // 文字列比較（両方がポインタ型の場合）
+            if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                // strcmp(lhs, rhs) != 0
+                auto strcmpFunc = module->getOrInsertFunction(
+                    "strcmp", llvm::FunctionType::get(ctx.getI32Type(),
+                                                      {ctx.getPtrType(), ctx.getPtrType()}, false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "strcmp");
+                return builder->CreateICmpNE(cmpResult, llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                             "strne");
+            }
+            // 整数型のビット幅を揃える
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateICmpNE(lhs, rhs, "ne");
-        case mir::MirBinaryOp::Lt:
+        }
+        case mir::MirBinaryOp::Lt: {
             if (lhs->getType()->isFloatingPointTy()) {
                 return builder->CreateFCmpOLT(lhs, rhs, "flt");
             }
+            // 整数型のビット幅を揃える
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateICmpSLT(lhs, rhs, "lt");
-        case mir::MirBinaryOp::Le:
+        }
+        case mir::MirBinaryOp::Le: {
             if (lhs->getType()->isFloatingPointTy()) {
                 return builder->CreateFCmpOLE(lhs, rhs, "fle");
             }
+            // 整数型のビット幅を揃える
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateICmpSLE(lhs, rhs, "le");
-        case mir::MirBinaryOp::Gt:
+        }
+        case mir::MirBinaryOp::Gt: {
             if (lhs->getType()->isFloatingPointTy()) {
                 return builder->CreateFCmpOGT(lhs, rhs, "fgt");
             }
+            // 整数型のビット幅を揃える
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateICmpSGT(lhs, rhs, "gt");
-        case mir::MirBinaryOp::Ge:
+        }
+        case mir::MirBinaryOp::Ge: {
             if (lhs->getType()->isFloatingPointTy()) {
                 return builder->CreateFCmpOGE(lhs, rhs, "fge");
             }
+            // 整数型のビット幅を揃える
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateICmpSGE(lhs, rhs, "ge");
+        }
 
         // ビット演算
         case mir::MirBinaryOp::BitAnd:

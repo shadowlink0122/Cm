@@ -27,12 +27,33 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# 子プロセスのPIDを追跡
+CHILD_PIDS=()
+
+# クリーンアップ関数
+cleanup() {
+    echo -e "\n${YELLOW}[INTERRUPTED]${NC} テストを中断しています..."
+    # 子プロセスを終了
+    for pid in "${CHILD_PIDS[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    done
+    # プロセスグループ全体を終了
+    kill -TERM 0 2>/dev/null
+    exit 130
+}
+
+# シグナルトラップ設定
+trap cleanup SIGINT SIGTERM
+
 # デフォルト値
 BACKEND="interpreter"
 CATEGORIES=""
 VERBOSE=false
 PARALLEL=false
-TIMEOUT=5
+TIMEOUT=10
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
@@ -40,6 +61,14 @@ if command -v timeout >/dev/null 2>&1; then
     TIMEOUT_CMD="timeout"
 elif command -v gtimeout >/dev/null 2>&1; then
     TIMEOUT_CMD="gtimeout"
+fi
+
+# タイムアウトコマンドがない場合の警告
+if [ -z "$TIMEOUT_CMD" ]; then
+    echo -e "${YELLOW}警告: timeout/gtimeoutコマンドが見つかりません${NC}"
+    echo "無限ループが発生した場合、Ctrl+Cで中断できます"
+    echo "macOSの場合: brew install coreutils でgtimeoutをインストールできます"
+    echo ""
 fi
 
 # ヘルプメッセージ
@@ -53,7 +82,7 @@ usage() {
     echo "  -t, --timeout <seconds>    Test timeout in seconds (default: 5)"
     echo "  -h, --help                 Show this help message"
     echo ""
-    echo "Categories: basic, control_flow, errors, formatting, functions, macros, modules, overload, types"
+    echo "Categories: basic, control_flow, errors, formatting, functions, structs, macros, modules, overload, types"
     exit 0
 }
 
@@ -101,9 +130,9 @@ fi
 if [ -z "$CATEGORIES" ]; then
     # llvmとllvm-wasmは同じカテゴリを使用
     if [ "$BACKEND" = "llvm" ] || [ "$BACKEND" = "llvm-wasm" ]; then
-        CATEGORIES="basic control_flow errors formatting types functions"
+        CATEGORIES="basic control_flow errors formatting types functions structs"
     else
-        CATEGORIES="basic control_flow errors formatting types functions"
+        CATEGORIES="basic control_flow errors formatting types functions structs"
         # マクロとモジュールは未実装なので、インタプリタ以外ではスキップ
         if [ "$BACKEND" = "interpreter" ]; then
             CATEGORIES="$CATEGORIES macros modules"
@@ -168,7 +197,8 @@ run_single_test() {
     run_with_timeout() {
         local cmd="$@"
         if [ -n "$TIMEOUT_CMD" ]; then
-            $TIMEOUT_CMD "$TIMEOUT" $cmd
+            # --kill-after: タイムアウト後さらに2秒待ってもプロセスが終了しなければSIGKILL
+            $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" $cmd
         else
             # タイムアウトコマンドがない場合は直接実行
             $cmd

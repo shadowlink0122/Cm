@@ -804,6 +804,29 @@ class MirInterpreter {
             }
         }
 
+        // 文字列の比較演算
+        if (lhs.type() == typeid(std::string) && rhs.type() == typeid(std::string)) {
+            std::string l = std::any_cast<std::string>(lhs);
+            std::string r = std::any_cast<std::string>(rhs);
+
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(l == r);
+                case MirBinaryOp::Ne:
+                    return Value(l != r);
+                case MirBinaryOp::Lt:
+                    return Value(l < r);
+                case MirBinaryOp::Le:
+                    return Value(l <= r);
+                case MirBinaryOp::Gt:
+                    return Value(l > r);
+                case MirBinaryOp::Ge:
+                    return Value(l >= r);
+                default:
+                    break;
+            }
+        }
+
         // 論理演算（bool型）
         if (lhs.type() == typeid(bool) && rhs.type() == typeid(bool)) {
             bool l = std::any_cast<bool>(lhs);
@@ -869,6 +892,31 @@ class MirInterpreter {
                     return Value(l != 0 || r != 0);
                 default:
                     break;
+            }
+        }
+
+        // char型の演算
+        if (lhs.type() == typeid(char) && rhs.type() == typeid(char)) {
+            char l = std::any_cast<char>(lhs);
+            char r = std::any_cast<char>(rhs);
+
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(l == r);
+                case MirBinaryOp::Ne:
+                    return Value(l != r);
+                case MirBinaryOp::Lt:
+                    return Value(l < r);
+                case MirBinaryOp::Le:
+                    return Value(l <= r);
+                case MirBinaryOp::Gt:
+                    return Value(l > r);
+                case MirBinaryOp::Ge:
+                    return Value(l >= r);
+                default:
+                    // 他の演算は整数に変換して処理
+                    return evaluate_binary_op(op, Value(static_cast<int64_t>(l)),
+                                              Value(static_cast<int64_t>(r)));
             }
         }
 

@@ -523,8 +523,25 @@ struct MirFunction {
 // ============================================================
 // MIRプログラム
 // ============================================================
+// 構造体定義
+struct MirStructField {
+    std::string name;
+    hir::TypePtr type;
+    uint32_t offset;  // バイトオフセット（将来の最適化用）
+};
+
+struct MirStruct {
+    std::string name;
+    std::vector<MirStructField> fields;
+    uint32_t size;   // 構造体全体のサイズ
+    uint32_t align;  // アライメント要求
+};
+
+using MirStructPtr = std::unique_ptr<MirStruct>;
+
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
+    std::vector<MirStructPtr> structs;  // 構造体定義
     std::string filename;
 };
 

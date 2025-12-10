@@ -40,6 +40,15 @@ static size_t wasm_strlen(const char* str) {
     return len;
 }
 
+// 文字列比較（strcmp互換）
+int strcmp(const char* s1, const char* s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return (unsigned char)*s1 - (unsigned char)*s2;
+}
+
 // 整数を文字列に変換
 static void wasm_int_to_str(int value, char* buffer, size_t* len) {
     int is_negative = 0;
@@ -98,6 +107,40 @@ static void wasm_uint_to_str(unsigned int value, char* buffer, size_t* len) {
 
     // 逆順を正しい順序に
     int j = 0;
+    while (i > 0) {
+        buffer[j++] = temp[--i];
+    }
+
+    *len = j;
+}
+
+// 64ビット整数を文字列に変換
+static void wasm_int64_to_str(long long value, char* buffer, size_t* len) {
+    int is_negative = 0;
+    unsigned long long uval;
+
+    if (value < 0) {
+        is_negative = 1;
+        uval = (unsigned long long)(-value);
+    } else {
+        uval = (unsigned long long)value;
+    }
+
+    // 数字を逆順で格納
+    char temp[32];
+    int i = 0;
+    do {
+        temp[i++] = '0' + (uval % 10);
+        uval /= 10;
+    } while (uval > 0);
+
+    // 符号を追加
+    int j = 0;
+    if (is_negative) {
+        buffer[j++] = '-';
+    }
+
+    // 逆順を正しい順序に
     while (i > 0) {
         buffer[j++] = temp[--i];
     }
@@ -261,7 +304,7 @@ char* cm_int_to_string(int value) {
     return buffer;
 }
 
-// cm_format_int - 整数をフォーマット
+// cm_format_int - 32ビット整数をフォーマット（WASM用）
 char* cm_format_int(int value) {
     char* buffer = (char*)wasm_alloc(32);
     size_t len;
@@ -316,6 +359,18 @@ char* cm_format_char(char value) {
 // cm_format_double_precision - 精度付き浮動小数点数をフォーマット
 char* cm_format_double_precision(double value, int precision) {
     char* buffer = (char*)wasm_alloc(64);
+    
+    // 四捨五入のための調整
+    double round_adj = 0.5;
+    for (int i = 0; i < precision; i++) {
+        round_adj /= 10.0;
+    }
+    if (value >= 0) {
+        value += round_adj;
+    } else {
+        value -= round_adj;
+    }
+    
     int int_part = (int)value;
     double frac_part = value - int_part;
     if (frac_part < 0) frac_part = -frac_part;
@@ -341,13 +396,32 @@ char* cm_format_double_precision(double value, int precision) {
 // cm_format_double - 浮動小数点数をフォーマット（簡易版）
 char* cm_format_double(double value) {
     char* buffer = (char*)wasm_alloc(64);
+    
+    // 負の数の処理
+    int is_negative = 0;
+    if (value < 0) {
+        is_negative = 1;
+        value = -value;
+    }
+    
+    // 四捨五入（小数点以下5桁）
+    value += 0.000005;
+    
     int int_part = (int)value;
     double frac_part = value - int_part;
-    if (frac_part < 0) frac_part = -frac_part;
 
     // 整数部分を文字列化
-    size_t len;
-    wasm_int_to_str(int_part, buffer, &len);
+    size_t len = 0;
+    if (is_negative) {
+        buffer[len++] = '-';
+    }
+    
+    char int_buffer[32];
+    size_t int_len;
+    wasm_int_to_str(int_part, int_buffer, &int_len);
+    for (size_t i = 0; i < int_len; i++) {
+        buffer[len++] = int_buffer[i];
+    }
 
     // 小数点を追加
     buffer[len++] = '.';
@@ -367,9 +441,9 @@ char* cm_format_double(double value) {
         }
     }
 
-    // 有効桁数を出力（最低2桁、最大5桁）
+    // 有効桁数を出力（最低1桁、最大5桁）
     int num_digits = 5 - trailing_zeros;
-    if (num_digits < 2) num_digits = 2;
+    if (num_digits < 1) num_digits = 1;
     if (num_digits > 5) num_digits = 5;
 
     // 桁を出力
@@ -385,9 +459,9 @@ char* cm_format_double(double value) {
 }
 
 // 整数を16進数（小文字）に変換
-char* cm_format_int_hex(long value) {
+char* cm_format_int_hex(long long value) {
     char* buffer = (char*)wasm_alloc(32);
-    unsigned long uval = (unsigned long)value;
+    unsigned long long uval = (unsigned long long)value;
 
     char hex_chars[] = "0123456789abcdef";
     char temp[32];
@@ -414,9 +488,9 @@ char* cm_format_int_hex(long value) {
 }
 
 // 整数を16進数（大文字）に変換
-char* cm_format_int_HEX(long value) {
+char* cm_format_int_HEX(long long value) {
     char* buffer = (char*)wasm_alloc(32);
-    unsigned long uval = (unsigned long)value;
+    unsigned long long uval = (unsigned long long)value;
 
     char hex_chars[] = "0123456789ABCDEF";
     char temp[32];
@@ -443,9 +517,9 @@ char* cm_format_int_HEX(long value) {
 }
 
 // 整数を2進数に変換
-char* cm_format_int_binary(long value) {
+char* cm_format_int_binary(long long value) {
     char* buffer = (char*)wasm_alloc(65);  // 最大64ビット + null終端
-    unsigned long uval = (unsigned long)value;
+    unsigned long long uval = (unsigned long long)value;
 
     if (uval == 0) {
         buffer[0] = '0';
@@ -453,7 +527,7 @@ char* cm_format_int_binary(long value) {
         return buffer;
     }
 
-    char temp[32];
+    char temp[64];
     int i = 0;
 
     while (uval > 0) {
@@ -471,9 +545,9 @@ char* cm_format_int_binary(long value) {
 }
 
 // 整数を8進数に変換
-char* cm_format_int_octal(long value) {
+char* cm_format_int_octal(long long value) {
     char* buffer = (char*)wasm_alloc(32);
-    unsigned long uval = (unsigned long)value;
+    unsigned long long uval = (unsigned long long)value;
 
     if (uval == 0) {
         buffer[0] = '0';
@@ -824,6 +898,13 @@ char* cm_format_double_scientific(double value, int uppercase) {
         }
     }
 
+    // 四捨五入（小数点以下6桁）
+    mantissa += 0.0000005;
+    if (mantissa >= 10.0) {
+        mantissa /= 10.0;
+        exponent++;
+    }
+
     // 仮数部を文字列に変換（小数点以下6桁）
     int mantissa_int = (int)mantissa;
     int mantissa_frac = (int)((mantissa - mantissa_int) * 1000000);
@@ -834,10 +915,10 @@ char* cm_format_double_scientific(double value, int uppercase) {
     buffer[idx++] = '.';
 
     // 小数部分（6桁）
-    for (int i = 5; i >= 0; i--) {
-        int digit = mantissa_frac / 1;
-        for (int j = 0; j < i; j++) digit /= 10;
-        buffer[idx++] = '0' + (digit % 10);
+    int divisor = 100000;
+    for (int i = 0; i < 6; i++) {
+        buffer[idx++] = '0' + ((mantissa_frac / divisor) % 10);
+        divisor /= 10;
     }
 
     // 指数部

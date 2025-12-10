@@ -304,10 +304,23 @@ class Parser {
         expect(TokenKind::LBrace);
 
         std::vector<ast::Field> fields;
+        bool has_default_field = false;
         while (!check(TokenKind::RBrace) && !is_at_end()) {
             ast::Field field;
+
+            // private修飾子: impl/interfaceのselfポインタからのみアクセス可能
             field.visibility = consume_if(TokenKind::KwPrivate) ? ast::Visibility::Private
                                                                 : ast::Visibility::Export;
+
+            // default修飾子: デフォルトメンバ（構造体に1つだけ）
+            if (consume_if(TokenKind::KwDefault)) {
+                if (has_default_field) {
+                    error("Only one default member allowed per struct");
+                }
+                field.is_default = true;
+                has_default_field = true;
+            }
+
             field.qualifiers.is_const = consume_if(TokenKind::KwConst);
             field.type = parse_type();
             field.name = expect_ident();

@@ -1,0 +1,11 @@
+// エラーケース: 構造体に複数のdefault修飾子
+// 1つの構造体にdefaultメンバは1つだけ許可される
+
+struct BadStruct {
+    default int x;
+    default int y;  // エラー: 複数のdefaultは不可
+}
+
+int main() {
+    return 0;
+}

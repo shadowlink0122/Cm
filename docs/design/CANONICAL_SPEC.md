@@ -157,6 +157,51 @@ struct Point3D with Debug, Clone {
 struct Point3D { }
 ```
 
+### 6.1 メンバ修飾子
+
+#### private修飾子
+`private`修飾子を持つメンバは直接アクセス不可。`impl`ブロック内の`self`ポインタからのみアクセス可能。
+
+```cm
+struct Person {
+    string name;        // 外部からアクセス可能
+    private int age;    // impl内のselfからのみアクセス可能
+}
+
+impl Person {
+    int getAge() {
+        return this.age;  // ✓ impl内からアクセス可能
+    }
+}
+
+void main() {
+    Person p;
+    p.name = "Alice";   // ✓ OK
+    // p.age = 30;      // ❌ エラー: privateメンバへの直接アクセス
+}
+```
+
+#### default修飾子
+`default`修飾子はデフォルトメンバを指定。構造体に1つだけ設定可能。メンバ名を省略した場合にこのメンバにアクセス。
+
+```cm
+struct Wrapper {
+    default int value;  // デフォルトメンバ
+    string tag;
+}
+
+void main() {
+    Wrapper w;
+    w.value = 10;  // 通常のアクセス
+    w = 20;        // デフォルトメンバへのアクセス（w.value = 20と同等）
+    int x = w;     // デフォルトメンバの取得（x = w.valueと同等）
+}
+```
+
+**制約：**
+- `default`修飾子は構造体に1つのメンバにのみ指定可能
+- 複数のdefaultメンバはコンパイルエラー
+
 ## 7. マクロ定義
 
 **正式構文：`#macro`キーワード**

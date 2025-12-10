@@ -1,0 +1,15 @@
+// private修飾子のテスト
+// privateメンバはimpl内のselfからのみアクセス可能
+
+struct Person {
+    string name;        // 外部アクセス可能
+    private int age;    // impl内selfからのみアクセス可能
+}
+
+int main() {
+    Person p;
+    p.name = "Alice";
+    // p.age = 25;  // これはエラーになるべき（privateメンバ）
+
+    return 0;
+}

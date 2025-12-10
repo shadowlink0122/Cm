@@ -5,6 +5,7 @@
 #include "../hir/hir_nodes.hpp"
 #include "mir_nodes.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <stack>
 #include <unordered_map>
@@ -27,6 +28,9 @@ class MirLowering {
         for (const auto& decl : hir_program.declarations) {
             if (auto* st = std::get_if<std::unique_ptr<hir::HirStruct>>(&decl->kind)) {
                 register_struct(**st);
+                // MIR構造体を生成してプログラムに追加
+                auto mir_struct = create_mir_struct(**st);
+                mir_program.structs.push_back(std::move(mir_struct));
             }
         }
 
@@ -39,7 +43,8 @@ class MirLowering {
         }
 
         cm::debug::mir::log(cm::debug::mir::Id::LowerEnd,
-                            std::to_string(mir_program.functions.size()) + " functions");
+                            std::to_string(mir_program.functions.size()) + " functions, " +
+                                std::to_string(mir_program.structs.size()) + " structs");
         return mir_program;
     }
 
@@ -73,6 +78,73 @@ class MirLowering {
             }
         }
         return std::nullopt;
+    }
+
+    // MIR構造体を生成
+    MirStructPtr create_mir_struct(const hir::HirStruct& st) {
+        auto mir_struct = std::make_unique<MirStruct>();
+        mir_struct->name = st.name;
+
+        // フィールドとレイアウトを計算
+        uint32_t current_offset = 0;
+        uint32_t max_align = 1;
+
+        for (const auto& field : st.fields) {
+            MirStructField mir_field;
+            mir_field.name = field.name;
+            mir_field.type = field.type;
+
+            // 型のサイズとアライメントを取得（簡易版）
+            uint32_t size = 0, align = 1;
+            if (field.type) {
+                switch (field.type->kind) {
+                    case hir::TypeKind::Bool:
+                    case hir::TypeKind::Tiny:
+                    case hir::TypeKind::UTiny:
+                    case hir::TypeKind::Char:
+                        size = 1;
+                        align = 1;
+                        break;
+                    case hir::TypeKind::Short:
+                    case hir::TypeKind::UShort:
+                        size = 2;
+                        align = 2;
+                        break;
+                    case hir::TypeKind::Int:
+                    case hir::TypeKind::UInt:
+                    case hir::TypeKind::Float:
+                        size = 4;
+                        align = 4;
+                        break;
+                    case hir::TypeKind::Long:
+                    case hir::TypeKind::ULong:
+                    case hir::TypeKind::Double:
+                    case hir::TypeKind::Pointer:
+                    case hir::TypeKind::Reference:
+                    case hir::TypeKind::String:
+                        size = 8;
+                        align = 8;
+                        break;
+                    default:
+                        size = 8;
+                        align = 8;  // デフォルト
+                }
+            }
+
+            // アライメント調整
+            current_offset = (current_offset + align - 1) & ~(align - 1);
+            mir_field.offset = current_offset;
+            current_offset += size;
+            max_align = std::max(max_align, align);
+
+            mir_struct->fields.push_back(mir_field);
+        }
+
+        // 構造体全体のサイズ（最終アライメント調整）
+        mir_struct->size = (current_offset + max_align - 1) & ~(max_align - 1);
+        mir_struct->align = max_align;
+
+        return mir_struct;
     }
 
     // ループコンテキスト

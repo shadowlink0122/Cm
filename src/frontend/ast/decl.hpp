@@ -48,7 +48,8 @@ struct Field {
     TypePtr type;
     Visibility visibility = Visibility::Private;
     TypeQualifiers qualifiers;
-    ExprPtr default_value;  // オプション
+    ExprPtr default_value;    // オプション
+    bool is_default = false;  // デフォルトメンバ（構造体に1つだけ）
 };
 
 // ============================================================

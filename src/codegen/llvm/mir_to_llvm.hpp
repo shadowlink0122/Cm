@@ -32,6 +32,10 @@ class MIRToLLVM {
     std::unordered_map<std::string, llvm::GlobalVariable*> globals;
     std::unordered_map<std::string, llvm::Function*> functions;
 
+    // 構造体型キャッシュ
+    std::unordered_map<std::string, llvm::StructType*> structTypes;
+    std::unordered_map<std::string, const mir::MirStruct*> structDefs;
+
    public:
     /// コンストラクタ
     explicit MIRToLLVM(LLVMContext& context)
