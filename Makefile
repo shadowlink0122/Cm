@@ -11,7 +11,9 @@ help:
 	@echo "Cm Language - Make Commands"
 	@echo ""
 	@echo "Build Commands:"
-	@echo "  make build          - ビルド（デバッグモード）"
+	@echo "  make all            - ビルド（テスト含む）"
+	@echo "  make build          - cmコンパイラのみビルド"
+	@echo "  make build-all      - テストを含むビルド"
 	@echo "  make release        - リリースビルド"
 	@echo "  make clean          - ビルドディレクトリをクリーン"
 	@echo "  make rebuild        - クリーン後に再ビルド"
@@ -23,52 +25,59 @@ help:
 	@echo "  make test-mir       - MIR Loweringテストのみ"
 	@echo "  make test-opt       - 最適化テストのみ"
 	@echo ""
-	@echo "Test Commands (Integration/Backend Tests):"
-	@echo "  make test-interpreter - インタプリタテスト"
-	@echo "  make test-cpp         - C++コード生成テスト"
-	@echo "  make test-rust        - Rustコード生成テスト"
-	@echo "  make test-ts          - TypeScriptコード生成テスト"
+	@echo "Test Commands (LLVM Backend):"
+	@echo "  make test-llvm        - LLVM ネイティブテスト"
+	@echo "  make test-llvm-all    - すべてのLLVMテスト"
+	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
 	@echo ""
 	@echo "Run Commands:"
 	@echo "  make run FILE=<file>       - Cmファイルを実行"
 	@echo "  make run-debug FILE=<file> - デバッグモードで実行"
 	@echo ""
-	@echo "Development Commands:"
-	@echo "  make format         - コードフォーマット"
-	@echo "  make format-check   - フォーマットチェック"
-	@echo ""
 	@echo "Quick Shortcuts:"
-	@echo "  make b  - build"
-	@echo "  make t  - test"
-	@echo "  make ta - test-all"
+	@echo "  make b   - build"
+	@echo "  make t   - test"
+	@echo "  make ta  - test-all"
+	@echo "  make tl  - test-llvm"
+	@echo "  make tla - test-llvm-all"
 
 # ========================================
 # Build Commands
 # ========================================
 
+.PHONY: all
+all: build-all
+
 .PHONY: build
 build:
 	@echo "Building Cm compiler (debug mode)..."
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug
+	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON
 	@cmake --build $(BUILD_DIR)
 	@echo "✅ Build complete!"
+
+.PHONY: build-all
+build-all:
+	@echo "Building Cm compiler with tests (debug mode)..."
+	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON
+	@cmake --build $(BUILD_DIR)
+	@echo "✅ Build complete (with tests)!"
 
 .PHONY: release
 release:
 	@echo "Building Cm compiler (release mode)..."
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
+	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON
 	@cmake --build $(BUILD_DIR)
 	@echo "✅ Release build complete!"
 
 .PHONY: clean
 clean:
 	@echo "Cleaning build directory..."
-	@rm -rf $(BUILD_DIR)
+	@rm -rf $(CM) $(BUILD_DIR) .tmp/*
 	@echo "✅ Clean complete!"
 
 .PHONY: rebuild
-rebuild: clean build
+rebuild: clean build-all
 
 # ========================================
 # Unit Test Commands (C++ tests via ctest)
@@ -102,7 +111,7 @@ test-opt:
 	@ctest --test-dir $(BUILD_DIR) -R "MirOptimizationTest" --output-on-failure
 
 # ========================================
-# Integration/Backend Test Commands
+# Integration Test Commands
 # ========================================
 
 .PHONY: test-interpreter
@@ -111,27 +120,28 @@ test-interpreter:
 	@chmod +x tests/unified_test_runner.sh
 	@tests/unified_test_runner.sh -b interpreter
 
-.PHONY: test-cpp
-test-cpp:
-	@echo "Running C++ code generation tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@tests/unified_test_runner.sh -b cpp
+# ========================================
+# LLVM Backend Test Commands
+# ========================================
 
-.PHONY: test-rust
-test-rust:
-	@echo "Running Rust code generation tests..."
+# LLVM ネイティブテスト
+.PHONY: test-llvm
+test-llvm:
+	@echo "Running LLVM native code generation tests..."
 	@chmod +x tests/unified_test_runner.sh
-	@tests/unified_test_runner.sh -b rust
+	@tests/unified_test_runner.sh -b llvm
 
-.PHONY: test-ts
-test-ts:
-	@echo "Running TypeScript code generation tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@tests/unified_test_runner.sh -b typescript
+# すべてのLLVMテストを実行
+.PHONY: test-llvm-all
+test-llvm-all: test-llvm
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All LLVM tests completed!"
+	@echo "=========================================="
 
 # すべてのテストを実行
 .PHONY: test-all
-test-all: test test-interpreter test-cpp test-rust test-ts
+test-all: test test-interpreter test-llvm-all
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
@@ -191,6 +201,12 @@ ta: test-all
 
 .PHONY: c
 c: clean
+
+.PHONY: tl
+tl: test-llvm
+
+.PHONY: tla
+tla: test-llvm-all
 
 # デフォルトファイル設定
 FILE ?=

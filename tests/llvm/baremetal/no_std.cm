@@ -1,0 +1,104 @@
+// ベアメタル環境用テスト（no_std）
+#![no_std]
+#![no_main]
+
+// カスタムパニックハンドラ
+[[noreturn]]
+void panic(const char* msg) {
+    // 簡易的なUART出力（仮想アドレス）
+    volatile unsigned int* uart = (unsigned int*)0x10000000;
+
+    // メッセージ出力
+    while (*msg) {
+        *uart = (unsigned int)*msg;
+        msg = msg + 1;
+    }
+
+    // 無限ループで停止
+    while (true) {
+        // NOP
+    }
+}
+
+// 簡易アロケータ
+struct SimpleAllocator {
+    unsigned char* heap_start;
+    unsigned char* heap_current;
+    unsigned int heap_size;
+};
+
+SimpleAllocator g_allocator;
+
+void init_allocator(unsigned char* start, unsigned int size) {
+    g_allocator.heap_start = start;
+    g_allocator.heap_current = start;
+    g_allocator.heap_size = size;
+}
+
+void* alloc(unsigned int size) {
+    // アライメント調整（4バイト境界）
+    unsigned int aligned_size = (size + 3) & ~3;
+
+    // ヒープオーバーフローチェック
+    unsigned int used = g_allocator.heap_current - g_allocator.heap_start;
+    if (used + aligned_size > g_allocator.heap_size) {
+        panic("Out of memory");
+    }
+
+    void* result = g_allocator.heap_current;
+    g_allocator.heap_current = g_allocator.heap_current + aligned_size;
+    return result;
+}
+
+// エントリーポイント
+extern "C" void _start() {
+    // スタックポインタ設定（アセンブリで実装）
+    // BSS領域のゼロクリア
+    extern unsigned char _sbss;
+    extern unsigned char _ebss;
+
+    unsigned char* bss_ptr = &_sbss;
+    while (bss_ptr < &_ebss) {
+        *bss_ptr = 0;
+        bss_ptr = bss_ptr + 1;
+    }
+
+    // ヒープ初期化（仮想アドレス）
+    unsigned char heap[1024];
+    init_allocator(heap, 1024);
+
+    // メイン処理
+    int result = main();
+
+    // 結果をUARTに出力
+    volatile unsigned int* uart = (unsigned int*)0x10000000;
+    *uart = result;
+
+    // 無限ループ
+    while (true) {
+        // WFI (Wait For Interrupt)
+    }
+}
+
+// メイン関数
+int main() {
+    // ベアメタル環境での基本演算テスト
+    int a = 42;
+    int b = 13;
+    int c = a + b;  // 55
+
+    // 簡易メモリアロケーション
+    int* ptr = (int*)alloc(sizeof(int));
+    *ptr = c;
+
+    // ポインタ演算
+    int* ptr2 = ptr + 1;
+    *ptr2 = 100;
+
+    // 結果確認
+    if (*ptr == 55) {
+        return 0;  // 成功
+    }
+
+    return 1;  // エラー
+}

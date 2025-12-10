@@ -49,7 +49,7 @@ fn add(a: int, b: int) -> int { }
 ## コンパイラパイプライン
 
 ```
-Lexer → Parser → AST → HIR → MIR → LIR → CodeGen
+Lexer → Parser → AST → HIR → MIR → LLVM IR → Native/WASM
                             ↑
                         現在ここまで実装
 ```
@@ -59,22 +59,26 @@ Lexer → Parser → AST → HIR → MIR → LIR → CodeGen
 - ✓ HIR（高レベル中間表現）
 - ✓ MIR（SSA形式、CFGベース）
 - ✓ 基本的な型システム
+- ✓ LLVMバックエンド（基本機能）
 
 ### 未実装
-- ✗ LIR（低レベル中間表現）
-- ✗ バックエンド（Rust/TS/WASM）
+- ✗ 構造体/配列の完全サポート
 - ✗ 完全なオーバーロード解決
 - ✗ ジェネリック特殊化
+
+### 廃止されたバックエンド
+- ~~Rust/TS/C++トランスパイラ~~ → LLVMバックエンドに置き換え
 
 ## ビルド・テスト
 
 ```bash
-# ビルド
-cmake -B build && cmake --build build
+# ビルド（LLVM有効）
+cmake -B build -DCM_USE_LLVM=ON && cmake --build build
 
 # テスト
 ctest --test-dir build               # C++テスト
 ./build/bin/cm tests/regression/*.cm # Cmテスト
+make test-llvm-all                   # LLVMテスト
 ```
 
 ## 開発時の注意

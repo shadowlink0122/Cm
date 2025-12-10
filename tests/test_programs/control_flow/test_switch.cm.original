@@ -1,0 +1,80 @@
+import std::io::println;
+
+int main() {
+    // 単一値パターンテスト
+    println("Single value pattern:");
+    int x = 2;
+    switch(x) {
+        case(1) {
+            println("One");
+        }
+        case(2) {
+            println("Two");
+        }
+        case(3) {
+            println("Three");
+        }
+        else {
+            println("Other");
+        }
+    }
+
+    // ORパターンテスト
+    println("\nOR pattern:");
+    int day = 6;
+    switch(day) {
+        case(1 | 7) {
+            println("Weekend");
+        }
+        case(2 | 3 | 4 | 5 | 6) {
+            println("Weekday");
+        }
+        else {
+            println("Invalid day");
+        }
+    }
+
+    // 範囲パターンテスト
+    println("\nRange pattern:");
+    int score = 85;
+    switch(score) {
+        case(90...100) {
+            println("Grade: A");
+        }
+        case(80...89) {
+            println("Grade: B");
+        }
+        case(70...79) {
+            println("Grade: C");
+        }
+        case(60...69) {
+            println("Grade: D");
+        }
+        case(0...59) {
+            println("Grade: F");
+        }
+        else {
+            println("Invalid score");
+        }
+    }
+
+    // 混合パターンテスト
+    println("\nMixed patterns:");
+    int num = 15;
+    switch(num) {
+        case(1 | 2 | 3) {
+            println("Small number");
+        }
+        case(10...20) {
+            println("Medium range");
+        }
+        case(100 | 200 | 300) {
+            println("Special value");
+        }
+        else {
+            println("Other value");
+        }
+    }
+
+    return 0;
+}

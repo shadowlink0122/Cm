@@ -1,0 +1,26 @@
+// 基本的なテストプログラム
+// インタプリタと同じ出力を確認
+
+int main() {
+    // 基本的な算術
+    int a = 10;
+    int b = 20;
+    int c = a + b;
+
+    // 出力
+    print(c);  // 30
+
+    // 条件分岐
+    if (c == 30) {
+        print("OK");
+    } else {
+        print("NG");
+    }
+
+    // ループ
+    for (int i = 0; i < 3; i = i + 1) {
+        print(i);
+    }
+
+    return 0;
+}

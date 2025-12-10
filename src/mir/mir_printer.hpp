@@ -381,31 +381,13 @@ class MirPrinter {
         }
     }
 
-    // 型を文字列に（簡略版）
+    // 型を文字列に
     std::string type_to_string(hir::TypePtr type) {
         if (!type)
             return "?";
 
-        // 現時点では簡略化して型名を返す
-        // TODO: 実際の型システムに合わせて実装
-        if (type->name == "int")
-            return "int";
-        if (type->name == "uint")
-            return "uint";
-        if (type->name == "float")
-            return "float";
-        if (type->name == "double")
-            return "double";
-        if (type->name == "bool")
-            return "bool";
-        if (type->name == "char")
-            return "char";
-        if (type->name == "void")
-            return "void";
-        if (type->name == "string")
-            return "string";
-
-        return type->name.empty() ? "T" : type->name;
+        // HIRの型システムを正しく使用
+        return hir::type_to_string(*type);
     }
 };
 

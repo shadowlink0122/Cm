@@ -1,5 +1,39 @@
 // 標準ライブラリ: I/Oモジュール
+// FFI (Foreign Function Interface) を使用してCランタイムライブラリを呼び出す
 module std::io;
+
+// C言語ランタイムライブラリの関数宣言
+extern "C" {
+    // 文字列出力
+    void cm_print_string(const char* str);
+    void cm_println_string(const char* str);
+    
+    // 整数出力
+    void cm_print_int(int value);
+    void cm_println_int(int value);
+    void cm_print_uint(unsigned int value);
+    void cm_println_uint(unsigned int value);
+    
+    // 浮動小数点数出力
+    void cm_print_double(double value);
+    void cm_println_double(double value);
+    
+    // ブール値出力
+    void cm_print_bool(char value, char with_newline);
+    
+    // フォーマット付き出力
+    char* cm_format_int(int value);
+    char* cm_format_uint(unsigned int value);
+    char* cm_format_double(double value);
+    char* cm_format_bool(char value);
+    char* cm_format_char(char value);
+    char* cm_format_replace(const char* format, const char* value);
+    char* cm_format_replace_int(const char* format, int value);
+    char* cm_format_replace_uint(const char* format, unsigned int value);
+    char* cm_format_replace_double(const char* format, double value);
+    char* cm_format_replace_string(const char* format, const char* value);
+    char* cm_string_concat(const char* left, const char* right);
+}
 
 // Rust風フォーマット文字列対応のprintln
 // 可変長引数をサポート
@@ -13,28 +47,28 @@ export void println(...) {
 
 // 後方互換性のための単純な出力関数（廃止予定）
 export void println_string(string message) {
-    __builtin_println_string(message);
+    cm_println_string(message);
 }
 
 export void println_int(int value) {
-    __builtin_println_int(value);
+    cm_println_int(value);
 }
 
 export void println_double(double value) {
-    __builtin_println_double(value);
+    cm_println_double(value);
 }
 
 export void println_bool(bool value) {
-    __builtin_println_bool(value);
+    cm_print_bool(value ? 1 : 0, 1);
 }
 
 // 改行なし出力
 export void print(string message) {
-    __builtin_print_string(message);
+    cm_print_string(message);
 }
 
 export void print(int value) {
-    __builtin_print_int(value);
+    cm_print_int(value);
 }
 
 // 入力

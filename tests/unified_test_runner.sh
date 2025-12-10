@@ -1,14 +1,23 @@
 #!/bin/bash
 
 # Unified Test Runner for Cm Language
-# Supports: interpreter, typescript, rust backends with the same test items
+# Supports: interpreter, llvm backends with the same test items
 
 # set -e を削除（エラーが発生してもスクリプトを継続）
 
 # 設定
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CM_EXECUTABLE="$PROJECT_ROOT/cm"
+
+# Windows対応: 実行ファイルの拡張子
+if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    CM_EXECUTABLE="$PROJECT_ROOT/cm.exe"
+    IS_WINDOWS=true
+else
+    CM_EXECUTABLE="$PROJECT_ROOT/cm"
+    IS_WINDOWS=false
+fi
+
 TEST_DIR="$PROJECT_ROOT/tests/test_programs"
 TEMP_DIR="$PROJECT_ROOT/.tmp/test_runner"
 
@@ -37,7 +46,7 @@ fi
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm (default: interpreter)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: all)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
@@ -82,9 +91,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, typescript, rust, cpp"
+    echo "Valid backends: interpreter, typescript, rust, cpp, llvm"
     exit 1
 fi
 
@@ -224,6 +233,24 @@ run_single_test() {
                     run_with_timeout ./main > "$output_file" 2>&1 || exit_code=$?
                 fi
                 popd > /dev/null 2>&1
+            fi
+            ;;
+
+        llvm)
+            # LLVMバックエンドでネイティブコードにコンパイルして実行
+            local llvm_exec="$TEMP_DIR/llvm_${test_name}"
+            # Windows対応: .exe拡張子
+            if [ "$IS_WINDOWS" = true ]; then
+                llvm_exec="${llvm_exec}.exe"
+            fi
+            rm -f "$llvm_exec"
+
+            # LLVM経由でネイティブ実行ファイル生成（エラー時は出力ファイルにエラーメッセージを書き込む）
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm "$test_file" -o "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
+                # 実行
+                "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
             fi
             ;;
     esac

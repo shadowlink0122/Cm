@@ -13,6 +13,12 @@
 #include "codegen/ts/ts_mir_codegen.hpp"
 #include "codegen/ts/ts_mir_converter.hpp"
 #include "codegen/ts/typescript_codegen.hpp"
+
+// LLVM codegen (if enabled)
+#ifdef CM_LLVM_ENABLED
+#include "codegen/llvm/llvm_codegen.hpp"
+#endif
+
 #include "common/debug_messages.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
@@ -60,7 +66,9 @@ struct Options {
     bool emit_ts = false;   // TypeScript出力
     bool emit_cpp = false;  // C++出力
     bool emit_llvm = false;
-    bool run_after_emit = false;  // 生成後に実行
+    std::string backend = "";       // バックエンド指定 (llvm, etc)
+    std::string target = "native";  // ターゲット (native, wasm32, baremetal-arm)
+    bool run_after_emit = false;    // 生成後に実行
     int optimization_level = 0;
     bool debug = false;
     std::string debug_level = "info";
@@ -162,6 +170,13 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_cpp = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
+        } else if (arg.substr(0, 10) == "--backend=") {
+            opts.backend = arg.substr(10);
+            if (opts.backend == "llvm") {
+                opts.emit_llvm = true;
+            }
+        } else if (arg.substr(0, 9) == "--target=") {
+            opts.target = arg.substr(9);
         } else if (arg == "--run") {
             opts.run_after_emit = true;
         } else if (arg == "-o") {
@@ -612,11 +627,70 @@ int main(int argc, char* argv[]) {
                 }
 
             } else if (opts.emit_llvm) {
+#ifdef CM_LLVM_ENABLED
                 if (opts.verbose) {
-                    std::cout << "=== LLVM IR Generation ===\n";
+                    std::cout << "=== LLVM Code Generation ===\n";
                 }
-                std::cout << "注意: LLVM IR生成は開発中です\n";
-                // TODO: LLVM IR生成を実装・統合
+
+                // LLVM バックエンドオプション設定
+                cm::codegen::llvm_backend::LLVMCodeGen::Options llvm_opts;
+
+                // 出力ファイル設定
+                if (opts.output_file.empty()) {
+                    // デフォルトは実行ファイル名
+                    llvm_opts.outputFile = "a.out";
+                } else {
+                    llvm_opts.outputFile = opts.output_file;
+                }
+
+                // ターゲット設定
+                if (opts.target == "wasm32" || opts.target == "wasm") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Bitcode;
+                } else if (opts.target == "baremetal-arm" || opts.target == "baremetal") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Baremetal;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
+                } else {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                }
+
+                // 最適化レベル
+                llvm_opts.optimizationLevel = opts.optimization_level;
+                llvm_opts.debugInfo = opts.debug;
+                llvm_opts.verbose = opts.verbose || opts.debug;
+                llvm_opts.verifyIR = true;
+
+                // LLVM コード生成
+                try {
+                    cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
+                    codegen.compile(mir);
+
+                    if (opts.verbose) {
+                        std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                    }
+
+                    // --runオプションがある場合は実行
+                    if (opts.run_after_emit &&
+                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
+                        if (opts.verbose) {
+                            std::cout << "実行中: " << llvm_opts.outputFile << "\n";
+                        }
+                        int exec_result = std::system(llvm_opts.outputFile.c_str());
+                        return WEXITSTATUS(exec_result);
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "LLVM コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
+#else
+                std::cerr << "エラー: LLVM バックエンドが有効になっていません。\n";
+                std::cerr << "CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n";
+                return 1;
+#endif
             } else {
                 // デフォルトはネイティブコード（将来実装）
                 if (opts.verbose) {

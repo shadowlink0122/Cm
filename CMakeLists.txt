@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(Cm 
+project(Cm
     VERSION 0.1.0
-    LANGUAGES CXX
+    LANGUAGES C CXX
     DESCRIPTION "Cm Programming Language Compiler"
 )
 
@@ -13,11 +13,72 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Options
 option(CM_DEBUG_BUILD "Enable debug logging macros" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
-option(BUILD_TESTING "Build tests" ON)
+option(BUILD_TESTING "Build tests (use -DBUILD_TESTING=ON to enable)" OFF)
+option(CM_USE_LLVM "Enable LLVM backend" ON)
+option(CM_LLVM_STATIC "Link LLVM statically" OFF)
 
 # Debug build definition
 if(CM_DEBUG_BUILD)
     add_compile_definitions(CM_DEBUG_BUILD)
+endif()
+
+# LLVM Configuration
+if(CM_USE_LLVM)
+    # Find LLVM (try versions from newest to oldest, suppress warnings with QUIET)
+    find_package(LLVM 15 CONFIG QUIET)
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 14 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        # Final attempt without version requirement
+        find_package(LLVM CONFIG REQUIRED)
+    endif()
+
+    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+    message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+    # LLVM definitions
+    add_compile_definitions(CM_LLVM_ENABLED)
+    add_compile_definitions(${LLVM_DEFINITIONS})
+
+    # LLVM include directories (SYSTEM to suppress warnings from LLVM headers)
+    include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+
+    # Find the libraries that correspond to the LLVM components we need
+    llvm_map_components_to_libnames(llvm_libs
+        Core
+        Support
+        IRReader
+        Passes
+        CodeGen
+        MC
+        MCParser
+        MCJIT
+        ExecutionEngine
+        Target
+
+        # Target architectures (add as needed)
+        X86CodeGen X86AsmParser X86Desc X86Info
+        AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+        WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
+    )
+
+    # Create LLVM backend library
+    add_library(cm_llvm_backend INTERFACE)
+    target_include_directories(cm_llvm_backend INTERFACE
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm
+    )
+
+    if(CM_LLVM_STATIC)
+        target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
+    else()
+        # Dynamic linking
+        target_link_libraries(cm_llvm_backend INTERFACE LLVM)
+    endif()
+
+    message(STATUS "LLVM backend enabled")
+else()
+    message(STATUS "LLVM backend disabled")
 endif()
 
 # Compiler warnings
@@ -43,9 +104,13 @@ elseif(MSVC)
 endif()
 
 # Output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})  # cm実行ファイルをルートに配置
+# cm実行ファイルはルートに、テスト実行ファイルはbuild/binに配置
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# テスト実行ファイル用の出力ディレクトリ
+set(TEST_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
@@ -61,14 +126,72 @@ target_include_directories(cm_frontend INTERFACE ${CMAKE_SOURCE_DIR}/src/fronten
 target_link_libraries(cm_frontend INTERFACE cm_common)
 
 # Main executable
-add_executable(cm
+set(CM_SOURCES
     src/main.cpp
     src/frontend/lexer/token.cpp
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
 )
+
+# Add LLVM sources if enabled
+if(CM_USE_LLVM)
+    list(APPEND CM_SOURCES
+        src/codegen/llvm/context.cpp
+        src/codegen/llvm/mir_to_llvm.cpp
+        src/codegen/llvm/llvm_codegen.cpp
+        src/codegen/llvm/target.cpp
+        src/codegen/llvm/intrinsics.cpp
+    )
+endif()
+
+add_executable(cm ${CM_SOURCES})
 target_link_libraries(cm cm_frontend)
+
+# Link LLVM backend if enabled
+if(CM_USE_LLVM)
+    target_link_libraries(cm cm_llvm_backend)
+    
+    # LLVMのホストターゲットを取得
+    execute_process(
+        COMMAND llvm-config --host-target
+        OUTPUT_VARIABLE LLVM_HOST_TARGET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    
+    # ターゲットアーキテクチャを判定
+    set(CM_RUNTIME_ARCH_FLAG "")
+    if(LLVM_HOST_TARGET MATCHES "x86_64")
+        set(CM_RUNTIME_ARCH_FLAG "-arch x86_64")
+    elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+        set(CM_RUNTIME_ARCH_FLAG "-arch arm64")
+    endif()
+    
+    message(STATUS "LLVM host target: ${LLVM_HOST_TARGET}")
+    message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
+    
+    # Build LLVM runtime library
+    # Cランタイムをコンパイルしてbuild/lib/に配置
+    set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/runtime.c)
+    set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
+    
+    add_custom_command(
+        OUTPUT ${CM_RUNTIME_OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+        COMMAND clang -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 ${CM_RUNTIME_ARCH_FLAG}
+        DEPENDS ${CM_RUNTIME_SOURCE}
+        COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
+    )
+    
+    add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT})
+    add_dependencies(cm cm_runtime)
+    
+    # ランタイムライブラリのパスをコンパイル時に埋め込む
+    target_compile_definitions(cm PRIVATE 
+        CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+    )
+endif()
 
 # Testing
 if(BUILD_TESTING)
@@ -85,6 +208,7 @@ if(BUILD_TESTING)
             tests/unit/lexer_test.cpp
             src/frontend/lexer/token.cpp
         )
+        set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(lexer_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
 
@@ -96,6 +220,7 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
         )
+        set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
 
@@ -107,6 +232,7 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
         )
+        set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
 
@@ -118,6 +244,7 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
         )
+        set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
 

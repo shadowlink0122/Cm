@@ -21,15 +21,28 @@ Cm/
 │   │   ├── mir_nodes.hpp
 │   │   ├── mir_lowering.hpp
 │   │   └── optimizations/ # 最適化パス
-│   └── backends/          # バックエンド
-│       ├── rust/          # Rustトランスパイラ
-│       ├── typescript/    # TypeScriptトランスパイラ
-│       └── wasm/          # WebAssembly生成
+│   ├── codegen/           # コード生成（LLVMバックエンド）
+│   │   └── llvm/          # LLVM IR生成
+│   │       ├── context.hpp/cpp
+│   │       ├── mir_to_llvm.hpp/cpp
+│   │       ├── llvm_codegen.hpp/cpp
+│   │       └── runtime.c  # Cランタイムライブラリ
+│   └── backends/          # レガシーバックエンド（参考のため保持、非推奨）
+│       ├── rust/          # Rustトランスパイラ（廃止）
+│       ├── typescript/    # TypeScriptトランスパイラ（廃止）
+│       └── wasm/          # WebAssembly（LLVM経由で実装予定）
 │
 ├── tests/                 # テストファイル
 │   ├── unit/              # ユニットテスト（*.cpp）
 │   ├── integration/       # 統合テスト（*.cpp）
-│   └── regression/        # リグレッションテスト（*.cm）
+│   ├── regression/        # リグレッションテスト（*.cm）
+│   ├── test_programs/     # LLVMバックエンドテスト
+│   │   ├── basic/         # 基本テスト
+│   │   ├── control_flow/  # 制御フローテスト
+│   │   ├── types/         # 型テスト
+│   │   ├── functions/     # 関数テスト
+│   │   └── formatting/    # フォーマット文字列テスト
+│   └── llvm/              # LLVMバックエンド固有テスト
 │
 ├── docs/                  # ドキュメント
 │   ├── design/            # 設計文書
@@ -44,8 +57,7 @@ Cm/
 ├── examples/              # サンプルコード
 │   ├── basic/             # 基本的な例
 │   ├── advanced/          # 高度な例
-│   ├── overload/          # オーバーロード例
-│   └── transpiler/        # トランスパイラ例
+│   └── overload/          # オーバーロード例
 │
 ├── build/                 # ビルド出力（.gitignore）
 │   ├── bin/               # 実行ファイル
@@ -60,6 +72,18 @@ Cm/
 ├── same-claude.md        # 共通AI設定（100行以内）
 ├── README.md             # プロジェクト説明
 └── LICENSE               # ライセンス
+```
+
+## コード生成アーキテクチャ
+
+> **2024年12月より、LLVMバックエンドが唯一のコード生成方式です。**
+
+```
+MIR → LLVM IR → ネイティブコード / WebAssembly
+
+以前のバックエンド（廃止）:
+- Rust トランスパイラ: src/backends/rust/ （参考のため保持）
+- TypeScript トランスパイラ: src/backends/typescript/ （参考のため保持）
 ```
 
 ## ルールと規約
@@ -87,6 +111,7 @@ Cm/
 [LEXER] Starting tokenization
 [PARSER] Parsing function: main
 [MIR] Lowering HIR to MIR
+[CODEGEN] LLVM生成を開始
 ```
 
 **間違い**：
@@ -100,6 +125,7 @@ Cm/
 - `tests/unit/` - C++ユニットテスト（Google Test）
 - `tests/integration/` - C++統合テスト
 - `tests/regression/` - Cmファイルによるリグレッションテスト
+- `tests/test_programs/` - LLVMバックエンドテスト
 
 ### ドキュメント
 
@@ -111,13 +137,19 @@ Cm/
 ## ビルドとテスト
 
 ```bash
-# ビルド
-cmake -B build -G Ninja
+# ビルド（LLVM有効）
+cmake -B build -G Ninja -DCM_USE_LLVM=ON
 cmake --build build
+
+# または
+./build_and_test_llvm.sh
 
 # テスト実行
 ctest --test-dir build
 ./build/bin/cm tests/regression/example.cm
+
+# LLVMテスト
+make test-llvm-all
 
 # クリーンアップ
 rm -rf build .tmp

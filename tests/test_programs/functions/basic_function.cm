@@ -1,4 +1,4 @@
-// 基本的な関数定義のテスト
+// 基本的な関数定義のテスト - 簡略版
 import std::io::println;
 
 // 引数あり、戻り値あり
@@ -18,13 +18,13 @@ double multiply(double x, double y) {
 
 int main() {
     int result = add(5, 3);
-    println("5 + 3 = {}", result);
+    println(result);  // 8
 
     int s = sum3(1, 2, 3);
-    println("1 + 2 + 3 = {}", s);
+    println(s);  // 6
 
     double m = multiply(2.5, 4.0);
-    println("2.5 * 4.0 = {}", m);
+    println(m);  // 10
 
     return 0;
 }

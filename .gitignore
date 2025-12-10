@@ -41,6 +41,7 @@ coverage.info
 .tmp/
 *.cm.tmp
 test_transpile.cm
+Testing/
 
 # Generated output directories
 cm_build_ts/
@@ -49,3 +50,9 @@ target/
 # Test output
 *.out
 *.actual
+
+# LLVM specific
+link.ld
+*.ll
+*.bc
+*.wasm

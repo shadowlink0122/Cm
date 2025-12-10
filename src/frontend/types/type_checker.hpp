@@ -268,21 +268,32 @@ class TypeChecker {
     ast::TypePtr infer_type(ast::Expr& expr) {
         debug::tc::log(debug::tc::Id::CheckExpr, "", debug::Level::Trace);
 
+        ast::TypePtr inferred_type;
+
         if (auto* lit = expr.as<ast::LiteralExpr>()) {
-            return infer_literal(*lit);
+            inferred_type = infer_literal(*lit);
         } else if (auto* ident = expr.as<ast::IdentExpr>()) {
-            return infer_ident(*ident);
+            inferred_type = infer_ident(*ident);
         } else if (auto* binary = expr.as<ast::BinaryExpr>()) {
-            return infer_binary(*binary);
+            inferred_type = infer_binary(*binary);
         } else if (auto* unary = expr.as<ast::UnaryExpr>()) {
-            return infer_unary(*unary);
+            inferred_type = infer_unary(*unary);
         } else if (auto* call = expr.as<ast::CallExpr>()) {
-            return infer_call(*call);
+            inferred_type = infer_call(*call);
         } else if (auto* member = expr.as<ast::MemberExpr>()) {
-            return infer_member(*member);
+            inferred_type = infer_member(*member);
+        } else {
+            inferred_type = ast::make_error();
         }
 
-        return ast::make_error();
+        // 推論した型を式に設定
+        if (inferred_type && !expr.type) {
+            expr.type = inferred_type;
+        } else if (!expr.type) {
+            expr.type = ast::make_error();
+        }
+
+        return expr.type;
     }
 
     // リテラル

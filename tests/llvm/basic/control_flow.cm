@@ -1,0 +1,82 @@
+// 制御フローテスト
+int test_if_else() {
+    int x = 10;
+
+    if (x > 5) {
+        x = x * 2;  // 20
+    } else {
+        x = x / 2;
+    }
+
+    if (x == 20) {
+        return 0;  // 成功
+    }
+
+    return 1;
+}
+
+int test_loops() {
+    // forループ
+    int sum = 0;
+    for (int i = 1; i <= 10; i = i + 1) {
+        sum = sum + i;
+    }
+    // sum should be 55
+
+    // whileループ
+    int count = 0;
+    int n = 1;
+    while (n < 100) {
+        n = n * 2;
+        count = count + 1;
+    }
+    // count should be 7 (2^7 = 128)
+
+    // ネストループ
+    int nested_sum = 0;
+    for (int i = 0; i < 3; i = i + 1) {
+        for (int j = 0; j < 3; j = j + 1) {
+            nested_sum = nested_sum + (i * 3 + j);
+        }
+    }
+    // nested_sum = 0+1+2+3+4+5+6+7+8 = 36
+
+    if (sum == 55 && count == 7 && nested_sum == 36) {
+        return 0;  // 成功
+    }
+
+    return 1;
+}
+
+int test_switch() {
+    int result = 0;
+    int value = 2;
+
+    switch (value) {
+        case 1:
+            result = 10;
+            break;
+        case 2:
+            result = 20;
+            break;
+        case 3:
+            result = 30;
+            break;
+        default:
+            result = -1;
+    }
+
+    if (result == 20) {
+        return 0;  // 成功
+    }
+
+    return 1;
+}
+
+int main() {
+    if (test_if_else() != 0) return 1;
+    if (test_loops() != 0) return 2;
+    if (test_switch() != 0) return 3;
+
+    return 0;  // すべて成功
+}

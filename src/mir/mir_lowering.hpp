@@ -1064,6 +1064,14 @@ class MirLowering {
 
     // リテラルのlowering
     LocalId lower_literal(FunctionContext& ctx, const hir::HirLiteral& lit, hir::TypePtr type) {
+        // デバッグ: 型情報を出力
+        if (auto* str_val = std::get_if<std::string>(&lit.value)) {
+            cm::debug::mir::log(cm::debug::mir::Id::LiteralExpr,
+                                "String literal: \"" + *str_val +
+                                    "\" with type: " + (type ? hir::type_to_string(*type) : "null"),
+                                cm::debug::Level::Debug);
+        }
+
         // 文字列リテラルの場合、変数埋め込みがあるかチェック
         if (auto* str_val = std::get_if<std::string>(&lit.value)) {
             // 変数埋め込みパターン {varname} があり、その変数が存在する場合のみ処理
