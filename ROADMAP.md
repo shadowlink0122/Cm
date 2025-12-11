@@ -107,7 +107,7 @@ impl Printable for int {
 }
 ```
 
-## Version 0.4.0 - privateメソッドとdefaultメンバ推論（現在の目標）
+## Version 0.4.0 - privateメソッドとdefaultメンバ推論 ✅
 
 ### 目標
 privateメソッドによるカプセル化とdefaultメンバの暗黙的アクセス
@@ -120,12 +120,13 @@ privateメソッドによるカプセル化とdefaultメンバの暗黙的アク
 | defaultメンバ暗黙代入 | ✅ | ✅ | ✅ |
 | defaultメンバ暗黙取得 | ✅ | ✅ | ✅ |
 | impl Type（基本impl） | ✅ | ✅ | ✅ |
-| self()コンストラクタ | ✅ | ⬜ | ✅ |
-| overloadコンストラクタ | ✅ | ⬜ | ✅ |
-| Type name(args)構文 | ✅ | ⬜ | ✅ |
-| selfへの参照渡し | ✅ | ⬜ | ✅ |
-| ~self()デストラクタ | ✅ | ⬜ | ⬜ |
-| RAII自動呼び出し | ⬜ | ⬜ | ⬜ |
+| self()コンストラクタ | ✅ | ✅ | ✅ |
+| overloadコンストラクタ | ✅ | ✅ | ✅ |
+| Type name(args)構文 | ✅ | ✅ | ✅ |
+| Type name 暗黙的コンストラクタ | ✅ | ✅ | ✅ |
+| selfへの参照渡し | ✅ | ✅ | ✅ |
+| ~self()デストラクタ | ✅ | ✅ | ✅ |
+| RAII自動呼び出し | ✅ | ✅ | ✅ |
 
 ### privateメソッド構文例
 ```cm
@@ -183,10 +184,143 @@ impl<T> Vec<T> for Container<T> {
 }
 ```
 
-## Version 0.5.0 - エラーハンドリングとResult型
+## Version 0.5.0 - Enum・リテラル型・ユニオン型（現在の目標）
 
 ### 目標
-安全なエラーハンドリングの実装
+高度な型システム基盤の構築（Result/Option型の前提条件）
+
+### 実装項目
+| 機能 | インタプリタ | LLVM | テスト |
+|------|-------------|------|--------|
+| enum定義 | ⬜ | ⬜ | ⬜ |
+| enum値アクセス (NAME::MEMBER) | ⬜ | ⬜ | ⬜ |
+| enum負の値サポート | ⬜ | ⬜ | ⬜ |
+| enum値重複チェック | ⬜ | ⬜ | ⬜ |
+| enumオートインクリメント | ⬜ | ⬜ | ⬜ |
+| typedef ユニオン型 | ⬜ | ⬜ | ⬜ |
+| typedef リテラル型 | ⬜ | ⬜ | ⬜ |
+| ユニオン型への構造体/interface | ⬜ | ⬜ | ⬜ |
+| 高度な型を引数/戻り値に使用 | ⬜ | ⬜ | ⬜ |
+
+### Enum構文
+```cm
+// 基本的なenum定義
+enum Color {
+    Red = 0,      // 明示的に0
+    Green,        // 自動で1
+    Blue          // 自動で2
+}
+
+// 負の値を含むenum
+enum Status {
+    Error = -1,
+    Unknown = 0,
+    Success = 1,
+    Pending        // 自動で2
+}
+
+// 使用例
+int main() {
+    int c = Color::Red;      // 0
+    int s = Status::Error;   // -1
+    
+    // switch文との組み合わせ
+    switch (c) {
+        case Color::Red:   println("赤"); break;
+        case Color::Green: println("緑"); break;
+        case Color::Blue:  println("青"); break;
+    }
+    return 0;
+}
+
+// 値の重複はコンパイルエラー
+enum Invalid {
+    First = 1,
+    One = 1      // エラー: 値1は既にFirstで使用されています
+}
+```
+
+### リテラル型構文
+```cm
+// 文字列リテラル型
+typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+// 数値リテラル型
+typedef Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+// 使用例
+void handle_request(HttpMethod method) {
+    // methodは"GET", "POST", "PUT", "DELETE"のいずれか
+}
+
+int main() {
+    handle_request("GET");    // OK
+    handle_request("PATCH");  // コンパイルエラー
+    return 0;
+}
+```
+
+### ユニオン型構文
+```cm
+// プリミティブ型のユニオン
+typedef Number = int | double;
+
+// 構造体を含むユニオン
+struct Circle { double radius; }
+struct Rectangle { double width; double height; }
+typedef Shape = Circle | Rectangle;
+
+// interfaceを含むユニオン
+interface Drawable { void draw(); }
+interface Clickable { void on_click(); }
+typedef Widget = Drawable | Clickable;
+
+// 関数での使用
+Number add(Number a, Number b) {
+    // 型に応じた処理
+}
+
+void render(Shape shape) {
+    // CircleかRectangleに応じた処理
+}
+
+// enumとユニオン型の組み合わせ
+enum JsonType { Null, Boolean, Number, String, Array, Object }
+typedef JsonValue = null | bool | double | string | JsonValue[] | Map<string, JsonValue>;
+```
+
+### 型情報の拡張
+```cm
+// 全ての型は関数の引数・戻り値として使用可能
+struct Point { int x; int y; }
+interface Serializable { string serialize(); }
+enum Status { Ok, Error }
+typedef Result = int | string;
+
+// 構造体を返す
+Point create_point(int x, int y) {
+    Point p;
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+// enumを引数に取る
+void handle_status(Status s) { }
+
+// ユニオン型を返す
+Result divide(int a, int b) {
+    if (b == 0) {
+        return "Division by zero";
+    }
+    return a / b;
+}
+```
+
+## Version 0.6.0 - エラーハンドリングとResult型
+
+### 目標
+安全なエラーハンドリングの実装（v0.5.0のEnum/ユニオン型が前提）
 
 ### 実装項目
 | 機能 | インタプリタ | LLVM | テスト |
@@ -196,7 +330,40 @@ impl<T> Vec<T> for Container<T> {
 | ?演算子 | ⬜ | ⬜ | ⬜ |
 | パニックハンドリング | ⬜ | ⬜ | ⬜ |
 
-## Version 0.6.0 - 配列とコレクション
+### 構文例
+```cm
+// Result型の定義（標準ライブラリ）
+enum ResultTag { Ok, Err }
+struct Result<T, E> {
+    ResultTag tag;
+    T ok_value;
+    E err_value;
+}
+
+// Option型の定義（標準ライブラリ）
+enum OptionTag { Some, None }
+struct Option<T> {
+    OptionTag tag;
+    T value;
+}
+
+// 使用例
+Result<int, string> divide(int a, int b) {
+    if (b == 0) {
+        return Result<int, string>{ ResultTag::Err, 0, "Division by zero" };
+    }
+    return Result<int, string>{ ResultTag::Ok, a / b, "" };
+}
+
+// ?演算子（エラー伝播）
+Result<int, string> calculate() {
+    int x = divide(10, 2)?;  // エラーなら即座にreturn
+    int y = divide(x, 0)?;   // ここでエラー発生 → 関数からreturn
+    return Result<int, string>{ ResultTag::Ok, y, "" };
+}
+```
+
+## Version 0.7.0 - 配列とコレクション
 
 ### 目標
 動的・静的配列とベクター型の実装
@@ -210,7 +377,7 @@ impl<T> Vec<T> for Container<T> {
 | スライス操作 | ⬜ | ⬜ | ⬜ |
 | イテレータ | ⬜ | ⬜ | ⬜ |
 
-## Version 0.7.0 - ジェネリクス
+## Version 0.8.0 - ジェネリクス
 
 ### 目標
 型パラメータとジェネリックプログラミング
@@ -224,7 +391,7 @@ impl<T> Vec<T> for Container<T> {
 | 関連型 | ⬜ | ⬜ | ⬜ |
 | 型推論強化 | ⬜ | ⬜ | ⬜ |
 
-## Version 0.8.0 - モジュールシステム
+## Version 0.9.0 - モジュールシステム
 
 ### 目標
 完全なモジュールとパッケージ管理
@@ -238,21 +405,54 @@ impl<T> Vec<T> for Container<T> {
 | genパッケージマネージャ | ⬜ | ⬜ | ⬜ |
 | 依存関係管理 | ⬜ | ⬜ | ⬜ |
 
-## Version 0.9.0 - パターンマッチングと列挙型
+## Version 0.10.0 - パターンマッチング
 
 ### 目標
-強力なパターンマッチング機能
+強力なパターンマッチング機能（v0.5.0のenum/ユニオン型を活用）
 
 ### 実装項目
 | 機能 | インタプリタ | LLVM | テスト |
 |------|-------------|------|--------|
 | match式 | ⬜ | ⬜ | ⬜ |
-| enum型 | ⬜ | ⬜ | ⬜ |
 | パターンガード | ⬜ | ⬜ | ⬜ |
 | 構造化束縛 | ⬜ | ⬜ | ⬜ |
 | 網羅性チェック | ⬜ | ⬜ | ⬜ |
 
-## Version 0.10.0 - 非同期処理
+### 構文例
+```cm
+// enumとのパターンマッチング
+enum Color { Red, Green, Blue }
+
+void describe_color(Color c) {
+    match (c) {
+        Color::Red => println("情熱の赤"),
+        Color::Green => println("自然の緑"),
+        Color::Blue => println("静寂の青"),
+    }
+}
+
+// ユニオン型とのパターンマッチング
+typedef Shape = Circle | Rectangle;
+
+double area(Shape s) {
+    match (s) {
+        Circle c => 3.14159 * c.radius * c.radius,
+        Rectangle r => r.width * r.height,
+    }
+}
+
+// パターンガード
+void classify(int n) {
+    match (n) {
+        x if x < 0 => println("負の数"),
+        0 => println("ゼロ"),
+        x if x < 10 => println("一桁"),
+        _ => println("それ以外"),
+    }
+}
+```
+
+## Version 0.11.0 - 非同期処理
 
 ### 目標
 async/awaitとFuture型の実装
@@ -326,23 +526,30 @@ test:
 | 仕様変更による手戻り | 中 | 早期のプロトタイプと検証 |
 | 依存関係の複雑化 | 低 | モジュール間の疎結合設計 |
 
-## 次のアクション（v0.2.0に向けて）
+## 次のアクション（v0.5.0に向けて）
 
-1. **スコープトラッキング実装** - 1週間
-   - FunctionContextにスコープスタック追加
-   - ブロック開始/終了でスコープをpush/pop
+1. **Enum型の実装** - 2週間
+   - Lexer: `enum`キーワード追加
+   - Parser: enum定義のパース
+   - AST/HIR: EnumDecl追加
+   - 型チェック: 重複値検出
+   - MIR: int型としてlowering
+   - 値アクセス: `NAME::MEMBER`構文
 
-2. **StorageDead自動発行** - 1週間
-   - ブロック終了時にスコープ内変数にStorageDeadを発行
-   - インタプリタでの検証
+2. **リテラル型の実装** - 1週間
+   - typedef構文の拡張
+   - リテラル値の型チェック
 
-3. **defer文の実装** - 2週間
-   - AST/HIR/MIRへの追加
-   - 逆順実行の保証
+3. **ユニオン型の実装** - 2週間
+   - typedef構文: `T1 | T2 | ...`
+   - 構造体/interfaceを含むユニオン
+   - タグ付きユニオンの内部表現
 
-4. **テストスイート作成** - 1週間
+4. **型の拡張** - 1週間
+   - 関数の引数/戻り値にenum/typedef/構造体を使用可能に
+   - 型情報の統一的な扱い
 
-**目標リリース日**: 2025年1月上旬
+**目標リリース日**: 2025年1月下旬
 
 ---
 
