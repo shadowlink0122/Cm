@@ -19,10 +19,17 @@ class HirLowering {
         HirProgram hir;
         hir.filename = program.filename;
 
-        // Pass 1: 構造体定義とコンストラクタ情報を収集
+        // Pass 1: 構造体定義、enum定義、コンストラクタ情報を収集
         for (auto& decl : program.declarations) {
             if (auto* st = decl->as<ast::StructDecl>()) {
                 struct_defs_[st->name] = st;
+            } else if (auto* en = decl->as<ast::EnumDecl>()) {
+                // enum定義を収集（メンバ名と値のマッピング）
+                for (const auto& member : en->members) {
+                    if (member.value.has_value()) {
+                        enum_values_[en->name + "::" + member.name] = *member.value;
+                    }
+                }
             } else if (auto* impl = decl->as<ast::ImplDecl>()) {
                 // コンストラクタ情報を収集
                 if (impl->is_ctor_impl && impl->target_type) {
@@ -52,6 +59,9 @@ class HirLowering {
    private:
     // 構造体定義のキャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
+    
+    // enum値のキャッシュ (EnumName::MemberName -> value)
+    std::unordered_map<std::string, int64_t> enum_values_;
 
     // デフォルトコンストラクタを持つ型の集合
     std::unordered_set<std::string> types_with_default_ctor_;
@@ -81,6 +91,10 @@ class HirLowering {
             return lower_impl(*impl);
         } else if (auto* imp = decl.as<ast::ImportDecl>()) {
             return lower_import(*imp);
+        } else if (auto* en = decl.as<ast::EnumDecl>()) {
+            return lower_enum(*en);
+        } else if (auto* td = decl.as<ast::TypedefDecl>()) {
+            return lower_typedef(*td);
         }
         return nullptr;
     }
@@ -252,6 +266,35 @@ class HirLowering {
         hir_imp->alias = "";  // 一時的に空文字列
 
         return std::make_unique<HirDecl>(std::move(hir_imp));
+    }
+    
+    // Enum
+    HirDeclPtr lower_enum(ast::EnumDecl& en) {
+        debug::hir::log(debug::hir::Id::NodeCreate, "enum " + en.name, debug::Level::Debug);
+
+        auto hir_enum = std::make_unique<HirEnum>();
+        hir_enum->name = en.name;
+        hir_enum->is_export = en.visibility == ast::Visibility::Export;
+        
+        for (const auto& member : en.members) {
+            HirEnumMember hir_member;
+            hir_member.name = member.name;
+            hir_member.value = member.value.value_or(0);  // ASTで既に値は計算済み
+            hir_enum->members.push_back(std::move(hir_member));
+        }
+
+        return std::make_unique<HirDecl>(std::move(hir_enum));
+    }
+    
+    // Typedef
+    HirDeclPtr lower_typedef(ast::TypedefDecl& td) {
+        debug::hir::log(debug::hir::Id::NodeCreate, "typedef " + td.name, debug::Level::Debug);
+
+        auto hir_typedef = std::make_unique<HirTypedef>();
+        hir_typedef->name = td.name;
+        hir_typedef->type = td.type;
+
+        return std::make_unique<HirDecl>(std::move(hir_typedef));
     }
 
     // 文の変換
@@ -546,6 +589,19 @@ class HirLowering {
             return lower_literal(*lit, type);
         } else if (auto* ident = expr.as<ast::IdentExpr>()) {
             debug::hir::log(debug::hir::Id::IdentifierLower, ident->name, debug::Level::Debug);
+            
+            // enum値アクセスかチェック（EnumName::MemberName形式）
+            auto it = enum_values_.find(ident->name);
+            if (it != enum_values_.end()) {
+                // enum値を整数リテラルに変換
+                debug::hir::log(debug::hir::Id::IdentifierRef, 
+                                "enum value: " + ident->name + " = " + std::to_string(it->second),
+                                debug::Level::Debug);
+                auto lit = std::make_unique<HirLiteral>();
+                lit->value = it->second;
+                return std::make_unique<HirExpr>(std::move(lit), ast::make_int());
+            }
+            
             debug::hir::log(debug::hir::Id::IdentifierRef, "variable: " + ident->name,
                             debug::Level::Trace);
             auto var_ref = std::make_unique<HirVarRef>();

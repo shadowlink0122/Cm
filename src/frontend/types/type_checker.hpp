@@ -27,8 +27,24 @@ class TypeChecker {
 
     // 構造体定義を取得
     const ast::StructDecl* get_struct(const std::string& name) const {
+        // まず直接検索
         auto it = struct_defs_.find(name);
-        return it != struct_defs_.end() ? it->second : nullptr;
+        if (it != struct_defs_.end()) {
+            return it->second;
+        }
+        
+        // typedefをチェック
+        auto td_it = typedef_defs_.find(name);
+        if (td_it != typedef_defs_.end() && td_it->second) {
+            // typedefの実際の型名で再検索
+            std::string actual_name = td_it->second->name;
+            auto struct_it = struct_defs_.find(actual_name);
+            if (struct_it != struct_defs_.end()) {
+                return struct_it->second;
+            }
+        }
+        
+        return nullptr;
     }
 
     // 構造体のdefaultメンバの型を取得（なければnullptr）
@@ -98,6 +114,24 @@ class TypeChecker {
 
     // 現在チェック中のimplのターゲット型（privateメソッド呼び出しチェック用）
     std::string current_impl_target_type_;
+    
+    // インターフェース実装情報 (型名 → 実装しているインターフェース名のセット)
+    std::unordered_map<std::string, std::unordered_set<std::string>> impl_interfaces_;
+    
+    // インターフェース名のセット
+    std::unordered_set<std::string> interface_names_;
+    
+    // インターフェースのメソッド情報 (インターフェース名 → メソッド名 → メソッド情報)
+    std::unordered_map<std::string, std::unordered_map<std::string, MethodInfo>> interface_methods_;
+    
+    // enum値のキャッシュ (EnumName::MemberName -> value)
+    std::unordered_map<std::string, int64_t> enum_values_;
+    
+    // enum名のセット
+    std::unordered_set<std::string> enum_names_;
+    
+    // typedef定義のキャッシュ (エイリアス名 -> 実際の型)
+    std::unordered_map<std::string, ast::TypePtr> typedef_defs_;
 
     // フォーマット文字列から変数名を抽出
     std::vector<std::string> extract_format_variables(const std::string& format_str) {
@@ -131,6 +165,31 @@ class TypeChecker {
             scopes_.global().define(st->name, ast::make_named(st->name));
             // 構造体定義を保存（フィールドアクセス用）
             register_struct(st->name, *st);
+        } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
+            // インターフェースを登録
+            interface_names_.insert(iface->name);
+            scopes_.global().define(iface->name, ast::make_named(iface->name));
+            
+            // インターフェースのメソッド情報を保存
+            for (const auto& method : iface->methods) {
+                MethodInfo info;
+                info.return_type = method.return_type;
+                for (const auto& param : method.params) {
+                    info.param_types.push_back(param.type);
+                }
+                interface_methods_[iface->name][method.name] = info;
+            }
+            
+            debug::tc::log(debug::tc::Id::Resolved, 
+                          "Registering interface: " + iface->name + 
+                          " with " + std::to_string(iface->methods.size()) + " methods", 
+                          debug::Level::Debug);
+        } else if (auto* en = decl.as<ast::EnumDecl>()) {
+            // enum定義を登録
+            register_enum(*en);
+        } else if (auto* td = decl.as<ast::TypedefDecl>()) {
+            // typedef定義を登録
+            register_typedef(*td);
         } else if (auto* impl = decl.as<ast::ImplDecl>()) {
             // impl定義からメソッド情報を登録
             register_impl(*impl);
@@ -207,6 +266,42 @@ class TypeChecker {
                                              method->return_type);
         }
     }
+    
+    // enum定義の登録
+    void register_enum(ast::EnumDecl& en) {
+        debug::tc::log(debug::tc::Id::Resolved, "Registering enum: " + en.name, debug::Level::Debug);
+        
+        // enum名を記録
+        enum_names_.insert(en.name);
+        
+        // enum型自体をグローバルスコープに登録（int型として扱う）
+        scopes_.global().define(en.name, ast::make_int());
+        
+        // enum値を登録（EnumName::MemberName -> 整数値）
+        for (const auto& member : en.members) {
+            std::string full_name = en.name + "::" + member.name;
+            int64_t value = member.value.value_or(0);
+            enum_values_[full_name] = value;
+            
+            // enum値を変数としてグローバルスコープに登録（int型として）
+            scopes_.global().define(full_name, ast::make_int());
+            
+            debug::tc::log(debug::tc::Id::Resolved, 
+                          "  " + full_name + " = " + std::to_string(value), 
+                          debug::Level::Debug);
+        }
+    }
+    
+    // typedef定義の登録
+    void register_typedef(ast::TypedefDecl& td) {
+        debug::tc::log(debug::tc::Id::Resolved, "Registering typedef: " + td.name, debug::Level::Debug);
+        
+        // typedefをグローバルスコープに型として登録
+        scopes_.global().define(td.name, td.type);
+        
+        // typedefマップに保存（型解決用）
+        typedef_defs_[td.name] = td.type;
+    }
 
     // impl本体のチェック
     void check_impl(ast::ImplDecl& impl) {
@@ -214,6 +309,14 @@ class TypeChecker {
             return;
 
         std::string type_name = ast::type_to_string(*impl.target_type);
+
+        // インターフェース実装の場合、実装情報を記録
+        if (!impl.interface_name.empty()) {
+            impl_interfaces_[type_name].insert(impl.interface_name);
+            debug::tc::log(debug::tc::Id::Resolved, 
+                          type_name + " implements " + impl.interface_name,
+                          debug::Level::Debug);
+        }
 
         // コンストラクタ専用implの場合
         if (impl.is_ctor_impl) {
@@ -313,11 +416,14 @@ class TypeChecker {
     // 関数チェック
     void check_function(ast::FunctionDecl& func) {
         scopes_.push();
-        current_return_type_ = func.return_type;
+        
+        // 戻り値型のtypedef解決
+        current_return_type_ = resolve_typedef(func.return_type);
 
-        // パラメータをスコープに追加
+        // パラメータをスコープに追加（typedefを解決）
         for (const auto& param : func.params) {
-            scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+            auto resolved_type = resolve_typedef(param.type);
+            scopes_.current().define(param.name, resolved_type, param.qualifiers.is_const);
         }
 
         // 本体をチェック
@@ -382,11 +488,14 @@ class TypeChecker {
         }
 
         if (let.type) {
-            // 明示的型あり
-            if (init_type && !types_compatible(let.type, init_type)) {
+            // 明示的型あり - typedefを解決
+            auto resolved_type = resolve_typedef(let.type);
+            if (init_type && !types_compatible(resolved_type, init_type)) {
                 error(Span{}, "Type mismatch in variable declaration '" + let.name + "'");
             }
-            scopes_.current().define(let.name, let.type, let.is_const);
+            // 解決後の型を設定
+            let.type = resolved_type;
+            scopes_.current().define(let.name, resolved_type, let.is_const);
         } else if (init_type) {
             // 型推論
             let.type = init_type;
@@ -695,6 +804,7 @@ class TypeChecker {
 
         // メソッド呼び出しの場合（全ての型で共通処理）
         if (member.is_method_call) {
+            // まず通常のメソッドを探す
             auto it = type_methods_.find(type_name);
             if (it != type_methods_.end()) {
                 auto method_it = it->second.find(member.member);
@@ -738,6 +848,41 @@ class TypeChecker {
                     return method_info.return_type;
                 }
             }
+            
+            // インターフェース型の場合、インターフェースのメソッドを探す
+            auto iface_it = interface_methods_.find(type_name);
+            if (iface_it != interface_methods_.end()) {
+                auto method_it = iface_it->second.find(member.member);
+                if (method_it != iface_it->second.end()) {
+                    const auto& method_info = method_it->second;
+                    
+                    // 引数の型チェック
+                    if (member.args.size() != method_info.param_types.size()) {
+                        error(Span{}, "Method '" + member.member + "' expects " +
+                                          std::to_string(method_info.param_types.size()) +
+                                          " arguments, got " + std::to_string(member.args.size()));
+                    } else {
+                        for (size_t i = 0; i < member.args.size(); ++i) {
+                            auto arg_type = infer_type(*member.args[i]);
+                            if (!types_compatible(method_info.param_types[i], arg_type)) {
+                                std::string expected =
+                                    ast::type_to_string(*method_info.param_types[i]);
+                                std::string actual = ast::type_to_string(*arg_type);
+                                error(Span{}, "Argument type mismatch in method call '" +
+                                                  member.member + "': expected " + expected +
+                                                  ", got " + actual);
+                            }
+                        }
+                    }
+                    
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Interface " + type_name + "." + member.member +
+                                       "() : " + ast::type_to_string(*method_info.return_type),
+                                   debug::Level::Debug);
+                    return method_info.return_type;
+                }
+            }
+            
             error(Span{}, "Unknown method '" + member.member + "' for type '" + type_name + "'");
             return ast::make_error();
         }
@@ -748,11 +893,12 @@ class TypeChecker {
             if (struct_decl) {
                 for (const auto& field : struct_decl->fields) {
                     if (field.name == member.member) {
+                        auto resolved_field_type = resolve_typedef(field.type);
                         debug::tc::log(debug::tc::Id::Resolved,
                                        type_name + "." + member.member + " : " +
-                                           ast::type_to_string(*field.type),
+                                           ast::type_to_string(*resolved_field_type),
                                        debug::Level::Trace);
-                        return field.type;
+                        return resolved_field_type;
                     }
                 }
                 error(Span{},
@@ -773,10 +919,33 @@ class TypeChecker {
             return false;
         if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
             return true;
+        
+        // typedefを展開（名前付き型の場合）
+        a = resolve_typedef(a);
+        b = resolve_typedef(b);
+
+        // インターフェース互換性チェック（同じ型チェックより先に行う）
+        // a（期待される型）がインターフェース名で、b（実際の型）がそれを実装した構造体の場合
+        // 注: パーサーは全ての名前付き型をStructとして作成するため、名前でインターフェースか判定
+        if (a->kind == ast::TypeKind::Struct && interface_names_.count(a->name)) {
+            // aはインターフェース名
+            if (b->kind == ast::TypeKind::Struct && !interface_names_.count(b->name)) {
+                // bは構造体（インターフェースでない）
+                auto it = impl_interfaces_.find(b->name);
+                if (it != impl_interfaces_.end()) {
+                    if (it->second.count(a->name)) {
+                        return true;  // bはaインターフェースを実装している
+                    }
+                }
+            }
+        }
 
         // 同じ型
         if (a->kind == b->kind) {
             if (a->kind == ast::TypeKind::Struct) {
+                return a->name == b->name;
+            }
+            if (a->kind == ast::TypeKind::Interface) {
                 return a->name == b->name;
             }
             return true;
@@ -804,6 +973,30 @@ class TypeChecker {
         }
 
         return false;
+    }
+    
+    // typedef解決（名前付き型→実際の型）
+    ast::TypePtr resolve_typedef(ast::TypePtr type) {
+        if (!type) return type;
+        
+        // 名前付き型（Struct/Interface/Generic）の場合
+        if (type->kind == ast::TypeKind::Struct || 
+            type->kind == ast::TypeKind::Interface ||
+            type->kind == ast::TypeKind::Generic) {
+            
+            // enum名の場合はint型として解決
+            if (enum_names_.count(type->name)) {
+                return ast::make_int();
+            }
+            
+            // typedefに登録されていれば解決
+            auto it = typedef_defs_.find(type->name);
+            if (it != typedef_defs_.end()) {
+                return it->second;
+            }
+        }
+        
+        return type;
     }
 
     // 共通型の計算

@@ -1,0 +1,27 @@
+// インターフェース型を引数に取る関数
+interface Printable {
+    void print();
+}
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point for Printable {
+    void print() {
+        println("{} {}", self.x, self.y);
+    }
+}
+
+void print_it(Printable p) {
+    p.print();
+}
+
+int main() {
+    Point pt;
+    pt.x = 10;
+    pt.y = 20;
+    print_it(pt);  // Pointをprintable引数に渡す
+    return 0;
+}

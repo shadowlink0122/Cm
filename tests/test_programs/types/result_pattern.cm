@@ -1,0 +1,48 @@
+// enumベースのResult型パターン
+enum ResultTag {
+    Ok = 0,
+    Err = 1
+}
+
+struct IntResult {
+    ResultTag tag;
+    int value;
+    string error;
+}
+
+IntResult ok(int v) {
+    IntResult r;
+    r.tag = ResultTag::Ok;
+    r.value = v;
+    r.error = "";
+    return r;
+}
+
+IntResult err(string e) {
+    IntResult r;
+    r.tag = ResultTag::Err;
+    r.value = 0;
+    r.error = e;
+    return r;
+}
+
+IntResult divide(int a, int b) {
+    if (b == 0) {
+        return err("Division by zero");
+    }
+    return ok(a / b);
+}
+
+int main() {
+    IntResult r1 = divide(10, 2);
+    if (r1.tag == ResultTag::Ok) {
+        println("{}", r1.value);
+    }
+    
+    IntResult r2 = divide(10, 0);
+    if (r2.tag == ResultTag::Err) {
+        println("{}", r2.error);
+    }
+    
+    return 0;
+}

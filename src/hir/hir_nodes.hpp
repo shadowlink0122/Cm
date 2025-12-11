@@ -299,9 +299,30 @@ struct HirImport {
     std::string alias;
 };
 
+// Enumメンバ
+struct HirEnumMember {
+    std::string name;
+    int64_t value;
+};
+
+// Enum定義
+struct HirEnum {
+    std::string name;
+    std::vector<HirEnumMember> members;
+    bool is_export = false;
+};
+
+// Typedef定義
+struct HirTypedef {
+    std::string name;
+    TypePtr type;
+    bool is_export = false;
+};
+
 using HirDeclKind = std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
                                  std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
-                                 std::unique_ptr<HirImport>>;
+                                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>,
+                                 std::unique_ptr<HirTypedef>>;
 
 struct HirDecl {
     HirDeclKind kind;

@@ -24,6 +24,15 @@ class MirLowering {
         MirProgram mir_program;
         mir_program.filename = hir_program.filename;
 
+        // Pass 0: typedef定義とenum名を収集
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* td = std::get_if<std::unique_ptr<hir::HirTypedef>>(&decl->kind)) {
+                register_typedef(**td);
+            } else if (auto* en = std::get_if<std::unique_ptr<hir::HirEnum>>(&decl->kind)) {
+                register_enum_name(**en);
+            }
+        }
+
         // まず構造体定義を収集
         for (const auto& decl : hir_program.declarations) {
             if (auto* st = std::get_if<std::unique_ptr<hir::HirStruct>>(&decl->kind)) {
@@ -33,14 +42,34 @@ class MirLowering {
                 mir_program.structs.push_back(std::move(mir_struct));
             }
         }
+        
+        // インターフェース定義を収集
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* iface = std::get_if<std::unique_ptr<hir::HirInterface>>(&decl->kind)) {
+                interface_names.insert((*iface)->name);
+            }
+        }
 
-        // 先にimplを処理してデストラクタ情報を収集
+        // 先にimplを処理してデストラクタ情報とインターフェース実装情報を収集
         for (const auto& decl : hir_program.declarations) {
             if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
-                // デストラクタの有無を先にチェック
+                std::string target_type = (*impl)->target_type;
+                std::string iface_name = (*impl)->interface_name;
+                
+                // インターフェース実装情報を記録
+                if (!iface_name.empty() && !target_type.empty()) {
+                    std::vector<std::string> method_names;
+                    for (const auto& method : (*impl)->methods) {
+                        if (!method->is_constructor && !method->is_destructor) {
+                            method_names.push_back(method->name);
+                        }
+                    }
+                    impl_info[target_type][iface_name] = method_names;
+                }
+                
+                // デストラクタの有無をチェック
                 for (const auto& method : (*impl)->methods) {
                     if (method->is_destructor) {
-                        std::string target_type = (*impl)->target_type;
                         if (struct_defs.count(target_type)) {
                             struct_defs[target_type].has_destructor = true;
                         }
@@ -65,13 +94,324 @@ class MirLowering {
             }
         }
 
+        // MIR後処理：インターフェースメソッド呼び出しの解決（関数単一化を含む）
+        resolve_interface_calls(hir_program, mir_program);
+
         cm::debug::mir::log(cm::debug::mir::Id::LowerEnd,
                             std::to_string(mir_program.functions.size()) + " functions, " +
                                 std::to_string(mir_program.structs.size()) + " structs");
         return mir_program;
     }
+    
+    // HIRプログラムへのアクセス用
+    const hir::HirProgram* current_hir_program_ = nullptr;
+    
+    // インターフェースメソッド呼び出しの解決
+    void resolve_interface_calls(const hir::HirProgram& hir_program, MirProgram& program) {
+        // HIRの関数定義を収集
+        std::unordered_map<std::string, const hir::HirFunction*> hir_functions;
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
+                hir_functions[(*func)->name] = func->get();
+            }
+        }
+        
+        // 単一化が必要な呼び出しを収集 (関数名 -> [(呼び出し元, パラメータIndex, 実際の型)])
+        std::unordered_map<std::string, std::vector<std::tuple<std::string, size_t, std::string>>> needed_specializations;
+        
+        // 全関数の呼び出しをスキャンして単一化が必要なものを見つける
+        for (auto& func : program.functions) {
+            for (auto& block : func->basic_blocks) {
+                if (!block->terminator) continue;
+                if (block->terminator->kind != MirTerminator::Call) continue;
+                
+                auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+                if (call_data.func->kind != MirOperand::FunctionRef) continue;
+                
+                std::string target_func_name = std::get<std::string>(call_data.func->data);
+                
+                // 呼び出し先がユーザー定義関数でインターフェースパラメータを持つかチェック
+                auto hir_it = hir_functions.find(target_func_name);
+                if (hir_it == hir_functions.end()) continue;
+                
+                const hir::HirFunction* target_hir_func = hir_it->second;
+                
+                // パラメータごとにインターフェース型かチェック
+                for (size_t i = 0; i < target_hir_func->params.size() && i < call_data.args.size(); ++i) {
+                    auto& param_type = target_hir_func->params[i].type;
+                    if (!param_type) continue;
+                    
+                    std::string param_type_str = hir::type_to_string(*param_type);
+                    if (!interface_names.count(param_type_str)) continue;
+                    
+                    // このパラメータはインターフェース型
+                    // 呼び出し側の引数の実際の型を取得
+                    auto& arg = call_data.args[i];
+                    if (arg->kind != MirOperand::Copy && arg->kind != MirOperand::Move) continue;
+                    
+                    auto& place = std::get<MirPlace>(arg->data);
+                    if (place.local >= func->locals.size()) continue;
+                    
+                    auto& local = func->locals[place.local];
+                    if (!local.type) continue;
+                    
+                    std::string actual_type = hir::type_to_string(*local.type);
+                    
+                    // 実際の型がインターフェースと異なる（構造体などの具体的な型）場合
+                    if (actual_type != param_type_str && impl_info.count(actual_type) && 
+                        impl_info[actual_type].count(param_type_str)) {
+                        needed_specializations[target_func_name].push_back({func->name, i, actual_type});
+                    }
+                }
+            }
+        }
+        
+        // 特殊化関数を生成
+        for (auto& [func_name, specs] : needed_specializations) {
+            auto hir_it = hir_functions.find(func_name);
+            if (hir_it == hir_functions.end()) continue;
+            
+            const hir::HirFunction* original_func = hir_it->second;
+            
+            // 特殊化パターンごとにグループ化
+            std::unordered_map<std::string, std::string> specialization_map;  // actual_type -> specialized_name
+            
+            for (auto& [caller, param_idx, actual_type] : specs) {
+                std::string spec_name = func_name + "$" + actual_type;
+                if (specialization_map.count(actual_type)) continue;
+                
+                specialization_map[actual_type] = spec_name;
+                
+                // 特殊化関数を生成
+                auto specialized = generate_specialized_function(*original_func, actual_type, param_idx);
+                if (specialized) {
+                    program.functions.push_back(std::move(specialized));
+                }
+            }
+            
+            // 呼び出しを特殊化バージョンに置き換え
+            for (auto& [caller, param_idx, actual_type] : specs) {
+                if (!specialization_map.count(actual_type)) continue;
+                std::string spec_name = specialization_map[actual_type];
+                
+                // 呼び出し元関数を見つけて呼び出しを書き換え
+                for (auto& mir_func : program.functions) {
+                    if (mir_func->name != caller) continue;
+                    
+                    for (auto& block : mir_func->basic_blocks) {
+                        if (!block->terminator) continue;
+                        if (block->terminator->kind != MirTerminator::Call) continue;
+                        
+                        auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+                        if (call_data.func->kind != MirOperand::FunctionRef) continue;
+                        
+                        std::string& target = std::get<std::string>(call_data.func->data);
+                        if (target != func_name) continue;
+                        
+                        // 引数の型をチェックして正しい特殊化を選択
+                        if (param_idx < call_data.args.size()) {
+                            auto& arg = call_data.args[param_idx];
+                            if (arg->kind == MirOperand::Copy || arg->kind == MirOperand::Move) {
+                                auto& place = std::get<MirPlace>(arg->data);
+                                if (place.local < mir_func->locals.size()) {
+                                    auto& local = mir_func->locals[place.local];
+                                    if (local.type && hir::type_to_string(*local.type) == actual_type) {
+                                        target = spec_name;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 特殊化された関数がある元の関数を削除
+        // (全ての呼び出しが特殊化バージョンに置き換わっている場合)
+        std::unordered_set<std::string> functions_to_remove;
+        for (auto& [func_name, specs] : needed_specializations) {
+            // この関数への直接呼び出しがまだ残っているかチェック
+            bool has_direct_calls = false;
+            for (auto& mir_func : program.functions) {
+                for (auto& block : mir_func->basic_blocks) {
+                    if (!block->terminator) continue;
+                    if (block->terminator->kind != MirTerminator::Call) continue;
+                    
+                    auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+                    if (call_data.func->kind != MirOperand::FunctionRef) continue;
+                    
+                    std::string& target = std::get<std::string>(call_data.func->data);
+                    if (target == func_name) {
+                        has_direct_calls = true;
+                        break;
+                    }
+                }
+                if (has_direct_calls) break;
+            }
+            
+            if (!has_direct_calls) {
+                functions_to_remove.insert(func_name);
+            }
+        }
+        
+        // 関数を削除
+        program.functions.erase(
+            std::remove_if(program.functions.begin(), program.functions.end(),
+                [&functions_to_remove](const auto& func) {
+                    return functions_to_remove.count(func->name) > 0;
+                }),
+            program.functions.end());
+    }
+    
+    // 特殊化関数を生成
+    MirFunctionPtr generate_specialized_function(const hir::HirFunction& original, 
+                                                  const std::string& actual_type,
+                                                  size_t param_idx) {
+        // インターフェースパラメータの型名を取得
+        if (param_idx >= original.params.size()) return nullptr;
+        std::string interface_type = hir::type_to_string(*original.params[param_idx].type);
+        
+        // 特殊化コンテキストを設定
+        interface_specialization_[interface_type] = actual_type;
+        
+        // 特殊化された関数を生成
+        // パラメータ型を変更したHIR関数を作成
+        hir::HirFunction specialized_hir;
+        specialized_hir.name = original.name + "$" + actual_type;
+        specialized_hir.return_type = original.return_type;
+        
+        // パラメータをコピー
+        for (size_t i = 0; i < original.params.size(); ++i) {
+            auto param = original.params[i];
+            if (i == param_idx) {
+                param.type = ast::make_named(actual_type);
+            }
+            specialized_hir.params.push_back(param);
+        }
+        
+        // 本体の参照を保持（クローンせずに元の本体を使う）
+        // lower_function呼び出し時に特殊化コンテキストでメソッド呼び出しが変換される
+        specialized_hir.body.reserve(original.body.size());
+        // 注：HIRの本体はconst参照のままで、MIR生成時に参照するだけ
+        
+        auto mir_func = lower_function_with_body(specialized_hir, original.body);
+        
+        // 特殊化コンテキストをクリア
+        interface_specialization_.clear();
+        
+        return mir_func;
+    }
+    
+    // 外部本体を使って関数をlower
+    MirFunctionPtr lower_function_with_body(const hir::HirFunction& hir_func, 
+                                            const std::vector<std::unique_ptr<hir::HirStmt>>& body) {
+        cm::debug::mir::log(cm::debug::mir::Id::FunctionLower, hir_func.name,
+                            cm::debug::Level::Debug);
+
+        auto mir_func = std::make_unique<MirFunction>();
+        mir_func->name = hir_func.name;
+
+        FunctionContext ctx(mir_func.get());
+
+        // defer実行用のコールバックを設定
+        ctx.defer_executor = [this](FunctionContext& c, const hir::HirStmt& stmt) {
+            lower_statement(c, stmt);
+        };
+
+        // デストラクタ呼び出し生成用コールバック
+        ctx.destructor_emitter = [this](FunctionContext& c, LocalId local_id,
+                                        const std::string& type_name) {
+            emit_destructor_call(c, local_id, type_name);
+        };
+
+        // 戻り値用のローカル変数 _0 を作成
+        auto resolved_return_type = resolve_typedef(hir_func.return_type);
+        ctx.func->return_local = ctx.func->add_local("_0", resolved_return_type, true, false);
+
+        // パラメータをローカル変数として登録
+        for (const auto& param : hir_func.params) {
+            auto resolved_param_type = resolve_typedef(param.type);
+            LocalId param_id = ctx.func->add_local(param.name, resolved_param_type, true, true);
+            ctx.func->arg_locals.push_back(param_id);
+            ctx.var_map[param.name] = param_id;
+        }
+
+        // エントリーブロックを作成
+        ctx.func->add_block();
+
+        // 関数本体を変換
+        for (const auto& stmt : body) {
+            lower_statement(ctx, *stmt);
+        }
+
+        // 関数スコープを終了
+        ctx.pop_scope();
+
+        // 現在のブロックに終端がない場合、returnを追加
+        if (auto* block = ctx.get_current_block()) {
+            if (!block->terminator) {
+                block->set_terminator(MirTerminator::return_value());
+            }
+        }
+
+        // CFGを構築
+        mir_func->build_cfg();
+
+        return mir_func;
+    }
+    
+    // 現在の特殊化コンテキスト (interface_name -> actual_type)
+    std::unordered_map<std::string, std::string> interface_specialization_;
 
    private:
+    // typedef定義のキャッシュ (エイリアス名 -> 実際の型)
+    std::unordered_map<std::string, hir::TypePtr> typedef_defs;
+    
+    // enum名のセット
+    std::unordered_set<std::string> enum_names;
+    
+    // インターフェース実装情報 (struct_name -> interface_name -> [method_names])
+    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> impl_info;
+    
+    // インターフェース名のセット
+    std::unordered_set<std::string> interface_names;
+    
+    // typedef登録
+    void register_typedef(const hir::HirTypedef& td) {
+        typedef_defs[td.name] = td.type;
+        cm::debug::mir::log(cm::debug::mir::Id::LowerStart, "typedef " + td.name, cm::debug::Level::Debug);
+    }
+    
+    // enum登録
+    void register_enum_name(const hir::HirEnum& en) {
+        enum_names.insert(en.name);
+        cm::debug::mir::log(cm::debug::mir::Id::LowerStart, "enum " + en.name, cm::debug::Level::Debug);
+    }
+    
+    // 型のtypedef解決（enum名もint型に解決）
+    hir::TypePtr resolve_typedef(hir::TypePtr type) {
+        if (!type) return type;
+        
+        // 名前付き型の場合
+        if (type->kind == hir::TypeKind::Struct || 
+            type->kind == hir::TypeKind::Interface ||
+            type->kind == hir::TypeKind::Generic) {
+            
+            // enum名の場合はint型として解決
+            if (enum_names.count(type->name)) {
+                return ast::make_int();
+            }
+            
+            // typedefに登録されていれば解決
+            auto it = typedef_defs.find(type->name);
+            if (it != typedef_defs.end()) {
+                return it->second;
+            }
+        }
+        
+        return type;
+    }
+
     // 構造体定義情報
     struct StructInfo {
         std::string name;
@@ -85,7 +425,9 @@ class MirLowering {
         StructInfo info;
         info.name = st.name;
         for (const auto& field : st.fields) {
-            info.fields.push_back({field.name, field.type});
+            // フィールドの型をtypedef/enum解決
+            auto resolved_type = resolve_typedef(field.type);
+            info.fields.push_back({field.name, resolved_type});
         }
         struct_defs[st.name] = std::move(info);
     }
@@ -116,12 +458,13 @@ class MirLowering {
         for (const auto& field : st.fields) {
             MirStructField mir_field;
             mir_field.name = field.name;
-            mir_field.type = field.type;
+            // フィールドの型をtypedef/enum解決
+            mir_field.type = resolve_typedef(field.type);
 
             // 型のサイズとアライメントを取得（簡易版）
             uint32_t size = 0, align = 1;
-            if (field.type) {
-                switch (field.type->kind) {
+            if (mir_field.type) {
+                switch (mir_field.type->kind) {
                     case hir::TypeKind::Bool:
                     case hir::TypeKind::Tiny:
                     case hir::TypeKind::UTiny:
@@ -365,22 +708,24 @@ class MirLowering {
             emit_destructor_call(c, local_id, type_name);
         };
 
-        // 戻り値用のローカル変数 _0 を作成
-        ctx.func->return_local = ctx.func->add_local("_0", hir_func.return_type, true, false);
+        // 戻り値用のローカル変数 _0 を作成（typedefを解決）
+        auto resolved_return_type = resolve_typedef(hir_func.return_type);
+        ctx.func->return_local = ctx.func->add_local("_0", resolved_return_type, true, false);
         cm::debug::mir::log(
             cm::debug::mir::Id::LocalAlloc,
             "_0 (return value) : " +
-                (hir_func.return_type ? hir::type_to_string(*hir_func.return_type) : "void"),
+                (resolved_return_type ? hir::type_to_string(*resolved_return_type) : "void"),
             cm::debug::Level::Trace);
 
-        // パラメータをローカル変数として登録
+        // パラメータをローカル変数として登録（typedefを解決）
         for (const auto& param : hir_func.params) {
-            LocalId param_id = ctx.func->add_local(param.name, param.type, true, true);
+            auto resolved_param_type = resolve_typedef(param.type);
+            LocalId param_id = ctx.func->add_local(param.name, resolved_param_type, true, true);
             ctx.func->arg_locals.push_back(param_id);
             ctx.var_map[param.name] = param_id;
             cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc,
                                 param.name + " (param) : " +
-                                    (param.type ? hir::type_to_string(*param.type) : "auto") +
+                                    (resolved_param_type ? hir::type_to_string(*resolved_param_type) : "auto") +
                                     " -> _" + std::to_string(param_id),
                                 cm::debug::Level::Trace);
         }
@@ -624,25 +969,28 @@ class MirLowering {
                             "let " + let_stmt.name + (let_stmt.is_const ? " (const)" : ""),
                             cm::debug::Level::Debug);
 
+        // 型を解決（typedef展開）
+        hir::TypePtr resolved_type = resolve_typedef(let_stmt.type);
+
         // 新しいローカル変数を作成
         LocalId local_id =
-            ctx.func->add_local(let_stmt.name, let_stmt.type, !let_stmt.is_const, true);
+            ctx.func->add_local(let_stmt.name, resolved_type, !let_stmt.is_const, true);
         ctx.var_map[let_stmt.name] = local_id;
         cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc,
                             let_stmt.name + " -> _" + std::to_string(local_id) +
-                                (let_stmt.type ? " : " + hir::type_to_string(*let_stmt.type) : ""),
+                                (resolved_type ? " : " + hir::type_to_string(*resolved_type) : ""),
                             cm::debug::Level::Trace);
 
         // スコープに変数を登録（StorageDead用）
         // 構造体型の場合、型名も登録（デストラクタ呼び出し用）
         std::string type_name_for_dtor;
-        if (let_stmt.type) {
+        if (resolved_type) {
             cm::debug::mir::log(
                 cm::debug::mir::Id::LocalAlloc,
-                "Type kind: " + std::to_string(static_cast<int>(let_stmt.type->kind)),
+                "Type kind: " + std::to_string(static_cast<int>(resolved_type->kind)),
                 cm::debug::Level::Debug);
-            if (let_stmt.type->kind == hir::TypeKind::Struct) {
-                type_name_for_dtor = let_stmt.type->name;
+            if (resolved_type->kind == hir::TypeKind::Struct) {
+                type_name_for_dtor = resolved_type->name;
                 cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc,
                                     "Struct type with destructor tracking: " + type_name_for_dtor,
                                     cm::debug::Level::Debug);
@@ -1514,6 +1862,21 @@ class MirLowering {
 
     // リテラルのlowering
     LocalId lower_literal(FunctionContext& ctx, const hir::HirLiteral& lit, hir::TypePtr type) {
+        // 型がnullまたはerrorの場合、リテラルの値から型を推論
+        if (!type || type->kind == hir::TypeKind::Error) {
+            if (std::holds_alternative<std::string>(lit.value)) {
+                type = ast::make_string();
+            } else if (std::holds_alternative<int64_t>(lit.value)) {
+                type = ast::make_int();
+            } else if (std::holds_alternative<double>(lit.value)) {
+                type = ast::make_double();
+            } else if (std::holds_alternative<bool>(lit.value)) {
+                type = ast::make_bool();
+            } else if (std::holds_alternative<char>(lit.value)) {
+                type = ast::make_char();
+            }
+        }
+        
         // デバッグ: 型情報を出力
         if (auto* str_val = std::get_if<std::string>(&lit.value)) {
             cm::debug::mir::log(cm::debug::mir::Id::LiteralExpr,
@@ -1892,9 +2255,10 @@ class MirLowering {
         LocalId result = 0;
         std::optional<MirPlace> destination;
 
-        // 戻り値がvoidでない場合のみ一時変数を作成
-        if (type && type->kind != hir::TypeKind::Void) {
-            result = ctx.new_temp(type);
+        // 戻り値がvoidでない場合のみ一時変数を作成（typedefを解決）
+        auto resolved_type = resolve_typedef(type);
+        if (resolved_type && resolved_type->kind != hir::TypeKind::Void) {
+            result = ctx.new_temp(resolved_type);
             destination = MirPlace(result);
         }
 
@@ -1910,6 +2274,52 @@ class MirLowering {
         } else if (func_name == "print") {
             func_name = "std::io::print";
         }
+        
+        // インターフェースメソッド呼び出しの変換
+        // 関数名が Interface__method 形式の場合
+        size_t sep_pos = func_name.find("__");
+        if (sep_pos != std::string::npos) {
+            std::string possible_iface = func_name.substr(0, sep_pos);
+            std::string method_name = func_name.substr(sep_pos + 2);
+            
+            // これがインターフェース名かどうか確認
+            if (interface_names.count(possible_iface)) {
+                cm::debug::mir::log(cm::debug::mir::Id::FunctionLower,
+                    "Interface method call: " + func_name + ", context size: " + 
+                    std::to_string(interface_specialization_.size()),
+                    cm::debug::Level::Debug);
+                
+                // 特殊化コンテキストをチェック
+                auto spec_it = interface_specialization_.find(possible_iface);
+                if (spec_it != interface_specialization_.end()) {
+                    // 特殊化された型のメソッドに変換
+                    std::string new_name = spec_it->second + "__" + method_name;
+                    cm::debug::mir::log(cm::debug::mir::Id::FunctionLower,
+                        "Specializing: " + func_name + " -> " + new_name,
+                        cm::debug::Level::Debug);
+                    func_name = new_name;
+                } else if (!arg_locals.empty()) {
+                    // 第一引数の型を取得して直接変換を試みる
+                    LocalId first_arg = arg_locals[0];
+                    if (first_arg < ctx.func->locals.size()) {
+                        auto& local = ctx.func->locals[first_arg];
+                        if (local.type) {
+                            std::string actual_type = hir::type_to_string(*local.type);
+                            // 実際の型がインターフェースを実装しているか確認
+                            auto impl_it = impl_info.find(actual_type);
+                            if (impl_it != impl_info.end()) {
+                                auto iface_it = impl_it->second.find(possible_iface);
+                                if (iface_it != impl_it->second.end()) {
+                                    // 実際の型のメソッドに変換
+                                    func_name = actual_type + "__" + method_name;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         auto func_operand = MirOperand::function_ref(func_name);
 
         // CallDataを作成

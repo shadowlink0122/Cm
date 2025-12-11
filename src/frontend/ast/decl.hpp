@@ -117,6 +117,29 @@ struct ImplDecl {
         : interface_name(""), target_type(std::move(target)), is_ctor_impl(true) {}
 };
 
+// ============================================================
+// Enumメンバ定義
+// ============================================================
+struct EnumMember {
+    std::string name;
+    std::optional<int64_t> value;  // 明示的な値（なければオートインクリメント）
+    
+    EnumMember(std::string n, std::optional<int64_t> v = std::nullopt)
+        : name(std::move(n)), value(v) {}
+};
+
+// ============================================================
+// Enum定義
+// ============================================================
+struct EnumDecl {
+    std::string name;
+    std::vector<EnumMember> members;
+    Visibility visibility = Visibility::Private;
+    
+    EnumDecl(std::string n, std::vector<EnumMember> m)
+        : name(std::move(n)), members(std::move(m)) {}
+};
+
 // ImportDeclはmodule.hppに移動
 
 // ============================================================
@@ -143,3 +166,6 @@ inline DeclPtr make_struct(std::string name, std::vector<Field> fields, Span s =
 // }
 
 }  // namespace cm::ast
+
+// typedef関連
+#include "typedef.hpp"

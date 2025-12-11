@@ -1,0 +1,13 @@
+// 負の値を持つenum
+enum Status {
+    Error = -1,
+    Unknown = 0,
+    Success = 1
+}
+
+int main() {
+    println("{}", Status::Error);
+    println("{}", Status::Unknown);
+    println("{}", Status::Success);
+    return 0;
+}

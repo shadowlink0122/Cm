@@ -1,0 +1,13 @@
+// typedefを関数シグネチャで使用
+typedef Integer = int;
+
+Integer double_it(Integer x) {
+    return x * 2;
+}
+
+int main() {
+    Integer a = 21;
+    Integer b = double_it(a);
+    println("{}", b);
+    return 0;
+}

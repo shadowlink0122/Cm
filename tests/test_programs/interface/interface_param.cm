@@ -1,0 +1,26 @@
+// 構造体（interfaceを実装）を引数に取る関数
+interface Valuable {
+    int get_value();
+}
+
+struct Number {
+    int value;
+}
+
+impl Number for Valuable {
+    int get_value() {
+        return self.value;
+    }
+}
+
+int extract_value(Number n) {
+    return n.get_value();
+}
+
+int main() {
+    Number n;
+    n.value = 42;
+    int v = extract_value(n);
+    println("{}", v);
+    return 0;
+}

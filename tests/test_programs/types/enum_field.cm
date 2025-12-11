@@ -1,0 +1,21 @@
+// enumをstructフィールドとして使用
+enum Status {
+    Ok = 0,
+    Err = 1
+}
+
+struct Result {
+    Status tag;
+    int value;
+}
+
+int main() {
+    Result r;
+    r.tag = Status::Ok;
+    r.value = 42;
+    
+    if (r.tag == Status::Ok) {
+        println("{}", r.value);
+    }
+    return 0;
+}

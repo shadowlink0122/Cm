@@ -201,6 +201,13 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         auto targetType = alloca->getAllocatedType();
                         auto sourceType = rvalue->getType();
 
+                        // sourceがポインタで、targetが構造体の場合（構造体のコピー）
+                        if (sourceType->isPointerTy() && targetType->isStructTy()) {
+                            // ポインタからロードして構造体値を取得
+                            rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
+                            sourceType = rvalue->getType();
+                        }
+
                         // i1からi8への変換が必要な場合（bool値の格納）
                         if (sourceType->isIntegerTy(1) && targetType->isIntegerTy(8)) {
                             rvalue = builder->CreateZExt(rvalue, ctx.getI8Type(), "bool_ext");
@@ -803,6 +810,20 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 }
 
                 if (callee) {
+                    // 引数の型が一致しない場合はbitcastで変換
+                    // (インターフェース型を引数に取る関数に構造体を渡す場合など)
+                    auto funcType = callee->getFunctionType();
+                    for (size_t i = 0; i < args.size() && i < funcType->getNumParams(); ++i) {
+                        auto expectedType = funcType->getParamType(i);
+                        auto actualType = args[i]->getType();
+                        if (expectedType != actualType) {
+                            // ポインタ型同士の場合はbitcast
+                            if (expectedType->isPointerTy() && actualType->isPointerTy()) {
+                                args[i] = builder->CreateBitCast(args[i], expectedType);
+                            }
+                        }
+                    }
+                    
                     auto result = builder->CreateCall(callee, args);
 
                     // 戻り値がある場合は保存先に格納

@@ -1,0 +1,13 @@
+// enumの基本テスト
+enum Color {
+    Red = 0,
+    Green,
+    Blue
+}
+
+int main() {
+    println("{}", Color::Red);
+    println("{}", Color::Green);
+    println("{}", Color::Blue);
+    return 0;
+}

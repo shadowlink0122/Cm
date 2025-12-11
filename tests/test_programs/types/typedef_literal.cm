@@ -1,0 +1,10 @@
+// リテラル型のテスト
+typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+int main() {
+    // リテラル型の定義が成功することを確認
+    // 現在は型チェックなしで文字列として扱われる
+    string method = "GET";
+    println("{}", method);
+    return 0;
+}

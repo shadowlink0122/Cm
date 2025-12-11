@@ -94,6 +94,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "this";
         case TokenKind::KwTrue:
             return "true";
+        case TokenKind::KwTypedef:
+            return "typedef";
         case TokenKind::KwTypename:
             return "typename";
         case TokenKind::KwUse:

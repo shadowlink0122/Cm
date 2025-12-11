@@ -1,0 +1,23 @@
+// インターフェースを実装した構造体のtypedef
+interface Valuable {
+    int get_value();
+}
+
+struct Number {
+    int value;
+}
+
+impl Number for Valuable {
+    int get_value() {
+        return self.value;
+    }
+}
+
+typedef Num = Number;
+
+int main() {
+    Num n;
+    n.value = 100;
+    println("{}", n.get_value());
+    return 0;
+}

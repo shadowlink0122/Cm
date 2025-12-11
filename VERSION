@@ -1,9 +1,16 @@
 # Cm Language Version Information
-VERSION=0.4.0
+VERSION=0.5.0
 RELEASE_TYPE=development
 RELEASE_DATE=2025-12-11
 
 # Version History
+# 0.5.0 - Enum and typedef types
+#   - enum NAME { MEMBER = value, ... } definition
+#   - NAME::MEMBER enum value access
+#   - Negative enum values, auto-increment
+#   - typedef type aliases
+#   - Enum as struct field type
+#   - Bug fixes: struct return, switch literals
 # 0.4.0 - Private methods, default member inference, constructors
 #   - private modifier for methods in impl blocks
 #   - Default member implicit access (w = 100, int x = w)

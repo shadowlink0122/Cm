@@ -110,6 +110,7 @@ class Lexer {
             {"template", TokenKind::KwTemplate},
             {"this", TokenKind::KwThis},
             {"true", TokenKind::KwTrue},
+            {"typedef", TokenKind::KwTypedef},
             {"typename", TokenKind::KwTypename},
             {"use", TokenKind::KwUse},
             {"void", TokenKind::KwVoid},

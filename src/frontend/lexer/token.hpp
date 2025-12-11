@@ -58,6 +58,7 @@ enum class TokenKind {
     KwTemplate,  // template declaration
     KwThis,
     KwTrue,
+    KwTypedef,   // type alias
     KwTypename,  // template typename
     KwUse,       // use statement (similar to import)
     KwVoid,

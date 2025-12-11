@@ -1,0 +1,16 @@
+// 構造体のtypedefエイリアス
+struct Point {
+    int x;
+    int y;
+}
+
+typedef Vec2 = Point;
+
+int main() {
+    Vec2 p;
+    p.x = 10;
+    p.y = 20;
+    println("{}", p.x);
+    println("{}", p.y);
+    return 0;
+}

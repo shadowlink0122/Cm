@@ -607,9 +607,44 @@ class MirInterpreter {
                                 }
                             }
                         } else {
-                            debug::interp::log(debug::interp::Id::CallNotFound,
-                                               "Function not found: " + func_name,
-                                               debug::Level::Error);
+                            // 関数が見つからない場合、インターフェースメソッドの動的ディスパッチを試みる
+                            // 関数名の形式: InterfaceName__methodName
+                            bool dispatched = false;
+                            size_t sep_pos = func_name.find("__");
+                            if (sep_pos != std::string::npos && !args.empty()) {
+                                std::string method_name = func_name.substr(sep_pos + 2);
+                                
+                                // 最初の引数（self）の実際の型を値から取得
+                                Value& self_arg = args[0];
+                                if (self_arg.type() == typeid(StructValue)) {
+                                    auto& struct_val = std::any_cast<StructValue&>(self_arg);
+                                    std::string actual_type = struct_val.type_name;
+                                    
+                                    if (!actual_type.empty()) {
+                                        std::string actual_func_name = actual_type + "__" + method_name;
+                                        
+                                        const MirFunction* actual_func = find_function(actual_func_name);
+                                        if (actual_func) {
+                                            debug::interp::log(debug::interp::Id::CallUser,
+                                                              "Dynamic dispatch: " + func_name + " -> " + actual_func_name,
+                                                              debug::Level::Debug);
+                                            
+                                            Value result = execute_function(*actual_func, args);
+                                            debug::interp::dump_value("Function result", result);
+                                            if (data.destination) {
+                                                store_to_place(ctx, *data.destination, result);
+                                            }
+                                            dispatched = true;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (!dispatched) {
+                                debug::interp::log(debug::interp::Id::CallNotFound,
+                                                   "Function not found: " + func_name,
+                                                   debug::Level::Error);
+                            }
                         }
                     }
                 } else {
@@ -1022,8 +1057,11 @@ class MirInterpreter {
         return Value{};
     }
 
-    // 構造体の値を表現（フィールド名 → 値のマップ）
-    using StructValue = std::unordered_map<FieldId, Value>;
+    // 構造体の値を表現（型名 + フィールド値のマップ）
+    struct StructValue {
+        std::string type_name;
+        std::unordered_map<FieldId, Value> fields;
+    };
 
     // デバッグ用: 二項演算子を文字列に変換
     std::string mir_binop_to_string(MirBinaryOp op) {
@@ -1105,8 +1143,8 @@ class MirInterpreter {
                 // 構造体のフィールドアクセス
                 if (result.type() == typeid(StructValue)) {
                     auto& struct_val = std::any_cast<StructValue&>(result);
-                    auto field_it = struct_val.find(proj.field_id);
-                    if (field_it != struct_val.end()) {
+                    auto field_it = struct_val.fields.find(proj.field_id);
+                    if (field_it != struct_val.fields.end()) {
                         result = field_it->second;
                         debug::interp::dump_value("Field value", result);
                     } else {
@@ -1153,7 +1191,17 @@ class MirInterpreter {
                 debug::interp::log(debug::interp::Id::StoreInitStruct,
                                    "Initializing new struct for _" + std::to_string(place.local),
                                    debug::Level::Trace);
-                ctx.locals[place.local] = Value(StructValue{});
+                // 型名を取得
+                std::string type_name;
+                for (const auto& local : ctx.function->locals) {
+                    if (local.id == place.local && local.type) {
+                        type_name = hir::type_to_string(*local.type);
+                        break;
+                    }
+                }
+                StructValue sv;
+                sv.type_name = type_name;
+                ctx.locals[place.local] = Value(sv);
                 it = ctx.locals.find(place.local);
             }
 
@@ -1167,10 +1215,20 @@ class MirInterpreter {
                     // 構造体ではない場合は初期化
                     debug::interp::log(debug::interp::Id::StoreConvertStruct,
                                        "Converting to struct type", debug::Level::Trace);
-                    it->second = Value(StructValue{});
+                    // 型名を取得
+                    std::string type_name;
+                    for (const auto& local : ctx.function->locals) {
+                        if (local.id == place.local && local.type) {
+                            type_name = hir::type_to_string(*local.type);
+                            break;
+                        }
+                    }
+                    StructValue sv;
+                    sv.type_name = type_name;
+                    it->second = Value(sv);
                 }
                 auto& struct_val = std::any_cast<StructValue&>(it->second);
-                struct_val[place.projections[0].field_id] = value;
+                struct_val.fields[place.projections[0].field_id] = value;
             }
             // TODO: 複数のプロジェクション、Index, Deref
         }

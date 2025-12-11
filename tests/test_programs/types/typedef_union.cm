@@ -1,0 +1,12 @@
+// ユニオン型のテスト
+typedef Number = int | double;
+
+int main() {
+    // ユニオン型の定義が成功することを確認
+    // 現在は個別の型として扱われる
+    int i = 42;
+    double d = 3.14;
+    println("{}", i);
+    println("{}", d);
+    return 0;
+}

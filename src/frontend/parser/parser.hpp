@@ -135,6 +135,11 @@ class Parser {
         if (check(TokenKind::KwEnum)) {
             return parse_enum_decl();
         }
+        
+        // typedef
+        if (check(TokenKind::KwTypedef)) {
+            return parse_typedef_decl();
+        }
 
         // #macro (新しいC++風マクロ構文)
         if (check(TokenKind::Hash)) {
@@ -620,6 +625,7 @@ class Parser {
     ast::DeclPtr parse_constexpr();
     ast::DeclPtr parse_template_decl();
     ast::DeclPtr parse_enum_decl();
+    ast::DeclPtr parse_typedef_decl();
 
     // ユーティリティ
     const Token& current() const { return tokens_[pos_]; }

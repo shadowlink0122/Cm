@@ -1,0 +1,19 @@
+// 構造体を関数から返すテスト
+struct Point {
+    int x;
+    int y;
+}
+
+Point create_point(int x, int y) {
+    Point p;
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+int main() {
+    Point p = create_point(10, 20);
+    println("{}", p.x);
+    println("{}", p.y);
+    return 0;
+}
