@@ -53,6 +53,7 @@ enum class Id {
     // 式変換（詳細）
     FieldAccessLower,
     FieldName,
+    MethodCallLower,
     CastExprLower,
     CastFrom,
     CastTo,

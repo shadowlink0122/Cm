@@ -4,6 +4,8 @@
 #include "../frontend/ast/decl.hpp"
 #include "hir_nodes.hpp"
 
+#include <unordered_set>
+
 namespace cm::hir {
 
 // ============================================================
@@ -17,6 +19,25 @@ class HirLowering {
         HirProgram hir;
         hir.filename = program.filename;
 
+        // Pass 1: 構造体定義とコンストラクタ情報を収集
+        for (auto& decl : program.declarations) {
+            if (auto* st = decl->as<ast::StructDecl>()) {
+                struct_defs_[st->name] = st;
+            } else if (auto* impl = decl->as<ast::ImplDecl>()) {
+                // コンストラクタ情報を収集
+                if (impl->is_ctor_impl && impl->target_type) {
+                    std::string type_name = type_to_string(*impl->target_type);
+                    for (auto& ctor : impl->constructors) {
+                        // デフォルトコンストラクタ（引数なし）の存在を記録
+                        if (ctor->params.empty()) {
+                            types_with_default_ctor_.insert(type_name);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Pass 2: 宣言を変換
         for (auto& decl : program.declarations) {
             if (auto hir_decl = lower_decl(*decl)) {
                 hir.declarations.push_back(std::move(hir_decl));
@@ -29,6 +50,25 @@ class HirLowering {
     }
 
    private:
+    // 構造体定義のキャッシュ
+    std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
+
+    // デフォルトコンストラクタを持つ型の集合
+    std::unordered_set<std::string> types_with_default_ctor_;
+
+    // 構造体のdefaultメンバ名を取得（なければ空文字列）
+    std::string get_default_member_name(const std::string& struct_name) const {
+        auto it = struct_defs_.find(struct_name);
+        if (it == struct_defs_.end())
+            return "";
+        for (const auto& field : it->second->fields) {
+            if (field.is_default) {
+                return field.name;
+            }
+        }
+        return "";
+    }
+
     // 宣言の変換
     HirDeclPtr lower_decl(ast::Decl& decl) {
         if (auto* func = decl.as<ast::FunctionDecl>()) {
@@ -126,7 +166,59 @@ class HirLowering {
         auto hir_impl = std::make_unique<HirImpl>();
         hir_impl->interface_name = impl.interface_name;
         hir_impl->target_type = impl.target_type ? type_to_string(*impl.target_type) : "";
+        hir_impl->is_ctor_impl = impl.is_ctor_impl;
 
+        // コンストラクタ専用implの場合
+        if (impl.is_ctor_impl) {
+            // コンストラクタを関数としてlower
+            for (auto& ctor : impl.constructors) {
+                auto hir_func = std::make_unique<HirFunction>();
+                std::string mangled_name = hir_impl->target_type + "__ctor";
+                if (ctor->is_overload) {
+                    mangled_name += "_" + std::to_string(ctor->params.size());
+                }
+                hir_func->name = mangled_name;
+                hir_func->return_type = ast::make_void();
+                hir_func->is_constructor = true;
+
+                // selfパラメータを追加（ポインタ）
+                hir_func->params.push_back({"self", impl.target_type});
+                for (const auto& param : ctor->params) {
+                    hir_func->params.push_back({param.name, param.type});
+                }
+
+                for (auto& stmt : ctor->body) {
+                    if (auto hir_stmt = lower_stmt(*stmt)) {
+                        hir_func->body.push_back(std::move(hir_stmt));
+                    }
+                }
+
+                hir_impl->methods.push_back(std::move(hir_func));
+            }
+
+            // デストラクタをlower
+            if (impl.destructor) {
+                auto hir_func = std::make_unique<HirFunction>();
+                hir_func->name = hir_impl->target_type + "__dtor";
+                hir_func->return_type = ast::make_void();
+                hir_func->is_destructor = true;
+
+                // selfパラメータを追加（ポインタ）
+                hir_func->params.push_back({"self", impl.target_type});
+
+                for (auto& stmt : impl.destructor->body) {
+                    if (auto hir_stmt = lower_stmt(*stmt)) {
+                        hir_func->body.push_back(std::move(hir_stmt));
+                    }
+                }
+
+                hir_impl->methods.push_back(std::move(hir_func));
+            }
+
+            return std::make_unique<HirDecl>(std::move(hir_impl));
+        }
+
+        // メソッド実装の場合
         for (auto& method : impl.methods) {
             auto hir_func = std::make_unique<HirFunction>();
             hir_func->name = method->name;
@@ -232,7 +324,70 @@ class HirLowering {
 
         if (let.init) {
             debug::hir::log(debug::hir::Id::LetInit, "initializer present", debug::Level::Trace);
-            hir_let->init = lower_expr(*let.init);
+
+            // defaultメンバからの暗黙的な取得をチェック
+            // 左辺がプリミティブで右辺が構造体の場合、defaultメンバを取得
+            auto init_type = let.init->type;
+            if (let.type && let.type->kind != ast::TypeKind::Struct && init_type &&
+                init_type->kind == ast::TypeKind::Struct) {
+                std::string default_member = get_default_member_name(init_type->name);
+                if (!default_member.empty()) {
+                    debug::hir::log(debug::hir::Id::LetInit,
+                                    "Converting to default member access: " + default_member,
+                                    debug::Level::Debug);
+                    // int x = w → int x = w.value に変換
+                    auto member = std::make_unique<HirMember>();
+                    member->object = lower_expr(*let.init);
+                    member->member = default_member;
+                    hir_let->init = std::make_unique<HirExpr>(std::move(member), let.type);
+                } else {
+                    hir_let->init = lower_expr(*let.init);
+                }
+            } else {
+                hir_let->init = lower_expr(*let.init);
+            }
+        }
+
+        // コンストラクタ呼び出しがある場合、または構造体型でデフォルトコンストラクタを持つ場合
+        bool should_call_ctor = let.has_ctor_call;
+
+        // 明示的なコンストラクタ呼び出しがなく、初期化子もない場合
+        // デフォルトコンストラクタを持つ構造体型なら暗黙的に呼び出す
+        if (!should_call_ctor && !let.init && let.type) {
+            std::string type_name = type_to_string(*let.type);
+            if (types_with_default_ctor_.count(type_name)) {
+                should_call_ctor = true;
+                debug::hir::log(debug::hir::Id::LetInit,
+                                "Implicit default constructor call for: " + type_name,
+                                debug::Level::Debug);
+            }
+        }
+
+        if (should_call_ctor && let.type) {
+            std::string type_name = type_to_string(*let.type);
+            std::string ctor_name = type_name + "__ctor";
+            if (!let.ctor_args.empty()) {
+                ctor_name += "_" + std::to_string(let.ctor_args.size());
+            }
+
+            debug::hir::log(debug::hir::Id::LetInit, "Adding constructor call: " + ctor_name,
+                            debug::Level::Debug);
+
+            // コンストラクタ呼び出しを生成
+            auto ctor_call = std::make_unique<HirCall>();
+            ctor_call->func_name = ctor_name;
+
+            // thisポインタ（変数への参照）を第一引数として追加
+            auto this_ref = std::make_unique<HirVarRef>();
+            this_ref->name = let.name;
+            ctor_call->args.push_back(std::make_unique<HirExpr>(std::move(this_ref), let.type));
+
+            // コンストラクタ引数を追加
+            for (auto& arg : let.ctor_args) {
+                ctor_call->args.push_back(lower_expr(*arg));
+            }
+
+            hir_let->ctor_call = std::make_unique<HirExpr>(std::move(ctor_call), ast::make_void());
         }
 
         return std::make_unique<HirStmt>(std::move(hir_let));
@@ -485,6 +640,32 @@ class HirLowering {
         if (binary.op == ast::BinaryOp::Assign) {
             debug::hir::log(debug::hir::Id::AssignLower, "Assignment detected",
                             debug::Level::Debug);
+
+            // defaultメンバへの暗黙的な代入をチェック
+            // 左辺が構造体で右辺がプリミティブの場合、defaultメンバへの代入に変換
+            auto lhs_type = binary.left->type;
+            auto rhs_type = binary.right->type;
+            if (lhs_type && lhs_type->kind == ast::TypeKind::Struct && rhs_type &&
+                rhs_type->kind != ast::TypeKind::Struct) {
+                std::string default_member = get_default_member_name(lhs_type->name);
+                if (!default_member.empty()) {
+                    debug::hir::log(debug::hir::Id::AssignLower,
+                                    "Converting to default member assignment: " + default_member,
+                                    debug::Level::Debug);
+                    // w = 20 → w.value = 20 に変換
+                    auto hir = std::make_unique<HirBinary>();
+                    hir->op = HirBinaryOp::Assign;
+
+                    // 左辺をメンバアクセスに変換
+                    auto member = std::make_unique<HirMember>();
+                    member->object = lower_expr(*binary.left);
+                    member->member = default_member;
+                    hir->lhs = std::make_unique<HirExpr>(std::move(member), rhs_type);
+
+                    hir->rhs = lower_expr(*binary.right);
+                    return std::make_unique<HirExpr>(std::move(hir), type);
+                }
+            }
         }
 
         auto hir = std::make_unique<HirBinary>();
@@ -737,8 +918,42 @@ class HirLowering {
         return std::make_unique<HirExpr>(std::move(hir), type);
     }
 
-    // メンバアクセス
+    // メンバアクセス / メソッド呼び出し
     HirExprPtr lower_member(ast::MemberExpr& mem, TypePtr type) {
+        // メソッド呼び出しの場合
+        if (mem.is_method_call) {
+            debug::hir::log(
+                debug::hir::Id::MethodCallLower,
+                "method: " + mem.member + " with " + std::to_string(mem.args.size()) + " args",
+                debug::Level::Debug);
+
+            auto hir = std::make_unique<HirCall>();
+
+            // オブジェクトの型を取得してマングル化された関数名を生成
+            auto obj_hir = lower_expr(*mem.object);
+            std::string type_name;
+
+            // HIR式から型を取得
+            if (obj_hir->type) {
+                type_name = ast::type_to_string(*obj_hir->type);
+            } else if (mem.object->type) {
+                type_name = ast::type_to_string(*mem.object->type);
+            }
+
+            hir->func_name = type_name + "__" + mem.member;
+
+            // selfを第一引数として追加
+            hir->args.push_back(std::move(obj_hir));
+
+            // 残りの引数を追加
+            for (auto& arg : mem.args) {
+                hir->args.push_back(lower_expr(*arg));
+            }
+
+            return std::make_unique<HirExpr>(std::move(hir), type);
+        }
+
+        // 通常のフィールドアクセス
         debug::hir::log(debug::hir::Id::FieldAccessLower, "", debug::Level::Debug);
         auto hir = std::make_unique<HirMember>();
         hir->object = lower_expr(*mem.object);

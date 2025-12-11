@@ -7,9 +7,8 @@
 
 namespace cm::codegen::llvm_backend {
 
-// 関数シグネチャ変換（ヘルパー関数）
-static llvm::Function* convertFunctionSignature(const mir::MirFunction& func, llvm::Module* module,
-                                                LLVMContext& ctx) {
+// 関数シグネチャ変換（メンバ関数に変更）
+llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func) {
     // パラメータ型
     std::vector<llvm::Type*> paramTypes;
     for (const auto& arg_local : func.arg_locals) {
@@ -17,8 +16,13 @@ static llvm::Function* convertFunctionSignature(const mir::MirFunction& func, ll
         if (arg_local < func.locals.size()) {
             auto& local = func.locals[arg_local];
             if (local.type) {
-                MIRToLLVM converter(ctx);
-                paramTypes.push_back(converter.convertType(local.type));
+                auto llvmType = convertType(local.type);
+                // 構造体はポインタとして渡す（構造体型のポインタ）
+                if (local.type->kind == hir::TypeKind::Struct) {
+                    paramTypes.push_back(llvm::PointerType::get(llvmType, 0));
+                } else {
+                    paramTypes.push_back(llvmType);
+                }
             } else {
                 paramTypes.push_back(ctx.getI32Type());  // デフォルト
             }
@@ -37,8 +41,7 @@ static llvm::Function* convertFunctionSignature(const mir::MirFunction& func, ll
         if (func.return_local < func.locals.size()) {
             auto& returnLocal = func.locals[func.return_local];
             if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
-                MIRToLLVM converter(ctx);
-                returnType = converter.convertType(returnLocal.type);
+                returnType = convertType(returnLocal.type);
             }
         }
     }
@@ -86,7 +89,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     // 関数宣言（先に全て宣言）
     for (const auto& func : program.functions) {
-        auto llvmFunc = convertFunctionSignature(*func, module, ctx);
+        auto llvmFunc = convertFunctionSignature(*func);
         functions[func->name] = llvmFunc;
     }
 
@@ -981,9 +984,16 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             auto local = place.local;
             auto val = locals[local];
             if (val && llvm::isa<llvm::AllocaInst>(val)) {
-                // アロケーションの場合はロード（型を正しく推論）
+                // アロケーションの場合
                 auto allocaInst = llvm::cast<llvm::AllocaInst>(val);
                 auto allocatedType = allocaInst->getAllocatedType();
+
+                // 構造体型の場合はポインタをそのまま返す（値渡しではなくポインタ渡し）
+                if (allocatedType->isStructTy()) {
+                    return val;
+                }
+
+                // スカラー型の場合はロード
                 return builder->CreateLoad(allocatedType, val, "load");
             }
             return val;
@@ -1034,6 +1044,18 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     // 型情報が取得できない場合は、addrの型から推測
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         structType = allocaInst->getAllocatedType();
+                    } else if (addr->getType()->isPointerTy()) {
+                        // ポインタ型の場合（関数引数として渡された構造体など）
+                        // MIR関数情報から構造体型を取得
+                        if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                            auto& local = currentMIRFunction->locals[place.local];
+                            if (local.type && local.type->kind == hir::TypeKind::Struct) {
+                                auto it = structTypes.find(local.type->name);
+                                if (it != structTypes.end()) {
+                                    structType = it->second;
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1071,6 +1093,11 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
 
     // allocaインストラクションの場合はそのまま返す
     if (addr && llvm::isa<llvm::AllocaInst>(addr)) {
+        return addr;
+    }
+
+    // ポインタ型の場合（関数引数など）はそのまま返す
+    if (addr && addr->getType()->isPointerTy()) {
         return addr;
     }
 

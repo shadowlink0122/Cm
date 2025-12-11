@@ -153,7 +153,7 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_defer(std::move(body), Span{start_pos, previous().end});
     }
 
-    // 変数宣言 (auto x = ... or type x ...)
+    // 変数宣言 (auto x = ... or type x ... or type x(args))
     if (check(TokenKind::KwConst) || is_type_start()) {
         bool is_const = consume_if(TokenKind::KwConst);
         if (is_const) {
@@ -169,12 +169,26 @@ ast::StmtPtr Parser::parse_stmt() {
         debug::par::log(debug::par::Id::VarName, "Variable name: " + name, debug::Level::Debug);
 
         ast::ExprPtr init;
+        std::vector<ast::ExprPtr> ctor_args;
+        bool has_ctor_call = false;
+
         if (consume_if(TokenKind::Eq)) {
             debug::par::log(debug::par::Id::VarInit, "Variable has initializer",
                             debug::Level::Debug);
             init = parse_expr();
             debug::par::log(debug::par::Id::VarInitComplete,
                             "Variable initialization expression parsed", debug::Level::Debug);
+        } else if (consume_if(TokenKind::LParen)) {
+            // コンストラクタ呼び出し: Type name(args)
+            debug::par::log(debug::par::Id::VarInit, "Variable has constructor call",
+                            debug::Level::Debug);
+            has_ctor_call = true;
+            if (!check(TokenKind::RParen)) {
+                do {
+                    ctor_args.push_back(parse_expr());
+                } while (consume_if(TokenKind::Comma));
+            }
+            expect(TokenKind::RParen);
         } else {
             debug::par::log(debug::par::Id::VarNoInit, "Variable declared without initializer",
                             debug::Level::Debug);
@@ -187,8 +201,19 @@ ast::StmtPtr Parser::parse_stmt() {
         }
         decl_msg += name;
         debug::par::log(debug::par::Id::VarDeclComplete, decl_msg, debug::Level::Debug);
-        return ast::make_let(std::move(name), std::move(type), std::move(init), is_const,
-                             Span{start_pos, previous().end});
+
+        auto let_stmt = ast::make_let(std::move(name), std::move(type), std::move(init), is_const,
+                                      Span{start_pos, previous().end});
+
+        // コンストラクタ引数を設定
+        if (has_ctor_call) {
+            if (auto* let = let_stmt->as<ast::LetStmt>()) {
+                let->has_ctor_call = true;
+                let->ctor_args = std::move(ctor_args);
+            }
+        }
+
+        return let_stmt;
     }
 
     // 式文

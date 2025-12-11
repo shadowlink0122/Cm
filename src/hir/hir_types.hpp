@@ -27,7 +27,13 @@ using ast::make_long;
 using ast::make_named;
 using ast::make_pointer;
 using ast::make_reference;
+using ast::make_short;
 using ast::make_string;
+using ast::make_tiny;
+using ast::make_uint;
+using ast::make_ulong;
+using ast::make_ushort;
+using ast::make_utiny;
 using ast::make_void;
 using ast::type_to_string;
 

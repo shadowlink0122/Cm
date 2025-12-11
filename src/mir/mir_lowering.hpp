@@ -34,11 +34,34 @@ class MirLowering {
             }
         }
 
+        // 先にimplを処理してデストラクタ情報を収集
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
+                // デストラクタの有無を先にチェック
+                for (const auto& method : (*impl)->methods) {
+                    if (method->is_destructor) {
+                        std::string target_type = (*impl)->target_type;
+                        if (struct_defs.count(target_type)) {
+                            struct_defs[target_type].has_destructor = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 通常の関数を処理
         for (const auto& decl : hir_program.declarations) {
             if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
                 if (auto mir_func = lower_function(**func)) {
                     mir_program.functions.push_back(std::move(mir_func));
                 }
+            }
+        }
+
+        // impl内のメソッドを処理
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
+                lower_impl(**impl, mir_program);
             }
         }
 
@@ -53,6 +76,7 @@ class MirLowering {
     struct StructInfo {
         std::string name;
         std::vector<std::pair<std::string, hir::TypePtr>> fields;  // (field_name, type)
+        bool has_destructor = false;                               // デストラクタを持つか
     };
     std::unordered_map<std::string, StructInfo> struct_defs;
 
@@ -163,14 +187,21 @@ class MirLowering {
         std::vector<LoopContext> loop_stack;  // ループコンテキストのスタック
 
         // スコープ管理
+        struct LocalInfo {
+            LocalId id;
+            std::string type_name;  // 構造体名（デストラクタ呼び出し用）
+        };
         struct Scope {
-            std::vector<LocalId> locals;               // このスコープで宣言された変数
+            std::vector<LocalInfo> locals;             // このスコープで宣言された変数
             std::vector<const hir::HirDefer*> defers;  // defer文（逆順実行用）
         };
         std::vector<Scope> scope_stack;  // スコープスタック
 
         // defer文実行用のコールバック（MirLoweringのメンバ関数を呼ぶため）
         std::function<void(FunctionContext&, const hir::HirStmt&)> defer_executor;
+
+        // デストラクタ呼び出し生成用コールバック
+        std::function<void(FunctionContext&, LocalId, const std::string&)> destructor_emitter;
 
         FunctionContext(MirFunction* f) : func(f), current_block(ENTRY_BLOCK), next_temp_id(0) {
             // 関数全体のスコープを開始
@@ -180,7 +211,7 @@ class MirLowering {
         // スコープを開始
         void push_scope() { scope_stack.push_back(Scope{}); }
 
-        // スコープを終了（defer実行 + StorageDeadを発行）
+        // スコープを終了（デストラクタ + defer実行 + StorageDeadを発行）
         void pop_scope() {
             if (scope_stack.empty())
                 return;
@@ -194,18 +225,25 @@ class MirLowering {
                 }
             }
 
+            // デストラクタを逆順で呼び出し（RAII）
+            for (auto it = scope.locals.rbegin(); it != scope.locals.rend(); ++it) {
+                if (!it->type_name.empty() && destructor_emitter) {
+                    destructor_emitter(*this, it->id, it->type_name);
+                }
+            }
+
             // スコープ内の変数にStorageDeadを発行
             for (auto it = scope.locals.rbegin(); it != scope.locals.rend(); ++it) {
-                push_statement(MirStatement::storage_dead(*it));
+                push_statement(MirStatement::storage_dead(it->id));
             }
 
             scope_stack.pop_back();
         }
 
         // 現在のスコープに変数を登録
-        void register_local_in_scope(LocalId local) {
+        void register_local_in_scope(LocalId local, const std::string& type_name = "") {
             if (!scope_stack.empty()) {
-                scope_stack.back().locals.push_back(local);
+                scope_stack.back().locals.push_back({local, type_name});
             }
         }
 
@@ -223,8 +261,17 @@ class MirLowering {
         void emit_scope_cleanup_until(size_t target_depth) {
             // 現在のスコープから target_depth まで、defer と StorageDead を発行
             // ただしスコープ自体はpopしない（break/continue後は到達不能なため）
+            cm::debug::mir::log(
+                cm::debug::mir::Id::StatementLower,
+                "Cleanup: scope_stack.size()=" + std::to_string(scope_stack.size()) +
+                    ", target_depth=" + std::to_string(target_depth),
+                cm::debug::Level::Debug);
             for (size_t i = scope_stack.size(); i > target_depth; --i) {
                 auto& scope = scope_stack[i - 1];
+                cm::debug::mir::log(cm::debug::mir::Id::StatementLower,
+                                    "Processing scope " + std::to_string(i - 1) + " with " +
+                                        std::to_string(scope.locals.size()) + " locals",
+                                    cm::debug::Level::Debug);
 
                 // defer文を逆順で実行
                 for (auto it = scope.defers.rbegin(); it != scope.defers.rend(); ++it) {
@@ -233,11 +280,30 @@ class MirLowering {
                     }
                 }
 
+                // デストラクタを逆順で呼び出し
+                for (auto it = scope.locals.rbegin(); it != scope.locals.rend(); ++it) {
+                    cm::debug::mir::log(
+                        cm::debug::mir::Id::StatementLower,
+                        "Local _" + std::to_string(it->id) + " type_name='" + it->type_name + "'",
+                        cm::debug::Level::Debug);
+                    if (!it->type_name.empty() && destructor_emitter) {
+                        destructor_emitter(*this, it->id, it->type_name);
+                    }
+                }
+
                 // スコープ内の変数にStorageDeadを発行
                 for (auto it = scope.locals.rbegin(); it != scope.locals.rend(); ++it) {
-                    push_statement(MirStatement::storage_dead(*it));
+                    push_statement(MirStatement::storage_dead(it->id));
                 }
             }
+        }
+
+        // return文用：スコープをクリアするがクリーンアップコードは発行しない
+        // （emit_scope_cleanup_until で既に発行済みのため）
+        void clear_scopes() {
+            scope_stack.clear();
+            // 空のスコープを再作成（関数スコープ）
+            push_scope();
         }
 
         // 新しい一時変数を生成
@@ -293,6 +359,12 @@ class MirLowering {
             lower_statement(c, stmt);
         };
 
+        // デストラクタ呼び出し生成用コールバック
+        ctx.destructor_emitter = [this](FunctionContext& c, LocalId local_id,
+                                        const std::string& type_name) {
+            emit_destructor_call(c, local_id, type_name);
+        };
+
         // 戻り値用のローカル変数 _0 を作成
         ctx.func->return_local = ctx.func->add_local("_0", hir_func.return_type, true, false);
         cm::debug::mir::log(
@@ -344,6 +416,158 @@ class MirLowering {
         mir_func->build_cfg();
 
         return mir_func;
+    }
+
+    // デストラクタ呼び出しを生成
+    void emit_destructor_call(FunctionContext& ctx, LocalId local_id,
+                              const std::string& type_name) {
+        // デストラクタを持つ構造体かチェック
+        auto it = struct_defs.find(type_name);
+        if (it == struct_defs.end() || !it->second.has_destructor) {
+            return;
+        }
+
+        std::string dtor_name = type_name + "__dtor";
+        cm::debug::mir::log(cm::debug::mir::Id::StatementLower,
+                            "Emitting destructor call: " + dtor_name, cm::debug::Level::Debug);
+
+        // デストラクタ呼び出し: Type__dtor(self)
+        // selfは変数への参照
+        auto func_ref = std::make_unique<MirOperand>();
+        func_ref->kind = MirOperand::FunctionRef;
+        func_ref->data = dtor_name;
+
+        std::vector<MirOperandPtr> args;
+        auto self_arg = std::make_unique<MirOperand>();
+        self_arg->kind = MirOperand::Copy;
+        self_arg->data = MirPlace(local_id);
+        args.push_back(std::move(self_arg));
+
+        // 新しいブロックを作成（current_blockは変更しない）
+        BlockId next_block = ctx.func->add_block();
+
+        auto term = std::make_unique<MirTerminator>();
+        term->kind = MirTerminator::Call;
+        term->data = MirTerminator::CallData{
+            std::move(func_ref), std::move(args),
+            std::nullopt,  // 戻り値なし
+            next_block,
+            std::nullopt  // unwindなし
+        };
+        ctx.set_terminator(std::move(term));
+        ctx.switch_to_block(next_block);
+    }
+
+    // impl内のメソッドをlowering
+    void lower_impl(const hir::HirImpl& impl, MirProgram& mir_program) {
+        std::string target_type = impl.target_type;
+
+        for (const auto& method : impl.methods) {
+            cm::debug::mir::log(cm::debug::mir::Id::FunctionLower,
+                                target_type + "::" + method->name, cm::debug::Level::Debug);
+
+            auto mir_func = std::make_unique<MirFunction>();
+
+            // コンストラクタ/デストラクタの場合は既にマングルされた名前を使用
+            if (method->is_constructor || method->is_destructor) {
+                mir_func->name = method->name;
+
+                // デストラクタの場合、構造体情報を更新
+                if (method->is_destructor) {
+                    if (struct_defs.count(target_type)) {
+                        struct_defs[target_type].has_destructor = true;
+                    }
+                }
+            } else {
+                // メソッド名をマングル: TypeName__methodName
+                mir_func->name = target_type + "__" + method->name;
+            }
+
+            FunctionContext ctx(mir_func.get());
+
+            // defer実行用のコールバックを設定
+            ctx.defer_executor = [this](FunctionContext& c, const hir::HirStmt& stmt) {
+                lower_statement(c, stmt);
+            };
+
+            // デストラクタ呼び出し生成用コールバック
+            ctx.destructor_emitter = [this](FunctionContext& c, LocalId local_id,
+                                            const std::string& tn) {
+                emit_destructor_call(c, local_id, tn);
+            };
+
+            // 戻り値用のローカル変数
+            ctx.func->return_local = ctx.func->add_local("_0", method->return_type, true, false);
+
+            // selfパラメータを追加（全てselfを使用）
+            // プリミティブ型の場合は値渡し、構造体の場合はポインタ渡し
+            hir::TypePtr self_type;
+            if (target_type == "int") {
+                self_type = hir::make_int();
+            } else if (target_type == "uint") {
+                self_type = hir::make_uint();
+            } else if (target_type == "long") {
+                self_type = hir::make_long();
+            } else if (target_type == "ulong") {
+                self_type = hir::make_ulong();
+            } else if (target_type == "short") {
+                self_type = hir::make_short();
+            } else if (target_type == "ushort") {
+                self_type = hir::make_ushort();
+            } else if (target_type == "tiny") {
+                self_type = hir::make_tiny();
+            } else if (target_type == "utiny") {
+                self_type = hir::make_utiny();
+            } else if (target_type == "float") {
+                self_type = hir::make_float();
+            } else if (target_type == "double") {
+                self_type = hir::make_double();
+            } else if (target_type == "bool") {
+                self_type = hir::make_bool();
+            } else if (target_type == "char") {
+                self_type = hir::make_char();
+            } else if (target_type == "string") {
+                self_type = hir::make_string();
+            } else {
+                // 構造体型
+                self_type = hir::make_named(target_type);
+            }
+            LocalId self_id = ctx.func->add_local("self", self_type, true, true);
+            ctx.func->arg_locals.push_back(self_id);
+            ctx.var_map["self"] = self_id;
+            cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc, "self (param) : " + target_type,
+                                cm::debug::Level::Trace);
+
+            // 他のパラメータを追加（コンストラクタの場合は最初のselfパラメータをスキップ）
+            size_t start_idx = (method->is_constructor || method->is_destructor) ? 1 : 0;
+            for (size_t i = start_idx; i < method->params.size(); ++i) {
+                const auto& param = method->params[i];
+                LocalId param_id = ctx.func->add_local(param.name, param.type, true, true);
+                ctx.func->arg_locals.push_back(param_id);
+                ctx.var_map[param.name] = param_id;
+            }
+
+            // エントリーブロック
+            ctx.func->add_block();
+
+            // メソッド本体を変換
+            for (const auto& stmt : method->body) {
+                lower_statement(ctx, *stmt);
+            }
+
+            // スコープを終了
+            ctx.pop_scope();
+
+            // 終端がなければreturnを追加
+            if (auto* block = ctx.get_current_block()) {
+                if (!block->terminator) {
+                    block->set_terminator(MirTerminator::return_value());
+                }
+            }
+
+            mir_func->build_cfg();
+            mir_program.functions.push_back(std::move(mir_func));
+        }
     }
 
     // 文のlowering
@@ -410,7 +634,21 @@ class MirLowering {
                             cm::debug::Level::Trace);
 
         // スコープに変数を登録（StorageDead用）
-        ctx.register_local_in_scope(local_id);
+        // 構造体型の場合、型名も登録（デストラクタ呼び出し用）
+        std::string type_name_for_dtor;
+        if (let_stmt.type) {
+            cm::debug::mir::log(
+                cm::debug::mir::Id::LocalAlloc,
+                "Type kind: " + std::to_string(static_cast<int>(let_stmt.type->kind)),
+                cm::debug::Level::Debug);
+            if (let_stmt.type->kind == hir::TypeKind::Struct) {
+                type_name_for_dtor = let_stmt.type->name;
+                cm::debug::mir::log(cm::debug::mir::Id::LocalAlloc,
+                                    "Struct type with destructor tracking: " + type_name_for_dtor,
+                                    cm::debug::Level::Debug);
+            }
+        }
+        ctx.register_local_in_scope(local_id, type_name_for_dtor);
 
         // StorageLive
         ctx.push_statement(MirStatement::storage_live(local_id));
@@ -431,6 +669,15 @@ class MirLowering {
                 cm::debug::mir::Id::InstStore,
                 "_" + std::to_string(local_id) + " = _" + std::to_string(init_local),
                 cm::debug::Level::Trace);
+        }
+
+        // コンストラクタ呼び出しがある場合
+        if (let_stmt.ctor_call) {
+            cm::debug::mir::log(cm::debug::mir::Id::StatementLower,
+                                "Calling constructor for " + let_stmt.name,
+                                cm::debug::Level::Debug);
+            // コンストラクタ呼び出しを評価（結果は使わない）
+            lower_expr(ctx, *let_stmt.ctor_call);
         }
     }
 
@@ -455,6 +702,16 @@ class MirLowering {
             ctx.push_statement(
                 MirStatement::assign(MirPlace(ctx.func->return_local), std::move(rvalue)));
         }
+
+        // return前にすべてのスコープのデストラクタを呼び出し（RAII）
+        cm::debug::mir::log(
+            cm::debug::mir::Id::StatementLower,
+            "Return: emitting cleanup for " + std::to_string(ctx.scope_stack.size()) + " scopes",
+            cm::debug::Level::Debug);
+        ctx.emit_scope_cleanup_until(0);
+
+        // スコープをクリア（pop_scopeでの二重呼び出しを防ぐ）
+        ctx.clear_scopes();
 
         // return終端
         ctx.set_terminator(MirTerminator::return_value());

@@ -1,0 +1,21 @@
+// デストラクタの基本テスト
+struct Resource {
+    int id;
+}
+
+impl Resource {
+    self() {
+        self.id = 42;
+        println("C");
+    }
+    
+    ~self() {
+        println("D");
+    }
+}
+
+int main() {
+    Resource r;  // ()なしでもコンストラクタが呼ばれる
+    println("M");
+    return 0;
+}

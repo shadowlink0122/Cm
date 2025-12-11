@@ -162,11 +162,29 @@ inline TypePtr make_void() {
 inline TypePtr make_bool() {
     return std::make_shared<Type>(TypeKind::Bool);
 }
+inline TypePtr make_tiny() {
+    return std::make_shared<Type>(TypeKind::Tiny);
+}
+inline TypePtr make_utiny() {
+    return std::make_shared<Type>(TypeKind::UTiny);
+}
+inline TypePtr make_short() {
+    return std::make_shared<Type>(TypeKind::Short);
+}
+inline TypePtr make_ushort() {
+    return std::make_shared<Type>(TypeKind::UShort);
+}
 inline TypePtr make_int() {
     return std::make_shared<Type>(TypeKind::Int);
 }
+inline TypePtr make_uint() {
+    return std::make_shared<Type>(TypeKind::UInt);
+}
 inline TypePtr make_long() {
     return std::make_shared<Type>(TypeKind::Long);
+}
+inline TypePtr make_ulong() {
+    return std::make_shared<Type>(TypeKind::ULong);
 }
 inline TypePtr make_float() {
     return std::make_shared<Type>(TypeKind::Float);

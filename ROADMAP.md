@@ -52,7 +52,7 @@ void scope_test() {
 }
 ```
 
-## Version 0.3.0 - Interface/Impl/Self（現在の目標）
+## Version 0.3.0 - Interface/Impl/Self ✅
 
 ### 目標
 型に振る舞いを付与するインターフェースシステムの実装
@@ -60,16 +60,18 @@ void scope_test() {
 ### 設計原則
 - **構造体には直接メソッドを定義できない**
 - 全てのメソッドは`interface`を通じて定義される
-- `impl Type for Interface`で実装を提供
+- `impl Interface for Type`で実装を提供
+- **プリミティブ型へのimplも可能**
 
 ### 実装項目
 | 機能 | インタプリタ | LLVM | テスト |
 |------|-------------|------|--------|
-| interface定義 | ⬜ | ⬜ | ⬜ |
-| impl Type for Interface | ⬜ | ⬜ | ⬜ |
-| selfキーワード | ⬜ | ⬜ | ⬜ |
-| メソッド呼び出し | ⬜ | ⬜ | ⬜ |
-| 静的ディスパッチ | ⬜ | ⬜ | ⬜ |
+| interface定義 | ✅ | ✅ | ✅ |
+| impl Interface for Type | ✅ | ✅ | ✅ |
+| selfキーワード | ✅ | ✅ | ✅ |
+| メソッド呼び出し | ✅ | ✅ | ✅ |
+| 静的ディスパッチ | ✅ | ✅ | ✅ |
+| プリミティブ型へのimpl | ✅ | ✅ | ✅ |
 
 ### 構文例
 ```cm
@@ -90,29 +92,65 @@ struct Point {
     double y;
 }
 
-// インターフェース実装
-impl Point for Printable {
+// インターフェース実装（構造体）
+impl Printable for Point {
     void print() {
         println("({}, {})", self.x, self.y);
     }
 }
+
+// プリミティブ型へのimpl
+impl Printable for int {
+    void print() {
+        println("{}", self);
+    }
+}
 ```
 
-## Version 0.4.0 - コンストラクタ/デストラクタ
+## Version 0.4.0 - privateメソッドとdefaultメンバ推論（現在の目標）
 
 ### 目標
-オブジェクトのライフサイクル管理
+privateメソッドによるカプセル化とdefaultメンバの暗黙的アクセス
 
 ### 実装項目
 | 機能 | インタプリタ | LLVM | テスト |
 |------|-------------|------|--------|
-| impl Type（基本impl） | ⬜ | ⬜ | ⬜ |
-| self()コンストラクタ | ⬜ | ⬜ | ⬜ |
-| ~self()デストラクタ | ⬜ | ⬜ | ⬜ |
-| overloadコンストラクタ | ⬜ | ⬜ | ⬜ |
+| privateメソッド | ✅ | ✅ | ✅ |
+| privateアクセスチェック | ✅ | ✅ | ✅ |
+| defaultメンバ暗黙代入 | ✅ | ✅ | ✅ |
+| defaultメンバ暗黙取得 | ✅ | ✅ | ✅ |
+| impl Type（基本impl） | ✅ | ✅ | ✅ |
+| self()コンストラクタ | ✅ | ⬜ | ✅ |
+| overloadコンストラクタ | ✅ | ⬜ | ✅ |
+| Type name(args)構文 | ✅ | ⬜ | ✅ |
+| selfへの参照渡し | ✅ | ⬜ | ✅ |
+| ~self()デストラクタ | ✅ | ⬜ | ⬜ |
 | RAII自動呼び出し | ⬜ | ⬜ | ⬜ |
 
-### 構文例
+### privateメソッド構文例
+```cm
+interface Calculator {
+    int calculate(int x);
+}
+
+struct MyCalc {
+    int base;
+}
+
+impl MyCalc for Calculator {
+    // privateメソッド：impl内からのみ呼び出し可能
+    private int helper(int n) {
+        return n * 2;
+    }
+
+    // publicメソッド：外部から呼び出し可能
+    int calculate(int x) {
+        return self.helper(x) + self.base;
+    }
+}
+```
+
+### コンストラクタ/デストラクタ構文例（今後実装）
 ```cm
 struct Vec<T> {
     private T* data;

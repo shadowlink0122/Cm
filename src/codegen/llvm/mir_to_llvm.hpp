@@ -48,6 +48,9 @@ class MIRToLLVM {
     llvm::Type* convertType(const hir::TypePtr& type);
 
    private:
+    /// 関数シグネチャ変換
+    llvm::Function* convertFunctionSignature(const mir::MirFunction& func);
+
     /// 関数変換
     void convertFunction(const mir::MirFunction& func);
 

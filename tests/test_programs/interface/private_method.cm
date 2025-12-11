@@ -1,0 +1,34 @@
+// privateメソッドのテスト
+// impl内でprivate修飾子を使ってメソッドを定義
+
+interface Calculator {
+    int calculate(int x);
+}
+
+struct MyCalc {
+    int multiplier;
+}
+
+impl MyCalc for Calculator {
+    // privateメソッド：impl内からのみ呼び出し可能
+    private int doubleValue(int n) {
+        return n * 2;
+    }
+
+    // publicメソッド：外部から呼び出し可能
+    int calculate(int x) {
+        // impl内からprivateメソッドを呼び出し
+        return self.doubleValue(x) + self.multiplier;
+    }
+}
+
+int main() {
+    MyCalc c;
+    c.multiplier = 10;
+
+    int result = c.calculate(5);  // doubleValue(5) + 10 = 10 + 10 = 20
+
+    println("Result: {}", result);
+
+    return (result == 20) ? 0 : 1;
+}

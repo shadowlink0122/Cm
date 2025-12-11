@@ -164,7 +164,7 @@ run_interpreter() {
     fi
 
     # インタープリタ実行
-    if $CM_EXEC --run "$test_file" > "$output_file" 2>&1; then
+    if $CM_EXEC run "$test_file" > "$output_file" 2>&1; then
         echo "EXIT: 0" >> "$output_file"
     else
         echo "EXIT: $?" >> "$output_file"

@@ -364,21 +364,113 @@ class Parser {
     }
 
     // impl
+    // impl Type for InterfaceName { ... } - メソッド実装
+    // impl Type { ... } - コンストラクタ/デストラクタ専用
     ast::DeclPtr parse_impl() {
         expect(TokenKind::KwImpl);
-        std::string iface = expect_ident();
-        expect(TokenKind::KwFor);
-        auto target = parse_type();
+        auto target = parse_type();  // Type first
+
+        // forがあればメソッド実装、なければコンストラクタ/デストラクタ専用
+        if (consume_if(TokenKind::KwFor)) {
+            std::string iface = expect_ident();  // InterfaceName
+            expect(TokenKind::LBrace);
+
+            auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
+
+            while (!check(TokenKind::RBrace) && !is_at_end()) {
+                try {
+                    // private修飾子をチェック
+                    bool is_private = consume_if(TokenKind::KwPrivate);
+
+                    auto func = parse_function(false, false, false, false);
+                    if (auto* f = func->as<ast::FunctionDecl>()) {
+                        // privateメソッドの場合はvisibilityを設定
+                        if (is_private) {
+                            f->visibility = ast::Visibility::Private;
+                        } else {
+                            // デフォルトはExport（外部から呼び出し可能）
+                            f->visibility = ast::Visibility::Export;
+                        }
+                        decl->methods.push_back(
+                            std::unique_ptr<ast::FunctionDecl>(static_cast<ast::FunctionDecl*>(
+                                std::get<std::unique_ptr<ast::FunctionDecl>>(func->kind)
+                                    .release())));
+                    }
+                } catch (...) {
+                    // エラー回復：次の関数定義または閉じ括弧まで進める
+                    synchronize();
+                }
+            }
+
+            expect(TokenKind::RBrace);
+            return std::make_unique<ast::Decl>(std::move(decl));
+        } else {
+            // コンストラクタ/デストラクタ専用impl
+            return parse_impl_ctor(std::move(target));
+        }
+    }
+
+    // コンストラクタ/デストラクタ専用implの解析
+    // impl Type { self() { ... } ~self() { ... } }
+    ast::DeclPtr parse_impl_ctor(ast::TypePtr target) {
         expect(TokenKind::LBrace);
 
-        auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
+        auto decl = std::make_unique<ast::ImplDecl>(std::move(target));
 
         while (!check(TokenKind::RBrace) && !is_at_end()) {
-            auto func = parse_function(false, false, false, false);
-            if (auto* f = func->as<ast::FunctionDecl>()) {
-                decl->methods.push_back(
-                    std::unique_ptr<ast::FunctionDecl>(static_cast<ast::FunctionDecl*>(
-                        std::get<std::unique_ptr<ast::FunctionDecl>>(func->kind).release())));
+            try {
+                // overload修飾子をチェック
+                bool is_overload = consume_if(TokenKind::KwOverload);
+
+                // デストラクタ: ~self()
+                if (check(TokenKind::Tilde)) {
+                    advance();  // consume ~
+                    if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                        advance();  // consume self
+                        expect(TokenKind::LParen);
+                        expect(TokenKind::RParen);
+                        auto body = parse_block();
+
+                        auto dtor = std::make_unique<ast::FunctionDecl>(
+                            "~self", std::vector<ast::Param>{}, ast::make_void(), std::move(body));
+                        dtor->is_destructor = true;
+
+                        if (decl->destructor) {
+                            error("Only one destructor allowed per impl block");
+                        }
+                        decl->destructor = std::move(dtor);
+                    } else {
+                        error("Expected 'self' after '~'");
+                        synchronize();
+                    }
+                }
+                // コンストラクタ: self() or overload self(...)
+                else if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                    advance();  // consume self
+                    expect(TokenKind::LParen);
+                    auto params = parse_params();
+                    expect(TokenKind::RParen);
+                    auto body = parse_block();
+
+                    auto ctor = std::make_unique<ast::FunctionDecl>(
+                        "self", std::move(params), ast::make_void(), std::move(body));
+                    ctor->is_constructor = true;
+                    ctor->is_overload = is_overload;
+
+                    decl->constructors.push_back(std::move(ctor));
+                } else {
+                    // selfでもデストラクタでもない場合、エラーを報告してスキップ
+                    error("Expected 'self' or '~self' in constructor impl block");
+                    // 次の有効なトークンまでスキップ
+                    while (
+                        !check(TokenKind::RBrace) && !is_at_end() &&
+                        !(current().kind == TokenKind::Ident && current().get_string() == "self") &&
+                        !check(TokenKind::Tilde) && !check(TokenKind::KwOverload)) {
+                        advance();
+                    }
+                }
+            } catch (...) {
+                synchronize();
             }
         }
 
@@ -562,7 +654,8 @@ class Parser {
             advance();
             return name;
         }
-        error("Expected identifier");
+        error("Expected identifier, got '" + std::string(current().get_string()) + "'");
+        advance();  // エラー回復：1トークン進める
         return "<error>";
     }
 

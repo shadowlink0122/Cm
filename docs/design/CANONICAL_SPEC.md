@@ -110,11 +110,49 @@ impl<T> Vec<T> {
 
 // 形式2：メソッド実装（for インターフェース）
 impl<T> Vec<T> for Container<T> {
-    void push(T item) { }         // メソッド
+    void push(T item) { }         // publicメソッド（デフォルト）
     T pop() { }
+
+    // privateメソッド（impl内からのみ呼び出し可能）
+    private void grow() {
+        // 内部ヘルパー関数
+    }
 
     // メソッドのオーバーロード
     overload void push(T item, size_t count) { }
+}
+```
+
+### 4.1 privateメソッド
+
+`private`修飾子をメソッドの前に付けると、そのメソッドは同じimplブロック内からのみ呼び出し可能になります。
+
+```cm
+interface Calculator {
+    int calculate(int x);
+}
+
+struct MyCalc {
+    int base;
+}
+
+impl MyCalc for Calculator {
+    // privateメソッド：外部から呼び出し不可
+    private int helper(int n) {
+        return n * 2;
+    }
+
+    // publicメソッド：外部から呼び出し可能
+    int calculate(int x) {
+        return self.helper(x) + self.base;  // impl内からはprivateを呼べる
+    }
+}
+
+void main() {
+    MyCalc c;
+    c.base = 10;
+    int result = c.calculate(5);  // OK: publicメソッド
+    // c.helper(5);                // エラー: privateメソッドは外部から呼べない
 }
 ```
 
@@ -160,23 +198,27 @@ struct Point3D { }
 ### 6.1 メンバ修飾子
 
 #### private修飾子
-`private`修飾子を持つメンバは直接アクセス不可。`impl`ブロック内の`self`ポインタからのみアクセス可能。
+`private`修飾子を持つメンバは直接アクセス不可。コンストラクタ・デストラクタ内の`this`ポインタからのみアクセス可能。
 
 ```cm
 struct Person {
     string name;        // 外部からアクセス可能
-    private int age;    // impl内のselfからのみアクセス可能
+    private int age;    // コンストラクタ/デストラクタ内からのみアクセス可能
 }
 
 impl Person {
-    int getAge() {
-        return this.age;  // ✓ impl内からアクセス可能
+    self(string name, int age) {
+        this.name = name;
+        this.age = age;   // ✓ コンストラクタ内からアクセス可能
     }
 }
 
+// アクセサはフリー関数として定義
+int getAge(const Person& p);  // 実装はfriend関数等で別途提供
+
 void main() {
-    Person p;
-    p.name = "Alice";   // ✓ OK
+    Person p("Alice", 30);
+    p.name = "Bob";     // ✓ OK
     // p.age = 30;      // ❌ エラー: privateメンバへの直接アクセス
 }
 ```

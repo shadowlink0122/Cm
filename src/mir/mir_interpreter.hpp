@@ -314,6 +314,35 @@ class MirInterpreter {
         return ret_val;
     }
 
+    // コンストラクタを実行（selfへの変更を呼び出し元に反映）
+    void execute_constructor(const MirFunction& func, std::vector<Value>& args) {
+        debug::interp::log(debug::interp::Id::FunctionEnter, "Entering constructor: " + func.name,
+                           debug::Level::Info);
+
+        ExecutionContext ctx(&func);
+
+        // 引数をローカル変数に設定
+        for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); i++) {
+            ctx.locals[func.arg_locals[i]] = args[i];
+        }
+
+        // 戻り値用のローカル変数を初期化
+        ctx.locals[func.return_local] = Value{};
+
+        // エントリブロックから実行開始
+        execute_block(ctx, func.entry_block);
+
+        // selfへの変更を呼び出し元に反映
+        if (!func.arg_locals.empty() && !args.empty()) {
+            args[0] = ctx.locals[func.arg_locals[0]];
+            debug::interp::log(debug::interp::Id::FunctionExit,
+                               "Constructor: copying self back to caller", debug::Level::Debug);
+        }
+
+        debug::interp::log(debug::interp::Id::FunctionExit, "Exiting constructor: " + func.name,
+                           debug::Level::Info);
+    }
+
     // 基本ブロックを実行
     void execute_block(ExecutionContext& ctx, BlockId block_id) {
         debug::interp::log(debug::interp::Id::BlockExecute,
@@ -542,13 +571,40 @@ class MirInterpreter {
                             debug::interp::log(debug::interp::Id::CallUser,
                                                "Calling user-defined function: " + func_name,
                                                debug::Level::Debug);
-                            Value result = execute_function(*user_func, args);
-                            debug::interp::dump_value("Function result", result);
-                            if (data.destination) {
-                                debug::interp::log(debug::interp::Id::CallStore,
-                                                   "Storing result to destination",
-                                                   debug::Level::Debug);
-                                store_to_place(ctx, *data.destination, result);
+
+                            // コンストラクタかどうかを判定（__ctorを含む）
+                            bool is_constructor = func_name.find("__ctor") != std::string::npos;
+
+                            if (is_constructor && !args.empty()) {
+                                // コンストラクタ: selfへの変更を呼び出し元に反映
+                                // 第一引数がどの変数を指すかを取得
+                                LocalId self_local = 0;
+                                if (!data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+                                    auto& place = std::get<MirPlace>(data.args[0]->data);
+                                    self_local = place.local;
+                                }
+
+                                execute_constructor(*user_func, args);
+
+                                // コンストラクタ実行後、argsの最初の要素（self）が更新されている
+                                // それを元の変数にコピーバック
+                                if (self_local != 0) {
+                                    ctx.locals[self_local] = args[0];
+                                    debug::interp::log(debug::interp::Id::CallStore,
+                                                       "Constructor: copying self back to _" +
+                                                           std::to_string(self_local),
+                                                       debug::Level::Debug);
+                                }
+                            } else {
+                                // 通常の関数呼び出し
+                                Value result = execute_function(*user_func, args);
+                                debug::interp::dump_value("Function result", result);
+                                if (data.destination) {
+                                    debug::interp::log(debug::interp::Id::CallStore,
+                                                       "Storing result to destination",
+                                                       debug::Level::Debug);
+                                    store_to_place(ctx, *data.destination, result);
+                                }
                             }
                         } else {
                             debug::interp::log(debug::interp::Id::CallNotFound,

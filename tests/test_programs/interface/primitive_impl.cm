@@ -1,0 +1,26 @@
+// プリミティブ型へのimplテスト
+
+interface Abs {
+    int abs();
+}
+
+impl int for Abs {
+    int abs() {
+        if (self < 0) {
+            return -self;
+        }
+        return self;
+    }
+}
+
+int main() {
+    int a = 5;
+    int b = -3;
+    int c = 0;
+    
+    println("{}", a.abs());
+    println("{}", b.abs());
+    println("{}", c.abs());
+    
+    return 0;
+}

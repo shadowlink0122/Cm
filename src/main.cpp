@@ -47,8 +47,8 @@ struct Options {
     bool show_mir = false;
     bool show_mir_opt = false;
     bool emit_llvm = false;
-    std::string target = "";       // ターゲット (native, wasm)
-    bool run_after_emit = false;   // 生成後に実行
+    std::string target = "";      // ターゲット (native, wasm)
+    bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 0;
     bool debug = false;
     std::string debug_level = "info";
@@ -310,6 +310,11 @@ int main(int argc, char* argv[]) {
 
         if (parser.has_errors()) {
             std::cerr << "構文エラーが発生しました\n";
+            // 診断情報を表示
+            for (const auto& diag : parser.diagnostics()) {
+                std::cerr << "  " << (diag.kind == DiagKind::Error ? "エラー" : "警告") << ": "
+                          << diag.message << "\n";
+            }
             return 1;
         }
         if (opts.debug)
@@ -442,16 +447,14 @@ int main(int argc, char* argv[]) {
             // ターゲット設定
             if (opts.target == "wasm") {
                 llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
-                llvm_opts.format =
-                    cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                llvm_opts.format = cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
             } else if (!opts.target.empty() && opts.target != "native") {
                 std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
                 std::cerr << "有効なターゲット: native, wasm\n";
                 return 1;
             } else {
                 llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
-                llvm_opts.format =
-                    cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                llvm_opts.format = cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
             }
 
             // 出力ファイル設定

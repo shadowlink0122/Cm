@@ -30,6 +30,11 @@ struct FunctionDecl {
     bool is_inline = false;
     bool is_async = false;
 
+    // コンストラクタ/デストラクタ
+    bool is_constructor = false;  // self() コンストラクタ
+    bool is_destructor = false;   // ~self() デストラクタ
+    bool is_overload = false;     // overload修飾子
+
     // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
     std::vector<AttributeNode> attributes;
 
@@ -95,12 +100,21 @@ struct InterfaceDecl {
 // impl定義
 // ============================================================
 struct ImplDecl {
-    std::string interface_name;
+    std::string interface_name;  // forなしの場合は空文字列
     TypePtr target_type;
     std::vector<std::unique_ptr<FunctionDecl>> methods;
 
+    // コンストラクタ/デストラクタ専用impl（forなし）
+    bool is_ctor_impl = false;
+    std::vector<std::unique_ptr<FunctionDecl>> constructors;  // self()
+    std::unique_ptr<FunctionDecl> destructor;                 // ~self()
+
     ImplDecl(std::string iface, TypePtr target)
         : interface_name(std::move(iface)), target_type(std::move(target)) {}
+
+    // コンストラクタ専用implのコンストラクタ
+    explicit ImplDecl(TypePtr target)
+        : interface_name(""), target_type(std::move(target)), is_ctor_impl(true) {}
 };
 
 // ImportDeclはmodule.hppに移動

@@ -74,6 +74,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "new";
         case TokenKind::KwNull:
             return "null";
+        case TokenKind::KwOverload:
+            return "overload";
         case TokenKind::KwPrivate:
             return "private";
         case TokenKind::KwPub:

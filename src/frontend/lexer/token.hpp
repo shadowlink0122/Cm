@@ -48,6 +48,7 @@ enum class TokenKind {
     KwMutable,
     KwNew,
     KwNull,
+    KwOverload,  // function overloading
     KwPrivate,
     KwPub,  // public visibility
     KwReturn,

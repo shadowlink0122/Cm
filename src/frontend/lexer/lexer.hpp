@@ -100,6 +100,7 @@ class Lexer {
             {"mutable", TokenKind::KwMutable},
             {"new", TokenKind::KwNew},
             {"null", TokenKind::KwNull},
+            {"overload", TokenKind::KwOverload},
             {"private", TokenKind::KwPrivate},
             {"pub", TokenKind::KwPub},
             {"return", TokenKind::KwReturn},

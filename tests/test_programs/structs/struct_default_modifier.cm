@@ -21,6 +21,10 @@ int main() {
     c.name = "hits";
     c.count = 100;
 
+    // default修飾子のテスト：直接アクセス
+    w.value = 50;
+    c.count = c.count + 1;
+
     // 通常のアクセスが正しく動作することを確認
-    return (w.value == 42 && c.count == 100) ? 0 : 1;
+    return (w.value == 50 && c.count == 101) ? 0 : 1;
 }

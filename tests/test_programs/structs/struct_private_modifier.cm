@@ -1,15 +1,19 @@
 // private修飾子のテスト
-// privateメンバはimpl内のselfからのみアクセス可能
+// privateメンバは外部から直接アクセス不可
+
+import std::io::println;
 
 struct Person {
     string name;        // 外部アクセス可能
-    private int age;    // impl内selfからのみアクセス可能
+    private int age;    // 外部から直接アクセス不可（将来的にエラー）
 }
 
 int main() {
     Person p;
     p.name = "Alice";
-    // p.age = 25;  // これはエラーになるべき（privateメンバ）
+    
+    // publicメンバは直接アクセス可能
+    println("Name: {}", p.name);
 
     return 0;
 }

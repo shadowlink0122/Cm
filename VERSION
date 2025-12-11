@@ -1,9 +1,23 @@
 # Cm Language Version Information
-VERSION=0.1.0
+VERSION=0.4.0
 RELEASE_TYPE=development
-RELEASE_DATE=2025-01-06
+RELEASE_DATE=2025-12-11
 
 # Version History
+# 0.4.0 - Private methods, default member inference, constructors
+#   - private modifier for methods in impl blocks
+#   - Default member implicit access (w = 100, int x = w)
+#   - impl Type { self() } constructor syntax
+#   - Type name(args) constructor call syntax
+#   - self keyword as pointer in constructors/methods
+#   - overload keyword for function overloading
+# 0.3.0 - Interface/Impl/Self system
+#   - interface definitions
+#   - impl Type for Interface syntax
+#   - Method dispatch
+# 0.2.0 - Scope and resource management
+#   - defer statement
+#   - Automatic StorageDead
 # 0.1.0 - Initial development release
 #   - Basic interpreter with MIR execution
 #   - Format strings with auto variable capture

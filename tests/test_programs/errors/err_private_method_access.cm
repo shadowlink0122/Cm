@@ -1,0 +1,36 @@
+// privateメソッドへの不正アクセステスト
+// 外部からprivateメソッドを呼び出そうとするとエラーになるべき
+
+interface Counter {
+    void increment();
+    int get();
+}
+
+struct MyCounter {
+    int value;
+}
+
+impl MyCounter for Counter {
+    // privateメソッド
+    private void addValue(int n) {
+        self.value = self.value + n;
+    }
+
+    void increment() {
+        self.addValue(1);
+    }
+
+    int get() {
+        return self.value;
+    }
+}
+
+int main() {
+    MyCounter c;
+    c.value = 0;
+
+    // これはエラーになるべき：外部からprivateメソッドを呼び出し
+    c.addValue(10);
+
+    return 0;
+}

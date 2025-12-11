@@ -132,6 +132,7 @@ struct HirLet {
     TypePtr type;
     HirExprPtr init;
     bool is_const;
+    HirExprPtr ctor_call;  // コンストラクタ呼び出し（オプション）
 };
 
 // 代入
@@ -253,6 +254,8 @@ struct HirFunction {
     TypePtr return_type;
     std::vector<HirStmtPtr> body;
     bool is_export = false;
+    bool is_constructor = false;
+    bool is_destructor = false;
 };
 
 // 構造体フィールド
@@ -287,6 +290,7 @@ struct HirImpl {
     std::string interface_name;  // 空の場合は inherent impl
     std::string target_type;
     std::vector<std::unique_ptr<HirFunction>> methods;
+    bool is_ctor_impl = false;  // コンストラクタ/デストラクタ専用impl
 };
 
 // インポート

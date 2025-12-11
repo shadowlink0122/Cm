@@ -31,6 +31,32 @@ class TypeChecker {
         return it != struct_defs_.end() ? it->second : nullptr;
     }
 
+    // 構造体のdefaultメンバの型を取得（なければnullptr）
+    ast::TypePtr get_default_member_type(const std::string& struct_name) const {
+        const ast::StructDecl* decl = get_struct(struct_name);
+        if (!decl)
+            return nullptr;
+        for (const auto& field : decl->fields) {
+            if (field.is_default) {
+                return field.type;
+            }
+        }
+        return nullptr;
+    }
+
+    // 構造体のdefaultメンバの名前を取得（なければ空文字列）
+    std::string get_default_member_name(const std::string& struct_name) const {
+        const ast::StructDecl* decl = get_struct(struct_name);
+        if (!decl)
+            return "";
+        for (const auto& field : decl->fields) {
+            if (field.is_default) {
+                return field.name;
+            }
+        }
+        return "";
+    }
+
     // プログラム全体をチェック
     bool check(ast::Program& program) {
         debug::tc::log(debug::tc::Id::Start);
@@ -59,6 +85,20 @@ class TypeChecker {
     }
 
    private:
+    // メソッド情報
+    struct MethodInfo {
+        std::string name;
+        std::vector<ast::TypePtr> param_types;
+        ast::TypePtr return_type;
+        ast::Visibility visibility = ast::Visibility::Export;  // デフォルトは公開
+    };
+
+    // 型ごとのメソッド情報 (型名 → メソッド名 → メソッド情報)
+    std::unordered_map<std::string, std::unordered_map<std::string, MethodInfo>> type_methods_;
+
+    // 現在チェック中のimplのターゲット型（privateメソッド呼び出しチェック用）
+    std::string current_impl_target_type_;
+
     // フォーマット文字列から変数名を抽出
     std::vector<std::string> extract_format_variables(const std::string& format_str) {
         std::vector<std::string> variables;
@@ -91,6 +131,9 @@ class TypeChecker {
             scopes_.global().define(st->name, ast::make_named(st->name));
             // 構造体定義を保存（フィールドアクセス用）
             register_struct(st->name, *st);
+        } else if (auto* impl = decl.as<ast::ImplDecl>()) {
+            // impl定義からメソッド情報を登録
+            register_impl(*impl);
         }
     }
 
@@ -102,7 +145,142 @@ class TypeChecker {
             check_function(*func);
         } else if (auto* import = decl.as<ast::ImportDecl>()) {
             check_import(*import);
+        } else if (auto* impl = decl.as<ast::ImplDecl>()) {
+            check_impl(*impl);
         }
+    }
+
+    // impl定義の登録
+    void register_impl(ast::ImplDecl& impl) {
+        if (!impl.target_type)
+            return;
+
+        std::string type_name = ast::type_to_string(*impl.target_type);
+
+        // コンストラクタ専用implの場合
+        if (impl.is_ctor_impl) {
+            // コンストラクタを関数として登録
+            for (const auto& ctor : impl.constructors) {
+                std::string mangled_name = type_name + "__ctor";
+                if (ctor->is_overload) {
+                    // オーバーロードの場合、パラメータの数で区別
+                    mangled_name += "_" + std::to_string(ctor->params.size());
+                }
+                std::vector<ast::TypePtr> param_types;
+                param_types.push_back(impl.target_type);  // thisポインタ
+                for (const auto& param : ctor->params) {
+                    param_types.push_back(param.type);
+                }
+                scopes_.global().define_function(mangled_name, std::move(param_types),
+                                                 ast::make_void());
+            }
+            // デストラクタを登録
+            if (impl.destructor) {
+                std::string mangled_name = type_name + "__dtor";
+                std::vector<ast::TypePtr> param_types;
+                param_types.push_back(impl.target_type);  // thisポインタ
+                scopes_.global().define_function(mangled_name, std::move(param_types),
+                                                 ast::make_void());
+            }
+            return;
+        }
+
+        // メソッド実装の場合
+        for (const auto& method : impl.methods) {
+            MethodInfo info;
+            info.name = method->name;
+            info.return_type = method->return_type;
+            info.visibility = method->visibility;  // visibilityを保存
+            for (const auto& param : method->params) {
+                info.param_types.push_back(param.type);
+            }
+            type_methods_[type_name][method->name] = std::move(info);
+
+            // グローバル関数としても登録（TypeName__methodName形式）
+            std::string mangled_name = type_name + "__" + method->name;
+            std::vector<ast::TypePtr> all_param_types;
+            all_param_types.push_back(impl.target_type);  // selfパラメータ
+            for (const auto& param : method->params) {
+                all_param_types.push_back(param.type);
+            }
+            scopes_.global().define_function(mangled_name, std::move(all_param_types),
+                                             method->return_type);
+        }
+    }
+
+    // impl本体のチェック
+    void check_impl(ast::ImplDecl& impl) {
+        if (!impl.target_type)
+            return;
+
+        std::string type_name = ast::type_to_string(*impl.target_type);
+
+        // コンストラクタ専用implの場合
+        if (impl.is_ctor_impl) {
+            // コンストラクタをチェック
+            for (auto& ctor : impl.constructors) {
+                scopes_.push();
+                current_return_type_ = ast::make_void();
+
+                // selfをスコープに追加（target_type型のポインタ）
+                scopes_.current().define("self", impl.target_type, false);
+
+                // パラメータをスコープに追加
+                for (const auto& param : ctor->params) {
+                    scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+                }
+
+                // 本体をチェック
+                for (auto& stmt : ctor->body) {
+                    check_statement(*stmt);
+                }
+
+                scopes_.pop();
+            }
+
+            // デストラクタをチェック
+            if (impl.destructor) {
+                scopes_.push();
+                current_return_type_ = ast::make_void();
+
+                // selfをスコープに追加
+                scopes_.current().define("self", impl.target_type, false);
+
+                for (auto& stmt : impl.destructor->body) {
+                    check_statement(*stmt);
+                }
+
+                scopes_.pop();
+            }
+
+            current_return_type_ = nullptr;
+            return;
+        }
+
+        // impl内でprivateメソッドを呼び出せるように、現在のターゲット型を設定
+        current_impl_target_type_ = type_name;
+
+        for (auto& method : impl.methods) {
+            scopes_.push();
+            current_return_type_ = method->return_type;
+
+            // selfをスコープに追加（target_type型）
+            scopes_.current().define("self", impl.target_type, false);
+
+            // パラメータをスコープに追加
+            for (const auto& param : method->params) {
+                scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+            }
+
+            // 本体をチェック
+            for (auto& stmt : method->body) {
+                check_statement(*stmt);
+            }
+
+            scopes_.pop();
+        }
+        current_return_type_ = nullptr;
+        current_impl_target_type_.clear();  // implチェック完了後にクリア
     }
 
     // インポートのチェックと解決
@@ -183,6 +361,24 @@ class TypeChecker {
         ast::TypePtr init_type;
         if (let.init) {
             init_type = infer_type(*let.init);
+        }
+
+        // コンストラクタ呼び出しのチェック
+        if (let.has_ctor_call && let.type) {
+            std::string type_name = ast::type_to_string(*let.type);
+            // コンストラクタが存在するかチェック
+            std::string ctor_name = type_name + "__ctor";
+            if (!let.ctor_args.empty()) {
+                ctor_name += "_" + std::to_string(let.ctor_args.size());
+            }
+
+            // コンストラクタ引数の型チェック
+            for (auto& arg : let.ctor_args) {
+                infer_type(*arg);  // 引数の型を解決
+            }
+
+            debug::tc::log(debug::tc::Id::Resolved, "Constructor call: " + ctor_name,
+                           debug::Level::Debug);
         }
 
         if (let.type) {
@@ -487,36 +683,85 @@ class TypeChecker {
         return ast::make_error();
     }
 
-    // メンバアクセス
+    // メンバアクセス / メソッド呼び出し
     ast::TypePtr infer_member(ast::MemberExpr& member) {
         auto obj_type = infer_type(*member.object);
         if (!obj_type) {
             return ast::make_error();
         }
 
-        // 構造体型の場合、フィールドの型を解決
-        if (obj_type->kind == ast::TypeKind::Struct) {
-            std::string struct_name = obj_type->name;
-            const ast::StructDecl* struct_decl = get_struct(struct_name);
+        // 型名を取得（構造体・プリミティブ両対応）
+        std::string type_name = ast::type_to_string(*obj_type);
 
+        // メソッド呼び出しの場合（全ての型で共通処理）
+        if (member.is_method_call) {
+            auto it = type_methods_.find(type_name);
+            if (it != type_methods_.end()) {
+                auto method_it = it->second.find(member.member);
+                if (method_it != it->second.end()) {
+                    const auto& method_info = method_it->second;
+
+                    // privateメソッドのアクセスチェック
+                    if (method_info.visibility == ast::Visibility::Private) {
+                        // impl内（current_impl_target_type_が設定されている）からの呼び出しのみ許可
+                        if (current_impl_target_type_.empty() ||
+                            current_impl_target_type_ != type_name) {
+                            error(Span{}, "Cannot call private method '" + member.member +
+                                              "' from outside impl block of '" + type_name + "'");
+                            return ast::make_error();
+                        }
+                    }
+
+                    // 引数の型チェック
+                    if (member.args.size() != method_info.param_types.size()) {
+                        error(Span{}, "Method '" + member.member + "' expects " +
+                                          std::to_string(method_info.param_types.size()) +
+                                          " arguments, got " + std::to_string(member.args.size()));
+                    } else {
+                        for (size_t i = 0; i < member.args.size(); ++i) {
+                            auto arg_type = infer_type(*member.args[i]);
+                            if (!types_compatible(method_info.param_types[i], arg_type)) {
+                                std::string expected =
+                                    ast::type_to_string(*method_info.param_types[i]);
+                                std::string actual = ast::type_to_string(*arg_type);
+                                error(Span{}, "Argument type mismatch in method call '" +
+                                                  member.member + "': expected " + expected +
+                                                  ", got " + actual);
+                            }
+                        }
+                    }
+
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   type_name + "." + member.member +
+                                       "() : " + ast::type_to_string(*method_info.return_type),
+                                   debug::Level::Debug);
+                    return method_info.return_type;
+                }
+            }
+            error(Span{}, "Unknown method '" + member.member + "' for type '" + type_name + "'");
+            return ast::make_error();
+        }
+
+        // フィールドアクセスの場合（構造体のみ）
+        if (obj_type->kind == ast::TypeKind::Struct) {
+            const ast::StructDecl* struct_decl = get_struct(type_name);
             if (struct_decl) {
-                // フィールドを検索
                 for (const auto& field : struct_decl->fields) {
                     if (field.name == member.member) {
                         debug::tc::log(debug::tc::Id::Resolved,
-                                       struct_name + "." + member.member + " : " +
+                                       type_name + "." + member.member + " : " +
                                            ast::type_to_string(*field.type),
                                        debug::Level::Trace);
                         return field.type;
                     }
                 }
                 error(Span{},
-                      "Unknown field '" + member.member + "' in struct '" + struct_name + "'");
+                      "Unknown field '" + member.member + "' in struct '" + type_name + "'");
             } else {
-                error(Span{}, "Unknown struct type '" + struct_name + "'");
+                error(Span{}, "Unknown struct type '" + type_name + "'");
             }
         } else {
-            error(Span{}, "Member access on non-struct type");
+            error(Span{}, "Field access on non-struct type '" + type_name + "'");
         }
 
         return ast::make_error();
@@ -540,6 +785,22 @@ class TypeChecker {
         // 数値型間の暗黙変換
         if (a->is_numeric() && b->is_numeric()) {
             return true;
+        }
+
+        // 構造体のdefaultメンバとの互換性チェック
+        // a（左辺）が構造体でb（右辺）がプリミティブの場合：w = 20
+        if (a->kind == ast::TypeKind::Struct) {
+            auto default_type = get_default_member_type(a->name);
+            if (default_type && types_compatible(default_type, b)) {
+                return true;
+            }
+        }
+        // a（左辺）がプリミティブでb（右辺）が構造体の場合：int x = w
+        if (b->kind == ast::TypeKind::Struct) {
+            auto default_type = get_default_member_type(b->name);
+            if (default_type && types_compatible(a, default_type)) {
+                return true;
+            }
         }
 
         return false;

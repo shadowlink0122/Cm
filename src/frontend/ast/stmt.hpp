@@ -14,6 +14,10 @@ struct LetStmt {
     ExprPtr init;  // 初期化式（省略可）
     bool is_const = false;
 
+    // コンストラクタ呼び出し（Type name(args) 構文用）
+    bool has_ctor_call = false;
+    std::vector<ExprPtr> ctor_args;
+
     LetStmt(std::string n, TypePtr t, ExprPtr i, bool c = false)
         : name(std::move(n)), type(std::move(t)), init(std::move(i)), is_const(c) {}
 };
