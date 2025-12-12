@@ -142,6 +142,105 @@ LocalId evaluate_simple_expr(const hir::HirExpr* expr,
                         MirOperand::copy(MirPlace{operand})
                     )
                 ));
+            } else if (unary->op == hir::HirUnaryOp::PostInc || unary->op == hir::HirUnaryOp::PostDec) {
+                // 後置インクリメント/デクリメント: x++ / x--
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "evaluate_simple_expr: post-increment/decrement operation");
+
+                // オペランドは変数でなければならない
+                if (auto var_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&unary->operand->kind)) {
+                    auto* var = var_ptr->get();
+                    if (var) {
+                        auto it = variables.find(var->name);
+                        if (it != variables.end()) {
+                            LocalId var_id = it->second;
+
+                            // 現在の値を結果として保存
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{result},
+                                MirRvalue::use(MirOperand::copy(MirPlace{var_id}))
+                            ));
+
+                            // 1を加算または減算
+                            LocalId one = mir_func->next_local_id++;
+                            mir_func->locals.emplace_back(one, "_one", expr->type, true, true);
+                            auto one_const = MirOperand::constant(MirConstant{expr->type, int64_t(1)});
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{one},
+                                MirRvalue::use(std::move(one_const))
+                            ));
+
+                            // 変数を更新
+                            LocalId new_value = mir_func->next_local_id++;
+                            mir_func->locals.emplace_back(new_value, "_inc_temp", expr->type, true, true);
+
+                            MirBinaryOp op = (unary->op == hir::HirUnaryOp::PostInc) ?
+                                            MirBinaryOp::Add : MirBinaryOp::Sub;
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{new_value},
+                                MirRvalue::binary_op(
+                                    op,
+                                    MirOperand::copy(MirPlace{var_id}),
+                                    MirOperand::copy(MirPlace{one})
+                                )
+                            ));
+
+                            // 変数に新しい値を代入
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{var_id},
+                                MirRvalue::use(MirOperand::copy(MirPlace{new_value}))
+                            ));
+
+                            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                                       "Post-increment/decrement: " + var->name);
+                        }
+                    }
+                }
+            } else if (unary->op == hir::HirUnaryOp::PreInc || unary->op == hir::HirUnaryOp::PreDec) {
+                // 前置インクリメント/デクリメント: ++x / --x
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "evaluate_simple_expr: pre-increment/decrement operation");
+
+                // オペランドは変数でなければならない
+                if (auto var_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&unary->operand->kind)) {
+                    auto* var = var_ptr->get();
+                    if (var) {
+                        auto it = variables.find(var->name);
+                        if (it != variables.end()) {
+                            LocalId var_id = it->second;
+
+                            // 1を加算または減算
+                            LocalId one = mir_func->next_local_id++;
+                            mir_func->locals.emplace_back(one, "_one", expr->type, true, true);
+                            auto one_const = MirOperand::constant(MirConstant{expr->type, int64_t(1)});
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{one},
+                                MirRvalue::use(std::move(one_const))
+                            ));
+
+                            // 変数を更新
+                            MirBinaryOp op = (unary->op == hir::HirUnaryOp::PreInc) ?
+                                            MirBinaryOp::Add : MirBinaryOp::Sub;
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{result},
+                                MirRvalue::binary_op(
+                                    op,
+                                    MirOperand::copy(MirPlace{var_id}),
+                                    MirOperand::copy(MirPlace{one})
+                                )
+                            ));
+
+                            // 変数に新しい値を代入
+                            block->add_statement(MirStatement::assign(
+                                MirPlace{var_id},
+                                MirRvalue::use(MirOperand::copy(MirPlace{result}))
+                            ));
+
+                            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                                       "Pre-increment/decrement: " + var->name);
+                        }
+                    }
+                }
             } else {
                 // その他の単項演算はサポートしない
                 debug::log(debug::Stage::Mir, debug::Level::Warn,
@@ -887,6 +986,21 @@ void lower_statement(const hir::HirStmt* stmt,
                         }
                     } else {
                         // 代入以外の式の場合は単に評価
+                        evaluate_simple_expr(for_stmt->update.get(), mir_func, update_current, variables);
+                    }
+                } else if (auto unary_ptr = std::get_if<std::unique_ptr<hir::HirUnary>>(&for_stmt->update->kind)) {
+                    // 単項演算（++i, i++など）の場合
+                    auto* unary = unary_ptr->get();
+                    if (unary && (unary->op == hir::HirUnaryOp::PostInc ||
+                                  unary->op == hir::HirUnaryOp::PostDec ||
+                                  unary->op == hir::HirUnaryOp::PreInc ||
+                                  unary->op == hir::HirUnaryOp::PreDec)) {
+                        debug::log(debug::Stage::Mir, debug::Level::Debug,
+                                   "FOR: Update is an increment/decrement expression");
+                        // evaluate_simple_exprが適切に処理する
+                        evaluate_simple_expr(for_stmt->update.get(), mir_func, update_current, variables);
+                    } else {
+                        // その他の単項演算
                         evaluate_simple_expr(for_stmt->update.get(), mir_func, update_current, variables);
                     }
                 } else {
