@@ -718,22 +718,36 @@ void lower_statement(const hir::HirStmt* stmt,
             BlockId loop_body_id = mir_func->next_block_id++;
             BlockId loop_exit_id = mir_func->next_block_id++;
 
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[WHILE] Block IDs - header:" + std::to_string(loop_header_id) +
+                       " body:" + std::to_string(loop_body_id) +
+                       " exit:" + std::to_string(loop_exit_id));
+
             auto loop_header = std::make_unique<BasicBlock>(loop_header_id);
             auto loop_body = std::make_unique<BasicBlock>(loop_body_id);
             auto loop_exit = std::make_unique<BasicBlock>(loop_exit_id);
 
             // 現在のブロックからループヘッダへ
             current_block->set_terminator(MirTerminator::goto_block(loop_header_id));
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[WHILE] Entry goto header bb" + std::to_string(loop_header_id));
 
             // ループヘッダで条件評価
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[WHILE] Evaluating condition in header");
             LocalId cond_value = evaluate_simple_expr(while_stmt->cond.get(), mir_func, loop_header.get(), variables);
             loop_header->set_terminator(MirTerminator::switch_int(
                 MirOperand::copy(MirPlace{cond_value}),
                 {{1, loop_body_id}},
                 loop_exit_id
             ));
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[WHILE] Header terminator - true->bb" + std::to_string(loop_body_id) +
+                       " false->bb" + std::to_string(loop_exit_id));
 
             // ループ本体の処理
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[WHILE] Processing body statements");
             BasicBlock* body_current = loop_body.get();
             for (const auto& body_stmt : while_stmt->body) {
                 if (body_stmt) {
@@ -745,6 +759,8 @@ void lower_statement(const hir::HirStmt* stmt,
             // ループ本体からループヘッダへ戻る
             if (!body_current->terminator) {
                 body_current->set_terminator(MirTerminator::goto_block(loop_header_id));
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[WHILE] Body returns to header bb" + std::to_string(loop_header_id));
             }
 
             // ブロックを追加
@@ -766,8 +782,13 @@ void lower_statement(const hir::HirStmt* stmt,
             debug::log(debug::Stage::Mir, debug::Level::Debug,
                        "Processing for statement");
 
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[FOR] Creating blocks - header, body, update, exit");
+
             // 初期化部の処理
             if (for_stmt->init) {
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] Processing init statement");
                 lower_statement(for_stmt->init.get(), mir_func, current_block, variables,
                                 defer_statements, entry_block, 0, 1);
             }
@@ -776,6 +797,12 @@ void lower_statement(const hir::HirStmt* stmt,
             BlockId loop_body_id = mir_func->next_block_id++;
             BlockId loop_update_id = mir_func->next_block_id++;
             BlockId loop_exit_id = mir_func->next_block_id++;
+
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[FOR] Block IDs - header:" + std::to_string(loop_header_id) +
+                       " body:" + std::to_string(loop_body_id) +
+                       " update:" + std::to_string(loop_update_id) +
+                       " exit:" + std::to_string(loop_exit_id));
 
             auto loop_header = std::make_unique<BasicBlock>(loop_header_id);
             auto loop_body = std::make_unique<BasicBlock>(loop_body_id);
@@ -787,18 +814,27 @@ void lower_statement(const hir::HirStmt* stmt,
 
             // ループヘッダで条件評価
             if (for_stmt->cond) {
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] Evaluating condition in header block");
                 LocalId cond_value = evaluate_simple_expr(for_stmt->cond.get(), mir_func, loop_header.get(), variables);
                 loop_header->set_terminator(MirTerminator::switch_int(
                     MirOperand::copy(MirPlace{cond_value}),
                     {{1, loop_body_id}},
                     loop_exit_id
                 ));
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] Header terminator set - true->bb" + std::to_string(loop_body_id) +
+                           " false->bb" + std::to_string(loop_exit_id));
             } else {
                 // 条件がない場合は常にループ本体へ
                 loop_header->set_terminator(MirTerminator::goto_block(loop_body_id));
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] No condition, always goto body bb" + std::to_string(loop_body_id));
             }
 
             // ループ本体の処理
+            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                       "[FOR] Processing loop body statements");
             BasicBlock* body_current = loop_body.get();
             for (const auto& body_stmt : for_stmt->body) {
                 if (body_stmt) {
@@ -809,17 +845,60 @@ void lower_statement(const hir::HirStmt* stmt,
             // ループ本体から更新部へ
             if (!body_current->terminator) {
                 body_current->set_terminator(MirTerminator::goto_block(loop_update_id));
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] Body exits to update bb" + std::to_string(loop_update_id));
             }
 
             // 更新部の処理
             BasicBlock* update_current = loop_update.get();
             if (for_stmt->update) {
-                // 更新部は式なので直接評価
-                evaluate_simple_expr(for_stmt->update.get(), mir_func, update_current, variables);
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] Processing update expression");
+
+                // 更新式が代入式の場合は特別に処理
+                if (auto binary_ptr = std::get_if<std::unique_ptr<hir::HirBinary>>(&for_stmt->update->kind)) {
+                    auto* binary = binary_ptr->get();
+                    if (binary && binary->op == hir::HirBinaryOp::Assign) {
+                        debug::log(debug::Stage::Mir, debug::Level::Debug,
+                                   "[FOR] Update is an assignment expression");
+                        // 左辺値（変数）の解決
+                        if (binary->lhs) {
+                            if (auto var_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&binary->lhs->kind)) {
+                                auto* var = var_ptr->get();
+                                if (var) {
+                                    auto it = variables.find(var->name);
+                                    if (it != variables.end()) {
+                                        LocalId target_id = it->second;
+                                        // 右辺値の評価
+                                        if (binary->rhs) {
+                                            LocalId value_id = evaluate_simple_expr(binary->rhs.get(), mir_func, update_current, variables);
+                                            // 代入命令を生成
+                                            update_current->add_statement(MirStatement::assign(
+                                                MirPlace{target_id},
+                                                MirRvalue::use(MirOperand::copy(MirPlace{value_id}))
+                                            ));
+                                            debug::log(debug::Stage::Mir, debug::Level::Debug,
+                                                       "[FOR] Update assignment: local " + std::to_string(target_id) +
+                                                       " = local " + std::to_string(value_id));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // 代入以外の式の場合は単に評価
+                        evaluate_simple_expr(for_stmt->update.get(), mir_func, update_current, variables);
+                    }
+                } else {
+                    // その他の式の場合は単に評価
+                    evaluate_simple_expr(for_stmt->update.get(), mir_func, update_current, variables);
+                }
             }
             // 更新部からループヘッダへ戻る
             if (!update_current->terminator) {
                 update_current->set_terminator(MirTerminator::goto_block(loop_header_id));
+                debug::log(debug::Stage::Mir, debug::Level::Debug,
+                           "[FOR] Update returns to header bb" + std::to_string(loop_header_id));
             }
 
             // ブロックを追加
