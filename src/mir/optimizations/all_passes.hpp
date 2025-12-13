@@ -9,42 +9,23 @@
 
 namespace cm::mir::opt {
 
-// OptimizationPassの基底クラスに不足している実装を追加
-inline void OptimizationPass::collect_used_locals(const MirFunction& /* func */,
-                                                  std::set<LocalId>& /* used */) {
-    // この実装はDeadCodeEliminationから移動
-    // 実装の詳細は各最適化パスで必要に応じてオーバーライド
-}
+// 標準的な最適化パスを作成する関数
+inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
+    int optimization_level) {
+    std::vector<std::unique_ptr<OptimizationPass>> passes;
 
-inline std::optional<MirConstant> OptimizationPass::eval_binary_op(MirBinaryOp /* op */,
-                                                                   const MirConstant& /* lhs */,
-                                                                   const MirConstant& /* rhs */) {
-    // この実装はConstantFoldingから移動
-    // 基本的な実装を提供
-    return std::nullopt;
-}
-
-inline std::optional<MirConstant> OptimizationPass::eval_unary_op(
-    MirUnaryOp /* op */, const MirConstant& /* operand */) {
-    // この実装はConstantFoldingから移動
-    // 基本的な実装を提供
-    return std::nullopt;
-}
-
-// 標準的な最適化パスを追加
-inline void OptimizationPipeline::add_standard_passes(int optimization_level) {
     if (optimization_level >= 1) {
         // -O1: 基本的な最適化
-        add_pass(std::make_unique<ConstantFolding>());
-        add_pass(std::make_unique<CopyPropagation>());
-        add_pass(std::make_unique<DeadCodeElimination>());
+        passes.push_back(std::make_unique<ConstantFolding>());
+        passes.push_back(std::make_unique<CopyPropagation>());
+        passes.push_back(std::make_unique<DeadCodeElimination>());
     }
 
     if (optimization_level >= 2) {
         // -O2: より積極的な最適化
         // 最適化パスを複数回実行
-        add_pass(std::make_unique<ConstantFolding>());
-        add_pass(std::make_unique<CopyPropagation>());
+        passes.push_back(std::make_unique<ConstantFolding>());
+        passes.push_back(std::make_unique<CopyPropagation>());
         // TODO: インライン化、ループ最適化など
     }
 
@@ -52,6 +33,8 @@ inline void OptimizationPipeline::add_standard_passes(int optimization_level) {
         // -O3: 最大限の最適化
         // TODO: ベクトル化、アンロールなど
     }
+
+    return passes;
 }
 
 // ============================================================

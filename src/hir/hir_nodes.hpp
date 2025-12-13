@@ -247,9 +247,16 @@ struct HirParam {
     TypePtr type;
 };
 
+// ジェネリック型パラメータ
+struct HirGenericParam {
+    std::string name;
+    std::vector<std::string> bounds;  // 型制約（例: Ord, Clone）
+};
+
 // 関数
 struct HirFunction {
     std::string name;
+    std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<HirParam> params;
     TypePtr return_type;
     std::vector<HirStmtPtr> body;
@@ -267,8 +274,10 @@ struct HirField {
 // 構造体
 struct HirStruct {
     std::string name;
+    std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<HirField> fields;
     bool is_export = false;
+    bool has_explicit_constructor = false;
 };
 
 // メソッドシグネチャ
@@ -281,6 +290,7 @@ struct HirMethodSig {
 // インターフェース
 struct HirInterface {
     std::string name;
+    std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<HirMethodSig> methods;
     bool is_export = false;
 };
@@ -289,6 +299,7 @@ struct HirInterface {
 struct HirImpl {
     std::string interface_name;  // 空の場合は inherent impl
     std::string target_type;
+    std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<std::unique_ptr<HirFunction>> methods;
     bool is_ctor_impl = false;  // コンストラクタ/デストラクタ専用impl
 };
@@ -319,10 +330,10 @@ struct HirTypedef {
     bool is_export = false;
 };
 
-using HirDeclKind = std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
-                                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
-                                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>,
-                                 std::unique_ptr<HirTypedef>>;
+using HirDeclKind =
+    std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
+                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
+                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>, std::unique_ptr<HirTypedef>>;
 
 struct HirDecl {
     HirDeclKind kind;

@@ -1,0 +1,101 @@
+// 型制約を持つジェネリクスのテスト
+
+// Ordインターフェース（比較可能）
+interface Ord {
+    bool less_than(Ord other);
+    bool equals(Ord other);
+}
+
+// 型制約付きジェネリック関数
+<T: Ord> T min(T a, T b) {
+    if (a.less_than(b)) {
+        return a;
+    }
+    return b;
+}
+
+// ソート可能な配列
+<T: Ord> void sort_pair(T* a, T* b) {
+    if (b.less_than(*a)) {
+        T temp = *a;
+        *a = *b;
+        *b = temp;
+    }
+}
+
+// Ordを実装する構造体
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point for Ord {
+    bool less_than(Ord other) {
+        Point* p = (Point*)&other;
+        return (this.x * this.x + this.y * this.y) <
+               (p->x * p->x + p->y * p->y);
+    }
+
+    bool equals(Ord other) {
+        Point* p = (Point*)&other;
+        return this.x == p->x && this.y == p->y;
+    }
+}
+
+// 複数の型制約を持つジェネリック関数
+interface Clone {
+    Clone copy();
+}
+
+<T: Ord + Clone> T find_min_and_clone(T a, T b) {
+    T minimum = min(a, b);
+    return minimum.copy();
+}
+
+// ジェネリック構造体に型制約
+struct SortedPair<T: Ord> {
+    T first;
+    T second;
+}
+
+impl SortedPair<T: Ord> {
+    <T: Ord> SortedPair<T> new(T a, T b) {
+        SortedPair<T> pair;
+        if (a.less_than(b)) {
+            pair.first = a;
+            pair.second = b;
+        } else {
+            pair.first = b;
+            pair.second = a;
+        }
+        return pair;
+    }
+
+    <T: Ord> T get_min() {
+        return this.first;
+    }
+
+    <T: Ord> T get_max() {
+        return this.second;
+    }
+}
+
+int main() {
+    // Point型でのテスト
+    Point p1 = {x: 3, y: 4};
+    Point p2 = {x: 1, y: 2};
+
+    Point min_point = min(p1, p2);
+    println("Minimum point: ({}, {})", min_point.x, min_point.y);
+
+    // SortedPairのテスト
+    SortedPair<Point> sorted = SortedPair<Point>::new(p1, p2);
+    Point smallest = sorted.get_min();
+    Point largest = sorted.get_max();
+
+    println("Sorted pair - min: ({}, {}), max: ({}, {})",
+            smallest.x, smallest.y,
+            largest.x, largest.y);
+
+    return 0;
+}

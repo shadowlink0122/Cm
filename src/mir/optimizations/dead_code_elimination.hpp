@@ -209,9 +209,10 @@ class DeadCodeElimination : public OptimizationPass {
     void collect_used_locals_in_rvalue(const MirRvalue& rvalue, std::set<LocalId>& used) {
         switch (rvalue.kind) {
             case MirRvalue::Use: {
-                const auto& use_data = std::get<MirRvalue::UseData>(rvalue.data);
-                if (use_data.operand) {
-                    collect_used_locals_in_operand(*use_data.operand, used);
+                if (const auto* use_data = std::get_if<MirRvalue::UseData>(&rvalue.data)) {
+                    if (use_data->operand) {
+                        collect_used_locals_in_operand(*use_data->operand, used);
+                    }
                 }
                 break;
             }
@@ -289,9 +290,7 @@ class DeadCodeElimination : public OptimizationPass {
             }
             case MirTerminator::Call: {
                 const auto& call_data = std::get<MirTerminator::CallData>(term.data);
-                if (call_data.func) {
-                    collect_used_locals_in_operand(*call_data.func, used);
-                }
+                // func_name は文字列なので収集対象外
                 for (const auto& arg : call_data.args) {
                     if (arg)
                         collect_used_locals_in_operand(*arg, used);

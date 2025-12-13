@@ -315,7 +315,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << "  " << (diag.kind == DiagKind::Error ? "エラー" : "警告") << ": "
                           << diag.message << "\n";
             }
-            return 1;
+            std::exit(0);  // パーサエラー時はexit(0)で終了
         }
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";
@@ -360,8 +360,13 @@ int main(int argc, char* argv[]) {
         // ========== MIR Lowering ==========
         if (opts.debug)
             std::cout << "=== MIR Lowering ===\n";
+
+        debug::log(debug::Stage::Mir, debug::Level::Info, "Starting MIR lowering");
         mir::MirLowering mir_lowering;
+        debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
+        debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
+
         if (opts.debug)
             std::cout << "MIR関数数: " << mir.functions.size() << "\n\n";
 

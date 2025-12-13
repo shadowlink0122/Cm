@@ -81,6 +81,12 @@ class MIRToLLVM {
     /// 単項演算変換
     llvm::Value* convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand);
 
+    /// 論理AND演算（短絡評価付き）
+    llvm::Value* convertLogicalAnd(llvm::Value* lhs, llvm::Value* rhs);
+
+    /// 論理OR演算（短絡評価付き）
+    llvm::Value* convertLogicalOr(llvm::Value* lhs, llvm::Value* rhs);
+
     /// フォーマット変換
     llvm::Value* convertFormatConvert(llvm::Value* value, const std::string& format_spec);
 

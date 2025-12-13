@@ -218,9 +218,8 @@ class MirPrinter {
                 }
                 break;
             case MirOperand::FunctionRef:
-                // 関数参照を出力
                 if (auto* func_name = std::get_if<std::string>(&op.data)) {
-                    out << "fn " << *func_name;
+                    out << *func_name;
                 }
                 break;
         }
@@ -258,14 +257,18 @@ class MirPrinter {
             case MirRvalue::Aggregate: {
                 auto& data = std::get<MirRvalue::AggregateData>(rv.data);
                 switch (data.kind.type) {
-                    case AggregateKind::Array:
+                    case AggregateKind::Type::Array:
                         out << "[";
                         break;
-                    case AggregateKind::Tuple:
+                    case AggregateKind::Type::Tuple:
                         out << "(";
                         break;
-                    case AggregateKind::Struct:
-                        out << data.kind.name << "{";
+                    case AggregateKind::Type::Struct:
+                        if (!data.kind.name.empty()) {
+                            out << data.kind.name << "{";
+                        } else {
+                            out << "{";
+                        }
                         break;
                 }
 
@@ -278,13 +281,13 @@ class MirPrinter {
                 }
 
                 switch (data.kind.type) {
-                    case AggregateKind::Array:
+                    case AggregateKind::Type::Array:
                         out << "]";
                         break;
-                    case AggregateKind::Tuple:
+                    case AggregateKind::Type::Tuple:
                         out << ")";
                         break;
-                    case AggregateKind::Struct:
+                    case AggregateKind::Type::Struct:
                         out << "}";
                         break;
                 }
@@ -308,9 +311,7 @@ class MirPrinter {
 
     // 定数を出力
     void print_constant(const MirConstant& constant, std::ostream& out) {
-        if (std::holds_alternative<std::monostate>(constant.value)) {
-            out << "()";
-        } else if (auto* b = std::get_if<bool>(&constant.value)) {
+        if (auto* b = std::get_if<bool>(&constant.value)) {
             out << (*b ? "true" : "false");
         } else if (auto* i = std::get_if<int64_t>(&constant.value)) {
             out << "const " << *i;
@@ -374,8 +375,6 @@ class MirPrinter {
                 return "-";
             case MirUnaryOp::Not:
                 return "!";
-            case MirUnaryOp::BitNot:
-                return "~";
             default:
                 return "?";
         }

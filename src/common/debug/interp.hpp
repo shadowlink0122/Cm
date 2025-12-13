@@ -78,6 +78,7 @@ enum class Id {
     StorageLive,
     StorageDead,
     Nop,
+    Defer,
 
     // 制御フロー
     Goto,
@@ -87,6 +88,9 @@ enum class Id {
     SwitchMatch,
     SwitchDefault,
     Return,
+    Assert,
+    AssertSuccess,
+    Yield,
 
     // 関数呼び出し
     Call,

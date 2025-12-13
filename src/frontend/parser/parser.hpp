@@ -35,12 +35,30 @@ class Parser {
         debug::par::log(debug::par::Id::Start);
 
         ast::Program program;
-        while (!is_at_end()) {
+        int iterations = 0;
+        const int MAX_ITERATIONS = 10000;
+        size_t last_pos = pos_;
+
+        while (!is_at_end() && iterations < MAX_ITERATIONS) {
+            // 無限ループ検出
+            if (pos_ == last_pos && iterations > 0) {
+                error("Parser stuck - no progress made");
+                if (!is_at_end()) {
+                    advance();  // 強制的に進める
+                }
+            }
+            last_pos = pos_;
+
             if (auto decl = parse_top_level()) {
                 program.declarations.push_back(std::move(decl));
             } else {
                 synchronize();
             }
+            iterations++;
+        }
+
+        if (iterations >= MAX_ITERATIONS) {
+            error("Parser exceeded maximum iteration limit");
         }
 
         debug::par::log(debug::par::Id::End,
@@ -135,7 +153,7 @@ class Parser {
         if (check(TokenKind::KwEnum)) {
             return parse_enum_decl();
         }
-        
+
         // typedef
         if (check(TokenKind::KwTypedef)) {
             return parse_typedef_decl();
@@ -252,6 +270,9 @@ class Parser {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
 
+        // 明示的なジェネリックパラメータをチェック（例: <T> T max(T a, T b)）
+        std::vector<std::string> generic_params = parse_generic_params();
+
         auto return_type = parse_type();
         std::string name = expect_ident();
 
@@ -263,6 +284,18 @@ class Parser {
 
         auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
                                                         std::move(return_type), std::move(body));
+
+        // ジェネリックパラメータを設定（明示的に指定された場合）
+        if (!generic_params.empty()) {
+            func->generic_params = std::move(generic_params);
+
+            // デバッグ出力
+            std::string params_str = "Function '" + func->name + "' has generic params: ";
+            for (const auto& p : func->generic_params) {
+                params_str += p + " ";
+            }
+            debug::par::log(debug::par::Id::FuncDef, params_str, debug::Level::Info);
+        }
 
         func->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         func->is_static = is_static;
@@ -297,6 +330,9 @@ class Parser {
 
         expect(TokenKind::KwStruct);
         std::string name = expect_ident();
+
+        // ジェネリックパラメータをチェック（例: struct Vec<T>）
+        std::vector<std::string> generic_params = parse_generic_params();
 
         // with キーワード
         std::vector<std::string> auto_impls;
@@ -339,6 +375,18 @@ class Parser {
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         decl->auto_impls = std::move(auto_impls);
 
+        // ジェネリックパラメータを設定（明示的に指定された場合）
+        if (!generic_params.empty()) {
+            decl->generic_params = std::move(generic_params);
+
+            // デバッグ出力
+            std::string params_str = "Struct '" + decl->name + "' has generic params: ";
+            for (const auto& p : decl->generic_params) {
+                params_str += p + " ";
+            }
+            debug::par::log(debug::par::Id::StructDef, params_str, debug::Level::Info);
+        }
+
         return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
     }
 
@@ -346,6 +394,10 @@ class Parser {
     ast::DeclPtr parse_interface(bool is_export) {
         expect(TokenKind::KwInterface);
         std::string name = expect_ident();
+
+        // ジェネリックパラメータをチェック（例: interface Container<T>）
+        std::vector<std::string> generic_params = parse_generic_params();
+
         expect(TokenKind::LBrace);
 
         std::vector<ast::MethodSig> methods;
@@ -365,15 +417,21 @@ class Parser {
         auto decl = std::make_unique<ast::InterfaceDecl>(std::move(name), std::move(methods));
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
 
+        // ジェネリックパラメータを設定（明示的に指定された場合）
+        if (!generic_params.empty()) {
+            decl->generic_params = std::move(generic_params);
+        }
+
         return std::make_unique<ast::Decl>(std::move(decl));
     }
 
     // impl
-    // impl Type for InterfaceName { ... } - メソッド実装
-    // impl Type { ... } - コンストラクタ/デストラクタ専用
+    // impl Type<T> for InterfaceName<T> { ... } - メソッド実装
+    // impl Type<T> { ... } - コンストラクタ/デストラクタ専用
     ast::DeclPtr parse_impl() {
         expect(TokenKind::KwImpl);
-        auto target = parse_type();  // Type first
+
+        auto target = parse_type();  // Type first (Vec<T> など、ジェネリクスは型に含まれる)
 
         // forがあればメソッド実装、なければコンストラクタ/デストラクタ専用
         if (consume_if(TokenKind::KwFor)) {
@@ -381,6 +439,8 @@ class Parser {
             expect(TokenKind::LBrace);
 
             auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
+
+            // ジェネリックパラメータは型から抽出される（Vec<T> の T など）
 
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 try {
@@ -416,11 +476,13 @@ class Parser {
     }
 
     // コンストラクタ/デストラクタ専用implの解析
-    // impl Type { self() { ... } ~self() { ... } }
+    // impl Type<T> { self() { ... } ~self() { ... } }
     ast::DeclPtr parse_impl_ctor(ast::TypePtr target) {
         expect(TokenKind::LBrace);
 
         auto decl = std::make_unique<ast::ImplDecl>(std::move(target));
+
+        // ジェネリックパラメータは型から抽出される（Vec<T> の T など）
 
         while (!check(TokenKind::RBrace) && !is_at_end()) {
             try {
@@ -489,10 +551,42 @@ class Parser {
         expect(TokenKind::LBrace);
 
         std::vector<ast::StmtPtr> stmts;
-        while (!check(TokenKind::RBrace) && !is_at_end()) {
+        int iterations = 0;
+        const int MAX_BLOCK_ITERATIONS = 1000;
+        size_t last_pos = pos_;
+
+        while (!check(TokenKind::RBrace) && !is_at_end() && iterations < MAX_BLOCK_ITERATIONS) {
+            // 無限ループ検出
+            if (pos_ == last_pos && iterations > 0) {
+                error("Parser stuck in block - no progress made");
+                // エラー復旧: 次のセミコロンまたは閉じ括弧まで進める
+                while (!is_at_end() && current().kind != TokenKind::Semicolon &&
+                       current().kind != TokenKind::RBrace) {
+                    advance();
+                }
+                if (current().kind == TokenKind::Semicolon) {
+                    advance();
+                }
+                if (is_at_end() || current().kind == TokenKind::RBrace) {
+                    break;
+                }
+            }
+            last_pos = pos_;
+
             if (auto stmt = parse_stmt()) {
                 stmts.push_back(std::move(stmt));
+            } else {
+                // parse_stmtが失敗した場合、エラー復旧
+                if (!is_at_end() && current().kind != TokenKind::RBrace) {
+                    // 少なくとも1トークン進める
+                    advance();
+                }
             }
+            iterations++;
+        }
+
+        if (iterations >= MAX_BLOCK_ITERATIONS) {
+            error("Block parsing exceeded maximum iteration limit");
         }
 
         expect(TokenKind::RBrace);
@@ -523,6 +617,33 @@ class Parser {
     ast::ExprPtr parse_unary();
     ast::ExprPtr parse_postfix();
     ast::ExprPtr parse_primary();
+
+    // ジェネリックパラメータ（<T>, <T: Ord>, <T, U>）をパース
+    std::vector<std::string> parse_generic_params() {
+        std::vector<std::string> params;
+
+        if (!check(TokenKind::Lt)) {
+            return params;  // ジェネリックパラメータがない場合
+        }
+
+        // ジェネリクスはまだ未実装
+        error("Generic parameters (<T>) are not yet implemented");
+
+        // エラー復旧: '>' まで読み飛ばす
+        advance();  // '<' を消費
+        int depth = 1;
+        int max_skip = 100;
+        while (!is_at_end() && depth > 0 && max_skip-- > 0) {
+            if (current().kind == TokenKind::Lt) {
+                depth++;
+            } else if (current().kind == TokenKind::Gt) {
+                depth--;
+            }
+            advance();
+        }
+
+        return params;  // 空のパラメータリストを返す
+    }
 
     // 型解析
     ast::TypePtr parse_type() {
@@ -600,10 +721,31 @@ class Parser {
                 break;
         }
 
-        // ユーザー定義型
+        // ユーザー定義型（ジェネリクス対応）
         if (check(TokenKind::Ident)) {
             std::string name = current_text();
             advance();
+
+            // ジェネリック型引数をチェック（例: Vec<int>, Map<K, V>）
+            if (check(TokenKind::Lt)) {
+                advance();  // '<' を消費
+
+                std::vector<ast::TypePtr> type_args;
+
+                // 型引数をパース
+                do {
+                    type_args.push_back(parse_type());
+                } while (consume_if(TokenKind::Comma));
+
+                // '>' を期待
+                expect(TokenKind::Gt);
+
+                // ジェネリック型として返す
+                auto type = ast::make_named(name);
+                type->type_args = std::move(type_args);
+                return type;
+            }
+
             return ast::make_named(name);
         }
 
@@ -678,8 +820,26 @@ class Parser {
     }
 
     void synchronize() {
+        // 無限ループ防止のための最大スキップ数
+        const int MAX_SKIP = 1000;
+        int skipped = 0;
+
+        // 現在の位置を記憶（無限ループ検出用）
+        size_t last_pos = pos_;
+
         advance();
-        while (!is_at_end()) {
+        while (!is_at_end() && skipped < MAX_SKIP) {
+            // 位置が進んでいるか確認
+            if (pos_ == last_pos) {
+                // 位置が進んでいない場合は強制的に進める
+                if (pos_ < tokens_.size() - 1) {
+                    pos_++;
+                } else {
+                    break;  // 既に最後にいる
+                }
+            }
+            last_pos = pos_;
+
             if (previous().kind == TokenKind::Semicolon)
                 return;
             switch (current().kind) {
@@ -690,9 +850,23 @@ class Parser {
                 case TokenKind::KwExport:
                 case TokenKind::Hash:  // ディレクティブの開始位置で停止
                     return;
+                // 型キーワードでも停止
+                case TokenKind::KwBool:
+                case TokenKind::KwInt:
+                case TokenKind::KwVoid:
+                case TokenKind::KwString:
+                case TokenKind::KwChar:
+                case TokenKind::KwFloat:
+                case TokenKind::KwDouble:
+                    return;
                 default:
                     advance();
+                    skipped++;
             }
+        }
+
+        if (skipped >= MAX_SKIP) {
+            error("Parser stuck in synchronization - too many tokens skipped");
         }
     }
 

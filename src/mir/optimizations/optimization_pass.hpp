@@ -27,7 +27,9 @@ class OptimizationPass {
     virtual bool run_on_program(MirProgram& program) {
         bool changed = false;
         for (auto& func : program.functions) {
-            changed |= run(*func);
+            if (func) {
+                changed |= run(*func);
+            }
         }
         return changed;
     }

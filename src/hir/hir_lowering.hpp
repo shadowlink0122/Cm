@@ -59,7 +59,7 @@ class HirLowering {
    private:
     // 構造体定義のキャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
-    
+
     // enum値のキャッシュ (EnumName::MemberName -> value)
     std::unordered_map<std::string, int64_t> enum_values_;
 
@@ -109,6 +109,14 @@ class HirLowering {
         hir_func->return_type = func.return_type;
         hir_func->is_export = func.visibility == ast::Visibility::Export;
 
+        // ジェネリックパラメータを処理
+        for (const auto& param_name : func.generic_params) {
+            HirGenericParam param;
+            param.name = param_name;
+            // TODO: 型制約の解析（T: Ord のような構文）
+            hir_func->generic_params.push_back(param);
+        }
+
         debug::hir::log(debug::hir::Id::FunctionReturn,
                         func.return_type ? type_to_string(*func.return_type) : "void",
                         debug::Level::Trace);
@@ -140,6 +148,15 @@ class HirLowering {
         hir_st->name = st.name;
         hir_st->is_export = st.visibility == ast::Visibility::Export;
 
+        // ジェネリックパラメータを処理
+        for (const auto& param_name : st.generic_params) {
+            HirGenericParam param;
+            param.name = param_name;
+            // TODO: 型制約の解析（T: Ord のような構文）
+            // 現在のASTでは制約情報を持っていないので、空のまま
+            hir_st->generic_params.push_back(param);
+        }
+
         for (const auto& field : st.fields) {
             hir_st->fields.push_back({field.name, field.type});
             debug::hir::log(
@@ -158,6 +175,15 @@ class HirLowering {
         auto hir_iface = std::make_unique<HirInterface>();
         hir_iface->name = iface.name;
         hir_iface->is_export = iface.visibility == ast::Visibility::Export;
+
+        // ジェネリックパラメータを処理
+        for (const auto& param_name : iface.generic_params) {
+            HirGenericParam param;
+            param.name = param_name;
+            // TODO: 型制約の解析（T: Ord のような構文）
+            // 現在のASTでは制約情報を持っていないので、空のまま
+            hir_iface->generic_params.push_back(param);
+        }
 
         for (const auto& method : iface.methods) {
             HirMethodSig sig;
@@ -181,6 +207,15 @@ class HirLowering {
         hir_impl->interface_name = impl.interface_name;
         hir_impl->target_type = impl.target_type ? type_to_string(*impl.target_type) : "";
         hir_impl->is_ctor_impl = impl.is_ctor_impl;
+
+        // ジェネリックパラメータを処理
+        for (const auto& param_name : impl.generic_params) {
+            HirGenericParam param;
+            param.name = param_name;
+            // TODO: 型制約の解析（T: Ord のような構文）
+            // 現在のASTでは制約情報を持っていないので、空のまま
+            hir_impl->generic_params.push_back(param);
+        }
 
         // コンストラクタ専用implの場合
         if (impl.is_ctor_impl) {
@@ -267,7 +302,7 @@ class HirLowering {
 
         return std::make_unique<HirDecl>(std::move(hir_imp));
     }
-    
+
     // Enum
     HirDeclPtr lower_enum(ast::EnumDecl& en) {
         debug::hir::log(debug::hir::Id::NodeCreate, "enum " + en.name, debug::Level::Debug);
@@ -275,7 +310,7 @@ class HirLowering {
         auto hir_enum = std::make_unique<HirEnum>();
         hir_enum->name = en.name;
         hir_enum->is_export = en.visibility == ast::Visibility::Export;
-        
+
         for (const auto& member : en.members) {
             HirEnumMember hir_member;
             hir_member.name = member.name;
@@ -285,7 +320,7 @@ class HirLowering {
 
         return std::make_unique<HirDecl>(std::move(hir_enum));
     }
-    
+
     // Typedef
     HirDeclPtr lower_typedef(ast::TypedefDecl& td) {
         debug::hir::log(debug::hir::Id::NodeCreate, "typedef " + td.name, debug::Level::Debug);
@@ -589,19 +624,19 @@ class HirLowering {
             return lower_literal(*lit, type);
         } else if (auto* ident = expr.as<ast::IdentExpr>()) {
             debug::hir::log(debug::hir::Id::IdentifierLower, ident->name, debug::Level::Debug);
-            
+
             // enum値アクセスかチェック（EnumName::MemberName形式）
             auto it = enum_values_.find(ident->name);
             if (it != enum_values_.end()) {
                 // enum値を整数リテラルに変換
-                debug::hir::log(debug::hir::Id::IdentifierRef, 
+                debug::hir::log(debug::hir::Id::IdentifierRef,
                                 "enum value: " + ident->name + " = " + std::to_string(it->second),
                                 debug::Level::Debug);
                 auto lit = std::make_unique<HirLiteral>();
                 lit->value = it->second;
                 return std::make_unique<HirExpr>(std::move(lit), ast::make_int());
             }
-            
+
             debug::hir::log(debug::hir::Id::IdentifierRef, "variable: " + ident->name,
                             debug::Level::Trace);
             auto var_ref = std::make_unique<HirVarRef>();

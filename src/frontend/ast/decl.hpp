@@ -5,6 +5,8 @@
 #include "nodes.hpp"
 #include "stmt.hpp"
 
+#include <optional>
+
 namespace cm::ast {
 
 // ============================================================
@@ -103,6 +105,7 @@ struct ImplDecl {
     std::string interface_name;  // forなしの場合は空文字列
     TypePtr target_type;
     std::vector<std::unique_ptr<FunctionDecl>> methods;
+    std::vector<std::string> generic_params;  // ジェネリックパラメータ（例: impl<T>）
 
     // コンストラクタ/デストラクタ専用impl（forなし）
     bool is_ctor_impl = false;
@@ -123,7 +126,7 @@ struct ImplDecl {
 struct EnumMember {
     std::string name;
     std::optional<int64_t> value;  // 明示的な値（なければオートインクリメント）
-    
+
     EnumMember(std::string n, std::optional<int64_t> v = std::nullopt)
         : name(std::move(n)), value(v) {}
 };
@@ -135,7 +138,7 @@ struct EnumDecl {
     std::string name;
     std::vector<EnumMember> members;
     Visibility visibility = Visibility::Private;
-    
+
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}
 };

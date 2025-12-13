@@ -1,0 +1,17 @@
+!true = false
+!false = true
+Direct !true = false
+Direct !false = true
+!!true = true
+!!false = false
+!false is true
+!true is false
+Count: 0
+Count: 1
+Count: 2
+!(5 > 10) is true
+!(5 == 10) is true
+!(a && b) = true
+!(a || b) = false
+!a || !b = true
+!a && !b = false

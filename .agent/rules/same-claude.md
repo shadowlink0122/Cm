@@ -1,108 +1,93 @@
----
-trigger: always_on
----
+# CLAUDE.md - Cm言語プロジェクトAIガイド
 
-# same-claude.md - 全プロジェクト共通AI設定
+## 重要：開発前に必ず確認
+1. `docs/design/CANONICAL_SPEC.md` - **正式言語仕様**（最優先）
+2. `docs/design/architecture.md` - システム設計
+3. `docs/PROJECT_STRUCTURE.md` - プロジェクト構造
 
-## 基本ルール
+## 言語仕様（必須）
 
-### 思考と言語
-- **思考**: 英語で行う
-- **コメント**: 日本語で記述
-- **ドキュメント**: 日本語で作成
-- **エラーメッセージ**: 日本語で具体的に
+### 構文スタイル：C++風（Rust風禁止）
+```cm
+// ✓ 正しい
+int add(int a, int b) { return a + b; }
+<T: Ord> T max(T a, T b) { return a > b ? a : b; }
 
-### コーディング規約
-```
-関数/変数: snake_case
-型/クラス: PascalCase
-定数: UPPER_SNAKE_CASE
-ファイル: snake_case.ext
+// ✗ 間違い（Rust風）
+fn add(a: int, b: int) -> int { }
 ```
 
-### プロジェクト構造
+### キーワード優先順位
+- `typedef` - 型エイリアス（`type`は使わない）
+- `#define` - 型付きコンパイル時定数
+- `#macro` - コードマクロ（`#define`マクロは使わない）
+- `overload` - 関数オーバーロード（明示的に必要）
+- `constexpr` - コンパイル時計算
+- `with` - 自動トレイト実装（`[[derive()]]`は使わない）
+
+## プロジェクトルール（厳守）
+
+### ファイル配置
 ```
-project/
-├── src/          # ソースコード
-├── tests/        # テストコード
-├── docs/         # ドキュメント
-├── examples/     # サンプル
-└── .tmp/         # 一時ファイル（.gitignore）
-```
-
-## 開発フロー
-
-1. **要件確認** → 既存コード確認 → 設計 → 実装 → テスト
-2. **既存コードとの整合性を最優先**
-3. **破壊的変更は事前に確認**
-
-## Git規約
-
-### コミットメッセージ
-```
-種別: 簡潔な説明
-
-- 詳細1
-- 詳細2
-
-Co-Authored-By: Claude <noreply@anthropic.com>
+✗ プロジェクトルート禁止：*.cm, 実行ファイル, 個別ドキュメント
+✓ tests/        - 全テストファイル
+✓ docs/         - 全ドキュメント
+✓ src/          - ソースコード
+✓ examples/     - サンプルコード
 ```
 
-種別: `feat`, `fix`, `docs`, `test`, `refactor`, `style`, `perf`
-
-### ブランチ
-- `main` - 安定版
-- `feature/*` - 新機能
-- `fix/*` - バグ修正
-
-## 品質基準
-
-### コード
-- **Lint/Format実行必須**
-- **テストカバレッジ維持**
-- **ドキュメント更新**
-
-### エラー処理
+### デバッグ出力
 ```cpp
-// 具体的なエラーメッセージ
-if (error) {
-    return Error("ファイル '{}' が見つかりません（パス: {}）",
-                 filename, full_path);
-}
+// 正しい形式：[STAGE] のみ（1つのブラケット）
+[LEXER] Starting tokenization
+[PARSER] ERROR: Expected ';'
+[MIR] Lowering function: main
+
+// ✗ 間違い：[STAGE] [LEVEL] （2つのブラケット）
 ```
 
-## 禁止事項
+## コンパイラパイプライン
 
-1. **プロジェクトルートにソースファイル配置**
-2. **テストなしのコミット**
-3. **ドキュメントなしの新機能**
-4. **ハードコードされたパス**
-5. **環境依存のコード**
-
-## 推奨事項
-
-1. **早期リターン**で可読性向上
-2. **RAII**でリソース管理
-3. **const正確性**の維持
-4. **小さな関数**（30行以内）
-5. **明確な名前付け**
-
-## デバッグ支援
-
-```cpp
-// アサーション活用
-assert(ptr != nullptr && "ポインタがnull");
-
-// ログ出力
-LOG(DEBUG, "処理開始: {}", param);
+```
+Lexer → Parser → AST → HIR → MIR → LIR → CodeGen
+                            ↑
+                        現在ここまで実装
 ```
 
-## パフォーマンス
+### 実装済み
+- ✓ Lexer/Parser（基本構文）
+- ✓ HIR（高レベル中間表現）
+- ✓ MIR（SSA形式、CFGベース）
+- ✓ 基本的な型システム
 
-- **計測してから最適化**
-- **プロファイリング結果を記録**
-- **ベンチマークテスト作成**
+### 未実装
+- ✗ LIR（低レベル中間表現）
+- ✗ バックエンド（Rust/TS/WASM）
+- ✗ 完全なオーバーロード解決
+- ✗ ジェネリック特殊化
 
----
-このファイルは全プロジェクトで共有される設定です。
-プロジェクト固有の設定は`CLAUDE.md`に記載してください。
+## ビルド・テスト
+
+```bash
+# ビルド
+cmake -B build && cmake --build build
+
+# テスト
+ctest --test-dir build               # C++テスト
+./build/bin/cm tests/regression/*.cm # Cmテスト
+```
+
+## 開発時の注意
+
+1. **矛盾時は`CANONICAL_SPEC.md`が最優先**
+2. **C++20必須**（Clang 17+推奨）
+3. **テストは必ず`tests/`に配置**
+4. **新機能は設計文書を先に作成**
+
+## AI向けヒント
+- 思考は英語、コメントは日本語
+- エラーメッセージは具体的に
+- デバッグモード(--debug, -d)を必ず使うこと
+- デバッグメッセージはdebug_msgで表示するためのIDとメッセージを正しく設定すること
+- 実装前に既存コードを確認
+- テスト駆動開発を推奨

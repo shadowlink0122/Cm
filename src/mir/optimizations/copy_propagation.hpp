@@ -46,18 +46,19 @@ class CopyPropagation : public OptimizationPass {
                 // 単純なコピー代入を検出: _x = _y
                 if (assign_data.place.projections.empty() &&
                     assign_data.rvalue->kind == MirRvalue::Use) {
-                    auto& use_data = std::get<MirRvalue::UseData>(assign_data.rvalue->data);
+                    if (auto* use_data =
+                            std::get_if<MirRvalue::UseData>(&assign_data.rvalue->data)) {
+                        if (use_data->operand && use_data->operand->kind == MirOperand::Copy) {
+                            if (auto* src_place = std::get_if<MirPlace>(&use_data->operand->data)) {
+                                if (src_place->projections.empty()) {
+                                    // _x = _y の形式
+                                    LocalId target = assign_data.place.local;
+                                    LocalId source = resolve_copy_chain(src_place->local, copies);
 
-                    if (use_data.operand && use_data.operand->kind == MirOperand::Copy) {
-                        if (auto* src_place = std::get_if<MirPlace>(&use_data.operand->data)) {
-                            if (src_place->projections.empty()) {
-                                // _x = _y の形式
-                                LocalId target = assign_data.place.local;
-                                LocalId source = resolve_copy_chain(src_place->local, copies);
-
-                                // 自己代入でない場合
-                                if (target != source) {
-                                    copies[target] = source;
+                                    // 自己代入でない場合
+                                    if (target != source) {
+                                        copies[target] = source;
+                                    }
                                 }
                             }
                         }
@@ -103,9 +104,10 @@ class CopyPropagation : public OptimizationPass {
 
         switch (rvalue.kind) {
             case MirRvalue::Use: {
-                auto& use_data = std::get<MirRvalue::UseData>(rvalue.data);
-                if (use_data.operand) {
-                    changed |= propagate_in_operand(*use_data.operand, copies);
+                if (auto* use_data = std::get_if<MirRvalue::UseData>(&rvalue.data)) {
+                    if (use_data->operand) {
+                        changed |= propagate_in_operand(*use_data->operand, copies);
+                    }
                 }
                 break;
             }
@@ -207,9 +209,7 @@ class CopyPropagation : public OptimizationPass {
             }
             case MirTerminator::Call: {
                 auto& call_data = std::get<MirTerminator::CallData>(term.data);
-                if (call_data.func) {
-                    changed |= propagate_in_operand(*call_data.func, copies);
-                }
+                // func_name は文字列なので伝播対象外
                 for (auto& arg : call_data.args) {
                     if (arg)
                         changed |= propagate_in_operand(*arg, copies);

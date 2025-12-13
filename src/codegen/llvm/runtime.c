@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 // エスケープ処理: {{ -> {, }} -> }
 char* cm_unescape_braces(const char* str) {
@@ -61,6 +62,20 @@ void cm_println_int(int value) {
     printf("%d\n", value);
 }
 
+// ブール値出力（println用）
+void cm_println_bool(char value) {
+    printf("%s\n", value ? "true" : "false");
+}
+
+// 文字出力
+void cm_print_char(char value) {
+    printf("%c", value);
+}
+
+void cm_println_char(char value) {
+    printf("%c\n", value);
+}
+
 // 符号なし整数出力
 void cm_print_uint(unsigned int value) {
     printf("%u", value);
@@ -88,13 +103,154 @@ void cm_println_double(double value) {
     }
 }
 
-// ブール値出力
-void cm_print_bool(char value, char with_newline) {
-    if (with_newline) {
-        printf("%s\n", value ? "true" : "false");
-    } else {
-        printf("%s", value ? "true" : "false");
+// ブール値出力（print用）
+void cm_print_bool(char value) {
+    printf("%s", value ? "true" : "false");
+}
+
+// 前方宣言（cm_println_format_typedで使用）
+char* cm_format_int(int value);
+char* cm_format_double(double value);
+char* cm_format_bool(char value);
+char* cm_format_char(char value);
+char* cm_format_replace(const char* format, const char* value);
+
+// フォーマット文字列のprintln（簡易版）
+// formatは文字列、argcは追加引数の数、その後に実際の引数が続く
+// 現在は整数、double、文字列のみをサポート
+void cm_println_format(const char* format, int argc, ...) {
+    if (!format) {
+        printf("\n");
+        return;
     }
+
+    // 作業用バッファ（最大4KB）
+    char buffer[4096];
+    buffer[0] = '\0';
+
+    va_list args;
+    va_start(args, argc);
+
+    const char* p = format;
+    int arg_index = 0;
+    int buf_pos = 0;
+
+    while (*p && buf_pos < sizeof(buffer) - 1) {
+        if (*p == '{' && *(p + 1) == '}') {
+            // {} プレースホルダー発見
+            if (arg_index < argc) {
+                // 引数を取得して文字列に変換
+                // 簡略化のため、すべての引数をintとして処理
+                int value = va_arg(args, int);
+                int written = snprintf(buffer + buf_pos, sizeof(buffer) - buf_pos, "%d", value);
+                if (written > 0) {
+                    buf_pos += written;
+                }
+                arg_index++;
+            } else {
+                // 引数が足りない場合はそのまま出力
+                if (buf_pos + 2 < sizeof(buffer)) {
+                    buffer[buf_pos++] = '{';
+                    buffer[buf_pos++] = '}';
+                }
+            }
+            p += 2; // "{}"をスキップ
+        } else if (*p == '{' && *(p + 1) == '{') {
+            // {{ -> { エスケープ
+            buffer[buf_pos++] = '{';
+            p += 2;
+        } else if (*p == '}' && *(p + 1) == '}') {
+            // }} -> } エスケープ
+            buffer[buf_pos++] = '}';
+            p += 2;
+        } else {
+            buffer[buf_pos++] = *p;
+            p++;
+        }
+    }
+
+    buffer[buf_pos] = '\0';
+    printf("%s\n", buffer);
+
+    va_end(args);
+}
+
+// 複数の型に対応したフォーマット文字列のprintln（拡張版）
+// 各引数には型タグが必要（0=int, 1=double, 2=string, 3=bool, 4=char）
+void cm_println_format_typed(const char* format, int argc, ...) {
+    if (!format) {
+        printf("\n");
+        return;
+    }
+
+    va_list args;
+    va_start(args, argc);
+
+    char* result = (char*)malloc(strlen(format) + 1);
+    if (!result) {
+        printf("%s\n", format);
+        va_end(args);
+        return;
+    }
+    strcpy(result, format);
+
+    for (int i = 0; i < argc; i++) {
+        int type_tag = va_arg(args, int);
+        char* formatted = NULL;
+
+        switch (type_tag) {
+            case 0: { // int
+                int val = va_arg(args, int);
+                formatted = cm_format_int(val);
+                break;
+            }
+            case 1: { // double
+                double val = va_arg(args, double);
+                formatted = cm_format_double(val);
+                break;
+            }
+            case 2: { // string
+                const char* val = va_arg(args, const char*);
+                formatted = (char*)malloc(strlen(val) + 1);
+                if (formatted) strcpy(formatted, val);
+                break;
+            }
+            case 3: { // bool
+                int val = va_arg(args, int);
+                formatted = cm_format_bool((char)val);
+                break;
+            }
+            case 4: { // char
+                int val = va_arg(args, int);
+                formatted = cm_format_char((char)val);
+                break;
+            }
+        }
+
+        if (formatted) {
+            char* new_result = cm_format_replace(result, formatted);
+            free(formatted);
+            free(result);
+            result = new_result;
+            if (!result) {
+                printf("\n");
+                va_end(args);
+                return;
+            }
+        }
+    }
+
+    // エスケープ処理を適用
+    char* unescaped = cm_unescape_braces(result);
+    if (unescaped) {
+        printf("%s\n", unescaped);
+        free(unescaped);
+    } else {
+        printf("%s\n", result);
+    }
+
+    free(result);
+    va_end(args);
 }
 
 // 文字を文字列に変換

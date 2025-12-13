@@ -1,9 +1,0 @@
-Hello, {name}!
-{name} is {age} years old
-Hello, Alice!
-Name: Alice, Age: 25
-Value in hex: ff
-Value in HEX: FF
-Binary: 11111111
-PI = 3.14
-Literal braces: { and }

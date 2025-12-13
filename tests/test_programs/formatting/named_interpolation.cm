@@ -1,0 +1,33 @@
+// 名前付き変数補間のテスト
+import std::io::println;
+
+int main() {
+    // 基本的な変数
+    string name = "Alice";
+    int age = 25;
+    double height = 175.5;
+
+    // 名前付きプレースホルダで自動的に変数を補間
+    println("Hello, {name}!");
+    println("Name: {name}, Age: {age}, Height: {height}");
+
+    // フォーマット指定子付き
+    int value = 255;
+    println("Value in hex: {value:x}, in binary: {value:b}");
+
+    // 変数の更新後
+    name = "Bob";
+    age = 30;
+    println("Updated: {name} is {age} years old");
+
+    // 複雑な式は位置引数で対応
+    int x = 10;
+    int y = 20;
+    println("Sum of {x} and {y} is {}", x + y);
+
+    // 名前付きと位置の混在
+    string city = "Tokyo";
+    println("User {name} from {city} says: {}", "Hello World");
+
+    return 0;
+}

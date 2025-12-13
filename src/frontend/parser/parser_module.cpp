@@ -1,10 +1,10 @@
 // モジュール関連のパーサー実装
 
-#include <unordered_set>
-
 #include "../../common/debug/par.hpp"
 #include "../ast/module.hpp"
 #include "parser.hpp"
+
+#include <unordered_set>
 
 namespace cm {
 
@@ -372,57 +372,57 @@ ast::DeclPtr Parser::parse_template_decl() {
 ast::DeclPtr Parser::parse_enum_decl() {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
-    
+
     std::string name = expect_ident();
     expect(TokenKind::LBrace);
-    
+
     std::vector<ast::EnumMember> members;
-    int64_t next_value = 0;  // オートインクリメント用
+    int64_t next_value = 0;                   // オートインクリメント用
     std::unordered_set<int64_t> used_values;  // 重複チェック用
-    
+
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         std::string member_name = expect_ident();
         std::optional<int64_t> explicit_value;
-        
+
         // 明示的な値指定
         if (consume_if(TokenKind::Eq)) {
             // 負の数をサポート
             bool is_negative = consume_if(TokenKind::Minus);
-            
+
             if (!check(TokenKind::IntLiteral)) {
                 error("enum値には整数リテラルが必要です");
                 return nullptr;
             }
-            
+
             int64_t value = static_cast<int64_t>(current().get_int());
             advance();
-            
+
             if (is_negative) {
                 value = -value;
             }
-            
+
             explicit_value = value;
             next_value = value + 1;
         } else {
             explicit_value = next_value;
             next_value++;
         }
-        
+
         // 重複チェック
         if (used_values.count(*explicit_value)) {
             error("enum値 " + std::to_string(*explicit_value) + " は既に使用されています");
             return nullptr;
         }
         used_values.insert(*explicit_value);
-        
+
         members.emplace_back(std::move(member_name), explicit_value);
-        
+
         // カンマは省略可能（最後の要素の後も許可）
         consume_if(TokenKind::Comma);
     }
-    
+
     expect(TokenKind::RBrace);
-    
+
     auto enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
     return std::make_unique<ast::Decl>(std::move(enum_decl), Span{start_pos, previous().end});
 }
@@ -435,21 +435,21 @@ ast::DeclPtr Parser::parse_enum_decl() {
 ast::DeclPtr Parser::parse_typedef_decl() {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwTypedef);
-    
+
     std::string name = expect_ident();
     expect(TokenKind::Eq);
-    
+
     // ユニオン型 or リテラル型をパース
     // 最初の要素を見て判断
-    
+
     // リテラル型かどうかをチェック
     bool is_literal_type = check(TokenKind::StringLiteral) || check(TokenKind::IntLiteral) ||
                            check(TokenKind::FloatLiteral);
-    
+
     if (is_literal_type) {
         // リテラル型: typedef T = "a" | "b" | 1 | 2;
         std::vector<ast::LiteralType> literals;
-        
+
         do {
             if (check(TokenKind::StringLiteral)) {
                 literals.emplace_back(std::string(current().get_string()));
@@ -465,16 +465,18 @@ ast::DeclPtr Parser::parse_typedef_decl() {
                 return nullptr;
             }
         } while (consume_if(TokenKind::Pipe));
-        
+
         expect(TokenKind::Semicolon);
-        
+
         auto lit_union = ast::make_literal_union(std::move(literals));
-        auto typedef_decl = std::make_unique<ast::TypedefDecl>(std::move(name), std::move(lit_union));
-        return std::make_unique<ast::Decl>(std::move(typedef_decl), Span{start_pos, previous().end});
+        auto typedef_decl =
+            std::make_unique<ast::TypedefDecl>(std::move(name), std::move(lit_union));
+        return std::make_unique<ast::Decl>(std::move(typedef_decl),
+                                           Span{start_pos, previous().end});
     } else {
         // ユニオン型: typedef T = Type1 | Type2;
         std::vector<ast::TypePtr> types;
-        
+
         do {
             auto type = parse_type();
             if (!type) {
@@ -483,9 +485,9 @@ ast::DeclPtr Parser::parse_typedef_decl() {
             }
             types.push_back(std::move(type));
         } while (consume_if(TokenKind::Pipe));
-        
+
         expect(TokenKind::Semicolon);
-        
+
         // 単一の型の場合はエイリアス、複数の場合はユニオン型
         ast::TypePtr result_type;
         if (types.size() == 1) {
@@ -502,9 +504,11 @@ ast::DeclPtr Parser::parse_typedef_decl() {
             }
             result_type = ast::make_union(std::move(variants));
         }
-        
-        auto typedef_decl = std::make_unique<ast::TypedefDecl>(std::move(name), std::move(result_type));
-        return std::make_unique<ast::Decl>(std::move(typedef_decl), Span{start_pos, previous().end});
+
+        auto typedef_decl =
+            std::make_unique<ast::TypedefDecl>(std::move(name), std::move(result_type));
+        return std::make_unique<ast::Decl>(std::move(typedef_decl),
+                                           Span{start_pos, previous().end});
     }
 }
 

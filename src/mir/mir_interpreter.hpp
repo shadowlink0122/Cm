@@ -49,14 +49,16 @@ class MirInterpreter {
         debug::interp::log(debug::interp::Id::FunctionSearch,
                            "Searching for function: " + entry_point, debug::Level::Debug);
         for (const auto& func : program.functions) {
-            debug::interp::log(debug::interp::Id::FunctionCheck, "Checking function: " + func->name,
-                               debug::Level::Trace);
-            if (func->name == entry_point) {
-                main_func = func.get();
-                debug::interp::log(debug::interp::Id::FunctionFound,
-                                   "Found entry point function: " + entry_point,
-                                   debug::Level::Debug);
-                break;
+            if (func) {
+                debug::interp::log(debug::interp::Id::FunctionCheck,
+                                   "Checking function: " + func->name, debug::Level::Trace);
+                if (func->name == entry_point) {
+                    main_func = func.get();
+                    debug::interp::log(debug::interp::Id::FunctionFound,
+                                       "Found entry point function: " + entry_point,
+                                       debug::Level::Debug);
+                    break;
+                }
             }
         }
 
@@ -89,7 +91,7 @@ class MirInterpreter {
         if (!current_program_)
             return nullptr;
         for (const auto& func : current_program_->functions) {
-            if (func->name == name) {
+            if (func && func->name == name) {
                 return func.get();
             }
         }
@@ -166,6 +168,490 @@ class MirInterpreter {
                 }
                 std::cout << std::endl;
 
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_int
+            builtins["cm_println_int"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty()) {
+                    if (args[0].type() == typeid(int64_t)) {
+                        std::cout << std::any_cast<int64_t>(args[0]) << std::endl;
+                    } else if (args[0].type() == typeid(bool)) {
+                        // bool値を"true"/"false"として出力
+                        std::cout << (std::any_cast<bool>(args[0]) ? "true" : "false") << std::endl;
+                    }
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_string
+            builtins["cm_println_string"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(std::string)) {
+                    std::cout << std::any_cast<std::string>(args[0]) << std::endl;
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_bool
+            builtins["cm_println_bool"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(bool)) {
+                    std::cout << (std::any_cast<bool>(args[0]) ? "true" : "false") << std::endl;
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_char
+            builtins["cm_println_char"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(char)) {
+                    std::cout << std::any_cast<char>(args[0]) << std::endl;
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_double
+            builtins["cm_println_double"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(double)) {
+                    double val = std::any_cast<double>(args[0]);
+                    if (val == static_cast<int>(val)) {
+                        std::cout << static_cast<int>(val) << std::endl;
+                    } else {
+                        std::cout << val << std::endl;
+                    }
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_uint
+            builtins["cm_println_uint"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(uint64_t)) {
+                    std::cout << std::any_cast<uint64_t>(args[0]) << std::endl;
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_println_format
+            builtins["cm_println_format"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (args.size() >= 2) {
+                    // 第1引数: フォーマット文字列
+                    // 第2引数: 引数の数
+                    std::string format = std::any_cast<std::string>(args[0]);
+                    int64_t argc = std::any_cast<int64_t>(args[1]);
+
+                    size_t pos = 0;
+                    int arg_index = 0;
+                    std::string result;
+
+                    while (pos < format.length()) {
+                        // エスケープされた中括弧を処理
+                        if (pos + 1 < format.length() && format[pos] == '{' &&
+                            format[pos + 1] == '{') {
+                            result += '{';
+                            pos += 2;
+                            continue;
+                        }
+                        if (pos + 1 < format.length() && format[pos] == '}' &&
+                            format[pos + 1] == '}') {
+                            result += '}';
+                            pos += 2;
+                            continue;
+                        }
+
+                        // フォーマット指定子を探す
+                        if (format[pos] == '{') {
+                            size_t end = pos + 1;
+                            while (end < format.length() && format[end] != '}') {
+                                end++;
+                            }
+
+                            if (end < format.length() && arg_index < argc &&
+                                (size_t)(2 + arg_index) < args.size()) {
+                                // フォーマット指定子を解析
+                                std::string spec = format.substr(pos + 1, end - pos - 1);
+                                const auto& arg = args[2 + arg_index];
+
+                                // フォーマット指定子のパラメータ
+                                std::string alignment;  // <, >, ^
+                                char fill_char = ' ';
+                                int width = 0;
+                                int precision = -1;
+                                std::string type_spec;  // x, X, b, o, e, E
+
+                                // フォーマット指定子を解析
+                                size_t spec_pos = 0;
+                                if (spec.length() > 0 && spec[0] == ':') {
+                                    spec_pos = 1;
+
+                                    // ゼロパディング（:0>5 のような形式）
+                                    if (spec_pos < spec.length() && spec[spec_pos] == '0' &&
+                                        spec_pos + 1 < spec.length() &&
+                                        (spec[spec_pos + 1] == '<' || spec[spec_pos + 1] == '>' ||
+                                         spec[spec_pos + 1] == '^')) {
+                                        fill_char = '0';
+                                        spec_pos++;
+                                    }
+
+                                    // アラインメント
+                                    if (spec_pos < spec.length() &&
+                                        (spec[spec_pos] == '<' || spec[spec_pos] == '>' ||
+                                         spec[spec_pos] == '^')) {
+                                        alignment = spec[spec_pos];
+                                        spec_pos++;
+                                    }
+
+                                    // 幅
+                                    std::string width_str;
+                                    while (spec_pos < spec.length() &&
+                                           std::isdigit(spec[spec_pos])) {
+                                        width_str += spec[spec_pos];
+                                        spec_pos++;
+                                    }
+                                    if (!width_str.empty()) {
+                                        width = std::stoi(width_str);
+                                    }
+
+                                    // 精度（.2 のような形式）
+                                    if (spec_pos < spec.length() && spec[spec_pos] == '.') {
+                                        spec_pos++;
+                                        std::string prec_str;
+                                        while (spec_pos < spec.length() &&
+                                               std::isdigit(spec[spec_pos])) {
+                                            prec_str += spec[spec_pos];
+                                            spec_pos++;
+                                        }
+                                        if (!prec_str.empty()) {
+                                            precision = std::stoi(prec_str);
+                                        }
+                                    }
+
+                                    // 型指定子
+                                    if (spec_pos < spec.length()) {
+                                        type_spec = spec.substr(spec_pos);
+                                    }
+                                }
+
+                                // 値をフォーマット
+                                std::string formatted;
+                                if (arg.type() == typeid(int64_t)) {
+                                    int64_t val = std::any_cast<int64_t>(arg);
+
+                                    if (type_spec == "x") {
+                                        // 小文字16進数
+                                        char buffer[32];
+                                        snprintf(buffer, sizeof(buffer), "%llx", (long long)val);
+                                        formatted = buffer;
+                                    } else if (type_spec == "X") {
+                                        // 大文字16進数
+                                        char buffer[32];
+                                        snprintf(buffer, sizeof(buffer), "%llX", (long long)val);
+                                        formatted = buffer;
+                                    } else if (type_spec == "b") {
+                                        // 2進数
+                                        if (val == 0) {
+                                            formatted = "0";
+                                        } else {
+                                            std::string binary;
+                                            int64_t temp = val;
+                                            while (temp > 0) {
+                                                binary = (char)('0' + (temp & 1)) + binary;
+                                                temp >>= 1;
+                                            }
+                                            formatted = binary;
+                                        }
+                                    } else if (type_spec == "o") {
+                                        // 8進数
+                                        char buffer[32];
+                                        snprintf(buffer, sizeof(buffer), "%llo", (long long)val);
+                                        formatted = buffer;
+                                    } else {
+                                        // デフォルト（10進数）
+                                        formatted = std::to_string(val);
+                                    }
+                                } else if (arg.type() == typeid(double)) {
+                                    double val = std::any_cast<double>(arg);
+                                    char buffer[64];
+
+                                    if (type_spec == "e") {
+                                        // 小文字科学記法
+                                        snprintf(buffer, sizeof(buffer), "%e", val);
+                                        formatted = buffer;
+                                    } else if (type_spec == "E") {
+                                        // 大文字科学記法
+                                        snprintf(buffer, sizeof(buffer), "%E", val);
+                                        formatted = buffer;
+                                    } else if (precision >= 0) {
+                                        // 精度指定あり
+                                        snprintf(buffer, sizeof(buffer), "%.*f", precision, val);
+                                        formatted = buffer;
+                                    } else {
+                                        // デフォルト
+                                        if (val == (int64_t)val) {
+                                            formatted = std::to_string((int64_t)val);
+                                        } else {
+                                            snprintf(buffer, sizeof(buffer), "%g", val);
+                                            formatted = buffer;
+                                        }
+                                    }
+                                } else if (arg.type() == typeid(bool)) {
+                                    formatted = std::any_cast<bool>(arg) ? "true" : "false";
+                                } else if (arg.type() == typeid(char)) {
+                                    formatted = std::string(1, std::any_cast<char>(arg));
+                                } else if (arg.type() == typeid(std::string)) {
+                                    formatted = std::any_cast<std::string>(arg);
+                                } else {
+                                    formatted = "{}";
+                                }
+
+                                // 幅とアラインメントを適用
+                                if (width > 0 && static_cast<int>(formatted.length()) < width) {
+                                    int padding = width - formatted.length();
+
+                                    if (alignment == ">") {
+                                        // 右寄せ
+                                        formatted = std::string(padding, fill_char) + formatted;
+                                    } else if (alignment == "^") {
+                                        // 中央寄せ
+                                        int left_pad = padding / 2;
+                                        int right_pad = padding - left_pad;
+                                        formatted = std::string(left_pad, ' ') + formatted +
+                                                    std::string(right_pad, ' ');
+                                    } else {
+                                        // 左寄せ（デフォルト）
+                                        formatted = formatted + std::string(padding, ' ');
+                                    }
+                                }
+
+                                result += formatted;
+                                arg_index++;
+                            } else if (end < format.length()) {
+                                // 引数がない場合はそのまま出力
+                                result += format.substr(pos, end - pos + 1);
+                            }
+
+                            pos = (end < format.length()) ? end + 1 : format.length();
+                        } else {
+                            result += format[pos];
+                            pos++;
+                        }
+                    }
+
+                    std::cout << result << std::endl;
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_print_int
+            builtins["cm_print_int"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(int64_t)) {
+                    std::cout << std::any_cast<int64_t>(args[0]);
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_print_string
+            builtins["cm_print_string"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(std::string)) {
+                    std::cout << std::any_cast<std::string>(args[0]);
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_print_bool
+            builtins["cm_print_bool"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(bool)) {
+                    std::cout << (std::any_cast<bool>(args[0]) ? "true" : "false");
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_print_char
+            builtins["cm_print_char"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (!args.empty() && args[0].type() == typeid(char)) {
+                    std::cout << std::any_cast<char>(args[0]);
+                }
+                return Value{};
+            };
+
+            // ランタイム関数: cm_format_string (文字列を作成して返す)
+            builtins["cm_format_string"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (args.size() >= 2) {
+                    // 第1引数: フォーマット文字列
+                    // 第2引数: 引数の数
+                    std::string format = std::any_cast<std::string>(args[0]);
+                    int64_t argc = std::any_cast<int64_t>(args[1]);
+
+                    size_t pos = 0;
+                    int arg_index = 0;
+                    std::string result;
+
+                    while (pos < format.length()) {
+                        // エスケープされた {{ を処理
+                        if (pos + 1 < format.length() && format[pos] == '{' &&
+                            format[pos + 1] == '{') {
+                            result += '{';
+                            pos += 2;
+                            continue;
+                        }
+                        // エスケープされた }} を処理
+                        if (pos + 1 < format.length() && format[pos] == '}' &&
+                            format[pos + 1] == '}') {
+                            result += '}';
+                            pos += 2;
+                            continue;
+                        }
+
+                        if (format[pos] == '{') {
+                            size_t end = format.find('}', pos + 1);
+                            if (end != std::string::npos) {
+                                // フォーマット指定子をチェック
+                                std::string spec = format.substr(pos + 1, end - pos - 1);
+                                if (arg_index < argc &&
+                                    arg_index + 2 < static_cast<int>(args.size())) {
+                                    const auto& arg = args[arg_index + 2];
+
+                                    // フォーマット指定子の解析
+                                    size_t colon_pos = spec.find(':');
+                                    std::string fmt_type = "";
+                                    if (colon_pos != std::string::npos) {
+                                        fmt_type = spec.substr(colon_pos + 1);
+                                    }
+
+                                    // 値のフォーマット
+                                    if (arg.type() == typeid(int64_t)) {
+                                        int64_t val = std::any_cast<int64_t>(arg);
+                                        if (fmt_type == "x") {
+                                            // 16進数（小文字）
+                                            std::stringstream ss;
+                                            ss << std::hex << val;
+                                            result += ss.str();
+                                        } else if (fmt_type == "X") {
+                                            // 16進数（大文字）
+                                            std::stringstream ss;
+                                            ss << std::hex << std::uppercase << val;
+                                            result += ss.str();
+                                        } else if (fmt_type == "b") {
+                                            // 2進数
+                                            result += std::bitset<64>(val).to_string().erase(
+                                                0, std::bitset<64>(val).to_string().find('1'));
+                                        } else if (fmt_type == "o") {
+                                            // 8進数
+                                            std::stringstream ss;
+                                            ss << std::oct << val;
+                                            result += ss.str();
+                                        } else {
+                                            result += std::to_string(val);
+                                        }
+                                    } else if (arg.type() == typeid(double)) {
+                                        double val = std::any_cast<double>(arg);
+                                        // 精度の指定をチェック
+                                        if (!fmt_type.empty() && fmt_type[0] == '.') {
+                                            int precision = std::stoi(fmt_type.substr(1));
+                                            std::stringstream ss;
+                                            ss << std::fixed << std::setprecision(precision) << val;
+                                            result += ss.str();
+                                        } else {
+                                            result += std::to_string(val);
+                                        }
+                                    } else if (arg.type() == typeid(bool)) {
+                                        result += std::any_cast<bool>(arg) ? "true" : "false";
+                                    } else if (arg.type() == typeid(char)) {
+                                        result += std::any_cast<char>(arg);
+                                    } else if (arg.type() == typeid(std::string)) {
+                                        result += std::any_cast<std::string>(arg);
+                                    }
+                                    arg_index++;
+                                }
+                                pos = end + 1;
+                            } else {
+                                result += format[pos];
+                                pos++;
+                            }
+                        } else {
+                            result += format[pos];
+                            pos++;
+                        }
+                    }
+
+                    return Value{result};
+                }
+                return Value{std::string("")};
+            };
+
+            // ランタイム関数: cm_println_formatted
+            builtins["cm_println_formatted"] =
+                [](std::vector<Value> args,
+                   const std::unordered_map<LocalId, Value>& /* locals */) -> Value {
+                if (args.empty())
+                    return Value{};
+
+                // 最初の引数はフォーマット文字列
+                if (args[0].type() != typeid(std::string))
+                    return Value{};
+                std::string format_str = std::any_cast<std::string>(args[0]);
+
+                std::string result;
+                size_t arg_index = 1;
+                size_t pos = 0;
+
+                while (pos < format_str.length()) {
+                    size_t placeholder_pos = format_str.find("{}", pos);
+                    if (placeholder_pos == std::string::npos) {
+                        // 残りの文字列を追加
+                        result += format_str.substr(pos);
+                        break;
+                    }
+
+                    // プレースホルダーまでの文字列を追加
+                    result += format_str.substr(pos, placeholder_pos - pos);
+
+                    // 引数が残っている場合は値を挿入
+                    if (arg_index < args.size()) {
+                        // 値を文字列に変換
+                        if (args[arg_index].type() == typeid(int64_t)) {
+                            result += std::to_string(std::any_cast<int64_t>(args[arg_index]));
+                        } else if (args[arg_index].type() == typeid(bool)) {
+                            result += std::any_cast<bool>(args[arg_index]) ? "true" : "false";
+                        } else if (args[arg_index].type() == typeid(std::string)) {
+                            result += std::any_cast<std::string>(args[arg_index]);
+                        } else if (args[arg_index].type() == typeid(double)) {
+                            result += std::to_string(std::any_cast<double>(args[arg_index]));
+                        } else if (args[arg_index].type() == typeid(char)) {
+                            result += std::any_cast<char>(args[arg_index]);
+                        } else {
+                            result += "?";  // 未知の型
+                        }
+                        arg_index++;
+                    } else {
+                        result += "{}";  // 引数が不足
+                    }
+
+                    pos = placeholder_pos + 2;  // "{}"の長さ分進める
+                }
+
+                std::cout << result << std::endl;
                 return Value{};
             };
 
@@ -272,6 +758,49 @@ class MirInterpreter {
                 }
                 return Value(std::string(""));
             };
+
+            // 文字列連結
+            builtins["cm_string_concat"] = [](std::vector<Value> args,
+                                              const std::unordered_map<LocalId, Value>&) -> Value {
+                if (args.size() == 2) {
+                    std::string left = "";
+                    std::string right = "";
+
+                    // 左辺を文字列に変換
+                    if (args[0].type() == typeid(std::string)) {
+                        left = std::any_cast<std::string>(args[0]);
+                    } else if (args[0].type() == typeid(int64_t)) {
+                        left = std::to_string(std::any_cast<int64_t>(args[0]));
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        left = std::to_string(std::any_cast<int32_t>(args[0]));
+                    }
+
+                    // 右辺を文字列に変換
+                    if (args[1].type() == typeid(std::string)) {
+                        right = std::any_cast<std::string>(args[1]);
+                    } else if (args[1].type() == typeid(int64_t)) {
+                        right = std::to_string(std::any_cast<int64_t>(args[1]));
+                    } else if (args[1].type() == typeid(int32_t)) {
+                        right = std::to_string(std::any_cast<int32_t>(args[1]));
+                    }
+
+                    return Value(left + right);
+                }
+                return Value(std::string(""));
+            };
+
+            // 整数を文字列に変換
+            builtins["cm_int_to_string"] = [](std::vector<Value> args,
+                                              const std::unordered_map<LocalId, Value>&) -> Value {
+                if (args.size() == 1) {
+                    if (args[0].type() == typeid(int64_t)) {
+                        return Value(std::to_string(std::any_cast<int64_t>(args[0])));
+                    } else if (args[0].type() == typeid(int32_t)) {
+                        return Value(std::to_string(std::any_cast<int32_t>(args[0])));
+                    }
+                }
+                return Value(std::string(""));
+            };
         }
     };
 
@@ -348,14 +877,20 @@ class MirInterpreter {
         debug::interp::log(debug::interp::Id::BlockExecute,
                            "Executing block: bb" + std::to_string(block_id), debug::Level::Debug);
 
-        if (block_id >= ctx.function->basic_blocks.size()) {
-            debug::interp::log(debug::interp::Id::Error,
-                               "Invalid block ID: " + std::to_string(block_id),
-                               debug::Level::Error);
-            throw std::runtime_error("無効なブロックID: " + std::to_string(block_id));
+        // ブロックIDに対応するブロックを検索
+        const BasicBlock* block = nullptr;
+        for (const auto& bb : ctx.function->basic_blocks) {
+            if (bb->id == block_id) {
+                block = bb.get();
+                break;
+            }
         }
 
-        const BasicBlock* block = ctx.function->basic_blocks[block_id].get();
+        if (!block) {
+            debug::interp::log(debug::interp::Id::Error,
+                               "Block not found: " + std::to_string(block_id), debug::Level::Error);
+            throw std::runtime_error("ブロックが見つかりません: " + std::to_string(block_id));
+        }
         debug::interp::log(debug::interp::Id::BlockStats,
                            "Block has " + std::to_string(block->statements.size()) + " statements",
                            debug::Level::Trace);
@@ -479,12 +1014,15 @@ class MirInterpreter {
                         debug::interp::Id::SwitchValue,
                         "Switch on boolean: " + std::string(value ? "true" : "false"),
                         debug::Level::Debug);
+                    // boolをint64_tに変換して比較
+                    int64_t int_value = value ? 1 : 0;
                     for (const auto& [case_value, target] : data.targets) {
                         debug::interp::log(debug::interp::Id::SwitchCase,
                                            "Checking case: " + std::to_string(case_value) +
-                                               " -> bb" + std::to_string(target),
-                                           debug::Level::Trace);
-                        if ((case_value != 0) == value) {
+                                               " -> bb" + std::to_string(target) +
+                                               ", bool as int: " + std::to_string(int_value),
+                                           debug::Level::Debug);
+                        if (case_value == int_value) {
                             debug::interp::log(
                                 debug::interp::Id::SwitchMatch,
                                 "Match found! Jumping to bb" + std::to_string(target),
@@ -514,19 +1052,12 @@ class MirInterpreter {
                                    debug::Level::Debug);
                 auto& data = std::get<MirTerminator::CallData>(term.data);
 
+                // 新しい構造では func_name が直接文字列として格納されている
+                // func オペランドから関数名を取得
                 std::string func_name;
-
-                // 関数名を取得（FunctionRefまたはConstantから）
-                if (data.func->kind == MirOperand::FunctionRef) {
-                    // 新しいFunctionRef形式
-                    if (auto* str_ptr = std::get_if<std::string>(&data.func->data)) {
-                        func_name = *str_ptr;
-                    }
-                } else if (data.func->kind == MirOperand::Constant) {
-                    // 後方互換性のためConstantもサポート
-                    auto& constant = std::get<MirConstant>(data.func->data);
-                    if (auto* str_ptr = std::get_if<std::string>(&constant.value)) {
-                        func_name = *str_ptr;
+                if (data.func && data.func->kind == MirOperand::FunctionRef) {
+                    if (auto* name = std::get_if<std::string>(&data.func->data)) {
+                        func_name = *name;
                     }
                 }
 
@@ -613,22 +1144,25 @@ class MirInterpreter {
                             size_t sep_pos = func_name.find("__");
                             if (sep_pos != std::string::npos && !args.empty()) {
                                 std::string method_name = func_name.substr(sep_pos + 2);
-                                
+
                                 // 最初の引数（self）の実際の型を値から取得
                                 Value& self_arg = args[0];
                                 if (self_arg.type() == typeid(StructValue)) {
                                     auto& struct_val = std::any_cast<StructValue&>(self_arg);
                                     std::string actual_type = struct_val.type_name;
-                                    
+
                                     if (!actual_type.empty()) {
-                                        std::string actual_func_name = actual_type + "__" + method_name;
-                                        
-                                        const MirFunction* actual_func = find_function(actual_func_name);
+                                        std::string actual_func_name =
+                                            actual_type + "__" + method_name;
+
+                                        const MirFunction* actual_func =
+                                            find_function(actual_func_name);
                                         if (actual_func) {
                                             debug::interp::log(debug::interp::Id::CallUser,
-                                                              "Dynamic dispatch: " + func_name + " -> " + actual_func_name,
-                                                              debug::Level::Debug);
-                                            
+                                                               "Dynamic dispatch: " + func_name +
+                                                                   " -> " + actual_func_name,
+                                                               debug::Level::Debug);
+
                                             Value result = execute_function(*actual_func, args);
                                             debug::interp::dump_value("Function result", result);
                                             if (data.destination) {
@@ -639,7 +1173,7 @@ class MirInterpreter {
                                     }
                                 }
                             }
-                            
+
                             if (!dispatched) {
                                 debug::interp::log(debug::interp::Id::CallNotFound,
                                                    "Function not found: " + func_name,
@@ -672,8 +1206,9 @@ class MirInterpreter {
             case MirRvalue::Use: {
                 debug::interp::log(debug::interp::Id::RvalueUse, "Rvalue type: Use",
                                    debug::Level::Trace);
-                auto& data = std::get<MirRvalue::UseData>(rvalue.data);
-                Value result = evaluate_operand(ctx, *data.operand);
+                // UseDataには operand フィールドがある
+                auto& use_data = std::get<MirRvalue::UseData>(rvalue.data);
+                Value result = evaluate_operand(ctx, *use_data.operand);
                 debug::interp::dump_value("Use result", result);
                 return result;
             }
@@ -924,9 +1459,9 @@ class MirInterpreter {
             bool r = std::any_cast<bool>(rhs);
 
             switch (op) {
-                case MirBinaryOp::And:
+                case MirBinaryOp::BitAnd:
                     return Value(l && r);
-                case MirBinaryOp::Or:
+                case MirBinaryOp::BitOr:
                     return Value(l || r);
                 case MirBinaryOp::Eq:
                     return Value(l == r);
@@ -977,10 +1512,6 @@ class MirInterpreter {
                     return Value(l << r);
                 case MirBinaryOp::Shr:
                     return Value(l >> r);
-                case MirBinaryOp::And:
-                    return Value(l != 0 && r != 0);
-                case MirBinaryOp::Or:
-                    return Value(l != 0 || r != 0);
                 default:
                     break;
             }

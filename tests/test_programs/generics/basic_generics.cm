@@ -1,0 +1,71 @@
+// 基本的なジェネリクス関数のテスト
+
+// ジェネリックスワップ関数
+<T> void swap(T* a, T* b) {
+    T temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// ジェネリック最大値関数
+<T> T max(T a, T b) {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+// ジェネリック構造体
+struct Pair<T> {
+    T first;
+    T second;
+}
+
+// ジェネリック構造体のメソッド
+impl Pair<T> {
+    <T> Pair<T> new(T f, T s) {
+        Pair<T> p;
+        p.first = f;
+        p.second = s;
+        return p;
+    }
+
+    <T> T get_first() {
+        return this.first;
+    }
+
+    <T> void set_first(T value) {
+        this.first = value;
+    }
+}
+
+// テスト関数
+int main() {
+    // int型でのswapテスト
+    int x = 10;
+    int y = 20;
+    swap(&x, &y);
+    println("After swap: x = {x}, y = {y}");
+
+    // float型でのmaxテスト
+    float a = 3.14;
+    float b = 2.71;
+    float result = max(a, b);
+    println("Max of {a} and {b} is {result}");
+
+    // ジェネリック構造体のテスト
+    Pair<int> int_pair = Pair<int>::new(100, 200);
+    int first = int_pair.get_first();
+    println("First element: {first}");
+
+    int_pair.set_first(300);
+    println("Updated first element: {}", int_pair.first);
+
+    // 文字列でのPair
+    Pair<string> str_pair;
+    str_pair.first = "hello";
+    str_pair.second = "world";
+    println("String pair: ({}, {})", str_pair.first, str_pair.second);
+
+    return 0;
+}

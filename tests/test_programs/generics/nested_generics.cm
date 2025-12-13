@@ -1,0 +1,173 @@
+// ネストしたジェネリクスと型引数のテスト
+
+// ジェネリックなOptionタイプ
+struct Option<T> {
+    bool has_value;
+    T value;
+}
+
+impl Option<T> {
+    <T> Option<T> some(T val) {
+        Option<T> opt;
+        opt.has_value = true;
+        opt.value = val;
+        return opt;
+    }
+
+    <T> Option<T> none() {
+        Option<T> opt;
+        opt.has_value = false;
+        return opt;
+    }
+
+    <T> bool is_some() {
+        return this.has_value;
+    }
+
+    <T> bool is_none() {
+        return !this.has_value;
+    }
+
+    <T> T unwrap() {
+        if (!this.has_value) {
+            panic("Unwrap called on None");
+        }
+        return this.value;
+    }
+
+    <T> T unwrap_or(T default_val) {
+        if (this.has_value) {
+            return this.value;
+        }
+        return default_val;
+    }
+}
+
+// ジェネリックなResultタイプ
+struct Result<T, E> {
+    bool is_ok;
+    T ok_value;
+    E err_value;
+}
+
+impl Result<T, E> {
+    <T, E> Result<T, E> ok(T value) {
+        Result<T, E> res;
+        res.is_ok = true;
+        res.ok_value = value;
+        return res;
+    }
+
+    <T, E> Result<T, E> err(E error) {
+        Result<T, E> res;
+        res.is_ok = false;
+        res.err_value = error;
+        return res;
+    }
+
+    <T, E> bool is_ok() {
+        return this.is_ok;
+    }
+
+    <T, E> bool is_err() {
+        return !this.is_ok;
+    }
+}
+
+// ネストしたジェネリック構造体
+struct Container<T> {
+    Option<T> data;
+    int capacity;
+}
+
+impl Container<T> {
+    <T> Container<T> new(int cap) {
+        Container<T> c;
+        c.data = Option<T>::none();
+        c.capacity = cap;
+        return c;
+    }
+
+    <T> void store(T value) {
+        this.data = Option<T>::some(value);
+    }
+
+    <T> Option<T> retrieve() {
+        return this.data;
+    }
+}
+
+// ジェネリック関数内でジェネリック型を使用
+<T> Result<T, string> safe_divide(T numerator, T denominator) {
+    if (denominator == 0) {
+        return Result<T, string>::err("Division by zero");
+    }
+    return Result<T, string>::ok(numerator / denominator);
+}
+
+// 複数の型パラメータを持つ関数
+<T, U> void print_pair(T first, U second) {
+    println("Pair: ({}, {})", first, second);
+}
+
+// ジェネリック関数から別のジェネリック関数を呼び出す
+<T> Option<T> find_first(T* array, int size, T target) {
+    for (int i = 0; i < size; i++) {
+        if (array[i] == target) {
+            return Option<T>::some(array[i]);
+        }
+    }
+    return Option<T>::none();
+}
+
+int main() {
+    // Option型のテスト
+    Option<int> some_value = Option<int>::some(42);
+    Option<int> no_value = Option<int>::none();
+
+    if (some_value.is_some()) {
+        int val = some_value.unwrap();
+        println("Value: {val}");
+    }
+
+    int default_val = no_value.unwrap_or(100);
+    println("Default value: {default_val}");
+
+    // Result型のテスト
+    Result<float, string> result1 = safe_divide(10.0, 2.0);
+    Result<float, string> result2 = safe_divide(10.0, 0.0);
+
+    if (result1.is_ok()) {
+        float res = result1.ok_value;
+        println("Division result: {res}");
+    }
+
+    if (result2.is_err()) {
+        string err = result2.err_value;
+        println("Error: {err}");
+    }
+
+    // Container型のテスト
+    Container<string> str_container = Container<string>::new(10);
+    str_container.store("Hello, Generics!");
+
+    Option<string> retrieved = str_container.retrieve();
+    if (retrieved.is_some()) {
+        string msg = retrieved.unwrap();
+        println("Retrieved: {msg}");
+    }
+
+    // 複数型パラメータのテスト
+    print_pair(123, "test");
+    print_pair(3.14, true);
+
+    // ジェネリック配列検索のテスト
+    int numbers[5] = {1, 2, 3, 4, 5};
+    Option<int> found = find_first(numbers, 5, 3);
+    if (found.is_some()) {
+        int num = found.unwrap();
+        println("Found: {num}");
+    }
+
+    return 0;
+}

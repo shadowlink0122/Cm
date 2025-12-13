@@ -72,19 +72,22 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     // ヘルパー関数は不要（ランタイムライブラリを使用）
 
     // 構造体型を先に定義
-    for (const auto& structDef : program.structs) {
+    for (const auto& structPtr : program.structs) {
+        const auto& structDef = *structPtr;
+        const auto& name = structDef.name;
+
         // 構造体定義を保存
-        structDefs[structDef->name] = structDef.get();
+        structDefs[name] = &structDef;
 
         // LLVM構造体型を作成
         std::vector<llvm::Type*> fieldTypes;
-        for (const auto& field : structDef->fields) {
+        for (const auto& field : structDef.fields) {
             fieldTypes.push_back(convertType(field.type));
         }
 
         // 構造体型を作成（名前付き）
-        auto structType = llvm::StructType::create(ctx.getContext(), fieldTypes, structDef->name);
-        structTypes[structDef->name] = structType;
+        auto structType = llvm::StructType::create(ctx.getContext(), fieldTypes, name);
+        structTypes[name] = structType;
     }
 
     // 関数宣言（先に全て宣言）
@@ -336,9 +339,14 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
         case mir::MirTerminator::Call: {
             auto& callData = std::get<mir::MirTerminator::CallData>(term.data);
 
-            // 関数オペランドを取得
+            // 関数名を取得（funcオペランドから）
             std::string funcName;
-            if (callData.func->kind == mir::MirOperand::FunctionRef) {
+            if (callData.func->kind == mir::MirOperand::Constant) {
+                auto& constant = std::get<mir::MirConstant>(callData.func->data);
+                if (auto* name = std::get_if<std::string>(&constant.value)) {
+                    funcName = *name;
+                }
+            } else if (callData.func->kind == mir::MirOperand::FunctionRef) {
                 funcName = std::get<std::string>(callData.func->data);
             }
 
@@ -823,7 +831,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             }
                         }
                     }
-                    
+
                     auto result = builder->CreateCall(callee, args);
 
                     // 戻り値がある場合は保存先に格納
@@ -847,7 +855,10 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
     switch (rvalue.kind) {
         case mir::MirRvalue::Use: {
             auto& useData = std::get<mir::MirRvalue::UseData>(rvalue.data);
-            return convertOperand(*useData.operand);
+            if (useData.operand) {
+                return convertOperand(*useData.operand);
+            }
+            return nullptr;
         }
         case mir::MirRvalue::BinaryOp: {
             auto& binop = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
@@ -1022,10 +1033,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
         case mir::MirOperand::Constant: {
             auto& constant = std::get<mir::MirConstant>(operand.data);
             return convertConstant(constant);
-        }
-        case mir::MirOperand::FunctionRef: {
-            // 関数ポインタ（簡易実装）
-            return nullptr;
         }
         default:
             return nullptr;
@@ -1317,7 +1324,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
         }
         case mir::MirBinaryOp::Mod: {
             if (lhs->getType()->isFloatingPointTy()) {
-                return builder->CreateFRem(lhs, rhs, "frem");
+                return builder->CreateFRem(lhs, rhs, "fmod");
             }
             return builder->CreateSRem(lhs, rhs, "mod");
         }
@@ -1440,23 +1447,23 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpSGE(lhs, rhs, "ge");
         }
 
-        // ビット演算
+        // ビット演算（列挙型の定義順序: BitXor, BitAnd, BitOr）
+        case mir::MirBinaryOp::BitXor:
+            std::cerr << "[LLVM] BitXor operation\n";
+            return builder->CreateXor(lhs, rhs, "xor");
         case mir::MirBinaryOp::BitAnd:
+            std::cerr << "[LLVM] BitAnd operation\n";
             return builder->CreateAnd(lhs, rhs, "bitand");
         case mir::MirBinaryOp::BitOr:
+            std::cerr << "[LLVM] BitOr operation\n";
             return builder->CreateOr(lhs, rhs, "bitor");
-        case mir::MirBinaryOp::BitXor:
-            return builder->CreateXor(lhs, rhs, "xor");
         case mir::MirBinaryOp::Shl:
             return builder->CreateShl(lhs, rhs, "shl");
         case mir::MirBinaryOp::Shr:
             return builder->CreateAShr(lhs, rhs, "shr");
 
-        // 論理演算
-        case mir::MirBinaryOp::And:
-            return builder->CreateAnd(lhs, rhs, "and");
-        case mir::MirBinaryOp::Or:
-            return builder->CreateOr(lhs, rhs, "or");
+            // 論理演算はMIRレベルでは直接サポートされない
+            // （条件分岐やビット演算で実装される）
 
         default:
             return nullptr;
@@ -1468,14 +1475,13 @@ llvm::Value* MIRToLLVM::convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand)
     switch (op) {
         case mir::MirUnaryOp::Not: {
             // bool値（i8で0または1）の場合、論理否定を行う
-            // i8の場合: 0 -> 1, 1 -> 0
             auto operandType = operand->getType();
             if (operandType->isIntegerTy(8)) {
-                // i8の場合、論理否定: (value == 0) ? 1 : 0
+                // i8のbool値の場合、0と比較してi8に変換
+                // value == 0 ? 1 : 0
                 auto zero = llvm::ConstantInt::get(ctx.getI8Type(), 0);
-                auto one = llvm::ConstantInt::get(ctx.getI8Type(), 1);
-                auto isZero = builder->CreateICmpEQ(operand, zero, "is_zero");
-                return builder->CreateSelect(isZero, one, zero, "logical_not");
+                auto cmp = builder->CreateICmpEQ(operand, zero, "not_cmp");
+                return builder->CreateZExt(cmp, ctx.getI8Type(), "logical_not");
             } else {
                 // その他の整数型の場合はビット反転
                 return builder->CreateNot(operand, "not");
@@ -1486,6 +1492,68 @@ llvm::Value* MIRToLLVM::convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand)
         default:
             return nullptr;
     }
+}
+
+// 論理AND演算（短絡評価付き）
+llvm::Value* MIRToLLVM::convertLogicalAnd(llvm::Value* lhs, llvm::Value* rhs) {
+    // 現在のブロックと関数を保存
+    auto currentBB = builder->GetInsertBlock();
+    auto func = currentBB->getParent();
+
+    // ブロック作成
+    auto rhsBB = llvm::BasicBlock::Create(ctx.getContext(), "and.rhs", func);
+    auto mergeBB = llvm::BasicBlock::Create(ctx.getContext(), "and.merge", func);
+
+    // lhsをboolに変換 (i8 != 0)
+    auto zero = llvm::ConstantInt::get(lhs->getType(), 0);
+    auto lhsBool = builder->CreateICmpNE(lhs, zero, "lhs.bool");
+
+    // lhsがtrueならrhsBBへ、falseならmergeBBへ
+    builder->CreateCondBr(lhsBool, rhsBB, mergeBB);
+
+    // rhsBBでrhsを評価
+    builder->SetInsertPoint(rhsBB);
+    // rhsはすでにi8なので、そのまま使用
+    builder->CreateBr(mergeBB);
+
+    // mergeBBでPHIノード作成
+    builder->SetInsertPoint(mergeBB);
+    auto phi = builder->CreatePHI(ctx.getI8Type(), 2, "and.result");
+    phi->addIncoming(llvm::ConstantInt::get(ctx.getI8Type(), 0), currentBB);  // lhs=falseの場合
+    phi->addIncoming(rhs, rhsBB);  // lhs=trueの場合はrhsの値
+
+    return phi;
+}
+
+// 論理OR演算（短絡評価付き）
+llvm::Value* MIRToLLVM::convertLogicalOr(llvm::Value* lhs, llvm::Value* rhs) {
+    // 現在のブロックと関数を保存
+    auto currentBB = builder->GetInsertBlock();
+    auto func = currentBB->getParent();
+
+    // ブロック作成
+    auto rhsBB = llvm::BasicBlock::Create(ctx.getContext(), "or.rhs", func);
+    auto mergeBB = llvm::BasicBlock::Create(ctx.getContext(), "or.merge", func);
+
+    // lhsをboolに変換 (i8 != 0)
+    auto zero = llvm::ConstantInt::get(lhs->getType(), 0);
+    auto lhsBool = builder->CreateICmpNE(lhs, zero, "lhs.bool");
+
+    // lhsがfalseならrhsBBへ、trueならmergeBBへ
+    builder->CreateCondBr(lhsBool, mergeBB, rhsBB);
+
+    // rhsBBでrhsを評価
+    builder->SetInsertPoint(rhsBB);
+    // rhsはすでにi8なので、そのまま使用
+    builder->CreateBr(mergeBB);
+
+    // mergeBBでPHIノード作成
+    builder->SetInsertPoint(mergeBB);
+    auto phi = builder->CreatePHI(ctx.getI8Type(), 2, "or.result");
+    phi->addIncoming(llvm::ConstantInt::get(ctx.getI8Type(), 1), currentBB);  // lhs=trueの場合
+    phi->addIncoming(rhs, rhsBB);  // lhs=falseの場合はrhsの値
+
+    return phi;
 }
 
 // 外部関数宣言
@@ -1501,6 +1569,32 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         // puts関数
         auto putsType = llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction("puts", putsType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // ランタイム関数の宣言
+    else if (name == "cm_println_int" || name == "cm_print_int") {
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_println_string" || name == "cm_print_string") {
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_println_double" || name == "cm_print_double") {
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getF64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_println_uint" || name == "cm_print_uint") {
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_println_bool" || name == "cm_print_bool") {
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_println_char" || name == "cm_print_char") {
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
 

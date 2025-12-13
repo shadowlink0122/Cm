@@ -92,11 +92,12 @@ class ConstantFolding : public OptimizationPass {
         const MirRvalue& rvalue, const std::unordered_map<LocalId, MirConstant>& constants) {
         switch (rvalue.kind) {
             case MirRvalue::Use: {
-                auto& use_data = std::get<MirRvalue::UseData>(rvalue.data);
-                if (!use_data.operand)
-                    return std::nullopt;
-
-                return evaluate_operand(*use_data.operand, constants);
+                if (auto* use_data = std::get_if<MirRvalue::UseData>(&rvalue.data)) {
+                    if (!use_data->operand)
+                        return std::nullopt;
+                    return evaluate_operand(*use_data->operand, constants);
+                }
+                return std::nullopt;
             }
 
             case MirRvalue::BinaryOp: {
@@ -235,12 +236,8 @@ class ConstantFolding : public OptimizationPass {
                 result.type = lhs.type;
 
                 switch (op) {
-                    case MirBinaryOp::And:
-                        result.value = *lhs_bool && *rhs_bool;
-                        return result;
-                    case MirBinaryOp::Or:
-                        result.value = *lhs_bool || *rhs_bool;
-                        return result;
+                    // 論理演算は MIR では直接サポートされない
+                    // （ビット演算として処理されるか、条件分岐で実装される）
                     case MirBinaryOp::Eq:
                         result.value = (*lhs_bool == *rhs_bool);
                         return result;

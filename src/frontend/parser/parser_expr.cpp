@@ -531,18 +531,17 @@ ast::ExprPtr Parser::parse_primary() {
         debug::par::log(debug::par::Id::IdentifierRef, "Found identifier: " + name,
                         debug::Level::Debug);
         advance();
-        
+
         // enum値アクセス: EnumName::MemberName
         if (consume_if(TokenKind::ColonColon)) {
             std::string member = expect_ident();
-            debug::par::log(debug::par::Id::IdentifierRef, 
-                            "Found enum access: " + name + "::" + member,
-                            debug::Level::Debug);
+            debug::par::log(debug::par::Id::IdentifierRef,
+                            "Found enum access: " + name + "::" + member, debug::Level::Debug);
             // EnumName::Memberを "EnumName::Member" という識別子として扱う
             std::string enum_access = name + "::" + member;
             return ast::make_ident(std::move(enum_access), Span{start_pos, previous().end});
         }
-        
+
         debug::par::log(debug::par::Id::VariableDetected, "Variable/Function reference: " + name,
                         debug::Level::Debug);
         return ast::make_ident(std::move(name), Span{start_pos, previous().end});
