@@ -1,6 +1,6 @@
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
-#include "codegen/llvm/llvm_codegen.hpp"
+#include "codegen/llvm/codegen.hpp"
 #endif
 
 #include "common/debug_messages.hpp"

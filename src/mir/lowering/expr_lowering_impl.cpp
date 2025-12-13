@@ -619,7 +619,32 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 // 関数呼び出しのlowering
 LocalId ExprLowering::lower_call(const hir::HirCall& call, LoweringContext& ctx) {
     // println builtin特別処理
-    if (call.func_name == "println" && !call.args.empty()) {
+    if (call.func_name == "println") {
+        // 引数がない場合は空行を出力
+        if (call.args.empty()) {
+            BlockId success_block = ctx.new_block();
+
+            // cm_println_string("") を呼び出す
+            std::vector<MirOperandPtr> args;
+            MirConstant str_const;
+            str_const.type = hir::make_string();
+            str_const.value = std::string("");
+            args.push_back(MirOperand::constant(str_const));
+
+            auto func_operand = MirOperand::function_ref("cm_println_string");
+            auto call_term = std::make_unique<MirTerminator>();
+            call_term->kind = MirTerminator::Call;
+            call_term->data = MirTerminator::CallData{
+                std::move(func_operand), std::move(args),
+                std::nullopt,  // 戻り値なし
+                success_block,
+                std::nullopt  // unwind無し
+            };
+            ctx.set_terminator(std::move(call_term));
+            ctx.switch_to_block(success_block);
+            return ctx.new_temp(hir::make_void());
+        }
+
         // 最初の引数を取得
         const auto& first_arg = call.args[0];
 

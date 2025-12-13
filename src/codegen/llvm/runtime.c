@@ -31,6 +31,11 @@ char* cm_unescape_braces(const char* str) {
     return result;
 }
 
+// エイリアス: フォーマット用
+char* cm_format_unescape_braces(const char* str) {
+    return cm_unescape_braces(str);
+}
+
 // 文字列出力
 void cm_print_string(const char* str) {
     if (str) {

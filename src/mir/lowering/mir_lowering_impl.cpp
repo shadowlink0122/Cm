@@ -55,12 +55,23 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         // デストラクタを呼び出す
         emit_destructors(ctx);
 
-        MirConstant default_return;
-        default_return.type = func.return_type;
-        default_return.value = int64_t(0);
+        // 構造体やvoid型はデフォルト値代入をスキップ
+        bool skip_default_assign = false;
+        if (func.return_type) {
+            if (func.return_type->kind == hir::TypeKind::Struct ||
+                func.return_type->kind == hir::TypeKind::Void) {
+                skip_default_assign = true;
+            }
+        }
 
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{0}, MirRvalue::use(MirOperand::constant(default_return))));
+        if (!skip_default_assign) {
+            MirConstant default_return;
+            default_return.type = func.return_type;
+            default_return.value = int64_t(0);
+
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{0}, MirRvalue::use(MirOperand::constant(default_return))));
+        }
         ctx.set_terminator(MirTerminator::return_value());
     }
 

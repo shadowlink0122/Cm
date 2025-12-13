@@ -122,6 +122,13 @@ test-interpreter:
 	@chmod +x tests/unified_test_runner.sh
 	@tests/unified_test_runner.sh -b interpreter
 
+# 並列インタプリタテスト
+.PHONY: test-interpreter-parallel
+test-interpreter-parallel:
+	@echo "Running interpreter tests (parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b interpreter -p
+
 # ========================================
 # LLVM Backend Test Commands
 # ========================================
@@ -133,6 +140,13 @@ test-llvm:
 	@chmod +x tests/unified_test_runner.sh
 	@tests/unified_test_runner.sh -b llvm
 
+# LLVM ネイティブテスト（並列）
+.PHONY: test-llvm-parallel
+test-llvm-parallel:
+	@echo "Running LLVM native code generation tests (parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b llvm -p
+
 # LLVM WebAssemblyテスト
 .PHONY: test-llvm-wasm
 test-llvm-wasm:
@@ -140,12 +154,32 @@ test-llvm-wasm:
 	@chmod +x tests/unified_test_runner.sh
 	@tests/unified_test_runner.sh -b llvm-wasm
 
+# LLVM WebAssemblyテスト（並列）
+.PHONY: test-llvm-wasm-parallel
+test-llvm-wasm-parallel:
+	@echo "Running LLVM WebAssembly code generation tests (parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b llvm-wasm -p
+
 # すべてのLLVMテストを実行
 .PHONY: test-llvm-all
 test-llvm-all: test-llvm test-llvm-wasm
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All LLVM tests completed!"
+	@echo "=========================================="
+
+# すべてのテストを実行（並列）
+.PHONY: test-all-parallel
+test-all-parallel:
+	@echo "Running all tests in parallel..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b interpreter -p
+	@tests/unified_test_runner.sh -b llvm -p
+	@tests/unified_test_runner.sh -b llvm-wasm -p
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All parallel tests completed!"
 	@echo "=========================================="
 
 # すべてのテストを実行
@@ -208,17 +242,29 @@ t: test
 .PHONY: ta
 ta: test-all
 
+.PHONY: tap
+tap: test-all-parallel
+
 .PHONY: c
 c: clean
 
 .PHONY: ti
 ti: test-interpreter
 
+.PHONY: tip
+tip: test-interpreter-parallel
+
 .PHONY: tl
 tl: test-llvm
 
+.PHONY: tlp
+tlp: test-llvm-parallel
+
 .PHONY: tlw
 tlw: test-llvm-wasm
+
+.PHONY: tlwp
+tlwp: test-llvm-wasm-parallel
 
 .PHONY: tla
 tla: test-llvm-all

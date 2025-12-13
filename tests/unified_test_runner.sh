@@ -53,7 +53,7 @@ BACKEND="interpreter"
 CATEGORIES=""
 VERBOSE=false
 PARALLEL=false
-TIMEOUT=10
+TIMEOUT=5
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
@@ -470,31 +470,17 @@ main() {
     log "Cm Language Unified Test Runner"
     log "Backend: $BACKEND"
     log "Categories: $CATEGORIES"
+    log "Parallel: $PARALLEL"
     log "=========================================="
     log ""
 
-    # カテゴリーごとにテスト実行
-    for category in $CATEGORIES; do
-        local category_dir="$TEST_DIR/$category"
-
-        if [ ! -d "$category_dir" ]; then
-            log "Warning: Category directory '$category' not found, skipping"
-            continue
-        fi
-
-        log "Testing category: $category"
-        log "----------------------------------------"
-
-        # .cmファイルを検索
-        for test_file in "$category_dir"/*.cm; do
-            if [ -f "$test_file" ]; then
-                ((TOTAL++))
-                run_single_test "$test_file"
-            fi
-        done
-
-        log ""
-    done
+    if [ "$PARALLEL" = true ]; then
+        # 並列実行モード
+        run_tests_parallel
+    else
+        # 順次実行モード
+        run_tests_sequential
+    fi
 
     # 結果サマリー
     log "=========================================="
@@ -513,6 +499,213 @@ main() {
         log "Status: SUCCESS"
         exit 0
     fi
+}
+
+# 順次実行モード
+run_tests_sequential() {
+    for category in $CATEGORIES; do
+        local category_dir="$TEST_DIR/$category"
+
+        if [ ! -d "$category_dir" ]; then
+            log "Warning: Category directory '$category' not found, skipping"
+            continue
+        fi
+
+        log "Testing category: $category"
+        log "----------------------------------------"
+
+        for test_file in "$category_dir"/*.cm; do
+            if [ -f "$test_file" ]; then
+                ((TOTAL++))
+                run_single_test "$test_file"
+            fi
+        done
+
+        log ""
+    done
+}
+
+# 並列実行モード
+run_tests_parallel() {
+    local test_files=()
+    local results_dir="$TEMP_DIR/parallel_results"
+    mkdir -p "$results_dir"
+    
+    # 全テストファイルを収集
+    for category in $CATEGORIES; do
+        local category_dir="$TEST_DIR/$category"
+        if [ -d "$category_dir" ]; then
+            for test_file in "$category_dir"/*.cm; do
+                if [ -f "$test_file" ]; then
+                    test_files+=("$test_file")
+                fi
+            done
+        fi
+    done
+    
+    TOTAL=${#test_files[@]}
+    log "Running $TOTAL tests in parallel..."
+    log ""
+    
+    # 並列ジョブ数（CPU数に基づく）
+    local max_jobs=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    
+    # 各テストを並列実行
+    local pids=()
+    local job_count=0
+    
+    for test_file in "${test_files[@]}"; do
+        local test_name="$(basename "${test_file%.cm}")"
+        local category="$(basename "$(dirname "$test_file")")"
+        local result_file="$results_dir/${category}_${test_name}.result"
+        
+        # バックグラウンドでテスト実行
+        (
+            run_parallel_test "$test_file" "$result_file"
+        ) &
+        
+        pids+=($!)
+        CHILD_PIDS+=($!)
+        ((job_count++))
+        
+        # 最大ジョブ数に達したら待機
+        if [ $job_count -ge $max_jobs ]; then
+            wait "${pids[0]}"
+            pids=("${pids[@]:1}")
+            ((job_count--))
+        fi
+    done
+    
+    # 残りのジョブを待機
+    wait
+    
+    # 結果を集計
+    for test_file in "${test_files[@]}"; do
+        local test_name="$(basename "${test_file%.cm}")"
+        local category="$(basename "$(dirname "$test_file")")"
+        local result_file="$results_dir/${category}_${test_name}.result"
+        
+        if [ -f "$result_file" ]; then
+            local result=$(cat "$result_file")
+            case "$result" in
+                PASS*)
+                    echo -e "${GREEN}[PASS]${NC} $category/$test_name"
+                    ((PASSED++))
+                    ;;
+                FAIL*)
+                    local reason="${result#FAIL:}"
+                    echo -e "${RED}[FAIL]${NC} $category/$test_name - $reason"
+                    ((FAILED++))
+                    ;;
+                SKIP*)
+                    local reason="${result#SKIP:}"
+                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - $reason"
+                    ((SKIPPED++))
+                    ;;
+            esac
+        else
+            echo -e "${RED}[FAIL]${NC} $category/$test_name - No result file"
+            ((FAILED++))
+        fi
+    done
+}
+
+# 並列テスト実行（子プロセス用）
+run_parallel_test() {
+    local test_file="$1"
+    local result_file="$2"
+    local test_name="$(basename "${test_file%.cm}")"
+    local category="$(basename "$(dirname "$test_file")")"
+    local expect_file="${test_file%.cm}.expect"
+    local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
+    local output_file="$TEMP_DIR/${category}_${test_name}_$$.out"
+
+    # バックエンド固有のexpectファイルがあれば優先
+    if [ -f "$backend_expect_file" ]; then
+        expect_file="$backend_expect_file"
+    fi
+
+    # expectファイルがない場合
+    if [ ! -f "$expect_file" ]; then
+        echo "SKIP:No expect file" > "$result_file"
+        return
+    fi
+
+    local exit_code=0
+
+    # タイムアウト付き実行
+    run_with_timeout_silent() {
+        local cmd="$@"
+        if [ -n "$TIMEOUT_CMD" ]; then
+            $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" $cmd
+        else
+            $cmd
+        fi
+    }
+
+    case "$BACKEND" in
+        interpreter)
+            run_with_timeout_silent "$CM_EXECUTABLE" run "$test_file" > "$output_file" 2>&1 || exit_code=$?
+            ;;
+        llvm)
+            local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
+            run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm "$test_file" -o "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+            if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
+                "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                rm -f "$llvm_exec"
+            fi
+            ;;
+        llvm-wasm)
+            local wasm_file="$TEMP_DIR/wasm_${test_name}_$$.wasm"
+            run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_file" -o "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+            if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
+                if command -v wasmtime >/dev/null 2>&1; then
+                    run_with_timeout_silent wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                else
+                    echo "SKIP:No WASM runtime" > "$result_file"
+                    rm -f "$wasm_file"
+                    return
+                fi
+                rm -f "$wasm_file"
+            fi
+            ;;
+        *)
+            echo "SKIP:Backend not supported for parallel" > "$result_file"
+            return
+            ;;
+    esac
+
+    # タイムアウト
+    if [ $exit_code -eq 124 ] || [ $exit_code -eq 143 ]; then
+        echo "FAIL:Timeout (>${TIMEOUT}s)" > "$result_file"
+        rm -f "$output_file"
+        return
+    fi
+
+    # 結果比較
+    if grep -q "error\|Error\|エラー" "$expect_file" 2>/dev/null; then
+        if [ $exit_code -ne 0 ]; then
+            if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then
+                echo "PASS" > "$result_file"
+            else
+                echo "FAIL:Error output mismatch" > "$result_file"
+            fi
+        else
+            echo "FAIL:Expected error but succeeded" > "$result_file"
+        fi
+    else
+        if [ $exit_code -ne 0 ]; then
+            echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+        else
+            if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then
+                echo "PASS" > "$result_file"
+            else
+                echo "FAIL:Output mismatch" > "$result_file"
+            fi
+        fi
+    fi
+
+    rm -f "$output_file"
 }
 
 # メイン実行

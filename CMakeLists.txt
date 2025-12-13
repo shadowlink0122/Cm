@@ -145,7 +145,11 @@ if(CM_USE_LLVM)
     list(APPEND CM_SOURCES
         src/codegen/llvm/context.cpp
         src/codegen/llvm/mir_to_llvm.cpp
-        src/codegen/llvm/llvm_codegen.cpp
+        src/codegen/llvm/terminator.cpp
+        src/codegen/llvm/types.cpp
+        src/codegen/llvm/operators.cpp
+        src/codegen/llvm/utils.cpp
+        src/codegen/llvm/codegen.cpp
         src/codegen/llvm/target.cpp
         src/codegen/llvm/intrinsics.cpp
     )
@@ -191,7 +195,7 @@ if(CM_USE_LLVM)
     )
 
     # Build WASM runtime library
-    set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/runtime_wasm.c)
+    set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/wasm/runtime_wasm.c)
     set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
 
     add_custom_command(
