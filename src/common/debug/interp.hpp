@@ -77,6 +77,7 @@ enum class Id {
     // 変数ライフサイクル
     StorageLive,
     StorageDead,
+    LocalInit,  // ローカル変数の初期化
     Nop,
     Defer,
 

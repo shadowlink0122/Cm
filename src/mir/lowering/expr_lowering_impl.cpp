@@ -171,14 +171,14 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, LoweringContext& 
 LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& ctx) {
     // 代入演算の処理
     if (bin.op == hir::HirBinaryOp::Assign) {
-        // 左辺は変数参照である必要がある
+        // 右辺を先に評価
+        LocalId rhs_value = lower_expression(*bin.rhs, ctx);
+
+        // 左辺が変数参照の場合
         if (auto var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&bin.lhs->kind)) {
             auto local_opt = ctx.resolve_variable((*var_ref)->name);
             if (local_opt) {
                 LocalId target = *local_opt;
-
-                // 右辺を評価
-                LocalId rhs_value = lower_expression(*bin.rhs, ctx);
 
                 // 変数に代入
                 ctx.push_statement(MirStatement::assign(
@@ -188,14 +188,55 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                 return target;
             }
         }
-        // 変数でない場合はエラー（暫定的に0を返す）
-        LocalId temp = ctx.new_temp(bin.lhs->type);
-        MirConstant zero_const;
-        zero_const.type = bin.lhs->type;
-        zero_const.value = int64_t(0);
-        ctx.push_statement(
-            MirStatement::assign(MirPlace{temp}, MirRvalue::use(MirOperand::constant(zero_const))));
-        return temp;
+        // 左辺がメンバーアクセスの場合（構造体フィールドへの代入）
+        else if (auto member = std::get_if<std::unique_ptr<hir::HirMember>>(&bin.lhs->kind)) {
+            // オブジェクトの変数を解決
+            if (auto obj_var =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*member)->object->kind)) {
+                auto local_opt = ctx.resolve_variable((*obj_var)->name);
+                if (local_opt) {
+                    LocalId object = *local_opt;
+
+                    // オブジェクトの型から構造体名を取得
+                    auto obj_type = (*member)->object->type;
+                    if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
+                        // 構造体のフィールドインデックスを取得
+                        auto field_idx = ctx.get_field_index(obj_type->name, (*member)->member);
+                        if (field_idx) {
+                            // Projectionを使ったアクセスを生成
+                            MirPlace place{object};
+                            place.projections.push_back(PlaceProjection::field(*field_idx));
+
+                            // フィールドに代入
+                            ctx.push_statement(MirStatement::assign(
+                                place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+
+                            // 代入された値を返す
+                            return rhs_value;
+                        }
+                    }
+                }
+            }
+        }
+        // 左辺が配列インデックスの場合
+        else if (auto index = std::get_if<std::unique_ptr<hir::HirIndex>>(&bin.lhs->kind)) {
+            // 配列オブジェクトと添え字を解決
+            LocalId array = lower_expression(*(*index)->object, ctx);
+            LocalId idx = lower_expression(*(*index)->index, ctx);
+
+            // Projectionを使ったアクセスを生成
+            MirPlace place{array};
+            place.projections.push_back(PlaceProjection::index(idx));
+
+            // 配列要素に代入
+            ctx.push_statement(
+                MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+
+            return rhs_value;
+        }
+
+        // その他の左辺（エラー）は評価済みの右辺値を返す
+        return rhs_value;
     }
 
     // 論理演算 (AND/OR) - 短絡評価を実装
@@ -208,22 +249,20 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         LocalId result = ctx.new_temp(hir::make_bool());
 
         // ブロックを作成
-        BlockId eval_rhs = ctx.new_block();    // 右辺を評価するブロック
-        BlockId skip_rhs = ctx.new_block();    // 右辺をスキップするブロック（結果はfalse）
-        BlockId merge = ctx.new_block();       // 結果を統合するブロック
+        BlockId eval_rhs = ctx.new_block();  // 右辺を評価するブロック
+        BlockId skip_rhs = ctx.new_block();  // 右辺をスキップするブロック（結果はfalse）
+        BlockId merge = ctx.new_block();  // 結果を統合するブロック
 
         // 左辺がtrueなら右辺を評価、falseならスキップ
         ctx.set_terminator(
-            MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}),
-                                     {{1, eval_rhs}}, skip_rhs));
+            MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}), {{1, eval_rhs}}, skip_rhs));
 
         // 右辺を評価するブロック
         ctx.switch_to_block(eval_rhs);
         LocalId rhs = lower_expression(*bin.rhs, ctx);
         // 結果は右辺の値（左辺は既にtrue）
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{result},
-            MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
+        ctx.push_statement(MirStatement::assign(MirPlace{result},
+                                                MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
         // 右辺をスキップするブロック（左辺がfalse）
@@ -232,9 +271,8 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         MirConstant false_const;
         false_const.type = hir::make_bool();
         false_const.value = false;
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{result},
-            MirRvalue::use(MirOperand::constant(false_const))));
+        ctx.push_statement(MirStatement::assign(MirPlace{result},
+                                                MirRvalue::use(MirOperand::constant(false_const))));
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
         // マージブロック
@@ -252,14 +290,13 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         LocalId result = ctx.new_temp(hir::make_bool());
 
         // ブロックを作成
-        BlockId skip_rhs = ctx.new_block();    // 右辺をスキップするブロック（結果はtrue）
-        BlockId eval_rhs = ctx.new_block();    // 右辺を評価するブロック
-        BlockId merge = ctx.new_block();       // 結果を統合するブロック
+        BlockId skip_rhs = ctx.new_block();  // 右辺をスキップするブロック（結果はtrue）
+        BlockId eval_rhs = ctx.new_block();  // 右辺を評価するブロック
+        BlockId merge = ctx.new_block();     // 結果を統合するブロック
 
         // 左辺がtrueならスキップ、falseなら右辺を評価
         ctx.set_terminator(
-            MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}),
-                                     {{1, skip_rhs}}, eval_rhs));
+            MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}), {{1, skip_rhs}}, eval_rhs));
 
         // 右辺をスキップするブロック（左辺がtrue）
         ctx.switch_to_block(skip_rhs);
@@ -267,18 +304,16 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         MirConstant true_const;
         true_const.type = hir::make_bool();
         true_const.value = true;
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{result},
-            MirRvalue::use(MirOperand::constant(true_const))));
+        ctx.push_statement(MirStatement::assign(MirPlace{result},
+                                                MirRvalue::use(MirOperand::constant(true_const))));
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
         // 右辺を評価するブロック
         ctx.switch_to_block(eval_rhs);
         LocalId rhs = lower_expression(*bin.rhs, ctx);
         // 結果は右辺の値（左辺は既にfalse）
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{result},
-            MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
+        ctx.push_statement(MirStatement::assign(MirPlace{result},
+                                                MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
         // マージブロック
@@ -294,34 +329,27 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
 
     // 文字列連結の特別処理
     if (bin.op == hir::HirBinaryOp::Add) {
-        // 左辺が文字列型の場合、文字列連結として処理
-        if (bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::String) {
-            // 文字列連結関数を呼び出す
+        bool lhs_is_string = bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::String;
+        bool rhs_is_string = bin.rhs->type && bin.rhs->type->kind == hir::TypeKind::String;
+
+        // どちらかが文字列型の場合、文字列連結として処理
+        if (lhs_is_string || rhs_is_string) {
             std::vector<MirOperandPtr> args;
-            args.push_back(MirOperand::copy(MirPlace{lhs}));
 
-            // 右辺が整数の場合、文字列に変換
-            if (bin.rhs->type && bin.rhs->type->kind == hir::TypeKind::Int) {
-                // int_to_string関数を呼び出す
-                LocalId str_rhs = ctx.new_temp(hir::make_string());
-                std::vector<MirOperandPtr> conv_args;
-                conv_args.push_back(MirOperand::copy(MirPlace{rhs}));
-
-                BlockId conv_success = ctx.new_block();
-
-                // cm_int_to_string関数を呼び出す
-                auto conv_func_operand = MirOperand::function_ref("cm_int_to_string");
-
-                auto conv_call_term = std::make_unique<MirTerminator>();
-                conv_call_term->kind = MirTerminator::Call;
-                conv_call_term->data =
-                    MirTerminator::CallData{std::move(conv_func_operand), std::move(conv_args),
-                                            MirPlace{str_rhs}, conv_success, std::nullopt};
-                ctx.set_terminator(std::move(conv_call_term));
-                ctx.switch_to_block(conv_success);
-                args.push_back(MirOperand::copy(MirPlace{str_rhs}));
+            // 左辺を文字列に変換（必要な場合）
+            if (lhs_is_string) {
+                args.push_back(MirOperand::copy(MirPlace{lhs}));
             } else {
+                LocalId str_lhs = convert_to_string(lhs, bin.lhs->type, ctx);
+                args.push_back(MirOperand::copy(MirPlace{str_lhs}));
+            }
+
+            // 右辺を文字列に変換（必要な場合）
+            if (rhs_is_string) {
                 args.push_back(MirOperand::copy(MirPlace{rhs}));
+            } else {
+                LocalId str_rhs = convert_to_string(rhs, bin.rhs->type, ctx);
+                args.push_back(MirOperand::copy(MirPlace{str_rhs}));
             }
 
             // 文字列連結
@@ -823,13 +851,37 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     // オブジェクトをlowering
     LocalId object = lower_expression(*member.object, ctx);
 
-    // フィールドアクセス（簡易実装）
-    // TODO: 実際のフィールド解決を実装
-    LocalId result = ctx.new_temp(hir::make_int());
+    // オブジェクトの型から構造体名を取得
+    auto obj_type = member.object->type;
+    if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+        // エラー：構造体型でない
+        return ctx.new_temp(hir::make_error());
+    }
 
-    // Projection を使ったアクセスを生成
+    // 構造体のフィールドインデックスを取得
+    auto field_idx = ctx.get_field_index(obj_type->name, member.member);
+    if (!field_idx) {
+        // エラー：フィールドが見つからない
+        std::cerr << "[MIR] Error: Field '" << member.member << "' not found in struct '"
+                  << obj_type->name << "'\n";
+        return ctx.new_temp(hir::make_error());
+    }
+
+    // フィールドの型を取得
+    hir::TypePtr field_type = hir::make_int();  // デフォルト
+    if (ctx.struct_defs && ctx.struct_defs->count(obj_type->name)) {
+        const auto* struct_def = ctx.struct_defs->at(obj_type->name);
+        if (*field_idx < struct_def->fields.size()) {
+            field_type = struct_def->fields[*field_idx].type;
+        }
+    }
+
+    // フィールドアクセスのための一時変数
+    LocalId result = ctx.new_temp(field_type);
+
+    // Projectionを使ったアクセスを生成
     MirPlace place{object};
-    place.projections.push_back(PlaceProjection::field(0));  // TODO: 実際のフィールドインデックス
+    place.projections.push_back(PlaceProjection::field(*field_idx));
 
     ctx.push_statement(
         MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(place))));
@@ -890,6 +942,66 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     ctx.switch_to_block(merge_block);
 
     return result;
+}
+
+// 値を文字列に変換するヘルパー（文字列連結用）
+LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
+                                        LoweringContext& ctx) {
+    // 変換関数名を型に基づいて決定
+    std::string conv_func;
+    if (!type) {
+        conv_func = "cm_int_to_string";  // デフォルト
+    } else {
+        switch (type->kind) {
+            case hir::TypeKind::Int:
+            case hir::TypeKind::Short:
+            case hir::TypeKind::Long:
+            case hir::TypeKind::Tiny:
+                conv_func = "cm_int_to_string";
+                break;
+            case hir::TypeKind::UInt:
+            case hir::TypeKind::UShort:
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::UTiny:
+                conv_func = "cm_uint_to_string";
+                break;
+            case hir::TypeKind::Float:
+            case hir::TypeKind::Double:
+                conv_func = "cm_double_to_string";
+                break;
+            case hir::TypeKind::Bool:
+                conv_func = "cm_bool_to_string";
+                break;
+            case hir::TypeKind::Char:
+                conv_func = "cm_char_to_string";
+                break;
+            case hir::TypeKind::String:
+                // 既に文字列なので変換不要
+                return value;
+            default:
+                conv_func = "cm_int_to_string";  // フォールバック
+                break;
+        }
+    }
+
+    // 変換関数を呼び出す
+    LocalId str_result = ctx.new_temp(hir::make_string());
+    std::vector<MirOperandPtr> conv_args;
+    conv_args.push_back(MirOperand::copy(MirPlace{value}));
+
+    BlockId conv_success = ctx.new_block();
+
+    auto conv_func_operand = MirOperand::function_ref(conv_func);
+
+    auto conv_call_term = std::make_unique<MirTerminator>();
+    conv_call_term->kind = MirTerminator::Call;
+    conv_call_term->data =
+        MirTerminator::CallData{std::move(conv_func_operand), std::move(conv_args),
+                                MirPlace{str_result}, conv_success, std::nullopt};
+    ctx.set_terminator(std::move(conv_call_term));
+    ctx.switch_to_block(conv_success);
+
+    return str_result;
 }
 
 }  // namespace cm::mir

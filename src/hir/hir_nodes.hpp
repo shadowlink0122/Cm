@@ -137,8 +137,8 @@ struct HirLet {
 
 // 代入
 struct HirAssign {
-    std::string target;
-    HirExprPtr value;
+    HirExprPtr target;  // 左辺値（変数参照、メンバーアクセス、配列アクセス等）
+    HirExprPtr value;  // 右辺値
 };
 
 // return
@@ -253,6 +253,12 @@ struct HirGenericParam {
     std::vector<std::string> bounds;  // 型制約（例: Ord, Clone）
 };
 
+// メソッドのアクセス修飾子
+enum class HirMethodAccess {
+    Public,  // デフォルト（外部からアクセス可能）
+    Private  // impl内からのみアクセス可能
+};
+
 // 関数
 struct HirFunction {
     std::string name;
@@ -263,12 +269,22 @@ struct HirFunction {
     bool is_export = false;
     bool is_constructor = false;
     bool is_destructor = false;
+    bool is_overload = false;                          // overloadキーワードの有無
+    HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
+};
+
+// フィールドのアクセス修飾子
+enum class HirFieldAccess {
+    Public,  // デフォルト（外部からアクセス可能）
+    Private,  // コンストラクタ/デストラクタ内のthisポインタからのみアクセス可能
+    Default  // デフォルトメンバ（構造体に1つのみ）
 };
 
 // 構造体フィールド
 struct HirField {
     std::string name;
     TypePtr type;
+    HirFieldAccess access = HirFieldAccess::Public;  // デフォルトはpublic
 };
 
 // 構造体
@@ -285,6 +301,7 @@ struct HirMethodSig {
     std::string name;
     std::vector<HirParam> params;
     TypePtr return_type;
+    HirMethodAccess access = HirMethodAccess::Public;  // デフォルトはpublic
 };
 
 // インターフェース

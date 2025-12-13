@@ -715,3 +715,58 @@ void __cm_panic(const char* message) {
     fprintf(stderr, "panic: %s\n", message);
     abort();
 }
+// ============================================================
+// 型変換関数（文字列連結用）
+// ============================================================
+
+// int -> string
+char* cm_int_to_string(int value) {
+    char* buffer = (char*)malloc(32);
+    if (buffer) {
+        snprintf(buffer, 32, "%d", value);
+    }
+    return buffer;
+}
+
+// unsigned int -> string
+char* cm_uint_to_string(unsigned int value) {
+    char* buffer = (char*)malloc(32);
+    if (buffer) {
+        snprintf(buffer, 32, "%u", value);
+    }
+    return buffer;
+}
+
+// char -> string
+char* cm_char_to_string(char value) {
+    char* buffer = (char*)malloc(2);
+    if (buffer) {
+        buffer[0] = value;
+        buffer[1] = '\0';
+    }
+    return buffer;
+}
+
+// bool -> string
+char* cm_bool_to_string(bool value) {
+    const char* str = value ? "true" : "false";
+    char* buffer = (char*)malloc(strlen(str) + 1);
+    if (buffer) {
+        strcpy(buffer, str);
+    }
+    return buffer;
+}
+
+// double -> string
+char* cm_double_to_string(double value) {
+    char* buffer = (char*)malloc(64);
+    if (buffer) {
+        // 整数値の場合は小数点なしで表示
+        if (value == (long long)value) {
+            snprintf(buffer, 64, "%lld", (long long)value);
+        } else {
+            snprintf(buffer, 64, "%g", value);
+        }
+    }
+    return buffer;
+}

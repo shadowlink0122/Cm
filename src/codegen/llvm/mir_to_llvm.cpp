@@ -135,6 +135,10 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             // 引数以外のローカル変数
             auto& local = func.locals[i];
             if (local.type) {
+                // void型はアロケーションしない
+                if (local.type->kind == hir::TypeKind::Void) {
+                    continue;
+                }
                 // 文字列型の一時変数はアロケーションしない（直接値を使用）
                 if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
                     continue;
@@ -312,7 +316,15 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 }
             } else {
                 // 通常の関数
-                if (currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
+                // 戻り型をチェック
+                auto& returnLocal = currentMIRFunction->locals[currentMIRFunction->return_local];
+                bool isVoidReturn =
+                    returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void;
+
+                if (isVoidReturn) {
+                    // void関数
+                    builder->CreateRetVoid();
+                } else if (currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
                     // 戻り値がある場合
                     auto retVal = locals[currentMIRFunction->return_local];
                     if (retVal) {
@@ -1594,6 +1606,50 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_println_char" || name == "cm_print_char") {
         auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 型変換関数
+    else if (name == "cm_int_to_string" || name == "cm_uint_to_string") {
+        // int -> string (returns char*)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_char_to_string") {
+        // char -> string (returns char*)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_bool_to_string") {
+        // bool -> string (returns char*)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_double_to_string") {
+        // double -> string (returns char*)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getF64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列操作関数
+    else if (name == "cm_string_concat") {
+        // string + string -> string (char*, char*) -> char*
+        auto funcType =
+            llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // フォーマット出力関数（可変長引数）
+    else if (name == "cm_println_format" || name == "cm_print_format") {
+        // (char* format, int argc, ...) -> void
+        auto funcType = llvm::FunctionType::get(
+            ctx.getVoidType(), {ctx.getPtrType(), ctx.getI32Type()}, true /* varargs */);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_format_string") {
+        // (char* format, int argc, ...) -> char*
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(), {ctx.getPtrType(), ctx.getI32Type()}, true /* varargs */);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }

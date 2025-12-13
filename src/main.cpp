@@ -8,7 +8,7 @@
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
 #include "hir/hir_lowering.hpp"
-#include "mir/mir_interpreter.hpp"
+#include "mir/interpreter/interpreter.hpp"
 #include "mir/mir_lowering.hpp"
 #include "mir/mir_printer.hpp"
 #include "mir/optimizations/all_passes.hpp"
@@ -315,7 +315,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << "  " << (diag.kind == DiagKind::Error ? "エラー" : "警告") << ": "
                           << diag.message << "\n";
             }
-            std::exit(0);  // パーサエラー時はexit(0)で終了
+            std::exit(1);  // エラー時はexit(1)で終了
         }
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";
@@ -408,7 +408,7 @@ int main(int argc, char* argv[]) {
             if (opts.verbose) {
                 std::cout << "=== Interpreter ===\n";
             }
-            mir::MirInterpreter interpreter;
+            mir::interp::Interpreter interpreter;
             auto result = interpreter.execute(mir);
 
             if (!result.success) {

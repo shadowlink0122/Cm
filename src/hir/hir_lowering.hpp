@@ -273,6 +273,11 @@ class HirLowering {
             hir_func->name = method->name;
             hir_func->return_type = method->return_type;
 
+            // selfパラメータを最初に追加（構造体型への参照）
+            if (impl.target_type) {
+                hir_func->params.push_back({"self", impl.target_type});
+            }
+
             for (const auto& param : method->params) {
                 hir_func->params.push_back({param.name, param.type});
             }

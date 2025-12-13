@@ -36,6 +36,9 @@ class MirLoweringBase {
     // enum定義 (enum名 -> (メンバー名 -> 値))
     std::unordered_map<std::string, std::unordered_map<std::string, int64_t>> enum_defs;
 
+    // デストラクタを持つ型のセット
+    std::unordered_set<std::string> types_with_destructor;
+
    public:
     MirLoweringBase() = default;
     virtual ~MirLoweringBase() = default;
@@ -43,6 +46,11 @@ class MirLoweringBase {
     // MIRプログラムを取得
     MirProgram& get_program() { return mir_program; }
     const MirProgram& get_program() const { return mir_program; }
+
+    // 型がデストラクタを持つか確認
+    bool has_destructor(const std::string& type_name) const {
+        return types_with_destructor.count(type_name) > 0;
+    }
 
    protected:
     // 構造体を登録

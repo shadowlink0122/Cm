@@ -164,11 +164,8 @@ run_interpreter() {
     fi
 
     # インタープリタ実行
-    if $CM_EXEC run "$test_file" > "$output_file" 2>&1; then
-        echo "EXIT: 0" >> "$output_file"
-    else
-        echo "EXIT: $?" >> "$output_file"
-    fi
+    $CM_EXEC run "$test_file" > "$output_file" 2>&1
+    local exit_code=$?
 
     # 結果比較
     if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then

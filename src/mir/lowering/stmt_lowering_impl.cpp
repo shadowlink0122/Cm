@@ -21,26 +21,95 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         ctx.push_statement(MirStatement::assign(
             MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
     }
+
+    // コンストラクタ呼び出しがある場合
+    if (let.ctor_call) {
+        // コンストラクタ呼び出しはHirCall形式
+        if (auto* call = std::get_if<std::unique_ptr<hir::HirCall>>(&let.ctor_call->kind)) {
+            const auto& hir_call = **call;
+
+            // 引数をlowering
+            std::vector<MirOperandPtr> args;
+
+            // HIRのctor_call.argsには既にthis（変数への参照）が含まれている
+            // 最初の引数は変数自身への参照なので、直接localを使う
+            bool first_arg = true;
+            for (const auto& arg : hir_call.args) {
+                if (first_arg) {
+                    // 最初の引数（this）は変数自身を使う
+                    args.push_back(MirOperand::copy(MirPlace{local}));
+                    first_arg = false;
+                } else {
+                    // 残りの引数を通常通りlowering
+                    LocalId arg_local = expr_lowering->lower_expression(*arg, ctx);
+                    args.push_back(MirOperand::copy(MirPlace{arg_local}));
+                }
+            }
+
+            // コンストラクタ関数呼び出しを生成
+            BlockId success_block = ctx.new_block();
+            auto func_operand = MirOperand::function_ref(hir_call.func_name);
+
+            auto call_term = std::make_unique<MirTerminator>();
+            call_term->kind = MirTerminator::Call;
+            call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
+                                                      std::nullopt,  // コンストラクタは戻り値なし
+                                                      success_block, std::nullopt};
+            ctx.set_terminator(std::move(call_term));
+            ctx.switch_to_block(success_block);
+        }
+    }
+
+    // デストラクタを持つ型の変数を登録
+    if (let.type && let.type->kind == hir::TypeKind::Struct) {
+        std::string type_name = let.type->name;
+        if (ctx.has_destructor(type_name)) {
+            ctx.register_destructor_var(local, type_name);
+        }
+    }
 }
 
 // 代入文のlowering
 void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& ctx) {
-    // 左辺値を取得（変数名から）
-    auto lhs_opt = ctx.resolve_variable(assign.target);
-
-    if (!lhs_opt) {
-        // 変数が見つからない場合はエラー（デバッグ用）
-        // TODO: エラーハンドリングの改善
+    if (!assign.target || !assign.value) {
         return;
     }
 
     // 右辺値をlowering
-    if (assign.value) {
-        LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
+    LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
 
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+    // 左辺値の種類に応じて処理
+    if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&assign.target->kind)) {
+        // 単純な変数代入
+        auto lhs_opt = ctx.resolve_variable((*var_ref)->name);
+        if (lhs_opt) {
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+        }
+    } else if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind)) {
+        // メンバーアクセス（構造体フィールド）への代入
+        // オブジェクトをlowering
+        LocalId object = expr_lowering->lower_expression(*(*member)->object, ctx);
+
+        // オブジェクトの型から構造体名を取得
+        auto obj_type = (*member)->object->type;
+        if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
+            // 構造体のフィールドインデックスを取得
+            auto field_idx = ctx.get_field_index(obj_type->name, (*member)->member);
+            if (field_idx) {
+                // Projectionを使ったアクセスを生成
+                MirPlace place{object};
+                place.projections.push_back(PlaceProjection::field(*field_idx));
+
+                ctx.push_statement(MirStatement::assign(
+                    place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+            }
+        }
+    } else if (auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
+        // 配列インデックスへの代入
+        // TODO: 配列アクセスの実装
     }
+    // その他の左辺値タイプは未対応
 }
 
 // return文のlowering
@@ -59,6 +128,27 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
     auto defers = ctx.get_defer_stmts();
     for (const auto* defer_stmt : defers) {
         lower_statement(*defer_stmt, ctx);
+    }
+
+    // デストラクタを呼び出す（逆順）
+    auto destructor_vars = ctx.get_all_destructor_vars();
+    for (const auto& [local_id, type_name] : destructor_vars) {
+        std::string dtor_name = type_name + "__dtor";
+
+        // デストラクタ呼び出しを生成
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(MirPlace{local_id}));
+
+        BlockId success_block = ctx.new_block();
+
+        auto func_operand = MirOperand::function_ref(dtor_name);
+        auto call_term = std::make_unique<MirTerminator>();
+        call_term->kind = MirTerminator::Call;
+        call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
+                                                  std::nullopt,  // void戻り値
+                                                  success_block, std::nullopt};
+        ctx.set_terminator(std::move(call_term));
+        ctx.switch_to_block(success_block);
     }
 
     // return終端命令

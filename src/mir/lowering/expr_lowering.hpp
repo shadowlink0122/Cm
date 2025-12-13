@@ -68,6 +68,9 @@ class ExprLowering : public MirLoweringBase {
 
     // HIR単項演算子をMIRに変換
     MirUnaryOp convert_unary_op(hir::HirUnaryOp op);
+
+    // 値を文字列に変換するヘルパー（文字列連結用）
+    LocalId convert_to_string(LocalId value, const hir::TypePtr& type, LoweringContext& ctx);
 };
 
 }  // namespace cm::mir

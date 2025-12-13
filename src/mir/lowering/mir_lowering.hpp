@@ -97,6 +97,14 @@ class MirLowering : public MirLoweringBase {
                 impl_info[type_name][interface_name] = impl_method_name;
             }
         }
+
+        // デストラクタを持つ型を記録
+        for (const auto& method : impl.methods) {
+            if (method && method->is_destructor) {
+                types_with_destructor.insert(type_name);
+                break;
+            }
+        }
     }
 
     // 通常の関数をlowering
@@ -132,6 +140,9 @@ class MirLowering : public MirLoweringBase {
 
     // デストラクタを生成（構造体用）
     void generate_destructor(const std::string& type_name, LoweringContext& ctx);
+
+    // デストラクタ呼び出しを挿入
+    void emit_destructors(LoweringContext& ctx);
 };
 
 }  // namespace cm::mir

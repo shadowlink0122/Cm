@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <optional>
 #include <stack>
+#include <unordered_set>
 
 namespace cm::mir {
 
@@ -46,12 +47,22 @@ class LoweringContext {
     // raw pointerを使用（HirStmtは関数のlowering中は生きているため）
     std::vector<std::vector<const hir::HirStmt*>> defer_stacks;
 
+    // デストラクタを持つ変数の追跡（スコープごと）
+    // {LocalId, 型名} のペアを格納
+    std::vector<std::vector<std::pair<LocalId, std::string>>> destructor_vars;
+
+    // デストラクタを持つ型のセット
+    std::unordered_set<std::string> types_with_destructor;
+
     // enum値のキャッシュ (EnumName::MemberName -> value) - 親クラスから参照
     const std::unordered_map<std::string, std::unordered_map<std::string, int64_t>>* enum_defs =
         nullptr;
 
     // typedef定義へのポインタ - 親クラスから参照
     const std::unordered_map<std::string, hir::TypePtr>* typedef_defs = nullptr;
+
+    // 構造体定義へのポインタ - 親クラスから参照
+    const std::unordered_map<std::string, const hir::HirStruct*>* struct_defs = nullptr;
 
     explicit LoweringContext(MirFunction* f) : func(f) {
         // 初期スコープを作成
@@ -69,13 +80,13 @@ class LoweringContext {
 
     // 新しいローカル変数を作成
     LocalId new_local(const std::string& name, hir::TypePtr type, bool is_mutable = true) {
-        return func->add_local(name, resolve_typedef(type), is_mutable, false);
+        return func->add_local(name, type, is_mutable, false);
     }
 
     // 新しい一時変数を作成
     LocalId new_temp(hir::TypePtr type) {
         std::string name = "_t" + std::to_string(next_temp_id++);
-        return func->add_local(name, resolve_typedef(type), true, true);
+        return func->add_local(name, type, true, true);
     }
 
     // 文を現在のブロックに追加
@@ -112,23 +123,6 @@ class LoweringContext {
     // 現在のループコンテキストを取得
     LoopContext* current_loop() { return loop_stack.empty() ? nullptr : &loop_stack.top(); }
 
-    // typedefを解決
-    hir::TypePtr resolve_typedef(hir::TypePtr type) {
-        if (!type || !typedef_defs)
-            return type;
-
-        // TypeAlias型の場合、typedefかチェック
-        if (type->kind == hir::TypeKind::TypeAlias || type->kind == hir::TypeKind::Struct) {
-            auto it = typedef_defs->find(type->name);
-            if (it != typedef_defs->end()) {
-                // 再帰的に解決
-                return resolve_typedef(it->second);
-            }
-        }
-
-        return type;
-    }
-
     // enum値を取得
     std::optional<int64_t> get_enum_value(const std::string& enum_name,
                                           const std::string& member_name) {
@@ -150,6 +144,7 @@ class LoweringContext {
     void push_scope() {
         scopes.emplace_back();
         defer_stacks.emplace_back();
+        destructor_vars.emplace_back();
     }
 
     void pop_scope() {
@@ -158,6 +153,9 @@ class LoweringContext {
         }
         if (!defer_stacks.empty()) {
             defer_stacks.pop_back();
+        }
+        if (!destructor_vars.empty()) {
+            destructor_vars.pop_back();
         }
     }
 
@@ -178,6 +176,48 @@ class LoweringContext {
         return {};
     }
 
+    // デストラクタを持つ変数を登録
+    void register_destructor_var(LocalId id, const std::string& type_name) {
+        if (!destructor_vars.empty()) {
+            destructor_vars.back().push_back({id, type_name});
+        }
+    }
+
+    // 全スコープのデストラクタ変数を取得（内側から外側へ、逆順）
+    std::vector<std::pair<LocalId, std::string>> get_all_destructor_vars() {
+        std::vector<std::pair<LocalId, std::string>> result;
+        // 内側のスコープから外側へ
+        for (auto it = destructor_vars.rbegin(); it != destructor_vars.rend(); ++it) {
+            // 各スコープ内では逆順（後から宣言された変数が先にデストラクト）
+            for (auto var_it = it->rbegin(); var_it != it->rend(); ++var_it) {
+                result.push_back(*var_it);
+            }
+        }
+        return result;
+    }
+
+    // 現在のスコープのデストラクタ変数を取得（逆順）
+    std::vector<std::pair<LocalId, std::string>> get_current_scope_destructor_vars() {
+        std::vector<std::pair<LocalId, std::string>> result;
+        if (!destructor_vars.empty()) {
+            auto& current = destructor_vars.back();
+            for (auto it = current.rbegin(); it != current.rend(); ++it) {
+                result.push_back(*it);
+            }
+        }
+        return result;
+    }
+
+    // 型がデストラクタを持つか確認
+    bool has_destructor(const std::string& type_name) const {
+        return types_with_destructor.count(type_name) > 0;
+    }
+
+    // デストラクタを持つ型として登録
+    void register_type_with_destructor(const std::string& type_name) {
+        types_with_destructor.insert(type_name);
+    }
+
     // 変数を現在のスコープに登録
     void register_variable(const std::string& name, LocalId id) {
         if (!scopes.empty()) {
@@ -195,6 +235,40 @@ class LoweringContext {
             }
         }
         return std::nullopt;
+    }
+
+    // 構造体のフィールドインデックスを取得
+    std::optional<FieldId> get_field_index(const std::string& struct_name,
+                                           const std::string& field_name) {
+        if (!struct_defs || struct_defs->find(struct_name) == struct_defs->end()) {
+            return std::nullopt;
+        }
+
+        const auto* struct_def = struct_defs->at(struct_name);
+        for (size_t i = 0; i < struct_def->fields.size(); ++i) {
+            if (struct_def->fields[i].name == field_name) {
+                return static_cast<FieldId>(i);
+            }
+        }
+        return std::nullopt;
+    }
+
+   private:
+    // typedefを解決（必要に応じて再帰的に）
+    hir::TypePtr resolve_typedef(const hir::TypePtr& type) {
+        if (!type || !typedef_defs) {
+            return type;
+        }
+
+        // Structタイプの場合、typedef定義を確認
+        if (type->kind == hir::TypeKind::Struct) {
+            if (auto it = typedef_defs->find(type->name); it != typedef_defs->end()) {
+                // 再帰的に解決
+                return resolve_typedef(it->second);
+            }
+        }
+
+        return type;
     }
 };
 

@@ -24,6 +24,12 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     LoweringContext ctx(mir_func.get());
     ctx.enum_defs = &enum_defs;
     ctx.typedef_defs = &typedef_defs;
+    ctx.struct_defs = &struct_defs;
+
+    // デストラクタを持つ型の情報をコンテキストに渡す
+    for (const auto& type_name : types_with_destructor) {
+        ctx.register_type_with_destructor(type_name);
+    }
 
     // 関数パラメータをローカル変数として登録
     for (const auto& param : func.params) {
@@ -46,6 +52,9 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     // デフォルト値で戻る（return文がない場合）
     auto* current = ctx.get_current_block();
     if (current && !current->terminator) {
+        // デストラクタを呼び出す
+        emit_destructors(ctx);
+
         MirConstant default_return;
         default_return.type = func.return_type;
         default_return.value = int64_t(0);
@@ -58,6 +67,29 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     return mir_func;
 }
 
+// デストラクタ呼び出しを生成
+void MirLowering::emit_destructors(LoweringContext& ctx) {
+    auto destructor_vars = ctx.get_all_destructor_vars();
+    for (const auto& [local_id, type_name] : destructor_vars) {
+        std::string dtor_name = type_name + "__dtor";
+
+        // デストラクタ呼び出しを生成
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(MirPlace{local_id}));
+
+        BlockId success_block = ctx.new_block();
+
+        auto func_operand = MirOperand::function_ref(dtor_name);
+        auto call_term = std::make_unique<MirTerminator>();
+        call_term->kind = MirTerminator::Call;
+        call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
+                                                  std::nullopt,  // void戻り値
+                                                  success_block, std::nullopt};
+        ctx.set_terminator(std::move(call_term));
+        ctx.switch_to_block(success_block);
+    }
+}
+
 // impl内のメソッドをlowering
 void MirLowering::lower_impl(const hir::HirImpl& impl) {
     if (impl.target_type.empty())
@@ -67,12 +99,16 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
 
     // 各メソッドをlowering
     for (const auto& method : impl.methods) {
-        std::string impl_method_name = type_name + "__" + method->name;
-
-        // メソッドを関数として処理（参照を使用、名前だけ変更）
+        // メソッドを関数として処理
         auto mir_func = lower_function(*method);
         if (mir_func) {
-            mir_func->name = impl_method_name;
+            // コンストラクタ/デストラクタは既にマングル化された名前を持っている
+            if (method->is_constructor || method->is_destructor) {
+                mir_func->name = method->name;
+            } else {
+                // 通常のメソッドは type__method_name 形式にする
+                mir_func->name = type_name + "__" + method->name;
+            }
             mir_program.functions.push_back(std::move(mir_func));
         }
     }

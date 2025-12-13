@@ -362,6 +362,11 @@ struct MirTerminator {
         std::optional<MirPlace> destination;  // 戻り値の格納先
         BlockId success;                      // 成功時の遷移先
         std::optional<BlockId> unwind;        // パニック時の遷移先
+
+        // インターフェースメソッド呼び出し用（オプション）
+        std::string interface_name;  // インターフェース名（空なら通常の関数呼び出し）
+        std::string method_name;  // メソッド名
+        bool is_virtual = false;  // vtable経由の呼び出しか
     };
 
     std::variant<std::monostate,  // Return, Unreachable
@@ -535,14 +540,80 @@ struct MirStruct {
     std::vector<MirStructField> fields;
     uint32_t size;   // 構造体全体のサイズ
     uint32_t align;  // アライメント要求
+
+    // インターフェース実装情報
+    std::vector<std::string> implemented_interfaces;
 };
 
 using MirStructPtr = std::unique_ptr<MirStruct>;
 
+// インターフェースメソッド定義
+struct MirInterfaceMethod {
+    std::string name;
+    hir::TypePtr return_type;
+    std::vector<hir::TypePtr> param_types;
+};
+
+// インターフェース定義
+struct MirInterface {
+    std::string name;
+    std::vector<MirInterfaceMethod> methods;
+};
+
+using MirInterfacePtr = std::unique_ptr<MirInterface>;
+
+// vtableエントリ（動的ディスパッチ用）
+struct VTableEntry {
+    std::string method_name;
+    std::string impl_function_name;  // 実際に呼び出す関数名
+};
+
+// vtable（型ごとのインターフェース実装）
+struct VTable {
+    std::string type_name;       // 実装する型
+    std::string interface_name;  // 実装するインターフェース
+    std::vector<VTableEntry> entries;
+};
+
+using VTablePtr = std::unique_ptr<VTable>;
+
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
-    std::vector<MirStructPtr> structs;  // 構造体定義
+    std::vector<MirStructPtr> structs;        // 構造体定義
+    std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
+    std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
     std::string filename;
+
+    // 関数を名前で検索
+    const MirFunction* find_function(const std::string& name) const {
+        for (const auto& func : functions) {
+            if (func && func->name == name) {
+                return func.get();
+            }
+        }
+        return nullptr;
+    }
+
+    // 構造体を名前で検索
+    const MirStruct* find_struct(const std::string& name) const {
+        for (const auto& st : structs) {
+            if (st && st->name == name) {
+                return st.get();
+            }
+        }
+        return nullptr;
+    }
+
+    // vtableを検索
+    const VTable* find_vtable(const std::string& type_name,
+                              const std::string& interface_name) const {
+        for (const auto& vt : vtables) {
+            if (vt && vt->type_name == type_name && vt->interface_name == interface_name) {
+                return vt.get();
+            }
+        }
+        return nullptr;
+    }
 };
 
 }  // namespace cm::mir

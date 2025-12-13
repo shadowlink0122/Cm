@@ -640,6 +640,10 @@ class TypeChecker {
             inferred_type = infer_call(*call);
         } else if (auto* member = expr.as<ast::MemberExpr>()) {
             inferred_type = infer_member(*member);
+        } else if (auto* ternary = expr.as<ast::TernaryExpr>()) {
+            inferred_type = infer_ternary(*ternary);
+        } else if (auto* idx = expr.as<ast::IndexExpr>()) {
+            inferred_type = infer_index(*idx);
         } else {
             inferred_type = ast::make_error();
         }
@@ -950,6 +954,57 @@ class TypeChecker {
             error(Span{}, "Field access on non-struct type '" + type_name + "'");
         }
 
+        return ast::make_error();
+    }
+
+    // 三項演算子
+    ast::TypePtr infer_ternary(ast::TernaryExpr& ternary) {
+        // 条件式の型チェック
+        auto cond_type = infer_type(*ternary.condition);
+        if (!cond_type ||
+            (cond_type->kind != ast::TypeKind::Bool && cond_type->kind != ast::TypeKind::Int)) {
+            error(Span{}, "Ternary condition must be bool or int");
+        }
+
+        // then部とelse部の型を推論
+        auto then_type = infer_type(*ternary.then_expr);
+        auto else_type = infer_type(*ternary.else_expr);
+
+        // 型が互換性があるか確認
+        if (!types_compatible(then_type, else_type)) {
+            error(Span{}, "Ternary branches have incompatible types");
+        }
+
+        // then部の型を返す（両方が互換性がある場合）
+        return then_type;
+    }
+
+    // 配列インデックスアクセス
+    ast::TypePtr infer_index(ast::IndexExpr& idx) {
+        // オブジェクトの型を推論
+        auto obj_type = infer_type(*idx.object);
+
+        // インデックスの型を推論（整数であること）
+        auto index_type = infer_type(*idx.index);
+        if (!index_type || !index_type->is_integer()) {
+            error(Span{}, "Array index must be an integer type");
+        }
+
+        if (!obj_type) {
+            return ast::make_error();
+        }
+
+        // 配列型の場合、要素型を返す
+        if (obj_type->kind == ast::TypeKind::Array) {
+            return obj_type->element_type;
+        }
+
+        // ポインタ型の場合、参照先の型を返す
+        if (obj_type->kind == ast::TypeKind::Pointer) {
+            return obj_type->element_type;
+        }
+
+        error(Span{}, "Index access on non-array type");
         return ast::make_error();
     }
 
