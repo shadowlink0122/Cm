@@ -198,26 +198,91 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         return temp;
     }
 
-    // 論理演算 (AND/OR) を一時的にビット演算として実装（短絡評価なし）
-    if (bin.op == hir::HirBinaryOp::And || bin.op == hir::HirBinaryOp::Or) {
-        // 両辺を評価
+    // 論理演算 (AND/OR) - 短絡評価を実装
+    if (bin.op == hir::HirBinaryOp::And) {
+        // AND演算の短絡評価
+        // 左辺を評価
         LocalId lhs = lower_expression(*bin.lhs, ctx);
-        LocalId rhs = lower_expression(*bin.rhs, ctx);
 
-        // 結果用の一時変数
+        // 結果を格納する変数
         LocalId result = ctx.new_temp(hir::make_bool());
 
-        // 論理演算をビット演算として実装
-        MirBinaryOp op =
-            (bin.op == hir::HirBinaryOp::And) ? MirBinaryOp::BitAnd : MirBinaryOp::BitOr;
+        // ブロックを作成
+        BlockId eval_rhs = ctx.new_block();    // 右辺を評価するブロック
+        BlockId skip_rhs = ctx.new_block();    // 右辺をスキップするブロック（結果はfalse）
+        BlockId merge = ctx.new_block();       // 結果を統合するブロック
 
-        // BinaryOp Rvalueを作成
-        auto bin_rvalue = std::make_unique<MirRvalue>();
-        bin_rvalue->kind = MirRvalue::BinaryOp;
-        bin_rvalue->data = MirRvalue::BinaryOpData{op, MirOperand::copy(MirPlace{lhs}),
-                                                   MirOperand::copy(MirPlace{rhs})};
+        // 左辺がtrueなら右辺を評価、falseならスキップ
+        ctx.set_terminator(
+            MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}),
+                                     {{1, eval_rhs}}, skip_rhs));
 
-        ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(bin_rvalue)));
+        // 右辺を評価するブロック
+        ctx.switch_to_block(eval_rhs);
+        LocalId rhs = lower_expression(*bin.rhs, ctx);
+        // 結果は右辺の値（左辺は既にtrue）
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{result},
+            MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
+        ctx.set_terminator(MirTerminator::goto_block(merge));
+
+        // 右辺をスキップするブロック（左辺がfalse）
+        ctx.switch_to_block(skip_rhs);
+        // 結果はfalse
+        MirConstant false_const;
+        false_const.type = hir::make_bool();
+        false_const.value = false;
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{result},
+            MirRvalue::use(MirOperand::constant(false_const))));
+        ctx.set_terminator(MirTerminator::goto_block(merge));
+
+        // マージブロック
+        ctx.switch_to_block(merge);
+
+        return result;
+    }
+
+    if (bin.op == hir::HirBinaryOp::Or) {
+        // OR演算の短絡評価
+        // 左辺を評価
+        LocalId lhs = lower_expression(*bin.lhs, ctx);
+
+        // 結果を格納する変数
+        LocalId result = ctx.new_temp(hir::make_bool());
+
+        // ブロックを作成
+        BlockId skip_rhs = ctx.new_block();    // 右辺をスキップするブロック（結果はtrue）
+        BlockId eval_rhs = ctx.new_block();    // 右辺を評価するブロック
+        BlockId merge = ctx.new_block();       // 結果を統合するブロック
+
+        // 左辺がtrueならスキップ、falseなら右辺を評価
+        ctx.set_terminator(
+            MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}),
+                                     {{1, skip_rhs}}, eval_rhs));
+
+        // 右辺をスキップするブロック（左辺がtrue）
+        ctx.switch_to_block(skip_rhs);
+        // 結果はtrue
+        MirConstant true_const;
+        true_const.type = hir::make_bool();
+        true_const.value = true;
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{result},
+            MirRvalue::use(MirOperand::constant(true_const))));
+        ctx.set_terminator(MirTerminator::goto_block(merge));
+
+        // 右辺を評価するブロック
+        ctx.switch_to_block(eval_rhs);
+        LocalId rhs = lower_expression(*bin.rhs, ctx);
+        // 結果は右辺の値（左辺は既にfalse）
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{result},
+            MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
+        ctx.set_terminator(MirTerminator::goto_block(merge));
+
+        // マージブロック
+        ctx.switch_to_block(merge);
 
         return result;
     }
