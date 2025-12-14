@@ -1,0 +1,15 @@
+// 非網羅的matchのテスト - コンパイルエラーが期待される
+
+int main() {
+    int x = 5;
+    
+    // ワイルドカードがないため非網羅的
+    int result = match (x) {
+        1 => 10,
+        2 => 20,
+        3 => 30,
+    };
+    
+    println("result = {result}");
+    return 0;
+}

@@ -59,7 +59,7 @@ class Monomorphization : public MirLoweringBase {
 
         // 特殊化関数を生成
         generate_generic_specializations(program, hir_functions, needed);
-        
+
         // 呼び出し箇所を書き換え（Container<int>__print -> Container__int__print）
         rewrite_generic_calls(program, needed);
 
@@ -76,12 +76,11 @@ class Monomorphization : public MirLoweringBase {
 
     // ジェネリック構造体のモノモーフィゼーション
     void monomorphize_structs(MirProgram& program);
-    
+
     // ジェネリック関数呼び出しを特殊化関数呼び出しに書き換え
     void rewrite_generic_calls(
-        MirProgram& program,
-        const std::map<std::pair<std::string, std::vector<std::string>>,
-                       std::vector<std::tuple<std::string, size_t>>>& needed);
+        MirProgram& program, const std::map<std::pair<std::string, std::vector<std::string>>,
+                                            std::vector<std::tuple<std::string, size_t>>>& needed);
 
     // MIR内の全型を走査し、必要な構造体特殊化を収集
     void collect_struct_specializations(

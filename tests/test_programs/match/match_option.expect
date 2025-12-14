@@ -1,0 +1,5 @@
+unwrap_or_match(Some(42), 0) = 42
+unwrap_or_match(None, -1) = -1
+option_to_int(Some) = 1
+option_to_int(None) = 0
+sum(Some(10), Some(20)) = 30

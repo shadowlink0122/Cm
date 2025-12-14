@@ -665,6 +665,8 @@ class Parser {
     ast::ExprPtr parse_unary();
     ast::ExprPtr parse_postfix();
     ast::ExprPtr parse_primary();
+    ast::ExprPtr parse_match_expr(uint32_t start_pos);
+    std::unique_ptr<ast::MatchPattern> parse_match_pattern();
 
     // ジェネリックパラメータ（<T>, <T: Ord>, <T, U>）をパース
     // 戻り値: pair<名前リスト（後方互換）, GenericParamリスト（制約付き）>

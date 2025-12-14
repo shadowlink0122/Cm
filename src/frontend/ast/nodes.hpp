@@ -46,13 +46,15 @@ struct MemberExpr;
 struct TernaryExpr;
 struct NewExpr;
 struct LambdaExpr;
+struct MatchExpr;
 
 // 式の種類
-using ExprKind = std::variant<std::unique_ptr<LiteralExpr>, std::unique_ptr<IdentExpr>,
-                              std::unique_ptr<BinaryExpr>, std::unique_ptr<UnaryExpr>,
-                              std::unique_ptr<CallExpr>, std::unique_ptr<IndexExpr>,
-                              std::unique_ptr<MemberExpr>, std::unique_ptr<TernaryExpr>,
-                              std::unique_ptr<NewExpr>, std::unique_ptr<LambdaExpr>>;
+using ExprKind =
+    std::variant<std::unique_ptr<LiteralExpr>, std::unique_ptr<IdentExpr>,
+                 std::unique_ptr<BinaryExpr>, std::unique_ptr<UnaryExpr>, std::unique_ptr<CallExpr>,
+                 std::unique_ptr<IndexExpr>, std::unique_ptr<MemberExpr>,
+                 std::unique_ptr<TernaryExpr>, std::unique_ptr<NewExpr>,
+                 std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>>;
 
 struct Expr : Node {
     ExprKind kind;

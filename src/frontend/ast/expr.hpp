@@ -284,6 +284,71 @@ struct LambdaExpr {
 };
 
 // ============================================================
+// matchパターン（式用）
+// ============================================================
+enum class MatchPatternKind {
+    Literal,     // リテラル値 (42, "hello", true)
+    Variable,    // 変数束縛 (x)
+    Wildcard,    // ワイルドカード (_)
+    EnumVariant  // enum値 (Option::Some, Color::Red)
+};
+
+struct MatchPattern {
+    MatchPatternKind kind;
+    ExprPtr value;         // Literal/EnumVariant用
+    std::string var_name;  // Variable用（束縛変数名）
+
+    static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Literal;
+        p->value = std::move(val);
+        return p;
+    }
+
+    static std::unique_ptr<MatchPattern> make_variable(std::string name) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Variable;
+        p->var_name = std::move(name);
+        return p;
+    }
+
+    static std::unique_ptr<MatchPattern> make_wildcard() {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Wildcard;
+        return p;
+    }
+
+    static std::unique_ptr<MatchPattern> make_enum_variant(ExprPtr val) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::EnumVariant;
+        p->value = std::move(val);
+        return p;
+    }
+};
+
+// ============================================================
+// matchアーム
+// ============================================================
+struct MatchArm {
+    std::unique_ptr<MatchPattern> pattern;
+    ExprPtr guard;  // オプショナルなガード条件 (if condition)
+    ExprPtr body;   // アームの本体（式）
+
+    MatchArm(std::unique_ptr<MatchPattern> p, ExprPtr g, ExprPtr b)
+        : pattern(std::move(p)), guard(std::move(g)), body(std::move(b)) {}
+};
+
+// ============================================================
+// match式
+// ============================================================
+struct MatchExpr {
+    ExprPtr scrutinee;           // マッチ対象の式
+    std::vector<MatchArm> arms;  // マッチアームのリスト
+
+    MatchExpr(ExprPtr s, std::vector<MatchArm> a) : scrutinee(std::move(s)), arms(std::move(a)) {}
+};
+
+// ============================================================
 // 式作成ヘルパー
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {

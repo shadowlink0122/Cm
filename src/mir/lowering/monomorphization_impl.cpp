@@ -395,50 +395,196 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
     if (!callee || callee->generic_params.empty())
         return result;
 
-    // 各型パラメータに対して推論
-    for (const auto& generic_param : callee->generic_params) {
-        std::string inferred_type;
+    // 型パラメータ名 -> 推論された型のマッピング
+    std::unordered_map<std::string, std::string> inferred_map;
 
-        // パラメータから型を推論
-        for (size_t i = 0; i < callee->params.size() && i < call_data.args.size(); ++i) {
-            const auto& param = callee->params[i];
+    // 各パラメータから型を推論
+    for (size_t i = 0; i < callee->params.size() && i < call_data.args.size(); ++i) {
+        const auto& param = callee->params[i];
+        if (!param.type)
+            continue;
 
-            // パラメータ型がジェネリック型パラメータと一致するか
-            if (param.type && param.type->name == generic_param.name) {
-                // 引数の型を取得
-                const auto& arg = call_data.args[i];
-                if (arg && arg->kind == MirOperand::Copy) {
-                    if (auto* place = std::get_if<MirPlace>(&arg->data)) {
-                        if (place->local < caller->locals.size()) {
-                            auto& local = caller->locals[place->local];
-                            std::string type_name = get_type_name(local.type);
-                            if (!type_name.empty()) {
-                                inferred_type = type_name;
-                                break;
-                            }
+        // 引数の型を取得
+        std::string arg_type_name;
+        const auto& arg = call_data.args[i];
+        if (arg && arg->kind == MirOperand::Copy) {
+            if (auto* place = std::get_if<MirPlace>(&arg->data)) {
+                if (place->local < caller->locals.size()) {
+                    auto& local = caller->locals[place->local];
+                    arg_type_name = get_type_name(local.type);
+                }
+            }
+        } else if (arg && arg->kind == MirOperand::Constant) {
+            if (auto* constant = std::get_if<MirConstant>(&arg->data)) {
+                arg_type_name = get_type_name(constant->type);
+            }
+        }
+
+        if (arg_type_name.empty())
+            continue;
+
+        // 1. 単純な型パラメータの場合（T → int）
+        for (const auto& generic_param : callee->generic_params) {
+            if (param.type->name == generic_param.name) {
+                inferred_map[generic_param.name] = arg_type_name;
+                debug_msg("MONO", "Inferred " + generic_param.name + " = " + arg_type_name +
+                                      " from simple param");
+            }
+        }
+
+        // 2. ジェネリック構造体パラメータの場合（Pair<T, U> → Pair__int__string）
+        // パラメータ型がジェネリック構造体かチェック
+        if (!param.type->type_args.empty() && hir_struct_defs) {
+            // パラメータ型の構造体定義を取得
+            auto struct_it = hir_struct_defs->find(param.type->name);
+            if (struct_it != hir_struct_defs->end() && struct_it->second) {
+                const auto* struct_def = struct_it->second;
+
+                // 引数の型名からtype_argsを抽出（Pair__int__string → [int, string]）
+                std::string base_name = param.type->name;
+                size_t underscore_pos = arg_type_name.find("__");
+
+                if (underscore_pos != std::string::npos &&
+                    arg_type_name.substr(0, underscore_pos) == base_name) {
+                    // 型引数を抽出
+                    std::vector<std::string> extracted_args;
+                    std::string remaining = arg_type_name.substr(underscore_pos + 2);
+
+                    size_t start = 0;
+                    while (true) {
+                        size_t next_pos = remaining.find("__", start);
+                        if (next_pos != std::string::npos) {
+                            extracted_args.push_back(remaining.substr(start, next_pos - start));
+                            start = next_pos + 2;
+                        } else {
+                            extracted_args.push_back(remaining.substr(start));
+                            break;
                         }
                     }
-                } else if (arg && arg->kind == MirOperand::Constant) {
-                    if (auto* constant = std::get_if<MirConstant>(&arg->data)) {
-                        std::string type_name = get_type_name(constant->type);
-                        if (!type_name.empty()) {
-                            inferred_type = type_name;
-                            break;
+
+                    // 型引数とジェネリックパラメータをマッチング
+                    for (size_t j = 0;
+                         j < param.type->type_args.size() && j < extracted_args.size(); ++j) {
+                        const auto& type_arg = param.type->type_args[j];
+                        if (type_arg) {
+                            // このtype_argがジェネリックパラメータ名なら推論
+                            for (const auto& generic_param : callee->generic_params) {
+                                if (type_arg->name == generic_param.name) {
+                                    inferred_map[generic_param.name] = extracted_args[j];
+                                    debug_msg("MONO", "Inferred " + generic_param.name + " = " +
+                                                          extracted_args[j] +
+                                                          " from struct param " + param.type->name);
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
 
-        if (inferred_type.empty()) {
+    // 各型パラメータの推論結果を収集
+    for (const auto& generic_param : callee->generic_params) {
+        auto it = inferred_map.find(generic_param.name);
+        if (it != inferred_map.end()) {
+            result.push_back(it->second);
+        } else {
             // 推論できなかった場合、デフォルトとしてintを使用
-            inferred_type = "int";
+            result.push_back("int");
+            debug_msg("MONO",
+                      "WARNING: Could not infer " + generic_param.name + ", defaulting to int");
         }
-
-        result.push_back(inferred_type);
     }
 
     return result;
+}
+
+// 型内の型パラメータを再帰的に置換するヘルパー関数
+static hir::TypePtr substitute_type_in_type(
+    const hir::TypePtr& type, const std::unordered_map<std::string, hir::TypePtr>& type_subst,
+    Monomorphization* mono) {
+    if (!type)
+        return nullptr;
+
+    // 1. 単純な型パラメータの場合（T → int）
+    auto it = type_subst.find(type->name);
+    if (it != type_subst.end()) {
+        return it->second;
+    }
+
+    // 2. ポインタ型の場合（Container<T>* → Container<int>*）
+    if (type->kind == hir::TypeKind::Pointer) {
+        // ポインタの指す型を取得（名前から推測）
+        std::string pointed_name = type->name;
+        if (!pointed_name.empty() && pointed_name.back() == '*') {
+            pointed_name.pop_back();  // '*'を削除
+
+            // 指される型を作成して再帰的に置換
+            auto pointed_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+            pointed_type->name = pointed_name;
+            auto substituted_pointed = substitute_type_in_type(pointed_type, type_subst, mono);
+
+            if (substituted_pointed && substituted_pointed->name != pointed_name) {
+                auto new_ptr_type = std::make_shared<hir::Type>(hir::TypeKind::Pointer);
+                new_ptr_type->name = substituted_pointed->name + "*";
+                return new_ptr_type;
+            }
+        }
+    }
+
+    // 3. 構造体名に型パラメータが埋め込まれている場合（Container__T → Container__int）
+    if (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) {
+        std::string type_name = type->name;
+        size_t underscore_pos = type_name.find("__");
+
+        if (underscore_pos != std::string::npos) {
+            std::string base_name = type_name.substr(0, underscore_pos);
+            std::string params_str = type_name.substr(underscore_pos + 2);
+
+            // 型パラメータを "__" で分割して置換
+            std::vector<std::string> new_params;
+            bool any_substituted = false;
+            size_t start = 0;
+
+            while (true) {
+                size_t next_pos = params_str.find("__", start);
+                std::string param;
+                if (next_pos != std::string::npos) {
+                    param = params_str.substr(start, next_pos - start);
+                } else {
+                    param = params_str.substr(start);
+                }
+
+                // この型パラメータを置換できるか
+                auto subst_it = type_subst.find(param);
+                if (subst_it != type_subst.end()) {
+                    new_params.push_back(get_type_name(subst_it->second));
+                    any_substituted = true;
+                } else {
+                    new_params.push_back(param);
+                }
+
+                if (next_pos == std::string::npos)
+                    break;
+                start = next_pos + 2;
+            }
+
+            if (any_substituted) {
+                // 新しい構造体名を生成
+                std::string new_name = base_name;
+                for (const auto& p : new_params) {
+                    new_name += "__" + p;
+                }
+
+                auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                new_type->name = new_name;
+                return new_type;
+            }
+        }
+    }
+
+    // 変更なしの場合は元の型を返す
+    return type;
 }
 
 // ジェネリック関数の特殊化を生成
@@ -503,135 +649,7 @@ void Monomorphization::generate_generic_specializations(
         for (const auto& local : original_mir->locals) {
             LocalDecl new_local = local;
             if (new_local.type) {
-                // 単純な型パラメータの置換
-                auto it = type_subst.find(new_local.type->name);
-                if (it != type_subst.end()) {
-                    new_local.type = it->second;
-                }
-                // 構造体型でtype_argsがある場合（Box<T> → Box<int>など）
-                else if ((new_local.type->kind == hir::TypeKind::Struct ||
-                          new_local.type->kind == hir::TypeKind::TypeAlias) &&
-                         !new_local.type->type_args.empty()) {
-                    debug_msg("MONO", "  Checking struct with type_args: " + new_local.type->name +
-                                          " (" + std::to_string(new_local.type->type_args.size()) +
-                                          " args)");
-                    // type_args内の型パラメータを置換
-                    bool needs_update = false;
-                    std::vector<std::string> new_type_args;
-                    for (const auto& arg : new_local.type->type_args) {
-                        if (arg) {
-                            debug_msg("MONO", "    type_arg: " + arg->name + " (kind=" +
-                                                  std::to_string(static_cast<int>(arg->kind)) +
-                                                  ")");
-                            auto subst_it = type_subst.find(arg->name);
-                            if (subst_it != type_subst.end()) {
-                                new_type_args.push_back(get_type_name(subst_it->second));
-                                needs_update = true;
-                                debug_msg("MONO", "      -> substituted to: " +
-                                                      get_type_name(subst_it->second));
-                            } else {
-                                new_type_args.push_back(get_type_name(arg));
-                                debug_msg("MONO", "      -> kept as: " + get_type_name(arg));
-                            }
-                        }
-                    }
-
-                    if (needs_update && !new_type_args.empty()) {
-                        // 特殊化された構造体名を生成
-                        std::string spec_struct_name =
-                            make_specialized_struct_name(new_local.type->name, new_type_args);
-
-                        // 特殊化構造体が必要なら即座に生成
-                        if (hir_struct_defs &&
-                            generated_struct_specializations.count(spec_struct_name) == 0) {
-                            generate_specialized_struct(program, new_local.type->name,
-                                                        new_type_args);
-                        }
-
-                        // 型を更新
-                        new_local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                        new_local.type->name = spec_struct_name;
-                        debug_msg("MONO", "  Updated generic struct type: " + local.name + " -> " +
-                                              spec_struct_name);
-                    }
-                }
-                // 構造体型で名前がジェネリック構造体の特殊化形式の場合（Box__T → Box__int, Pair__T__U → Pair__int__string）
-                else if (new_local.type->kind == hir::TypeKind::Struct &&
-                         new_local.type->type_args.empty()) {
-                    // 名前が "Base__Param1__Param2..." 形式かチェック
-                    std::string type_name = new_local.type->name;
-                    size_t underscore_pos = type_name.find("__");
-                    if (underscore_pos != std::string::npos) {
-                        std::string base_name = type_name.substr(0, underscore_pos);
-                        
-                        // HIR構造体定義を確認して型パラメータ数を取得
-                        if (hir_struct_defs) {
-                            auto hir_it = hir_struct_defs->find(base_name);
-                            if (hir_it != hir_struct_defs->end() && hir_it->second) {
-                                const auto* struct_def = hir_it->second;
-                                if (!struct_def->generic_params.empty()) {
-                                    // 型パラメータ名を順番に抽出して置換
-                                    std::vector<std::string> new_type_args;
-                                    std::string remaining = type_name.substr(underscore_pos + 2);
-                                    
-                                    for (const auto& param : struct_def->generic_params) {
-                                        // パラメータ名が置換マップにあるか
-                                        auto subst_it = type_subst.find(param.name);
-                                        if (subst_it != type_subst.end()) {
-                                            new_type_args.push_back(get_type_name(subst_it->second));
-                                        } else {
-                                            // 置換マップにない場合は元の名前を使う
-                                            // remaining から次の "__" までを抽出
-                                            size_t next_pos = remaining.find("__");
-                                            if (next_pos != std::string::npos) {
-                                                new_type_args.push_back(remaining.substr(0, next_pos));
-                                                remaining = remaining.substr(next_pos + 2);
-                                            } else {
-                                                new_type_args.push_back(remaining);
-                                                remaining.clear();
-                                            }
-                                        }
-                                    }
-                                    
-                                    if (!new_type_args.empty()) {
-                                        std::string spec_struct_name =
-                                            make_specialized_struct_name(base_name, new_type_args);
-                                        
-                                        // 特殊化構造体が必要なら生成
-                                        if (generated_struct_specializations.count(spec_struct_name) == 0) {
-                                            generate_specialized_struct(program, base_name, new_type_args);
-                                        }
-                                        
-                                        new_local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                                        new_local.type->name = spec_struct_name;
-                                        debug_msg("MONO", "  Updated multi-param struct: " + type_name +
-                                                              " -> " + spec_struct_name);
-                                    }
-                                    continue;  // 処理済みなので次のケースへ
-                                }
-                            }
-                        }
-                        
-                        // 単一型パラメータの従来の処理
-                        std::string param_name = type_name.substr(underscore_pos + 2);
-                        auto subst_it = type_subst.find(param_name);
-                        if (subst_it != type_subst.end()) {
-                            std::string new_param = get_type_name(subst_it->second);
-                            std::string spec_struct_name = base_name + "__" + new_param;
-
-                            // 特殊化構造体が必要なら生成
-                            if (hir_struct_defs &&
-                                generated_struct_specializations.count(spec_struct_name) == 0) {
-                                generate_specialized_struct(program, base_name, {new_param});
-                            }
-
-                            new_local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                            new_local.type->name = spec_struct_name;
-                            debug_msg("MONO", "  Updated struct name: " + type_name + " -> " +
-                                                  spec_struct_name);
-                        }
-                    }
-                }
+                new_local.type = substitute_type_in_type(new_local.type, type_subst, this);
             }
             specialized->locals.push_back(new_local);
         }
@@ -1150,10 +1168,8 @@ void Monomorphization::update_type_references(MirProgram& program) {
 
 // ジェネリック関数呼び出しを特殊化関数呼び出しに書き換え
 void Monomorphization::rewrite_generic_calls(
-    MirProgram& program,
-    const std::map<std::pair<std::string, std::vector<std::string>>,
-                   std::vector<std::tuple<std::string, size_t>>>& needed) {
-    
+    MirProgram& program, const std::map<std::pair<std::string, std::vector<std::string>>,
+                                        std::vector<std::tuple<std::string, size_t>>>& needed) {
     // (元の関数名, 型引数) -> 特殊化関数名 のマッピングを構築
     std::map<std::pair<std::string, std::vector<std::string>>, std::string> rewrite_map;
     for (const auto& [key, _] : needed) {
@@ -1161,31 +1177,36 @@ void Monomorphization::rewrite_generic_calls(
         std::string specialized_name = make_specialized_name(func_name, type_args);
         rewrite_map[key] = specialized_name;
     }
-    
+
     // 全関数の呼び出しを書き換え
     for (auto& func : program.functions) {
-        if (!func) continue;
-        
+        if (!func)
+            continue;
+
         for (auto& block : func->basic_blocks) {
-            if (!block || !block->terminator) continue;
-            
+            if (!block || !block->terminator)
+                continue;
+
             if (block->terminator->kind == MirTerminator::Call) {
                 auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
-                
-                if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef) continue;
-                
+
+                if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+                    continue;
+
                 auto& func_name = std::get<std::string>(call_data.func->data);
-                
+
                 // Container<int>__print のような形式を検出
                 auto pos = func_name.find("<");
-                if (pos == std::string::npos) continue;
-                
+                if (pos == std::string::npos)
+                    continue;
+
                 auto end_pos = func_name.find(">__");
-                if (end_pos == std::string::npos) continue;
-                
+                if (end_pos == std::string::npos)
+                    continue;
+
                 // 型引数を抽出
                 std::string type_args_str = func_name.substr(pos + 1, end_pos - pos - 1);
-                
+
                 // 複数型引数をパース（カンマで分割）
                 std::vector<std::string> type_args;
                 size_t start = 0;
@@ -1195,28 +1216,30 @@ void Monomorphization::rewrite_generic_calls(
                     start = comma_pos + 2;
                 }
                 type_args.push_back(type_args_str.substr(start));
-                
+
                 // 元のジェネリック関数名を再構築
-                std::string base_name = func_name.substr(0, pos);  // "Container"
+                std::string base_name = func_name.substr(0, pos);           // "Container"
                 std::string method_suffix = func_name.substr(end_pos + 1);  // "__print"
-                
+
                 // Container<T>__print のような形式に変換
                 std::string generic_func_name = base_name + "<";
                 // 型パラメータ名は不明なので、T, U, V... と仮定
                 const char* param_names[] = {"T", "U", "V", "W"};
                 for (size_t i = 0; i < type_args.size(); ++i) {
-                    if (i > 0) generic_func_name += ", ";
+                    if (i > 0)
+                        generic_func_name += ", ";
                     generic_func_name += (i < 4) ? param_names[i] : "T" + std::to_string(i);
                 }
                 generic_func_name += ">" + method_suffix;
-                
+
                 // rewrite_mapから特殊化関数名を取得
                 auto key = std::make_pair(generic_func_name, type_args);
                 auto it = rewrite_map.find(key);
                 if (it != rewrite_map.end()) {
                     func_name = it->second;
-                    debug_msg("MONO", "Rewrote call in " + func->name + ": " + 
-                             std::get<std::string>(call_data.func->data) + " -> " + func_name);
+                    debug_msg("MONO", "Rewrote call in " + func->name + ": " +
+                                          std::get<std::string>(call_data.func->data) + " -> " +
+                                          func_name);
                 }
             }
         }

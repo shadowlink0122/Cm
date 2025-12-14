@@ -1,0 +1,31 @@
+// パターンガードのテスト（変数束縛版）
+
+int sign(int x) {
+    return match (x) {
+        n if n > 0 => 1,
+        n if n < 0 => -1,
+        _ => 0,
+    };
+}
+
+int grade_to_points(int score) {
+    return match (score) {
+        n if n >= 90 => 4,
+        n if n >= 80 => 3,
+        n if n >= 70 => 2,
+        n if n >= 60 => 1,
+        _ => 0,
+    };
+}
+
+int main() {
+    println("sign(10) = {}", sign(10));
+    println("sign(-5) = {}", sign(-5));
+    println("sign(0) = {}", sign(0));
+    
+    println("grade_to_points(95) = {}", grade_to_points(95));
+    println("grade_to_points(75) = {}", grade_to_points(75));
+    println("grade_to_points(50) = {}", grade_to_points(50));
+    
+    return 0;
+}

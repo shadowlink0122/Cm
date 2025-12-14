@@ -525,6 +525,12 @@ ast::ExprPtr Parser::parse_primary() {
         return std::make_unique<ast::Expr>(std::move(new_expr), Span{start_pos, previous().end});
     }
 
+    // match式
+    if (consume_if(TokenKind::KwMatch)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found match expression", debug::Level::Debug);
+        return parse_match_expr(start_pos);
+    }
+
     // 識別子（enum値アクセスを含む）
     if (check(TokenKind::Ident)) {
         std::string name(current().get_string());
@@ -563,6 +569,97 @@ ast::ExprPtr Parser::parse_primary() {
     debug::par::log(debug::par::Id::ExprError, error_msg, debug::Level::Error);
     error("Expected expression");
     return ast::make_null_literal();
+}
+
+// match式の解析
+// match (expr) {
+//     pattern => body,
+//     pattern if guard => body,
+//     _ => default_body,
+// }
+ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
+    expect(TokenKind::LParen);
+    auto scrutinee = parse_expr();
+    expect(TokenKind::RParen);
+    expect(TokenKind::LBrace);
+
+    std::vector<ast::MatchArm> arms;
+
+    while (!check(TokenKind::RBrace) && !is_at_end()) {
+        // パターンをパース
+        auto pattern = parse_match_pattern();
+
+        // オプションのガード条件 (if condition)
+        ast::ExprPtr guard = nullptr;
+        if (consume_if(TokenKind::KwIf)) {
+            guard = parse_expr();
+        }
+
+        // => (arrow)
+        expect(TokenKind::Arrow);
+
+        // アームの本体（式）
+        auto body = parse_expr();
+
+        arms.emplace_back(std::move(pattern), std::move(guard), std::move(body));
+
+        // 最後のアームでなければカンマが必要
+        if (!check(TokenKind::RBrace)) {
+            expect(TokenKind::Comma);
+        }
+    }
+
+    expect(TokenKind::RBrace);
+
+    auto match_expr = std::make_unique<ast::MatchExpr>(std::move(scrutinee), std::move(arms));
+    return std::make_unique<ast::Expr>(std::move(match_expr), Span{start_pos, previous().end});
+}
+
+// matchパターンの解析
+std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern() {
+    uint32_t start_pos = current().start;
+
+    // ワイルドカード (_)
+    if (check(TokenKind::Ident) && current().get_string() == "_") {
+        advance();
+        debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: wildcard",
+                        debug::Level::Debug);
+        return ast::MatchPattern::make_wildcard();
+    }
+
+    // リテラルパターン (数値、文字列、真偽値)
+    if (check(TokenKind::IntLiteral) || check(TokenKind::FloatLiteral) ||
+        check(TokenKind::StringLiteral) || check(TokenKind::CharLiteral) ||
+        check(TokenKind::KwTrue) || check(TokenKind::KwFalse) || check(TokenKind::KwNull)) {
+        auto lit_expr = parse_primary();
+        debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: literal", debug::Level::Debug);
+        return ast::MatchPattern::make_literal(std::move(lit_expr));
+    }
+
+    // enum値パターン (EnumName::Variant) または 変数束縛パターン
+    if (check(TokenKind::Ident)) {
+        std::string name(current().get_string());
+        advance();
+
+        // enum値アクセス: EnumName::Member
+        if (consume_if(TokenKind::ColonColon)) {
+            std::string member = expect_ident();
+            std::string enum_access = name + "::" + member;
+            auto enum_expr =
+                ast::make_ident(std::move(enum_access), Span{start_pos, previous().end});
+            debug::par::log(debug::par::Id::PrimaryExpr,
+                            "Match pattern: enum " + name + "::" + member, debug::Level::Debug);
+            return ast::MatchPattern::make_enum_variant(std::move(enum_expr));
+        }
+
+        // 変数束縛パターン
+        debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: variable " + name,
+                        debug::Level::Debug);
+        return ast::MatchPattern::make_variable(name);
+    }
+
+    error("Expected match pattern");
+    return ast::MatchPattern::make_wildcard();
 }
 
 }  // namespace cm

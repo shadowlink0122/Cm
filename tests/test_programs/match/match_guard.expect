@@ -1,0 +1,6 @@
+sign(10) = 1
+sign(-5) = -1
+sign(0) = 0
+grade_to_points(95) = 4
+grade_to_points(75) = 2
+grade_to_points(50) = 0

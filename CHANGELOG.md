@@ -2,6 +2,55 @@
 
 Cm言語コンパイラの変更履歴です。
 
+## [0.8.0] - 2024-12-14
+
+### 追加
+
+#### match式
+- **match式**: `match (expr) { pattern => body, ... }` 形式のパターンマッチング
+- **リテラルパターン**: 数値、真偽値のマッチング
+- **enum値パターン**: `Status::Ok => ...` 形式のenum値マッチング
+- **ワイルドカードパターン**: `_ => default` 形式のデフォルトマッチ
+- **パターンガード**: `pattern if condition => body` 形式の条件付きマッチ
+- **変数束縛パターンガード**: `n if n > 0 => ...` 形式の変数束縛付きガード
+- **網羅性チェック**: 整数型/bool型/enum型のmatch網羅性検証
+
+#### 型制約チェック
+- **型制約検証**: `<T: Ord>`などの型制約をコンパイル時にチェック
+- **組み込みインターフェース**: `Ord`, `Eq`, `Clone`のプリミティブ型への自動実装
+- **制約違反エラー**: 型が制約を満たさない場合に明確なエラーメッセージ
+
+### 修正
+
+#### v0.7.0の「既知の問題」
+以下の問題は実際には解決済みでした：
+- **impl<T>のLLVM関数署名**: 正常に動作確認
+- **複数型パラメータとジェネリック関数**: `make_pair<T,U>`パターンが動作
+- **Option<T>/Result<T,E>型**: ジェネリック構造体として実装可能
+
+### 修正（追加）
+
+#### 三項演算子の型処理
+- **文字列型match式のLLVMコンパイル**: 三項演算子の結果変数が正しい型を使用するように修正
+- これにより文字列を返すmatch式がLLVM/WASMでも正常に動作
+
+### テスト追加
+- `tests/test_programs/match/match_basic.cm`
+- `tests/test_programs/match/match_enum.cm`
+- `tests/test_programs/match/match_guard.cm`
+- `tests/test_programs/match/match_enum_exhaustive.cm`
+- `tests/test_programs/match/match_option.cm`
+- `tests/test_programs/match/match_result.cm`
+- `tests/test_programs/generics/impl_generics.cm`
+- `tests/test_programs/generics/multiple_type_params.cm`
+- `tests/test_programs/generics/option_type.cm`
+- `tests/test_programs/generics/result_type.cm`
+- `tests/test_programs/generics/generic_with_struct.cm`
+- `tests/test_programs/generics/simple_pair.cm`
+- `tests/test_programs/errors/constraint_error.cm`
+- `tests/test_programs/errors/match_non_exhaustive.cm`
+- `tests/test_programs/errors/match_enum_non_exhaustive.cm`
+
 ## [0.7.0] - 2024-12-14
 
 ### 追加

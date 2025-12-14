@@ -1,0 +1,16 @@
+// match式のテスト - 文字列結果
+
+int main() {
+    int status = 1;
+    
+    // 文字列を返すmatch式
+    string msg = match (status) {
+        0 => "OK",
+        1 => "ERROR",
+        _ => "UNKNOWN",
+    };
+    
+    println("status: {msg}");
+    
+    return 0;
+}

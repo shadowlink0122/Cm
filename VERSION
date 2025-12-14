@@ -1,9 +1,17 @@
 # Cm Language Version Information
-VERSION=0.7.0
+VERSION=0.8.0
 RELEASE_TYPE=development
 RELEASE_DATE=2024-12-14
 
 # Version History
+# 0.8.0 - Match Expression and Generics Verification
+#   - match (expr) { pattern => body, ... } syntax
+#   - Literal patterns, enum patterns, wildcard patterns
+#   - Pattern guards (parser implementation)
+#   - Verified v0.7.0 generics features work correctly
+#   - impl<T> generic methods on LLVM
+#   - Multiple type parameter functions (<T, U>)
+#   - Option<T> and Result<T, E> types
 # 0.7.0 - Advanced Generics and WASM Backend
 #   - impl<T> generic syntax
 #   - Generic struct method resolution

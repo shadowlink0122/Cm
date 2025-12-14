@@ -160,6 +160,8 @@ class TypeChecker {
             // ジェネリックパラメータがある場合は記録
             if (!func->generic_params.empty()) {
                 generic_functions_[func->name] = func->generic_params;
+                // 制約情報も保存
+                generic_function_constraints_[func->name] = func->generic_params_v2;
                 debug::tc::log(debug::tc::Id::Resolved,
                                "Generic function: " + func->name + " with " +
                                    std::to_string(func->generic_params.size()) + " type params",
@@ -267,6 +269,13 @@ class TypeChecker {
                                                  ast::make_void());
             }
             return;
+        }
+
+        // インターフェース実装を記録
+        if (!impl.interface_name.empty()) {
+            impl_interfaces_[type_name].insert(impl.interface_name);
+            debug::tc::log(debug::tc::Id::Resolved,
+                           type_name + " implements " + impl.interface_name, debug::Level::Debug);
         }
 
         // メソッド実装の場合
@@ -650,6 +659,8 @@ class TypeChecker {
             inferred_type = infer_ternary(*ternary);
         } else if (auto* idx = expr.as<ast::IndexExpr>()) {
             inferred_type = infer_index(*idx);
+        } else if (auto* match_expr = expr.as<ast::MatchExpr>()) {
+            inferred_type = infer_match(*match_expr);
         } else {
             inferred_type = ast::make_error();
         }
@@ -1079,6 +1090,207 @@ class TypeChecker {
         return then_type;
     }
 
+    // match式
+    ast::TypePtr infer_match(ast::MatchExpr& match) {
+        // scrutinee（マッチ対象）の型を推論
+        auto scrutinee_type = infer_type(*match.scrutinee);
+        if (!scrutinee_type) {
+            error(Span{}, "Cannot infer type of match scrutinee");
+            return ast::make_error();
+        }
+
+        // 各アームの型をチェック
+        ast::TypePtr result_type = nullptr;
+        for (auto& arm : match.arms) {
+            // パターンの型チェック
+            check_match_pattern(arm.pattern.get(), scrutinee_type);
+
+            // ガード条件がある場合、bool型であることを確認
+            if (arm.guard) {
+                auto guard_type = infer_type(*arm.guard);
+                if (!guard_type || guard_type->kind != ast::TypeKind::Bool) {
+                    error(Span{}, "Match guard must be a boolean expression");
+                }
+            }
+
+            // アームの本体の型を推論
+            auto body_type = infer_type(*arm.body);
+
+            // 最初のアームの型を結果型とする
+            if (!result_type) {
+                result_type = body_type;
+            } else if (!types_compatible(result_type, body_type)) {
+                error(Span{}, "Match arms have incompatible types");
+            }
+        }
+
+        if (!result_type) {
+            error(Span{}, "Match expression has no arms");
+            return ast::make_error();
+        }
+
+        // 網羅性チェック
+        check_match_exhaustiveness(match, scrutinee_type);
+
+        return result_type;
+    }
+
+    // match式の網羅性チェック
+    void check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr scrutinee_type) {
+        if (!scrutinee_type)
+            return;
+
+        bool has_wildcard = false;
+        bool has_variable_binding = false;
+        std::set<std::string> covered_values;
+        std::string detected_enum_name;  // enum型パターンから検出されたenum名
+
+        for (const auto& arm : match.arms) {
+            if (!arm.pattern)
+                continue;
+
+            switch (arm.pattern->kind) {
+                case ast::MatchPatternKind::Wildcard:
+                    has_wildcard = true;
+                    break;
+                case ast::MatchPatternKind::Variable:
+                    // 変数束縛パターンは全ての値にマッチ（ガードがない場合）
+                    if (!arm.guard) {
+                        has_variable_binding = true;
+                    }
+                    break;
+                case ast::MatchPatternKind::Literal:
+                    if (arm.pattern->value) {
+                        if (auto* lit = arm.pattern->value->as<ast::LiteralExpr>()) {
+                            if (lit->is_int()) {
+                                covered_values.insert(
+                                    std::to_string(std::get<int64_t>(lit->value)));
+                            } else if (lit->is_bool()) {
+                                covered_values.insert(std::get<bool>(lit->value) ? "true"
+                                                                                 : "false");
+                            }
+                        }
+                    }
+                    break;
+                case ast::MatchPatternKind::EnumVariant:
+                    if (arm.pattern->value) {
+                        if (auto* ident = arm.pattern->value->as<ast::IdentExpr>()) {
+                            covered_values.insert(ident->name);
+                            // EnumName::Member から EnumName を抽出
+                            auto pos = ident->name.find("::");
+                            if (pos != std::string::npos) {
+                                std::string enum_name = ident->name.substr(0, pos);
+                                if (enum_names_.count(enum_name)) {
+                                    detected_enum_name = enum_name;
+                                }
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+
+        // ワイルドカードまたは変数束縛があれば網羅的
+        if (has_wildcard || has_variable_binding) {
+            return;
+        }
+
+        // bool型の場合
+        if (scrutinee_type->kind == ast::TypeKind::Bool) {
+            if (!covered_values.count("true") || !covered_values.count("false")) {
+                error(Span{},
+                      "Non-exhaustive match: missing 'true' or 'false' pattern (or add '_' "
+                      "wildcard)");
+            }
+            return;
+        }
+
+        // enum型パターンが検出された場合
+        if (!detected_enum_name.empty()) {
+            // enum値を取得
+            std::set<std::string> all_variants;
+            for (const auto& [key, value] : enum_values_) {
+                if (key.find(detected_enum_name + "::") == 0) {
+                    all_variants.insert(key);
+                }
+            }
+
+            // 全てのバリアントがカバーされているか確認
+            for (const auto& variant : all_variants) {
+                if (!covered_values.count(variant)) {
+                    error(Span{}, "Non-exhaustive match: missing pattern for '" + variant +
+                                      "' (or add '_' wildcard)");
+                    return;
+                }
+            }
+            return;
+        }
+
+        // scrutinee_typeがenum名として登録されている場合
+        std::string type_name = ast::type_to_string(*scrutinee_type);
+        if (enum_names_.count(type_name)) {
+            // enum値を取得
+            std::set<std::string> all_variants;
+            for (const auto& [key, value] : enum_values_) {
+                if (key.find(type_name + "::") == 0) {
+                    all_variants.insert(key);
+                }
+            }
+
+            // 全てのバリアントがカバーされているか確認
+            for (const auto& variant : all_variants) {
+                if (!covered_values.count(variant)) {
+                    error(Span{}, "Non-exhaustive match: missing pattern for '" + variant +
+                                      "' (or add '_' wildcard)");
+                    return;
+                }
+            }
+            return;
+        }
+
+        // 整数型などの場合、ワイルドカードが必要
+        if (scrutinee_type->is_integer()) {
+            error(Span{}, "Non-exhaustive match: integer patterns require a '_' wildcard pattern");
+        }
+    }
+
+    // matchパターンの型チェック
+    void check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr expected_type) {
+        if (!pattern)
+            return;
+
+        switch (pattern->kind) {
+            case ast::MatchPatternKind::Literal:
+                if (pattern->value) {
+                    auto lit_type = infer_type(*pattern->value);
+                    if (!types_compatible(lit_type, expected_type)) {
+                        error(Span{}, "Pattern type does not match scrutinee type");
+                    }
+                }
+                break;
+
+            case ast::MatchPatternKind::Variable:
+                // 変数束縛パターン: 変数にscrutineeの型を設定
+                if (!pattern->var_name.empty()) {
+                    scopes_.current().define(pattern->var_name, expected_type);
+                }
+                break;
+
+            case ast::MatchPatternKind::EnumVariant:
+                if (pattern->value) {
+                    auto enum_type = infer_type(*pattern->value);
+                    if (!types_compatible(enum_type, expected_type)) {
+                        error(Span{}, "Enum pattern type does not match scrutinee type");
+                    }
+                }
+                break;
+
+            case ast::MatchPatternKind::Wildcard:
+                // ワイルドカードは任意の型にマッチ
+                break;
+        }
+    }
+
     // 配列インデックスアクセス
     ast::TypePtr infer_index(ast::IndexExpr& idx) {
         // オブジェクトの型を推論
@@ -1177,6 +1389,64 @@ class TypeChecker {
         }
 
         return false;
+    }
+
+    // 型が指定されたインターフェースを実装しているかチェック
+    bool type_implements_interface(const std::string& type_name,
+                                   const std::string& interface_name) {
+        // プリミティブ型の組み込みインターフェース
+        // Ord: 比較可能な型（数値型、文字型）
+        if (interface_name == "Ord") {
+            if (type_name == "int" || type_name == "uint" || type_name == "tiny" ||
+                type_name == "utiny" || type_name == "short" || type_name == "ushort" ||
+                type_name == "long" || type_name == "ulong" || type_name == "float" ||
+                type_name == "double" || type_name == "char") {
+                return true;
+            }
+        }
+
+        // Eq: 等価比較可能な型
+        if (interface_name == "Eq") {
+            if (type_name == "int" || type_name == "uint" || type_name == "tiny" ||
+                type_name == "utiny" || type_name == "short" || type_name == "ushort" ||
+                type_name == "long" || type_name == "ulong" || type_name == "float" ||
+                type_name == "double" || type_name == "char" || type_name == "bool" ||
+                type_name == "string") {
+                return true;
+            }
+        }
+
+        // Clone: コピー可能な型（今のところすべてのプリミティブ型）
+        if (interface_name == "Clone") {
+            if (type_name == "int" || type_name == "uint" || type_name == "tiny" ||
+                type_name == "utiny" || type_name == "short" || type_name == "ushort" ||
+                type_name == "long" || type_name == "ulong" || type_name == "float" ||
+                type_name == "double" || type_name == "char" || type_name == "bool" ||
+                type_name == "string") {
+                return true;
+            }
+        }
+
+        // 明示的なimpl実装をチェック
+        auto it = impl_interfaces_.find(type_name);
+        if (it != impl_interfaces_.end()) {
+            if (it->second.count(interface_name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 型制約をチェック（ジェネリック関数呼び出し時）
+    bool check_type_constraints(const std::string& type_name,
+                                const std::vector<std::string>& constraints) {
+        for (const auto& constraint : constraints) {
+            if (!type_implements_interface(type_name, constraint)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // ジェネリック型パラメータを具体型に置換
@@ -1359,6 +1629,33 @@ class TypeChecker {
             }
         }
 
+        // 型制約チェック
+        auto constraint_it = generic_function_constraints_.find(func_name);
+        if (constraint_it != generic_function_constraints_.end()) {
+            for (const auto& generic_param : constraint_it->second) {
+                if (!generic_param.constraints.empty()) {
+                    // この型パラメータに対する推論された型を取得
+                    auto inferred_it = inferred_types.find(generic_param.name);
+                    if (inferred_it != inferred_types.end()) {
+                        std::string actual_type = ast::type_to_string(*inferred_it->second);
+                        // 全ての制約をチェック
+                        if (!check_type_constraints(actual_type, generic_param.constraints)) {
+                            std::string constraints_str;
+                            for (size_t i = 0; i < generic_param.constraints.size(); ++i) {
+                                if (i > 0)
+                                    constraints_str += " + ";
+                                constraints_str += generic_param.constraints[i];
+                            }
+                            error(Span{}, "Type '" + actual_type +
+                                              "' does not satisfy constraint '" + constraints_str +
+                                              "' for type parameter '" + generic_param.name +
+                                              "' in function '" + func_name + "'");
+                        }
+                    }
+                }
+            }
+        }
+
         // 戻り値の型を置換
         std::string return_type_str = ast::type_to_string(*sym->return_type);
         auto it = inferred_types.find(return_type_str);
@@ -1424,6 +1721,9 @@ class TypeChecker {
 
     // ジェネリック関数の登録情報（関数名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_functions_;
+
+    // ジェネリック関数の制約情報（関数名 → GenericParamリスト）
+    std::unordered_map<std::string, std::vector<ast::GenericParam>> generic_function_constraints_;
 
     // ジェネリック構造体の登録情報（構造体名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_structs_;

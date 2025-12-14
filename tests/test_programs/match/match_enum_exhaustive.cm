@@ -1,0 +1,31 @@
+// enum型の網羅的matchテスト
+
+enum Color {
+    Red = 0,
+    Green = 1,
+    Blue = 2
+}
+
+int main() {
+    int c = Color::Green;
+    
+    // 全てのバリアントをカバー - OK
+    int code1 = match (c) {
+        Color::Red => 100,
+        Color::Green => 200,
+        Color::Blue => 300,
+    };
+    
+    println("code1 = {code1}");
+    
+    // ワイルドカードでカバー - OK
+    int c2 = Color::Blue;
+    int code2 = match (c2) {
+        Color::Red => 100,
+        _ => 0,
+    };
+    
+    println("code2 = {code2}");
+    
+    return 0;
+}

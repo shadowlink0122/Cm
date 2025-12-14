@@ -1016,8 +1016,9 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     BlockId else_block = ctx.new_block();
     BlockId merge_block = ctx.new_block();
 
-    // 結果用の変数
-    LocalId result = ctx.new_temp(hir::make_int());  // TODO: 実際の型
+    // 結果用の変数（then_exprの型を使用）
+    hir::TypePtr result_type = ternary.then_expr ? ternary.then_expr->type : hir::make_int();
+    LocalId result = ctx.new_temp(result_type);
 
     // 条件分岐
     ctx.set_terminator(
