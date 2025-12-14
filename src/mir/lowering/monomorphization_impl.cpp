@@ -555,17 +555,65 @@ void Monomorphization::generate_generic_specializations(
                                               spec_struct_name);
                     }
                 }
-                // 構造体型で名前がジェネリック構造体の特殊化形式の場合（Box__T → Box__int）
+                // 構造体型で名前がジェネリック構造体の特殊化形式の場合（Box__T → Box__int, Pair__T__U → Pair__int__string）
                 else if (new_local.type->kind == hir::TypeKind::Struct &&
                          new_local.type->type_args.empty()) {
-                    // 名前が "Base__ParamName" 形式かチェック
+                    // 名前が "Base__Param1__Param2..." 形式かチェック
                     std::string type_name = new_local.type->name;
                     size_t underscore_pos = type_name.find("__");
                     if (underscore_pos != std::string::npos) {
                         std::string base_name = type_name.substr(0, underscore_pos);
+                        
+                        // HIR構造体定義を確認して型パラメータ数を取得
+                        if (hir_struct_defs) {
+                            auto hir_it = hir_struct_defs->find(base_name);
+                            if (hir_it != hir_struct_defs->end() && hir_it->second) {
+                                const auto* struct_def = hir_it->second;
+                                if (!struct_def->generic_params.empty()) {
+                                    // 型パラメータ名を順番に抽出して置換
+                                    std::vector<std::string> new_type_args;
+                                    std::string remaining = type_name.substr(underscore_pos + 2);
+                                    
+                                    for (const auto& param : struct_def->generic_params) {
+                                        // パラメータ名が置換マップにあるか
+                                        auto subst_it = type_subst.find(param.name);
+                                        if (subst_it != type_subst.end()) {
+                                            new_type_args.push_back(get_type_name(subst_it->second));
+                                        } else {
+                                            // 置換マップにない場合は元の名前を使う
+                                            // remaining から次の "__" までを抽出
+                                            size_t next_pos = remaining.find("__");
+                                            if (next_pos != std::string::npos) {
+                                                new_type_args.push_back(remaining.substr(0, next_pos));
+                                                remaining = remaining.substr(next_pos + 2);
+                                            } else {
+                                                new_type_args.push_back(remaining);
+                                                remaining.clear();
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (!new_type_args.empty()) {
+                                        std::string spec_struct_name =
+                                            make_specialized_struct_name(base_name, new_type_args);
+                                        
+                                        // 特殊化構造体が必要なら生成
+                                        if (generated_struct_specializations.count(spec_struct_name) == 0) {
+                                            generate_specialized_struct(program, base_name, new_type_args);
+                                        }
+                                        
+                                        new_local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                                        new_local.type->name = spec_struct_name;
+                                        debug_msg("MONO", "  Updated multi-param struct: " + type_name +
+                                                              " -> " + spec_struct_name);
+                                    }
+                                    continue;  // 処理済みなので次のケースへ
+                                }
+                            }
+                        }
+                        
+                        // 単一型パラメータの従来の処理
                         std::string param_name = type_name.substr(underscore_pos + 2);
-
-                        // 型パラメータ名が置換マップにあるか
                         auto subst_it = type_subst.find(param_name);
                         if (subst_it != type_subst.end()) {
                             std::string new_param = get_type_name(subst_it->second);
@@ -1094,6 +1142,81 @@ void Monomorphization::update_type_references(MirProgram& program) {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// ジェネリック関数呼び出しを特殊化関数呼び出しに書き換え
+void Monomorphization::rewrite_generic_calls(
+    MirProgram& program,
+    const std::map<std::pair<std::string, std::vector<std::string>>,
+                   std::vector<std::tuple<std::string, size_t>>>& needed) {
+    
+    // (元の関数名, 型引数) -> 特殊化関数名 のマッピングを構築
+    std::map<std::pair<std::string, std::vector<std::string>>, std::string> rewrite_map;
+    for (const auto& [key, _] : needed) {
+        const auto& [func_name, type_args] = key;
+        std::string specialized_name = make_specialized_name(func_name, type_args);
+        rewrite_map[key] = specialized_name;
+    }
+    
+    // 全関数の呼び出しを書き換え
+    for (auto& func : program.functions) {
+        if (!func) continue;
+        
+        for (auto& block : func->basic_blocks) {
+            if (!block || !block->terminator) continue;
+            
+            if (block->terminator->kind == MirTerminator::Call) {
+                auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+                
+                if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef) continue;
+                
+                auto& func_name = std::get<std::string>(call_data.func->data);
+                
+                // Container<int>__print のような形式を検出
+                auto pos = func_name.find("<");
+                if (pos == std::string::npos) continue;
+                
+                auto end_pos = func_name.find(">__");
+                if (end_pos == std::string::npos) continue;
+                
+                // 型引数を抽出
+                std::string type_args_str = func_name.substr(pos + 1, end_pos - pos - 1);
+                
+                // 複数型引数をパース（カンマで分割）
+                std::vector<std::string> type_args;
+                size_t start = 0;
+                size_t comma_pos;
+                while ((comma_pos = type_args_str.find(", ", start)) != std::string::npos) {
+                    type_args.push_back(type_args_str.substr(start, comma_pos - start));
+                    start = comma_pos + 2;
+                }
+                type_args.push_back(type_args_str.substr(start));
+                
+                // 元のジェネリック関数名を再構築
+                std::string base_name = func_name.substr(0, pos);  // "Container"
+                std::string method_suffix = func_name.substr(end_pos + 1);  // "__print"
+                
+                // Container<T>__print のような形式に変換
+                std::string generic_func_name = base_name + "<";
+                // 型パラメータ名は不明なので、T, U, V... と仮定
+                const char* param_names[] = {"T", "U", "V", "W"};
+                for (size_t i = 0; i < type_args.size(); ++i) {
+                    if (i > 0) generic_func_name += ", ";
+                    generic_func_name += (i < 4) ? param_names[i] : "T" + std::to_string(i);
+                }
+                generic_func_name += ">" + method_suffix;
+                
+                // rewrite_mapから特殊化関数名を取得
+                auto key = std::make_pair(generic_func_name, type_args);
+                auto it = rewrite_map.find(key);
+                if (it != rewrite_map.end()) {
+                    func_name = it->second;
+                    debug_msg("MONO", "Rewrote call in " + func->name + ": " + 
+                             std::get<std::string>(call_data.func->data) + " -> " + func_name);
                 }
             }
         }

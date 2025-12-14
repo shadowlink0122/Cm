@@ -57,8 +57,11 @@ class Monomorphization : public MirLoweringBase {
 
         debug_msg("MONO", "Found " + std::to_string(needed.size()) + " specializations needed");
 
-        // 特殊化関数を生成して呼び出しを書き換え
+        // 特殊化関数を生成
         generate_generic_specializations(program, hir_functions, needed);
+        
+        // 呼び出し箇所を書き換え（Container<int>__print -> Container__int__print）
+        rewrite_generic_calls(program, needed);
 
         // 元のジェネリック関数を削除
         cleanup_generic_functions(program, generic_funcs);
@@ -73,6 +76,12 @@ class Monomorphization : public MirLoweringBase {
 
     // ジェネリック構造体のモノモーフィゼーション
     void monomorphize_structs(MirProgram& program);
+    
+    // ジェネリック関数呼び出しを特殊化関数呼び出しに書き換え
+    void rewrite_generic_calls(
+        MirProgram& program,
+        const std::map<std::pair<std::string, std::vector<std::string>>,
+                       std::vector<std::tuple<std::string, size_t>>>& needed);
 
     // MIR内の全型を走査し、必要な構造体特殊化を収集
     void collect_struct_specializations(
@@ -123,7 +132,7 @@ class Monomorphization : public MirLoweringBase {
                                              const hir::HirFunction* callee);
 
     // 型名から特殊化関数名を生成
-    // Container<T>__print + [int] -> Container<int>__print
+    // Container<T>__print + [int] -> Container__int__print
     std::string make_specialized_name(const std::string& base_name,
                                       const std::vector<std::string>& type_args) {
         // base_name が "Container<T>__print" の形式かチェック
@@ -131,19 +140,17 @@ class Monomorphization : public MirLoweringBase {
         auto end_pos = base_name.find(">__");
 
         if (pos != std::string::npos && end_pos != std::string::npos && !type_args.empty()) {
-            // Container<T>__print -> Container<int>__print
-            std::string prefix = base_name.substr(0, pos + 1);  // "Container<"
-            std::string suffix = base_name.substr(end_pos);     // ">__print"
+            // Container<T>__print -> Container__int__print
+            std::string prefix = base_name.substr(0, pos);       // "Container"
+            std::string suffix = base_name.substr(end_pos + 1);  // "__print"
 
-            // 型引数を連結
+            // 型引数を __int__string 形式で連結
             std::string args_str;
             for (size_t i = 0; i < type_args.size(); ++i) {
-                if (i > 0)
-                    args_str += ", ";
-                args_str += type_args[i];
+                args_str += "__" + type_args[i];
             }
 
-            return prefix + args_str + suffix;  // "Container<int>__print"
+            return prefix + args_str + suffix;  // "Container__int__print"
         }
 
         // 通常の場合は末尾に追加

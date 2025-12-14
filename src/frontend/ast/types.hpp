@@ -295,4 +295,25 @@ inline std::string type_to_string(const Type& t) {
     }
 }
 
+// 型名のマングル化版（Container<int> → Container__int）
+inline std::string type_to_mangled_name(const Type& t) {
+    switch (t.kind) {
+        case TypeKind::Struct:
+        case TypeKind::Union:
+        case TypeKind::TypeAlias: {
+            std::string result = t.name;
+            // ジェネリック型引数がある場合
+            if (!t.type_args.empty()) {
+                for (size_t i = 0; i < t.type_args.size(); ++i) {
+                    result += "__" + type_to_mangled_name(*t.type_args[i]);
+                }
+            }
+            return result;
+        }
+        default:
+            // その他の型はtype_to_stringと同じ
+            return type_to_string(t);
+    }
+}
+
 }  // namespace cm::ast

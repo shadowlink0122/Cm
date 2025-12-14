@@ -1,9 +1,23 @@
 # Cm Language Version Information
-VERSION=0.5.0
+VERSION=0.7.0
 RELEASE_TYPE=development
-RELEASE_DATE=2025-12-11
+RELEASE_DATE=2024-12-14
 
 # Version History
+# 0.7.0 - Advanced Generics and WASM Backend
+#   - impl<T> generic syntax
+#   - Generic struct method resolution
+#   - Multiple type parameters (Pair<T, U>)
+#   - Function name mangling (Container__int__print)
+#   - Call site rewriting for monomorphization
+#   - WASM backend with LLVM
+#   - WASM runtime library
+#   - Type mangling helper functions
+# 0.6.0 - Basic Generics
+#   - Generic functions <T> T identity(T)
+#   - Generic structs struct Box<T>
+#   - Type inference from arguments
+#   - Monomorphization for specialization
 # 0.5.0 - Enum and typedef types
 #   - enum NAME { MEMBER = value, ... } definition
 #   - NAME::MEMBER enum value access
