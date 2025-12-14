@@ -1,12 +1,13 @@
 #pragma once
 
-#include "../../mir/mir_nodes.hpp"
+#include "../../../mir/mir_nodes.hpp"
 #include "context.hpp"
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Value.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace cm::codegen::llvm_backend {
@@ -25,6 +26,9 @@ class MIRToLLVM {
     // ローカル変数マッピング
     std::unordered_map<mir::LocalId, llvm::Value*> locals;
 
+    // allocaされた変数のセット（SSA代入で上書きされないようにする）
+    std::unordered_set<mir::LocalId> allocatedLocals;
+
     // 基本ブロックマッピング
     std::unordered_map<mir::BlockId, llvm::BasicBlock*> blocks;
 
@@ -35,6 +39,13 @@ class MIRToLLVM {
     // 構造体型キャッシュ
     std::unordered_map<std::string, llvm::StructType*> structTypes;
     std::unordered_map<std::string, const mir::MirStruct*> structDefs;
+
+    // インターフェース関連
+    std::unordered_set<std::string> interfaceNames;
+    std::unordered_map<std::string, llvm::StructType*> interfaceTypes;  // fat pointer型
+    std::unordered_map<std::string, llvm::GlobalVariable*>
+        vtableGlobals;  // type_interface -> vtable
+    const mir::MirProgram* currentProgram = nullptr;
 
    public:
     /// コンストラクタ
@@ -101,6 +112,42 @@ class MIRToLLVM {
 
     /// MIRオペランドからHIR型情報を取得
     hir::TypePtr getOperandType(const mir::MirOperand& operand);
+
+    /// インターフェース型かどうかをチェック
+    bool isInterfaceType(const std::string& typeName) const {
+        return interfaceNames.count(typeName) > 0;
+    }
+
+    /// インターフェース用のfat pointer型を取得（{i8* data, i8** vtable}）
+    llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);
+
+    /// vtableを生成
+    void generateVTables(const mir::MirProgram& program);
+
+    /// インターフェースメソッド呼び出しを生成
+    llvm::Value* generateInterfaceMethodCall(const std::string& interfaceName,
+                                             const std::string& methodName, llvm::Value* receiver,
+                                             llvm::ArrayRef<llvm::Value*> args);
+
+    // ============================================================
+    // Print/Format Helper Methods (implemented in print_codegen.cpp)
+    // ============================================================
+
+    /// print/println呼び出しを生成
+    void generatePrintCall(const mir::MirTerminator::CallData& callData, bool isNewline);
+
+    /// cm_format_string呼び出しを生成
+    void generateFormatStringCall(const mir::MirTerminator::CallData& callData);
+
+    /// cm_println_format/cm_print_format呼び出しを生成
+    void generatePrintFormatCall(const mir::MirTerminator::CallData& callData, bool isNewline);
+
+    /// 値を文字列に変換するコードを生成
+    llvm::Value* generateValueToString(llvm::Value* value, const hir::TypePtr& hirType);
+
+    /// フォーマット置換を生成（replace系関数の呼び出し）
+    llvm::Value* generateFormatReplace(llvm::Value* currentStr, llvm::Value* value,
+                                       const hir::TypePtr& hirType);
 };
 
 }  // namespace cm::codegen::llvm_backend

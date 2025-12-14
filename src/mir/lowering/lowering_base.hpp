@@ -66,17 +66,24 @@ class MirLoweringBase {
     // typedef定義を登録
     void register_typedef(const hir::HirTypedef& td) { typedef_defs[td.name] = td.type; }
 
-    // typedefを解決（エイリアスを実際の型に展開）
+    // typedefとenumを解決（エイリアスを実際の型に展開）
     hir::TypePtr resolve_typedef(hir::TypePtr type) {
         if (!type)
             return type;
 
         // TypeAlias型の場合、typedefかチェック
         if (type->kind == hir::TypeKind::TypeAlias || type->kind == hir::TypeKind::Struct) {
+            // まずtypedef定義を確認
             auto it = typedef_defs.find(type->name);
             if (it != typedef_defs.end()) {
                 // 再帰的に解決（typedef chainがある場合）
                 return resolve_typedef(it->second);
+            }
+
+            // enum定義を確認（enum型はintとして扱う）
+            auto enum_it = enum_defs.find(type->name);
+            if (enum_it != enum_defs.end()) {
+                return hir::make_int();
             }
         }
 

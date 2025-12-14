@@ -3,7 +3,7 @@
 
 #include "mir_to_llvm.hpp"
 
-#include "../../common/debug/codegen.hpp"
+#include "../../../common/debug/codegen.hpp"
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
@@ -18,12 +18,19 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         if (arg_local < func.locals.size()) {
             auto& local = func.locals[arg_local];
             if (local.type) {
-                auto llvmType = convertType(local.type);
-                // 構造体はポインタとして渡す（構造体型のポインタ）
-                if (local.type->kind == hir::TypeKind::Struct) {
-                    paramTypes.push_back(llvm::PointerType::get(llvmType, 0));
+                // インターフェース型かチェック
+                if (isInterfaceType(local.type->name)) {
+                    // インターフェース型はfat pointerへのポインタとして渡す
+                    auto fatPtrType = getInterfaceFatPtrType(local.type->name);
+                    paramTypes.push_back(llvm::PointerType::get(fatPtrType, 0));
                 } else {
-                    paramTypes.push_back(llvmType);
+                    auto llvmType = convertType(local.type);
+                    // 構造体はポインタとして渡す（構造体型のポインタ）
+                    if (local.type->kind == hir::TypeKind::Struct) {
+                        paramTypes.push_back(llvm::PointerType::get(llvmType, 0));
+                    } else {
+                        paramTypes.push_back(llvmType);
+                    }
                 }
             } else {
                 paramTypes.push_back(ctx.getI32Type());  // デフォルト
@@ -71,7 +78,14 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
 void MIRToLLVM::convert(const mir::MirProgram& program) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert, "Starting MIR to LLVM conversion");
 
-    // ヘルパー関数は不要（ランタイムライブラリを使用）
+    currentProgram = &program;
+
+    // インターフェース名を収集
+    for (const auto& iface : program.interfaces) {
+        if (iface) {
+            interfaceNames.insert(iface->name);
+        }
+    }
 
     // 構造体型を先に定義
     for (const auto& structPtr : program.structs) {
@@ -92,11 +106,21 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         structTypes[name] = structType;
     }
 
-    // 関数宣言（先に全て宣言）
+    // インターフェース型（fat pointer）を定義
+    for (const auto& iface : program.interfaces) {
+        if (iface) {
+            getInterfaceFatPtrType(iface->name);
+        }
+    }
+
+    // 関数宣言（先に全て宣言）- vtable生成前に必要
     for (const auto& func : program.functions) {
         auto llvmFunc = convertFunctionSignature(*func);
         functions[func->name] = llvmFunc;
     }
+
+    // vtableを生成（関数宣言後に実行）
+    generateVTables(program);
 
     // 関数実装
     for (const auto& func : program.functions) {
@@ -116,6 +140,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
     currentMIRFunction = &func;
     locals.clear();
     blocks.clear();
+    allocatedLocals.clear();
 
     // エントリーブロック作成
     auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
@@ -149,6 +174,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 auto alloca =
                     builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));
                 locals[i] = alloca;
+                allocatedLocals.insert(i);  // allocaされた変数を記録
             }
         }
     }
@@ -160,6 +186,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             auto llvmType = convertType(returnLocal.type);
             auto alloca = builder->CreateAlloca(llvmType, nullptr, "retval");
             locals[func.return_local] = alloca;
+            allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
         }
     }
 
@@ -202,56 +229,65 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
             auto rvalue = convertRvalue(*assign.rvalue);
             if (rvalue) {
-                // Placeに値を格納
-                auto addr = convertPlaceToAddress(assign.place);
-                if (addr) {
-                    // allocaの場合、その割り当て型を確認して適切な型変換を行う
-                    if (auto alloca = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
-                        auto targetType = alloca->getAllocatedType();
-                        auto sourceType = rvalue->getType();
+                // projectionsがある場合（構造体フィールドなど）は常にstoreが必要
+                bool hasProjections = !assign.place.projections.empty();
 
-                        // sourceがポインタで、targetが構造体の場合（構造体のコピー）
-                        if (sourceType->isPointerTy() && targetType->isStructTy()) {
-                            // ポインタからロードして構造体値を取得
-                            rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
-                            sourceType = rvalue->getType();
-                        }
+                // allocaされた変数かどうかをチェック
+                bool isAllocated = allocatedLocals.count(assign.place.local) > 0;
 
-                        // i1からi8への変換が必要な場合（bool値の格納）
-                        if (sourceType->isIntegerTy(1) && targetType->isIntegerTy(8)) {
-                            rvalue = builder->CreateZExt(rvalue, ctx.getI8Type(), "bool_ext");
-                        }
-                        // i1からの拡張は常にゼロ拡張
-                        else if (sourceType->isIntegerTy(1) && targetType->isIntegerTy()) {
-                            rvalue = builder->CreateZExt(rvalue, targetType, "bool_zext");
-                        }
-                        // 整数型間の変換
-                        else if (sourceType->isIntegerTy() && targetType->isIntegerTy()) {
-                            auto sourceBits = sourceType->getIntegerBitWidth();
-                            auto targetBits = targetType->getIntegerBitWidth();
-                            if (sourceBits > targetBits) {
-                                // 縮小変換 (例: i32 -> i8, i32 -> i16)
-                                rvalue = builder->CreateTrunc(rvalue, targetType, "trunc");
-                            } else if (sourceBits < targetBits) {
-                                // 拡大変換 (例: i8 -> i32)
-                                rvalue = builder->CreateSExt(rvalue, targetType, "sext");
+                if (hasProjections || isAllocated) {
+                    // Placeに値を格納
+                    auto addr = convertPlaceToAddress(assign.place);
+
+                    if (addr) {
+                        // allocaの場合のみ型変換を行う
+                        if (auto alloca = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                            auto targetType = alloca->getAllocatedType();
+                            auto sourceType = rvalue->getType();
+
+                            // sourceがポインタで、targetが構造体の場合（構造体のコピー）
+                            if (sourceType->isPointerTy() && targetType->isStructTy()) {
+                                // ポインタからロードして構造体値を取得
+                                rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
+                                sourceType = rvalue->getType();
+                            }
+
+                            // i1からi8への変換が必要な場合（bool値の格納）
+                            if (sourceType->isIntegerTy(1) && targetType->isIntegerTy(8)) {
+                                rvalue = builder->CreateZExt(rvalue, ctx.getI8Type(), "bool_ext");
+                            }
+                            // i1からの拡張は常にゼロ拡張
+                            else if (sourceType->isIntegerTy(1) && targetType->isIntegerTy()) {
+                                rvalue = builder->CreateZExt(rvalue, targetType, "bool_zext");
+                            }
+                            // 整数型間の変換
+                            else if (sourceType->isIntegerTy() && targetType->isIntegerTy()) {
+                                auto sourceBits = sourceType->getIntegerBitWidth();
+                                auto targetBits = targetType->getIntegerBitWidth();
+                                if (sourceBits > targetBits) {
+                                    // 縮小変換 (例: i32 -> i8, i32 -> i16)
+                                    rvalue = builder->CreateTrunc(rvalue, targetType, "trunc");
+                                } else if (sourceBits < targetBits) {
+                                    // 拡大変換 (例: i8 -> i32)
+                                    rvalue = builder->CreateSExt(rvalue, targetType, "sext");
+                                }
+                            }
+                            // 浮動小数点型間の変換
+                            else if (sourceType->isFloatingPointTy() &&
+                                     targetType->isFloatingPointTy()) {
+                                if (sourceType->isDoubleTy() && targetType->isFloatTy()) {
+                                    // double -> float
+                                    rvalue = builder->CreateFPTrunc(rvalue, targetType, "fptrunc");
+                                } else if (sourceType->isFloatTy() && targetType->isDoubleTy()) {
+                                    // float -> double
+                                    rvalue = builder->CreateFPExt(rvalue, targetType, "fpext");
+                                }
                             }
                         }
-                        // 浮動小数点型間の変換
-                        else if (sourceType->isFloatingPointTy() &&
-                                 targetType->isFloatingPointTy()) {
-                            if (sourceType->isDoubleTy() && targetType->isFloatTy()) {
-                                // double -> float
-                                rvalue = builder->CreateFPTrunc(rvalue, targetType, "fptrunc");
-                            } else if (sourceType->isFloatTy() && targetType->isDoubleTy()) {
-                                // float -> double
-                                rvalue = builder->CreateFPExt(rvalue, targetType, "fpext");
-                            }
-                        }
+                        builder->CreateStore(rvalue, addr);
                     }
-                    builder->CreateStore(rvalue, addr);
                 } else {
-                    // 直接ローカル変数に格納（SSA形式）
+                    // SSA形式：allocaがない変数に直接値を格納
                     locals[assign.place.local] = rvalue;
                 }
             }
@@ -546,5 +582,7 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
     // それ以外はnullptr（SSA形式で直接値を使う）
     return nullptr;
 }
+
+// インターフェース関連の実装は interface.cpp に移動
 
 }  // namespace cm::codegen::llvm_backend

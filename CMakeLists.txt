@@ -66,7 +66,9 @@ if(CM_USE_LLVM)
     # Create LLVM backend library
     add_library(cm_llvm_backend INTERFACE)
     target_include_directories(cm_llvm_backend INTERFACE
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
     )
 
     if(CM_LLVM_STATIC)
@@ -143,15 +145,22 @@ set(CM_SOURCES
 # Add LLVM sources if enabled
 if(CM_USE_LLVM)
     list(APPEND CM_SOURCES
-        src/codegen/llvm/context.cpp
-        src/codegen/llvm/mir_to_llvm.cpp
-        src/codegen/llvm/terminator.cpp
-        src/codegen/llvm/types.cpp
-        src/codegen/llvm/operators.cpp
-        src/codegen/llvm/utils.cpp
-        src/codegen/llvm/codegen.cpp
-        src/codegen/llvm/target.cpp
-        src/codegen/llvm/intrinsics.cpp
+        # Common codegen
+        src/codegen/common/type_converter.cpp
+        src/codegen/common/runtime_functions.cpp
+        # LLVM core (shared between native and wasm)
+        src/codegen/llvm/core/context.cpp
+        src/codegen/llvm/core/mir_to_llvm.cpp
+        src/codegen/llvm/core/interface.cpp
+        src/codegen/llvm/core/terminator.cpp
+        src/codegen/llvm/core/print_codegen.cpp
+        src/codegen/llvm/core/types.cpp
+        src/codegen/llvm/core/operators.cpp
+        src/codegen/llvm/core/utils.cpp
+        src/codegen/llvm/core/intrinsics.cpp
+        # LLVM native backend
+        src/codegen/llvm/native/codegen.cpp
+        src/codegen/llvm/native/target.cpp
     )
 endif()
 
@@ -183,7 +192,7 @@ if(CM_USE_LLVM)
     
     # Build LLVM runtime library
     # Cランタイムをコンパイルしてbuild/lib/に配置
-    set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/runtime.c)
+    set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
     set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
     add_custom_command(
@@ -195,14 +204,16 @@ if(CM_USE_LLVM)
     )
 
     # Build WASM runtime library
-    set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/wasm/runtime_wasm.c)
+    set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
+    set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
+    set(CM_RUNTIME_WASM_PRINT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c)
     set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
 
     add_custom_command(
         OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
         COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
-        DEPENDS ${CM_RUNTIME_WASM_SOURCE}
+        DEPENDS ${CM_RUNTIME_WASM_SOURCE} ${CM_RUNTIME_WASM_FORMAT} ${CM_RUNTIME_WASM_PRINT}
         COMMENT "Building Cm WASM runtime library"
     )
 

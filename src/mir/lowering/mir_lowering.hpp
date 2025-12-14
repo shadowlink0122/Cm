@@ -43,7 +43,21 @@ class MirLowering : public MirLoweringBase {
    private:
     // 宣言の登録
     void register_declarations(const hir::HirProgram& hir_program) {
-        // 構造体定義を収集
+        // typedef定義を収集（最初に登録）
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* td = std::get_if<std::unique_ptr<hir::HirTypedef>>(&decl->kind)) {
+                register_typedef(**td);
+            }
+        }
+
+        // enum定義を収集（構造体より前に登録）
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* e = std::get_if<std::unique_ptr<hir::HirEnum>>(&decl->kind)) {
+                register_enum(**e);
+            }
+        }
+
+        // 構造体定義を収集（typedef/enumが登録された後に処理）
         for (const auto& decl : hir_program.declarations) {
             if (auto* st = std::get_if<std::unique_ptr<hir::HirStruct>>(&decl->kind)) {
                 register_struct(**st);
@@ -57,20 +71,7 @@ class MirLowering : public MirLoweringBase {
         for (const auto& decl : hir_program.declarations) {
             if (auto* iface = std::get_if<std::unique_ptr<hir::HirInterface>>(&decl->kind)) {
                 interface_names.insert((*iface)->name);
-            }
-        }
-
-        // typedef定義を収集
-        for (const auto& decl : hir_program.declarations) {
-            if (auto* td = std::get_if<std::unique_ptr<hir::HirTypedef>>(&decl->kind)) {
-                register_typedef(**td);
-            }
-        }
-
-        // enum定義を収集
-        for (const auto& decl : hir_program.declarations) {
-            if (auto* e = std::get_if<std::unique_ptr<hir::HirEnum>>(&decl->kind)) {
-                register_enum(**e);
+                register_interface(**iface);
             }
         }
 
@@ -78,6 +79,66 @@ class MirLowering : public MirLoweringBase {
         for (const auto& decl : hir_program.declarations) {
             if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
                 register_impl(**impl);
+            }
+        }
+
+        // vtable生成（impl登録後に実行）
+        generate_vtables();
+    }
+
+    // インターフェース定義を登録
+    void register_interface(const hir::HirInterface& iface) {
+        auto mir_iface = std::make_unique<MirInterface>();
+        mir_iface->name = iface.name;
+
+        for (const auto& method : iface.methods) {
+            MirInterfaceMethod mir_method;
+            mir_method.name = method.name;
+            mir_method.return_type = method.return_type;
+            for (const auto& param : method.params) {
+                mir_method.param_types.push_back(param.type);
+            }
+            mir_iface->methods.push_back(std::move(mir_method));
+        }
+
+        mir_program.interfaces.push_back(std::move(mir_iface));
+    }
+
+    // vtable生成
+    void generate_vtables() {
+        // 各インターフェース実装に対してvtableを生成
+        for (const auto& [type_name, iface_map] : impl_info) {
+            for (const auto& [interface_name, impl_method_name] : iface_map) {
+                // @initは内部用なのでスキップ
+                if (interface_name == "@init")
+                    continue;
+
+                // 対応するインターフェース定義を検索
+                const MirInterface* mir_iface = nullptr;
+                for (const auto& iface : mir_program.interfaces) {
+                    if (iface && iface->name == interface_name) {
+                        mir_iface = iface.get();
+                        break;
+                    }
+                }
+
+                if (!mir_iface)
+                    continue;
+
+                // vtableを生成
+                auto vtable = std::make_unique<VTable>();
+                vtable->type_name = type_name;
+                vtable->interface_name = interface_name;
+
+                // 各メソッドのエントリを追加
+                for (const auto& method : mir_iface->methods) {
+                    VTableEntry entry;
+                    entry.method_name = method.name;
+                    entry.impl_function_name = type_name + "__" + method.name;
+                    vtable->entries.push_back(std::move(entry));
+                }
+
+                mir_program.vtables.push_back(std::move(vtable));
             }
         }
     }

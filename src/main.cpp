@@ -1,14 +1,14 @@
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
-#include "codegen/llvm/codegen.hpp"
+#include "codegen/llvm/native/codegen.hpp"
 #endif
 
+#include "codegen/interpreter/interpreter.hpp"
 #include "common/debug_messages.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
 #include "hir/hir_lowering.hpp"
-#include "mir/interpreter/interpreter.hpp"
 #include "mir/mir_lowering.hpp"
 #include "mir/mir_printer.hpp"
 #include "mir/optimizations/all_passes.hpp"

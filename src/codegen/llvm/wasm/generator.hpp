@@ -1,4 +1,4 @@
-/// @file wasm_codegen.hpp
+/// @file generator.hpp
 /// @brief WASM コード生成モジュール
 ///
 /// LLVM WASM ターゲットを使用した WebAssembly コード生成

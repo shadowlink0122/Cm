@@ -64,6 +64,9 @@ class LoweringContext {
     // 構造体定義へのポインタ - 親クラスから参照
     const std::unordered_map<std::string, const hir::HirStruct*>* struct_defs = nullptr;
 
+    // インターフェース名のセット - 親クラスから参照
+    const std::unordered_set<std::string>* interface_names = nullptr;
+
     explicit LoweringContext(MirFunction* f) : func(f) {
         // 初期スコープを作成
         push_scope();
@@ -78,15 +81,17 @@ class LoweringContext {
     // 現在のブロックを取得
     BasicBlock* get_current_block() { return func->get_block(current_block); }
 
-    // 新しいローカル変数を作成
+    // 新しいローカル変数を作成（typedefを解決）
     LocalId new_local(const std::string& name, hir::TypePtr type, bool is_mutable = true) {
-        return func->add_local(name, type, is_mutable, false);
+        auto resolved_type = resolve_typedef(type);
+        return func->add_local(name, resolved_type, is_mutable, false);
     }
 
-    // 新しい一時変数を作成
+    // 新しい一時変数を作成（typedefを解決）
     LocalId new_temp(hir::TypePtr type) {
         std::string name = "_t" + std::to_string(next_temp_id++);
-        return func->add_local(name, type, true, true);
+        auto resolved_type = resolve_typedef(type);
+        return func->add_local(name, resolved_type, true, true);
     }
 
     // 文を現在のブロックに追加
@@ -254,17 +259,27 @@ class LoweringContext {
     }
 
    private:
-    // typedefを解決（必要に応じて再帰的に）
+    // typedefとenumを解決（必要に応じて再帰的に）
     hir::TypePtr resolve_typedef(const hir::TypePtr& type) {
-        if (!type || !typedef_defs) {
+        if (!type) {
             return type;
         }
 
-        // Structタイプの場合、typedef定義を確認
-        if (type->kind == hir::TypeKind::Struct) {
-            if (auto it = typedef_defs->find(type->name); it != typedef_defs->end()) {
-                // 再帰的に解決
-                return resolve_typedef(it->second);
+        // Structタイプの場合、typedef/enum定義を確認
+        if (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) {
+            // まずtypedef定義を確認
+            if (typedef_defs) {
+                if (auto it = typedef_defs->find(type->name); it != typedef_defs->end()) {
+                    // 再帰的に解決
+                    return resolve_typedef(it->second);
+                }
+            }
+
+            // enum定義を確認（enum型はintとして扱う）
+            if (enum_defs) {
+                if (auto it = enum_defs->find(type->name); it != enum_defs->end()) {
+                    return hir::make_int();
+                }
             }
         }
 

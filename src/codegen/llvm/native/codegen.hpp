@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../../common/debug/codegen.hpp"
-#include "../../mir/mir_nodes.hpp"
-#include "context.hpp"
-#include "intrinsics.hpp"
-#include "mir_to_llvm.hpp"
+#include "../../../common/debug/codegen.hpp"
+#include "../../../mir/mir_nodes.hpp"
+#include "../core/context.hpp"
+#include "../core/intrinsics.hpp"
+#include "../core/mir_to_llvm.hpp"
 #include "target.hpp"
 
 #include <filesystem>
@@ -417,9 +417,9 @@ class LLVMCodeGen {
     std::string compileRuntimeOnDemand() {
         // ランタイムソースの可能な場所
         std::vector<std::string> sourcePaths = {
-            "src/codegen/llvm/runtime.c",
-            "./src/codegen/llvm/runtime.c",
-            "../src/codegen/llvm/runtime.c",
+            "src/codegen/llvm/native/runtime.c",
+            "./src/codegen/llvm/native/runtime.c",
+            "../src/codegen/llvm/native/runtime.c",
         };
 
         std::string runtimeSource;

@@ -426,8 +426,53 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             mir_op = MirBinaryOp::Add;  // プレースホルダー
     }
 
+    // 結果型を決定
+    // 比較演算子 -> bool
+    // 算術演算子 -> 左辺の型（または型昇格）
+    hir::TypePtr result_type;
+    bool is_comparison =
+        (mir_op == MirBinaryOp::Eq || mir_op == MirBinaryOp::Ne || mir_op == MirBinaryOp::Lt ||
+         mir_op == MirBinaryOp::Le || mir_op == MirBinaryOp::Gt || mir_op == MirBinaryOp::Ge);
+
+    if (is_comparison) {
+        result_type = hir::make_bool();
+    } else {
+        // 算術演算の型昇格
+        // float + double -> double, int + double -> double, etc.
+        auto lhs_type = bin.lhs->type;
+        auto rhs_type = bin.rhs->type;
+
+        if (lhs_type && rhs_type) {
+            // doubleがあればdouble
+            if (lhs_type->kind == hir::TypeKind::Double ||
+                rhs_type->kind == hir::TypeKind::Double) {
+                result_type = hir::make_double();
+            }
+            // floatがあればfloat
+            else if (lhs_type->kind == hir::TypeKind::Float ||
+                     rhs_type->kind == hir::TypeKind::Float) {
+                result_type = hir::make_float();
+            }
+            // longがあればlong
+            else if (lhs_type->kind == hir::TypeKind::Long ||
+                     rhs_type->kind == hir::TypeKind::Long ||
+                     lhs_type->kind == hir::TypeKind::ULong ||
+                     rhs_type->kind == hir::TypeKind::ULong) {
+                result_type = hir::make_long();
+            }
+            // それ以外は左辺の型を使用
+            else {
+                result_type = lhs_type;
+            }
+        } else if (lhs_type) {
+            result_type = lhs_type;
+        } else {
+            result_type = hir::make_int();
+        }
+    }
+
     // 結果用の一時変数
-    LocalId result = ctx.new_temp(hir::make_int());  // TODO: 実際の結果型を推論
+    LocalId result = ctx.new_temp(result_type);
 
     // BinaryOp Rvalueを作成
     auto bin_rvalue = std::make_unique<MirRvalue>();
@@ -858,11 +903,38 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, LoweringContext& ctx)
     // Call終端命令を手動で作成
     auto call_term = std::make_unique<MirTerminator>();
     call_term->kind = MirTerminator::Call;
-    call_term->data = MirTerminator::CallData{
+
+    // インターフェースメソッド呼び出しかどうかを判定
+    // 関数名が "TypeName__MethodName" の形式で、TypeNameがインターフェースの場合
+    std::string interface_name;
+    std::string method_name;
+    bool is_virtual = false;
+
+    auto underscore_pos = call.func_name.find("__");
+    if (underscore_pos != std::string::npos) {
+        std::string type_name = call.func_name.substr(0, underscore_pos);
+        method_name = call.func_name.substr(underscore_pos + 2);
+
+        // コンテキストのインターフェース名セットをチェック
+        if (ctx.interface_names && ctx.interface_names->count(type_name) > 0) {
+            interface_name = type_name;
+            is_virtual = true;
+        }
+    }
+
+    MirTerminator::CallData call_data{
         std::move(func_operand), std::move(args), MirPlace{result},  // 戻り値の格納先
         success_block,
         std::nullopt  // unwind無し
     };
+
+    if (is_virtual) {
+        call_data.interface_name = interface_name;
+        call_data.method_name = method_name;
+        call_data.is_virtual = true;
+    }
+
+    call_term->data = std::move(call_data);
     ctx.set_terminator(std::move(call_term));
 
     // 次のブロックへ移動

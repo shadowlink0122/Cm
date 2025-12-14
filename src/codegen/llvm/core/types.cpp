@@ -44,6 +44,17 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             return llvm::ArrayType::get(elemType, size);
         }
         case hir::TypeKind::Struct: {
+            // まずインターフェース型かチェック
+            if (isInterfaceType(type->name)) {
+                // インターフェース型はfat pointerとして扱う
+                auto it = interfaceTypes.find(type->name);
+                if (it != interfaceTypes.end()) {
+                    return it->second;
+                }
+                // まだ作成されていない場合は作成
+                return getInterfaceFatPtrType(type->name);
+            }
+
             // 構造体型を検索
             auto it = structTypes.find(type->name);
             if (it != structTypes.end()) {
@@ -51,6 +62,25 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
             // 見つからない場合は不透明型として扱う
             return llvm::StructType::create(ctx.getContext(), type->name);
+        }
+        case hir::TypeKind::TypeAlias: {
+            // まずインターフェース型かチェック
+            if (isInterfaceType(type->name)) {
+                auto it = interfaceTypes.find(type->name);
+                if (it != interfaceTypes.end()) {
+                    return it->second;
+                }
+                return getInterfaceFatPtrType(type->name);
+            }
+
+            // TypeAliasはMIRレベルで解決されているべき
+            // 万が一解決されていない場合、structTypesを確認
+            auto it = structTypes.find(type->name);
+            if (it != structTypes.end()) {
+                return it->second;
+            }
+            // フォールバック: intとして扱う
+            return ctx.getI32Type();
         }
         default:
             return ctx.getI32Type();

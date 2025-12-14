@@ -12,9 +12,10 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     auto mir_func = std::make_unique<MirFunction>();
     mir_func->name = func.name;
 
-    // 戻り値用のローカル変数
+    // 戻り値用のローカル変数（typedefを解決）
     mir_func->return_local = 0;
-    mir_func->locals.emplace_back(0, "@return", func.return_type, true, false);
+    auto resolved_return_type = resolve_typedef(func.return_type);
+    mir_func->locals.emplace_back(0, "@return", resolved_return_type, true, false);
 
     // エントリーブロックを作成
     mir_func->entry_block = 0;
@@ -25,15 +26,17 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.enum_defs = &enum_defs;
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
+    ctx.interface_names = &interface_names;
 
     // デストラクタを持つ型の情報をコンテキストに渡す
     for (const auto& type_name : types_with_destructor) {
         ctx.register_type_with_destructor(type_name);
     }
 
-    // 関数パラメータをローカル変数として登録
+    // 関数パラメータをローカル変数として登録（typedefを解決）
     for (const auto& param : func.params) {
-        LocalId param_id = ctx.new_local(param.name, param.type, false);
+        auto resolved_param_type = resolve_typedef(param.type);
+        LocalId param_id = ctx.new_local(param.name, resolved_param_type, false);
         mir_func->arg_locals.push_back(param_id);
         ctx.register_variable(param.name, param_id);
 
@@ -57,17 +60,23 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
 
         // 構造体やvoid型はデフォルト値代入をスキップ
         bool skip_default_assign = false;
-        if (func.return_type) {
-            if (func.return_type->kind == hir::TypeKind::Struct ||
-                func.return_type->kind == hir::TypeKind::Void) {
+        auto resolved_return_type = resolve_typedef(func.return_type);
+        if (resolved_return_type) {
+            if (resolved_return_type->kind == hir::TypeKind::Struct ||
+                resolved_return_type->kind == hir::TypeKind::Void) {
                 skip_default_assign = true;
             }
         }
 
         if (!skip_default_assign) {
             MirConstant default_return;
-            default_return.type = func.return_type;
-            default_return.value = int64_t(0);
+            default_return.type = resolved_return_type;
+            // 型に応じたデフォルト値を設定
+            if (resolved_return_type && resolved_return_type->is_floating()) {
+                default_return.value = 0.0;
+            } else {
+                default_return.value = int64_t(0);
+            }
 
             ctx.push_statement(MirStatement::assign(
                 MirPlace{0}, MirRvalue::use(MirOperand::constant(default_return))));

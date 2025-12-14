@@ -1,7 +1,7 @@
-/// @file wasm_codegen.cpp
+/// @file generator.cpp
 /// @brief WASM コード生成実装
 
-#include "wasm_codegen.hpp"
+#include "generator.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -19,7 +19,7 @@ std::string getWasmRuntimePath() {
     }
 
     // デフォルトパス
-    return "src/codegen/wasm/runtime_wasm.c";
+    return "src/codegen/llvm/wasm/runtime_wasm.c";
 }
 
 std::string getWasmJsGluePath() {
