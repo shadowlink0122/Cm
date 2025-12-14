@@ -662,7 +662,8 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 }
 
 // 関数呼び出しのlowering
-LocalId ExprLowering::lower_call(const hir::HirCall& call, LoweringContext& ctx) {
+LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
+                                 LoweringContext& ctx) {
     // println builtin特別処理
     if (call.func_name == "println") {
         // 引数がない場合は空行を出力
@@ -891,8 +892,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, LoweringContext& ctx)
         args.push_back(MirOperand::copy(MirPlace{arg_local}));
     }
 
-    // 結果用の一時変数
-    LocalId result = ctx.new_temp(hir::make_int());  // TODO: 実際の戻り値型
+    // 結果用の一時変数（型チェッカーが推論した型を使用）
+    hir::TypePtr actual_result_type = result_type ? result_type : hir::make_int();
+    LocalId result = ctx.new_temp(actual_result_type);
 
     // Call終端命令（現在のブロックを終端）
     BlockId success_block = ctx.new_block();

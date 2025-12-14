@@ -271,7 +271,7 @@ class Parser {
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
 
         // 明示的なジェネリックパラメータをチェック（例: <T> T max(T a, T b)）
-        std::vector<std::string> generic_params = parse_generic_params();
+        auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
         auto return_type = parse_type();
         std::string name = expect_ident();
@@ -288,6 +288,7 @@ class Parser {
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
             func->generic_params = std::move(generic_params);
+            func->generic_params_v2 = std::move(generic_params_v2);
 
             // デバッグ出力
             std::string params_str = "Function '" + func->name + "' has generic params: ";
@@ -309,6 +310,7 @@ class Parser {
     // パラメータリスト
     std::vector<ast::Param> parse_params() {
         std::vector<ast::Param> params;
+        bool has_default = false;  // デフォルト引数が始まったかどうか
 
         if (!check(TokenKind::RParen)) {
             do {
@@ -316,6 +318,16 @@ class Parser {
                 param.qualifiers.is_const = consume_if(TokenKind::KwConst);
                 param.type = parse_type();
                 param.name = expect_ident();
+
+                // デフォルト引数をパース
+                if (consume_if(TokenKind::Eq)) {
+                    param.default_value = parse_expr();
+                    has_default = true;
+                } else if (has_default) {
+                    // デフォルト引数の後には必須引数は置けない
+                    error("Default argument required after parameter with default value");
+                }
+
                 params.push_back(std::move(param));
             } while (consume_if(TokenKind::Comma));
         }
@@ -332,7 +344,7 @@ class Parser {
         std::string name = expect_ident();
 
         // ジェネリックパラメータをチェック（例: struct Vec<T>）
-        std::vector<std::string> generic_params = parse_generic_params();
+        auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
         // with キーワード
         std::vector<std::string> auto_impls;
@@ -378,6 +390,7 @@ class Parser {
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
             decl->generic_params = std::move(generic_params);
+            decl->generic_params_v2 = std::move(generic_params_v2);
 
             // デバッグ出力
             std::string params_str = "Struct '" + decl->name + "' has generic params: ";
@@ -396,7 +409,7 @@ class Parser {
         std::string name = expect_ident();
 
         // ジェネリックパラメータをチェック（例: interface Container<T>）
-        std::vector<std::string> generic_params = parse_generic_params();
+        auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
         expect(TokenKind::LBrace);
 
@@ -420,27 +433,56 @@ class Parser {
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
             decl->generic_params = std::move(generic_params);
+            decl->generic_params_v2 = std::move(generic_params_v2);
         }
 
         return std::make_unique<ast::Decl>(std::move(decl));
     }
 
     // impl
+    // impl<T> Type<T> for InterfaceName<T> { ... } - ジェネリックメソッド実装
     // impl Type<T> for InterfaceName<T> { ... } - メソッド実装
+    // impl<T> Type<T> { ... } - ジェネリックコンストラクタ/デストラクタ
     // impl Type<T> { ... } - コンストラクタ/デストラクタ専用
     ast::DeclPtr parse_impl() {
         expect(TokenKind::KwImpl);
 
-        auto target = parse_type();  // Type first (Vec<T> など、ジェネリクスは型に含まれる)
+        // impl<T>構文のチェック
+        std::vector<std::string> generic_params;
+        std::vector<ast::GenericParam> generic_params_v2;
+        if (check(TokenKind::Lt)) {
+            // <T>または<T: Constraint>のパース
+            auto [params, params_v2] = parse_generic_params_v2();
+            generic_params = std::move(params);
+            generic_params_v2 = std::move(params_v2);
+        }
+
+        auto target = parse_type();  // Type (Vec<T> など、ジェネリクスは型に含まれる)
 
         // forがあればメソッド実装、なければコンストラクタ/デストラクタ専用
         if (consume_if(TokenKind::KwFor)) {
             std::string iface = expect_ident();  // InterfaceName
+
+            // インターフェースの型引数をパース（例: ValueHolder<T>）
+            std::vector<ast::TypePtr> iface_type_args;
+            if (check(TokenKind::Lt)) {
+                advance();  // consume <
+                do {
+                    iface_type_args.push_back(parse_type());
+                } while (consume_if(TokenKind::Comma));
+                expect(TokenKind::Gt);
+            }
+
             expect(TokenKind::LBrace);
 
             auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
+            decl->interface_type_args = std::move(iface_type_args);
 
-            // ジェネリックパラメータは型から抽出される（Vec<T> の T など）
+            // ジェネリックパラメータを設定
+            if (!generic_params.empty()) {
+                decl->generic_params = std::move(generic_params);
+                decl->generic_params_v2 = std::move(generic_params_v2);
+            }
 
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 try {
@@ -471,18 +513,24 @@ class Parser {
             return std::make_unique<ast::Decl>(std::move(decl));
         } else {
             // コンストラクタ/デストラクタ専用impl
-            return parse_impl_ctor(std::move(target));
+            return parse_impl_ctor(std::move(target), std::move(generic_params),
+                                   std::move(generic_params_v2));
         }
     }
 
     // コンストラクタ/デストラクタ専用implの解析
-    // impl Type<T> { self() { ... } ~self() { ... } }
-    ast::DeclPtr parse_impl_ctor(ast::TypePtr target) {
+    // impl<T> Type<T> { self() { ... } ~self() { ... } }
+    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<std::string> generic_params = {},
+                                 std::vector<ast::GenericParam> generic_params_v2 = {}) {
         expect(TokenKind::LBrace);
 
         auto decl = std::make_unique<ast::ImplDecl>(std::move(target));
 
-        // ジェネリックパラメータは型から抽出される（Vec<T> の T など）
+        // ジェネリックパラメータを設定
+        if (!generic_params.empty()) {
+            decl->generic_params = std::move(generic_params);
+            decl->generic_params_v2 = std::move(generic_params_v2);
+        }
 
         while (!check(TokenKind::RBrace) && !is_at_end()) {
             try {
@@ -619,30 +667,61 @@ class Parser {
     ast::ExprPtr parse_primary();
 
     // ジェネリックパラメータ（<T>, <T: Ord>, <T, U>）をパース
-    std::vector<std::string> parse_generic_params() {
-        std::vector<std::string> params;
+    // 戻り値: pair<名前リスト（後方互換）, GenericParamリスト（制約付き）>
+    std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2() {
+        std::vector<std::string> names;
+        std::vector<ast::GenericParam> params;
 
         if (!check(TokenKind::Lt)) {
-            return params;  // ジェネリックパラメータがない場合
+            return {names, params};  // ジェネリックパラメータがない場合
         }
 
-        // ジェネリクスはまだ未実装
-        error("Generic parameters (<T>) are not yet implemented");
-
-        // エラー復旧: '>' まで読み飛ばす
         advance();  // '<' を消費
-        int depth = 1;
-        int max_skip = 100;
-        while (!is_at_end() && depth > 0 && max_skip-- > 0) {
-            if (current().kind == TokenKind::Lt) {
-                depth++;
-            } else if (current().kind == TokenKind::Gt) {
-                depth--;
-            }
-            advance();
-        }
 
-        return params;  // 空のパラメータリストを返す
+        // パラメータリストをパース
+        do {
+            if (check(TokenKind::Gt)) {
+                break;  // 空のパラメータリスト
+            }
+
+            // 型パラメータ名
+            std::string param_name = expect_ident();
+            std::vector<std::string> constraints;
+
+            // 型制約（: Constraint）
+            if (consume_if(TokenKind::Colon)) {
+                // 複数の制約（Ord + Clone）もサポート
+                constraints.push_back(expect_ident());
+                while (consume_if(TokenKind::Plus)) {
+                    constraints.push_back(expect_ident());
+                }
+            }
+
+            names.push_back(param_name);
+            params.emplace_back(param_name, constraints);
+
+            std::string constraint_str;
+            for (size_t i = 0; i < constraints.size(); ++i) {
+                if (i > 0)
+                    constraint_str += " + ";
+                constraint_str += constraints[i];
+            }
+            debug::par::log(debug::par::Id::FuncDef,
+                            "Generic param: " + param_name +
+                                (constraint_str.empty() ? "" : " : " + constraint_str),
+                            debug::Level::Debug);
+
+        } while (consume_if(TokenKind::Comma));
+
+        expect(TokenKind::Gt);  // '>' を消費
+
+        return {names, params};
+    }
+
+    // 後方互換性のため維持
+    std::vector<std::string> parse_generic_params() {
+        auto [names, _] = parse_generic_params_v2();
+        return names;
     }
 
     // 型解析

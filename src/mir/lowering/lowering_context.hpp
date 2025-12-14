@@ -82,16 +82,17 @@ class LoweringContext {
     BasicBlock* get_current_block() { return func->get_block(current_block); }
 
     // 新しいローカル変数を作成（typedefを解決）
-    LocalId new_local(const std::string& name, hir::TypePtr type, bool is_mutable = true) {
+    LocalId new_local(const std::string& name, hir::TypePtr type, bool is_mutable = true,
+                      bool is_user = true, bool is_static = false) {
         auto resolved_type = resolve_typedef(type);
-        return func->add_local(name, resolved_type, is_mutable, false);
+        return func->add_local(name, resolved_type, is_mutable, is_user, is_static);
     }
 
     // 新しい一時変数を作成（typedefを解決）
     LocalId new_temp(hir::TypePtr type) {
         std::string name = "_t" + std::to_string(next_temp_id++);
         auto resolved_type = resolve_typedef(type);
-        return func->add_local(name, resolved_type, true, true);
+        return func->add_local(name, resolved_type, true, true, false);
     }
 
     // 文を現在のブロックに追加

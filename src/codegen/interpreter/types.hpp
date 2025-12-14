@@ -6,6 +6,7 @@
 #include <any>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace cm::mir::interp {
@@ -49,6 +50,7 @@ struct ExecutionContext {
     const MirFunction* function;
     std::unordered_map<LocalId, Value> locals;
     BuiltinRegistry* builtins;
+    std::unordered_set<LocalId> skip_static_init;  // 初期化をスキップするstatic変数
 
     ExecutionContext(const MirFunction* func, BuiltinRegistry* builtin_registry)
         : function(func), builtins(builtin_registry) {
@@ -70,6 +72,12 @@ struct ExecutionContext {
             }
         }
     }
+
+    /// static変数への初期化代入かどうかを判定
+    bool should_skip_static_init(LocalId id) const { return skip_static_init.count(id) > 0; }
+
+    /// static変数の初期化済みフラグをクリア（実際の代入後）
+    void mark_static_initialized(LocalId id) { skip_static_init.erase(id); }
 };
 
 // ============================================================
@@ -86,5 +94,35 @@ struct ExecutionResult {
 
     static ExecutionResult error(const std::string& msg) { return {false, {}, msg}; }
 };
+
+// ============================================================
+// ヘルパー関数
+// ============================================================
+
+/// 値を文字列に変換（デバッグ用）
+inline std::string value_to_string(const Value& val) {
+    if (!val.has_value())
+        return "<empty>";
+
+    if (val.type() == typeid(int64_t)) {
+        return std::to_string(std::any_cast<int64_t>(val));
+    }
+    if (val.type() == typeid(double)) {
+        return std::to_string(std::any_cast<double>(val));
+    }
+    if (val.type() == typeid(bool)) {
+        return std::any_cast<bool>(val) ? "true" : "false";
+    }
+    if (val.type() == typeid(std::string)) {
+        return "\"" + std::any_cast<std::string>(val) + "\"";
+    }
+    if (val.type() == typeid(char)) {
+        return std::string("'") + std::any_cast<char>(val) + "'";
+    }
+    if (val.type() == typeid(StructValue)) {
+        return "<struct:" + std::any_cast<StructValue>(val).type_name + ">";
+    }
+    return "<unknown>";
+}
 
 }  // namespace cm::mir::interp

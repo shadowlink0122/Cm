@@ -36,6 +36,9 @@ class MIRToLLVM {
     std::unordered_map<std::string, llvm::GlobalVariable*> globals;
     std::unordered_map<std::string, llvm::Function*> functions;
 
+    // static変数マッピング（関数名_変数名 -> グローバル変数）
+    std::unordered_map<std::string, llvm::GlobalVariable*> staticVariables;
+
     // 構造体型キャッシュ
     std::unordered_map<std::string, llvm::StructType*> structTypes;
     std::unordered_map<std::string, const mir::MirStruct*> structDefs;

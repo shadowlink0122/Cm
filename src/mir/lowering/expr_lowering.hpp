@@ -26,7 +26,7 @@ class ExprLowering : public MirLoweringBase {
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirUnary>>) {
                     return lower_unary(*expr_ptr, ctx);
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirCall>>) {
-                    return lower_call(*expr_ptr, ctx);
+                    return lower_call(*expr_ptr, expr.type, ctx);
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirIndex>>) {
                     return lower_index(*expr_ptr, ctx);
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirMember>>) {
@@ -46,7 +46,8 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_var_ref(const hir::HirVarRef& var, LoweringContext& ctx);
     LocalId lower_binary(const hir::HirBinary& bin, LoweringContext& ctx);
     LocalId lower_unary(const hir::HirUnary& un, LoweringContext& ctx);
-    LocalId lower_call(const hir::HirCall& call, LoweringContext& ctx);
+    LocalId lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
+                       LoweringContext& ctx);
     LocalId lower_index(const hir::HirIndex& idx, LoweringContext& ctx);
     LocalId lower_member(const hir::HirMember& mem, LoweringContext& ctx);
     LocalId lower_ternary(const hir::HirTernary& ternary, LoweringContext& ctx);

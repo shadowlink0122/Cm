@@ -171,10 +171,29 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     continue;
                 }
                 auto llvmType = convertType(local.type);
-                auto alloca =
-                    builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));
-                locals[i] = alloca;
-                allocatedLocals.insert(i);  // allocaされた変数を記録
+
+                // static変数はグローバル変数として作成
+                if (local.is_static) {
+                    std::string staticKey = func.name + "_" + local.name;
+                    auto it = staticVariables.find(staticKey);
+                    if (it == staticVariables.end()) {
+                        // 初期値を設定（デフォルトはゼロ初期化）
+                        llvm::Constant* initialValue = llvm::Constant::getNullValue(llvmType);
+                        auto globalVar = new llvm::GlobalVariable(
+                            *module, llvmType, false, llvm::GlobalValue::InternalLinkage,
+                            initialValue, staticKey);
+                        staticVariables[staticKey] = globalVar;
+                        locals[i] = globalVar;
+                    } else {
+                        locals[i] = it->second;
+                    }
+                    allocatedLocals.insert(i);  // グローバル変数もallocated扱い
+                } else {
+                    auto alloca =
+                        builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));
+                    locals[i] = alloca;
+                    allocatedLocals.insert(i);  // allocaされた変数を記録
+                }
             }
         }
     }
@@ -240,11 +259,17 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     auto addr = convertPlaceToAddress(assign.place);
 
                     if (addr) {
-                        // allocaの場合のみ型変換を行う
+                        // ターゲット型を取得（allocaまたはGEPの場合）
+                        llvm::Type* targetType = nullptr;
                         if (auto alloca = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
-                            auto targetType = alloca->getAllocatedType();
-                            auto sourceType = rvalue->getType();
+                            targetType = alloca->getAllocatedType();
+                        } else if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
+                            targetType = gep->getResultElementType();
+                        }
 
+                        auto sourceType = rvalue->getType();
+
+                        if (targetType) {
                             // sourceがポインタで、targetが構造体の場合（構造体のコピー）
                             if (sourceType->isPointerTy() && targetType->isStructTy()) {
                                 // ポインタからロードして構造体値を取得
@@ -477,6 +502,12 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
                 // スカラー型の場合はロード
                 return builder->CreateLoad(allocatedType, val, "load");
+            }
+            // static変数（GlobalVariable）の場合もロードが必要
+            if (val && llvm::isa<llvm::GlobalVariable>(val)) {
+                auto globalVar = llvm::cast<llvm::GlobalVariable>(val);
+                auto valueType = globalVar->getValueType();
+                return builder->CreateLoad(valueType, val, "static_load");
             }
             return val;
         }

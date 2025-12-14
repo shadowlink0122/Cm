@@ -1,10 +1,8 @@
 // 基本的なジェネリクス関数のテスト
 
-// ジェネリックスワップ関数
-<T> void swap(T* a, T* b) {
-    T temp = *a;
-    *a = *b;
-    *b = temp;
+// ジェネリック identity 関数
+<T> T identity(T value) {
+    return value;
 }
 
 // ジェネリック最大値関数
@@ -21,51 +19,31 @@ struct Pair<T> {
     T second;
 }
 
-// ジェネリック構造体のメソッド
-impl Pair<T> {
-    <T> Pair<T> new(T f, T s) {
-        Pair<T> p;
-        p.first = f;
-        p.second = s;
-        return p;
-    }
-
-    <T> T get_first() {
-        return this.first;
-    }
-
-    <T> void set_first(T value) {
-        this.first = value;
-    }
-}
-
 // テスト関数
 int main() {
-    // int型でのswapテスト
-    int x = 10;
-    int y = 20;
-    swap(&x, &y);
-    println("After swap: x = {x}, y = {y}");
+    // int型でのidentityテスト
+    int x = identity(42);
+    println("identity(42) = {x}");
 
-    // float型でのmaxテスト
-    float a = 3.14;
-    float b = 2.71;
-    float result = max(a, b);
-    println("Max of {a} and {b} is {result}");
+    // int型でのmaxテスト
+    int m1 = max(10, 20);
+    println("max(10, 20) = {m1}");
 
-    // ジェネリック構造体のテスト
-    Pair<int> int_pair = Pair<int>::new(100, 200);
-    int first = int_pair.get_first();
-    println("First element: {first}");
+    // double型でのmaxテスト
+    double m2 = max(3.14, 2.71);
+    println("max(3.14, 2.71) = {m2}");
 
-    int_pair.set_first(300);
-    println("Updated first element: {}", int_pair.first);
+    // ジェネリック構造体のテスト (int)
+    Pair<int> int_pair;
+    int_pair.first = 100;
+    int_pair.second = 200;
+    println("Int pair: ({}, {})", int_pair.first, int_pair.second);
 
-    // 文字列でのPair
-    Pair<string> str_pair;
-    str_pair.first = "hello";
-    str_pair.second = "world";
-    println("String pair: ({}, {})", str_pair.first, str_pair.second);
+    // ジェネリック構造体のテスト (double)
+    Pair<double> dbl_pair;
+    dbl_pair.first = 1.5;
+    dbl_pair.second = 2.5;
+    println("Double pair: ({}, {})", dbl_pair.first, dbl_pair.second);
 
     return 0;
 }

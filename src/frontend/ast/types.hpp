@@ -271,8 +271,19 @@ inline std::string type_to_string(const Type& t) {
             }
             return "[" + (t.element_type ? type_to_string(*t.element_type) : "?") + "]";
         case TypeKind::Struct:
-        case TypeKind::Interface:
-            return t.name;
+        case TypeKind::Interface: {
+            std::string result = t.name;
+            if (!t.type_args.empty()) {
+                result += "<";
+                for (size_t i = 0; i < t.type_args.size(); ++i) {
+                    if (i > 0)
+                        result += ", ";
+                    result += type_to_string(*t.type_args[i]);
+                }
+                result += ">";
+            }
+            return result;
+        }
         case TypeKind::Generic:
             return "<" + t.name + ">";
         case TypeKind::Error:

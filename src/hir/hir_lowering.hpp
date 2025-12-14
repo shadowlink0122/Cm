@@ -19,10 +19,13 @@ class HirLowering {
         HirProgram hir;
         hir.filename = program.filename;
 
-        // Pass 1: 構造体定義、enum定義、コンストラクタ情報を収集
+        // Pass 1: 構造体定義、enum定義、関数定義、コンストラクタ情報を収集
         for (auto& decl : program.declarations) {
             if (auto* st = decl->as<ast::StructDecl>()) {
                 struct_defs_[st->name] = st;
+            } else if (auto* func = decl->as<ast::FunctionDecl>()) {
+                // 関数定義を収集（デフォルト引数を持つ場合に必要）
+                func_defs_[func->name] = func;
             } else if (auto* en = decl->as<ast::EnumDecl>()) {
                 // enum定義を収集（メンバ名と値のマッピング）
                 for (const auto& member : en->members) {
@@ -59,6 +62,9 @@ class HirLowering {
    private:
     // 構造体定義のキャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
+
+    // 関数定義のキャッシュ（デフォルト引数を取得するため）
+    std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
 
     // enum値のキャッシュ (EnumName::MemberName -> value)
     std::unordered_map<std::string, int64_t> enum_values_;
@@ -223,7 +229,8 @@ class HirLowering {
             for (auto& ctor : impl.constructors) {
                 auto hir_func = std::make_unique<HirFunction>();
                 std::string mangled_name = hir_impl->target_type + "__ctor";
-                if (ctor->is_overload) {
+                // 引数がある場合は常に引数数をサフィックスとして追加
+                if (!ctor->params.empty()) {
                     mangled_name += "_" + std::to_string(ctor->params.size());
                 }
                 hir_func->name = mangled_name;
@@ -272,6 +279,11 @@ class HirLowering {
             auto hir_func = std::make_unique<HirFunction>();
             hir_func->name = method->name;
             hir_func->return_type = method->return_type;
+
+            // implのジェネリックパラメータをメソッドに伝播
+            for (const auto& gp : hir_impl->generic_params) {
+                hir_func->generic_params.push_back(gp);
+            }
 
             // selfパラメータを最初に追加（構造体型への参照）
             if (impl.target_type) {
@@ -394,11 +406,16 @@ class HirLowering {
             debug::hir::log(debug::hir::Id::LetConst, "const variable: " + let.name,
                             debug::Level::Trace);
         }
+        if (let.is_static) {
+            debug::hir::log(debug::hir::Id::LetLower, "static variable: " + let.name,
+                            debug::Level::Debug);
+        }
 
         auto hir_let = std::make_unique<HirLet>();
         hir_let->name = let.name;
         hir_let->type = let.type;
         hir_let->is_const = let.is_const;
+        hir_let->is_static = let.is_static;
 
         if (let.type) {
             debug::hir::log(debug::hir::Id::LetType, type_to_string(*let.type),
@@ -408,26 +425,51 @@ class HirLowering {
         if (let.init) {
             debug::hir::log(debug::hir::Id::LetInit, "initializer present", debug::Level::Trace);
 
-            // defaultメンバからの暗黙的な取得をチェック
-            // 左辺がプリミティブで右辺が構造体の場合、defaultメンバを取得
-            auto init_type = let.init->type;
-            if (let.type && let.type->kind != ast::TypeKind::Struct && init_type &&
-                init_type->kind == ast::TypeKind::Struct) {
-                std::string default_member = get_default_member_name(init_type->name);
-                if (!default_member.empty()) {
-                    debug::hir::log(debug::hir::Id::LetInit,
-                                    "Converting to default member access: " + default_member,
-                                    debug::Level::Debug);
-                    // int x = w → int x = w.value に変換
-                    auto member = std::make_unique<HirMember>();
-                    member->object = lower_expr(*let.init);
-                    member->member = default_member;
-                    hir_let->init = std::make_unique<HirExpr>(std::move(member), let.type);
+            // initが構造体のコンストラクタ呼び出し（Type name = Type(args)形式）かチェック
+            bool is_constructor_init = false;
+            if (auto* call = let.init->as<ast::CallExpr>()) {
+                if (auto* ident = call->callee->as<ast::IdentExpr>()) {
+                    // 呼び出し先が変数の型名と同じ場合、コンストラクタ呼び出しとみなす
+                    if (let.type && ident->name == let.type->name) {
+                        is_constructor_init = true;
+                        // コンストラクタ引数として扱う
+                        std::vector<ast::ExprPtr> ctor_args_temp;
+                        for (auto& arg : call->args) {
+                            ctor_args_temp.push_back(std::move(arg));
+                        }
+                        // ctor_argsとして設定（あとでコンストラクタ呼び出しとして処理される）
+                        let.ctor_args = std::move(ctor_args_temp);
+                        let.has_ctor_call = true;
+                        debug::hir::log(debug::hir::Id::LetInit,
+                                        "Detected constructor init: " + ident->name + " with " +
+                                            std::to_string(let.ctor_args.size()) + " args",
+                                        debug::Level::Debug);
+                    }
+                }
+            }
+
+            if (!is_constructor_init) {
+                // defaultメンバからの暗黙的な取得をチェック
+                // 左辺がプリミティブで右辺が構造体の場合、defaultメンバを取得
+                auto init_type = let.init->type;
+                if (let.type && let.type->kind != ast::TypeKind::Struct && init_type &&
+                    init_type->kind == ast::TypeKind::Struct) {
+                    std::string default_member = get_default_member_name(init_type->name);
+                    if (!default_member.empty()) {
+                        debug::hir::log(debug::hir::Id::LetInit,
+                                        "Converting to default member access: " + default_member,
+                                        debug::Level::Debug);
+                        // int x = w → int x = w.value に変換
+                        auto member = std::make_unique<HirMember>();
+                        member->object = lower_expr(*let.init);
+                        member->member = default_member;
+                        hir_let->init = std::make_unique<HirExpr>(std::move(member), let.type);
+                    } else {
+                        hir_let->init = lower_expr(*let.init);
+                    }
                 } else {
                     hir_let->init = lower_expr(*let.init);
                 }
-            } else {
-                hir_let->init = lower_expr(*let.init);
             }
         }
 
@@ -982,21 +1024,42 @@ class HirLowering {
         auto hir = std::make_unique<HirCall>();
 
         // 呼び出し先の名前を取得
+        std::string func_name;
         if (auto* ident = call.callee->as<ast::IdentExpr>()) {
-            hir->func_name = ident->name;
-            debug::hir::log(debug::hir::Id::CallTarget, "function: " + ident->name,
+            func_name = ident->name;
+            hir->func_name = func_name;
+            debug::hir::log(debug::hir::Id::CallTarget, "function: " + func_name,
                             debug::Level::Trace);
         } else {
             hir->func_name = "<indirect>";
             debug::hir::log(debug::hir::Id::CallTarget, "indirect call", debug::Level::Trace);
         }
 
+        // 明示的に渡された引数をlower
         debug::hir::log(debug::hir::Id::CallArgs, "count=" + std::to_string(call.args.size()),
                         debug::Level::Trace);
         for (size_t i = 0; i < call.args.size(); i++) {
             debug::hir::log(debug::hir::Id::CallArgEval, "arg[" + std::to_string(i) + "]",
                             debug::Level::Trace);
             hir->args.push_back(lower_expr(*call.args[i]));
+        }
+
+        // デフォルト引数を適用
+        if (!func_name.empty()) {
+            auto func_it = func_defs_.find(func_name);
+            if (func_it != func_defs_.end()) {
+                const auto* func_def = func_it->second;
+                // 不足している引数にデフォルト値を追加
+                for (size_t i = call.args.size(); i < func_def->params.size(); ++i) {
+                    const auto& param = func_def->params[i];
+                    if (param.default_value) {
+                        debug::hir::log(debug::hir::Id::CallArgEval,
+                                        "default arg[" + std::to_string(i) + "] for " + param.name,
+                                        debug::Level::Trace);
+                        hir->args.push_back(lower_expr(*param.default_value));
+                    }
+                }
+            }
         }
 
         return std::make_unique<HirExpr>(std::move(hir), type);

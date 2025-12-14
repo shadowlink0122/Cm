@@ -21,6 +21,7 @@ struct Symbol {
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
     ast::TypePtr return_type;
+    size_t required_params = 0;  // 必須引数の数（デフォルト値のない引数）
 };
 
 // ============================================================
@@ -40,7 +41,7 @@ class Scope {
 
     // 関数登録
     bool define_function(const std::string& name, std::vector<ast::TypePtr> params,
-                         ast::TypePtr ret) {
+                         ast::TypePtr ret, size_t required_params = SIZE_MAX) {
         if (symbols_.count(name))
             return false;
         Symbol sym;
@@ -49,6 +50,9 @@ class Scope {
         sym.param_types = std::move(params);
         sym.return_type = std::move(ret);
         sym.type = ast::make_void();  // 関数自体の型
+        // required_paramsがSIZE_MAXの場合は全引数が必須
+        sym.required_params =
+            (required_params == SIZE_MAX) ? sym.param_types.size() : required_params;
         symbols_[name] = std::move(sym);
         return true;
     }

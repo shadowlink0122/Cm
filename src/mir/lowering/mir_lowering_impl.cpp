@@ -129,6 +129,13 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
                 // 通常のメソッドは type__method_name 形式にする
                 mir_func->name = type_name + "__" + method->name;
             }
+
+            // ジェネリックパラメータがある場合、hir_functionsに登録（モノモーフィゼーション用）
+            if (!method->generic_params.empty()) {
+                hir_functions[mir_func->name] = method.get();
+                debug_msg("MIR", "Registered generic impl method: " + mir_func->name);
+            }
+
             mir_program.functions.push_back(std::move(mir_func));
         }
     }

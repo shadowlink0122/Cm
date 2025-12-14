@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <regex>
+#include <set>
 
 namespace cm {
 
@@ -166,10 +167,15 @@ class TypeChecker {
             }
 
             std::vector<ast::TypePtr> param_types;
+            size_t required_params = 0;
             for (const auto& p : func->params) {
                 param_types.push_back(p.type);
+                if (!p.default_value) {
+                    required_params++;
+                }
             }
-            scopes_.global().define_function(func->name, std::move(param_types), func->return_type);
+            scopes_.global().define_function(func->name, std::move(param_types), func->return_type,
+                                             required_params);
         } else if (auto* st = decl.as<ast::StructDecl>()) {
             // ジェネリックパラメータがある場合は記録
             if (!st->generic_params.empty()) {
@@ -718,11 +724,20 @@ class TypeChecker {
             case ast::BinaryOp::AddAssign:
             case ast::BinaryOp::SubAssign:
             case ast::BinaryOp::MulAssign:
-            case ast::BinaryOp::DivAssign:
+            case ast::BinaryOp::DivAssign: {
+                // const変数への代入をチェック
+                if (auto* ident = binary.left->as<ast::IdentExpr>()) {
+                    auto sym = scopes_.current().lookup(ident->name);
+                    if (sym && sym->is_const) {
+                        error(Span{}, "Cannot assign to const variable '" + ident->name + "'");
+                        return ast::make_error();
+                    }
+                }
                 if (!types_compatible(ltype, rtype)) {
                     error(Span{}, "Assignment type mismatch");
                 }
                 return ltype;
+            }
 
             // 加算演算子 - 文字列連結もサポート
             case ast::BinaryOp::Add:
@@ -806,6 +821,23 @@ class TypeChecker {
                 return ast::make_void();
             }
 
+            // ジェネリック関数かチェック
+            auto gen_it = generic_functions_.find(ident->name);
+            if (gen_it != generic_functions_.end()) {
+                // ジェネリック関数の型推論
+                return infer_generic_call(call, ident->name, gen_it->second);
+            }
+
+            // 構造体のコンストラクタ呼び出しかチェック
+            if (get_struct(ident->name) != nullptr) {
+                // コンストラクタの引数チェック（将来的にはコンストラクタシグネチャと照合）
+                for (auto& arg : call.args) {
+                    infer_type(*arg);
+                }
+                // コンストラクタは構造体型を返す
+                return ast::make_named(ident->name);
+            }
+
             // 通常の関数はシンボルテーブルから検索
             auto sym = scopes_.current().lookup(ident->name);
             if (!sym || !sym->is_function) {
@@ -813,13 +845,24 @@ class TypeChecker {
                 return ast::make_error();
             }
 
-            // 通常の関数の引数チェック
-            if (call.args.size() != sym->param_types.size()) {
-                error(Span{}, "Function '" + ident->name + "' expects " +
-                                  std::to_string(sym->param_types.size()) + " arguments, got " +
-                                  std::to_string(call.args.size()));
+            // 通常の関数の引数チェック（デフォルト引数を考慮）
+            size_t arg_count = call.args.size();
+            size_t param_count = sym->param_types.size();
+            size_t required_count = sym->required_params;
+
+            if (arg_count < required_count || arg_count > param_count) {
+                if (required_count == param_count) {
+                    error(Span{}, "Function '" + ident->name + "' expects " +
+                                      std::to_string(param_count) + " arguments, got " +
+                                      std::to_string(arg_count));
+                } else {
+                    error(Span{}, "Function '" + ident->name + "' expects " +
+                                      std::to_string(required_count) + " to " +
+                                      std::to_string(param_count) + " arguments, got " +
+                                      std::to_string(arg_count));
+                }
             } else {
-                for (size_t i = 0; i < call.args.size(); ++i) {
+                for (size_t i = 0; i < arg_count; ++i) {
                     auto arg_type = infer_type(*call.args[i]);
                     if (!types_compatible(sym->param_types[i], arg_type)) {
                         std::string expected = ast::type_to_string(*sym->param_types[i]);
@@ -893,6 +936,43 @@ class TypeChecker {
                 }
             }
 
+            // ジェネリック構造体の場合、ジェネリック版のメソッドを探す
+            // 例: Container<int> -> Container<T>
+            if (obj_type->kind == ast::TypeKind::Struct && !obj_type->type_args.empty()) {
+                // ジェネリック構造体名を構築 (Container<T>)
+                std::string generic_type_name = obj_type->name + "<";
+                auto gen_it = generic_structs_.find(obj_type->name);
+                if (gen_it != generic_structs_.end()) {
+                    for (size_t i = 0; i < gen_it->second.size(); ++i) {
+                        if (i > 0)
+                            generic_type_name += ", ";
+                        generic_type_name += gen_it->second[i];
+                    }
+                    generic_type_name += ">";
+
+                    auto git = type_methods_.find(generic_type_name);
+                    if (git != type_methods_.end()) {
+                        auto method_it = git->second.find(member.member);
+                        if (method_it != git->second.end()) {
+                            const auto& method_info = method_it->second;
+
+                            // 戻り値型のジェネリックパラメータを具体型に置換
+                            ast::TypePtr return_type = method_info.return_type;
+                            if (return_type && gen_it != generic_structs_.end()) {
+                                return_type = substitute_generic_type(return_type, gen_it->second,
+                                                                      obj_type->type_args);
+                            }
+
+                            debug::tc::log(debug::tc::Id::Resolved,
+                                           "Generic method: " + type_name + "." + member.member +
+                                               "() : " + ast::type_to_string(*return_type),
+                                           debug::Level::Debug);
+                            return return_type;
+                        }
+                    }
+                }
+            }
+
             // インターフェース型の場合、インターフェースのメソッドを探す
             auto iface_it = interface_methods_.find(type_name);
             if (iface_it != interface_methods_.end()) {
@@ -927,17 +1007,37 @@ class TypeChecker {
                 }
             }
 
+            // ジェネリック型パラメータの場合、メソッド呼び出しを許可（制約チェックは将来実装）
+            if (generic_context_.has_type_param(type_name)) {
+                debug::tc::log(debug::tc::Id::Resolved,
+                               "Generic type param " + type_name + "." + member.member +
+                                   "() - assuming valid (constraint check deferred)",
+                               debug::Level::Debug);
+                // 戻り値の型は不明なので、void を返す（モノモーフィゼーション時に解決）
+                return ast::make_void();
+            }
+
             error(Span{}, "Unknown method '" + member.member + "' for type '" + type_name + "'");
             return ast::make_error();
         }
 
         // フィールドアクセスの場合（構造体のみ）
         if (obj_type->kind == ast::TypeKind::Struct) {
-            const ast::StructDecl* struct_decl = get_struct(type_name);
+            // ジェネリック型の場合、基底名を抽出
+            std::string base_type_name = obj_type->name;
+            const ast::StructDecl* struct_decl = get_struct(base_type_name);
             if (struct_decl) {
                 for (const auto& field : struct_decl->fields) {
                     if (field.name == member.member) {
                         auto resolved_field_type = resolve_typedef(field.type);
+
+                        // ジェネリック型の場合、フィールドの型を具体型に置換
+                        if (!obj_type->type_args.empty() && !struct_decl->generic_params.empty()) {
+                            resolved_field_type = substitute_generic_type(
+                                resolved_field_type, struct_decl->generic_params,
+                                obj_type->type_args);
+                        }
+
                         debug::tc::log(debug::tc::Id::Resolved,
                                        type_name + "." + member.member + " : " +
                                            ast::type_to_string(*resolved_field_type),
@@ -1079,6 +1179,51 @@ class TypeChecker {
         return false;
     }
 
+    // ジェネリック型パラメータを具体型に置換
+    ast::TypePtr substitute_generic_type(ast::TypePtr type,
+                                         const std::vector<std::string>& generic_params,
+                                         const std::vector<ast::TypePtr>& type_args) {
+        if (!type)
+            return type;
+
+        // 型パラメータ名に一致するか確認
+        std::string type_name = ast::type_to_string(*type);
+        for (size_t i = 0; i < generic_params.size() && i < type_args.size(); ++i) {
+            if (type_name == generic_params[i]) {
+                return type_args[i];
+            }
+        }
+
+        // 複合型の場合は再帰的に処理
+        if (type->kind == ast::TypeKind::Pointer || type->kind == ast::TypeKind::Reference) {
+            auto new_type = std::make_shared<ast::Type>(type->kind);
+            new_type->element_type =
+                substitute_generic_type(type->element_type, generic_params, type_args);
+            return new_type;
+        }
+
+        if (type->kind == ast::TypeKind::Array) {
+            auto new_type = std::make_shared<ast::Type>(ast::TypeKind::Array);
+            new_type->element_type =
+                substitute_generic_type(type->element_type, generic_params, type_args);
+            new_type->array_size = type->array_size;
+            return new_type;
+        }
+
+        // ジェネリック構造体の場合
+        if (type->kind == ast::TypeKind::Struct && !type->type_args.empty()) {
+            auto new_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+            new_type->name = type->name;
+            for (const auto& arg : type->type_args) {
+                new_type->type_args.push_back(
+                    substitute_generic_type(arg, generic_params, type_args));
+            }
+            return new_type;
+        }
+
+        return type;
+    }
+
     // typedef解決（名前付き型→実際の型）
     ast::TypePtr resolve_typedef(ast::TypePtr type) {
         if (!type)
@@ -1118,6 +1263,150 @@ class TypeChecker {
         auto a_info = a->info();
         auto b_info = b->info();
         return a_info.size >= b_info.size ? a : b;
+    }
+
+    // ジェネリック関数呼び出しの型推論
+    ast::TypePtr infer_generic_call(ast::CallExpr& call, const std::string& func_name,
+                                    const std::vector<std::string>& type_params) {
+        // 引数の型を推論
+        std::vector<ast::TypePtr> arg_types;
+        for (auto& arg : call.args) {
+            arg_types.push_back(infer_type(*arg));
+        }
+
+        // シンボルテーブルから関数情報を取得
+        auto sym = scopes_.current().lookup(func_name);
+        if (!sym || !sym->is_function) {
+            error(Span{}, "'" + func_name + "' is not a function");
+            return ast::make_error();
+        }
+
+        // 引数の数チェック（デフォルト引数を考慮）
+        size_t arg_count = call.args.size();
+        size_t param_count = sym->param_types.size();
+        size_t required_count = sym->required_params;
+
+        if (arg_count < required_count || arg_count > param_count) {
+            if (required_count == param_count) {
+                error(Span{}, "Generic function '" + func_name + "' expects " +
+                                  std::to_string(param_count) + " arguments, got " +
+                                  std::to_string(arg_count));
+            } else {
+                error(Span{}, "Generic function '" + func_name + "' expects " +
+                                  std::to_string(required_count) + " to " +
+                                  std::to_string(param_count) + " arguments, got " +
+                                  std::to_string(arg_count));
+            }
+            return ast::make_error();
+        }
+
+        // 型パラメータをセットに変換
+        std::set<std::string> type_param_set(type_params.begin(), type_params.end());
+
+        // 型パラメータの推論
+        std::unordered_map<std::string, ast::TypePtr> inferred_types;
+        for (size_t i = 0; i < arg_types.size(); ++i) {
+            auto& param_type = sym->param_types[i];
+            auto& arg_type = arg_types[i];
+
+            if (param_type && arg_type) {
+                std::string param_str = ast::type_to_string(*param_type);
+                // パラメータ型が型パラメータの場合
+                if (type_param_set.count(param_str)) {
+                    auto it = inferred_types.find(param_str);
+                    if (it == inferred_types.end()) {
+                        inferred_types[param_str] = arg_type;
+                        debug::tc::log(
+                            debug::tc::Id::Resolved,
+                            "Inferred " + param_str + " = " + ast::type_to_string(*arg_type),
+                            debug::Level::Debug);
+                    }
+                }
+                // パラメータがジェネリック構造体の場合（例：Box<T>）
+                else if (param_type->kind == ast::TypeKind::Struct &&
+                         !param_type->type_args.empty() &&
+                         arg_type->kind == ast::TypeKind::Struct &&
+                         param_type->name == arg_type->name) {
+                    // 型引数を一致させて推論
+                    for (size_t j = 0;
+                         j < param_type->type_args.size() && j < arg_type->type_args.size(); ++j) {
+                        std::string type_arg_str = ast::type_to_string(*param_type->type_args[j]);
+                        if (type_param_set.count(type_arg_str)) {
+                            auto it = inferred_types.find(type_arg_str);
+                            if (it == inferred_types.end()) {
+                                inferred_types[type_arg_str] = arg_type->type_args[j];
+                                debug::tc::log(debug::tc::Id::Resolved,
+                                               "Inferred " + type_arg_str + " = " +
+                                                   ast::type_to_string(*arg_type->type_args[j]),
+                                               debug::Level::Debug);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 推論された型情報を保存（後でモノモーフィゼーションで使用）
+        if (!inferred_types.empty()) {
+            call.inferred_type_args = inferred_types;
+
+            // 順序付き型引数を設定
+            for (const auto& param_name : type_params) {
+                auto it = inferred_types.find(param_name);
+                if (it != inferred_types.end()) {
+                    call.ordered_type_args.push_back(it->second);
+                }
+            }
+        }
+
+        // 戻り値の型を置換
+        std::string return_type_str = ast::type_to_string(*sym->return_type);
+        auto it = inferred_types.find(return_type_str);
+        if (it != inferred_types.end()) {
+            // 戻り値型がジェネリック型パラメータの場合、推論された型を返す
+            debug::tc::log(
+                debug::tc::Id::Resolved,
+                "Generic call " + func_name + " returns " + ast::type_to_string(*it->second),
+                debug::Level::Debug);
+
+            return it->second;
+        }
+
+        // 戻り値型がジェネリック構造体の場合（例：Option<T>）、型引数を置換
+        if (sym->return_type && sym->return_type->kind == ast::TypeKind::Struct &&
+            !sym->return_type->type_args.empty()) {
+            bool needs_substitution = false;
+            std::vector<ast::TypePtr> new_type_args;
+
+            for (const auto& type_arg : sym->return_type->type_args) {
+                if (type_arg) {
+                    std::string arg_str = ast::type_to_string(*type_arg);
+                    auto subst_it = inferred_types.find(arg_str);
+                    if (subst_it != inferred_types.end()) {
+                        new_type_args.push_back(subst_it->second);
+                        needs_substitution = true;
+                    } else {
+                        new_type_args.push_back(type_arg);
+                    }
+                }
+            }
+
+            if (needs_substitution) {
+                auto new_return_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+                new_return_type->name = sym->return_type->name;
+                new_return_type->type_args = std::move(new_type_args);
+
+                debug::tc::log(debug::tc::Id::Resolved,
+                               "Generic call " + func_name + " returns " +
+                                   ast::type_to_string(*new_return_type),
+                               debug::Level::Debug);
+
+                return new_return_type;
+            }
+        }
+
+        // 戻り値型がジェネリックでない場合はそのまま
+        return sym->return_type;
     }
 
     void error(Span span, const std::string& msg) {

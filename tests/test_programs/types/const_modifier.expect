@@ -1,3 +1,4 @@
 const MAX = 100
 const PI = 3.14159
 const GREETING = Hello
+MAX * 2 = 200

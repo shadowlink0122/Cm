@@ -469,9 +469,16 @@ struct LocalDecl {
     hir::TypePtr type;
     bool is_mutable;
     bool is_user_variable;  // ユーザー定義の変数か、コンパイラ生成の一時変数か
+    bool is_static = false;  // static変数（関数呼び出し間で値が保持される）
 
-    LocalDecl(LocalId i, std::string n, hir::TypePtr t, bool mut = true, bool user = true)
-        : id(i), name(std::move(n)), type(std::move(t)), is_mutable(mut), is_user_variable(user) {}
+    LocalDecl(LocalId i, std::string n, hir::TypePtr t, bool mut = true, bool user = true,
+              bool is_static_ = false)
+        : id(i),
+          name(std::move(n)),
+          type(std::move(t)),
+          is_mutable(mut),
+          is_user_variable(user),
+          is_static(is_static_) {}
 };
 
 // ============================================================
@@ -487,9 +494,9 @@ struct MirFunction {
 
     // ローカル変数の追加
     LocalId add_local(std::string name, hir::TypePtr type, bool is_mutable = true,
-                      bool is_user = true) {
+                      bool is_user = true, bool is_static = false) {
         LocalId id = locals.size();
-        locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user);
+        locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user, is_static);
         return id;
     }
 

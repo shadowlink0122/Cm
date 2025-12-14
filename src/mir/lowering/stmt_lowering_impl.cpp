@@ -7,13 +7,23 @@ namespace cm::mir {
 void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // 新しいローカル変数を作成
     // is_const = true なら変更不可、false なら変更可能
-    LocalId local = ctx.new_local(let.name, let.type, !let.is_const);
+    // is_static = true なら関数呼び出し間で値が保持される
+    LocalId local = ctx.new_local(let.name, let.type, !let.is_const, true, let.is_static);
 
     // 変数をスコープに登録
     ctx.register_variable(let.name, local);
 
-    // 初期値がある場合は代入
-    if (let.init) {
+    // static変数の場合、初期化コードは生成しない
+    // LLVMバックエンドでグローバル変数としてゼロ初期化で生成される
+    // インタプリタでは初回呼び出し時にのみ初期化される
+    if (let.is_static) {
+        // 初期化代入は生成しない
+        // 注: 現在はゼロ初期化のみサポート。非ゼロ初期値は将来実装
+        return;
+    }
+
+    // コンストラクタ呼び出しがある場合はlet.initをスキップ（コンストラクタが初期化を担当）
+    if (let.init && !let.ctor_call) {
         // 式をlowering
         LocalId init_value = expr_lowering->lower_expression(*let.init, ctx);
 

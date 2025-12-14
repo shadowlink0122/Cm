@@ -25,6 +25,7 @@ enum class Stage {
     TypeCheck,
     Hir,
     Mir,
+    Mono,  // Monomorphization
     Lir,
     Interp,
     CodegenRust,
@@ -47,6 +48,8 @@ inline const char* stage_str(Stage s) {
             return "HIR";
         case Stage::Mir:
             return "MIR";
+        case Stage::Mono:
+            return "MONO";
         case Stage::Lir:
             return "LIR";
         case Stage::Interp:
@@ -133,3 +136,10 @@ inline const char* msg(const char* texts[], int count = 2) {
 }
 
 }  // namespace cm::debug
+
+// 簡易デバッグ出力マクロ
+inline void debug_msg(const std::string& stage, const std::string& msg) {
+    if (cm::debug::g_debug_mode) {
+        std::cerr << "[" << stage << "] " << msg << std::endl;
+    }
+}

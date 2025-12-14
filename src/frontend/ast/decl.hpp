@@ -18,6 +18,19 @@ enum class Visibility {
 };
 
 // ============================================================
+// ジェネリックパラメータ（型制約付き）
+// ============================================================
+struct GenericParam {
+    std::string name;                      // 型パラメータ名（T, U等）
+    std::vector<std::string> constraints;  // 型制約（Ord, Clone等）
+
+    GenericParam() = default;
+    explicit GenericParam(std::string n) : name(std::move(n)) {}
+    GenericParam(std::string n, std::vector<std::string> c)
+        : name(std::move(n)), constraints(std::move(c)) {}
+};
+
+// ============================================================
 // 関数定義
 // ============================================================
 struct FunctionDecl {
@@ -40,8 +53,9 @@ struct FunctionDecl {
     // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
     std::vector<AttributeNode> attributes;
 
-    // ジェネリクス（将来用）
-    std::vector<std::string> generic_params;
+    // ジェネリクス
+    std::vector<std::string> generic_params;      // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
 
     FunctionDecl(std::string n, std::vector<Param> p, TypePtr r, std::vector<StmtPtr> b)
         : name(std::move(n)), params(std::move(p)), return_type(std::move(r)), body(std::move(b)) {}
@@ -70,8 +84,9 @@ struct StructDecl {
     // with キーワードで自動実装するinterface
     std::vector<std::string> auto_impls;
 
-    // ジェネリクス（将来用）
-    std::vector<std::string> generic_params;
+    // ジェネリクス
+    std::vector<std::string> generic_params;      // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
 
     StructDecl(std::string n, std::vector<Field> f) : name(std::move(n)), fields(std::move(f)) {}
 };
@@ -92,7 +107,8 @@ struct InterfaceDecl {
     std::string name;
     std::vector<MethodSig> methods;
     Visibility visibility = Visibility::Private;
-    std::vector<std::string> generic_params;
+    std::vector<std::string> generic_params;      // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
 
     InterfaceDecl(std::string n, std::vector<MethodSig> m)
         : name(std::move(n)), methods(std::move(m)) {}
@@ -105,7 +121,10 @@ struct ImplDecl {
     std::string interface_name;  // forなしの場合は空文字列
     TypePtr target_type;
     std::vector<std::unique_ptr<FunctionDecl>> methods;
-    std::vector<std::string> generic_params;  // ジェネリックパラメータ（例: impl<T>）
+    std::vector<std::string> generic_params;      // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
+    std::vector<TypePtr>
+        interface_type_args;  // インターフェースの型引数（例: ValueHolder<T> の T）
 
     // コンストラクタ/デストラクタ専用impl（forなし）
     bool is_ctor_impl = false;

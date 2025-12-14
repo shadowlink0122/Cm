@@ -61,6 +61,10 @@ class MirLowering : public MirLoweringBase {
         for (const auto& decl : hir_program.declarations) {
             if (auto* st = std::get_if<std::unique_ptr<hir::HirStruct>>(&decl->kind)) {
                 register_struct(**st);
+                // ジェネリック構造体はモノモーフィゼーション時に特殊化されるのでスキップ
+                if (!(*st)->generic_params.empty()) {
+                    continue;
+                }
                 // MIR構造体を生成してプログラムに追加
                 auto mir_struct = create_mir_struct(**st);
                 mir_program.structs.push_back(std::make_unique<MirStruct>(std::move(mir_struct)));
@@ -191,7 +195,9 @@ class MirLowering : public MirLoweringBase {
     }
 
     // モノモーフィゼーションを実行
-    void perform_monomorphization() { monomorphizer.monomorphize(mir_program, hir_functions); }
+    void perform_monomorphization() {
+        monomorphizer.monomorphize(mir_program, hir_functions, struct_defs);
+    }
 
     // 関数のlowering
     std::unique_ptr<MirFunction> lower_function(const hir::HirFunction& func);

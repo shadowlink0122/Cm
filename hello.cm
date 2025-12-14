@@ -1,7 +1,0 @@
-import std::io::println;
-
-int main() {
-    println("Hello from WebAssembly!");
-    println("Compiled with Cm language");
-    return 0;
-}

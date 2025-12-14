@@ -13,13 +13,14 @@ struct LetStmt {
     TypePtr type;  // nullならauto推論
     ExprPtr init;  // 初期化式（省略可）
     bool is_const = false;
+    bool is_static = false;  // static変数（関数内で値が保持される）
 
     // コンストラクタ呼び出し（Type name(args) 構文用）
     bool has_ctor_call = false;
     std::vector<ExprPtr> ctor_args;
 
-    LetStmt(std::string n, TypePtr t, ExprPtr i, bool c = false)
-        : name(std::move(n)), type(std::move(t)), init(std::move(i)), is_const(c) {}
+    LetStmt(std::string n, TypePtr t, ExprPtr i, bool c = false, bool s = false)
+        : name(std::move(n)), type(std::move(t)), init(std::move(i)), is_const(c), is_static(s) {}
 };
 
 // ============================================================
@@ -167,9 +168,10 @@ struct DeferStmt {
 // 文作成ヘルパー
 // ============================================================
 inline StmtPtr make_let(std::string name, TypePtr type, ExprPtr init, bool is_const = false,
-                        Span s = {}) {
-    return std::make_unique<Stmt>(
-        std::make_unique<LetStmt>(std::move(name), std::move(type), std::move(init), is_const), s);
+                        Span s = {}, bool is_static = false) {
+    return std::make_unique<Stmt>(std::make_unique<LetStmt>(std::move(name), std::move(type),
+                                                            std::move(init), is_const, is_static),
+                                  s);
 }
 
 inline StmtPtr make_expr_stmt(ExprPtr expr, Span s = {}) {

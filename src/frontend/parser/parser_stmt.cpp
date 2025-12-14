@@ -153,11 +153,36 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_defer(std::move(body), Span{start_pos, previous().end});
     }
 
-    // 変数宣言 (auto x = ... or type x ... or type x(args))
-    if (check(TokenKind::KwConst) || is_type_start()) {
+    // 変数宣言 (auto x = ... or type x ... or type x(args) or static type x = ...)
+    // staticキーワードの後に型が来るかをチェック（static関数ではなくstatic変数）
+    bool is_static_var = false;
+    if (check(TokenKind::KwStatic)) {
+        // 次のトークンを見て型開始かどうか判定
+        size_t next_idx = pos_ + 1;
+        if (next_idx < tokens_.size()) {
+            TokenKind next_kind = tokens_[next_idx].kind;
+            // 型開始トークンかどうか
+            is_static_var = (next_kind == TokenKind::KwInt || next_kind == TokenKind::KwFloat ||
+                             next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwChar ||
+                             next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
+                             next_kind == TokenKind::KwVoid || next_kind == TokenKind::KwTiny ||
+                             next_kind == TokenKind::KwShort || next_kind == TokenKind::KwLong ||
+                             next_kind == TokenKind::KwUint || next_kind == TokenKind::KwUtiny ||
+                             next_kind == TokenKind::KwUshort || next_kind == TokenKind::KwUlong ||
+                             next_kind == TokenKind::Ident);
+        }
+    }
+    if (is_static_var) {
+        advance();  // consume 'static'
+    }
+
+    if (is_static_var || check(TokenKind::KwConst) || is_type_start()) {
         bool is_const = consume_if(TokenKind::KwConst);
         if (is_const) {
             debug::par::log(debug::par::Id::ConstDecl, "Found const variable declaration",
+                            debug::Level::Debug);
+        } else if (is_static_var) {
+            debug::par::log(debug::par::Id::VarDecl, "Found static variable declaration",
                             debug::Level::Debug);
         } else {
             debug::par::log(debug::par::Id::VarDecl, "Found variable declaration",
@@ -196,6 +221,9 @@ ast::StmtPtr Parser::parse_stmt() {
 
         expect(TokenKind::Semicolon);
         std::string decl_msg = "Variable declaration complete: ";
+        if (is_static_var) {
+            decl_msg += "static ";
+        }
         if (is_const) {
             decl_msg += "const ";
         }
@@ -203,7 +231,7 @@ ast::StmtPtr Parser::parse_stmt() {
         debug::par::log(debug::par::Id::VarDeclComplete, decl_msg, debug::Level::Debug);
 
         auto let_stmt = ast::make_let(std::move(name), std::move(type), std::move(init), is_const,
-                                      Span{start_pos, previous().end});
+                                      Span{start_pos, previous().end}, is_static_var);
 
         // コンストラクタ引数を設定
         if (has_ctor_call) {
@@ -244,9 +272,32 @@ bool Parser::is_type_start() {
         case TokenKind::LBracket:
             return true;
         case TokenKind::Ident:
-            // 識別子の後に識別子が来たら変数宣言
+            // 識別子の後に識別子が来たら変数宣言 (Type name)
+            // 識別子の後に<が来たらジェネリック型の可能性 (Type<T> name)
             if (pos_ + 1 < tokens_.size()) {
-                return tokens_[pos_ + 1].kind == TokenKind::Ident;
+                auto next_kind = tokens_[pos_ + 1].kind;
+                if (next_kind == TokenKind::Ident) {
+                    return true;
+                }
+                // ジェネリック型: Type<...> name
+                if (next_kind == TokenKind::Lt) {
+                    // <...> の後に識別子があるかチェック
+                    // 簡易チェック: <>のネストを追跡して、閉じた後に識別子があるか
+                    size_t i = pos_ + 2;
+                    int depth = 1;
+                    while (i < tokens_.size() && depth > 0) {
+                        if (tokens_[i].kind == TokenKind::Lt) {
+                            depth++;
+                        } else if (tokens_[i].kind == TokenKind::Gt) {
+                            depth--;
+                        }
+                        i++;
+                    }
+                    // depth == 0 なら閉じている
+                    if (depth == 0 && i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                        return true;
+                    }
+                }
             }
             return false;
         default:

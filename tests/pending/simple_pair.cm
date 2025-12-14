@@ -1,0 +1,20 @@
+// シンプルな複数型パラメータテスト
+
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+<T, U> Pair<T, U> make_pair(T a, U b) {
+    Pair<T, U> p;
+    p.first = a;
+    p.second = b;
+    return p;
+}
+
+int main() {
+    Pair<int, int> p = make_pair(1, 2);
+    println("{}", p.first);
+    println("{}", p.second);
+    return 0;
+}

@@ -2,6 +2,7 @@
 
 #include "nodes.hpp"
 
+#include <unordered_map>
 #include <variant>
 
 namespace cm::ast {
@@ -211,6 +212,12 @@ struct CallExpr {
     ExprPtr callee;
     std::vector<ExprPtr> args;
 
+    // ジェネリック型引数（型推論で推論されたもの）
+    std::unordered_map<std::string, TypePtr> inferred_type_args;
+
+    // 順序付き型引数（HIR lowering用）
+    std::vector<TypePtr> ordered_type_args;
+
     CallExpr(ExprPtr c, std::vector<ExprPtr> a) : callee(std::move(c)), args(std::move(a)) {}
 };
 
@@ -265,6 +272,7 @@ struct Param {
     std::string name;
     TypePtr type;
     TypeQualifiers qualifiers;
+    ExprPtr default_value;  // デフォルト引数（nullなら必須引数）
 };
 
 struct LambdaExpr {

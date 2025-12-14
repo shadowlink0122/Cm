@@ -1,0 +1,48 @@
+// 構造体を型引数として使用するジェネリクスのテスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+// ジェネリックなコンテナ
+struct Box<T> {
+    T value;
+    bool is_set;
+}
+
+// ジェネリック関数で構造体を扱う
+<T> T get_value(Box<T> box) {
+    return box.value;
+}
+
+<T> void set_value(Box<T> box, T val) {
+    box.value = val;
+    box.is_set = true;
+}
+
+int main() {
+    // 基本型のBox
+    Box<int> int_box;
+    int_box.value = 42;
+    int_box.is_set = true;
+    println("Int box: {}", int_box.value);
+
+    // 構造体のBox
+    Point p;
+    p.x = 10;
+    p.y = 20;
+
+    Box<Point> point_box;
+    point_box.value = p;
+    point_box.is_set = true;
+
+    Point extracted = point_box.value;
+    println("Point box: ({}, {})", extracted.x, extracted.y);
+
+    // ジェネリック関数で取得
+    int val = get_value(int_box);
+    println("get_value(int_box) = {val}");
+
+    return 0;
+}

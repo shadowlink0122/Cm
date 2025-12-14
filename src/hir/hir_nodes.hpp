@@ -132,7 +132,8 @@ struct HirLet {
     TypePtr type;
     HirExprPtr init;
     bool is_const;
-    HirExprPtr ctor_call;  // コンストラクタ呼び出し（オプション）
+    bool is_static = false;  // static変数フラグ
+    HirExprPtr ctor_call;    // コンストラクタ呼び出し（オプション）
 };
 
 // 代入

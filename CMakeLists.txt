@@ -136,8 +136,8 @@ set(CM_SOURCES
     src/frontend/parser/parser_module.cpp
     src/mir/optimizations/optimization_pipeline.cpp
     src/mir/lowering/mir_lowering_impl.cpp
-    # src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
-    src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
+    src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
+    # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt_lowering_impl.cpp
     src/mir/lowering/expr_lowering_impl.cpp
 )
