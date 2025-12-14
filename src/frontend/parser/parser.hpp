@@ -317,6 +317,10 @@ class Parser {
                 ast::Param param;
                 param.qualifiers.is_const = consume_if(TokenKind::KwConst);
                 param.type = parse_type();
+                
+                // C++スタイルの配列パラメータ: int[10] arr
+                param.type = check_array_suffix(std::move(param.type));
+                
                 param.name = expect_ident();
 
                 // デフォルト引数をパース
@@ -376,6 +380,10 @@ class Parser {
 
             field.qualifiers.is_const = consume_if(TokenKind::KwConst);
             field.type = parse_type();
+            
+            // C++スタイルの配列フィールド: int[10] data;
+            field.type = check_array_suffix(std::move(field.type));
+            
             field.name = expect_ident();
             expect(TokenKind::Semicolon);
             fields.push_back(std::move(field));
@@ -832,6 +840,26 @@ class Parser {
 
         error("Expected type");
         return ast::make_error();
+    }
+    
+    // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*)
+    // parse_type()の呼び出し後に使用
+    ast::TypePtr check_array_suffix(ast::TypePtr base_type) {
+        // T[N] 形式をチェック
+        if (consume_if(TokenKind::LBracket)) {
+            std::optional<uint32_t> size;
+            if (check(TokenKind::IntLiteral)) {
+                size = static_cast<uint32_t>(current().get_int());
+                advance();
+            }
+            expect(TokenKind::RBracket);
+            return ast::make_array(std::move(base_type), size);
+        }
+        // T* 形式をチェック（C++スタイルのポインタ）
+        if (consume_if(TokenKind::Star)) {
+            return ast::make_pointer(std::move(base_type));
+        }
+        return base_type;
     }
 
     // モジュール関連パーサ（parser_module.cppで実装）

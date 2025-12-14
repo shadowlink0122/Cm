@@ -1,0 +1,34 @@
+// 構造体ポインタテスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p;
+    p.x = 10;
+    p.y = 20;
+    
+    Point* ptr = &p;
+    
+    // ポインタ経由でメンバーにアクセス
+    Point deref = *ptr;
+    int px = deref.x;
+    int py = deref.y;
+    println("(*ptr).x = {px}");
+    println("(*ptr).y = {py}");
+    
+    // ポインタ経由で変更
+    Point tmp;
+    tmp.x = 100;
+    tmp.y = 200;
+    *ptr = tmp;
+    
+    int newx = p.x;
+    int newy = p.y;
+    println("after modify: p.x = {newx}");
+    println("after modify: p.y = {newy}");
+    
+    return 0;
+}

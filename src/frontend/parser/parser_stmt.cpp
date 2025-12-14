@@ -190,6 +190,10 @@ ast::StmtPtr Parser::parse_stmt() {
         }
 
         auto type = parse_type();
+        
+        // C++スタイルの配列宣言をチェック: T[N] name;
+        type = check_array_suffix(std::move(type));
+        
         std::string name = expect_ident();
         debug::par::log(debug::par::Id::VarName, "Variable name: " + name, debug::Level::Debug);
 
@@ -267,17 +271,60 @@ bool Parser::is_type_start() {
         case TokenKind::KwDouble:
         case TokenKind::KwChar:
         case TokenKind::KwString:
+            return true;
         case TokenKind::Star:
+            // *type name の形式かチェック（*p = x のような式と区別）
+            if (pos_ + 1 < tokens_.size()) {
+                auto next_kind = tokens_[pos_ + 1].kind;
+                // *の後に型キーワードまたは識別子が来て、
+                // さらにその後に識別子が来れば型宣言
+                if (next_kind == TokenKind::KwInt || next_kind == TokenKind::KwFloat ||
+                    next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwChar ||
+                    next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
+                    next_kind == TokenKind::KwVoid || next_kind == TokenKind::Ident) {
+                    // *int name or *Type name の形式
+                    if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].kind == TokenKind::Ident) {
+                        return true;
+                    }
+                }
+            }
+            return false;  // *p = ... のような式
         case TokenKind::Amp:
         case TokenKind::LBracket:
             return true;
         case TokenKind::Ident:
             // 識別子の後に識別子が来たら変数宣言 (Type name)
             // 識別子の後に<が来たらジェネリック型の可能性 (Type<T> name)
+            // 識別子の後に[が来たら配列型の可能性 (Type[N] name)
+            // 識別子の後に*が来たらポインタ型の可能性 (Type* name)
             if (pos_ + 1 < tokens_.size()) {
                 auto next_kind = tokens_[pos_ + 1].kind;
                 if (next_kind == TokenKind::Ident) {
                     return true;
+                }
+                // ポインタ型: Type* name
+                if (next_kind == TokenKind::Star) {
+                    // * の後に識別子があれば変数宣言
+                    if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].kind == TokenKind::Ident) {
+                        return true;
+                    }
+                }
+                // 配列型: Type[N] name
+                if (next_kind == TokenKind::LBracket) {
+                    // [N] の後に識別子があるかチェック
+                    size_t i = pos_ + 2;
+                    // 配列サイズをスキップ
+                    if (i < tokens_.size() && tokens_[i].kind == TokenKind::IntLiteral) {
+                        i++;
+                    }
+                    // ] を期待
+                    if (i < tokens_.size() && tokens_[i].kind == TokenKind::RBracket) {
+                        i++;
+                        // ] の後に識別子があれば変数宣言
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                            return true;
+                        }
+                    }
                 }
                 // ジェネリック型: Type<...> name
                 if (next_kind == TokenKind::Lt) {
@@ -294,8 +341,21 @@ bool Parser::is_type_start() {
                         i++;
                     }
                     // depth == 0 なら閉じている
-                    if (depth == 0 && i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
-                        return true;
+                    if (depth == 0 && i < tokens_.size()) {
+                        // ジェネリック型の後に[N]が来る可能性もチェック
+                        if (tokens_[i].kind == TokenKind::LBracket) {
+                            // [N]をスキップ
+                            i++;
+                            if (i < tokens_.size() && tokens_[i].kind == TokenKind::IntLiteral) {
+                                i++;
+                            }
+                            if (i < tokens_.size() && tokens_[i].kind == TokenKind::RBracket) {
+                                i++;
+                            }
+                        }
+                        if (tokens_[i].kind == TokenKind::Ident) {
+                            return true;
+                        }
                     }
                 }
             }

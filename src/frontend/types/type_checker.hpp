@@ -1388,6 +1388,14 @@ class TypeChecker {
             }
         }
 
+        // 配列→ポインタ暗黙変換 (array decay)
+        // int[N] → int* への変換を許可
+        if (a->kind == ast::TypeKind::Pointer && b->kind == ast::TypeKind::Array) {
+            if (a->element_type && b->element_type) {
+                return types_compatible(a->element_type, b->element_type);
+            }
+        }
+
         return false;
     }
 

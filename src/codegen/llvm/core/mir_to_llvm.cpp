@@ -266,6 +266,22 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         } else if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
                             targetType = gep->getResultElementType();
                         }
+                        
+                        // Derefプロジェクションがある場合、MIRの型情報から要素型を取得
+                        bool hasDeref = false;
+                        for (const auto& proj : assign.place.projections) {
+                            if (proj.kind == mir::ProjectionKind::Deref) {
+                                hasDeref = true;
+                                break;
+                            }
+                        }
+                        
+                        if (hasDeref && !targetType && currentMIRFunction) {
+                            auto& local = currentMIRFunction->locals[assign.place.local];
+                            if (local.type && local.type->kind == hir::TypeKind::Pointer && local.type->element_type) {
+                                targetType = convertType(local.type->element_type);
+                            }
+                        }
 
                         auto sourceType = rvalue->getType();
 
@@ -297,7 +313,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     rvalue = builder->CreateSExt(rvalue, targetType, "sext");
                                 }
                             }
-                            // 浮動小数点型間の変換
+                        // 浮動小数点型間の変換
                             else if (sourceType->isFloatingPointTy() &&
                                      targetType->isFloatingPointTy()) {
                                 if (sourceType->isDoubleTy() && targetType->isFloatTy()) {
@@ -308,7 +324,23 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     rvalue = builder->CreateFPExt(rvalue, targetType, "fpext");
                                 }
                             }
+                            // ポインタ型の変換（LLVM 14の型付きポインタ対応）
+                            else if (sourceType->isPointerTy() && targetType->isPointerTy()) {
+                                // 型付きポインタ環境では bitcast が必要
+                                if (sourceType != targetType) {
+                                    rvalue = builder->CreateBitCast(rvalue, targetType, "ptr_cast");
+                                }
+                            }
                         }
+                        
+                        // Deref時: アドレスを適切な型のポインタにbitcast
+                        if (hasDeref && targetType) {
+                            auto addrPtrType = llvm::PointerType::get(targetType, 0);
+                            if (addr->getType() != addrPtrType) {
+                                addr = builder->CreateBitCast(addr, addrPtrType, "deref_addr_cast");
+                            }
+                        }
+                        
                         builder->CreateStore(rvalue, addr);
                     }
                 } else {
@@ -350,6 +382,56 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             auto& fmtData = std::get<mir::MirRvalue::FormatConvertData>(rvalue.data);
             auto value = convertOperand(*fmtData.operand);
             return convertFormatConvert(value, fmtData.format_spec);
+        }
+        case mir::MirRvalue::Ref: {
+            // アドレス取得（&）
+            auto& refData = std::get<mir::MirRvalue::RefData>(rvalue.data);
+            auto local = refData.place.local;
+            
+            if (locals.find(local) == locals.end() || !locals[local]) {
+                return nullptr;
+            }
+            
+            llvm::Value* basePtr = locals[local];
+            
+            // プロジェクションがある場合（配列要素など）
+            if (!refData.place.projections.empty()) {
+                for (const auto& proj : refData.place.projections) {
+                    if (proj.kind == mir::ProjectionKind::Index) {
+                        // 配列要素へのアドレス
+                        auto& localInfo = currentMIRFunction->locals[local];
+                        if (localInfo.type && localInfo.type->kind == hir::TypeKind::Array) {
+                            auto elemType = convertType(localInfo.type->element_type);
+                            auto arraySize = localInfo.type->array_size.value_or(0);
+                            auto arrayType = llvm::ArrayType::get(elemType, arraySize);
+                            
+                            llvm::Value* indexVal = nullptr;
+                            if (locals.find(proj.index_local) != locals.end() && locals[proj.index_local]) {
+                                auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                                auto idxType = convertType(idxLocal.type);
+                                indexVal = builder->CreateLoad(idxType, locals[proj.index_local]);
+                                // i64に拡張
+                                if (indexVal->getType()->isIntegerTy() && 
+                                    indexVal->getType()->getIntegerBitWidth() < 64) {
+                                    indexVal = builder->CreateSExt(indexVal, ctx.getI64Type());
+                                }
+                            } else {
+                                indexVal = llvm::ConstantInt::get(ctx.getI64Type(), 0);
+                            }
+                            
+                            // GEPで配列要素のアドレスを取得
+                            basePtr = builder->CreateGEP(
+                                arrayType, basePtr,
+                                {llvm::ConstantInt::get(ctx.getI64Type(), 0), indexVal},
+                                "arr_elem_ptr");
+                        }
+                    } else if (proj.kind == mir::ProjectionKind::Field) {
+                        // 構造体フィールドへのアドレス（将来実装）
+                    }
+                }
+            }
+            
+            return basePtr;
         }
         default:
             return nullptr;
@@ -475,11 +557,37 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                 }
                             }
                         }
+                    } else if (lastProj.kind == mir::ProjectionKind::Index) {
+                        // 配列インデックスアクセス: 要素型を取得
+                        if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                            auto& local = currentMIRFunction->locals[place.local];
+                            if (local.type && local.type->kind == hir::TypeKind::Array && 
+                                local.type->element_type) {
+                                fieldType = convertType(local.type->element_type);
+                            }
+                        }
+                    } else if (lastProj.kind == mir::ProjectionKind::Deref) {
+                        // デリファレンス: ポインタの要素型を取得
+                        if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                            auto& local = currentMIRFunction->locals[place.local];
+                            if (local.type && local.type->kind == hir::TypeKind::Pointer && 
+                                local.type->element_type) {
+                                fieldType = convertType(local.type->element_type);
+                            }
+                        }
                     }
 
                     if (!fieldType) {
                         // フォールバック: i32として扱う
                         fieldType = ctx.getI32Type();
+                    }
+                    
+                    // Deref時: アドレスを適切な型のポインタにbitcast
+                    if (lastProj.kind == mir::ProjectionKind::Deref && fieldType) {
+                        auto addrPtrType = llvm::PointerType::get(fieldType, 0);
+                        if (addr->getType() != addrPtrType) {
+                            addr = builder->CreateBitCast(addr, addrPtrType, "deref_load_cast");
+                        }
                     }
 
                     return builder->CreateLoad(fieldType, addr, "field_load");
@@ -584,7 +692,71 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 break;
             }
             case mir::ProjectionKind::Index: {
-                // 配列インデックス（未実装）
+                // 配列インデックスアクセス
+                if (!addr) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                            "Index projection on null address",
+                                            cm::debug::Level::Error);
+                    return nullptr;
+                }
+
+                // インデックス値を取得
+                llvm::Value* indexVal = nullptr;
+                auto idx_it = locals.find(proj.index_local);
+                if (idx_it != locals.end()) {
+                    indexVal = idx_it->second;
+                    // allocaの場合はloadする
+                    if (allocatedLocals.count(proj.index_local)) {
+                        // 実際の型を取得してloadする
+                        llvm::Type* idxType = ctx.getI64Type();  // デフォルト
+                        if (currentMIRFunction && proj.index_local < currentMIRFunction->locals.size()) {
+                            auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                            idxType = convertType(idxLocal.type);
+                        }
+                        indexVal = builder->CreateLoad(idxType, indexVal, "idx_load");
+                        // i32の場合はi64に拡張（GEPはi64を期待）
+                        if (idxType->isIntegerTy(32)) {
+                            indexVal = builder->CreateSExt(indexVal, ctx.getI64Type(), "idx_ext");
+                        }
+                    }
+                }
+
+                if (!indexVal) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                            "Cannot get index value for array access",
+                                            cm::debug::Level::Error);
+                    return nullptr;
+                }
+
+                // 配列の要素型を取得
+                llvm::Type* arrayType = nullptr;
+                if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                    auto& local = currentMIRFunction->locals[place.local];
+                    if (local.type && local.type->kind == hir::TypeKind::Array) {
+                        arrayType = convertType(local.type);
+                    }
+                }
+
+                if (!arrayType) {
+                    // 型情報が取得できない場合は、allocaから推測
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                        arrayType = allocaInst->getAllocatedType();
+                    }
+                }
+
+                if (!arrayType || !arrayType->isArrayTy()) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                            "Cannot determine array type for index access",
+                                            cm::debug::Level::Error);
+                    return nullptr;
+                }
+
+                // GEPで配列要素のアドレスを取得
+                std::vector<llvm::Value*> indices;
+                indices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));  // 配列ベース
+                indices.push_back(indexVal);  // 要素インデックス
+
+                addr = builder->CreateGEP(arrayType, addr, indices, "elem_ptr");
                 break;
             }
             case mir::ProjectionKind::Deref: {

@@ -271,6 +271,13 @@ struct MirRvalue {
         rv->data = FormatConvertData{std::move(op), format_spec};
         return rv;
     }
+
+    static MirRvaluePtr ref(MirPlace place, bool is_mutable) {
+        auto rv = std::make_unique<MirRvalue>();
+        rv->kind = Ref;
+        rv->data = RefData{is_mutable ? BorrowKind::Mutable : BorrowKind::Shared, std::move(place)};
+        return rv;
+    }
 };
 
 // ============================================================

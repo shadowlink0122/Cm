@@ -64,6 +64,11 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             return llvm::StructType::create(ctx.getContext(), type->name);
         }
         case hir::TypeKind::TypeAlias: {
+            // typedefの実際の型がある場合は再帰的に変換
+            if (type->element_type) {
+                return convertType(type->element_type);
+            }
+            
             // まずインターフェース型かチェック
             if (isInterfaceType(type->name)) {
                 auto it = interfaceTypes.find(type->name);

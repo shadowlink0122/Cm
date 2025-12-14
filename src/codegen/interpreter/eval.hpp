@@ -66,8 +66,61 @@ class Evaluator {
                 } else {
                     return Value{};
                 }
+            } else if (proj.kind == ProjectionKind::Index) {
+                // 配列インデックスアクセス
+                // インデックスをローカル変数から取得
+                auto idx_it = ctx.locals.find(proj.index_local);
+                if (idx_it == ctx.locals.end()) {
+                    return Value{};
+                }
+                
+                int64_t index = 0;
+                if (idx_it->second.type() == typeid(int64_t)) {
+                    index = std::any_cast<int64_t>(idx_it->second);
+                } else if (idx_it->second.type() == typeid(int)) {
+                    index = std::any_cast<int>(idx_it->second);
+                }
+                
+                if (result.type() == typeid(ArrayValue)) {
+                    auto& arr = std::any_cast<ArrayValue&>(result);
+                    if (index >= 0 && static_cast<size_t>(index) < arr.elements.size()) {
+                        result = arr.elements[index];
+                    } else {
+                        return Value{};  // 範囲外
+                    }
+                } else {
+                    return Value{};
+                }
+            } else if (proj.kind == ProjectionKind::Deref) {
+                // ポインタのデリファレンス
+                if (result.type() == typeid(PointerValue)) {
+                    auto& ptr = std::any_cast<PointerValue&>(result);
+                    // ターゲットローカル変数から値を取得
+                    auto target_it = ctx.locals.find(ptr.target_local);
+                    if (target_it != ctx.locals.end()) {
+                        // 配列要素への参照の場合
+                        if (ptr.array_index.has_value()) {
+                            if (target_it->second.type() == typeid(ArrayValue)) {
+                                auto& arr = std::any_cast<ArrayValue&>(target_it->second);
+                                int64_t idx = ptr.array_index.value();
+                                if (idx >= 0 && static_cast<size_t>(idx) < arr.elements.size()) {
+                                    result = arr.elements[idx];
+                                } else {
+                                    return Value{};
+                                }
+                            } else {
+                                return Value{};
+                            }
+                        } else {
+                            result = target_it->second;
+                        }
+                    } else {
+                        return Value{};
+                    }
+                } else {
+                    return Value{};
+                }
             }
-            // TODO: Index, Deref
         }
 
         return result;
@@ -82,9 +135,16 @@ class Evaluator {
             // プロジェクションがある場合
             auto it = ctx.locals.find(place.local);
             if (it == ctx.locals.end()) {
-                // 新しいStructValueを作成
-                StructValue sv;
-                ctx.locals[place.local] = Value(sv);
+                // 新しいStructValueまたはArrayValueを作成
+                // 最初のプロジェクションの種類で判断
+                if (place.projections[0].kind == ProjectionKind::Index) {
+                    ArrayValue av;
+                    av.elements.resize(100);  // デフォルトサイズ
+                    ctx.locals[place.local] = Value(av);
+                } else {
+                    StructValue sv;
+                    ctx.locals[place.local] = Value(sv);
+                }
                 it = ctx.locals.find(place.local);
             }
 
@@ -97,6 +157,32 @@ class Evaluator {
                         auto& sv = std::any_cast<StructValue&>(*current);
                         current = &sv.fields[proj.field_id];
                     }
+                } else if (proj.kind == ProjectionKind::Index) {
+                    auto idx_it = ctx.locals.find(proj.index_local);
+                    if (idx_it != ctx.locals.end()) {
+                        int64_t index = 0;
+                        if (idx_it->second.type() == typeid(int64_t)) {
+                            index = std::any_cast<int64_t>(idx_it->second);
+                        } else if (idx_it->second.type() == typeid(int)) {
+                            index = std::any_cast<int>(idx_it->second);
+                        }
+                        if (current->type() == typeid(ArrayValue)) {
+                            auto& arr = std::any_cast<ArrayValue&>(*current);
+                            if (static_cast<size_t>(index) >= arr.elements.size()) {
+                                arr.elements.resize(index + 1);
+                            }
+                            current = &arr.elements[index];
+                        }
+                    }
+                } else if (proj.kind == ProjectionKind::Deref) {
+                    // ポインタのデリファレンス - 参照先に移動
+                    if (current->type() == typeid(PointerValue)) {
+                        auto& ptr = std::any_cast<PointerValue&>(*current);
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end()) {
+                            current = &target_it->second;
+                        }
+                    }
                 }
             }
 
@@ -106,6 +192,46 @@ class Evaluator {
                 if (current->type() == typeid(StructValue)) {
                     auto& sv = std::any_cast<StructValue&>(*current);
                     sv.fields[last_proj.field_id] = value;
+                }
+            } else if (last_proj.kind == ProjectionKind::Index) {
+                // 配列インデックスへの格納
+                auto idx_it = ctx.locals.find(last_proj.index_local);
+                if (idx_it != ctx.locals.end()) {
+                    int64_t index = 0;
+                    if (idx_it->second.type() == typeid(int64_t)) {
+                        index = std::any_cast<int64_t>(idx_it->second);
+                    } else if (idx_it->second.type() == typeid(int)) {
+                        index = std::any_cast<int>(idx_it->second);
+                    }
+                    if (current->type() == typeid(ArrayValue)) {
+                        auto& arr = std::any_cast<ArrayValue&>(*current);
+                        if (static_cast<size_t>(index) >= arr.elements.size()) {
+                            arr.elements.resize(index + 1);
+                        }
+                        arr.elements[index] = value;
+                    }
+                }
+            } else if (last_proj.kind == ProjectionKind::Deref) {
+                // ポインタのデリファレンスへの格納
+                if (current->type() == typeid(PointerValue)) {
+                    auto& ptr = std::any_cast<PointerValue&>(*current);
+                    // 配列要素への参照の場合
+                    if (ptr.array_index.has_value()) {
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end() && 
+                            target_it->second.type() == typeid(ArrayValue)) {
+                            auto& arr = std::any_cast<ArrayValue&>(target_it->second);
+                            int64_t idx = ptr.array_index.value();
+                            if (idx >= 0) {
+                                if (static_cast<size_t>(idx) >= arr.elements.size()) {
+                                    arr.elements.resize(idx + 1);
+                                }
+                                arr.elements[idx] = value;
+                            }
+                        }
+                    } else {
+                        ctx.locals[ptr.target_local] = value;
+                    }
                 }
             }
         }
@@ -311,6 +437,31 @@ class Evaluator {
                 auto& data = std::get<MirRvalue::UnaryOpData>(rvalue.data);
                 Value operand = evaluate_operand(ctx, *data.operand);
                 return evaluate_unary_op(data.op, operand);
+            }
+            case MirRvalue::Ref: {
+                // アドレス取得：PointerValueを作成
+                auto& data = std::get<MirRvalue::RefData>(rvalue.data);
+                PointerValue ptr;
+                ptr.target_local = data.place.local;
+                
+                // プロジェクションがある場合（配列要素への参照など）
+                if (!data.place.projections.empty()) {
+                    for (const auto& proj : data.place.projections) {
+                        if (proj.kind == ProjectionKind::Index) {
+                            // インデックスをローカル変数から取得
+                            auto idx_it = ctx.locals.find(proj.index_local);
+                            if (idx_it != ctx.locals.end()) {
+                                if (idx_it->second.type() == typeid(int64_t)) {
+                                    ptr.array_index = std::any_cast<int64_t>(idx_it->second);
+                                } else if (idx_it->second.type() == typeid(int)) {
+                                    ptr.array_index = std::any_cast<int>(idx_it->second);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                return Value(ptr);
             }
             default:
                 return Value{};

@@ -2,6 +2,42 @@
 
 Cm言語コンパイラの変更履歴です。
 
+## [0.9.0] - 2024-12-14 (進行中)
+
+### 追加
+
+#### 配列サポート
+- **C++スタイル配列宣言**: `int[5] arr;` 形式の配列型宣言
+- **配列インデックスアクセス**: `arr[i]` での読み書き
+- **構造体配列**: `Point[3] points;` のような構造体配列
+- **インタプリタ配列**: MIRインタプリタでの完全な配列サポート
+- **LLVMネイティブ配列**: プリミティブ型・構造体配列のLLVMコンパイル
+- **WASM配列**: WebAssemblyでの配列サポート
+
+#### ポインタサポート（完全実装）
+- **C++スタイルポインタ宣言**: `int* p;` 形式のポインタ型
+- **アドレス演算子**: `&x` で変数のアドレスを取得
+- **デリファレンス**: `*p` でポインタの参照先にアクセス
+- **ポインタ代入**: `*p = value;` でポインタ経由の書き込み
+- **構造体ポインタ**: `Point* ptr = &p;` で構造体へのポインタ
+- **LLVMネイティブ**: ポインタのネイティブコンパイル完全対応
+- **WASMポインタ**: WebAssemblyでのポインタ完全対応
+
+#### 配列→ポインタ暗黙変換（Array Decay）
+- **暗黙変換**: `int* p = arr;` で配列から先頭要素ポインタへ変換
+- **C/C++互換性**: 配列を関数にポインタとして渡せる
+
+### 既知の問題
+- typedef型ポインタのLLVM/WASMコンパイルは未完了（インタプリタでは動作）
+
+### テスト追加
+- `tests/test_programs/array/array_basic.cm`
+- `tests/test_programs/array/array_struct.cm`
+- `tests/test_programs/pointer/pointer_basic.cm`
+- `tests/test_programs/pointer/pointer_struct.cm`
+- `tests/test_programs/pointer/pointer_typedef.cm`
+- `tests/test_programs/pointer/pointer_array_decay.cm`
+
 ## [0.8.0] - 2024-12-14
 
 ### 追加

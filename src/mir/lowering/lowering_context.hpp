@@ -284,6 +284,26 @@ class LoweringContext {
             }
         }
 
+        // ポインタ型の場合、要素型を再帰的に解決
+        if (type->kind == hir::TypeKind::Pointer || type->kind == hir::TypeKind::Reference) {
+            auto resolved_elem = resolve_typedef(type->element_type);
+            if (resolved_elem != type->element_type) {
+                auto result = std::make_shared<hir::Type>(*type);
+                result->element_type = resolved_elem;
+                return result;
+            }
+        }
+
+        // 配列型の場合、要素型を再帰的に解決
+        if (type->kind == hir::TypeKind::Array) {
+            auto resolved_elem = resolve_typedef(type->element_type);
+            if (resolved_elem != type->element_type) {
+                auto result = std::make_shared<hir::Type>(*type);
+                result->element_type = resolved_elem;
+                return result;
+            }
+        }
+
         return type;
     }
 };
