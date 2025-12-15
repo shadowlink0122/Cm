@@ -1098,7 +1098,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                 std::move(func_operand), std::move(args),
                                 std::nullopt,  // printlnは戻り値なし
                                 success_block,
-                                std::nullopt  // unwind無し
+                                std::nullopt,  // unwind無し
                                 "", "", false  // 通常の関数呼び出し
                             };
                             ctx.set_terminator(std::move(call_term));
@@ -1141,7 +1141,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             std::move(func_operand), std::move(args),
             std::nullopt,  // printlnは戻り値なし
             success_block,
-            std::nullopt  // unwind無し
+            std::nullopt,  // unwind無し
             "", "", false  // 通常の関数呼び出し
         };
         ctx.set_terminator(std::move(call_term));
@@ -1210,7 +1210,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     MirTerminator::CallData call_data{
         std::move(func_operand), std::move(args), MirPlace{result},  // 戻り値の格納先
         success_block,
-        std::nullopt  // unwind無し
+        std::nullopt,  // unwind無し
         "", "", false  // 通常の関数呼び出し
     };
 
