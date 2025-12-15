@@ -265,6 +265,10 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/mir/lowering/mir_lowering_impl.cpp
+            src/mir/lowering/stmt_lowering_impl.cpp
+            src/mir/lowering/expr_lowering_impl.cpp
+            src/mir/lowering/monomorphization_impl.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
@@ -277,6 +281,11 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/mir/lowering/mir_lowering_impl.cpp
+            src/mir/lowering/stmt_lowering_impl.cpp
+            src/mir/lowering/expr_lowering_impl.cpp
+            src/mir/lowering/monomorphization_impl.cpp
+            src/mir/optimizations/optimization_pipeline.cpp
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
