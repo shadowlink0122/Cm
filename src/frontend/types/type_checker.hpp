@@ -508,6 +508,8 @@ class TypeChecker {
             check_while(*while_stmt);
         } else if (auto* for_stmt = stmt.as<ast::ForStmt>()) {
             check_for(*for_stmt);
+        } else if (auto* for_in = stmt.as<ast::ForInStmt>()) {
+            check_for_in(*for_in);
         } else if (auto* block = stmt.as<ast::BlockStmt>()) {
             scopes_.push();
             for (auto& s : block->stmts) {
@@ -631,6 +633,54 @@ class TypeChecker {
         }
 
         for (auto& s : for_stmt.body) {
+            check_statement(*s);
+        }
+
+        scopes_.pop();
+    }
+
+    // for-in文
+    void check_for_in(ast::ForInStmt& for_in) {
+        scopes_.push();
+
+        // イテラブルの型をチェック
+        auto iterable_type = infer_type(*for_in.iterable);
+        if (!iterable_type) {
+            error(Span{}, "Cannot infer type of iterable expression");
+            scopes_.pop();
+            return;
+        }
+
+        // イテラブルの要素型を取得
+        ast::TypePtr element_type;
+        if (iterable_type->kind == ast::TypeKind::Array) {
+            element_type = iterable_type->element_type;
+        } else {
+            error(Span{}, "For-in requires an iterable type (array), got " +
+                              ast::type_to_string(*iterable_type));
+            scopes_.pop();
+            return;
+        }
+
+        // ループ変数の型チェック
+        if (for_in.var_type) {
+            auto resolved_type = resolve_typedef(for_in.var_type);
+            if (!types_compatible(resolved_type, element_type)) {
+                error(Span{}, "For-in variable type mismatch: expected " +
+                                  ast::type_to_string(*element_type) + ", got " +
+                                  ast::type_to_string(*resolved_type));
+            }
+            for_in.var_type = resolved_type;
+        } else {
+            // 型推論
+            for_in.var_type = element_type;
+        }
+
+        // ループ変数をスコープに追加
+        scopes_.current().define(for_in.var_name, for_in.var_type, false);
+
+        // ボディをチェック
+        for (auto& s : for_in.body) {
             check_statement(*s);
         }
 
@@ -802,6 +852,10 @@ class TypeChecker {
                 }
                 return otype->element_type;
             case ast::UnaryOp::AddrOf:
+                // 関数のアドレスを取得する場合、そのまま関数ポインタ型を返す
+                if (otype->kind == ast::TypeKind::Function) {
+                    return otype;
+                }
                 return ast::make_pointer(otype);
             case ast::UnaryOp::PreInc:
             case ast::UnaryOp::PreDec:
@@ -851,7 +905,41 @@ class TypeChecker {
 
             // 通常の関数はシンボルテーブルから検索
             auto sym = scopes_.current().lookup(ident->name);
-            if (!sym || !sym->is_function) {
+            if (!sym) {
+                error(Span{}, "'" + ident->name + "' is not a function");
+                return ast::make_error();
+            }
+
+            // 関数ポインタ型の変数からの呼び出しをチェック
+            if (!sym->is_function && sym->type && sym->type->kind == ast::TypeKind::Function) {
+                // 関数ポインタ型の変数
+                auto fn_type = sym->type;
+
+                // 引数チェック
+                size_t arg_count = call.args.size();
+                size_t param_count = fn_type->param_types.size();
+
+                if (arg_count != param_count) {
+                    error(Span{}, "Function pointer '" + ident->name + "' expects " +
+                                      std::to_string(param_count) + " arguments, got " +
+                                      std::to_string(arg_count));
+                } else {
+                    for (size_t i = 0; i < arg_count; ++i) {
+                        auto arg_type = infer_type(*call.args[i]);
+                        if (!types_compatible(fn_type->param_types[i], arg_type)) {
+                            std::string expected = ast::type_to_string(*fn_type->param_types[i]);
+                            std::string actual = ast::type_to_string(*arg_type);
+                            error(Span{}, "Argument type mismatch in call to function pointer '" +
+                                              ident->name + "': expected " + expected + ", got " +
+                                              actual);
+                        }
+                    }
+                }
+
+                return fn_type->return_type ? fn_type->return_type : ast::make_void();
+            }
+
+            if (!sym->is_function) {
                 error(Span{}, "'" + ident->name + "' is not a function");
                 return ast::make_error();
             }
@@ -902,6 +990,43 @@ class TypeChecker {
 
         // メソッド呼び出しの場合（全ての型で共通処理）
         if (member.is_method_call) {
+            // 配列型のビルトインメソッド
+            if (obj_type->kind == ast::TypeKind::Array) {
+                if (member.member == "size" || member.member == "len") {
+                    if (!member.args.empty()) {
+                        error(Span{}, "Array " + member.member + "() takes no arguments");
+                    }
+                    debug::tc::log(
+                        debug::tc::Id::Resolved,
+                        "Array builtin: " + type_name + "." + member.member + "() : uint",
+                        debug::Level::Debug);
+                    return ast::make_uint();
+                }
+                error(Span{}, "Unknown array method '" + member.member + "'");
+                return ast::make_error();
+            }
+
+            // 文字列型のビルトインメソッド
+            if (obj_type->kind == ast::TypeKind::String) {
+                if (member.member == "len" || member.member == "size" ||
+                    member.member == "length") {
+                    if (!member.args.empty()) {
+                        error(Span{}, "String " + member.member + "() takes no arguments");
+                    }
+                    debug::tc::log(
+                        debug::tc::Id::Resolved,
+                        "String builtin: " + type_name + "." + member.member + "() : uint",
+                        debug::Level::Debug);
+                    return ast::make_uint();
+                }
+            }
+
+            // ポインタ型はビルトインメソッドを持たない
+            if (obj_type->kind == ast::TypeKind::Pointer) {
+                error(Span{},
+                      "Pointer type does not support method calls. Use (*ptr).method() instead.");
+                return ast::make_error();
+            }
             // まず通常のメソッドを探す
             auto it = type_methods_.find(type_name);
             if (it != type_methods_.end()) {
@@ -1363,6 +1488,24 @@ class TypeChecker {
             }
             if (a->kind == ast::TypeKind::Interface) {
                 return a->name == b->name;
+            }
+            // 関数ポインタ型の互換性チェック
+            if (a->kind == ast::TypeKind::Function) {
+                // 戻り値型のチェック
+                if (!types_compatible(a->return_type, b->return_type)) {
+                    return false;
+                }
+                // パラメータ数のチェック
+                if (a->param_types.size() != b->param_types.size()) {
+                    return false;
+                }
+                // 各パラメータ型のチェック
+                for (size_t i = 0; i < a->param_types.size(); ++i) {
+                    if (!types_compatible(a->param_types[i], b->param_types[i])) {
+                        return false;
+                    }
+                }
+                return true;
             }
             return true;
         }

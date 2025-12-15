@@ -1,0 +1,31 @@
+// 配列の.size()メソッドのテスト
+
+int main() {
+    // 整数配列
+    int[5] arr;
+    arr[0] = 10;
+    arr[1] = 20;
+    arr[2] = 30;
+    arr[3] = 40;
+    arr[4] = 50;
+    
+    // size()メソッドで配列サイズを取得
+    uint s = arr.size();
+    println("arr.size() = {s}");
+    
+    // len()もサポート
+    uint len = arr.len();
+    println("arr.len() = {len}");
+    
+    // 別のサイズの配列
+    int[10] big_arr;
+    uint big_size = big_arr.size();
+    println("big_arr.size() = {big_size}");
+    
+    // 異なる型の配列
+    double[3] doubles;
+    uint double_size = doubles.size();
+    println("doubles.size() = {double_size}");
+    
+    return 0;
+}

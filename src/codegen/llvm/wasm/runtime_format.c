@@ -14,6 +14,11 @@ size_t wasm_strlen(const char* str) {
     return len;
 }
 
+// Builtin string length function (used by Cm .len() method)
+size_t __builtin_string_len(const char* str) {
+    return wasm_strlen(str);
+}
+
 // ============================================================
 // Memory Allocator (Static Pool)
 // ============================================================

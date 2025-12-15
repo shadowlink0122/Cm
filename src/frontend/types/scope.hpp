@@ -47,9 +47,10 @@ class Scope {
         Symbol sym;
         sym.name = name;
         sym.is_function = true;
-        sym.param_types = std::move(params);
-        sym.return_type = std::move(ret);
-        sym.type = ast::make_void();  // 関数自体の型
+        sym.param_types = params;  // コピーを保持
+        sym.return_type = ret;
+        // 関数ポインタ型を設定（関数名を参照したときにこの型を返す）
+        sym.type = ast::make_function_ptr(ret, std::move(params));
         // required_paramsがSIZE_MAXの場合は全引数が必須
         sym.required_params =
             (required_params == SIZE_MAX) ? sym.param_types.size() : required_params;

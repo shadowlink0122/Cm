@@ -32,6 +32,7 @@ struct HirLiteral {
 // 変数参照
 struct HirVarRef {
     std::string name;
+    bool is_function_ref = false;  // 関数名への参照（関数ポインタ用）
 };
 
 // 二項演算
@@ -83,8 +84,9 @@ struct HirUnary {
 
 // 関数呼び出し
 struct HirCall {
-    std::string func_name;  // 完全修飾名
+    std::string func_name;  // 完全修飾名（関数ポインタの場合は変数名）
     std::vector<HirExprPtr> args;
+    bool is_indirect = false;  // 関数ポインタ経由の呼び出し
 };
 
 // 配列アクセス

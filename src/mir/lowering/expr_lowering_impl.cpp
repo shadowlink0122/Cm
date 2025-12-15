@@ -135,7 +135,22 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, LoweringContext&
 }
 
 // 変数参照のlowering
-LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, LoweringContext& ctx) {
+LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePtr& expr_type,
+                                    LoweringContext& ctx) {
+    // 関数参照の場合（関数ポインタ用）
+    if (var.is_function_ref) {
+        // 式の型（関数ポインタ型）を使用
+        hir::TypePtr func_ptr_type =
+            expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});
+        LocalId temp = ctx.new_temp(func_ptr_type);
+
+        // 関数参照を一時変数に格納
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{temp}, MirRvalue::use(MirOperand::function_ref(var.name))));
+
+        return temp;
+    }
+
     // 変数名からローカルIDを解決
     auto local_opt = ctx.resolve_variable(var.name);
 
@@ -221,9 +236,10 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         // 左辺が配列インデックスの場合
         else if (auto index = std::get_if<std::unique_ptr<hir::HirIndex>>(&bin.lhs->kind)) {
             LocalId array;
-            
+
             // objectが変数参照の場合は直接その変数を使用
-            if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*index)->object->kind)) {
+            if (auto* var_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*index)->object->kind)) {
                 auto var_id = ctx.resolve_variable((*var_ref)->name);
                 if (var_id) {
                     array = *var_id;
@@ -233,7 +249,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             } else {
                 array = lower_expression(*(*index)->object, ctx);
             }
-            
+
             LocalId idx = lower_expression(*(*index)->index, ctx);
 
             // Projectionを使ったアクセスを生成
@@ -251,14 +267,14 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             if ((*unary)->op == hir::HirUnaryOp::Deref) {
                 // ポインタをlowering
                 LocalId ptr = lower_expression(*(*unary)->operand, ctx);
-                
+
                 // Derefプロジェクションを使って代入
                 MirPlace place{ptr};
                 place.projections.push_back(PlaceProjection::deref());
-                
-                ctx.push_statement(
-                    MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
-                
+
+                ctx.push_statement(MirStatement::assign(
+                    place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+
                 return rhs_value;
             }
         }
@@ -585,29 +601,44 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
             auto local_opt = ctx.resolve_variable((*var_ref)->name);
             if (local_opt) {
                 LocalId var_id = *local_opt;
-                
+
+                // 関数型の場合、アドレスを取得するのではなくそのまま関数ポインタとして扱う
+                if (unary.operand->type && unary.operand->type->kind == hir::TypeKind::Function) {
+                    // 関数ポインタ型の値をそのまま返す
+                    LocalId result = ctx.new_temp(unary.operand->type);
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{var_id}))));
+                    return result;
+                }
+
                 // ポインタ型を作成
                 hir::TypePtr ptr_type = hir::make_pointer(unary.operand->type);
                 LocalId result = ctx.new_temp(ptr_type);
-                
+
                 // Ref Rvalueを作成（変数への参照）
                 auto ref_rvalue = std::make_unique<MirRvalue>();
                 ref_rvalue->kind = MirRvalue::Ref;
                 ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, MirPlace{var_id}};
-                
+
                 ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
                 return result;
             }
         }
+
+        // オペランドが既に関数ポインタ型の場合、そのまま返す
+        if (unary.operand->type && unary.operand->type->kind == hir::TypeKind::Function) {
+            return lower_expression(*unary.operand, ctx);
+        }
+
         // フォールバック：通常の評価
         LocalId operand = lower_expression(*unary.operand, ctx);
         hir::TypePtr ptr_type = hir::make_pointer(unary.operand->type);
         LocalId result = ctx.new_temp(ptr_type);
-        
+
         auto ref_rvalue = std::make_unique<MirRvalue>();
         ref_rvalue->kind = MirRvalue::Ref;
         ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, MirPlace{operand}};
-        
+
         ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
         return result;
     }
@@ -616,20 +647,20 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
     if (unary.op == hir::HirUnaryOp::Deref) {
         // ポインタをlowering
         LocalId ptr = lower_expression(*unary.operand, ctx);
-        
+
         // 要素型を取得
         hir::TypePtr elem_type = hir::make_int();  // デフォルト
         if (unary.operand->type && unary.operand->type->kind == hir::TypeKind::Pointer &&
             unary.operand->type->element_type) {
             elem_type = unary.operand->type->element_type;
         }
-        
+
         LocalId result = ctx.new_temp(elem_type);
-        
+
         // Derefプロジェクションを使用
         MirPlace place{ptr};
         place.projections.push_back(PlaceProjection::deref());
-        
+
         ctx.push_statement(
             MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(place))));
         return result;
@@ -984,8 +1015,23 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     // Call終端命令（現在のブロックを終端）
     BlockId success_block = ctx.new_block();
 
-    // 関数名を関数参照オペランドとして作成
-    auto func_operand = MirOperand::function_ref(call.func_name);
+    // 関数オペランドを作成
+    MirOperandPtr func_operand;
+    if (call.is_indirect) {
+        // 関数ポインタ経由の呼び出し: 変数から関数ポインタを取得
+        auto var_id = ctx.resolve_variable(call.func_name);
+        if (var_id) {
+            func_operand = MirOperand::copy(MirPlace{*var_id});
+        } else {
+            // 変数が見つからない場合はエラー
+            std::cerr << "[MIR] Error: Function pointer variable '" << call.func_name
+                      << "' not found\n";
+            func_operand = MirOperand::function_ref(call.func_name);
+        }
+    } else {
+        // 直接呼び出し: 関数参照を使用
+        func_operand = MirOperand::function_ref(call.func_name);
+    }
 
     // Call終端命令を手動で作成
     auto call_term = std::make_unique<MirTerminator>();
@@ -1077,7 +1123,7 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringContext& ctx) {
     // オブジェクトとインデックスをlowering
     LocalId array;
-    
+
     // objectが変数参照の場合は直接その変数を使用（配列のコピーを防ぐ）
     if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&index_expr.object->kind)) {
         auto var_id = ctx.resolve_variable((*var_ref)->name);
@@ -1089,17 +1135,17 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
     } else {
         array = lower_expression(*index_expr.object, ctx);
     }
-    
+
     LocalId index = lower_expression(*index_expr.index, ctx);
 
     // 要素型を取得
     hir::TypePtr elem_type = hir::make_int();  // デフォルト
-    if (index_expr.object && index_expr.object->type && 
+    if (index_expr.object && index_expr.object->type &&
         index_expr.object->type->kind == hir::TypeKind::Array &&
         index_expr.object->type->element_type) {
         elem_type = index_expr.object->type->element_type;
     }
-    
+
     LocalId result = ctx.new_temp(elem_type);
 
     MirPlace place{array};

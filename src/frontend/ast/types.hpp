@@ -227,6 +227,14 @@ inline TypePtr make_named(const std::string& name) {
     return t;
 }
 
+// 関数ポインタ型: int(*)(int, int) -> Function { return_type: int, param_types: [int, int] }
+inline TypePtr make_function_ptr(TypePtr return_type, std::vector<TypePtr> param_types) {
+    auto t = std::make_shared<Type>(TypeKind::Function);
+    t->return_type = std::move(return_type);
+    t->param_types = std::move(param_types);
+    return t;
+}
+
 // ============================================================
 // 型の文字列表現
 // ============================================================
@@ -286,6 +294,19 @@ inline std::string type_to_string(const Type& t) {
         }
         case TypeKind::Generic:
             return "<" + t.name + ">";
+        case TypeKind::Function: {
+            // 関数ポインタ型: int(*)(int, int)
+            std::string result = (t.return_type ? type_to_string(*t.return_type) : "void");
+            result += "(*)";
+            result += "(";
+            for (size_t i = 0; i < t.param_types.size(); ++i) {
+                if (i > 0)
+                    result += ", ";
+                result += type_to_string(*t.param_types[i]);
+            }
+            result += ")";
+            return result;
+        }
         case TypeKind::Error:
             return "<error>";
         case TypeKind::Inferred:

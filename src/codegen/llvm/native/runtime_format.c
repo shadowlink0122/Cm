@@ -9,6 +9,13 @@
 #include "../../common/runtime_common.h"
 
 // ============================================================
+// String Builtin Functions
+// ============================================================
+size_t __builtin_string_len(const char* str) {
+    return str ? strlen(str) : 0;
+}
+
+// ============================================================
 // Escape Processing
 // ============================================================
 char* cm_unescape_braces(const char* str) {

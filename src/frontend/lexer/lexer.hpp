@@ -92,6 +92,7 @@ class Lexer {
             {"if", TokenKind::KwIf},
             {"impl", TokenKind::KwImpl},
             {"import", TokenKind::KwImport},
+            {"in", TokenKind::KwIn},
             {"inline", TokenKind::KwInline},
             {"interface", TokenKind::KwInterface},
             {"macro", TokenKind::KwMacro},

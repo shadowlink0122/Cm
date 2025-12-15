@@ -4,6 +4,7 @@
 #include "../frontend/ast/decl.hpp"
 #include "hir_nodes.hpp"
 
+#include <set>
 #include <unordered_set>
 
 namespace cm::hir {
@@ -361,6 +362,8 @@ class HirLowering {
             return lower_while(*while_stmt);
         } else if (auto* for_stmt = stmt.as<ast::ForStmt>()) {
             return lower_for(*for_stmt);
+        } else if (auto* for_in = stmt.as<ast::ForInStmt>()) {
+            return lower_for_in(*for_in);
         } else if (auto* switch_stmt = stmt.as<ast::SwitchStmt>()) {
             return lower_switch(*switch_stmt);
         } else if (auto* expr_stmt = stmt.as<ast::ExprStmt>()) {
@@ -590,6 +593,88 @@ class HirLowering {
         return std::make_unique<HirStmt>(std::move(hir_for));
     }
 
+    // for-in文 → 通常のforループに変換
+    // for (T item in arr) { ... }
+    // => for (int __i = 0; __i < arr.size(); __i = __i + 1) { T item = arr[__i]; ... }
+    HirStmtPtr lower_for_in(ast::ForInStmt& for_in) {
+        debug::hir::log(debug::hir::Id::LoopLower, "Lowering for-in statement",
+                        debug::Level::Debug);
+
+        auto hir_for = std::make_unique<HirFor>();
+
+        // イテラブルの型からサイズを取得
+        auto iterable_type = for_in.iterable->type;
+        uint32_t size = 0;
+        if (iterable_type && iterable_type->kind == ast::TypeKind::Array &&
+            iterable_type->array_size.has_value()) {
+            size = iterable_type->array_size.value();
+        }
+
+        // インデックス変数名を生成
+        std::string idx_name = "__for_in_idx_" + for_in.var_name;
+
+        // init: int __i = 0;
+        auto init_let = std::make_unique<HirLet>();
+        init_let->name = idx_name;
+        init_let->type = ast::make_int();
+        auto zero_lit = std::make_unique<HirLiteral>();
+        zero_lit->value = int64_t{0};
+        init_let->init = std::make_unique<HirExpr>(std::move(zero_lit), ast::make_int());
+        hir_for->init = std::make_unique<HirStmt>(std::move(init_let));
+
+        // cond: __i < size
+        auto idx_ref = std::make_unique<HirVarRef>();
+        idx_ref->name = idx_name;
+        auto size_lit = std::make_unique<HirLiteral>();
+        size_lit->value = static_cast<int64_t>(size);
+        auto cond_binary = std::make_unique<HirBinary>();
+        cond_binary->op = HirBinaryOp::Lt;
+        cond_binary->lhs = std::make_unique<HirExpr>(std::move(idx_ref), ast::make_int());
+        cond_binary->rhs = std::make_unique<HirExpr>(std::move(size_lit), ast::make_int());
+        hir_for->cond = std::make_unique<HirExpr>(std::move(cond_binary), ast::make_bool());
+
+        // update: __i = __i + 1
+        // ASTの代入式を作成してlower_exprで変換
+        auto ast_idx_ref_left = std::make_unique<ast::IdentExpr>(idx_name);
+        auto ast_idx_ref_right = std::make_unique<ast::IdentExpr>(idx_name);
+        auto ast_one = std::make_unique<ast::LiteralExpr>(int64_t{1});
+        auto ast_add = std::make_unique<ast::BinaryExpr>(
+            ast::BinaryOp::Add, std::make_unique<ast::Expr>(std::move(ast_idx_ref_right)),
+            std::make_unique<ast::Expr>(std::move(ast_one)));
+        auto ast_assign = std::make_unique<ast::BinaryExpr>(
+            ast::BinaryOp::Assign, std::make_unique<ast::Expr>(std::move(ast_idx_ref_left)),
+            std::make_unique<ast::Expr>(std::move(ast_add)));
+        ast::Expr update_expr(std::move(ast_assign));
+        update_expr.type = ast::make_int();
+        hir_for->update = lower_expr(update_expr);
+
+        // ループ本体の先頭にループ変数の初期化を追加
+        // T item = arr[__i];
+        auto elem_let = std::make_unique<HirLet>();
+        elem_let->name = for_in.var_name;
+        elem_let->type = for_in.var_type;
+
+        // arr[__i] を構築
+        auto arr_expr = lower_expr(*for_in.iterable);
+        auto idx_ref3 = std::make_unique<HirVarRef>();
+        idx_ref3->name = idx_name;
+        auto index_expr = std::make_unique<HirIndex>();
+        index_expr->object = std::move(arr_expr);
+        index_expr->index = std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int());
+        elem_let->init = std::make_unique<HirExpr>(std::move(index_expr), for_in.var_type);
+
+        hir_for->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
+
+        // 残りのボディを追加
+        for (auto& s : for_in.body) {
+            if (auto hs = lower_stmt(*s)) {
+                hir_for->body.push_back(std::move(hs));
+            }
+        }
+
+        return std::make_unique<HirStmt>(std::move(hir_for));
+    }
+
     // switch文
     HirStmtPtr lower_switch(ast::SwitchStmt& switch_stmt) {
         auto hir_switch = std::make_unique<HirSwitch>();
@@ -688,6 +773,12 @@ class HirLowering {
                             debug::Level::Trace);
             auto var_ref = std::make_unique<HirVarRef>();
             var_ref->name = ident->name;
+            // 関数名への参照かチェック（関数ポインタ用）
+            if (func_defs_.find(ident->name) != func_defs_.end()) {
+                var_ref->is_function_ref = true;
+                debug::hir::log(debug::hir::Id::IdentifierRef, "function reference: " + ident->name,
+                                debug::Level::Debug);
+            }
             return std::make_unique<HirExpr>(std::move(var_ref), type);
         } else if (auto* binary = expr.as<ast::BinaryExpr>()) {
             return lower_binary(*binary, type);
@@ -1032,8 +1123,26 @@ class HirLowering {
             hir->func_name = func_name;
             debug::hir::log(debug::hir::Id::CallTarget, "function: " + func_name,
                             debug::Level::Trace);
+
+            // 組み込み関数リスト
+            static const std::set<std::string> builtin_funcs = {"println", "print", "printf",
+                                                                "sprintf", "exit",  "panic"};
+
+            // 関数ポインタからの呼び出しかチェック
+            // - func_defs_にある場合は通常の関数呼び出し
+            // - 組み込み関数の場合は通常の関数呼び出し
+            // - それ以外は関数ポインタ変数
+            bool is_builtin = builtin_funcs.find(func_name) != builtin_funcs.end();
+            bool is_defined = func_defs_.find(func_name) != func_defs_.end();
+
+            if (!is_builtin && !is_defined) {
+                hir->is_indirect = true;
+                debug::hir::log(debug::hir::Id::CallTarget,
+                                "indirect call via variable: " + func_name, debug::Level::Debug);
+            }
         } else {
             hir->func_name = "<indirect>";
+            hir->is_indirect = true;
             debug::hir::log(debug::hir::Id::CallTarget, "indirect call", debug::Level::Trace);
         }
 
@@ -1047,7 +1156,7 @@ class HirLowering {
         }
 
         // デフォルト引数を適用
-        if (!func_name.empty()) {
+        if (!func_name.empty() && !hir->is_indirect) {
             auto func_it = func_defs_.find(func_name);
             if (func_it != func_defs_.end()) {
                 const auto* func_def = func_it->second;
@@ -1088,19 +1197,52 @@ class HirLowering {
                 "method: " + mem.member + " with " + std::to_string(mem.args.size()) + " args",
                 debug::Level::Debug);
 
-            auto hir = std::make_unique<HirCall>();
-
-            // オブジェクトの型を取得してマングル化された関数名を生成
+            // オブジェクトの型を取得
             auto obj_hir = lower_expr(*mem.object);
             std::string type_name;
 
             // HIR式から型を取得
+            TypePtr obj_type = nullptr;
             if (obj_hir->type) {
+                obj_type = obj_hir->type;
                 type_name = ast::type_to_string(*obj_hir->type);
             } else if (mem.object->type) {
+                obj_type = mem.object->type;
                 type_name = ast::type_to_string(*mem.object->type);
             }
 
+            // 配列のビルトインメソッド処理
+            if (obj_type && obj_type->kind == ast::TypeKind::Array) {
+                if (mem.member == "size" || mem.member == "len") {
+                    // 配列サイズはコンパイル時定数として返す
+                    auto lit = std::make_unique<HirLiteral>();
+                    if (obj_type->array_size.has_value()) {
+                        lit->value = static_cast<int64_t>(obj_type->array_size.value());
+                    } else {
+                        lit->value = int64_t{0};  // 動的配列の場合（将来対応）
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower,
+                                    "Array builtin size() = " +
+                                        std::to_string(obj_type->array_size.value_or(0)),
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
+                }
+            }
+
+            // 文字列のビルトインメソッド処理
+            if (obj_type && obj_type->kind == ast::TypeKind::String) {
+                if (mem.member == "len" || mem.member == "size" || mem.member == "length") {
+                    // 文字列の長さを取得するビルトイン関数呼び出し
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_len";
+                    hir->args.push_back(std::move(obj_hir));
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin len()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_uint());
+                }
+            }
+
+            auto hir = std::make_unique<HirCall>();
             hir->func_name = type_name + "__" + mem.member;
 
             // selfを第一引数として追加

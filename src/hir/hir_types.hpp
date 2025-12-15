@@ -22,6 +22,7 @@ using ast::make_char;
 using ast::make_double;
 using ast::make_error;
 using ast::make_float;
+using ast::make_function_ptr;
 using ast::make_int;
 using ast::make_long;
 using ast::make_named;

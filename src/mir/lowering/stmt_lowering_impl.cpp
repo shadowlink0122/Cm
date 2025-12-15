@@ -27,12 +27,11 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         // 配列→ポインタ暗黙変換のチェック
         // 左辺がポインタ型で右辺が配列型の場合、配列の先頭要素へのアドレスを取得
         bool is_array_to_pointer = false;
-        if (let.type && let.init->type &&
-            let.type->kind == hir::TypeKind::Pointer &&
+        if (let.type && let.init->type && let.type->kind == hir::TypeKind::Pointer &&
             let.init->type->kind == hir::TypeKind::Array) {
             is_array_to_pointer = true;
         }
-        
+
         if (is_array_to_pointer) {
             // 配列変数への参照を取得
             if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&let.init->kind)) {
@@ -46,13 +45,13 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     zero_const.type = hir::make_int();
                     ctx.push_statement(MirStatement::assign(
                         MirPlace{idx_zero}, MirRvalue::use(MirOperand::constant(zero_const))));
-                    
+
                     // &arr[0] を生成
                     MirPlace arr_elem{*arr_local};
                     arr_elem.projections.push_back(PlaceProjection::index(idx_zero));
-                    
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{local}, MirRvalue::ref(arr_elem, false)));
+
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace{local}, MirRvalue::ref(arr_elem, false)));
                 } else {
                     // フォールバック: 通常のlowering
                     LocalId init_value = expr_lowering->lower_expression(*let.init, ctx);
@@ -159,7 +158,7 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
     } else if (auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
         // 配列インデックスへの代入
         LocalId array;
-        
+
         // objectが変数参照の場合は直接その変数を使用
         if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*index)->object->kind)) {
             // 変数名から変数IDを取得
@@ -174,15 +173,15 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
             // その他の場合は通常の評価
             array = expr_lowering->lower_expression(*(*index)->object, ctx);
         }
-        
+
         LocalId idx = expr_lowering->lower_expression(*(*index)->index, ctx);
         LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
-        
+
         // 配列[idx] = value
         MirPlace place{array};
         place.projections.push_back(PlaceProjection::index(idx));
-        ctx.push_statement(MirStatement::assign(
-            place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+        ctx.push_statement(
+            MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
     }
     // その他の左辺値タイプは未対応
 }

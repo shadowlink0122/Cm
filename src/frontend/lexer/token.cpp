@@ -58,6 +58,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "impl";
         case TokenKind::KwImport:
             return "import";
+        case TokenKind::KwIn:
+            return "in";
         case TokenKind::KwInline:
             return "inline";
         case TokenKind::KwInterface:

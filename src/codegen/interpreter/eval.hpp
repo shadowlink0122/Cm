@@ -73,14 +73,14 @@ class Evaluator {
                 if (idx_it == ctx.locals.end()) {
                     return Value{};
                 }
-                
+
                 int64_t index = 0;
                 if (idx_it->second.type() == typeid(int64_t)) {
                     index = std::any_cast<int64_t>(idx_it->second);
                 } else if (idx_it->second.type() == typeid(int)) {
                     index = std::any_cast<int>(idx_it->second);
                 }
-                
+
                 if (result.type() == typeid(ArrayValue)) {
                     auto& arr = std::any_cast<ArrayValue&>(result);
                     if (index >= 0 && static_cast<size_t>(index) < arr.elements.size()) {
@@ -218,7 +218,7 @@ class Evaluator {
                     // 配列要素への参照の場合
                     if (ptr.array_index.has_value()) {
                         auto target_it = ctx.locals.find(ptr.target_local);
-                        if (target_it != ctx.locals.end() && 
+                        if (target_it != ctx.locals.end() &&
                             target_it->second.type() == typeid(ArrayValue)) {
                             auto& arr = std::any_cast<ArrayValue&>(target_it->second);
                             int64_t idx = ptr.array_index.value();
@@ -248,6 +248,11 @@ class Evaluator {
             case MirOperand::Constant: {
                 const MirConstant& constant = std::get<MirConstant>(operand.data);
                 return constant_to_value(constant);
+            }
+            case MirOperand::FunctionRef: {
+                // 関数参照は関数名（文字列）として評価
+                const std::string& func_name = std::get<std::string>(operand.data);
+                return Value(func_name);
             }
             default:
                 return Value{};
@@ -443,7 +448,7 @@ class Evaluator {
                 auto& data = std::get<MirRvalue::RefData>(rvalue.data);
                 PointerValue ptr;
                 ptr.target_local = data.place.local;
-                
+
                 // プロジェクションがある場合（配列要素への参照など）
                 if (!data.place.projections.empty()) {
                     for (const auto& proj : data.place.projections) {
@@ -460,7 +465,7 @@ class Evaluator {
                         }
                     }
                 }
-                
+
                 return Value(ptr);
             }
             default:

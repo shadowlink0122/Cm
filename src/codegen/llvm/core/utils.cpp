@@ -67,6 +67,12 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // 文字列長取得関数
+    else if (name == "__builtin_string_len" || name == "cm_strlen") {
+        auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // フォーマット出力関数（可変長引数）
     else if (name == "cm_println_format" || name == "cm_print_format") {
         auto funcType =

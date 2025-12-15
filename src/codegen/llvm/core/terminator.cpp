@@ -79,6 +79,9 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
             // 関数名を取得
             std::string funcName;
+            bool isIndirectCall = false;          // 関数ポインタ変数からの呼び出し
+            llvm::Value* funcPtrValue = nullptr;  // 関数ポインタ値
+
             if (callData.func->kind == mir::MirOperand::Constant) {
                 auto& constant = std::get<mir::MirConstant>(callData.func->data);
                 if (auto* name = std::get_if<std::string>(&constant.value)) {
@@ -86,6 +89,11 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 }
             } else if (callData.func->kind == mir::MirOperand::FunctionRef) {
                 funcName = std::get<std::string>(callData.func->data);
+            } else if (callData.func->kind == mir::MirOperand::Copy ||
+                       callData.func->kind == mir::MirOperand::Move) {
+                // 関数ポインタ変数からの呼び出し
+                isIndirectCall = true;
+                funcPtrValue = convertOperand(*callData.func);
             }
 
             // ============================================================
@@ -237,9 +245,13 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 }
             }
 
-            llvm::Function* callee = functions[funcName];
-            if (!callee) {
-                callee = declareExternalFunction(funcName);
+            // 間接呼び出しの場合は直接呼び出しの処理をスキップ
+            llvm::Function* callee = nullptr;
+            if (!isIndirectCall && !funcName.empty()) {
+                callee = functions[funcName];
+                if (!callee) {
+                    callee = declareExternalFunction(funcName);
+                }
             }
 
             if (callee) {
@@ -326,6 +338,63 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 auto result = builder->CreateCall(callee, args);
                 if (callData.destination) {
                     locals[callData.destination->local] = result;
+                }
+            }
+            // 間接呼び出し（関数ポインタ変数経由）
+            else if (isIndirectCall && funcPtrValue) {
+                // 関数ポインタ変数の型情報から関数型を取得
+                hir::TypePtr funcPtrType = nullptr;
+                if (callData.func->kind == mir::MirOperand::Copy ||
+                    callData.func->kind == mir::MirOperand::Move) {
+                    auto& place = std::get<mir::MirPlace>(callData.func->data);
+                    if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                        funcPtrType = currentMIRFunction->locals[place.local].type;
+                    }
+                }
+
+                if (funcPtrType && funcPtrType->kind == hir::TypeKind::Function) {
+                    // 関数型を構築
+                    llvm::Type* retType = funcPtrType->return_type
+                                              ? convertType(funcPtrType->return_type)
+                                              : ctx.getVoidType();
+                    std::vector<llvm::Type*> paramTypes;
+                    for (const auto& paramType : funcPtrType->param_types) {
+                        paramTypes.push_back(convertType(paramType));
+                    }
+
+                    auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
+
+                    // 関数ポインタを適切な型にキャスト
+                    auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
+                    auto funcPtrCast =
+                        builder->CreateBitCast(funcPtrValue, funcPtrTypePtr, "func_ptr_cast");
+
+                    // 間接呼び出し（void戻り値の場合は名前を付けない）
+                    llvm::Value* result = nullptr;
+                    if (retType->isVoidTy()) {
+                        result = builder->CreateCall(funcType, funcPtrCast, args);
+                    } else {
+                        result = builder->CreateCall(funcType, funcPtrCast, args, "indirect_call");
+                    }
+                    if (callData.destination && result && !retType->isVoidTy()) {
+                        locals[callData.destination->local] = result;
+                    }
+                } else {
+                    // 型情報が取得できない場合のフォールバック
+                    // 引数と戻り値から関数型を推測
+                    std::vector<llvm::Type*> paramTypes;
+                    for (const auto& arg : args) {
+                        paramTypes.push_back(arg->getType());
+                    }
+                    auto funcType = llvm::FunctionType::get(ctx.getI32Type(), paramTypes, false);
+                    auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
+                    auto funcPtrCast =
+                        builder->CreateBitCast(funcPtrValue, funcPtrTypePtr, "func_ptr_cast");
+
+                    auto result = builder->CreateCall(funcType, funcPtrCast, args, "indirect_call");
+                    if (callData.destination) {
+                        locals[callData.destination->local] = result;
+                    }
                 }
             }
 

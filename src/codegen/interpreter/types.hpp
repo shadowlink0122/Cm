@@ -32,8 +32,8 @@ struct ArrayValue {
 
 /// ポインタの値を表現
 struct PointerValue {
-    LocalId target_local;  // 参照先のローカル変数ID
-    hir::TypePtr element_type;  // 参照先の型
+    LocalId target_local;                // 参照先のローカル変数ID
+    hir::TypePtr element_type;           // 参照先の型
     std::optional<int64_t> array_index;  // 配列要素への参照の場合のインデックス
 };
 
@@ -110,11 +110,10 @@ struct ExecutionContext {
                     }
                 }
                 locals[local.id] = Value(av);
-                debug::interp::log(
-                    debug::interp::Id::LocalInit,
-                    "Initialized array local _" + std::to_string(local.id) + " with " + 
-                        std::to_string(av.elements.size()) + " elements",
-                    debug::Level::Debug);
+                debug::interp::log(debug::interp::Id::LocalInit,
+                                   "Initialized array local _" + std::to_string(local.id) +
+                                       " with " + std::to_string(av.elements.size()) + " elements",
+                                   debug::Level::Debug);
             }
         }
     }

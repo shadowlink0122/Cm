@@ -99,6 +99,101 @@ ast::StmtPtr Parser::parse_stmt() {
     if (consume_if(TokenKind::KwFor)) {
         expect(TokenKind::LParen);
 
+        // for-in構文かどうかを先読みで判定
+        // for (Type var in iterable) または for (var in iterable)
+        bool is_for_in = false;
+        size_t lookahead = pos_;
+
+        // 先読みで 'in' キーワードを探す
+        // パターン1: Type var in ... (型指定あり)
+        // パターン2: var in ... (型推論)
+
+        // まず単純に識別子の後に'in'があるかチェック (型推論パターン)
+        if (check(TokenKind::Ident)) {
+            if (lookahead + 1 < tokens_.size() && tokens_[lookahead + 1].kind == TokenKind::KwIn) {
+                is_for_in = true;
+            }
+        }
+
+        // 型指定パターンをチェック
+        if (!is_for_in && is_type_start()) {
+            // 型をスキップして変数名と'in'を探す
+            lookahead = pos_;
+
+            // プリミティブ型をスキップ
+            auto kind = tokens_[lookahead].kind;
+            if (kind == TokenKind::KwInt || kind == TokenKind::KwUint ||
+                kind == TokenKind::KwTiny || kind == TokenKind::KwUtiny ||
+                kind == TokenKind::KwShort || kind == TokenKind::KwUshort ||
+                kind == TokenKind::KwLong || kind == TokenKind::KwUlong ||
+                kind == TokenKind::KwFloat || kind == TokenKind::KwDouble ||
+                kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
+                kind == TokenKind::KwString || kind == TokenKind::KwVoid) {
+                lookahead++;  // 型キーワードをスキップ
+            } else if (kind == TokenKind::Ident) {
+                lookahead++;  // カスタム型名をスキップ
+                // ジェネリック <...> をスキップ
+                if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::Lt) {
+                    int depth = 1;
+                    lookahead++;
+                    while (lookahead < tokens_.size() && depth > 0) {
+                        if (tokens_[lookahead].kind == TokenKind::Lt)
+                            depth++;
+                        else if (tokens_[lookahead].kind == TokenKind::Gt)
+                            depth--;
+                        lookahead++;
+                    }
+                }
+            }
+
+            // 配列 [N] をスキップ
+            if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::LBracket) {
+                lookahead++;
+                if (lookahead < tokens_.size() &&
+                    tokens_[lookahead].kind == TokenKind::IntLiteral) {
+                    lookahead++;
+                }
+                if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::RBracket) {
+                    lookahead++;
+                }
+            }
+
+            // ポインタ * をスキップ
+            while (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::Star) {
+                lookahead++;
+            }
+
+            // 変数名
+            if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::Ident) {
+                lookahead++;
+                // 'in' キーワード
+                if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::KwIn) {
+                    is_for_in = true;
+                }
+            }
+        }
+
+        if (is_for_in) {
+            // for-in構文をパース
+            ast::TypePtr var_type;
+            // 識別子の後に直接'in'があれば型推論
+            bool has_explicit_type = !(check(TokenKind::Ident) && pos_ + 1 < tokens_.size() &&
+                                       tokens_[pos_ + 1].kind == TokenKind::KwIn);
+            if (has_explicit_type) {
+                var_type = parse_type();
+            }
+            std::string var_name = expect_ident();
+            expect(TokenKind::KwIn);
+            auto iterable = parse_expr();
+            expect(TokenKind::RParen);
+            auto body = parse_block();
+
+            auto stmt = std::make_unique<ast::ForInStmt>(std::move(var_name), std::move(var_type),
+                                                         std::move(iterable), std::move(body));
+            return std::make_unique<ast::Stmt>(std::move(stmt), Span{start_pos, previous().end});
+        }
+
+        // 通常のfor文
         // 初期化
         ast::StmtPtr init;
         if (!check(TokenKind::Semicolon)) {
@@ -190,10 +285,10 @@ ast::StmtPtr Parser::parse_stmt() {
         }
 
         auto type = parse_type();
-        
+
         // C++スタイルの配列宣言をチェック: T[N] name;
         type = check_array_suffix(std::move(type));
-        
+
         std::string name = expect_ident();
         debug::par::log(debug::par::Id::VarName, "Variable name: " + name, debug::Level::Debug);
 

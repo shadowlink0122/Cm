@@ -300,8 +300,8 @@ class Interpreter {
 
     /// 関数呼び出しを実行
     void execute_call(ExecutionContext& ctx, const MirTerminator::CallData& data) {
-        // 関数名を取得
-        std::string func_name = get_function_name(data);
+        // 関数名を取得（関数ポインタ変数からの呼び出しも対応）
+        std::string func_name = get_function_name_from_operand(ctx, data);
         if (func_name.empty()) {
             debug::interp::log(debug::interp::Id::Error, "Could not determine function name",
                                debug::Level::Error);
@@ -400,6 +400,37 @@ class Interpreter {
                 return *name;
             }
         }
+        return "";
+    }
+
+    /// 関数名を取得（関数ポインタ変数からの呼び出しも対応）
+    std::string get_function_name_from_operand(ExecutionContext& ctx,
+                                               const MirTerminator::CallData& data) {
+        if (!data.func)
+            return "";
+
+        // 直接の関数参照
+        if (data.func->kind == MirOperand::FunctionRef) {
+            if (auto* name = std::get_if<std::string>(&data.func->data)) {
+                return *name;
+            }
+        }
+        // 定数
+        else if (data.func->kind == MirOperand::Constant) {
+            auto& constant = std::get<MirConstant>(data.func->data);
+            if (auto* name = std::get_if<std::string>(&constant.value)) {
+                return *name;
+            }
+        }
+        // 関数ポインタ変数（Copy/Move）
+        else if (data.func->kind == MirOperand::Copy || data.func->kind == MirOperand::Move) {
+            Value val = Evaluator::evaluate_operand(ctx, *data.func);
+            // 関数ポインタはstringとして保存されている
+            if (val.type() == typeid(std::string)) {
+                return std::any_cast<std::string>(val);
+            }
+        }
+
         return "";
     }
 

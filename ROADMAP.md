@@ -646,26 +646,56 @@ match (result) {
 |------|----------|-----------|---------|-------------|------|------|------|
 | 固定長配列 T[N] | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 構造体配列 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 配列.size()/.len() | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ポインタ T* | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | アドレス &Val | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 配列→ポインタ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | typedef型ポインタ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 可変長配列 T[] | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| 文字列操作 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| スライス操作[f:e] | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 範囲for (for-in) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 関数ポインタ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 文字列操作(.len()等) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 配列高級関数(.map等) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| スライス操作[f..e] | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | イテレータ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 自動derive(Eq,Copy等) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
-### テスト結果（2024年12月15日）
-- インタプリタ: 全110テストパス
-- LLVM Native: ポインタ完全サポート（typedef型ポインタ含む）
-- WASM: ポインタ完全サポート（typedef型ポインタ含む）
+### 関数ポインタ（2024年12月15日完全実装）
+- ✅ パーサー: `int*(int, int) op;` 新しい簡潔な構文
+- ✅ 型チェッカー: 関数ポインタ型の互換性チェック
+- ✅ HIR/MIR: 関数参照と間接呼び出しの区別
+- ✅ インタプリタ: 関数ポインタ経由の呼び出し完全サポート
+- ✅ LLVM Native: 間接呼び出し完全サポート
+- ✅ WASM: 間接呼び出し完全サポート（call_indirect使用）
+  - 関数ポインタ変数への代入
+  - 関数ポインタ経由の呼び出し
+  - 高階関数（関数ポインタを引数に取る関数）
+  - void戻り値の関数ポインタ
+
+### テスト結果（2024年12月15日更新）
+- インタプリタ: 全テストパス
+- LLVM Native: 全118テストパス（関数ポインタ含む）
+- WASM: 全118テストパス（関数ポインタ含む）
 - 新規テスト追加:
   - `tests/test_programs/array/array_basic.cm`
   - `tests/test_programs/array/array_struct.cm`
+  - `tests/test_programs/array/array_size.cm` - `.size()`/`.len()` メソッド
+  - `tests/test_programs/array/array_struct_size.cm` - 構造体配列の`.size()`
+  - `tests/test_programs/array/array_for_loop.cm` - forループイテレーション
   - `tests/test_programs/pointer/pointer_basic.cm`
   - `tests/test_programs/pointer/pointer_struct.cm`
   - `tests/test_programs/pointer/pointer_typedef.cm`
   - `tests/test_programs/pointer/pointer_array_decay.cm`
+
+### 配列メソッド（2024年12月15日追加）
+- ✅ `.size()` - 配列のサイズを取得（コンパイル時定数）
+- ✅ `.len()` - `.size()`のエイリアス
+- ✅ インタプリタ、LLVM、WASMすべてで動作確認済み
+
+### for-in構文（2024年12月15日追加）
+- ✅ `for (Type var in arr)` - 型指定あり範囲for
+- ✅ `for (var in arr)` - 型推論あり範囲for
+- ✅ 構造体配列に対するfor-in
+- ✅ インタプリタ、LLVM、WASMすべてで動作確認済み
 
 ### 完了した修正（2024年12月15日）
 - ✅ `resolve_typedef()`: ポインタ型・配列型の要素型を再帰的に解決
@@ -694,7 +724,91 @@ Vec<int>[10] vectors;
 
 ---
 
-## Version 0.10.0 - モジュールシステム
+## Version 0.10.0 - 可変長配列とヒープ
+
+### 目標
+実行時サイズ決定の配列とヒープメモリ管理
+
+### 実装項目
+| 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
+|------|----------|-----------|---------|-------------|------|------|------|
+| 可変長配列 T[] | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| new T[n] 動的確保 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| delete 解放 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Vec<T> 型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### 構文例
+```cm
+// 可変長配列（スタック上、allocaベース）
+void example(int n) {
+    int[] arr = new int[n];  // 実行時サイズ
+    for (int i = 0; i < n; i++) {
+        arr[i] = i * 2;
+    }
+    delete arr;
+}
+
+// Vec<T>（ヒープ、自動解放）
+Vec<int> vec;
+vec.push(1);
+vec.push(2);
+// スコープ終了時に自動解放
+```
+
+---
+
+## Version 0.11.0 - 参照と所有権
+
+### 目標
+参照型とmoveセマンティクスの実装（メモリ安全性の基盤）
+
+### 実装項目
+| 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
+|------|----------|-----------|---------|-------------|------|------|------|
+| &T 参照型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| &mut T 可変参照型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| move キーワード | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 借用チェッカー | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| ライフタイム基礎 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Drop trait | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Copy/Clone trait | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### 設計方針
+- **ポインタ（T*）**: C互換、手動管理、unsafe
+- **参照（&T）**: 借用チェック付き、安全
+- **move**: 所有権の明示的移動
+
+### 構文例
+```cm
+// 参照型
+void print_point(&Point p) {
+    println("({}, {})", p.x, p.y);
+}
+
+// 可変参照
+void increment(&mut int x) {
+    *x = *x + 1;
+}
+
+// 所有権移動
+struct Buffer { int* data; int size; }
+
+void consume(move Buffer buf) {
+    // bufの所有権を取得
+    // 関数終了時にbufは破棄される
+}
+
+int main() {
+    Buffer b;
+    consume(move b);  // 所有権を移動
+    // b はここで使用不可（コンパイルエラー）
+    return 0;
+}
+```
+
+---
+
+## Version 0.12.0 - モジュールシステム
 
 ### 目標
 完全なモジュールとパッケージ管理
@@ -712,7 +826,7 @@ Vec<int>[10] vectors;
 
 ---
 
-## Version 0.11.0 - FFIとインラインアセンブリ
+## Version 0.13.0 - FFIとインラインアセンブリ
 
 ### 目標
 外部関数インターフェースとインラインアセンブリによる低レベルアクセス
@@ -766,7 +880,7 @@ void platform_specific() {
 
 ---
 
-## Version 0.12.0 - 非同期処理
+## Version 0.14.0 - 非同期処理
 
 ### 目標
 async/awaitとFuture型の実装
@@ -782,6 +896,100 @@ async/awaitとFuture型の実装
 
 ---
 
+## Version 0.15.0 - ベアメタル・OSサポート
+
+### 目標
+UEFI/ベアメタル環境でのOS開発サポート
+
+### 実装項目
+| 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
+|------|----------|-----------|---------|-------------|------|------|------|
+| #[no_std] 属性 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | - | ⬜ |
+| #[no_main] 属性 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | - | ⬜ |
+| volatile read/write | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | - | ⬜ |
+| packed構造体 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | - | ⬜ |
+| カスタムリンカスクリプト | - | - | - | - | ⬜ | - | ⬜ |
+| UEFIターゲット | - | - | - | - | ⬜ | - | ⬜ |
+| freestanding環境 | - | - | - | - | ⬜ | - | ⬜ |
+
+### UEFI Hello World に必要な機能
+
+#### 1. 言語機能
+- ✅ ポインタ型（`void*`, `T*`）
+- ✅ 構造体（アライメント制御）
+- ⬜ packed構造体（`#[repr(packed)]`）
+- ⬜ volatile操作
+- ⬜ カスタムエントリポイント
+
+#### 2. コンパイル機能
+- ⬜ `#[no_std]` - 標準ライブラリなしコンパイル
+- ⬜ `#[no_main]` - mainなしコンパイル
+- ⬜ カスタムターゲット（PE32+/COFF for UEFI）
+- ⬜ リンカスクリプト指定
+
+#### 3. FFI機能
+- ⬜ `extern "efiapi"` 呼び出し規約（UEFI ABI）
+- ⬜ UEFI型定義（EFI_STATUS, EFI_HANDLE等）
+
+### 構文例（UEFI Hello World）
+```cm
+#[no_std]
+#[no_main]
+
+// UEFI型定義
+typedef EFI_STATUS = uint64;
+typedef EFI_HANDLE = void*;
+typedef CHAR16 = uint16;
+
+// UEFI構造体
+#[repr(C)]
+struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
+    void* Reset;
+    void* OutputString;
+    // ...
+}
+
+#[repr(C)]
+struct EFI_SYSTEM_TABLE {
+    // ...
+    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL* ConOut;
+    // ...
+}
+
+// UEFIエントリポイント
+extern "efiapi"
+EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_table) {
+    // "Hello, World!\r\n" in UTF-16
+    CHAR16[16] message = [0x0048, 0x0065, 0x006C, 0x006C, 0x006F, 0x002C, 
+                          0x0020, 0x0057, 0x006F, 0x0072, 0x006C, 0x0064,
+                          0x0021, 0x000D, 0x000A, 0x0000];
+    
+    // 関数ポインタを通じてOutputStringを呼び出し
+    system_table->ConOut->OutputString(system_table->ConOut, &message[0]);
+    
+    return 0;  // EFI_SUCCESS
+}
+```
+
+### ビルドフロー
+```bash
+# 1. Cmソースをコンパイル（UEFIターゲット）
+cm compile --target=x86_64-unknown-uefi hello.cm -o hello.o
+
+# 2. PE32+実行ファイルにリンク
+lld-link /subsystem:efi_application /entry:efi_main /out:hello.efi hello.o
+
+# 3. UEFIシェルまたはQEMUで実行
+qemu-system-x86_64 -bios OVMF.fd -drive file=fat:rw:esp/,format=raw
+```
+
+### OS非依存の原則
+- 標準ライブラリを**OS依存部分**と**OS非依存部分**に分離
+- `#[no_std]`環境では`println`等のOS依存機能は使用不可
+- 代わりに`core`ライブラリ（OS非依存）の機能のみ使用可能
+
+---
+
 ## Version 1.0.0 - 安定版リリース
 
 ### 達成条件
@@ -792,6 +1000,9 @@ async/awaitとFuture型の実装
 - ✅ genパッケージマネージャ完成
 - ✅ エディタサポート（VSCode, Vim）
 - ✅ 標準ライブラリ安定版
+- ✅ 参照型と所有権システム
+- ✅ FFIとインラインアセンブリ
+- ✅ ベアメタル・OSサポート
 
 ### 最終チェックリスト
 - [ ] 言語仕様書の完成

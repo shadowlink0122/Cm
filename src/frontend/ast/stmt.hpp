@@ -68,6 +68,23 @@ struct ForStmt {
 };
 
 // ============================================================
+// for-in文（範囲for）
+// for (T item in collection) { ... }
+// ============================================================
+struct ForInStmt {
+    std::string var_name;       // ループ変数名
+    TypePtr var_type;           // ループ変数の型（nullならauto推論）
+    ExprPtr iterable;           // イテレート対象（配列など）
+    std::vector<StmtPtr> body;  // ループ本体
+
+    ForInStmt(std::string name, TypePtr type, ExprPtr iter, std::vector<StmtPtr> b)
+        : var_name(std::move(name)),
+          var_type(std::move(type)),
+          iterable(std::move(iter)),
+          body(std::move(b)) {}
+};
+
+// ============================================================
 // while文
 // ============================================================
 struct WhileStmt {

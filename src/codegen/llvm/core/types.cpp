@@ -68,7 +68,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             if (type->element_type) {
                 return convertType(type->element_type);
             }
-            
+
             // まずインターフェース型かチェック
             if (isInterfaceType(type->name)) {
                 auto it = interfaceTypes.find(type->name);
@@ -86,6 +86,17 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
             // フォールバック: intとして扱う
             return ctx.getI32Type();
+        }
+        case hir::TypeKind::Function: {
+            // 関数ポインタ型
+            llvm::Type* retType =
+                type->return_type ? convertType(type->return_type) : ctx.getVoidType();
+            std::vector<llvm::Type*> paramTypes;
+            for (const auto& paramType : type->param_types) {
+                paramTypes.push_back(convertType(paramType));
+            }
+            auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
+            return llvm::PointerType::get(funcType, 0);
         }
         default:
             return ctx.getI32Type();

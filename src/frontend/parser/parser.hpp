@@ -317,10 +317,10 @@ class Parser {
                 ast::Param param;
                 param.qualifiers.is_const = consume_if(TokenKind::KwConst);
                 param.type = parse_type();
-                
+
                 // C++スタイルの配列パラメータ: int[10] arr
                 param.type = check_array_suffix(std::move(param.type));
-                
+
                 param.name = expect_ident();
 
                 // デフォルト引数をパース
@@ -380,10 +380,10 @@ class Parser {
 
             field.qualifiers.is_const = consume_if(TokenKind::KwConst);
             field.type = parse_type();
-            
+
             // C++スタイルの配列フィールド: int[10] data;
             field.type = check_array_suffix(std::move(field.type));
-            
+
             field.name = expect_ident();
             expect(TokenKind::Semicolon);
             fields.push_back(std::move(field));
@@ -763,51 +763,90 @@ class Parser {
         }
 
         // プリミティブ型
+        ast::TypePtr base_type;
         switch (current().kind) {
             case TokenKind::KwVoid:
                 advance();
-                return ast::make_void();
+                base_type = ast::make_void();
+                break;
             case TokenKind::KwBool:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::Bool);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+                break;
             case TokenKind::KwTiny:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::Tiny);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Tiny);
+                break;
             case TokenKind::KwShort:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::Short);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Short);
+                break;
             case TokenKind::KwInt:
                 advance();
-                return ast::make_int();
+                base_type = ast::make_int();
+                break;
             case TokenKind::KwLong:
                 advance();
-                return ast::make_long();
+                base_type = ast::make_long();
+                break;
             case TokenKind::KwUtiny:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::UTiny);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::UTiny);
+                break;
             case TokenKind::KwUshort:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::UShort);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::UShort);
+                break;
             case TokenKind::KwUint:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::UInt);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::UInt);
+                break;
             case TokenKind::KwUlong:
                 advance();
-                return std::make_shared<ast::Type>(ast::TypeKind::ULong);
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::ULong);
+                break;
             case TokenKind::KwFloat:
                 advance();
-                return ast::make_float();
+                base_type = ast::make_float();
+                break;
             case TokenKind::KwDouble:
                 advance();
-                return ast::make_double();
+                base_type = ast::make_double();
+                break;
             case TokenKind::KwChar:
                 advance();
-                return ast::make_char();
+                base_type = ast::make_char();
+                break;
             case TokenKind::KwString:
                 advance();
-                return ast::make_string();
+                base_type = ast::make_string();
+                break;
             default:
                 break;
+        }
+
+        // 関数ポインタ型: int*(int, int)
+        // base_typeがあり、次が *( の場合
+        if (base_type && check(TokenKind::Star)) {
+            // *( パターンのチェック - 関数ポインタ
+            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                advance();  // consume *
+                advance();  // consume (
+
+                std::vector<ast::TypePtr> param_types;
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        param_types.push_back(parse_type());
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+
+                return ast::make_function_ptr(std::move(base_type), std::move(param_types));
+            }
+        }
+
+        if (base_type) {
+            return base_type;
         }
 
         // ユーザー定義型（ジェネリクス対応）
@@ -832,7 +871,43 @@ class Parser {
                 // ジェネリック型として返す
                 auto type = ast::make_named(name);
                 type->type_args = std::move(type_args);
+
+                // 関数ポインタ型: MyStruct*(int, int)
+                if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
+                    tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                    advance();  // consume *
+                    advance();  // consume (
+
+                    std::vector<ast::TypePtr> param_types;
+                    if (!check(TokenKind::RParen)) {
+                        do {
+                            param_types.push_back(parse_type());
+                        } while (consume_if(TokenKind::Comma));
+                    }
+                    expect(TokenKind::RParen);
+
+                    return ast::make_function_ptr(std::move(type), std::move(param_types));
+                }
+
                 return type;
+            }
+
+            // 関数ポインタ型: MyStruct*(int, int)
+            if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
+                tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                auto named_type = ast::make_named(name);
+                advance();  // consume *
+                advance();  // consume (
+
+                std::vector<ast::TypePtr> param_types;
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        param_types.push_back(parse_type());
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+
+                return ast::make_function_ptr(std::move(named_type), std::move(param_types));
             }
 
             return ast::make_named(name);
@@ -841,7 +916,7 @@ class Parser {
         error("Expected type");
         return ast::make_error();
     }
-    
+
     // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*)
     // parse_type()の呼び出し後に使用
     ast::TypePtr check_array_suffix(ast::TypePtr base_type) {

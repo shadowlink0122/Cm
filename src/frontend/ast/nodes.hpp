@@ -89,6 +89,7 @@ struct ExprStmt;
 struct ReturnStmt;
 struct IfStmt;
 struct ForStmt;
+struct ForInStmt;
 struct WhileStmt;
 struct BlockStmt;
 struct SwitchStmt;
@@ -98,10 +99,10 @@ struct DeferStmt;
 
 using StmtKind =
     std::variant<std::unique_ptr<LetStmt>, std::unique_ptr<ExprStmt>, std::unique_ptr<ReturnStmt>,
-                 std::unique_ptr<IfStmt>, std::unique_ptr<ForStmt>, std::unique_ptr<WhileStmt>,
-                 std::unique_ptr<BlockStmt>, std::unique_ptr<SwitchStmt>,
-                 std::unique_ptr<BreakStmt>, std::unique_ptr<ContinueStmt>,
-                 std::unique_ptr<DeferStmt>>;
+                 std::unique_ptr<IfStmt>, std::unique_ptr<ForStmt>, std::unique_ptr<ForInStmt>,
+                 std::unique_ptr<WhileStmt>, std::unique_ptr<BlockStmt>,
+                 std::unique_ptr<SwitchStmt>, std::unique_ptr<BreakStmt>,
+                 std::unique_ptr<ContinueStmt>, std::unique_ptr<DeferStmt>>;
 
 struct Stmt : Node {
     StmtKind kind;

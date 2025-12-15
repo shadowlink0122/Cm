@@ -34,6 +34,8 @@ class BuiltinManager {
             if (!args.empty()) {
                 if (args[0].type() == typeid(int64_t)) {
                     std::cout << std::any_cast<int64_t>(args[0]) << std::endl;
+                } else if (args[0].type() == typeid(uint64_t)) {
+                    std::cout << std::any_cast<uint64_t>(args[0]) << std::endl;
                 } else if (args[0].type() == typeid(bool)) {
                     std::cout << (std::any_cast<bool>(args[0]) ? "true" : "false") << std::endl;
                 }
@@ -244,6 +246,16 @@ class BuiltinManager {
                 return Value(std::to_string(std::any_cast<uint64_t>(args[0])));
             }
             return Value(std::string(""));
+        };
+
+        // 文字列の長さを取得
+        builtins_["__builtin_string_len"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.empty())
+                return Value(uint64_t{0});
+            if (args[0].type() == typeid(std::string)) {
+                return Value(static_cast<uint64_t>(std::any_cast<std::string>(args[0]).size()));
+            }
+            return Value(uint64_t{0});
         };
     }
 

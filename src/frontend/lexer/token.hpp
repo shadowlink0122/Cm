@@ -39,6 +39,7 @@ enum class TokenKind {
     KwIf,
     KwImpl,
     KwImport,
+    KwIn,  // for-in loop
     KwInline,
     KwInterface,
     KwMacro,      // macro definition
