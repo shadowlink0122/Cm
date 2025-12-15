@@ -179,52 +179,79 @@ if(CM_USE_LLVM)
         ERROR_QUIET
     )
     
-    # ターゲットアーキテクチャを判定
-    set(CM_RUNTIME_ARCH_FLAG "")
-    if(LLVM_HOST_TARGET MATCHES "x86_64")
-        set(CM_RUNTIME_ARCH_FLAG "-arch x86_64")
-    elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-        set(CM_RUNTIME_ARCH_FLAG "-arch arm64")
+    # ランタイムライブラリはUnix系でのみビルド（Windows/MSVCは未対応）
+    if(NOT WIN32)
+        # ランタイムライブラリ用のclangコマンドとターゲット設定
+        # macOS: システムclangを使用（-archフラグ対応）
+        # Linux: LLVM clangを使用（--targetフラグ対応）
+        if(APPLE)
+            # macOSではシステムclangを使用（-archをサポート）
+            set(CM_RUNTIME_CLANG "/usr/bin/clang")
+            if(LLVM_HOST_TARGET MATCHES "x86_64")
+                set(CM_RUNTIME_ARCH_FLAG "-arch x86_64")
+            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                set(CM_RUNTIME_ARCH_FLAG "-arch arm64")
+            endif()
+        else()
+            # Linuxでは--targetを使用
+            set(CM_RUNTIME_CLANG "clang")
+            if(LLVM_HOST_TARGET MATCHES "x86_64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-unknown-linux-gnu")
+            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=aarch64-unknown-linux-gnu")
+            else()
+                set(CM_RUNTIME_ARCH_FLAG "")
+            endif()
+        endif()
+        
+        message(STATUS "LLVM host target: ${LLVM_HOST_TARGET}")
+        message(STATUS "Runtime clang: ${CM_RUNTIME_CLANG}")
+        message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
+        
+        # Build LLVM runtime library
+        # Cランタイムをコンパイルしてbuild/lib/に配置
+        set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
+        set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
+
+        add_custom_command(
+            OUTPUT ${CM_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_RUNTIME_SOURCE}
+            COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
+        )
+
+
+        # Build WASM runtime library
+        set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
+        set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
+        set(CM_RUNTIME_WASM_PRINT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c)
+        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+
+        add_custom_command(
+            OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
+            DEPENDS ${CM_RUNTIME_WASM_SOURCE} ${CM_RUNTIME_WASM_FORMAT} ${CM_RUNTIME_WASM_PRINT}
+            COMMENT "Building Cm WASM runtime library"
+        )
+
+        add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
+        add_dependencies(cm cm_runtime)
+        
+        # ランタイムライブラリのパスをコンパイル時に埋め込む
+        target_compile_definitions(cm PRIVATE
+            CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+            CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+        )
+    else()
+        # Windows: ランタイムライブラリなし（ダミーパス）
+        message(WARNING "Runtime library build is not supported on Windows/MSVC")
+        target_compile_definitions(cm PRIVATE
+            CM_RUNTIME_PATH=""
+            CM_RUNTIME_WASM_PATH=""
+        )
     endif()
-    
-    message(STATUS "LLVM host target: ${LLVM_HOST_TARGET}")
-    message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
-    
-    # Build LLVM runtime library
-    # Cランタイムをコンパイルしてbuild/lib/に配置
-    set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
-    set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
-
-    add_custom_command(
-        OUTPUT ${CM_RUNTIME_OUTPUT}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-        COMMAND clang -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 ${CM_RUNTIME_ARCH_FLAG}
-        DEPENDS ${CM_RUNTIME_SOURCE}
-        COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
-    )
-
-    # Build WASM runtime library
-    set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
-    set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
-    set(CM_RUNTIME_WASM_PRINT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c)
-    set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
-
-    add_custom_command(
-        OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-        COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
-        DEPENDS ${CM_RUNTIME_WASM_SOURCE} ${CM_RUNTIME_WASM_FORMAT} ${CM_RUNTIME_WASM_PRINT}
-        COMMENT "Building Cm WASM runtime library"
-    )
-
-    add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
-    add_dependencies(cm cm_runtime)
-    
-    # ランタイムライブラリのパスをコンパイル時に埋め込む
-    target_compile_definitions(cm PRIVATE
-        CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
-        CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
-    )
 endif()
 
 # Testing

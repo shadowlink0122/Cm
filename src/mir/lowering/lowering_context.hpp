@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <optional>
 #include <stack>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace cm::mir {

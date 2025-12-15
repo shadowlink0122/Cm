@@ -72,6 +72,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "LLVM_DIR=C:\Program Files\LLVM\lib\cmake\llvm" >> $env:GITHUB_ENV
           clang --version
       
       # Google Test インストール (Ubuntu)
