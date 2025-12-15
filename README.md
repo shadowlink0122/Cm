@@ -209,6 +209,40 @@ int main() {
 
 - **C++20** (Clang 17+推奨, GCC 13+, MSVC 2019+)
 
+## CI/CD テストマトリクス
+
+GitHub Actionsで全プラットフォーム・全バックエンドの自動テストを実行しています：
+
+### テスト構成 (3 OS × 3 Backends = 9 configurations)
+
+| OS | Interpreter | LLVM Native | LLVM WASM |
+|----|-------------|-------------|-----------|
+| **Ubuntu 22.04** | ✅ | ✅ | ✅ |
+| **macOS 13** | ✅ | ✅ | ✅ |
+| **Windows 2022** | ✅ | ✅ | ✅ |
+
+### テスト内容
+- **C++ Unit Tests**: GoogleTestによる単体テスト（Lexer, HIR, MIR, 最適化）
+- **Interpreter Tests**: 134個のCmプログラムをインタプリタで実行
+- **LLVM Native Tests**: 134個のCmプログラムをネイティブバイナリにコンパイル・実行
+- **LLVM WASM Tests**: 134個のCmプログラムをWASMにコンパイル・Wasmtimeで実行
+
+### ローカルテスト実行
+
+```bash
+# すべてのテスト
+make test
+
+# バックエンド別
+make test-interpreter-parallel  # インタプリタテスト（並列実行）
+make test-llvm-parallel         # LLVMネイティブテスト（並列実行）
+make test-wasm-parallel         # LLVM WASMテスト（並列実行）
+
+# 個別カテゴリ
+./tests/unified_test_runner.sh -b interpreter -c basic
+./tests/unified_test_runner.sh -b llvm -c generics
+```
+
 ## ドキュメント
 
 - [設計ドキュメント](docs/design/README.md)
