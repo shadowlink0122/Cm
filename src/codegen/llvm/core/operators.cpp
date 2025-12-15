@@ -5,6 +5,22 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 浮動小数点型の型昇格（float/doubleの統一）
+static void coerceFloatTypes(llvm::IRBuilder<>* builder, llvm::Value*& lhs, llvm::Value*& rhs) {
+    auto lhsType = lhs->getType();
+    auto rhsType = rhs->getType();
+
+    // 両方が浮動小数点で型が異なる場合
+    if (lhsType->isFloatingPointTy() && rhsType->isFloatingPointTy() && lhsType != rhsType) {
+        // floatをdoubleに拡張
+        if (lhsType->isFloatTy() && rhsType->isDoubleTy()) {
+            lhs = builder->CreateFPExt(lhs, rhsType, "fpext");
+        } else if (lhsType->isDoubleTy() && rhsType->isFloatTy()) {
+            rhs = builder->CreateFPExt(rhs, lhsType, "fpext");
+        }
+    }
+}
+
 // 二項演算変換
 llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs) {
     switch (op) {
@@ -89,31 +105,36 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             }
 
             // 通常の数値加算
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFAdd(lhs, rhs, "fadd");
             }
             return builder->CreateAdd(lhs, rhs, "add");
         }
         case mir::MirBinaryOp::Sub: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFSub(lhs, rhs, "fsub");
             }
             return builder->CreateSub(lhs, rhs, "sub");
         }
         case mir::MirBinaryOp::Mul: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFMul(lhs, rhs, "fmul");
             }
             return builder->CreateMul(lhs, rhs, "mul");
         }
         case mir::MirBinaryOp::Div: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFDiv(lhs, rhs, "fdiv");
             }
             return builder->CreateSDiv(lhs, rhs, "div");
         }
         case mir::MirBinaryOp::Mod: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFRem(lhs, rhs, "fmod");
             }
             return builder->CreateSRem(lhs, rhs, "mod");
@@ -121,7 +142,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
 
         // 比較演算
         case mir::MirBinaryOp::Eq: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOEQ(lhs, rhs, "feq");
             }
             // 文字列比較
@@ -146,7 +168,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpEQ(lhs, rhs, "eq");
         }
         case mir::MirBinaryOp::Ne: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpONE(lhs, rhs, "fne");
             }
             // 文字列比較
@@ -171,7 +194,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpNE(lhs, rhs, "ne");
         }
         case mir::MirBinaryOp::Lt: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOLT(lhs, rhs, "flt");
             }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
@@ -186,7 +210,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpSLT(lhs, rhs, "lt");
         }
         case mir::MirBinaryOp::Le: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOLE(lhs, rhs, "fle");
             }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
@@ -201,7 +226,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpSLE(lhs, rhs, "le");
         }
         case mir::MirBinaryOp::Gt: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOGT(lhs, rhs, "fgt");
             }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
@@ -216,7 +242,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpSGT(lhs, rhs, "gt");
         }
         case mir::MirBinaryOp::Ge: {
-            if (lhs->getType()->isFloatingPointTy()) {
+            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+                coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOGE(lhs, rhs, "fge");
             }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
@@ -242,6 +269,42 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateShl(lhs, rhs, "shl");
         case mir::MirBinaryOp::Shr:
             return builder->CreateAShr(lhs, rhs, "shr");
+
+        // 論理演算
+        case mir::MirBinaryOp::And: {
+            // bool（i8）を i1 に変換してAND、結果をi8に戻す
+            llvm::Value* lhsBool = lhs;
+            llvm::Value* rhsBool = rhs;
+
+            if (lhs->getType()->isIntegerTy(8)) {
+                lhsBool = builder->CreateICmpNE(lhs, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                                "lhs_bool");
+            }
+            if (rhs->getType()->isIntegerTy(8)) {
+                rhsBool = builder->CreateICmpNE(rhs, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                                "rhs_bool");
+            }
+
+            auto result = builder->CreateAnd(lhsBool, rhsBool, "logical_and");
+            return builder->CreateZExt(result, ctx.getI8Type(), "and_ext");
+        }
+        case mir::MirBinaryOp::Or: {
+            // bool（i8）を i1 に変換してOR、結果をi8に戻す
+            llvm::Value* lhsBool = lhs;
+            llvm::Value* rhsBool = rhs;
+
+            if (lhs->getType()->isIntegerTy(8)) {
+                lhsBool = builder->CreateICmpNE(lhs, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                                "lhs_bool");
+            }
+            if (rhs->getType()->isIntegerTy(8)) {
+                rhsBool = builder->CreateICmpNE(rhs, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                                "rhs_bool");
+            }
+
+            auto result = builder->CreateOr(lhsBool, rhsBool, "logical_or");
+            return builder->CreateZExt(result, ctx.getI8Type(), "or_ext");
+        }
 
         default:
             return nullptr;
@@ -273,8 +336,13 @@ llvm::Value* MIRToLLVM::convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand)
                 return builder->CreateNot(operand, "not");
             }
         }
-        case mir::MirUnaryOp::Neg:
+        case mir::MirUnaryOp::Neg: {
+            // 浮動小数点の場合はFNeg、整数の場合はNeg
+            if (operand->getType()->isFloatingPointTy()) {
+                return builder->CreateFNeg(operand, "fneg");
+            }
             return builder->CreateNeg(operand, "neg");
+        }
         default:
             return nullptr;
     }

@@ -76,6 +76,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "new";
         case TokenKind::KwNull:
             return "null";
+        case TokenKind::KwOperator:
+            return "operator";
         case TokenKind::KwOverload:
             return "overload";
         case TokenKind::KwPrivate:
@@ -106,6 +108,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "void";
         case TokenKind::KwVolatile:
             return "volatile";
+        case TokenKind::KwWhere:
+            return "where";
         case TokenKind::KwWhile:
             return "while";
         case TokenKind::KwWith:
@@ -132,6 +136,10 @@ const char* token_kind_to_string(TokenKind kind) {
             return "float";
         case TokenKind::KwDouble:
             return "double";
+        case TokenKind::KwUfloat:
+            return "ufloat";
+        case TokenKind::KwUdouble:
+            return "udouble";
         case TokenKind::KwBool:
             return "bool";
         case TokenKind::KwChar:

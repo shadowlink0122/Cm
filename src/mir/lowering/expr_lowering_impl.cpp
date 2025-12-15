@@ -371,6 +371,132 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
     LocalId lhs = lower_expression(*bin.lhs, ctx);
     LocalId rhs = lower_expression(*bin.rhs, ctx);
 
+    // 構造体の比較演算子の特別処理（with による自動実装）
+    if (bin.op == hir::HirBinaryOp::Eq || bin.op == hir::HirBinaryOp::Ne) {
+        // 左辺が構造体型かチェック
+        if (bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::Struct) {
+            std::string type_name = bin.lhs->type->name;
+
+            // impl_info で Eq が実装されているかチェック
+            auto& current_impl_info = get_impl_info();
+            auto type_it = current_impl_info.find(type_name);
+            if (type_it != current_impl_info.end()) {
+                // 任意のインターフェース（Eq）で op_eq が実装されているかチェック
+                std::string op_func_name;
+                for (const auto& [iface_name, func_name] : type_it->second) {
+                    // Eq インターフェースの実装を探す
+                    if (iface_name == "Eq" || func_name.find("__op_eq") != std::string::npos) {
+                        op_func_name = type_name + "__op_eq";
+                        break;
+                    }
+                }
+
+                if (!op_func_name.empty()) {
+                    // 自動生成された演算子関数を呼び出す
+                    // Point__op_eq(self, other) - 両方とも値渡し
+
+                    // 結果用変数
+                    LocalId result = ctx.new_temp(hir::make_bool());
+                    BlockId success_block = ctx.new_block();
+
+                    // 引数を準備（両方とも値渡し）
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(MirPlace{lhs}));  // self (値)
+                    args.push_back(MirOperand::copy(MirPlace{rhs}));  // other (値)
+
+                    // 関数呼び出し
+                    auto func_operand = MirOperand::function_ref(op_func_name);
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data =
+                        MirTerminator::CallData{std::move(func_operand), std::move(args),
+                                                MirPlace{result}, success_block, std::nullopt};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+
+                    // != の場合は結果を反転
+                    if (bin.op == hir::HirBinaryOp::Ne) {
+                        LocalId neg_result = ctx.new_temp(hir::make_bool());
+                        auto unary_rvalue = std::make_unique<MirRvalue>();
+                        unary_rvalue->kind = MirRvalue::UnaryOp;
+                        unary_rvalue->data = MirRvalue::UnaryOpData{
+                            MirUnaryOp::Not, MirOperand::copy(MirPlace{result})};
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace{neg_result}, std::move(unary_rvalue)));
+                        return neg_result;
+                    }
+
+                    return result;
+                }
+            }
+        }
+    }
+
+    // 構造体の順序演算子の特別処理（with Ord による自動実装）
+    if (bin.op == hir::HirBinaryOp::Lt || bin.op == hir::HirBinaryOp::Le ||
+        bin.op == hir::HirBinaryOp::Gt || bin.op == hir::HirBinaryOp::Ge) {
+        // 左辺が構造体型かチェック
+        if (bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::Struct) {
+            std::string type_name = bin.lhs->type->name;
+
+            // impl_info で Ord が実装されているかチェック
+            auto& current_impl_info = get_impl_info();
+            auto type_it = current_impl_info.find(type_name);
+            if (type_it != current_impl_info.end()) {
+                // Ord インターフェースで op_lt が実装されているかチェック
+                std::string op_func_name;
+                for (const auto& [iface_name, func_name] : type_it->second) {
+                    if (iface_name == "Ord" || func_name.find("__op_lt") != std::string::npos) {
+                        op_func_name = type_name + "__op_lt";
+                        break;
+                    }
+                }
+
+                if (!op_func_name.empty()) {
+                    LocalId result = ctx.new_temp(hir::make_bool());
+                    BlockId success_block = ctx.new_block();
+
+                    // < と > では引数の順序を変える
+                    // <= と >= では結果を反転する
+                    std::vector<MirOperandPtr> args;
+                    if (bin.op == hir::HirBinaryOp::Lt || bin.op == hir::HirBinaryOp::Le) {
+                        // a < b または a <= b: __op_lt(a, b)
+                        args.push_back(MirOperand::copy(MirPlace{lhs}));
+                        args.push_back(MirOperand::copy(MirPlace{rhs}));
+                    } else {
+                        // a > b または a >= b: __op_lt(b, a)
+                        args.push_back(MirOperand::copy(MirPlace{rhs}));
+                        args.push_back(MirOperand::copy(MirPlace{lhs}));
+                    }
+
+                    auto func_operand = MirOperand::function_ref(op_func_name);
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data =
+                        MirTerminator::CallData{std::move(func_operand), std::move(args),
+                                                MirPlace{result}, success_block, std::nullopt};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+
+                    // <= と >= は !(b < a) と !(a < b) を計算
+                    if (bin.op == hir::HirBinaryOp::Le || bin.op == hir::HirBinaryOp::Ge) {
+                        // a <= b は !(b < a) → 結果を反転
+                        LocalId neg_result = ctx.new_temp(hir::make_bool());
+                        auto unary_rvalue = std::make_unique<MirRvalue>();
+                        unary_rvalue->kind = MirRvalue::UnaryOp;
+                        unary_rvalue->data = MirRvalue::UnaryOpData{
+                            MirUnaryOp::Not, MirOperand::copy(MirPlace{result})};
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace{neg_result}, std::move(unary_rvalue)));
+                        return neg_result;
+                    }
+
+                    return result;
+                }
+            }
+        }
+    }
+
     // 文字列連結の特別処理
     if (bin.op == hir::HirBinaryOp::Add) {
         bool lhs_is_string = bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::String;
@@ -486,6 +612,15 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         auto lhs_type = bin.lhs->type;
         auto rhs_type = bin.rhs->type;
 
+        // HIRの型が利用できない、またはエラー型の場合、ローカル変数から型を取得
+        // （operator実装内の式など、型チェッカーが型を設定しない場合に対応）
+        if ((!lhs_type || lhs_type->is_error()) && lhs < ctx.func->locals.size()) {
+            lhs_type = ctx.func->locals[lhs].type;
+        }
+        if ((!rhs_type || rhs_type->is_error()) && rhs < ctx.func->locals.size()) {
+            rhs_type = ctx.func->locals[rhs].type;
+        }
+
         if (lhs_type && rhs_type) {
             // doubleがあればdouble
             if (lhs_type->kind == hir::TypeKind::Double ||
@@ -510,6 +645,8 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             }
         } else if (lhs_type) {
             result_type = lhs_type;
+        } else if (rhs_type) {
+            result_type = rhs_type;
         } else {
             result_type = hir::make_int();
         }
@@ -683,8 +820,16 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
     }
 
     // 結果用の一時変数（NOT の場合は bool、NEG の場合は元の型）
-    hir::TypePtr result_type =
-        (unary.op == hir::HirUnaryOp::Not) ? hir::make_bool() : unary.operand->type;
+    hir::TypePtr operand_type = unary.operand->type;
+    // HIRの型が利用できない、またはエラー型の場合、ローカル変数から型を取得
+    if ((!operand_type || operand_type->is_error()) && operand < ctx.func->locals.size()) {
+        operand_type = ctx.func->locals[operand].type;
+    }
+    if (!operand_type || operand_type->is_error()) {
+        operand_type = hir::make_int();  // デフォルト
+    }
+
+    hir::TypePtr result_type = (unary.op == hir::HirUnaryOp::Not) ? hir::make_bool() : operand_type;
     LocalId result = ctx.new_temp(result_type);
     // UnaryOp Rvalueを作成
     auto unary_rvalue = std::make_unique<MirRvalue>();
@@ -1083,8 +1228,18 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 
     // オブジェクトの型から構造体名を取得
     auto obj_type = member.object->type;
+
+    // 型が未設定の場合、ローカル変数から推論
+    if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+        if (object < ctx.func->locals.size()) {
+            obj_type = ctx.func->locals[object].type;
+        }
+    }
+
     if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
         // エラー：構造体型でない
+        debug_msg("MIR",
+                  "Error: Member access on non-struct type for member '" + member.member + "'");
         return ctx.new_temp(hir::make_error());
     }
 
@@ -1092,8 +1247,8 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     auto field_idx = ctx.get_field_index(obj_type->name, member.member);
     if (!field_idx) {
         // エラー：フィールドが見つからない
-        std::cerr << "[MIR] Error: Field '" << member.member << "' not found in struct '"
-                  << obj_type->name << "'\n";
+        debug_msg("MIR", "Error: Field '" + member.member + "' not found in struct '" +
+                             obj_type->name + "'");
         return ctx.new_temp(hir::make_error());
     }
 

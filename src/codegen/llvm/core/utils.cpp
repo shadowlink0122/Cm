@@ -75,19 +75,22 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     }
     // 文字列charAt
     else if (name == "__builtin_string_charAt") {
-        auto funcType = llvm::FunctionType::get(ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 文字列substring
     else if (name == "__builtin_string_substring") {
-        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 文字列indexOf
     else if (name == "__builtin_string_indexOf") {
-        auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
@@ -101,27 +104,98 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     // 文字列startsWith/endsWith/includes
     else if (name == "__builtin_string_startsWith" || name == "__builtin_string_endsWith" ||
              name == "__builtin_string_includes") {
-        auto funcType = llvm::FunctionType::get(ctx.getBoolType(), {ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto funcType =
+            llvm::FunctionType::get(ctx.getBoolType(), {ctx.getPtrType(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 文字列repeat
     else if (name == "__builtin_string_repeat") {
-        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto funcType =
+            llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 文字列replace
     else if (name == "__builtin_string_replace") {
-        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 配列スライス
     else if (name == "__builtin_array_slice") {
-        // void* __builtin_array_slice(void* arr, i64 elem_size, i64 arr_len, i64 start, i64 end, i64* out_len)
-        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), 
-            {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type(), ctx.getI64Type(), ctx.getI64Type(), ctx.getPtrType()}, false);
+        // void* __builtin_array_slice(void* arr, i64 elem_size, i64 arr_len, i64 start, i64 end,
+        // i64* out_len)
+        auto funcType =
+            llvm::FunctionType::get(ctx.getPtrType(),
+                                    {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type(),
+                                     ctx.getI64Type(), ctx.getI64Type(), ctx.getPtrType()},
+                                    false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 indexOf (i32版)
+    else if (name == "__builtin_array_indexOf_i32" || name == "__builtin_array_indexOf") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 indexOf (i64版)
+    else if (name == "__builtin_array_indexOf_i64") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 includes (i32版)
+    else if (name == "__builtin_array_includes_i32" || name == "__builtin_array_includes") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 includes (i64版)
+    else if (name == "__builtin_array_includes_i64") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 some (コールバック付き)
+    else if (name == "__builtin_array_some_i32" || name == "__builtin_array_some") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 every (コールバック付き)
+    else if (name == "__builtin_array_every_i32" || name == "__builtin_array_every") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 findIndex (コールバック付き)
+    else if (name == "__builtin_array_findIndex_i32" || name == "__builtin_array_findIndex") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 reduce (コールバック付き)
+    else if (name == "__builtin_array_reduce_i32" || name == "__builtin_array_reduce") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI32Type(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 forEach (コールバック付き)
+    else if (name == "__builtin_array_forEach_i32" || name == "__builtin_array_forEach") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getVoidType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }

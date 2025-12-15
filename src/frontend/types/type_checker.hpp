@@ -20,6 +20,8 @@ class TypeChecker {
    public:
     TypeChecker() {
         // 組み込み関数は import 時に登録される
+        // 組み込みインターフェースを登録
+        register_builtin_interfaces();
     }
 
     // 構造体定義を登録
@@ -192,6 +194,11 @@ class TypeChecker {
             scopes_.global().define(st->name, ast::make_named(st->name));
             // 構造体定義を保存（フィールドアクセス用）
             register_struct(st->name, *st);
+
+            // with キーワードで指定された自動実装を登録
+            for (const auto& iface_name : st->auto_impls) {
+                register_auto_impl(*st, iface_name);
+            }
         } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
             // インターフェースを登録
             interface_names_.insert(iface->name);
@@ -336,6 +343,143 @@ class TypeChecker {
 
         // typedefマップに保存（型解決用）
         typedef_defs_[td.name] = td.type;
+    }
+
+    // withキーワードで指定された自動実装を登録
+    void register_auto_impl(const ast::StructDecl& st, const std::string& iface_name) {
+        // 組み込みインターフェースか確認
+        if (interface_names_.find(iface_name) == interface_names_.end()) {
+            error(Span{}, "Unknown interface '" + iface_name + "' in 'with' clause");
+            return;
+        }
+
+        std::string struct_name = st.name;
+
+        // インターフェース実装を記録
+        impl_interfaces_[struct_name].insert(iface_name);
+
+        debug::tc::log(debug::tc::Id::Resolved,
+                       "Auto-implementing " + iface_name + " for " + struct_name,
+                       debug::Level::Debug);
+
+        // Eq: 全フィールドの == 比較
+        if (iface_name == "Eq") {
+            register_auto_eq_impl(st);
+        }
+        // Ord: 全フィールドの < 比較（辞書順）
+        else if (iface_name == "Ord") {
+            register_auto_ord_impl(st);
+        }
+        // Copy: マーカー（特に処理なし）
+        else if (iface_name == "Copy") {
+            // マーカーインターフェース、コード生成なし
+        }
+        // Clone: clone() メソッド
+        else if (iface_name == "Clone") {
+            register_auto_clone_impl(st);
+        }
+        // Hash: hash() メソッド
+        else if (iface_name == "Hash") {
+            register_auto_hash_impl(st);
+        }
+    }
+
+    // Eq自動実装: operator bool ==(StructType other)
+    void register_auto_eq_impl(const ast::StructDecl& st) {
+        std::string struct_name = st.name;
+        auto struct_type = ast::make_named(struct_name);
+
+        // 演算子情報を登録
+        MethodInfo eq_op;
+        eq_op.name = "==";
+        eq_op.return_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+        eq_op.param_types.push_back(struct_type);
+        type_methods_[struct_name]["operator=="] = eq_op;
+
+        // 自動導出される != も登録
+        MethodInfo ne_op;
+        ne_op.name = "!=";
+        ne_op.return_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+        ne_op.param_types.push_back(struct_type);
+        type_methods_[struct_name]["operator!="] = ne_op;
+
+        // 実装情報を保存（HIR/MIR生成で使用）
+        auto_impl_info_[struct_name]["Eq"] = true;
+
+        debug::tc::log(debug::tc::Id::Resolved,
+                       "  Generated operator== and operator!= for " + struct_name,
+                       debug::Level::Debug);
+    }
+
+    // Ord自動実装: operator bool <(StructType other)
+    void register_auto_ord_impl(const ast::StructDecl& st) {
+        std::string struct_name = st.name;
+        auto struct_type = ast::make_named(struct_name);
+
+        // < 演算子を登録
+        MethodInfo lt_op;
+        lt_op.name = "<";
+        lt_op.return_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+        lt_op.param_types.push_back(struct_type);
+        type_methods_[struct_name]["operator<"] = lt_op;
+
+        // 自動導出される >, <=, >= も登録
+        for (const char* op_name : {"operator>", "operator<=", "operator>="}) {
+            MethodInfo derived_op;
+            derived_op.name = op_name;
+            derived_op.return_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+            derived_op.param_types.push_back(struct_type);
+            type_methods_[struct_name][op_name] = derived_op;
+        }
+
+        auto_impl_info_[struct_name]["Ord"] = true;
+
+        debug::tc::log(debug::tc::Id::Resolved,
+                       "  Generated operator<, >, <=, >= for " + struct_name, debug::Level::Debug);
+    }
+
+    // Clone自動実装: T clone()
+    void register_auto_clone_impl(const ast::StructDecl& st) {
+        std::string struct_name = st.name;
+        auto struct_type = ast::make_named(struct_name);
+
+        MethodInfo clone_method;
+        clone_method.name = "clone";
+        clone_method.return_type = struct_type;
+        type_methods_[struct_name]["clone"] = clone_method;
+
+        // グローバル関数としても登録
+        std::string mangled_name = struct_name + "__clone";
+        std::vector<ast::TypePtr> param_types;
+        param_types.push_back(struct_type);  // self
+        scopes_.global().define_function(mangled_name, std::move(param_types), struct_type);
+
+        auto_impl_info_[struct_name]["Clone"] = true;
+
+        debug::tc::log(debug::tc::Id::Resolved, "  Generated clone() for " + struct_name,
+                       debug::Level::Debug);
+    }
+
+    // Hash自動実装: int hash()
+    void register_auto_hash_impl(const ast::StructDecl& st) {
+        std::string struct_name = st.name;
+        auto struct_type = ast::make_named(struct_name);
+
+        MethodInfo hash_method;
+        hash_method.name = "hash";
+        hash_method.return_type = ast::make_int();
+        type_methods_[struct_name]["hash"] = hash_method;
+
+        // グローバル関数としても登録
+        std::string mangled_name = struct_name + "__hash";
+        std::vector<ast::TypePtr> param_types;
+        param_types.push_back(struct_type);  // self
+        scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_int());
+
+        auto_impl_info_[struct_name]["Hash"] = true;
+
+        debug::tc::log(debug::tc::Id::Resolved, "  Generated hash() for " + struct_name,
+                       debug::Level::Debug);
     }
 
     // impl本体のチェック
@@ -994,7 +1138,8 @@ class TypeChecker {
         if (member.is_method_call) {
             // 配列型のビルトインメソッド
             if (obj_type->kind == ast::TypeKind::Array) {
-                if (member.member == "size" || member.member == "len") {
+                if (member.member == "size" || member.member == "len" ||
+                    member.member == "length") {
                     if (!member.args.empty()) {
                         error(Span{}, "Array " + member.member + "() takes no arguments");
                     }
@@ -1003,6 +1148,78 @@ class TypeChecker {
                         "Array builtin: " + type_name + "." + member.member + "() : uint",
                         debug::Level::Debug);
                     return ast::make_uint();
+                }
+                // indexOf: 要素の位置を検索
+                if (member.member == "indexOf") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "Array indexOf() takes 1 argument");
+                    }
+                    // 引数の型をチェック（要素型と互換性があること）
+                    if (!member.args.empty()) {
+                        infer_type(*member.args[0]);
+                    }
+                    return ast::make_int();
+                }
+                // includes/contains: 要素が含まれているか
+                if (member.member == "includes" || member.member == "contains") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "Array " + member.member + "() takes 1 argument");
+                    }
+                    if (!member.args.empty()) {
+                        infer_type(*member.args[0]);
+                    }
+                    return ast::make_bool();
+                }
+                // some: いずれかの要素が条件を満たすか
+                if (member.member == "some") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "Array some() takes 1 predicate function");
+                    }
+                    if (!member.args.empty()) {
+                        infer_type(*member.args[0]);
+                    }
+                    return ast::make_bool();
+                }
+                // every: すべての要素が条件を満たすか
+                if (member.member == "every") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "Array every() takes 1 predicate function");
+                    }
+                    if (!member.args.empty()) {
+                        infer_type(*member.args[0]);
+                    }
+                    return ast::make_bool();
+                }
+                // findIndex: 条件を満たす最初の要素のインデックス
+                if (member.member == "findIndex") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "Array findIndex() takes 1 predicate function");
+                    }
+                    if (!member.args.empty()) {
+                        infer_type(*member.args[0]);
+                    }
+                    return ast::make_int();
+                }
+                // reduce: 畳み込み
+                if (member.member == "reduce") {
+                    if (member.args.size() < 1 || member.args.size() > 2) {
+                        error(Span{}, "Array reduce() takes 1-2 arguments (callback, [initial])");
+                    }
+                    for (auto& arg : member.args) {
+                        infer_type(*arg);
+                    }
+                    // 戻り値の型は初期値の型（指定がなければint）
+                    return ast::make_int();
+                }
+                // forEach: 各要素に対して関数を実行
+                if (member.member == "forEach") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "Array forEach() takes 1 callback function");
+                    }
+                    if (!member.args.empty()) {
+                        infer_type(*member.args[0]);
+                    }
+                    return ast::make_void();
                 }
                 error(Span{}, "Unknown array method '" + member.member + "'");
                 return ast::make_error();
@@ -1039,7 +1256,8 @@ class TypeChecker {
                         for (auto& arg : member.args) {
                             auto arg_type = infer_type(*arg);
                             if (!arg_type->is_integer()) {
-                                error(Span{}, "String " + member.member + "() arguments must be integers");
+                                error(Span{},
+                                      "String " + member.member + "() arguments must be integers");
                             }
                         }
                     }
@@ -1056,14 +1274,14 @@ class TypeChecker {
                     }
                     return ast::make_int();
                 }
-                if (member.member == "toUpperCase" || member.member == "toLowerCase" || 
+                if (member.member == "toUpperCase" || member.member == "toLowerCase" ||
                     member.member == "trim") {
                     if (!member.args.empty()) {
                         error(Span{}, "String " + member.member + "() takes no arguments");
                     }
                     return ast::make_string();
                 }
-                if (member.member == "startsWith" || member.member == "endsWith" || 
+                if (member.member == "startsWith" || member.member == "endsWith" ||
                     member.member == "includes" || member.member == "contains") {
                     if (member.args.size() != 1) {
                         error(Span{}, "String " + member.member + "() takes 1 argument");
@@ -1534,7 +1752,7 @@ class TypeChecker {
     ast::TypePtr infer_slice(ast::SliceExpr& slice) {
         // オブジェクトの型を推論
         auto obj_type = infer_type(*slice.object);
-        
+
         // インデックスの型をチェック（整数であること）
         if (slice.start) {
             auto start_type = infer_type(*slice.start);
@@ -1554,22 +1772,22 @@ class TypeChecker {
                 error(Span{}, "Slice step must be an integer type");
             }
         }
-        
+
         if (!obj_type) {
             return ast::make_error();
         }
-        
+
         // 配列型の場合、動的配列型を返す（スライスは新しい配列を作成）
         if (obj_type->kind == ast::TypeKind::Array) {
             // スライスの結果は動的配列型
             return ast::make_array(obj_type->element_type, std::nullopt);
         }
-        
+
         // 文字列型の場合、文字列を返す
         if (obj_type->kind == ast::TypeKind::String) {
             return ast::make_string();
         }
-        
+
         error(Span{}, "Slice access on non-array/string type");
         return ast::make_error();
     }
@@ -2007,6 +2225,104 @@ class TypeChecker {
 
     // ジェネリック構造体の登録情報（構造体名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_structs_;
+
+    // 組み込みインターフェースを登録
+    void register_builtin_interfaces() {
+        // Eq<T> - 等価比較
+        // interface Eq<T> { operator bool ==(T other); }
+        {
+            interface_names_.insert("Eq");
+            builtin_interface_generic_params_["Eq"] = {"T"};
+
+            MethodInfo eq_op;
+            eq_op.name = "==";
+            eq_op.return_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+            eq_op.param_types.push_back(ast::make_generic_param("T"));
+            interface_methods_["Eq"]["=="] = eq_op;
+
+            // != は == から自動導出
+            builtin_derived_operators_["Eq"]["!="] = "==";  // a != b => !(a == b)
+        }
+
+        // Ord<T> - 順序比較
+        // interface Ord<T> { operator bool <(T other); }
+        {
+            interface_names_.insert("Ord");
+            builtin_interface_generic_params_["Ord"] = {"T"};
+
+            MethodInfo lt_op;
+            lt_op.name = "<";
+            lt_op.return_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+            lt_op.param_types.push_back(ast::make_generic_param("T"));
+            interface_methods_["Ord"]["<"] = lt_op;
+
+            // >, <=, >= は < から自動導出
+            builtin_derived_operators_["Ord"][">"] = "<";   // a > b => b < a
+            builtin_derived_operators_["Ord"]["<="] = "<";  // a <= b => !(b < a)
+            builtin_derived_operators_["Ord"][">="] = "<";  // a >= b => !(a < b)
+        }
+
+        // Copy - コピー可能（マーカーインターフェース）
+        {
+            interface_names_.insert("Copy");
+            // マーカーインターフェース（メソッドなし）
+        }
+
+        // Clone<T> - 明示的クローン
+        // interface Clone<T> { T clone(); }
+        {
+            interface_names_.insert("Clone");
+            builtin_interface_generic_params_["Clone"] = {"T"};
+
+            MethodInfo clone_method;
+            clone_method.name = "clone";
+            clone_method.return_type = ast::make_generic_param("T");
+            interface_methods_["Clone"]["clone"] = clone_method;
+        }
+
+        // Hash - ハッシュ値計算
+        // interface Hash { int hash(); }
+        {
+            interface_names_.insert("Hash");
+
+            MethodInfo hash_method;
+            hash_method.name = "hash";
+            hash_method.return_type = ast::make_int();
+            interface_methods_["Hash"]["hash"] = hash_method;
+        }
+
+        debug::tc::log(debug::tc::Id::Resolved,
+                       "Registered builtin interfaces: Eq, Ord, Copy, Clone, Hash",
+                       debug::Level::Debug);
+    }
+
+    // 組み込みインターフェースのジェネリックパラメータ
+    std::unordered_map<std::string, std::vector<std::string>> builtin_interface_generic_params_;
+
+    // 自動導出される演算子のマッピング (インターフェース名 → 導出演算子 → 基本演算子)
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+        builtin_derived_operators_;
+
+    // 自動実装情報 (構造体名 → インターフェース名 → 実装済みフラグ)
+    std::unordered_map<std::string, std::unordered_map<std::string, bool>> auto_impl_info_;
+
+   public:
+    // 自動実装情報を取得（HIR/MIR生成で使用）
+    bool has_auto_impl(const std::string& struct_name, const std::string& iface_name) const {
+        auto it = auto_impl_info_.find(struct_name);
+        if (it != auto_impl_info_.end()) {
+            auto iface_it = it->second.find(iface_name);
+            if (iface_it != it->second.end()) {
+                return iface_it->second;
+            }
+        }
+        return false;
+    }
+
+    // 構造体定義を取得（外部から使用）
+    const std::unordered_map<std::string, const ast::StructDecl*>& get_struct_defs() const {
+        return struct_defs_;
+    }
 };
 
 }  // namespace cm

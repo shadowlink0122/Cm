@@ -1,0 +1,39 @@
+// with Eq 自動実装テスト
+// struct Point with Eq で Eq<Point> を自動実装
+
+interface Eq<T> {
+    operator bool ==(T other);
+}
+
+struct Point with Eq {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+    
+    Point p2;
+    p2.x = 10;
+    p2.y = 20;
+    
+    Point p3;
+    p3.x = 5;
+    p3.y = 10;
+    
+    if (p1 == p2) {
+        println("p1 == p2: true");
+    } else {
+        println("p1 == p2: false");
+    }
+    
+    if (p1 == p3) {
+        println("p1 == p3: true");
+    } else {
+        println("p1 == p3: false");
+    }
+    
+    return 0;
+}

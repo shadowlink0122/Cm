@@ -358,6 +358,39 @@ class Parser {
             } while (consume_if(TokenKind::Comma));
         }
 
+        // where句をパース（例: where T: Eq, U: Ord）
+        // 構造体のジェネリックパラメータに制約を追加
+        if (consume_if(TokenKind::KwWhere)) {
+            do {
+                std::string type_param = expect_ident();
+                expect(TokenKind::Colon);
+
+                // 型制約をパース
+                std::vector<std::string> constraint_types;
+                constraint_types.push_back(expect_ident());
+
+                // ユニオン型制約（T: int | string）
+                while (consume_if(TokenKind::Pipe)) {
+                    constraint_types.push_back(expect_ident());
+                }
+
+                // 対応するジェネリックパラメータに制約を追加
+                for (auto& gp : generic_params_v2) {
+                    if (gp.name == type_param) {
+                        if (constraint_types.size() == 1) {
+                            gp.type_constraint = ast::TypeConstraint(constraint_types[0]);
+                        } else {
+                            gp.type_constraint =
+                                ast::TypeConstraint(ast::ConstraintKind::Union, constraint_types);
+                            gp.is_union_constraint = true;
+                        }
+                        gp.constraints = constraint_types;
+                        break;
+                    }
+                }
+            } while (consume_if(TokenKind::Comma));
+        }
+
         expect(TokenKind::LBrace);
 
         std::vector<ast::Field> fields;
@@ -411,31 +444,134 @@ class Parser {
         return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
     }
 
+    // 演算子の種類をパース
+    std::optional<ast::OperatorKind> parse_operator_kind() {
+        if (check(TokenKind::EqEq)) {
+            advance();
+            return ast::OperatorKind::Eq;
+        }
+        if (check(TokenKind::BangEq)) {
+            advance();
+            return ast::OperatorKind::Ne;
+        }
+        if (check(TokenKind::Lt)) {
+            advance();
+            return ast::OperatorKind::Lt;
+        }
+        if (check(TokenKind::Gt)) {
+            advance();
+            return ast::OperatorKind::Gt;
+        }
+        if (check(TokenKind::LtEq)) {
+            advance();
+            return ast::OperatorKind::Le;
+        }
+        if (check(TokenKind::GtEq)) {
+            advance();
+            return ast::OperatorKind::Ge;
+        }
+        if (check(TokenKind::Plus)) {
+            advance();
+            return ast::OperatorKind::Add;
+        }
+        if (check(TokenKind::Minus)) {
+            advance();
+            return ast::OperatorKind::Sub;
+        }
+        if (check(TokenKind::Star)) {
+            advance();
+            return ast::OperatorKind::Mul;
+        }
+        if (check(TokenKind::Slash)) {
+            advance();
+            return ast::OperatorKind::Div;
+        }
+        if (check(TokenKind::Percent)) {
+            advance();
+            return ast::OperatorKind::Mod;
+        }
+        if (check(TokenKind::Amp)) {
+            advance();
+            return ast::OperatorKind::BitAnd;
+        }
+        if (check(TokenKind::Pipe)) {
+            advance();
+            return ast::OperatorKind::BitOr;
+        }
+        if (check(TokenKind::Caret)) {
+            advance();
+            return ast::OperatorKind::BitXor;
+        }
+        if (check(TokenKind::LtLt)) {
+            advance();
+            return ast::OperatorKind::Shl;
+        }
+        if (check(TokenKind::GtGt)) {
+            advance();
+            return ast::OperatorKind::Shr;
+        }
+        if (check(TokenKind::Tilde)) {
+            advance();
+            return ast::OperatorKind::BitNot;
+        }
+        if (check(TokenKind::Bang)) {
+            advance();
+            return ast::OperatorKind::Not;
+        }
+        return std::nullopt;
+    }
+
     // インターフェース
     ast::DeclPtr parse_interface(bool is_export) {
         expect(TokenKind::KwInterface);
+
+        // インターフェース名を取得
         std::string name = expect_ident();
 
-        // ジェネリックパラメータをチェック（例: interface Container<T>）
+        // ジェネリックパラメータをチェック（例: interface Eq<T>）
         auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
         expect(TokenKind::LBrace);
 
         std::vector<ast::MethodSig> methods;
+        std::vector<ast::OperatorSig> operators;
+
         while (!check(TokenKind::RBrace) && !is_at_end()) {
-            ast::MethodSig sig;
-            sig.return_type = parse_type();
-            sig.name = expect_ident();
-            expect(TokenKind::LParen);
-            sig.params = parse_params();
-            expect(TokenKind::RParen);
-            expect(TokenKind::Semicolon);
-            methods.push_back(std::move(sig));
+            // operator キーワードをチェック
+            if (check(TokenKind::KwOperator)) {
+                advance();  // consume 'operator'
+                ast::OperatorSig op_sig;
+                op_sig.return_type = parse_type();
+
+                auto op_kind = parse_operator_kind();
+                if (!op_kind) {
+                    error("Expected operator symbol after 'operator'");
+                    continue;
+                }
+                op_sig.op = *op_kind;
+
+                expect(TokenKind::LParen);
+                op_sig.params = parse_params();
+                expect(TokenKind::RParen);
+                expect(TokenKind::Semicolon);
+                operators.push_back(std::move(op_sig));
+            } else {
+                // 通常のメソッドシグネチャ
+                ast::MethodSig sig;
+                sig.return_type = parse_type();
+                sig.name = expect_ident();
+                expect(TokenKind::LParen);
+                sig.params = parse_params();
+                expect(TokenKind::RParen);
+                expect(TokenKind::Semicolon);
+                methods.push_back(std::move(sig));
+            }
         }
 
         expect(TokenKind::RBrace);
 
         auto decl = std::make_unique<ast::InterfaceDecl>(std::move(name), std::move(methods));
+        decl->operators = std::move(operators);
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
 
         // ジェネリックパラメータを設定（明示的に指定された場合）
@@ -449,7 +585,8 @@ class Parser {
 
     // impl
     // impl<T> Type<T> for InterfaceName<T> { ... } - ジェネリックメソッド実装
-    // impl Type<T> for InterfaceName<T> { ... } - メソッド実装
+    // impl Type for InterfaceName { ... } - メソッド実装（省略記法）
+    // impl<T> Type for InterfaceName<T> where T: SomeType { ... } - where句付き
     // impl<T> Type<T> { ... } - ジェネリックコンストラクタ/デストラクタ
     // impl Type<T> { ... } - コンストラクタ/デストラクタ専用
     ast::DeclPtr parse_impl() {
@@ -481,10 +618,42 @@ class Parser {
                 expect(TokenKind::Gt);
             }
 
+            // where句をパース（例: where T: Polygon, where T: int | string）
+            std::vector<ast::WhereClause> where_clauses;
+            if (consume_if(TokenKind::KwWhere)) {
+                do {
+                    std::string type_param = expect_ident();
+                    expect(TokenKind::Colon);
+
+                    // 型制約をパース（単一型 or ユニオン型 T: int | string）
+                    std::vector<std::string> constraint_types;
+                    constraint_types.push_back(expect_ident());
+
+                    // ユニオン型（T: int | string）
+                    while (consume_if(TokenKind::Pipe)) {
+                        constraint_types.push_back(expect_ident());
+                    }
+
+                    ast::TypeConstraint constraint;
+                    if (constraint_types.size() == 1) {
+                        // 単一型またはインターフェース
+                        // TODO: インターフェースかどうかは型チェック時に判断
+                        constraint = ast::TypeConstraint(constraint_types[0]);
+                    } else {
+                        // ユニオン型
+                        constraint = ast::TypeConstraint(ast::ConstraintKind::Union,
+                                                         std::move(constraint_types));
+                    }
+
+                    where_clauses.emplace_back(std::move(type_param), std::move(constraint));
+                } while (consume_if(TokenKind::Comma));
+            }
+
             expect(TokenKind::LBrace);
 
             auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
             decl->interface_type_args = std::move(iface_type_args);
+            decl->where_clauses = std::move(where_clauses);
 
             // ジェネリックパラメータを設定
             if (!generic_params.empty()) {
@@ -494,22 +663,42 @@ class Parser {
 
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 try {
-                    // private修飾子をチェック
-                    bool is_private = consume_if(TokenKind::KwPrivate);
+                    // operator キーワードをチェック
+                    if (check(TokenKind::KwOperator)) {
+                        advance();  // consume 'operator'
+                        auto op_impl = std::make_unique<ast::OperatorImpl>();
+                        op_impl->return_type = parse_type();
 
-                    auto func = parse_function(false, false, false, false);
-                    if (auto* f = func->as<ast::FunctionDecl>()) {
-                        // privateメソッドの場合はvisibilityを設定
-                        if (is_private) {
-                            f->visibility = ast::Visibility::Private;
-                        } else {
-                            // デフォルトはExport（外部から呼び出し可能）
-                            f->visibility = ast::Visibility::Export;
+                        auto op_kind = parse_operator_kind();
+                        if (!op_kind) {
+                            error("Expected operator symbol after 'operator'");
+                            continue;
                         }
-                        decl->methods.push_back(
-                            std::unique_ptr<ast::FunctionDecl>(static_cast<ast::FunctionDecl*>(
-                                std::get<std::unique_ptr<ast::FunctionDecl>>(func->kind)
-                                    .release())));
+                        op_impl->op = *op_kind;
+
+                        expect(TokenKind::LParen);
+                        op_impl->params = parse_params();
+                        expect(TokenKind::RParen);
+                        op_impl->body = parse_block();
+                        decl->operators.push_back(std::move(op_impl));
+                    } else {
+                        // private修飾子をチェック
+                        bool is_private = consume_if(TokenKind::KwPrivate);
+
+                        auto func = parse_function(false, false, false, false);
+                        if (auto* f = func->as<ast::FunctionDecl>()) {
+                            // privateメソッドの場合はvisibilityを設定
+                            if (is_private) {
+                                f->visibility = ast::Visibility::Private;
+                            } else {
+                                // デフォルトはExport（外部から呼び出し可能）
+                                f->visibility = ast::Visibility::Export;
+                            }
+                            decl->methods.push_back(
+                                std::unique_ptr<ast::FunctionDecl>(static_cast<ast::FunctionDecl*>(
+                                    std::get<std::unique_ptr<ast::FunctionDecl>>(func->kind)
+                                        .release())));
+                        }
                     }
                 } catch (...) {
                     // エラー回復：次の関数定義または閉じ括弧まで進める
@@ -676,7 +865,7 @@ class Parser {
     ast::ExprPtr parse_match_expr(uint32_t start_pos);
     std::unique_ptr<ast::MatchPattern> parse_match_pattern();
 
-    // ジェネリックパラメータ（<T>, <T: Ord>, <T, U>）をパース
+    // ジェネリックパラメータ（<T>, <T: Ord>, <T: int | string>, <T, U>）をパース
     // 戻り値: pair<名前リスト（後方互換）, GenericParamリスト（制約付き）>
     std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2() {
         std::vector<std::string> names;
@@ -697,23 +886,42 @@ class Parser {
             // 型パラメータ名
             std::string param_name = expect_ident();
             std::vector<std::string> constraints;
+            bool is_union_constraint = false;
 
             // 型制約（: Constraint）
             if (consume_if(TokenKind::Colon)) {
-                // 複数の制約（Ord + Clone）もサポート
                 constraints.push_back(expect_ident());
-                while (consume_if(TokenKind::Plus)) {
-                    constraints.push_back(expect_ident());
+
+                // ユニオン型制約（T: int | string）または複数インターフェース（T: Ord + Clone）
+                if (check(TokenKind::Pipe)) {
+                    // ユニオン型制約
+                    is_union_constraint = true;
+                    while (consume_if(TokenKind::Pipe)) {
+                        constraints.push_back(expect_ident());
+                    }
+                } else {
+                    // 複数インターフェース制約（Ord + Clone）
+                    while (consume_if(TokenKind::Plus)) {
+                        constraints.push_back(expect_ident());
+                    }
                 }
             }
 
             names.push_back(param_name);
-            params.emplace_back(param_name, constraints);
+
+            // GenericParamを作成
+            if (is_union_constraint) {
+                ast::TypeConstraint tc(ast::ConstraintKind::Union, constraints);
+                params.emplace_back(param_name, std::move(tc), true);
+            } else {
+                params.emplace_back(param_name, constraints);
+            }
 
             std::string constraint_str;
+            std::string separator = is_union_constraint ? " | " : " + ";
             for (size_t i = 0; i < constraints.size(); ++i) {
                 if (i > 0)
-                    constraint_str += " + ";
+                    constraint_str += separator;
                 constraint_str += constraints[i];
             }
             debug::par::log(debug::par::Id::FuncDef,
@@ -812,6 +1020,14 @@ class Parser {
             case TokenKind::KwDouble:
                 advance();
                 base_type = ast::make_double();
+                break;
+            case TokenKind::KwUfloat:
+                advance();
+                base_type = ast::make_ufloat();
+                break;
+            case TokenKind::KwUdouble:
+                advance();
+                base_type = ast::make_udouble();
                 break;
             case TokenKind::KwChar:
                 advance();

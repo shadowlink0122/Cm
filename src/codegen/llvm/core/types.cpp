@@ -30,8 +30,10 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
         case hir::TypeKind::ULong:
             return ctx.getI64Type();
         case hir::TypeKind::Float:
+        case hir::TypeKind::UFloat:
             return ctx.getF32Type();
         case hir::TypeKind::Double:
+        case hir::TypeKind::UDouble:
             return ctx.getF64Type();
         case hir::TypeKind::String:
             return ctx.getPtrType();

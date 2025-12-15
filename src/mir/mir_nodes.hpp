@@ -568,10 +568,34 @@ struct MirInterfaceMethod {
     std::vector<hir::TypePtr> param_types;
 };
 
+// 演算子の種類
+enum class MirOperatorKind {
+    Eq,   // ==
+    Ne,   // != (自動導出)
+    Lt,   // <
+    Gt,   // > (自動導出)
+    Le,   // <= (自動導出)
+    Ge,   // >= (自動導出)
+    Add,  // +
+    Sub,  // -
+    Mul,  // *
+    Div,  // /
+    Mod,  // %
+};
+
+// 演算子シグネチャ
+struct MirOperatorSig {
+    MirOperatorKind op;
+    hir::TypePtr return_type;
+    std::vector<hir::TypePtr> param_types;
+};
+
 // インターフェース定義
 struct MirInterface {
     std::string name;
     std::vector<MirInterfaceMethod> methods;
+    std::vector<MirOperatorSig> operators;    // 演算子シグネチャ
+    std::vector<std::string> generic_params;  // ジェネリックパラメータ
 };
 
 using MirInterfacePtr = std::unique_ptr<MirInterface>;

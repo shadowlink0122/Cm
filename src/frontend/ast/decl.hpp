@@ -18,16 +18,57 @@ enum class Visibility {
 };
 
 // ============================================================
+// 型制約の種類
+// ============================================================
+enum class ConstraintKind {
+    Interface,  // T: Eq (インターフェースを実装している)
+    Type,       // T: Polygon (具体的な型)
+    Union,      // T: int | string (複数の型のいずれか)
+};
+
+// ============================================================
+// 型制約
+// ============================================================
+struct TypeConstraint {
+    ConstraintKind kind = ConstraintKind::Type;
+    std::vector<std::string>
+        types;  // Union: ["int", "string"], Interface: ["Eq"], Type: ["Polygon"]
+
+    TypeConstraint() = default;
+    explicit TypeConstraint(std::string single_type) : kind(ConstraintKind::Type) {
+        types.push_back(std::move(single_type));
+    }
+    TypeConstraint(ConstraintKind k, std::vector<std::string> t) : kind(k), types(std::move(t)) {}
+};
+
+// ============================================================
 // ジェネリックパラメータ（型制約付き）
 // ============================================================
 struct GenericParam {
     std::string name;                      // 型パラメータ名（T, U等）
-    std::vector<std::string> constraints;  // 型制約（Ord, Clone等）
+    std::vector<std::string> constraints;  // 型制約（Ord, Clone等） - 後方互換性
+    TypeConstraint type_constraint;        // 新しい型制約（ユニオン型対応）
+    bool is_union_constraint = false;      // T: int | string のようなユニオン制約か
 
     GenericParam() = default;
     explicit GenericParam(std::string n) : name(std::move(n)) {}
     GenericParam(std::string n, std::vector<std::string> c)
-        : name(std::move(n)), constraints(std::move(c)) {}
+        : name(std::move(n)), constraints(std::move(c)) {
+        // 後方互換性: constraintsをtype_constraintに変換
+        if (!c.empty()) {
+            if (c.size() == 1) {
+                type_constraint = TypeConstraint(c[0]);
+            } else {
+                // 複数の制約は「+」で結合されたインターフェース制約
+                type_constraint = TypeConstraint(ConstraintKind::Interface, c);
+            }
+        }
+    }
+    GenericParam(std::string n, TypeConstraint tc, bool is_union = false)
+        : name(std::move(n)), type_constraint(std::move(tc)), is_union_constraint(is_union) {
+        // 後方互換性: type_constraintからconstraintsを設定
+        constraints = type_constraint.types;
+    }
 };
 
 // ============================================================
@@ -101,11 +142,56 @@ struct MethodSig {
 };
 
 // ============================================================
+// 演算子の種類
+// ============================================================
+enum class OperatorKind {
+    Eq,      // ==
+    Ne,      // != (自動導出)
+    Lt,      // <
+    Gt,      // > (自動導出)
+    Le,      // <= (自動導出)
+    Ge,      // >= (自動導出)
+    Add,     // +
+    Sub,     // -
+    Mul,     // *
+    Div,     // /
+    Mod,     // %
+    BitAnd,  // &
+    BitOr,   // |
+    BitXor,  // ^
+    Shl,     // <<
+    Shr,     // >>
+    Neg,     // - (unary)
+    Not,     // ! (unary)
+    BitNot,  // ~ (unary)
+};
+
+// ============================================================
+// 演算子シグネチャ（interface内で使用）
+// ============================================================
+struct OperatorSig {
+    OperatorKind op;
+    std::vector<Param> params;  // 引数（selfは暗黙）
+    TypePtr return_type;
+};
+
+// ============================================================
+// 演算子実装（impl内で使用）
+// ============================================================
+struct OperatorImpl {
+    OperatorKind op;
+    std::vector<Param> params;
+    TypePtr return_type;
+    std::vector<StmtPtr> body;
+};
+
+// ============================================================
 // インターフェース定義
 // ============================================================
 struct InterfaceDecl {
     std::string name;
     std::vector<MethodSig> methods;
+    std::vector<OperatorSig> operators;  // 演算子シグネチャ
     Visibility visibility = Visibility::Private;
     std::vector<std::string> generic_params;      // 後方互換性のため維持
     std::vector<GenericParam> generic_params_v2;  // 型制約付き
@@ -117,14 +203,37 @@ struct InterfaceDecl {
 // ============================================================
 // impl定義
 // ============================================================
+
+struct WhereClause {
+    std::string type_param;     // T
+    TypeConstraint constraint;  // 型制約
+
+    // 後方互換性のため
+    std::string constraint_type;  // 単一の型（非推奨、constraintを使用）
+
+    WhereClause() = default;
+    WhereClause(std::string param, std::string single_type)
+        : type_param(std::move(param)), constraint_type(single_type) {
+        constraint = TypeConstraint(single_type);
+    }
+    WhereClause(std::string param, TypeConstraint c)
+        : type_param(std::move(param)), constraint(std::move(c)) {
+        if (!constraint.types.empty()) {
+            constraint_type = constraint.types[0];  // 後方互換性
+        }
+    }
+};
+
 struct ImplDecl {
     std::string interface_name;  // forなしの場合は空文字列
     TypePtr target_type;
     std::vector<std::unique_ptr<FunctionDecl>> methods;
-    std::vector<std::string> generic_params;      // 後方互換性のため維持
-    std::vector<GenericParam> generic_params_v2;  // 型制約付き
+    std::vector<std::unique_ptr<OperatorImpl>> operators;  // 演算子実装
+    std::vector<std::string> generic_params;               // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;           // 型制約付き
     std::vector<TypePtr>
         interface_type_args;  // インターフェースの型引数（例: ValueHolder<T> の T）
+    std::vector<WhereClause> where_clauses;  // where句
 
     // コンストラクタ/デストラクタ専用impl（forなし）
     bool is_ctor_impl = false;

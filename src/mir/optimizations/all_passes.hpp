@@ -4,6 +4,7 @@
 #include "copy_propagation.hpp"
 #include "dead_code_elimination.hpp"
 #include "optimization_pass.hpp"
+#include "program_dce.hpp"
 
 #include <iostream>
 

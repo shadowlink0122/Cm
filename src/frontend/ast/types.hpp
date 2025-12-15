@@ -25,6 +25,8 @@ enum class TypeKind {
     ULong,  // 符号なし整数
     Float,
     Double,  // 浮動小数点
+    UFloat,
+    UDouble,  // 符号なし浮動小数点（非負制約）
     Char,
     String,  // 文字/文字列
 
@@ -72,10 +74,12 @@ inline TypeInfo get_primitive_info(TypeKind kind) {
         case TypeKind::Int:
         case TypeKind::UInt:
         case TypeKind::Float:
+        case TypeKind::UFloat:
             return {4, 4};
         case TypeKind::Long:
         case TypeKind::ULong:
         case TypeKind::Double:
+        case TypeKind::UDouble:
             return {8, 8};
         case TypeKind::Pointer:
         case TypeKind::Reference:
@@ -134,7 +138,12 @@ struct Type {
 
     bool is_signed() const { return (kind >= TypeKind::Tiny && kind <= TypeKind::Long); }
 
-    bool is_floating() const { return kind == TypeKind::Float || kind == TypeKind::Double; }
+    bool is_floating() const {
+        return kind == TypeKind::Float || kind == TypeKind::Double || kind == TypeKind::UFloat ||
+               kind == TypeKind::UDouble;
+    }
+
+    bool is_unsigned_float() const { return kind == TypeKind::UFloat || kind == TypeKind::UDouble; }
 
     bool is_numeric() const { return is_integer() || is_floating(); }
 
@@ -192,6 +201,12 @@ inline TypePtr make_float() {
 inline TypePtr make_double() {
     return std::make_shared<Type>(TypeKind::Double);
 }
+inline TypePtr make_ufloat() {
+    return std::make_shared<Type>(TypeKind::UFloat);
+}
+inline TypePtr make_udouble() {
+    return std::make_shared<Type>(TypeKind::UDouble);
+}
 inline TypePtr make_char() {
     return std::make_shared<Type>(TypeKind::Char);
 }
@@ -223,6 +238,13 @@ inline TypePtr make_array(TypePtr elem, std::optional<uint32_t> size = std::null
 
 inline TypePtr make_named(const std::string& name) {
     auto t = std::make_shared<Type>(TypeKind::Struct);
+    t->name = name;
+    return t;
+}
+
+// ジェネリックパラメータ型: T, U等
+inline TypePtr make_generic_param(const std::string& name) {
+    auto t = std::make_shared<Type>(TypeKind::Generic);
     t->name = name;
     return t;
 }
@@ -264,6 +286,10 @@ inline std::string type_to_string(const Type& t) {
             return "float";
         case TypeKind::Double:
             return "double";
+        case TypeKind::UFloat:
+            return "ufloat";
+        case TypeKind::UDouble:
+            return "udouble";
         case TypeKind::Char:
             return "char";
         case TypeKind::String:

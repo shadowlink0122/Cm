@@ -656,9 +656,329 @@ match (result) {
 | 文字列操作(.len()等) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 文字列インデックス s[i] | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 文字列スライス s[a:b] | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 配列高級関数(.map等) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| イテレータ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| 自動derive(Eq,Copy等) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 配列高級関数(.some等) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| operatorキーワード | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⬜ | ⚠️ |
+| whereキーワード | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| with自動実装(Eq) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| with自動実装(Ord) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| with自動実装(Copy) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| with自動実装(Clone) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| with自動実装(Hash) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ジェネリック構造体with | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| デッドコード削除 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### 実装状況の詳細
+
+#### operatorキーワード（2024年12月15日更新）
+- ✅ パーサー: `impl S for Eq { operator bool ==(S other) {...} }` 構文
+- ✅ HIR/MIR: 明示的operator実装のlowering
+- ✅ インタプリタ: 明示的operator実装の実行
+- ⚠️ LLVM: **整数型のみ動作**、float型で型不一致エラー発生
+- ⬜ WASM: 未テスト
+
+**既知の問題（LLVMバックエンド）:**
+- 明示的`impl S for Eq { operator bool ==(S other) {...} }`で浮動小数点演算を使用すると型不一致エラー
+- 根本原因: HIRの型情報がoperator実装内の式に伝播されていない
+- 回避策: 整数型フィールドのみの構造体では正常に動作
+
+#### デッドコード削除（未実装）
+- ⬜ `with Eq`を宣言したが`==`を使用していない場合のoperator関数削除
+- ⬜ モノモーフィゼーション後の未使用特殊化の削除
+- ⬜ 自動実装展開後の未使用関数削除
+
+### 自動実装の処理フロー
+
+```
+1. パース時: `struct S with Eq, Ord` を認識
+2. 型チェック: 組み込みインターフェース(Eq, Ord等)の存在を確認
+3. MIR Lowering:
+   a. モノモーフィゼーション完了後に自動実装を生成
+   b. 使用箇所から逆算して必要な実装のみ生成
+4. デッドコード削除:
+   a. 呼び出されていない自動生成関数を削除
+   b. 未使用の演算子実装を削除
+5. コード生成: 最適化されたMIRからLLVM IR/WASMを生成
+```
+
+### イテレータ（v0.10.0へ移動）
+イテレータはラムダ式と動的メモリ確保に依存するため、v0.10.0で実装予定。
+
+### 実装状況
+
+#### 完了（2024年12月15日更新）
+- **Lexer**: `operator`, `where`キーワード追加
+- **Parser**: `interface I<T>`でoperatorシグネチャをパース
+- **Parser**: `impl S for I`でoperator実装をパース
+- **Parser**: `where T: Type`句のパース（struct/impl両対応）
+- **Parser**: ユニオン型制約 `T: int | string` のパース
+- **AST**: `OperatorKind`, `OperatorSig`, `OperatorImpl`, `WhereClause`追加
+- **HIR**: 対応するノード追加
+- **MIR**: `with Eq`による`==`演算子の自動実装
+- **MIR**: `with Ord`による`<`演算子の自動実装
+- **MIR**: `with Clone`による`clone()`メソッドの自動実装
+- **MIR**: `with Hash`による`hash()`メソッドの自動実装
+- **インタプリタ**: 自動実装されたoperator（`==`, `<`）の実行
+- **LLVM**: 論理AND/OR演算子の対応（`MirBinaryOp::And`, `MirBinaryOp::Or`）
+- **LLVM**: `with Eq`で自動生成された`Point__op_eq`のネイティブコンパイル
+- **LLVM**: `with Ord`で自動生成された`Point__op_lt`のネイティブコンパイル
+- **TypeChecker**: 組み込みインターフェース(Eq, Ord, Copy, Clone, Hash)の登録
+- **デッドコード削除**: プログラム全体の未使用関数・構造体削除（program_dce.hpp）
+
+### `with`キーワードによる自動実装（実装済み）
+
+構造体宣言時に`with`キーワードでインターフェースを自動実装：
+
+```cm
+// Eq インターフェース定義
+interface Eq<T> {
+    operator bool ==(T other);
+}
+
+// 基本構文 - Eq自動実装
+struct Point with Eq {
+    int x;
+    int y;
+}
+
+// 使用例
+Point p1, p2;
+p1.x = 10; p1.y = 20;
+p2.x = 10; p2.y = 20;
+if (p1 == p2) {
+    println("Equal!");  // フィールドごとの比較が自動生成される
+}
+```
+
+### 複数の構造体での自動実装（実装済み）
+
+```cm
+struct Color with Eq {
+    int r; int g; int b;
+}
+
+struct Size with Eq {
+    int width; int height;
+}
+```
+
+### 演算子オーバーロード（interface/impl内限定）
+
+`operator`キーワードはinterface定義とimpl内でのみ使用可能：
+
+```cm
+// インターフェース定義（ジェネリクス使用、Selfは使用禁止）
+interface Eq<T> {
+    operator bool ==(T other);
+}
+
+interface Ord<T> {
+    operator bool <(T other);
+}
+
+interface Add<T, U> {
+    operator T +(U other);
+}
+
+// 派生演算子はコンパイラが自動導出：
+// a != b  →  !(a == b)
+// a > b   →  b < a
+// a <= b  →  !(b < a)
+// a >= b  →  !(a < b)
+```
+
+### impl内でのoperator実装
+
+```cm
+struct Point { int x; int y; }
+
+// 同じ型との比較（withを使わない場合の明示的実装）
+impl Point for Eq {
+    operator bool ==(Point other) {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+// コンパイラ解釈: impl Point for Eq<Point>
+
+// 異なる型との比較（where句で型制約）
+impl<T> Point for Eq<T> where T: Polygon {
+    operator bool ==(T other) {
+        // PointとPolygonの比較ロジック
+        return self.x == other.center_x && self.y == other.center_y;
+    }
+}
+
+// 算術演算子
+impl Point for Add {
+    operator Point +(Point other) {
+        Point result;
+        result.x = self.x + other.x;
+        result.y = self.y + other.y;
+        return result;
+    }
+}
+// コンパイラ解釈: impl Point for Add<Point, Point>
+```
+
+### `with`による自動生成
+
+`with`で自動実装する場合、インターフェースの型パラメータは暗黙的に実装対象の型を使用：
+
+```cm
+// 基本ケース: struct S with I → impl S for I （暗黙的にI<S>）
+struct Point with Eq {
+    int x;
+    int y;
+}
+
+// 自動生成されるコード:
+// impl Point for Eq {
+//     operator bool ==(Point other) {
+//         return self.x == other.x && self.y == other.y;
+//     }
+// }
+```
+
+### ジェネリック構造体の`with`
+
+```cm
+// ジェネリック構造体: struct S<T> with I → impl<T> S<T> for I
+struct Pair<T> with Eq {
+    T first;
+    T second;
+}
+
+// 自動生成されるコード:
+// impl<T> Pair<T> for Eq {
+//     operator bool ==(Pair<T> other) {
+//         return self.first == other.first && self.second == other.second;
+//     }
+// }
+```
+
+### 型推論ルール
+
+| 宣言 | 自動生成されるimpl | コンパイラ解釈 |
+|------|-------------------|---------------|
+| `struct S with Eq` | `impl S for Eq` | `impl S for Eq<S>` |
+| `struct S with Ord` | `impl S for Ord` | `impl S for Ord<S>` |
+| `struct S<T> with Eq` | `impl<T> S<T> for Eq` | `impl<T> S<T> for Eq<S<T>>` |
+
+### 異なる型との比較（where句）
+
+異なる型との比較が必要な場合は`with`を使わず、where句で明示的に型制約：
+
+```cm
+struct Point { int x; int y; }
+struct Polygon { int center_x; int center_y; int vertices; }
+
+// PointとPolygonを比較（withは使わない）
+impl<T> Point for Eq<T> where T: Polygon {
+    operator bool ==(T other) {
+        return self.x == other.center_x && self.y == other.center_y;
+    }
+}
+
+// 使用例
+Point p; p.x = 10; p.y = 20;
+Polygon poly; poly.center_x = 10; poly.center_y = 20;
+if (p == poly) {  // impl<T> Point for Eq<T> where T: Polygon を使用
+    println("Same center!");
+}
+```
+
+### where句の使い分け
+
+| 構文 | 意味 |
+|------|------|
+| `<T: Interface>` | TはInterfaceを実装している |
+| `where T: Type` | Tは具体的なType型である |
+
+### 自動実装可能なインターフェース一覧
+
+| インターフェース | 説明 | 生成される演算子/メソッド | 自動実装の条件 | 実装状態 |
+|-----------------|------|------------------------|---------------|---------|
+| **Eq\<T\>** | 等価比較 | `==` (+ 自動導出`!=`) | 全フィールドがEq | ✅ 完了 |
+| **Ord\<T\>** | 順序比較 | `<` (+ 自動導出`>`,`<=`,`>=`) | 全フィールドがOrd | ✅ MIR生成完了 |
+| **Copy** | ビット単位コピー | （暗黙コピー許可） | 全フィールドがCopy（ポインタなし） | ✅ マーカー |
+| **Clone** | 深いコピー | `.clone()` | 全フィールドがClone | ✅ MIR生成完了 |
+| **Hash** | ハッシュ計算 | `.hash()` | 全フィールドがHash | ✅ MIR生成完了 |
+| **Debug** | デバッグ出力 | `.debug() -> string` | 全フィールドがDebug | ⬜ v0.10.0予定 |
+| **Display** | 文字列化 | `.toString() -> string` | 全フィールドがDisplay | ⬜ v0.10.0予定 |
+
+### Debug/Display実装の依存関係
+
+Debug/Displayインターフェースは以下の機能が必要なため、v0.10.0で実装予定：
+
+1. **型→文字列変換関数**: `int_to_string()`, `float_to_string()`, `bool_to_string()`
+2. **文字列連結**: `cm_string_concat`（既存）を繰り返し呼び出し
+3. **フォーマット文字列構築**: `"StructName { field1: value1, field2: value2 }"`
+4. **動的メモリ確保**: 結果文字列のメモリ管理
+
+#### Debug出力例
+```cm
+struct Point with Debug {
+    int x;
+    int y;
+}
+
+struct Line with Debug {
+    Point start;
+    Point end;
+}
+
+int main() {
+    Point p; p.x = 10; p.y = 20;
+    println("{}", p.debug());  // "Point { x: 10, y: 20 }"
+    
+    Line l;
+    l.start.x = 0; l.start.y = 0;
+    l.end.x = 100; l.end.y = 100;
+    println("{}", l.debug());  // "Line { start: Point { x: 0, y: 0 }, end: Point { x: 100, y: 100 } }"
+    return 0;
+}
+```
+
+### プリミティブ型のインターフェース実装状況
+
+| 型 | Eq | Ord | Copy | Clone | Hash | Debug | Display |
+|----|----|----|------|-------|------|-------|---------|
+| int/uint | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| float/double | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ |
+| bool | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| char | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| string | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ |
+| T* | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| T[N] | ✓* | ✓* | ✓* | ✓* | ✓* | ✓ | ✓ |
+
+*: 要素型がインターフェースを実装している場合のみ
+
+### 使用例
+
+```cm
+struct Point with Eq, Clone, Debug {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p1;
+    p1.x = 10; p1.y = 20;
+    Point p2 = p1.clone();
+    
+    if (p1 == p2) {          // operator == を呼び出し
+        println("Equal!");
+    }
+    
+    println("{}", p1.debug());  // "Point { x: 10, y: 20 }"
+    return 0;
+}
+```
+
+### 注記: v0.10.0への移動項目
+以下の機能は動的メモリ確保が必要なため、v0.10.0で実装予定：
+- 配列スライス `arr[a:b]` - 新しい配列を返すため動的メモリが必要
+- `.map()`, `.filter()` - 結果として新しい配列を返すため動的メモリが必要
+- ラムダ式 - map/filter等で使用するクロージャのため先に実装が必要
 
 ### 関数ポインタ（2024年12月15日完全実装）
 - ✅ パーサー: `int*(int, int) op;` 新しい簡潔な構文
@@ -698,7 +1018,7 @@ Python風のスライス構文をサポート：
 
 ### テスト結果（2024年12月15日更新）
 - インタプリタ: 全テストパス
-- LLVM Native: 全121テストパス
+- LLVM Native: 121/122テストパス（1スキップ）
 - WASM: 全テストパス
 - 新規テスト追加:
   - `tests/test_programs/string/string_methods.cm` - 文字列メソッド
@@ -708,15 +1028,22 @@ Python風のスライス構文をサポート：
   - `tests/test_programs/array/array_size.cm` - `.size()`/`.len()` メソッド
   - `tests/test_programs/array/array_struct_size.cm` - 構造体配列の`.size()`
   - `tests/test_programs/array/array_for_loop.cm` - forループイテレーション
+  - `tests/test_programs/array/array_methods.cm` - 高級関数テスト
   - `tests/test_programs/pointer/pointer_basic.cm`
   - `tests/test_programs/pointer/pointer_struct.cm`
   - `tests/test_programs/pointer/pointer_typedef.cm`
   - `tests/test_programs/pointer/pointer_array_decay.cm`
 
 ### 配列メソッド（2024年12月15日追加）
-- ✅ `.size()` - 配列のサイズを取得（コンパイル時定数）
-- ✅ `.len()` - `.size()`のエイリアス
-- ✅ インタプリタ、LLVM、WASMすべてで動作確認済み
+- ✅ `.size()` / `.len()` / `.length()` - 配列のサイズを取得（コンパイル時定数）
+- ✅ `.indexOf(value)` - 要素の位置を検索（見つからなければ-1）
+- ✅ `.includes(value)` / `.contains(value)` - 要素が含まれているか
+- ✅ `.some(predicate)` - いずれかの要素が条件を満たすか
+- ✅ `.every(predicate)` - すべての要素が条件を満たすか
+- ✅ `.findIndex(predicate)` - 条件を満たす最初の要素のインデックス
+- ✅ インタプリタ対応済み（PointerValue/ArrayValue両対応）
+- ✅ LLVM Native動作確認済み
+- ✅ WASM対応済み（2024年12月15日追加）
 
 ### for-in構文（2024年12月15日追加）
 - ✅ `for (Type var in arr)` - 型指定あり範囲for
@@ -751,20 +1078,113 @@ Vec<int>[10] vectors;
 
 ---
 
-## Version 0.10.0 - 可変長配列とヒープ
+## Version 0.10.0 - ラムダ式と動的メモリ
 
 ### 目標
-実行時サイズ決定の配列とヒープメモリ管理
+ラムダ式（無名関数）と動的メモリ確保の実装。これによりmap/filter/reduceなどの高級関数と配列スライスが完全に動作可能になる。
 
 ### 実装項目
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
+| ラムダ式 \|args\| expr | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| クロージャ（変数キャプチャ） | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 可変長配列 T[] | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | new T[n] 動的確保 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | delete 解放 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Vec<T> 型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 配列スライス arr[a:b] | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| .map(fn) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| .filter(fn) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| .reduce(fn, init) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| イテレータ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Debug自動実装 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Display自動実装 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 型→文字列変換関数 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
-### 構文例
+### Debug/Display自動実装
+
+Debug/Displayインターフェースは動的メモリ確保が必要なため、このバージョンで実装：
+
+```cm
+interface Debug {
+    string debug();
+}
+
+interface Display {
+    string toString();
+}
+
+// 自動実装例
+struct Point with Debug, Display {
+    int x;
+    int y;
+}
+
+// 自動生成されるコード:
+// impl Point for Debug {
+//     string debug() {
+//         return "Point { x: " + int_to_string(self.x) + ", y: " + int_to_string(self.y) + " }";
+//     }
+// }
+// impl Point for Display {
+//     string toString() {
+//         return "(" + int_to_string(self.x) + ", " + int_to_string(self.y) + ")";
+//     }
+// }
+
+int main() {
+    Point p; p.x = 10; p.y = 20;
+    println("{}", p.debug());     // "Point { x: 10, y: 20 }"
+    println("{}", p.toString());  // "(10, 20)"
+    return 0;
+}
+```
+
+### ネストした構造体のDebug
+```cm
+struct Line with Debug {
+    Point start;
+    Point end;
+}
+
+// 自動生成（ネスト対応）:
+// string debug() {
+//     return "Line { start: " + self.start.debug() + ", end: " + self.end.debug() + " }";
+// }
+
+Line l;
+println("{}", l.debug());
+// "Line { start: Point { x: 0, y: 0 }, end: Point { x: 0, y: 0 } }"
+```
+
+### 型→文字列変換関数（組み込み）
+以下の関数を組み込みとして提供：
+- `int_to_string(int) -> string`
+- `uint_to_string(uint) -> string`
+- `float_to_string(float) -> string`
+- `double_to_string(double) -> string`
+- `bool_to_string(bool) -> string`
+- `char_to_string(char) -> string`
+
+### ラムダ式の構文
+```cm
+// 基本構文: |params| expr または |params| { statements }
+int[5] arr = [1, 2, 3, 4, 5];
+
+// 型推論あり
+arr.map(|x| x * 2);                    // [2, 4, 6, 8, 10]
+arr.filter(|x| x > 2);                 // [3, 4, 5]
+arr.reduce(|acc, x| acc + x, 0);       // 15
+
+// 明示的な型
+arr.map(|int x| -> int { return x * 2; });
+
+// クロージャ（外部変数のキャプチャ）
+int multiplier = 3;
+arr.map(|x| x * multiplier);           // [3, 6, 9, 12, 15]
+```
+
+### 動的メモリ確保
 ```cm
 // 可変長配列（スタック上、allocaベース）
 void example(int n) {
@@ -782,6 +1202,51 @@ vec.push(2);
 // スコープ終了時に自動解放
 ```
 
+### 配列スライス（動的メモリ依存）
+```cm
+int[10] arr = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+// スライスは新しい配列を返す（動的メモリ確保）
+int[] slice = arr[2:5];      // [2, 3, 4]
+int[] tail = arr[5:];        // [5, 6, 7, 8, 9]
+int[] head = arr[:3];        // [0, 1, 2]
+int[] last3 = arr[-3:];      // [7, 8, 9]
+```
+
+### 高級関数（動的メモリ依存）
+```cm
+int[5] numbers = [1, 2, 3, 4, 5];
+
+// map: 新しい配列を返す
+int[] doubled = numbers.map(|x| x * 2);  // [2, 4, 6, 8, 10]
+
+// filter: 新しい配列を返す
+int[] evens = numbers.filter(|x| x % 2 == 0);  // [2, 4]
+
+// reduce: 単一の値を返す（既にv0.9.0で実装済み）
+int sum = numbers.reduce(|acc, x| acc + x, 0);  // 15
+
+// チェーン
+int result = numbers
+    .filter(|x| x > 2)
+    .map(|x| x * 10)
+    .reduce(|acc, x| acc + x, 0);  // 120
+```
+
+### 実装の依存関係
+```
+ラムダ式
+    ↓
+クロージャ（変数キャプチャ）
+    ↓
+動的メモリ確保 (new/delete)
+    ↓
+┌───────────────┬───────────────┬───────────────┐
+│  配列スライス  │     .map()    │   .filter()   │
+│   arr[a:b]    │               │               │
+└───────────────┴───────────────┴───────────────┘
+```
+
 ---
 
 ## Version 0.11.0 - 参照と所有権
@@ -789,31 +1254,30 @@ vec.push(2);
 ### 目標
 参照型とmoveセマンティクスの実装（メモリ安全性の基盤）
 
+### 設計方針
+- **const以外は全て可変**（`mut`キーワードは不要）
+- **ポインタ（T*）**: C互換、手動管理、unsafe
+- **参照（&T）**: 借用チェック付き、安全、読み取り専用
+- **move**: 所有権の明示的移動
+
 ### 実装項目
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
 | &T 参照型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| &mut T 可変参照型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | move キーワード | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 借用チェッカー | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | ライフタイム基礎 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Drop trait | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Copy/Clone trait | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-
-### 設計方針
-- **ポインタ（T*）**: C互換、手動管理、unsafe
-- **参照（&T）**: 借用チェック付き、安全
-- **move**: 所有権の明示的移動
 
 ### 構文例
 ```cm
-// 参照型
+// 参照型（読み取り専用）
 void print_point(&Point p) {
     println("({}, {})", p.x, p.y);
 }
 
-// 可変参照
-void increment(&mut int x) {
+// ポインタ経由で変更（明示的）
+void increment(int* x) {
     *x = *x + 1;
 }
 

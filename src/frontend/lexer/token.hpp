@@ -49,6 +49,7 @@ enum class TokenKind {
     KwMutable,
     KwNew,
     KwNull,
+    KwOperator,  // operator overloading in interface/impl
     KwOverload,  // function overloading
     KwPrivate,
     KwPub,  // public visibility
@@ -64,6 +65,7 @@ enum class TokenKind {
     KwUse,       // use statement (similar to import)
     KwVoid,
     KwVolatile,
+    KwWhere,  // where clause for type constraints
     KwWhile,
     KwWith,
 
@@ -78,6 +80,8 @@ enum class TokenKind {
     KwUlong,
     KwFloat,
     KwDouble,
+    KwUfloat,
+    KwUdouble,
     KwBool,
     KwChar,
     KwString,

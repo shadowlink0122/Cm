@@ -127,6 +127,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 kind == TokenKind::KwShort || kind == TokenKind::KwUshort ||
                 kind == TokenKind::KwLong || kind == TokenKind::KwUlong ||
                 kind == TokenKind::KwFloat || kind == TokenKind::KwDouble ||
+                kind == TokenKind::KwUfloat || kind == TokenKind::KwUdouble ||
                 kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
                 kind == TokenKind::KwString || kind == TokenKind::KwVoid) {
                 lookahead++;  // 型キーワードをスキップ
@@ -264,7 +265,8 @@ ast::StmtPtr Parser::parse_stmt() {
                              next_kind == TokenKind::KwShort || next_kind == TokenKind::KwLong ||
                              next_kind == TokenKind::KwUint || next_kind == TokenKind::KwUtiny ||
                              next_kind == TokenKind::KwUshort || next_kind == TokenKind::KwUlong ||
-                             next_kind == TokenKind::Ident);
+                             next_kind == TokenKind::KwUfloat ||
+                             next_kind == TokenKind::KwUdouble || next_kind == TokenKind::Ident);
         }
     }
     if (is_static_var) {
@@ -364,6 +366,8 @@ bool Parser::is_type_start() {
         case TokenKind::KwUlong:
         case TokenKind::KwFloat:
         case TokenKind::KwDouble:
+        case TokenKind::KwUfloat:
+        case TokenKind::KwUdouble:
         case TokenKind::KwChar:
         case TokenKind::KwString:
             return true;
@@ -374,7 +378,8 @@ bool Parser::is_type_start() {
                 // *の後に型キーワードまたは識別子が来て、
                 // さらにその後に識別子が来れば型宣言
                 if (next_kind == TokenKind::KwInt || next_kind == TokenKind::KwFloat ||
-                    next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwChar ||
+                    next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwUfloat ||
+                    next_kind == TokenKind::KwUdouble || next_kind == TokenKind::KwChar ||
                     next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
                     next_kind == TokenKind::KwVoid || next_kind == TokenKind::Ident) {
                     // *int name or *Type name の形式

@@ -27,6 +27,10 @@ class MirLoweringBase {
     // インターフェース実装情報 (型名 -> (インターフェース名 -> メソッドマップ))
     std::unordered_map<std::string, std::unordered_map<std::string, std::string>> impl_info;
 
+    // 共有のインターフェース実装情報へのポインタ（設定されている場合はこちらを使用）
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>>*
+        shared_impl_info = nullptr;
+
     // インターフェース名のセット
     std::unordered_set<std::string> interface_names;
 
@@ -39,9 +43,23 @@ class MirLoweringBase {
     // デストラクタを持つ型のセット
     std::unordered_set<std::string> types_with_destructor;
 
+    // インターフェース定義 (インターフェース名 -> HirInterface)
+    std::unordered_map<std::string, const hir::HirInterface*> interface_defs_;
+
    public:
     MirLoweringBase() = default;
     virtual ~MirLoweringBase() = default;
+
+    // 共有impl_infoを設定
+    void set_shared_impl_info(
+        std::unordered_map<std::string, std::unordered_map<std::string, std::string>>* info) {
+        shared_impl_info = info;
+    }
+
+    // impl_infoを取得（共有が設定されていればそれを使用）
+    auto& get_impl_info() { return shared_impl_info ? *shared_impl_info : impl_info; }
+
+    const auto& get_impl_info() const { return shared_impl_info ? *shared_impl_info : impl_info; }
 
     // MIRプログラムを取得
     MirProgram& get_program() { return mir_program; }

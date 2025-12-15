@@ -295,6 +295,7 @@ struct HirStruct {
     std::string name;
     std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<HirField> fields;
+    std::vector<std::string> auto_impls;  // with キーワードで自動実装するinterface
     bool is_export = false;
     bool has_explicit_constructor = false;
 };
@@ -307,12 +308,57 @@ struct HirMethodSig {
     HirMethodAccess access = HirMethodAccess::Public;  // デフォルトはpublic
 };
 
+// 演算子の種類（ASTからコピー）
+enum class HirOperatorKind {
+    Eq,      // ==
+    Ne,      // != (自動導出)
+    Lt,      // <
+    Gt,      // > (自動導出)
+    Le,      // <= (自動導出)
+    Ge,      // >= (自動導出)
+    Add,     // +
+    Sub,     // -
+    Mul,     // *
+    Div,     // /
+    Mod,     // %
+    BitAnd,  // &
+    BitOr,   // |
+    BitXor,  // ^
+    Shl,     // <<
+    Shr,     // >>
+    Neg,     // - (unary)
+    Not,     // ! (unary)
+    BitNot,  // ~ (unary)
+};
+
+// 演算子シグネチャ
+struct HirOperatorSig {
+    HirOperatorKind op;
+    std::vector<HirParam> params;
+    TypePtr return_type;
+};
+
+// 演算子実装
+struct HirOperatorImpl {
+    HirOperatorKind op;
+    std::vector<HirParam> params;
+    TypePtr return_type;
+    std::vector<HirStmtPtr> body;
+};
+
 // インターフェース
 struct HirInterface {
     std::string name;
     std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<HirMethodSig> methods;
+    std::vector<HirOperatorSig> operators;  // 演算子シグネチャ
     bool is_export = false;
+};
+
+// where句
+struct HirWhereClause {
+    std::string type_param;
+    std::string constraint_type;
 };
 
 // 実装ブロック
@@ -321,6 +367,8 @@ struct HirImpl {
     std::string target_type;
     std::vector<HirGenericParam> generic_params;  // ジェネリックパラメータ
     std::vector<std::unique_ptr<HirFunction>> methods;
+    std::vector<std::unique_ptr<HirOperatorImpl>> operators;  // 演算子実装
+    std::vector<HirWhereClause> where_clauses;                // where句
     bool is_ctor_impl = false;  // コンストラクタ/デストラクタ専用impl
 };
 

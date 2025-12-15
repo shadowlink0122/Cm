@@ -1249,3 +1249,120 @@ int strcmp(const char* s1, const char* s2) {
     }
     return (unsigned char)*s1 - (unsigned char)*s2;
 }
+
+// ============================================================
+// Array Methods (WASM)
+// ============================================================
+
+// indexOf: 要素の位置を検索
+int64_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
+    if (!arr) return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (arr[i] == value) return i;
+    }
+    return -1;
+}
+
+int64_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
+    if (!arr) return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (arr[i] == value) return i;
+    }
+    return -1;
+}
+
+// includes: 要素が含まれているか
+_Bool __builtin_array_includes_i64(int64_t* arr, int64_t size, int64_t value) {
+    return __builtin_array_indexOf_i64(arr, size, value) >= 0;
+}
+
+_Bool __builtin_array_includes_i32(int32_t* arr, int64_t size, int32_t value) {
+    return __builtin_array_indexOf_i32(arr, size, value) >= 0;
+}
+
+// some: いずれかの要素が条件を満たすか
+_Bool __builtin_array_some_i64(int64_t* arr, int64_t size, _Bool (*predicate)(int64_t)) {
+    if (!arr || !predicate) return 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(arr[i])) return 1;
+    }
+    return 0;
+}
+
+_Bool __builtin_array_some_i32(int32_t* arr, int64_t size, _Bool (*predicate)(int32_t)) {
+    if (!arr || !predicate) return 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(arr[i])) return 1;
+    }
+    return 0;
+}
+
+// every: すべての要素が条件を満たすか
+_Bool __builtin_array_every_i64(int64_t* arr, int64_t size, _Bool (*predicate)(int64_t)) {
+    if (!arr || !predicate) return 1;
+    for (int64_t i = 0; i < size; i++) {
+        if (!predicate(arr[i])) return 0;
+    }
+    return 1;
+}
+
+_Bool __builtin_array_every_i32(int32_t* arr, int64_t size, _Bool (*predicate)(int32_t)) {
+    if (!arr || !predicate) return 1;
+    for (int64_t i = 0; i < size; i++) {
+        if (!predicate(arr[i])) return 0;
+    }
+    return 1;
+}
+
+// findIndex: 条件を満たす最初の要素のインデックス
+int64_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, _Bool (*predicate)(int64_t)) {
+    if (!arr || !predicate) return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(arr[i])) return i;
+    }
+    return -1;
+}
+
+int64_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, _Bool (*predicate)(int32_t)) {
+    if (!arr || !predicate) return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(arr[i])) return i;
+    }
+    return -1;
+}
+
+// forEach: 各要素に関数を適用
+void __builtin_array_forEach_i64(int64_t* arr, int64_t size, void (*callback)(int64_t)) {
+    if (!arr || !callback) return;
+    for (int64_t i = 0; i < size; i++) {
+        callback(arr[i]);
+    }
+}
+
+void __builtin_array_forEach_i32(int32_t* arr, int64_t size, void (*callback)(int32_t)) {
+    if (!arr || !callback) return;
+    for (int64_t i = 0; i < size; i++) {
+        callback(arr[i]);
+    }
+}
+
+// reduce: 要素を畳み込み
+int64_t __builtin_array_reduce_i64(int64_t* arr, int64_t size, 
+                                   int64_t (*callback)(int64_t, int64_t), int64_t init) {
+    if (!arr || !callback) return init;
+    int64_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(acc, arr[i]);
+    }
+    return acc;
+}
+
+int32_t __builtin_array_reduce_i32(int32_t* arr, int64_t size,
+                                   int32_t (*callback)(int32_t, int32_t), int32_t init) {
+    if (!arr || !callback) return init;
+    int32_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(acc, arr[i]);
+    }
+    return acc;
+}

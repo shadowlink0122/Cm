@@ -343,7 +343,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     auto argType = getOperandType(*callData.args[i]);
                                     if (argType) {
                                         // Unsigned型かどうかをチェック
-                                        isSigned = argType->is_signed() || 
+                                        isSigned = argType->is_signed() ||
                                                    (argType->kind != hir::TypeKind::UTiny &&
                                                     argType->kind != hir::TypeKind::UShort &&
                                                     argType->kind != hir::TypeKind::UInt &&

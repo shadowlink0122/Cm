@@ -236,9 +236,9 @@ struct IndexExpr {
 // ============================================================
 struct SliceExpr {
     ExprPtr object;
-    ExprPtr start;    // nullなら最初から
-    ExprPtr end;      // nullなら最後まで
-    ExprPtr step;     // nullならstep=1
+    ExprPtr start;  // nullなら最初から
+    ExprPtr end;    // nullなら最後まで
+    ExprPtr step;   // nullならstep=1
 
     SliceExpr(ExprPtr o, ExprPtr s, ExprPtr e, ExprPtr st = nullptr)
         : object(std::move(o)), start(std::move(s)), end(std::move(e)), step(std::move(st)) {}

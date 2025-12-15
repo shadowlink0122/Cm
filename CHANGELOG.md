@@ -2,9 +2,26 @@
 
 Cm言語コンパイラの変更履歴です。
 
-## [0.9.0] - 2024-12-14 (進行中)
+## [0.9.0] - 2024-12-15 (進行中)
 
 ### 追加
+
+#### 明示的operator実装のLLVM float型対応
+- **型推論の修正**: HIRの型情報がoperator実装内の式に伝播されていない問題を修正
+- **MIR型推論の強化**: `is_error()` 型もフォールバックとして扱うように変更
+- **LLVM float/double型変換**: 異なる浮動小数点型間の演算時に自動で型変換を行うように修正
+- **FNeg演算**: 浮動小数点の単項マイナスを正しく `fneg` 命令で処理するように修正
+
+#### ufloat/udouble プリミティブ型
+- **ufloat (32bit)**: 非負制約付き単精度浮動小数点型
+- **udouble (64bit)**: 非負制約付き倍精度浮動小数点型
+- **レキサー・パーサー対応**: `ufloat`, `udouble` キーワードの認識
+- **LLVM対応**: float/doubleと同じネイティブ表現
+
+#### デッドコード削除
+- **プログラムレベルDCE**: 未使用の自動実装関数を自動的に削除
+- **呼び出しグラフ解析**: mainから到達可能な関数のみを保持
+- **未使用構造体削除**: 使用されない構造体定義の削除
 
 #### 配列サポート
 - **C++スタイル配列宣言**: `int[5] arr;` 形式の配列型宣言
@@ -27,8 +44,22 @@ Cm言語コンパイラの変更履歴です。
 - **暗黙変換**: `int* p = arr;` で配列から先頭要素ポインタへ変換
 - **C/C++互換性**: 配列を関数にポインタとして渡せる
 
+#### with キーワードによる自動実装
+- **組み込みインターフェース**: Eq, Ord, Copy, Clone, Hash を言語組み込みで定義
+- **with Eq**: `struct Point with Eq { ... }` で `==` 演算子を自動生成
+- **with Ord**: `struct Point with Ord { ... }` で `<` 演算子を自動生成
+- **with Clone**: `clone()` メソッドを自動生成
+- **with Hash**: `hash()` メソッドを自動生成
+- **MIRでの実装生成**: 全フィールドを比較する `TypeName__op_eq` 関数を自動生成
+- **LLVMコンパイル**: with Eq の自動実装をネイティブコードにコンパイル
+
+#### 論理演算子の修正
+- **論理AND/OR**: `MirBinaryOp::And`, `MirBinaryOp::Or` のLLVMコード生成を修正
+- **bool (i8) 対応**: i8型のbool値を正しくi1に変換してAND/OR演算
+
 ### 既知の問題
 - typedef型ポインタのLLVM/WASMコンパイルは未完了（インタプリタでは動作）
+- with自動実装のWASMコンパイルは未完了
 
 ### テスト追加
 - `tests/test_programs/array/array_basic.cm`
@@ -37,6 +68,8 @@ Cm言語コンパイラの変更履歴です。
 - `tests/test_programs/pointer/pointer_struct.cm`
 - `tests/test_programs/pointer/pointer_typedef.cm`
 - `tests/test_programs/pointer/pointer_array_decay.cm`
+- `tests/test_programs/interface/with_eq_basic.cm`
+- `tests/test_programs/interface/with_multi_struct.cm`
 
 ## [0.8.0] - 2024-12-14
 

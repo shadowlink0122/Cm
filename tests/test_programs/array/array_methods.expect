@@ -1,0 +1,12 @@
+size = 5
+len = 5
+indexOf(3) = 2
+indexOf(99) = -1
+includes(4) = true
+includes(99) = false
+some(is_even) = true
+some(is_negative) = false
+every(is_positive) = true
+every(is_even) = false
+findIndex(is_even) = 1
+findIndex(is_greater_than_3) = 3

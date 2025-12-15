@@ -319,6 +319,17 @@ class Interpreter {
             args.push_back(Evaluator::evaluate_operand(ctx, *arg));
         }
 
+        // 配列高級関数（some, every, findIndex）の特別処理
+        if (func_name.find("__builtin_array_some") == 0 ||
+            func_name.find("__builtin_array_every") == 0 ||
+            func_name.find("__builtin_array_findIndex") == 0) {
+            Value result = execute_array_higher_order(ctx, func_name, args);
+            if (data.destination) {
+                Evaluator::store_to_place(ctx, *data.destination, result);
+            }
+            return;
+        }
+
         // 組み込み関数を探す
         auto& builtins = *ctx.builtins;
         auto builtin_it = builtins.find(func_name);
@@ -489,6 +500,93 @@ class Interpreter {
             Evaluator::store_to_place(ctx, *data.destination, result);
         }
         return true;
+    }
+
+    /// 配列高級関数を実行（some, every, findIndex）
+    Value execute_array_higher_order(ExecutionContext& ctx, const std::string& func_name,
+                                     std::vector<Value>& args) {
+        if (args.size() < 3) {
+            debug::interp::log(debug::interp::Id::Error,
+                               "Array higher-order function requires 3 args", debug::Level::Warn);
+            return Value(false);
+        }
+
+        // 配列を取得
+        std::vector<Value> const* arr_ptr = nullptr;
+        if (args[0].type() == typeid(PointerValue)) {
+            const auto& pv = std::any_cast<PointerValue>(args[0]);
+            auto it = ctx.locals.find(pv.target_local);
+            if (it != ctx.locals.end() && it->second.type() == typeid(ArrayValue)) {
+                arr_ptr = &std::any_cast<const ArrayValue&>(it->second).elements;
+            }
+        } else if (args[0].type() == typeid(ArrayValue)) {
+            arr_ptr = &std::any_cast<const ArrayValue&>(args[0]).elements;
+        }
+
+        if (!arr_ptr) {
+            debug::interp::log(debug::interp::Id::Error, "Could not get array for higher-order fn",
+                               debug::Level::Warn);
+            return Value(false);
+        }
+        const auto& arr = *arr_ptr;
+
+        // サイズを取得
+        int64_t size = 0;
+        if (args[1].type() == typeid(int64_t)) {
+            size = std::any_cast<int64_t>(args[1]);
+        }
+
+        // 関数名を取得
+        std::string callback_name;
+        if (args[2].type() == typeid(std::string)) {
+            callback_name = std::any_cast<std::string>(args[2]);
+        } else {
+            debug::interp::log(
+                debug::interp::Id::Error,
+                "Callback is not a function name: " + std::string(args[2].type().name()),
+                debug::Level::Warn);
+            return Value(false);
+        }
+
+        // コールバック関数を検索
+        const MirFunction* callback = find_function(callback_name);
+        if (!callback) {
+            debug::interp::log(debug::interp::Id::Error,
+                               "Callback function not found: " + callback_name, debug::Level::Warn);
+            return Value(false);
+        }
+
+        // 関数の種類に応じて処理
+        if (func_name.find("__builtin_array_some") == 0) {
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                std::vector<Value> cb_args = {arr[i]};
+                Value result = execute_function(*callback, cb_args);
+                if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
+                    return Value(true);
+                }
+            }
+            return Value(false);
+        } else if (func_name.find("__builtin_array_every") == 0) {
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                std::vector<Value> cb_args = {arr[i]};
+                Value result = execute_function(*callback, cb_args);
+                if (result.type() == typeid(bool) && !std::any_cast<bool>(result)) {
+                    return Value(false);
+                }
+            }
+            return Value(true);
+        } else if (func_name.find("__builtin_array_findIndex") == 0) {
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                std::vector<Value> cb_args = {arr[i]};
+                Value result = execute_function(*callback, cb_args);
+                if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
+                    return Value(i);
+                }
+            }
+            return Value(int64_t{-1});
+        }
+
+        return Value(false);
     }
 };
 

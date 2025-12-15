@@ -4,6 +4,111 @@
 
 namespace cm::mir {
 
+// 演算子実装のlowering
+std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorImpl& op_impl,
+                                                         const std::string& type_name) {
+    std::string op_name;
+    switch (op_impl.op) {
+        case hir::HirOperatorKind::Eq:
+            op_name = "op_eq";
+            break;
+        case hir::HirOperatorKind::Ne:
+            op_name = "op_ne";
+            break;
+        case hir::HirOperatorKind::Lt:
+            op_name = "op_lt";
+            break;
+        case hir::HirOperatorKind::Gt:
+            op_name = "op_gt";
+            break;
+        case hir::HirOperatorKind::Le:
+            op_name = "op_le";
+            break;
+        case hir::HirOperatorKind::Ge:
+            op_name = "op_ge";
+            break;
+        case hir::HirOperatorKind::Add:
+            op_name = "op_add";
+            break;
+        case hir::HirOperatorKind::Sub:
+            op_name = "op_sub";
+            break;
+        case hir::HirOperatorKind::Mul:
+            op_name = "op_mul";
+            break;
+        case hir::HirOperatorKind::Div:
+            op_name = "op_div";
+            break;
+        case hir::HirOperatorKind::Mod:
+            op_name = "op_mod";
+            break;
+        default:
+            op_name = "op_unknown";
+            break;
+    }
+
+    debug::log(debug::Stage::Mir, debug::Level::Info,
+               "Lowering operator: " + type_name + "__" + op_name);
+
+    auto mir_func = std::make_unique<MirFunction>();
+    mir_func->name = type_name + "__" + op_name;
+
+    // 戻り値用のローカル変数
+    mir_func->return_local = 0;
+    auto resolved_return_type = resolve_typedef(op_impl.return_type);
+    mir_func->locals.emplace_back(0, "@return", resolved_return_type, true, false);
+
+    // エントリーブロックを作成
+    mir_func->entry_block = 0;
+    mir_func->basic_blocks.push_back(std::make_unique<BasicBlock>(0));
+
+    // LoweringContextを作成
+    LoweringContext ctx(mir_func.get());
+    ctx.enum_defs = &enum_defs;
+    ctx.typedef_defs = &typedef_defs;
+    ctx.struct_defs = &struct_defs;
+    ctx.interface_names = &interface_names;
+
+    // selfパラメータを登録
+    auto self_type = hir::make_named(type_name);
+    LocalId self_id = ctx.new_local("self", self_type, false);
+    mir_func->arg_locals.push_back(self_id);
+    ctx.register_variable("self", self_id);
+
+    // 他のパラメータを登録
+    for (const auto& param : op_impl.params) {
+        auto resolved_param_type = resolve_typedef(param.type);
+        LocalId param_id = ctx.new_local(param.name, resolved_param_type, false);
+        mir_func->arg_locals.push_back(param_id);
+        ctx.register_variable(param.name, param_id);
+    }
+
+    // 文を処理
+    for (const auto& stmt : op_impl.body) {
+        if (stmt) {
+            stmt_lowering.lower_statement(*stmt, ctx);
+        }
+    }
+
+    // デフォルトのreturn
+    auto* current = ctx.get_current_block();
+    if (current && !current->terminator) {
+        MirConstant default_return;
+        default_return.type = resolved_return_type;
+        if (resolved_return_type && resolved_return_type->is_floating()) {
+            default_return.value = 0.0;
+        } else {
+            default_return.value = int64_t(0);
+        }
+
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{0}, MirRvalue::use(MirOperand::constant(default_return))));
+        ctx.set_terminator(MirTerminator::return_value());
+    }
+
+    return mir_func;
+}
+
 // 関数のlowering - モジュラーコンポーネントを使用
 std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction& func) {
     debug::log(debug::Stage::Mir, debug::Level::Info, "Lowering function: " + func.name);
@@ -134,6 +239,27 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
             if (!method->generic_params.empty()) {
                 hir_functions[mir_func->name] = method.get();
                 debug_msg("MIR", "Registered generic impl method: " + mir_func->name);
+            }
+
+            mir_program.functions.push_back(std::move(mir_func));
+        }
+    }
+
+    // 各演算子実装をlowering
+    for (const auto& op_impl : impl.operators) {
+        if (!op_impl)
+            continue;
+
+        // 専用のlowering関数を使用
+        auto mir_func = lower_operator(*op_impl, type_name);
+        if (mir_func) {
+            debug_msg("MIR", "Lowered operator: " + mir_func->name);
+
+            // impl_infoに登録
+            if (op_impl->op == hir::HirOperatorKind::Eq) {
+                impl_info[type_name]["Eq"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Lt) {
+                impl_info[type_name]["Ord"] = mir_func->name;
             }
 
             mir_program.functions.push_back(std::move(mir_func));

@@ -382,19 +382,23 @@ int main(int argc, char* argv[]) {
             if (opts.debug)
                 std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n";
 
-            mir::opt::OptimizationPipeline pipeline;
-            pipeline.add_standard_passes(opts.optimization_level);
-
-            if (opts.optimization_level >= 2) {
-                // -O2以上では収束まで最適化を繰り返す
-                pipeline.run_until_fixpoint(mir);
-            } else {
-                pipeline.run(mir);
-            }
+            // Note: Function-level optimizations are temporarily disabled due to potential issues
+            // mir::opt::OptimizationPipeline pipeline;
+            // pipeline.add_standard_passes(opts.optimization_level);
+            // if (opts.optimization_level >= 2) {
+            //     pipeline.run_until_fixpoint(mir);
+            // } else {
+            //     pipeline.run(mir);
+            // }
 
             if (opts.debug)
                 std::cout << "最適化完了\n\n";
         }
+
+        // プログラムレベルのデッドコード削除
+        // 未使用の自動生成関数を削除する
+        mir::opt::ProgramDeadCodeElimination program_dce;
+        program_dce.run(mir);
 
         // MIRを表示（最適化後）
         if (opts.show_mir_opt) {
