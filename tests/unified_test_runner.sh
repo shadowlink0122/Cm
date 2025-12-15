@@ -289,6 +289,12 @@ run_single_test() {
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # 実行
                 "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                
+                # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
+                if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
+                    echo "=== Segmentation fault detected, running gdb ===" >> "$output_file"
+                    echo "run" | gdb --batch -ex "set pagination off" -ex "run" -ex "bt" -ex "quit" "$llvm_exec" >> "$output_file" 2>&1 || true
+                fi
             fi
             ;;
 
@@ -492,6 +498,21 @@ main() {
     log "Skipped: $SKIPPED"
     log ""
 
+    # CI環境でセグフォのデバッグ情報を表示
+    if [ -n "$CI" ] && [ $FAILED -gt 0 ]; then
+        shopt -s nullglob 2>/dev/null || true
+        for debug_file in "$TEMP_DIR"/*.debug; do
+            if [ -f "$debug_file" ]; then
+                log "=========================================="
+                log "Debug info for $(basename "${debug_file%.debug}")"
+                log "=========================================="
+                cat "$debug_file"
+                log ""
+            fi
+        done
+        shopt -u nullglob 2>/dev/null || true
+    fi
+
     if [ $FAILED -gt 0 ]; then
         log "Status: FAILED"
         exit 1
@@ -652,6 +673,13 @@ run_parallel_test() {
             run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm "$test_file" -o "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                
+                # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
+                if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
+                    echo "=== Segmentation fault detected, running gdb ===" >> "$output_file"
+                    echo "run" | gdb --batch -ex "set pagination off" -ex "run" -ex "bt" -ex "quit" "$llvm_exec" >> "$output_file" 2>&1 || true
+                fi
+                
                 rm -f "$llvm_exec"
             fi
             ;;
@@ -695,7 +723,14 @@ run_parallel_test() {
         fi
     else
         if [ $exit_code -ne 0 ]; then
-            echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+            # セグフォの場合は詳細情報を保存
+            if [ $exit_code -eq 139 ] && grep -q "=== Segmentation fault detected" "$output_file" 2>/dev/null; then
+                echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+                # デバッグ情報を別ファイルに保存
+                cat "$output_file" > "${result_file}.debug" 2>/dev/null || true
+            else
+                echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+            fi
         else
             if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then
                 echo "PASS" > "$result_file"

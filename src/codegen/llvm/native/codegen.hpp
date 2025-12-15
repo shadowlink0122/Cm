@@ -346,11 +346,10 @@ class LLVMCodeGen {
             }
             linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
 #else
-            linkCmd = "ld ";
+            // Linuxでもclangを使用（crt0.oなどが自動的にリンクされる）
+            linkCmd = "clang ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
-            } else {
-                linkCmd += "-lc ";  // libc
             }
             linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
 #endif

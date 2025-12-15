@@ -1,3 +1,5 @@
+#include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
+
 #include "context.hpp"
 
 #include "../../../common/debug/codegen.hpp"

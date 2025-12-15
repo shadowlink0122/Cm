@@ -1,3 +1,8 @@
+// LLVM version check (must be first)
+#ifdef CM_LLVM_ENABLED
+#include <llvm/Config/llvm-config.h>
+#endif
+
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
 #include "codegen/llvm/native/codegen.hpp"

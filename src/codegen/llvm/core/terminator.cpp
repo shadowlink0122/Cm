@@ -145,64 +145,73 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     auto receiverValue = args[0];
                                     auto fatPtrType = getInterfaceFatPtrType(actualTypeName);
 
+                                    llvm::Value* dataPtr = nullptr;
+                                    llvm::Value* vtablePtr = nullptr;
+
                                     if (receiverValue->getType()->isPointerTy()) {
+                                        // ポインタとして渡された場合（古い方法）
                                         auto dataFieldPtr = builder->CreateStructGEP(
                                             fatPtrType, receiverValue, 0, "data_field_ptr");
-                                        auto dataPtr = builder->CreateLoad(
+                                        dataPtr = builder->CreateLoad(
                                             ctx.getPtrType(), dataFieldPtr, "data_ptr");
                                         auto vtableFieldPtr = builder->CreateStructGEP(
                                             fatPtrType, receiverValue, 1, "vtable_field_ptr");
-                                        auto vtablePtr = builder->CreateLoad(
+                                        vtablePtr = builder->CreateLoad(
                                             ctx.getPtrType(), vtableFieldPtr, "vtable_ptr");
+                                    } else {
+                                        // 値として渡された場合（正しい方法）
+                                        dataPtr = builder->CreateExtractValue(
+                                            receiverValue, 0, "data_ptr");
+                                        vtablePtr = builder->CreateExtractValue(
+                                            receiverValue, 1, "vtable_ptr");
+                                    }
 
-                                        int methodIndex = -1;
-                                        if (currentProgram) {
-                                            for (const auto& iface : currentProgram->interfaces) {
-                                                if (iface && iface->name == actualTypeName) {
-                                                    for (size_t i = 0; i < iface->methods.size();
-                                                         ++i) {
-                                                        if (iface->methods[i].name ==
-                                                            callData.method_name) {
-                                                            methodIndex = static_cast<int>(i);
-                                                            break;
-                                                        }
+                                    int methodIndex = -1;
+                                    if (currentProgram) {
+                                        for (const auto& iface : currentProgram->interfaces) {
+                                            if (iface && iface->name == actualTypeName) {
+                                                for (size_t i = 0; i < iface->methods.size();
+                                                     ++i) {
+                                                    if (iface->methods[i].name ==
+                                                        callData.method_name) {
+                                                        methodIndex = static_cast<int>(i);
+                                                        break;
                                                     }
-                                                    break;
                                                 }
+                                                break;
                                             }
                                         }
+                                    }
 
-                                        if (methodIndex >= 0) {
-                                            auto ptrSize = module->getDataLayout().getPointerSize();
-                                            auto byteOffset = llvm::ConstantInt::get(
-                                                ctx.getI64Type(), methodIndex * ptrSize);
-                                            auto funcPtrPtr =
-                                                builder->CreateGEP(ctx.getI8Type(), vtablePtr,
-                                                                   byteOffset, "func_ptr_ptr");
-                                            auto ptrPtrType =
-                                                llvm::PointerType::get(ctx.getPtrType(), 0);
-                                            auto funcPtrPtrCast = builder->CreateBitCast(
-                                                funcPtrPtr, ptrPtrType, "func_ptr_ptr_cast");
-                                            auto funcPtr = builder->CreateLoad(
-                                                ctx.getPtrType(), funcPtrPtrCast, "func_ptr");
+                                    if (methodIndex >= 0) {
+                                        auto ptrSize = module->getDataLayout().getPointerSize();
+                                        auto byteOffset = llvm::ConstantInt::get(
+                                            ctx.getI64Type(), methodIndex * ptrSize);
+                                        auto funcPtrPtr =
+                                            builder->CreateGEP(ctx.getI8Type(), vtablePtr,
+                                                               byteOffset, "func_ptr_ptr");
+                                        auto ptrPtrType =
+                                            llvm::PointerType::get(ctx.getPtrType(), 0);
+                                        auto funcPtrPtrCast = builder->CreateBitCast(
+                                            funcPtrPtr, ptrPtrType, "func_ptr_ptr_cast");
+                                        auto funcPtr = builder->CreateLoad(
+                                            ctx.getPtrType(), funcPtrPtrCast, "func_ptr");
 
-                                            std::vector<llvm::Type*> paramTypes = {
-                                                ctx.getPtrType()};
-                                            auto funcType = llvm::FunctionType::get(
-                                                ctx.getVoidType(), paramTypes, false);
-                                            auto funcPtrTypePtr =
-                                                llvm::PointerType::get(funcType, 0);
-                                            auto funcPtrCast = builder->CreateBitCast(
-                                                funcPtr, funcPtrTypePtr, "func_ptr_cast");
+                                        std::vector<llvm::Type*> paramTypes = {
+                                            ctx.getPtrType()};
+                                        auto funcType = llvm::FunctionType::get(
+                                            ctx.getVoidType(), paramTypes, false);
+                                        auto funcPtrTypePtr =
+                                            llvm::PointerType::get(funcType, 0);
+                                        auto funcPtrCast = builder->CreateBitCast(
+                                            funcPtr, funcPtrTypePtr, "func_ptr_cast");
 
-                                            std::vector<llvm::Value*> callArgs = {dataPtr};
-                                            builder->CreateCall(funcType, funcPtrCast, callArgs);
-                                        }
+                                        std::vector<llvm::Value*> callArgs = {dataPtr};
+                                        builder->CreateCall(funcType, funcPtrCast, callArgs);
+                                    }
 
-                                        if (callData.success != mir::INVALID_BLOCK) {
-                                            builder->CreateBr(blocks[callData.success]);
-                                        }
-                                        break;
+                                    if (callData.success != mir::INVALID_BLOCK) {
+                                        builder->CreateBr(blocks[callData.success]);
                                     }
                                     break;
                                 } else {
@@ -310,11 +319,24 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     vtablePtr = llvm::Constant::getNullValue(ctx.getPtrType());
                                 }
 
+                                // 引数が構造体へのポインタの場合、そのポインタをdata pointerとして使用
+                                llvm::Value* dataPtr = args[i];
+                                
+                                // 構造体値の場合は、その値をヒープにコピーする
+                                // これにより、インターフェース呼び出し後もデータが有効になる
+                                if (!dataPtr->getType()->isPointerTy()) {
+                                    // スタック上に永続的なコピーを作成（呼び出し後も有効）
+                                    auto structType = dataPtr->getType();
+                                    auto structAlloca = builder->CreateAlloca(structType, nullptr, "interface_data");
+                                    builder->CreateStore(dataPtr, structAlloca);
+                                    dataPtr = structAlloca;
+                                }
+
                                 auto fatPtrAlloca =
                                     builder->CreateAlloca(fatPtrType, nullptr, "fat_ptr");
                                 auto dataFieldPtr = builder->CreateStructGEP(
                                     fatPtrType, fatPtrAlloca, 0, "data_field");
-                                auto dataPtrCast = builder->CreateBitCast(args[i], ctx.getPtrType(),
+                                auto dataPtrCast = builder->CreateBitCast(dataPtr, ctx.getPtrType(),
                                                                           "data_ptr_cast");
                                 builder->CreateStore(dataPtrCast, dataFieldPtr);
 
@@ -324,6 +346,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     vtablePtr, ctx.getPtrType(), "vtable_ptr_cast");
                                 builder->CreateStore(vtablePtrCast, vtableFieldPtr);
 
+                                // Fat pointerへのポインタとして渡す
                                 args[i] = fatPtrAlloca;
                                 continue;
                             }

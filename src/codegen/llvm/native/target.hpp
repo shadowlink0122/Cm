@@ -1,5 +1,12 @@
 #pragma once
 
+#include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
+
+// LLVM_VERSION_MAJORが定義されていることを確認
+#ifndef LLVM_VERSION_MAJOR
+#error "LLVM_VERSION_MAJOR is not defined. llvm-config.h may not be included correctly."
+#endif
+
 #include "../core/context.hpp"
 
 #include <fstream>
@@ -71,11 +78,13 @@ class TargetManager {
         if (config.noStd) {
             options.DisableIntegratedAS = false;
             options.MCOptions.ShowMCEncoding = false;
-#if LLVM_VERSION_MAJOR < 18
-            options.MCOptions.MCUseDwarfDirectory = false;
-#else
+            
+            // LLVM 17以降でMCUseDwarfDirectoryがenum型に変更
+            #if LLVM_VERSION_MAJOR >= 17
             options.MCOptions.MCUseDwarfDirectory = llvm::MCTargetOptions::DisableDwarfDirectory;
-#endif
+            #else
+            options.MCOptions.MCUseDwarfDirectory = false;
+            #endif
         }
 
         // 最適化レベル設定

@@ -25,7 +25,17 @@ endif()
 # LLVM Configuration
 if(CM_USE_LLVM)
     # Find LLVM (try versions from newest to oldest, suppress warnings with QUIET)
-    find_package(LLVM 15 CONFIG QUIET)
+    # Support LLVM 14-18 for compatibility
+    find_package(LLVM 18 CONFIG QUIET)
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 17 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 16 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 15 CONFIG QUIET)
+    endif()
     if(NOT LLVM_FOUND)
         find_package(LLVM 14 CONFIG QUIET)
     endif()
@@ -76,6 +86,16 @@ if(CM_USE_LLVM)
     else()
         # Dynamic linking
         target_link_libraries(cm_llvm_backend INTERFACE LLVM)
+        
+        # Set RPATH to find LLVM shared libraries at runtime
+        # This is crucial for finding libLLVM-*.so on Linux
+        get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
+        message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
+        
+        # Add RPATH settings
+        set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
+        set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
     endif()
 
     message(STATUS "LLVM backend enabled")

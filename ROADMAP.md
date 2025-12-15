@@ -1393,7 +1393,73 @@ void platform_specific() {
 
 ---
 
-## Version 0.14.0 - 非同期処理
+## Version 0.14.0 - WASMフロントエンド
+
+### 目標
+ブラウザ環境でのCmアプリケーション実行基盤
+
+### 実装項目
+| 機能 | パーサー | 型チェック | HIR/MIR | ビルドツール | ランタイム | テスト |
+|------|----------|-----------|---------|-------------|-----------|------|
+| JavaScript FFI | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| DOM操作API | ✅ | ⬜ | ⬜ | - | ⬜ | ⬜ |
+| WASMローダー生成 | - | - | - | ⬜ | ⬜ | ⬜ |
+| HTMLテンプレート生成 | - | - | - | ⬜ | - | ⬜ |
+| Web専用ランタイム | - | - | - | - | ⬜ | ⬜ |
+| イベントリスナー | ✅ | ⬜ | ⬜ | - | ⬜ | ⬜ |
+| 文字列変換（JS↔WASM） | - | - | - | - | ⬜ | ⬜ |
+
+### 構文例
+```cm
+// JavaScript FFI
+extern "js" {
+    void console_log(string message);
+    void alert(string message);
+}
+
+// DOM操作
+interface Document {
+    Element getElementById(string id);
+}
+
+interface Element {
+    void setText(string text);
+    void addEventListener(string event, void*(void*) callback);
+}
+
+int main() {
+    console_log("Hello from Cm!");
+    
+    Document doc = get_document();
+    Element btn = doc.getElementById("myButton");
+    btn.addEventListener("click", |event| {
+        alert("Button clicked!");
+    });
+    
+    return 0;
+}
+```
+
+### ビルドコマンド
+```bash
+# WASM + JavaScript + HTML を生成
+cm build --target=wasm-web app.cm -o dist/
+
+# 生成されるファイル
+# - dist/app.wasm
+# - dist/app.js (WASMローダー)
+# - dist/index.html
+```
+
+### 開発サーバー
+```bash
+cm serve --target=wasm-web
+# → http://localhost:3000 でアプリケーションを起動
+```
+
+---
+
+## Version 0.15.0 - 非同期処理
 
 ### 目標
 async/awaitとFuture型の実装
@@ -1406,10 +1472,13 @@ async/awaitとFuture型の実装
 | Future型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | ランタイム統合 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 並行処理 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Promise統合（WASM） | ⬜ | ⬜ | ⬜ | - | - | ⬜ | ⬜ |
 
 ---
 
-## Version 0.15.0 - ベアメタル・OSサポート
+---
+
+## Version 0.16.0 - ベアメタル・OSサポート
 
 ### 目標
 UEFI/ベアメタル環境でのOS開発サポート

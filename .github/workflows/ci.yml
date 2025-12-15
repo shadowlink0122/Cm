@@ -28,22 +28,19 @@ jobs:
             xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
 
   # ========================================
-  # Build - コンパイラビルド (全プラットフォーム)
+  # Build and Test - ビルドとテスト統合 (全プラットフォーム)
   # ========================================
-  build:
-    name: Build (${{ matrix.os }})
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
     needs: lint
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            llvm_version: "18"
+            llvm_version: "18"  # Ubuntu 24.04では18以降が利用可能
           - os: macos-latest
-            llvm_version: "18"
-          # Windows は LLVM インストールが複雑なため当面無効化
-          # - os: windows-latest
-          #   llvm_version: "18"
+            llvm_version: "14"  # macOSでは14を使用（ローカル環境と一致）
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -56,7 +53,7 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }}
+          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }} gdb
           echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
           echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
       
@@ -73,14 +70,18 @@ jobs:
       # Google Test インストール (Ubuntu)
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y libgtest-dev
+        run: |
+          sudo apt-get install -y libgtest-dev
+          # Install wasmtime
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
       
       # Google Test インストール (macOS)
       - name: Install Google Test (macOS)
         if: runner.os == 'macOS'
         run: |
           brew install googletest
-          brew install coreutils  # gtimeoutのため
+          brew install coreutils wasmtime  # gtimeout と wasmtime のため
       
       # Google Test インストール (Windows) - vcpkg経由
       - name: Install Google Test (Windows)
@@ -116,76 +117,9 @@ jobs:
         if: runner.os == 'Windows'
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $env:NUMBER_OF_PROCESSORS
       
-      # アーティファクト準備 (Unix)
-      - name: Prepare artifacts (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p artifacts
-          cp build/cm artifacts/ 2>/dev/null || cp cm artifacts/ || true
-          cp -r build/bin artifacts/ || true
-          cp -r build/lib artifacts/ || true
-      
-      # アーティファクト準備 (Windows)
-      - name: Prepare artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts
-          Copy-Item -Path "cm.exe" -Destination "artifacts/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/bin" -Destination "artifacts/" -Recurse -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/lib" -Destination "artifacts/" -Recurse -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/${{ env.BUILD_TYPE }}/*" -Destination "artifacts/bin/" -Recurse -ErrorAction SilentlyContinue
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: cm-${{ matrix.os }}
-          path: artifacts/
-          retention-days: 1
-
-  # ========================================
-  # Test - Unit Tests (C++ Google Test)
-  # ========================================
-  test-unit:
-    name: Unit Tests (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-          - os: macos-latest
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-${{ matrix.os }}
-          path: artifacts/
-      
-      # セットアップ (Unix)
-      - name: Setup artifacts (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          chmod +x artifacts/cm || true
-          chmod +x artifacts/bin/* || true
-          cp artifacts/cm . || true
-          mkdir -p build
-          cp -r artifacts/bin build/ || true
-          cp -r artifacts/lib build/ || true
-      
-      # セットアップ (Windows)
-      - name: Setup artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          if (Test-Path "artifacts/cm.exe") { Copy-Item "artifacts/cm.exe" "." }
-          New-Item -ItemType Directory -Force -Path "build/bin"
-          if (Test-Path "artifacts/bin") { Copy-Item -Path "artifacts/bin/*" -Destination "build/bin/" -Recurse -ErrorAction SilentlyContinue }
-          if (Test-Path "artifacts/lib") { Copy-Item -Path "artifacts/lib" -Destination "build/" -Recurse -ErrorAction SilentlyContinue }
-      
-      # テスト実行 (Unix)
+      # ========================================
+      # Unit Tests (C++ Google Test)
+      # ========================================
       - name: Run Unit tests (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -194,317 +128,58 @@ jobs:
           ./build/bin/mir_lowering_test --gtest_output=xml:test-results-mir.xml || true
           ./build/bin/mir_optimization_test --gtest_output=xml:test-results-opt.xml || true
       
-      # テスト実行 (Windows)
-      - name: Run Unit tests (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          if (Test-Path "build/bin/lexer_test.exe") { & "build/bin/lexer_test.exe" --gtest_output=xml:test-results-lexer.xml }
-          if (Test-Path "build/bin/hir_lowering_test.exe") { & "build/bin/hir_lowering_test.exe" --gtest_output=xml:test-results-hir.xml }
-          if (Test-Path "build/bin/mir_lowering_test.exe") { & "build/bin/mir_lowering_test.exe" --gtest_output=xml:test-results-mir.xml }
-          if (Test-Path "build/bin/mir_optimization_test.exe") { & "build/bin/mir_optimization_test.exe" --gtest_output=xml:test-results-opt.xml }
-
-  # ========================================
-  # Test - Interpreter (全プラットフォーム)
-  # ========================================
-  test-interpreter:
-    name: Interpreter Tests (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-          - os: macos-latest
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      # macOS用のcoreutils (gtimeout)
-      - name: Install coreutils (macOS)
+      # ========================================
+      # Integration Tests
+      # ========================================
+      - name: Install tools (macOS)
         if: runner.os == 'macOS'
-        run: brew install coreutils
+        run: brew install coreutils wasmtime
       
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-${{ matrix.os }}
-          path: artifacts/
-      
-      # セットアップ (Unix)
-      - name: Setup artifacts (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          chmod +x artifacts/cm || true
-          cp artifacts/cm . || true
-          mkdir -p build/lib
-          cp -r artifacts/lib/* build/lib/ 2>/dev/null || true
-      
-      # セットアップ (Windows)
-      - name: Setup artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          if (Test-Path "artifacts/cm.exe") { Copy-Item "artifacts/cm.exe" "." }
-          New-Item -ItemType Directory -Force -Path "build/lib"
-          if (Test-Path "artifacts/lib") { Copy-Item -Path "artifacts/lib/*" -Destination "build/lib/" -Recurse -ErrorAction SilentlyContinue }
-      
-      # テスト実行 (Unix)
-      - name: Run interpreter tests (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          # 各環境で別のバイナリを使用するようにキャッシュクリア
-          find tests -name '*.ast' -o -name '*.hir' -o -name '*.mir' | xargs rm -f
-          make tip
-      
-      # テスト実行 (Windows) - Git Bash使用
-      - name: Run interpreter tests (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: make tip
-
-  # ========================================
-  # Test - LLVM Backend (全プラットフォーム)
-  # ========================================
-  test-llvm:
-    name: LLVM Native Tests (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            llvm_version: "18"
-          - os: macos-latest
-            llvm_version: "18"
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      # macOS用のcoreutils (gtimeout)
-      - name: Install coreutils (macOS)
-        if: runner.os == 'macOS'
-        run: brew install coreutils
-      
-      # LLVM インストール (リンク用)
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y clang-${{ matrix.llvm_version }}
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-      
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }}
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-      
-      - name: Setup LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-${{ matrix.os }}
-          path: artifacts/
-      
-      # セットアップ (Unix)
-      - name: Setup artifacts (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          chmod +x artifacts/cm || true
-          cp artifacts/cm . || true
-          mkdir -p build/lib
-          cp -r artifacts/lib/* build/lib/ 2>/dev/null || true
-      
-      # セットアップ (Windows)
-      - name: Setup artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          if (Test-Path "artifacts/cm.exe") { Copy-Item "artifacts/cm.exe" "." }
-          New-Item -ItemType Directory -Force -Path "build/lib"
-          if (Test-Path "artifacts/lib") { Copy-Item -Path "artifacts/lib/*" -Destination "build/lib/" -Recurse -ErrorAction SilentlyContinue }
-      
-      # テスト実行 (Unix)
-      - name: Run LLVM Native tests (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          # 各環境で別のバイナリを使用するようにキャッシュクリア
-          find tests -name '*.ll' -o -name '*.o' -o -name '*.out' -o -name '*.wasm' | xargs rm -f
-          make tlp
-      
-      # テスト実行 (Windows) - Git Bash使用
-      - name: Run LLVM Native tests (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: make tlp
-
-  # ========================================
-  # Test - WASM Backend (全プラットフォーム)
-  # ========================================
-  test-wasm:
-    name: LLVM WASM Tests (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            llvm_version: "18"
-          - os: macos-latest
-            llvm_version: "18"
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      # macOS用のcoreutils (gtimeout)
-      - name: Install coreutils (macOS)
-        if: runner.os == 'macOS'
-        run: brew install coreutils
-      
-      # LLVM インストール (リンク用)
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y clang-${{ matrix.llvm_version }}
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-      
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }}
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-      
-      - name: Setup LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      
-      # Wasmtime インストール
-      - name: Install Wasmtime (Ubuntu)
+      - name: Install wasmtime (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           curl https://wasmtime.dev/install.sh -sSf | bash
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
       
-      - name: Install Wasmtime (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          curl https://wasmtime.dev/install.sh -sSf | bash
-          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
-      
-      - name: Install Wasmtime (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri https://github.com/bytecodealliance/wasmtime/releases/download/v15.0.0/wasmtime-v15.0.0-x86_64-windows.zip -OutFile wasmtime.zip
-          Expand-Archive -Path wasmtime.zip -DestinationPath .
-          Move-Item -Path "wasmtime-v15.0.0-x86_64-windows" -Destination "wasmtime"
-          echo "$PWD\wasmtime" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-${{ matrix.os }}
-          path: artifacts/
-      
-      # セットアップ (Unix)
-      - name: Setup artifacts (Unix)
+      - name: Run interpreter tests
         if: runner.os != 'Windows'
-        run: |
-          chmod +x artifacts/cm || true
-          cp artifacts/cm . || true
-          mkdir -p build/lib
-          cp -r artifacts/lib/* build/lib/ 2>/dev/null || true
+        run: make test-interpreter  # シリアル実行（メモリ効率優先）
       
-      # セットアップ (Windows)
-      - name: Setup artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          if (Test-Path "artifacts/cm.exe") { Copy-Item "artifacts/cm.exe" "." }
-          New-Item -ItemType Directory -Force -Path "build/lib"
-          if (Test-Path "artifacts/lib") { Copy-Item -Path "artifacts/lib/*" -Destination "build/lib/" -Recurse -ErrorAction SilentlyContinue }
-      
-      # Wasmtime動作確認
-      - name: Verify Wasmtime (Unix)
+      - name: Run LLVM native tests
         if: runner.os != 'Windows'
-        run: |
-          wasmtime --version
+        run: make test-llvm  # シリアル実行（メモリ効率優先）
       
-      - name: Verify Wasmtime (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          wasmtime --version
-      
-      # テスト実行 (Unix)
-      - name: Run LLVM WASM tests (Unix)
+      - name: Run LLVM WASM tests
         if: runner.os != 'Windows'
-        run: |
-          # 各環境で別のバイナリを使用するようにキャッシュクリア
-          find tests -name '*.ll' -o -name '*.wasm' | xargs rm -f
-          make tlwp
-      
-      # テスト実行 (Windows) - Git Bash使用
-      - name: Run LLVM WASM tests (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: make tlwp
+        run: make test-llvm-wasm  # シリアル実行（メモリ効率優先）
 
   # ========================================
   # CI Success - 全ジョブ成功確認
   # ========================================
   ci-success:
     name: CI Success
-    needs: [lint, build, test-unit, test-interpreter, test-llvm, test-wasm]
+    needs: [lint, build-and-test]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check all job results
         run: |
           echo "Lint: ${{ needs.lint.result }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "Unit Tests: ${{ needs.test-unit.result }}"
-          echo "Interpreter Tests: ${{ needs.test-interpreter.result }}"
-          echo "LLVM Native Tests: ${{ needs.test-llvm.result }}"
-          echo "LLVM WASM Tests: ${{ needs.test-wasm.result }}"
+          echo "Build & Test: ${{ needs.build-and-test.result }}"
           
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "❌ Lint failed"
             exit 1
           fi
-          if [ "${{ needs.build.result }}" != "success" ]; then
-            echo "❌ Build failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-unit.result }}" != "success" ]; then
-            echo "❌ Unit tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-interpreter.result }}" != "success" ]; then
-            echo "❌ Interpreter tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-llvm.result }}" != "success" ]; then
-            echo "❌ LLVM Native tests failed"
-            exit 1
-          fi
-          if [ "${{ needs.test-wasm.result }}" != "success" ]; then
-            echo "❌ LLVM WASM tests failed"
+          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
+            echo "❌ Build & Test failed"
             exit 1
           fi
           
           echo "✅ All CI checks passed!"
           echo ""
           echo "Test Matrix Coverage:"
-          echo "  - 3 Operating Systems: Ubuntu, macOS, Windows"
-          echo "  - 3 Backends: Interpreter, LLVM Native, LLVM WASM"
-          echo "  - Total: 9 test configurations executed successfully"
+          echo "  - 2 Operating Systems: Ubuntu (LLVM 14), macOS (LLVM 14)"
+          echo "  - 4 Test Suites: Unit Tests, Interpreter, LLVM Native, LLVM WASM"
+          echo "  - Total: Unified build-test pipeline executed successfully"
+
