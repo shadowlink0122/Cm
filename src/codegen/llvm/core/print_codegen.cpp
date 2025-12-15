@@ -197,7 +197,9 @@ void MIRToLLVM::generatePrintFormatCall(const mir::MirTerminator::CallData& call
     auto unescapeFunc = module->getOrInsertFunction(
         "cm_format_unescape_braces",
         llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false));
-    currentStr = builder->CreateCall(unescapeFunc, {currentStr});
+    // LLVM 15以降ではopaque pointerなのでキャスト不要
+
+    currentStr = builder->CreateCall(unescapeFunc, {formatStr});
 
     // 引数インデックス2以降が実際の値
     for (size_t i = 2; i < callData.args.size(); ++i) {
@@ -229,7 +231,9 @@ void MIRToLLVM::generateFormatStringCall(const mir::MirTerminator::CallData& cal
     auto unescapeFunc = module->getOrInsertFunction(
         "cm_format_unescape_braces",
         llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false));
-    currentStr = builder->CreateCall(unescapeFunc, {currentStr});
+    // LLVM 15以降ではopaque pointerなのでキャスト不要
+
+    currentStr = builder->CreateCall(unescapeFunc, {formatStr});
 
     // 引数インデックス2以降が実際の値
     for (size_t i = 2; i < callData.args.size(); ++i) {

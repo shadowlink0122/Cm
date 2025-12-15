@@ -41,8 +41,9 @@ jobs:
             llvm_version: "18"
           - os: macos-latest
             llvm_version: "18"
-          - os: windows-latest
-            llvm_version: "18"
+          # Windows は LLVM インストールが複雑なため当面無効化
+          # - os: windows-latest
+          #   llvm_version: "18"
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -69,14 +70,6 @@ jobs:
           echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
-      # LLVM インストール (Windows) - 既存のバージョンを使用
-      - name: Setup LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "LLVM_DIR=C:\Program Files\LLVM\lib\cmake\llvm" >> $env:GITHUB_ENV
-          clang --version
-      
       # Google Test インストール (Ubuntu)
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
@@ -85,7 +78,9 @@ jobs:
       # Google Test インストール (macOS)
       - name: Install Google Test (macOS)
         if: runner.os == 'macOS'
-        run: brew install googletest
+        run: |
+          brew install googletest
+          brew install coreutils  # gtimeoutのため
       
       # Google Test インストール (Windows) - vcpkg経由
       - name: Install Google Test (Windows)
@@ -126,7 +121,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
-          cp cm artifacts/ || true
+          cp build/cm artifacts/ 2>/dev/null || cp cm artifacts/ || true
           cp -r build/bin artifacts/ || true
           cp -r build/lib artifacts/ || true
       
@@ -159,7 +154,6 @@ jobs:
         include:
           - os: ubuntu-latest
           - os: macos-latest
-          - os: windows-latest
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -221,11 +215,15 @@ jobs:
         include:
           - os: ubuntu-latest
           - os: macos-latest
-          - os: windows-latest
     runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v4
+      
+      # macOS用のcoreutils (gtimeout)
+      - name: Install coreutils (macOS)
+        if: runner.os == 'macOS'
+        run: brew install coreutils
       
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -254,16 +252,15 @@ jobs:
       - name: Run interpreter tests (Unix)
         if: runner.os != 'Windows'
         run: |
-          chmod +x tests/unified_test_runner.sh
-          ./tests/unified_test_runner.sh -b interpreter -t 10
+          # 各環境で別のバイナリを使用するようにキャッシュクリア
+          find tests -name '*.ast' -o -name '*.hir' -o -name '*.mir' | xargs rm -f
+          make tip
       
       # テスト実行 (Windows) - Git Bash使用
       - name: Run interpreter tests (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: |
-          chmod +x tests/unified_test_runner.sh
-          ./tests/unified_test_runner.sh -b interpreter -t 15
+        run: make tip
 
   # ========================================
   # Test - LLVM Backend (全プラットフォーム)
@@ -279,12 +276,15 @@ jobs:
             llvm_version: "18"
           - os: macos-latest
             llvm_version: "18"
-          - os: windows-latest
-            llvm_version: "18"
     runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v4
+      
+      # macOS用のcoreutils (gtimeout)
+      - name: Install coreutils (macOS)
+        if: runner.os == 'macOS'
+        run: brew install coreutils
       
       # LLVM インストール (リンク用)
       - name: Install LLVM (Ubuntu)
@@ -334,16 +334,15 @@ jobs:
       - name: Run LLVM Native tests (Unix)
         if: runner.os != 'Windows'
         run: |
-          chmod +x tests/unified_test_runner.sh
-          ./tests/unified_test_runner.sh -b llvm -t 15
+          # 各環境で別のバイナリを使用するようにキャッシュクリア
+          find tests -name '*.ll' -o -name '*.o' -o -name '*.out' -o -name '*.wasm' | xargs rm -f
+          make tlp
       
       # テスト実行 (Windows) - Git Bash使用
       - name: Run LLVM Native tests (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: |
-          chmod +x tests/unified_test_runner.sh
-          ./tests/unified_test_runner.sh -b llvm -t 20
+        run: make tlp
 
   # ========================================
   # Test - WASM Backend (全プラットフォーム)
@@ -359,12 +358,15 @@ jobs:
             llvm_version: "18"
           - os: macos-latest
             llvm_version: "18"
-          - os: windows-latest
-            llvm_version: "18"
     runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v4
+      
+      # macOS用のcoreutils (gtimeout)
+      - name: Install coreutils (macOS)
+        if: runner.os == 'macOS'
+        run: brew install coreutils
       
       # LLVM インストール (リンク用)
       - name: Install LLVM (Ubuntu)
@@ -447,16 +449,15 @@ jobs:
       - name: Run LLVM WASM tests (Unix)
         if: runner.os != 'Windows'
         run: |
-          chmod +x tests/unified_test_runner.sh
-          ./tests/unified_test_runner.sh -b wasm -t 20
+          # 各環境で別のバイナリを使用するようにキャッシュクリア
+          find tests -name '*.ll' -o -name '*.wasm' | xargs rm -f
+          make tlwp
       
       # テスト実行 (Windows) - Git Bash使用
       - name: Run LLVM WASM tests (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: |
-          chmod +x tests/unified_test_runner.sh
-          ./tests/unified_test_runner.sh -b wasm -t 25
+        run: make tlwp
 
   # ========================================
   # CI Success - 全ジョブ成功確認

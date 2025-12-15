@@ -773,10 +773,14 @@ class MirLowering : public MirLoweringBase {
 
                         auto call_term = std::make_unique<MirTerminator>();
                         call_term->kind = MirTerminator::Call;
-                        call_term->data = MirTerminator::CallData{
-                            std::move(func_op), std::move(args), MirPlace(temp_result),
-                            negate_block, std::nullopt,
-                            "", "", false};  // 通常の関数呼び出し
+                        call_term->data = MirTerminator::CallData{std::move(func_op),
+                                                                  std::move(args),
+                                                                  MirPlace(temp_result),
+                                                                  negate_block,
+                                                                  std::nullopt,
+                                                                  "",
+                                                                  "",
+                                                                  false};  // 通常の関数呼び出し
                         block->terminator = std::move(call_term);
 
                         // 反転ブロック
@@ -798,10 +802,14 @@ class MirLowering : public MirLoweringBase {
 
                         auto call_term = std::make_unique<MirTerminator>();
                         call_term->kind = MirTerminator::Call;
-                        call_term->data = MirTerminator::CallData{
-                            std::move(func_op), std::move(args), MirPlace(temp_result),
-                            negate_block, std::nullopt,
-                            "", "", false};  // 通常の関数呼び出し
+                        call_term->data = MirTerminator::CallData{std::move(func_op),
+                                                                  std::move(args),
+                                                                  MirPlace(temp_result),
+                                                                  negate_block,
+                                                                  std::nullopt,
+                                                                  "",
+                                                                  "",
+                                                                  false};  // 通常の関数呼び出し
                         block->terminator = std::move(call_term);
 
                         auto* neg_block = func->get_block(negate_block);
@@ -818,10 +826,14 @@ class MirLowering : public MirLoweringBase {
 
                         auto call_term = std::make_unique<MirTerminator>();
                         call_term->kind = MirTerminator::Call;
-                        call_term->data =
-                            MirTerminator::CallData{std::move(func_op), std::move(args),
-                                                    result_place, cont_block, std::nullopt,
-                                                    "", "", false};  // 通常の関数呼び出し
+                        call_term->data = MirTerminator::CallData{std::move(func_op),
+                                                                  std::move(args),
+                                                                  result_place,
+                                                                  cont_block,
+                                                                  std::nullopt,
+                                                                  "",
+                                                                  "",
+                                                                  false};  // 通常の関数呼び出し
                         block->terminator = std::move(call_term);
                     }
 

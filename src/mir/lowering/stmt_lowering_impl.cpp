@@ -102,10 +102,14 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
 
             auto call_term = std::make_unique<MirTerminator>();
             call_term->kind = MirTerminator::Call;
-            call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
+            call_term->data = MirTerminator::CallData{std::move(func_operand),
+                                                      std::move(args),
                                                       std::nullopt,  // コンストラクタは戻り値なし
-                                                      success_block, std::nullopt,
-                                                      "", "", false};  // 通常の関数呼び出し
+                                                      success_block,
+                                                      std::nullopt,
+                                                      "",
+                                                      "",
+                                                      false};  // 通常の関数呼び出し
             ctx.set_terminator(std::move(call_term));
             ctx.switch_to_block(success_block);
         }
@@ -220,10 +224,14 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
         auto func_operand = MirOperand::function_ref(dtor_name);
         auto call_term = std::make_unique<MirTerminator>();
         call_term->kind = MirTerminator::Call;
-        call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
+        call_term->data = MirTerminator::CallData{std::move(func_operand),
+                                                  std::move(args),
                                                   std::nullopt,  // void戻り値
-                                                  success_block, std::nullopt,
-                                                  "", "", false};  // 通常の関数呼び出し
+                                                  success_block,
+                                                  std::nullopt,
+                                                  "",
+                                                  "",
+                                                  false};  // 通常の関数呼び出し
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(success_block);
     }

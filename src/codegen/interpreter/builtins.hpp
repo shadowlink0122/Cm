@@ -519,7 +519,8 @@ class BuiltinManager {
         };
 
         // 配列 findIndex
-        builtins_["__builtin_array_findIndex"] = [](std::vector<Value> /*args*/, const auto&) -> Value {
+        builtins_["__builtin_array_findIndex"] = [](std::vector<Value> /*args*/,
+                                                    const auto&) -> Value {
             // プレースホルダー実装
             return Value(int64_t{-1});
         };

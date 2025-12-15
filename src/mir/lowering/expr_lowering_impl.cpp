@@ -86,10 +86,14 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, LoweringContext&
             auto call_term = std::make_unique<MirTerminator>();
             call_term->kind = MirTerminator::Call;
             call_term->data = MirTerminator::CallData{
-                std::move(func_operand), std::move(args), MirPlace{result},  // 戻り値を格納
+                std::move(func_operand),
+                std::move(args),
+                MirPlace{result},  // 戻り値を格納
                 success_block,
                 std::nullopt,  // unwind無し
-                "", "", false  // 通常の関数呼び出し
+                "",
+                "",
+                false  // 通常の関数呼び出し
             };
             ctx.set_terminator(std::move(call_term));
             ctx.switch_to_block(success_block);
@@ -409,10 +413,14 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                     auto func_operand = MirOperand::function_ref(op_func_name);
                     auto call_term = std::make_unique<MirTerminator>();
                     call_term->kind = MirTerminator::Call;
-                    call_term->data =
-                        MirTerminator::CallData{std::move(func_operand), std::move(args),
-                                                MirPlace{result}, success_block, std::nullopt,
-                                                "", "", false};  // 通常の関数呼び出し
+                    call_term->data = MirTerminator::CallData{std::move(func_operand),
+                                                              std::move(args),
+                                                              MirPlace{result},
+                                                              success_block,
+                                                              std::nullopt,
+                                                              "",
+                                                              "",
+                                                              false};  // 通常の関数呼び出し
                     ctx.set_terminator(std::move(call_term));
                     ctx.switch_to_block(success_block);
 
@@ -474,10 +482,14 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                     auto func_operand = MirOperand::function_ref(op_func_name);
                     auto call_term = std::make_unique<MirTerminator>();
                     call_term->kind = MirTerminator::Call;
-                    call_term->data =
-                        MirTerminator::CallData{std::move(func_operand), std::move(args),
-                                                MirPlace{result}, success_block, std::nullopt,
-                                                "", "", false};  // 通常の関数呼び出し
+                    call_term->data = MirTerminator::CallData{std::move(func_operand),
+                                                              std::move(args),
+                                                              MirPlace{result},
+                                                              success_block,
+                                                              std::nullopt,
+                                                              "",
+                                                              "",
+                                                              false};  // 通常の関数呼び出し
                     ctx.set_terminator(std::move(call_term));
                     ctx.switch_to_block(success_block);
 
@@ -533,10 +545,14 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
 
             auto concat_call_term = std::make_unique<MirTerminator>();
             concat_call_term->kind = MirTerminator::Call;
-            concat_call_term->data =
-                MirTerminator::CallData{std::move(concat_func_operand), std::move(args),
-                                        MirPlace{result}, concat_success, std::nullopt,
-                                        "", "", false};  // 通常の関数呼び出し
+            concat_call_term->data = MirTerminator::CallData{std::move(concat_func_operand),
+                                                             std::move(args),
+                                                             MirPlace{result},
+                                                             concat_success,
+                                                             std::nullopt,
+                                                             "",
+                                                             "",
+                                                             false};  // 通常の関数呼び出し
             ctx.set_terminator(std::move(concat_call_term));
             ctx.switch_to_block(concat_success);
 
@@ -946,11 +962,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             auto call_term = std::make_unique<MirTerminator>();
             call_term->kind = MirTerminator::Call;
             call_term->data = MirTerminator::CallData{
-                std::move(func_operand), std::move(args),
+                std::move(func_operand),
+                std::move(args),
                 std::nullopt,  // 戻り値なし
                 success_block,
                 std::nullopt,  // unwind無し
-                "", "", false  // 通常の関数呼び出し
+                "",
+                "",
+                false  // 通常の関数呼び出し
             };
             ctx.set_terminator(std::move(call_term));
             ctx.switch_to_block(success_block);
@@ -1095,11 +1114,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                             auto call_term = std::make_unique<MirTerminator>();
                             call_term->kind = MirTerminator::Call;
                             call_term->data = MirTerminator::CallData{
-                                std::move(func_operand), std::move(args),
+                                std::move(func_operand),
+                                std::move(args),
                                 std::nullopt,  // printlnは戻り値なし
                                 success_block,
                                 std::nullopt,  // unwind無し
-                                std::string(), std::string(), false  // 通常の関数呼び出し
+                                std::string(),
+                                std::string(),
+                                false  // 通常の関数呼び出し
                             };
                             ctx.set_terminator(std::move(call_term));
                             ctx.switch_to_block(success_block);
@@ -1138,11 +1160,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         auto call_term = std::make_unique<MirTerminator>();
         call_term->kind = MirTerminator::Call;
         call_term->data = MirTerminator::CallData{
-            std::move(func_operand), std::move(args),
+            std::move(func_operand),
+            std::move(args),
             std::nullopt,  // printlnは戻り値なし
             success_block,
             std::nullopt,  // unwind無し
-            std::string(), std::string(), false  // 通常の関数呼び出し
+            std::string(),
+            std::string(),
+            false  // 通常の関数呼び出し
         };
         ctx.set_terminator(std::move(call_term));
 
@@ -1208,10 +1233,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     }
 
     MirTerminator::CallData call_data{
-        std::move(func_operand), std::move(args), MirPlace{result},  // 戻り値の格納先
+        std::move(func_operand),
+        std::move(args),
+        MirPlace{result},  // 戻り値の格納先
         success_block,
         std::nullopt,  // unwind無し
-        std::string(), std::string(), false  // 通常の関数呼び出し
+        std::string(),
+        std::string(),
+        false  // 通常の関数呼び出し
     };
 
     if (is_virtual) {
@@ -1409,10 +1438,14 @@ LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
 
     auto conv_call_term = std::make_unique<MirTerminator>();
     conv_call_term->kind = MirTerminator::Call;
-    conv_call_term->data =
-        MirTerminator::CallData{std::move(conv_func_operand), std::move(conv_args),
-                                MirPlace{str_result}, conv_success, std::nullopt,
-                                "", "", false};  // 通常の関数呼び出し
+    conv_call_term->data = MirTerminator::CallData{std::move(conv_func_operand),
+                                                   std::move(conv_args),
+                                                   MirPlace{str_result},
+                                                   conv_success,
+                                                   std::nullopt,
+                                                   "",
+                                                   "",
+                                                   false};  // 通常の関数呼び出し
     ctx.set_terminator(std::move(conv_call_term));
     ctx.switch_to_block(conv_success);
 

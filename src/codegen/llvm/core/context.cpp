@@ -50,6 +50,11 @@ LLVMContext::LLVMContext(const std::string& moduleName, const TargetConfig& conf
       targetConfig(config) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit, "Module: " + moduleName);
 
+#if LLVM_VERSION_MAJOR >= 15
+    // LLVM 15+でopaque pointerを有効化
+    context->setOpaquePointers(true);
+#endif
+
     // ターゲット初期化
     initializeTarget();
 
@@ -108,7 +113,7 @@ void LLVMContext::initializeTypes() {
     ptrTy = llvm::PointerType::getUnqual(ctx);
 #else
     // LLVM 14では型付きポインタを使用（i8*）
-    ptrTy = llvm::PointerType::get(ctx, 0);
+    ptrTy = llvm::PointerType::get(i8Ty, 0);
 #endif
 }
 
