@@ -332,6 +332,33 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         if (expectedType->isPointerTy() && actualType->isPointerTy()) {
                             args[i] = builder->CreateBitCast(args[i], expectedType);
                         }
+                        // 整数型のサイズが異なる場合、変換
+                        else if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
+                            unsigned expectedBits = expectedType->getIntegerBitWidth();
+                            unsigned actualBits = actualType->getIntegerBitWidth();
+                            if (expectedBits > actualBits) {
+                                // MIRの型情報から符号付きかどうかを判定
+                                bool isSigned = true;  // デフォルトは符号付き
+                                if (i < callData.args.size()) {
+                                    auto argType = getOperandType(*callData.args[i]);
+                                    if (argType) {
+                                        // Unsigned型かどうかをチェック
+                                        isSigned = argType->is_signed() || 
+                                                   (argType->kind != hir::TypeKind::UTiny &&
+                                                    argType->kind != hir::TypeKind::UShort &&
+                                                    argType->kind != hir::TypeKind::UInt &&
+                                                    argType->kind != hir::TypeKind::ULong);
+                                    }
+                                }
+                                if (isSigned) {
+                                    args[i] = builder->CreateSExt(args[i], expectedType, "sext");
+                                } else {
+                                    args[i] = builder->CreateZExt(args[i], expectedType, "zext");
+                                }
+                            } else if (expectedBits < actualBits) {
+                                args[i] = builder->CreateTrunc(args[i], expectedType, "trunc");
+                            }
+                        }
                     }
                 }
 

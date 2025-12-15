@@ -257,6 +257,182 @@ class BuiltinManager {
             }
             return Value(uint64_t{0});
         };
+
+        // 文字列の指定位置の文字を取得
+        builtins_["__builtin_string_charAt"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 2) return Value(char{0});
+            if (args[0].type() != typeid(std::string)) return Value(char{0});
+            const auto& str = std::any_cast<std::string>(args[0]);
+            int64_t index = 0;
+            if (args[1].type() == typeid(int64_t)) index = std::any_cast<int64_t>(args[1]);
+            else if (args[1].type() == typeid(uint64_t)) index = static_cast<int64_t>(std::any_cast<uint64_t>(args[1]));
+            if (index < 0 || static_cast<size_t>(index) >= str.size()) return Value(char{0});
+            return Value(str[index]);
+        };
+
+        // 部分文字列を取得
+        builtins_["__builtin_string_substring"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.empty()) return Value(std::string(""));
+            if (args[0].type() != typeid(std::string)) return Value(std::string(""));
+            const auto& str = std::any_cast<std::string>(args[0]);
+            int64_t start = 0, end = static_cast<int64_t>(str.size());
+            if (args.size() > 1) {
+                if (args[1].type() == typeid(int64_t)) start = std::any_cast<int64_t>(args[1]);
+                else if (args[1].type() == typeid(uint64_t)) start = static_cast<int64_t>(std::any_cast<uint64_t>(args[1]));
+            }
+            if (args.size() > 2) {
+                if (args[2].type() == typeid(int64_t)) end = std::any_cast<int64_t>(args[2]);
+                else if (args[2].type() == typeid(uint64_t)) end = static_cast<int64_t>(std::any_cast<uint64_t>(args[2]));
+            }
+            // Python風: 負の値は末尾からの位置（-1は最後）
+            if (start < 0) start = std::max(int64_t{0}, static_cast<int64_t>(str.size()) + start);
+            if (end < 0) end = static_cast<int64_t>(str.size()) + end + 1;  // -1 => len
+            if (end > static_cast<int64_t>(str.size())) end = static_cast<int64_t>(str.size());
+            if (start >= end) return Value(std::string(""));
+            return Value(str.substr(start, end - start));
+        };
+
+        // 部分文字列の位置を検索
+        builtins_["__builtin_string_indexOf"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 2) return Value(int64_t{-1});
+            if (args[0].type() != typeid(std::string) || args[1].type() != typeid(std::string)) 
+                return Value(int64_t{-1});
+            const auto& str = std::any_cast<std::string>(args[0]);
+            const auto& substr = std::any_cast<std::string>(args[1]);
+            auto pos = str.find(substr);
+            if (pos == std::string::npos) return Value(int64_t{-1});
+            return Value(static_cast<int64_t>(pos));
+        };
+
+        // 大文字に変換
+        builtins_["__builtin_string_toUpperCase"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.empty() || args[0].type() != typeid(std::string)) return Value(std::string(""));
+            std::string str = std::any_cast<std::string>(args[0]);
+            for (auto& c : str) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            return Value(str);
+        };
+
+        // 小文字に変換
+        builtins_["__builtin_string_toLowerCase"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.empty() || args[0].type() != typeid(std::string)) return Value(std::string(""));
+            std::string str = std::any_cast<std::string>(args[0]);
+            for (auto& c : str) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return Value(str);
+        };
+
+        // 空白を除去
+        builtins_["__builtin_string_trim"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.empty() || args[0].type() != typeid(std::string)) return Value(std::string(""));
+            std::string str = std::any_cast<std::string>(args[0]);
+            size_t start = str.find_first_not_of(" \t\n\r\f\v");
+            if (start == std::string::npos) return Value(std::string(""));
+            size_t end = str.find_last_not_of(" \t\n\r\f\v");
+            return Value(str.substr(start, end - start + 1));
+        };
+
+        // 先頭一致判定
+        builtins_["__builtin_string_startsWith"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 2) return Value(false);
+            if (args[0].type() != typeid(std::string) || args[1].type() != typeid(std::string)) 
+                return Value(false);
+            const auto& str = std::any_cast<std::string>(args[0]);
+            const auto& prefix = std::any_cast<std::string>(args[1]);
+            return Value(str.rfind(prefix, 0) == 0);
+        };
+
+        // 末尾一致判定
+        builtins_["__builtin_string_endsWith"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 2) return Value(false);
+            if (args[0].type() != typeid(std::string) || args[1].type() != typeid(std::string)) 
+                return Value(false);
+            const auto& str = std::any_cast<std::string>(args[0]);
+            const auto& suffix = std::any_cast<std::string>(args[1]);
+            if (suffix.size() > str.size()) return Value(false);
+            return Value(str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0);
+        };
+
+        // 部分文字列を含むか判定
+        builtins_["__builtin_string_includes"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 2) return Value(false);
+            if (args[0].type() != typeid(std::string) || args[1].type() != typeid(std::string)) 
+                return Value(false);
+            const auto& str = std::any_cast<std::string>(args[0]);
+            const auto& substr = std::any_cast<std::string>(args[1]);
+            return Value(str.find(substr) != std::string::npos);
+        };
+
+        // 文字列を繰り返す
+        builtins_["__builtin_string_repeat"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 2) return Value(std::string(""));
+            if (args[0].type() != typeid(std::string)) return Value(std::string(""));
+            const auto& str = std::any_cast<std::string>(args[0]);
+            int64_t count = 0;
+            if (args[1].type() == typeid(int64_t)) count = std::any_cast<int64_t>(args[1]);
+            else if (args[1].type() == typeid(uint64_t)) count = static_cast<int64_t>(std::any_cast<uint64_t>(args[1]));
+            if (count <= 0) return Value(std::string(""));
+            std::string result;
+            result.reserve(str.size() * count);
+            for (int64_t i = 0; i < count; ++i) result += str;
+            return Value(result);
+        };
+
+        // 文字列を置換
+        builtins_["__builtin_string_replace"] = [](std::vector<Value> args, const auto&) -> Value {
+            if (args.size() < 3) return args.empty() ? Value(std::string("")) : args[0];
+            if (args[0].type() != typeid(std::string) || 
+                args[1].type() != typeid(std::string) || 
+                args[2].type() != typeid(std::string)) {
+                return args[0];
+            }
+            std::string str = std::any_cast<std::string>(args[0]);
+            const auto& from = std::any_cast<std::string>(args[1]);
+            const auto& to = std::any_cast<std::string>(args[2]);
+            size_t pos = str.find(from);
+            if (pos != std::string::npos) {
+                str.replace(pos, from.length(), to);
+            }
+            return Value(str);
+        };
+
+        // 配列スライス
+        builtins_["__builtin_array_slice"] = [](std::vector<Value> args, const auto&) -> Value {
+            // args: [array, elem_size, arr_len, start, end]
+            if (args.size() < 5) return Value(std::vector<Value>{});
+            
+            // 配列を取得
+            if (args[0].type() != typeid(std::vector<Value>)) {
+                return Value(std::vector<Value>{});
+            }
+            const auto& arr = std::any_cast<std::vector<Value>>(args[0]);
+            
+            int64_t arr_len = 0;
+            if (args[2].type() == typeid(int64_t)) arr_len = std::any_cast<int64_t>(args[2]);
+            else if (args[2].type() == typeid(uint64_t)) arr_len = static_cast<int64_t>(std::any_cast<uint64_t>(args[2]));
+            
+            int64_t start = 0;
+            if (args[3].type() == typeid(int64_t)) start = std::any_cast<int64_t>(args[3]);
+            else if (args[3].type() == typeid(uint64_t)) start = static_cast<int64_t>(std::any_cast<uint64_t>(args[3]));
+            
+            int64_t end = arr_len;
+            if (args[4].type() == typeid(int64_t)) end = std::any_cast<int64_t>(args[4]);
+            else if (args[4].type() == typeid(uint64_t)) end = static_cast<int64_t>(std::any_cast<uint64_t>(args[4]));
+            
+            // Python風: 負のインデックス処理
+            if (start < 0) start = std::max(int64_t{0}, arr_len + start);
+            if (end < 0) end = arr_len + end + 1;
+            if (end > arr_len) end = arr_len;
+            if (start >= end || start >= arr_len) {
+                return Value(std::vector<Value>{});
+            }
+            
+            std::vector<Value> result;
+            for (int64_t i = start; i < end; i++) {
+                if (i < static_cast<int64_t>(arr.size())) {
+                    result.push_back(arr[i]);
+                }
+            }
+            return Value(result);
+        };
     }
 
     /// フォーマット文字列を処理
@@ -404,6 +580,32 @@ class BuiltinManager {
                 return buf;
             }
             return std::to_string(val);
+        } else if (arg.type() == typeid(uint64_t)) {
+            uint64_t val = std::any_cast<uint64_t>(arg);
+            if (type_spec == "x") {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%llx", (unsigned long long)val);
+                return buf;
+            } else if (type_spec == "X") {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%llX", (unsigned long long)val);
+                return buf;
+            } else if (type_spec == "b") {
+                if (val == 0)
+                    return "0";
+                std::string binary;
+                uint64_t temp = val;
+                while (temp > 0) {
+                    binary = (char)('0' + (temp & 1)) + binary;
+                    temp >>= 1;
+                }
+                return binary;
+            } else if (type_spec == "o") {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%llo", (unsigned long long)val);
+                return buf;
+            }
+            return std::to_string(val);
         } else if (arg.type() == typeid(double)) {
             double val = std::any_cast<double>(arg);
             char buf[64];
@@ -461,6 +663,8 @@ class BuiltinManager {
             return std::any_cast<std::string>(val);
         } else if (val.type() == typeid(int64_t)) {
             return std::to_string(std::any_cast<int64_t>(val));
+        } else if (val.type() == typeid(uint64_t)) {
+            return std::to_string(std::any_cast<uint64_t>(val));
         } else if (val.type() == typeid(double)) {
             return std::to_string(std::any_cast<double>(val));
         } else if (val.type() == typeid(char)) {

@@ -15,6 +15,208 @@ size_t __builtin_string_len(const char* str) {
     return str ? strlen(str) : 0;
 }
 
+char __builtin_string_charAt(const char* str, int64_t index) {
+    if (!str || index < 0) return '\0';
+    size_t len = strlen(str);
+    if ((size_t)index >= len) return '\0';
+    return str[index];
+}
+
+char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
+    if (!str) return NULL;
+    size_t len = strlen(str);
+    // Python風: 負の値は末尾からの位置
+    if (start < 0) {
+        start = (int64_t)len + start;
+        if (start < 0) start = 0;
+    }
+    if (end < 0) {
+        end = (int64_t)len + end + 1;  // -1 => len
+    }
+    if ((size_t)end > len) end = (int64_t)len;
+    if (start >= end) {
+        char* empty = (char*)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    size_t result_len = (size_t)(end - start);
+    char* result = (char*)malloc(result_len + 1);
+    if (!result) return NULL;
+    memcpy(result, str + start, result_len);
+    result[result_len] = '\0';
+    return result;
+}
+
+int64_t __builtin_string_indexOf(const char* str, const char* substr) {
+    if (!str || !substr) return -1;
+    const char* pos = strstr(str, substr);
+    if (!pos) return -1;
+    return (int64_t)(pos - str);
+}
+
+char* __builtin_string_toUpperCase(const char* str) {
+    if (!str) return NULL;
+    size_t len = strlen(str);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return NULL;
+    for (size_t i = 0; i < len; i++) {
+        char c = str[i];
+        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
+        result[i] = c;
+    }
+    result[len] = '\0';
+    return result;
+}
+
+char* __builtin_string_toLowerCase(const char* str) {
+    if (!str) return NULL;
+    size_t len = strlen(str);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return NULL;
+    for (size_t i = 0; i < len; i++) {
+        char c = str[i];
+        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
+        result[i] = c;
+    }
+    result[len] = '\0';
+    return result;
+}
+
+char* __builtin_string_trim(const char* str) {
+    if (!str) return NULL;
+    size_t len = strlen(str);
+    size_t start = 0, end = len;
+    while (start < len && (str[start] == ' ' || str[start] == '\t' || 
+           str[start] == '\n' || str[start] == '\r')) start++;
+    while (end > start && (str[end-1] == ' ' || str[end-1] == '\t' || 
+           str[end-1] == '\n' || str[end-1] == '\r')) end--;
+    size_t result_len = end - start;
+    char* result = (char*)malloc(result_len + 1);
+    if (!result) return NULL;
+    memcpy(result, str + start, result_len);
+    result[result_len] = '\0';
+    return result;
+}
+
+bool __builtin_string_startsWith(const char* str, const char* prefix) {
+    if (!str || !prefix) return false;
+    size_t str_len = strlen(str);
+    size_t prefix_len = strlen(prefix);
+    if (prefix_len > str_len) return false;
+    return strncmp(str, prefix, prefix_len) == 0;
+}
+
+bool __builtin_string_endsWith(const char* str, const char* suffix) {
+    if (!str || !suffix) return false;
+    size_t str_len = strlen(str);
+    size_t suffix_len = strlen(suffix);
+    if (suffix_len > str_len) return false;
+    return strcmp(str + str_len - suffix_len, suffix) == 0;
+}
+
+bool __builtin_string_includes(const char* str, const char* substr) {
+    if (!str || !substr) return false;
+    return strstr(str, substr) != NULL;
+}
+
+char* __builtin_string_repeat(const char* str, int64_t count) {
+    if (!str || count <= 0) {
+        char* empty = (char*)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    size_t len = strlen(str);
+    size_t total_len = len * (size_t)count;
+    char* result = (char*)malloc(total_len + 1);
+    if (!result) return NULL;
+    for (int64_t i = 0; i < count; i++) {
+        memcpy(result + (i * len), str, len);
+    }
+    result[total_len] = '\0';
+    return result;
+}
+
+char* __builtin_string_replace(const char* str, const char* from, const char* to) {
+    if (!str) return NULL;
+    if (!from || !to) {
+        char* copy = (char*)malloc(strlen(str) + 1);
+        if (copy) strcpy(copy, str);
+        return copy;
+    }
+    const char* pos = strstr(str, from);
+    if (!pos) {
+        char* copy = (char*)malloc(strlen(str) + 1);
+        if (copy) strcpy(copy, str);
+        return copy;
+    }
+    size_t str_len = strlen(str);
+    size_t from_len = strlen(from);
+    size_t to_len = strlen(to);
+    size_t result_len = str_len - from_len + to_len;
+    char* result = (char*)malloc(result_len + 1);
+    if (!result) return NULL;
+    size_t prefix_len = (size_t)(pos - str);
+    memcpy(result, str, prefix_len);
+    memcpy(result + prefix_len, to, to_len);
+    strcpy(result + prefix_len + to_len, pos + from_len);
+    return result;
+}
+
+// ============================================================
+// Array Slice Functions
+// ============================================================
+// 配列スライス: 新しい配列を作成して要素をコピー
+// arr: ソース配列へのポインタ
+// elem_size: 各要素のバイトサイズ
+// arr_len: ソース配列の長さ
+// start: 開始インデックス
+// end: 終了インデックス（-1は最後まで）
+// out_len: 出力配列の長さを格納するポインタ
+void* __builtin_array_slice(void* arr, int64_t elem_size, int64_t arr_len, 
+                            int64_t start, int64_t end, int64_t* out_len) {
+    if (!arr || elem_size <= 0 || arr_len <= 0) {
+        if (out_len) *out_len = 0;
+        return NULL;
+    }
+    
+    // Python風: 負のインデックス処理
+    if (start < 0) {
+        start = arr_len + start;
+        if (start < 0) start = 0;
+    }
+    if (end < 0) {
+        end = arr_len + end + 1;
+    }
+    if (end > arr_len) end = arr_len;
+    if (start >= end || start >= arr_len) {
+        if (out_len) *out_len = 0;
+        return NULL;
+    }
+    
+    int64_t slice_len = end - start;
+    void* result = malloc((size_t)(slice_len * elem_size));
+    if (!result) {
+        if (out_len) *out_len = 0;
+        return NULL;
+    }
+    
+    memcpy(result, (char*)arr + (start * elem_size), (size_t)(slice_len * elem_size));
+    if (out_len) *out_len = slice_len;
+    return result;
+}
+
+// 整数配列スライス（便利関数）
+int64_t* __builtin_array_slice_int(int64_t* arr, int64_t arr_len, 
+                                   int64_t start, int64_t end, int64_t* out_len) {
+    return (int64_t*)__builtin_array_slice(arr, sizeof(int64_t), arr_len, start, end, out_len);
+}
+
+// i32配列スライス
+int32_t* __builtin_array_slice_i32(int32_t* arr, int64_t arr_len,
+                                   int64_t start, int64_t end, int64_t* out_len) {
+    return (int32_t*)__builtin_array_slice(arr, sizeof(int32_t), arr_len, start, end, out_len);
+}
+
 // ============================================================
 // Escape Processing
 // ============================================================

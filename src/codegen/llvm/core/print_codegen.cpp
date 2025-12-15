@@ -52,10 +52,17 @@ llvm::Value* MIRToLLVM::generateValueToString(llvm::Value* value, const hir::Typ
         // 整数型
         auto intVal = value;
         if (intType->getBitWidth() != 32) {
-            if (isUnsigned) {
-                intVal = builder->CreateZExt(value, ctx.getI32Type());
+            unsigned srcBits = intType->getBitWidth();
+            if (srcBits < 32) {
+                // 小さい型から32ビットへの拡張
+                if (isUnsigned) {
+                    intVal = builder->CreateZExt(value, ctx.getI32Type());
+                } else {
+                    intVal = builder->CreateSExt(value, ctx.getI32Type());
+                }
             } else {
-                intVal = builder->CreateSExt(value, ctx.getI32Type());
+                // 大きい型から32ビットへの切り捨て
+                intVal = builder->CreateTrunc(value, ctx.getI32Type());
             }
         }
 
@@ -140,10 +147,15 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
         // 整数型
         auto intVal = value;
         if (intType->getBitWidth() != 32) {
-            if (isUnsigned) {
-                intVal = builder->CreateZExt(value, ctx.getI32Type());
+            unsigned srcBits = intType->getBitWidth();
+            if (srcBits < 32) {
+                if (isUnsigned) {
+                    intVal = builder->CreateZExt(value, ctx.getI32Type());
+                } else {
+                    intVal = builder->CreateSExt(value, ctx.getI32Type());
+                }
             } else {
-                intVal = builder->CreateSExt(value, ctx.getI32Type());
+                intVal = builder->CreateTrunc(value, ctx.getI32Type());
             }
         }
 

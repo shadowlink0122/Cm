@@ -371,16 +371,54 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
-        // 配列アクセス
+        // 配列アクセスまたはスライス
         if (consume_if(TokenKind::LBracket)) {
-            debug::par::log(debug::par::Id::ArrayAccess, "Detected array access",
+            debug::par::log(debug::par::Id::ArrayAccess, "Detected array access or slice",
                             debug::Level::Debug);
-            auto index = parse_expr();
+            
+            // スライス構文: arr[start:end:step]
+            // 空の start, end, step を許可: arr[:], arr[::], arr[1:], arr[:5], arr[1:5:2]
+            ast::ExprPtr start_expr = nullptr;
+            ast::ExprPtr end_expr = nullptr;
+            ast::ExprPtr step_expr = nullptr;
+            bool is_slice = false;
+            
+            // 開始インデックスをパース（:でなければ）
+            if (!check(TokenKind::Colon)) {
+                start_expr = parse_expr();
+            }
+            
+            // コロンがあればスライス
+            if (consume_if(TokenKind::Colon)) {
+                is_slice = true;
+                
+                // 終了インデックス（:や]でなければ）
+                if (!check(TokenKind::Colon) && !check(TokenKind::RBracket)) {
+                    end_expr = parse_expr();
+                }
+                
+                // 2つ目のコロンがあればステップ
+                if (consume_if(TokenKind::Colon)) {
+                    if (!check(TokenKind::RBracket)) {
+                        step_expr = parse_expr();
+                    }
+                }
+            }
+            
             expect(TokenKind::RBracket);
-            debug::par::log(debug::par::Id::IndexCreate, "Creating array index expression",
-                            debug::Level::Debug);
-            auto idx_expr = std::make_unique<ast::IndexExpr>(std::move(expr), std::move(index));
-            expr = std::make_unique<ast::Expr>(std::move(idx_expr));
+            
+            if (is_slice) {
+                debug::par::log(debug::par::Id::IndexCreate, "Creating slice expression",
+                                debug::Level::Debug);
+                auto slice_expr = std::make_unique<ast::SliceExpr>(
+                    std::move(expr), std::move(start_expr), std::move(end_expr), std::move(step_expr));
+                expr = std::make_unique<ast::Expr>(std::move(slice_expr));
+            } else {
+                debug::par::log(debug::par::Id::IndexCreate, "Creating array index expression",
+                                debug::Level::Debug);
+                auto idx_expr = std::make_unique<ast::IndexExpr>(std::move(expr), std::move(start_expr));
+                expr = std::make_unique<ast::Expr>(std::move(idx_expr));
+            }
             continue;
         }
 

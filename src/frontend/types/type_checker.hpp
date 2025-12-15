@@ -709,6 +709,8 @@ class TypeChecker {
             inferred_type = infer_ternary(*ternary);
         } else if (auto* idx = expr.as<ast::IndexExpr>()) {
             inferred_type = infer_index(*idx);
+        } else if (auto* slice = expr.as<ast::SliceExpr>()) {
+            inferred_type = infer_slice(*slice);
         } else if (auto* match_expr = expr.as<ast::MatchExpr>()) {
             inferred_type = infer_match(*match_expr);
         } else {
@@ -1018,6 +1020,84 @@ class TypeChecker {
                         "String builtin: " + type_name + "." + member.member + "() : uint",
                         debug::Level::Debug);
                     return ast::make_uint();
+                }
+                if (member.member == "charAt" || member.member == "at") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "String " + member.member + "() takes 1 argument");
+                    } else {
+                        auto arg_type = infer_type(*member.args[0]);
+                        if (!arg_type->is_integer()) {
+                            error(Span{}, "String " + member.member + "() index must be integer");
+                        }
+                    }
+                    return ast::make_char();
+                }
+                if (member.member == "substring" || member.member == "slice") {
+                    if (member.args.size() < 1 || member.args.size() > 2) {
+                        error(Span{}, "String " + member.member + "() takes 1-2 arguments");
+                    } else {
+                        for (auto& arg : member.args) {
+                            auto arg_type = infer_type(*arg);
+                            if (!arg_type->is_integer()) {
+                                error(Span{}, "String " + member.member + "() arguments must be integers");
+                            }
+                        }
+                    }
+                    return ast::make_string();
+                }
+                if (member.member == "indexOf") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "String indexOf() takes 1 argument");
+                    } else {
+                        auto arg_type = infer_type(*member.args[0]);
+                        if (arg_type->kind != ast::TypeKind::String) {
+                            error(Span{}, "String indexOf() argument must be string");
+                        }
+                    }
+                    return ast::make_int();
+                }
+                if (member.member == "toUpperCase" || member.member == "toLowerCase" || 
+                    member.member == "trim") {
+                    if (!member.args.empty()) {
+                        error(Span{}, "String " + member.member + "() takes no arguments");
+                    }
+                    return ast::make_string();
+                }
+                if (member.member == "startsWith" || member.member == "endsWith" || 
+                    member.member == "includes" || member.member == "contains") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "String " + member.member + "() takes 1 argument");
+                    } else {
+                        auto arg_type = infer_type(*member.args[0]);
+                        if (arg_type->kind != ast::TypeKind::String) {
+                            error(Span{}, "String " + member.member + "() argument must be string");
+                        }
+                    }
+                    return ast::make_bool();
+                }
+                if (member.member == "repeat") {
+                    if (member.args.size() != 1) {
+                        error(Span{}, "String repeat() takes 1 argument");
+                    } else {
+                        auto arg_type = infer_type(*member.args[0]);
+                        if (!arg_type->is_integer()) {
+                            error(Span{}, "String repeat() count must be integer");
+                        }
+                    }
+                    return ast::make_string();
+                }
+                if (member.member == "replace") {
+                    if (member.args.size() != 2) {
+                        error(Span{}, "String replace() takes 2 arguments");
+                    } else {
+                        for (auto& arg : member.args) {
+                            auto arg_type = infer_type(*arg);
+                            if (arg_type->kind != ast::TypeKind::String) {
+                                error(Span{}, "String replace() arguments must be strings");
+                            }
+                        }
+                    }
+                    return ast::make_string();
                 }
             }
 
@@ -1441,7 +1521,56 @@ class TypeChecker {
             return obj_type->element_type;
         }
 
+        // 文字列型の場合、charを返す
+        if (obj_type->kind == ast::TypeKind::String) {
+            return ast::make_char();
+        }
+
         error(Span{}, "Index access on non-array type");
+        return ast::make_error();
+    }
+
+    // スライス式: arr[start:end:step]
+    ast::TypePtr infer_slice(ast::SliceExpr& slice) {
+        // オブジェクトの型を推論
+        auto obj_type = infer_type(*slice.object);
+        
+        // インデックスの型をチェック（整数であること）
+        if (slice.start) {
+            auto start_type = infer_type(*slice.start);
+            if (!start_type || !start_type->is_integer()) {
+                error(Span{}, "Slice start index must be an integer type");
+            }
+        }
+        if (slice.end) {
+            auto end_type = infer_type(*slice.end);
+            if (!end_type || !end_type->is_integer()) {
+                error(Span{}, "Slice end index must be an integer type");
+            }
+        }
+        if (slice.step) {
+            auto step_type = infer_type(*slice.step);
+            if (!step_type || !step_type->is_integer()) {
+                error(Span{}, "Slice step must be an integer type");
+            }
+        }
+        
+        if (!obj_type) {
+            return ast::make_error();
+        }
+        
+        // 配列型の場合、動的配列型を返す（スライスは新しい配列を作成）
+        if (obj_type->kind == ast::TypeKind::Array) {
+            // スライスの結果は動的配列型
+            return ast::make_array(obj_type->element_type, std::nullopt);
+        }
+        
+        // 文字列型の場合、文字列を返す
+        if (obj_type->kind == ast::TypeKind::String) {
+            return ast::make_string();
+        }
+        
+        error(Span{}, "Slice access on non-array/string type");
         return ast::make_error();
     }
 

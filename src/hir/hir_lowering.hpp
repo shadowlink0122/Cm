@@ -788,6 +788,8 @@ class HirLowering {
             return lower_call(*call, type);
         } else if (auto* idx = expr.as<ast::IndexExpr>()) {
             return lower_index(*idx, type);
+        } else if (auto* slice = expr.as<ast::SliceExpr>()) {
+            return lower_slice(*slice, type);
         } else if (auto* mem = expr.as<ast::MemberExpr>()) {
             return lower_member(*mem, type);
         } else if (auto* tern = expr.as<ast::TernaryExpr>()) {
@@ -1179,13 +1181,156 @@ class HirLowering {
     // 配列アクセス
     HirExprPtr lower_index(ast::IndexExpr& idx, TypePtr type) {
         debug::hir::log(debug::hir::Id::IndexLower, "", debug::Level::Debug);
+        
+        // オブジェクトの型を確認
+        auto obj_hir = lower_expr(*idx.object);
+        TypePtr obj_type = obj_hir->type;
+        
+        // 文字列インデックスの場合: __builtin_string_charAt に変換
+        if (obj_type && obj_type->kind == ast::TypeKind::String) {
+            debug::hir::log(debug::hir::Id::IndexLower, "String index access", debug::Level::Debug);
+            auto hir = std::make_unique<HirCall>();
+            hir->func_name = "__builtin_string_charAt";
+            hir->args.push_back(std::move(obj_hir));
+            hir->args.push_back(lower_expr(*idx.index));
+            return std::make_unique<HirExpr>(std::move(hir), ast::make_char());
+        }
+        
+        // 通常の配列/ポインタインデックス
         auto hir = std::make_unique<HirIndex>();
-
         debug::hir::log(debug::hir::Id::IndexBase, "Evaluating base", debug::Level::Trace);
-        hir->object = lower_expr(*idx.object);
+        hir->object = std::move(obj_hir);
         debug::hir::log(debug::hir::Id::IndexValue, "Evaluating index", debug::Level::Trace);
         hir->index = lower_expr(*idx.index);
         return std::make_unique<HirExpr>(std::move(hir), type);
+    }
+
+    // スライス式: arr[start:end:step]
+    // 文字列スライスの場合: __builtin_string_substring に変換
+    // 配列スライスの場合: __builtin_array_slice に変換
+    HirExprPtr lower_slice(ast::SliceExpr& slice, TypePtr type) {
+        debug::hir::log(debug::hir::Id::IndexLower, "Slice expression", debug::Level::Debug);
+        
+        auto obj_hir = lower_expr(*slice.object);
+        TypePtr obj_type = obj_hir->type;
+        
+        // 文字列スライス
+        if (obj_type && obj_type->kind == ast::TypeKind::String) {
+            auto hir = std::make_unique<HirCall>();
+            hir->func_name = "__builtin_string_substring";
+            hir->args.push_back(std::move(obj_hir));
+            
+            // start (デフォルト: 0)
+            if (slice.start) {
+                hir->args.push_back(lower_expr(*slice.start));
+            } else {
+                auto zero = std::make_unique<HirLiteral>();
+                zero->value = int64_t{0};
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(zero), ast::make_int()));
+            }
+            
+            // end (デフォルト: -1 = 最後まで)
+            if (slice.end) {
+                hir->args.push_back(lower_expr(*slice.end));
+            } else {
+                auto neg_one = std::make_unique<HirLiteral>();
+                neg_one->value = int64_t{-1};
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(neg_one), ast::make_int()));
+            }
+            
+            // step は文字列スライスでは現時点では無視
+            if (slice.step) {
+                debug::hir::log(debug::hir::Id::Warning, "String slice step not yet supported",
+                                debug::Level::Warn);
+            }
+            
+            return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+        }
+        
+        // 配列スライス
+        if (obj_type && obj_type->kind == ast::TypeKind::Array) {
+            debug::hir::log(debug::hir::Id::IndexLower, "Array slice", debug::Level::Debug);
+            auto hir = std::make_unique<HirCall>();
+            hir->func_name = "__builtin_array_slice";
+            
+            // 配列へのポインタ
+            hir->args.push_back(std::move(obj_hir));
+            
+            // 要素サイズ（型に応じて計算）
+            int64_t elem_size = 8;  // デフォルト: 64ビット
+            if (obj_type->element_type) {
+                switch (obj_type->element_type->kind) {
+                    case ast::TypeKind::Tiny:
+                    case ast::TypeKind::UTiny:
+                    case ast::TypeKind::Char:
+                    case ast::TypeKind::Bool:
+                        elem_size = 1;
+                        break;
+                    case ast::TypeKind::Short:
+                    case ast::TypeKind::UShort:
+                        elem_size = 2;
+                        break;
+                    case ast::TypeKind::Int:
+                    case ast::TypeKind::UInt:
+                    case ast::TypeKind::Float:
+                        elem_size = 4;
+                        break;
+                    case ast::TypeKind::Long:
+                    case ast::TypeKind::ULong:
+                    case ast::TypeKind::Double:
+                    case ast::TypeKind::Pointer:
+                        elem_size = 8;
+                        break;
+                    default:
+                        elem_size = 8;
+                        break;
+                }
+            }
+            auto elem_size_lit = std::make_unique<HirLiteral>();
+            elem_size_lit->value = elem_size;
+            hir->args.push_back(std::make_unique<HirExpr>(std::move(elem_size_lit), ast::make_int()));
+            
+            // 配列長
+            int64_t arr_len = obj_type->array_size.value_or(0);
+            auto arr_len_lit = std::make_unique<HirLiteral>();
+            arr_len_lit->value = arr_len;
+            hir->args.push_back(std::make_unique<HirExpr>(std::move(arr_len_lit), ast::make_int()));
+            
+            // start (デフォルト: 0)
+            if (slice.start) {
+                hir->args.push_back(lower_expr(*slice.start));
+            } else {
+                auto zero = std::make_unique<HirLiteral>();
+                zero->value = int64_t{0};
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(zero), ast::make_int()));
+            }
+            
+            // end (デフォルト: -1 = 最後まで)
+            if (slice.end) {
+                hir->args.push_back(lower_expr(*slice.end));
+            } else {
+                auto neg_one = std::make_unique<HirLiteral>();
+                neg_one->value = int64_t{-1};
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(neg_one), ast::make_int()));
+            }
+            
+            // step は配列スライスでも現時点では無視
+            if (slice.step) {
+                debug::hir::log(debug::hir::Id::Warning, "Array slice step not yet supported",
+                                debug::Level::Warn);
+            }
+            
+            // 戻り値の型: 動的サイズの配列（ポインタ）
+            return std::make_unique<HirExpr>(std::move(hir), type);
+        }
+        
+        // その他の型: 未サポート
+        debug::hir::log(debug::hir::Id::Warning, "Slice on unsupported type",
+                        debug::Level::Warn);
+        
+        // フォールバック: 空のリテラル
+        auto lit = std::make_unique<HirLiteral>();
+        return std::make_unique<HirExpr>(std::move(lit), type);
     }
 
     // メンバアクセス / メソッド呼び出し
@@ -1239,6 +1384,121 @@ class HirLowering {
                     debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin len()",
                                     debug::Level::Debug);
                     return std::make_unique<HirExpr>(std::move(hir), ast::make_uint());
+                }
+                if (mem.member == "charAt" || mem.member == "at") {
+                    // 指定位置の文字を取得
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_charAt";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin charAt()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_char());
+                }
+                if (mem.member == "substring" || mem.member == "slice") {
+                    // 部分文字列を取得
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_substring";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin substring()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+                }
+                if (mem.member == "indexOf") {
+                    // 部分文字列の位置を検索
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_indexOf";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin indexOf()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_int());
+                }
+                if (mem.member == "toUpperCase") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_toUpperCase";
+                    hir->args.push_back(std::move(obj_hir));
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin toUpperCase()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+                }
+                if (mem.member == "toLowerCase") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_toLowerCase";
+                    hir->args.push_back(std::move(obj_hir));
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin toLowerCase()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+                }
+                if (mem.member == "trim") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_trim";
+                    hir->args.push_back(std::move(obj_hir));
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin trim()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+                }
+                if (mem.member == "startsWith") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_startsWith";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin startsWith()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
+                }
+                if (mem.member == "endsWith") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_endsWith";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin endsWith()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
+                }
+                if (mem.member == "includes" || mem.member == "contains") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_includes";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin includes()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
+                }
+                if (mem.member == "repeat") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_repeat";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin repeat()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+                }
+                if (mem.member == "replace") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_string_replace";
+                    hir->args.push_back(std::move(obj_hir));
+                    for (auto& arg : mem.args) {
+                        hir->args.push_back(lower_expr(*arg));
+                    }
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin replace()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
                 }
             }
 

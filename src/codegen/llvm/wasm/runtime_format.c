@@ -4,10 +4,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// Boolean type
+#ifndef __cplusplus
+typedef int bool;
+#define true 1
+#define false 0
+#endif
+
 // ============================================================
 // String Length Function (defined here to avoid dependency issues)
 // ============================================================
-size_t wasm_strlen(const char* str) {
+static size_t wasm_strlen(const char* str) {
     if (!str) return 0;
     size_t len = 0;
     while (str[len]) len++;
@@ -15,8 +22,9 @@ size_t wasm_strlen(const char* str) {
 }
 
 // Builtin string length function (used by Cm .len() method)
-size_t __builtin_string_len(const char* str) {
-    return wasm_strlen(str);
+// Returns uint64_t to match the Cm type system
+uint64_t __builtin_string_len(const char* str) {
+    return (uint64_t)wasm_strlen(str);
 }
 
 // ============================================================
@@ -32,6 +40,250 @@ static void* wasm_alloc(size_t size) {
     void* ptr = &memory_pool[pool_offset];
     pool_offset += size;
     return ptr;
+}
+
+// ============================================================
+// String Builtin Functions
+// ============================================================
+char __builtin_string_charAt(const char* str, int64_t index) {
+    if (!str || index < 0) return '\0';
+    size_t len = wasm_strlen(str);
+    if ((size_t)index >= len) return '\0';
+    return str[index];
+}
+
+char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
+    if (!str) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    size_t len = wasm_strlen(str);
+    // Python風: 負の値は末尾からの位置
+    if (start < 0) {
+        start = (int64_t)len + start;
+        if (start < 0) start = 0;
+    }
+    if (end < 0) {
+        end = (int64_t)len + end + 1;  // -1 => len
+    }
+    if ((size_t)end > len) end = (int64_t)len;
+    if (start >= end) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    size_t result_len = (size_t)(end - start);
+    char* result = (char*)wasm_alloc(result_len + 1);
+    for (size_t i = 0; i < result_len; i++) {
+        result[i] = str[start + i];
+    }
+    result[result_len] = '\0';
+    return result;
+}
+
+// Simple strstr implementation for WASM
+static const char* wasm_strstr(const char* haystack, const char* needle) {
+    if (!haystack || !needle) return 0;
+    if (!*needle) return haystack;
+    for (; *haystack; haystack++) {
+        const char* h = haystack;
+        const char* n = needle;
+        while (*n && *h == *n) { h++; n++; }
+        if (!*n) return haystack;
+    }
+    return 0;
+}
+
+int64_t __builtin_string_indexOf(const char* str, const char* substr) {
+    if (!str || !substr) return -1;
+    const char* pos = wasm_strstr(str, substr);
+    if (!pos) return -1;
+    return (int64_t)(pos - str);
+}
+
+char* __builtin_string_toUpperCase(const char* str) {
+    if (!str) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    size_t len = wasm_strlen(str);
+    char* result = (char*)wasm_alloc(len + 1);
+    for (size_t i = 0; i < len; i++) {
+        char c = str[i];
+        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
+        result[i] = c;
+    }
+    result[len] = '\0';
+    return result;
+}
+
+char* __builtin_string_toLowerCase(const char* str) {
+    if (!str) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    size_t len = wasm_strlen(str);
+    char* result = (char*)wasm_alloc(len + 1);
+    for (size_t i = 0; i < len; i++) {
+        char c = str[i];
+        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
+        result[i] = c;
+    }
+    result[len] = '\0';
+    return result;
+}
+
+char* __builtin_string_trim(const char* str) {
+    if (!str) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    size_t len = wasm_strlen(str);
+    size_t start = 0, end = len;
+    while (start < len && (str[start] == ' ' || str[start] == '\t' || 
+           str[start] == '\n' || str[start] == '\r')) start++;
+    while (end > start && (str[end-1] == ' ' || str[end-1] == '\t' || 
+           str[end-1] == '\n' || str[end-1] == '\r')) end--;
+    size_t result_len = end - start;
+    char* result = (char*)wasm_alloc(result_len + 1);
+    for (size_t i = 0; i < result_len; i++) {
+        result[i] = str[start + i];
+    }
+    result[result_len] = '\0';
+    return result;
+}
+
+bool __builtin_string_startsWith(const char* str, const char* prefix) {
+    if (!str || !prefix) return false;
+    while (*prefix) {
+        if (*str != *prefix) return false;
+        str++;
+        prefix++;
+    }
+    return true;
+}
+
+bool __builtin_string_endsWith(const char* str, const char* suffix) {
+    if (!str || !suffix) return false;
+    size_t str_len = wasm_strlen(str);
+    size_t suffix_len = wasm_strlen(suffix);
+    if (suffix_len > str_len) return false;
+    const char* str_end = str + str_len - suffix_len;
+    while (*suffix) {
+        if (*str_end != *suffix) return false;
+        str_end++;
+        suffix++;
+    }
+    return true;
+}
+
+bool __builtin_string_includes(const char* str, const char* substr) {
+    if (!str || !substr) return false;
+    return wasm_strstr(str, substr) != 0;
+}
+
+char* __builtin_string_repeat(const char* str, int64_t count) {
+    if (!str || count <= 0) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    size_t len = wasm_strlen(str);
+    size_t total_len = len * (size_t)count;
+    char* result = (char*)wasm_alloc(total_len + 1);
+    for (int64_t i = 0; i < count; i++) {
+        for (size_t j = 0; j < len; j++) {
+            result[i * len + j] = str[j];
+        }
+    }
+    result[total_len] = '\0';
+    return result;
+}
+
+char* __builtin_string_replace(const char* str, const char* from, const char* to) {
+    if (!str) {
+        char* empty = (char*)wasm_alloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+    if (!from || !to) {
+        size_t len = wasm_strlen(str);
+        char* copy = (char*)wasm_alloc(len + 1);
+        for (size_t i = 0; i <= len; i++) copy[i] = str[i];
+        return copy;
+    }
+    const char* pos = wasm_strstr(str, from);
+    if (!pos) {
+        size_t len = wasm_strlen(str);
+        char* copy = (char*)wasm_alloc(len + 1);
+        for (size_t i = 0; i <= len; i++) copy[i] = str[i];
+        return copy;
+    }
+    size_t str_len = wasm_strlen(str);
+    size_t from_len = wasm_strlen(from);
+    size_t to_len = wasm_strlen(to);
+    size_t result_len = str_len - from_len + to_len;
+    char* result = (char*)wasm_alloc(result_len + 1);
+    size_t prefix_len = (size_t)(pos - str);
+    for (size_t i = 0; i < prefix_len; i++) result[i] = str[i];
+    for (size_t i = 0; i < to_len; i++) result[prefix_len + i] = to[i];
+    const char* rest = pos + from_len;
+    size_t rest_len = wasm_strlen(rest);
+    for (size_t i = 0; i <= rest_len; i++) result[prefix_len + to_len + i] = rest[i];
+    return result;
+}
+
+// ============================================================
+// Array Slice Functions
+// ============================================================
+void* __builtin_array_slice(void* arr, int64_t elem_size, int64_t arr_len, 
+                            int64_t start, int64_t end, int64_t* out_len) {
+    if (!arr || elem_size <= 0 || arr_len <= 0) {
+        if (out_len) *out_len = 0;
+        return 0;
+    }
+    
+    if (start < 0) {
+        start = arr_len + start;
+        if (start < 0) start = 0;
+    }
+    if (end < 0) {
+        end = arr_len + end + 1;
+    }
+    if (end > arr_len) end = arr_len;
+    if (start >= end || start >= arr_len) {
+        if (out_len) *out_len = 0;
+        return 0;
+    }
+    
+    int64_t slice_len = end - start;
+    char* result = (char*)wasm_alloc((size_t)(slice_len * elem_size));
+    if (!result) {
+        if (out_len) *out_len = 0;
+        return 0;
+    }
+    
+    // memcpyの代わりにバイト単位でコピー
+    char* src = (char*)arr + (start * elem_size);
+    for (int64_t i = 0; i < slice_len * elem_size; i++) {
+        result[i] = src[i];
+    }
+    if (out_len) *out_len = slice_len;
+    return result;
+}
+
+int64_t* __builtin_array_slice_int(int64_t* arr, int64_t arr_len,
+                                   int64_t start, int64_t end, int64_t* out_len) {
+    return (int64_t*)__builtin_array_slice(arr, sizeof(int64_t), arr_len, start, end, out_len);
+}
+
+int32_t* __builtin_array_slice_i32(int32_t* arr, int64_t arr_len,
+                                   int64_t start, int64_t end, int64_t* out_len) {
+    return (int32_t*)__builtin_array_slice(arr, sizeof(int32_t), arr_len, start, end, out_len);
 }
 
 // ============================================================

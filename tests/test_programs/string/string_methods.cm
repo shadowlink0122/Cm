@@ -1,0 +1,56 @@
+// 文字列メソッドのテスト
+
+int main() {
+    string s = "Hello, World!";
+    
+    // len() - 文字列の長さ
+    uint len = s.len();
+    println("len: {len}");
+    
+    // charAt() - 指定位置の文字
+    char c = s.charAt(0);
+    println("charAt(0): {c}");
+    
+    // substring() - 部分文字列
+    string sub = s.substring(0, 5);
+    println("substring(0,5): {sub}");
+    
+    // indexOf() - 検索
+    int idx = s.indexOf("World");
+    println("indexOf(World): {idx}");
+    
+    // toUpperCase() - 大文字変換
+    string upper = s.toUpperCase();
+    println("toUpperCase: {upper}");
+    
+    // toLowerCase() - 小文字変換
+    string lower = s.toLowerCase();
+    println("toLowerCase: {lower}");
+    
+    // trim() - 空白除去
+    string padded = "  trimmed  ";
+    string trimmed = padded.trim();
+    println("trim: [{trimmed}]");
+    
+    // startsWith() - 先頭一致
+    bool sw = s.startsWith("Hello");
+    println("startsWith(Hello): {sw}");
+    
+    // endsWith() - 末尾一致
+    bool ew = s.endsWith("!");
+    println("endsWith(!): {ew}");
+    
+    // includes() - 含む判定
+    bool inc = s.includes("World");
+    println("includes(World): {inc}");
+    
+    // repeat() - 繰り返し
+    string rep = "ab".repeat(3);
+    println("repeat(3): {rep}");
+    
+    // replace() - 置換
+    string repl = s.replace("World", "Cm");
+    println("replace: {repl}");
+    
+    return 0;
+}

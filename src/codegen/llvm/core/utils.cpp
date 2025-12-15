@@ -73,6 +73,58 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // 文字列charAt
+    else if (name == "__builtin_string_charAt") {
+        auto funcType = llvm::FunctionType::get(ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列substring
+    else if (name == "__builtin_string_substring") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列indexOf
+    else if (name == "__builtin_string_indexOf") {
+        auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列toUpperCase/toLowerCase/trim
+    else if (name == "__builtin_string_toUpperCase" || name == "__builtin_string_toLowerCase" ||
+             name == "__builtin_string_trim") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列startsWith/endsWith/includes
+    else if (name == "__builtin_string_startsWith" || name == "__builtin_string_endsWith" ||
+             name == "__builtin_string_includes") {
+        auto funcType = llvm::FunctionType::get(ctx.getBoolType(), {ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列repeat
+    else if (name == "__builtin_string_repeat") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 文字列replace
+    else if (name == "__builtin_string_replace") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列スライス
+    else if (name == "__builtin_array_slice") {
+        // void* __builtin_array_slice(void* arr, i64 elem_size, i64 arr_len, i64 start, i64 end, i64* out_len)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), 
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type(), ctx.getI64Type(), ctx.getI64Type(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // フォーマット出力関数（可変長引数）
     else if (name == "cm_println_format" || name == "cm_print_format") {
         auto funcType =
