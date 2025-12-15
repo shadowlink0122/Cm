@@ -266,7 +266,7 @@ jobs:
   # Test - LLVM Backend (全プラットフォーム)
   # ========================================
   test-llvm:
-    name: LLVM Tests (${{ matrix.os }})
+    name: LLVM Native Tests (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
@@ -329,14 +329,14 @@ jobs:
           if (Test-Path "artifacts/lib") { Copy-Item -Path "artifacts/lib/*" -Destination "build/lib/" -Recurse -ErrorAction SilentlyContinue }
       
       # テスト実行 (Unix)
-      - name: Run LLVM tests (Unix)
+      - name: Run LLVM Native tests (Unix)
         if: runner.os != 'Windows'
         run: |
           chmod +x tests/unified_test_runner.sh
           ./tests/unified_test_runner.sh -b llvm -t 15
       
       # テスト実行 (Windows) - Git Bash使用
-      - name: Run LLVM tests (Windows)
+      - name: Run LLVM Native tests (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -344,11 +344,125 @@ jobs:
           ./tests/unified_test_runner.sh -b llvm -t 20
 
   # ========================================
+  # Test - WASM Backend (全プラットフォーム)
+  # ========================================
+  test-wasm:
+    name: LLVM WASM Tests (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            llvm_version: "14"
+          - os: macos-latest
+            llvm_version: "14"
+          - os: windows-latest
+            llvm_version: "17"
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # LLVM インストール (リンク用)
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh ${{ matrix.llvm_version }}
+          sudo apt-get install -y clang-${{ matrix.llvm_version }}
+          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
+      
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ matrix.llvm_version }}
+          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+      
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install llvm --version=${{ matrix.llvm_version }}.0.0 -y
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      
+      # Wasmtime インストール
+      - name: Install Wasmtime (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+      
+      - name: Install Wasmtime (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+      
+      - name: Install Wasmtime (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri https://github.com/bytecodealliance/wasmtime/releases/download/v15.0.0/wasmtime-v15.0.0-x86_64-windows.zip -OutFile wasmtime.zip
+          Expand-Archive -Path wasmtime.zip -DestinationPath .
+          Move-Item -Path "wasmtime-v15.0.0-x86_64-windows" -Destination "wasmtime"
+          echo "$PWD\wasmtime" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cm-${{ matrix.os }}
+          path: artifacts/
+      
+      # セットアップ (Unix)
+      - name: Setup artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x artifacts/cm || true
+          cp artifacts/cm . || true
+          mkdir -p build/lib
+          cp -r artifacts/lib/* build/lib/ 2>/dev/null || true
+      
+      # セットアップ (Windows)
+      - name: Setup artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (Test-Path "artifacts/cm.exe") { Copy-Item "artifacts/cm.exe" "." }
+          New-Item -ItemType Directory -Force -Path "build/lib"
+          if (Test-Path "artifacts/lib") { Copy-Item -Path "artifacts/lib/*" -Destination "build/lib/" -Recurse -ErrorAction SilentlyContinue }
+      
+      # Wasmtime動作確認
+      - name: Verify Wasmtime (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          wasmtime --version
+      
+      - name: Verify Wasmtime (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          wasmtime --version
+      
+      # テスト実行 (Unix)
+      - name: Run LLVM WASM tests (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x tests/unified_test_runner.sh
+          ./tests/unified_test_runner.sh -b wasm -t 20
+      
+      # テスト実行 (Windows) - Git Bash使用
+      - name: Run LLVM WASM tests (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          chmod +x tests/unified_test_runner.sh
+          ./tests/unified_test_runner.sh -b wasm -t 25
+
+  # ========================================
   # CI Success - 全ジョブ成功確認
   # ========================================
   ci-success:
     name: CI Success
-    needs: [lint, build, test-unit, test-interpreter, test-llvm]
+    needs: [lint, build, test-unit, test-interpreter, test-llvm, test-wasm]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -358,7 +472,8 @@ jobs:
           echo "Build: ${{ needs.build.result }}"
           echo "Unit Tests: ${{ needs.test-unit.result }}"
           echo "Interpreter Tests: ${{ needs.test-interpreter.result }}"
-          echo "LLVM Tests: ${{ needs.test-llvm.result }}"
+          echo "LLVM Native Tests: ${{ needs.test-llvm.result }}"
+          echo "LLVM WASM Tests: ${{ needs.test-wasm.result }}"
           
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "❌ Lint failed"
@@ -377,8 +492,17 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.test-llvm.result }}" != "success" ]; then
-            echo "❌ LLVM tests failed"
+            echo "❌ LLVM Native tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-wasm.result }}" != "success" ]; then
+            echo "❌ LLVM WASM tests failed"
             exit 1
           fi
           
           echo "✅ All CI checks passed!"
+          echo ""
+          echo "Test Matrix Coverage:"
+          echo "  - 3 Operating Systems: Ubuntu, macOS, Windows"
+          echo "  - 3 Backends: Interpreter, LLVM Native, LLVM WASM"
+          echo "  - Total: 9 test configurations executed successfully"
