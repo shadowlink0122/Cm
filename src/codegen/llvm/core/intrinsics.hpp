@@ -60,44 +60,66 @@ class IntrinsicsManager {
     /// メモリ操作組み込み
     void declareMemoryIntrinsics() {
         auto& ctx = *context;
+        
+        // LLVM 15+ではopaqueポインタ（ptr）を使用
+        #if LLVM_VERSION_MAJOR >= 15
+        auto ptrType = llvm::PointerType::get(ctx, 0);
+        #else
+        auto ptrType = llvm::PointerType::get(ctx, 0);
+        #endif
 
         // memcpy
+        #if LLVM_VERSION_MAJOR >= 15
+        auto memcpyName = "llvm.memcpy.p0.p0.i64";
+        #else
+        auto memcpyName = "llvm.memcpy.p0i8.p0i8.i64";
+        #endif
         auto memcpyType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
-                                                  {llvm::Type::getInt8PtrTy(ctx),  // dest
-                                                   llvm::Type::getInt8PtrTy(ctx),  // src
+                                                  {ptrType,  // dest
+                                                   ptrType,  // src
                                                    llvm::Type::getInt64Ty(ctx),    // size
                                                    llvm::Type::getInt1Ty(ctx)},    // is_volatile
                                                   false);
         auto memcpy = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage,
-                                             "llvm.memcpy.p0i8.p0i8.i64", module);
+                                             memcpyName, module);
         memcpy->addFnAttr(llvm::Attribute::NoUnwind);
-        memcpy->addFnAttr(llvm::Attribute::ArgMemOnly);
+        // LLVM 18+: Memory属性は削除され、自動推論される
         intrinsics["memcpy"] = memcpy;
 
         // memset
+        #if LLVM_VERSION_MAJOR >= 15
+        auto memsetName = "llvm.memset.p0.i64";
+        #else
+        auto memsetName = "llvm.memset.p0i8.i64";
+        #endif
         auto memsetType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
-                                                  {llvm::Type::getInt8PtrTy(ctx),  // dest
+                                                  {ptrType,  // dest
                                                    llvm::Type::getInt8Ty(ctx),     // value
                                                    llvm::Type::getInt64Ty(ctx),    // size
                                                    llvm::Type::getInt1Ty(ctx)},    // is_volatile
                                                   false);
         auto memset = llvm::Function::Create(memsetType, llvm::Function::ExternalLinkage,
-                                             "llvm.memset.p0i8.i64", module);
+                                             memsetName, module);
         memset->addFnAttr(llvm::Attribute::NoUnwind);
-        memset->addFnAttr(llvm::Attribute::ArgMemOnly);
+        // LLVM 18+: Memory属性は削除され、自動推論される
         intrinsics["memset"] = memset;
 
         // memmove
+        #if LLVM_VERSION_MAJOR >= 15
+        auto memmoveName = "llvm.memmove.p0.p0.i64";
+        #else
+        auto memmoveName = "llvm.memmove.p0i8.p0i8.i64";
+        #endif
         auto memmoveType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
-                                                   {llvm::Type::getInt8PtrTy(ctx),  // dest
-                                                    llvm::Type::getInt8PtrTy(ctx),  // src
+                                                   {ptrType,  // dest
+                                                    ptrType,  // src
                                                     llvm::Type::getInt64Ty(ctx),    // size
                                                     llvm::Type::getInt1Ty(ctx)},    // is_volatile
                                                    false);
         auto memmove = llvm::Function::Create(memmoveType, llvm::Function::ExternalLinkage,
-                                              "llvm.memmove.p0i8.p0i8.i64", module);
+                                              memmoveName, module);
         memmove->addFnAttr(llvm::Attribute::NoUnwind);
-        memmove->addFnAttr(llvm::Attribute::ArgMemOnly);
+        // LLVM 18+: Memory属性は削除され、自動推論される
         intrinsics["memmove"] = memmove;
     }
 

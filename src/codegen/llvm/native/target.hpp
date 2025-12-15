@@ -7,7 +7,11 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Support/FileSystem.h>
+#if LLVM_VERSION_MAJOR >= 16
+#include <llvm/TargetParser/Host.h>
+#else
 #include <llvm/Support/Host.h>
+#endif
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
@@ -67,29 +71,61 @@ class TargetManager {
         if (config.noStd) {
             options.DisableIntegratedAS = false;
             options.MCOptions.ShowMCEncoding = false;
+#if LLVM_VERSION_MAJOR < 18
             options.MCOptions.MCUseDwarfDirectory = false;
+#else
+            options.MCOptions.MCUseDwarfDirectory = llvm::MCTargetOptions::DisableDwarfDirectory;
+#endif
         }
 
         // 最適化レベル設定
+#if LLVM_VERSION_MAJOR >= 18
+        llvm::CodeGenOptLevel optLevel;
+#else
         llvm::CodeGenOpt::Level optLevel;
+#endif
         switch (config.optLevel) {
             case 0:
+#if LLVM_VERSION_MAJOR >= 18
+                optLevel = llvm::CodeGenOptLevel::None;
+#else
                 optLevel = llvm::CodeGenOpt::None;
+#endif
                 break;
             case 1:
+#if LLVM_VERSION_MAJOR >= 18
+                optLevel = llvm::CodeGenOptLevel::Less;
+#else
                 optLevel = llvm::CodeGenOpt::Less;
+#endif
                 break;
             case 2:
+#if LLVM_VERSION_MAJOR >= 18
+                optLevel = llvm::CodeGenOptLevel::Default;
+#else
                 optLevel = llvm::CodeGenOpt::Default;
+#endif
                 break;
             case 3:
+#if LLVM_VERSION_MAJOR >= 18
+                optLevel = llvm::CodeGenOptLevel::Aggressive;
+#else
                 optLevel = llvm::CodeGenOpt::Aggressive;
+#endif
                 break;
             case -1:
+#if LLVM_VERSION_MAJOR >= 18
+                optLevel = llvm::CodeGenOptLevel::Default;
+#else
                 optLevel = llvm::CodeGenOpt::Default;
+#endif
                 break;  // サイズは後で
             default:
+#if LLVM_VERSION_MAJOR >= 18
+                optLevel = llvm::CodeGenOptLevel::Default;
+#else
                 optLevel = llvm::CodeGenOpt::Default;
+#endif
         }
 
         targetMachine =
@@ -118,7 +154,12 @@ class TargetManager {
         }
 
         llvm::legacy::PassManager pass;
-        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, llvm::CGFT_ObjectFile)) {
+#if LLVM_VERSION_MAJOR >= 18
+        auto fileType = llvm::CodeGenFileType::ObjectFile;
+#else
+        auto fileType = llvm::CGFT_ObjectFile;
+#endif
+        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
             throw std::runtime_error("Target doesn't support object emission");
         }
 
@@ -135,7 +176,12 @@ class TargetManager {
         }
 
         llvm::legacy::PassManager pass;
-        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, llvm::CGFT_AssemblyFile)) {
+#if LLVM_VERSION_MAJOR >= 18
+        auto fileType = llvm::CodeGenFileType::AssemblyFile;
+#else
+        auto fileType = llvm::CGFT_AssemblyFile;
+#endif
+        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
             throw std::runtime_error("Target doesn't support assembly emission");
         }
 
@@ -210,7 +256,11 @@ SECTIONS
         builder.SetInsertPoint(bb);
 
         // スタックポインタ設定
-        auto spType = llvm::Type::getInt32PtrTy(ctx);
+#if LLVM_VERSION_MAJOR >= 15
+        auto spType = llvm::PointerType::get(llvm::Type::getInt32Ty(ctx), 0);
+#else
+        auto spType = llvm::PointerType::get(ctx, 0);
+#endif
         auto sp = module.getOrInsertGlobal("_estack", spType);
         // ARM: MSPレジスタに設定（インラインアセンブリ）
         auto asmType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), {spType}, false);
@@ -244,7 +294,7 @@ SECTIONS
         auto& ctx = module.getContext();
 
         // extern symbols
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(ctx);
+        auto i8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0);
         auto sdata = module.getOrInsertGlobal("_sdata", i8PtrTy);
         auto edata = module.getOrInsertGlobal("_edata", i8PtrTy);
         auto sidata = module.getOrInsertGlobal("_sidata", i8PtrTy);
@@ -266,7 +316,7 @@ SECTIONS
         auto& ctx = module.getContext();
 
         // extern symbols
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(ctx);
+        auto i8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0);
         auto sbss = module.getOrInsertGlobal("_sbss", i8PtrTy);
         auto ebss = module.getOrInsertGlobal("_ebss", i8PtrTy);
 

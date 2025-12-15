@@ -483,15 +483,15 @@ class BuiltinManager {
 
         // 配列 forEach
         builtins_["__builtin_array_forEach"] = [](std::vector<Value> args,
-                                                  const auto& call_func) -> Value {
+                                                  const auto& /*call_func*/) -> Value {
             if (args.size() < 3)
                 return Value{};
             if (args[0].type() != typeid(std::vector<Value>))
                 return Value{};
             const auto& arr = std::any_cast<std::vector<Value>>(args[0]);
-            int64_t size = 0;
-            if (args[1].type() == typeid(int64_t))
-                size = std::any_cast<int64_t>(args[1]);
+            // int64_t size = 0;  // 未使用
+            // if (args[1].type() == typeid(int64_t))
+            //     size = std::any_cast<int64_t>(args[1]);
             // args[2] は関数ポインタ（インタプリタでは直接呼び出せないため、forループで代替）
             // この実装はプレースホルダー - 実際の実装は呼び出し側で行う
             return Value{};
@@ -507,19 +507,19 @@ class BuiltinManager {
         };
 
         // 配列 some
-        builtins_["__builtin_array_some"] = [](std::vector<Value> args, const auto&) -> Value {
+        builtins_["__builtin_array_some"] = [](std::vector<Value> /*args*/, const auto&) -> Value {
             // プレースホルダー実装
             return Value(false);
         };
 
         // 配列 every
-        builtins_["__builtin_array_every"] = [](std::vector<Value> args, const auto&) -> Value {
+        builtins_["__builtin_array_every"] = [](std::vector<Value> /*args*/, const auto&) -> Value {
             // プレースホルダー実装
             return Value(true);
         };
 
         // 配列 findIndex
-        builtins_["__builtin_array_findIndex"] = [](std::vector<Value> args, const auto&) -> Value {
+        builtins_["__builtin_array_findIndex"] = [](std::vector<Value> /*args*/, const auto&) -> Value {
             // プレースホルダー実装
             return Value(int64_t{-1});
         };

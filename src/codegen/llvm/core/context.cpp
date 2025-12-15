@@ -4,7 +4,11 @@
 
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
+#if LLVM_VERSION_MAJOR >= 16
+#include <llvm/TargetParser/Host.h>
+#else
 #include <llvm/Support/Host.h>
+#endif
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
@@ -99,8 +103,13 @@ void LLVMContext::initializeTypes() {
     i64Ty = llvm::Type::getInt64Ty(ctx);
     f32Ty = llvm::Type::getFloatTy(ctx);
     f64Ty = llvm::Type::getDoubleTy(ctx);
+#if LLVM_VERSION_MAJOR >= 15
+    // LLVM 15+では不透明ポインタを使用
+    ptrTy = llvm::PointerType::getUnqual(ctx);
+#else
     // LLVM 14では型付きポインタを使用（i8*）
-    ptrTy = llvm::Type::getInt8PtrTy(ctx);
+    ptrTy = llvm::PointerType::get(ctx, 0);
+#endif
 }
 
 // 組み込み関数宣言（基本的なものだけ）
