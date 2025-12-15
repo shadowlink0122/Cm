@@ -11,14 +11,14 @@ int main() {
     udouble c = a * b;
     
     // 出力
-    println("{x} + {y} = {z}");
-    println("{a} * {b} = {c}");
+    println("{x} + {y} = {z:.1}");
+    println("{a} * {b} = {c:}");
     
     // 型変換
     ufloat f = 1.0;
     udouble d = 2.0;
     udouble result = d + f;  // fがdoubleに昇格
-    println("Result: {result}");
+    println("Result: {result:.1}");
     
     return 0;
 }

@@ -397,8 +397,12 @@ int main(int argc, char* argv[]) {
 
         // プログラムレベルのデッドコード削除
         // 未使用の自動生成関数を削除する
-        mir::opt::ProgramDeadCodeElimination program_dce;
-        program_dce.run(mir);
+        // 注意: インタプリタではインターフェースメソッドの動的ディスパッチがあるため、
+        // DCEはコンパイル時のみ実行する
+        if (opts.command == Command::Compile) {
+            mir::opt::ProgramDeadCodeElimination program_dce;
+            program_dce.run(mir);
+        }
 
         // MIRを表示（最適化後）
         if (opts.show_mir_opt) {

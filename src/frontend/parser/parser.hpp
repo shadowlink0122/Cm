@@ -358,33 +358,36 @@ class Parser {
             } while (consume_if(TokenKind::Comma));
         }
 
-        // where句をパース（例: where T: Eq, U: Ord）
+        // where句をパース（例: where T: Eq, U: Ord + Clone, V: I | J）
         // 構造体のジェネリックパラメータに制約を追加
         if (consume_if(TokenKind::KwWhere)) {
             do {
                 std::string type_param = expect_ident();
                 expect(TokenKind::Colon);
 
-                // 型制約をパース
-                std::vector<std::string> constraint_types;
-                constraint_types.push_back(expect_ident());
+                // インターフェース境界をパース
+                std::vector<std::string> interfaces;
+                interfaces.push_back(expect_ident());
+                ast::ConstraintKind constraint_kind = ast::ConstraintKind::Single;
 
-                // ユニオン型制約（T: int | string）
-                while (consume_if(TokenKind::Pipe)) {
-                    constraint_types.push_back(expect_ident());
+                // 複合インターフェース境界
+                if (check(TokenKind::Pipe)) {
+                    constraint_kind = ast::ConstraintKind::Or;
+                    while (consume_if(TokenKind::Pipe)) {
+                        interfaces.push_back(expect_ident());
+                    }
+                } else if (check(TokenKind::Plus)) {
+                    constraint_kind = ast::ConstraintKind::And;
+                    while (consume_if(TokenKind::Plus)) {
+                        interfaces.push_back(expect_ident());
+                    }
                 }
 
                 // 対応するジェネリックパラメータに制約を追加
                 for (auto& gp : generic_params_v2) {
                     if (gp.name == type_param) {
-                        if (constraint_types.size() == 1) {
-                            gp.type_constraint = ast::TypeConstraint(constraint_types[0]);
-                        } else {
-                            gp.type_constraint =
-                                ast::TypeConstraint(ast::ConstraintKind::Union, constraint_types);
-                            gp.is_union_constraint = true;
-                        }
-                        gp.constraints = constraint_types;
+                        gp.type_constraint = ast::TypeConstraint(constraint_kind, interfaces);
+                        gp.constraints = interfaces;
                         break;
                     }
                 }
@@ -618,33 +621,35 @@ class Parser {
                 expect(TokenKind::Gt);
             }
 
-            // where句をパース（例: where T: Polygon, where T: int | string）
+            // where句をパース
+            // where T: Interface, U: I + J, V: I | J
             std::vector<ast::WhereClause> where_clauses;
             if (consume_if(TokenKind::KwWhere)) {
                 do {
                     std::string type_param = expect_ident();
                     expect(TokenKind::Colon);
 
-                    // 型制約をパース（単一型 or ユニオン型 T: int | string）
-                    std::vector<std::string> constraint_types;
-                    constraint_types.push_back(expect_ident());
+                    // インターフェース境界をパース
+                    std::vector<std::string> interfaces;
+                    interfaces.push_back(expect_ident());
+                    ast::ConstraintKind constraint_kind = ast::ConstraintKind::Single;
 
-                    // ユニオン型（T: int | string）
-                    while (consume_if(TokenKind::Pipe)) {
-                        constraint_types.push_back(expect_ident());
+                    // 複合インターフェース境界
+                    if (check(TokenKind::Pipe)) {
+                        // OR制約: T: I | J
+                        constraint_kind = ast::ConstraintKind::Or;
+                        while (consume_if(TokenKind::Pipe)) {
+                            interfaces.push_back(expect_ident());
+                        }
+                    } else if (check(TokenKind::Plus)) {
+                        // AND制約: T: I + J
+                        constraint_kind = ast::ConstraintKind::And;
+                        while (consume_if(TokenKind::Plus)) {
+                            interfaces.push_back(expect_ident());
+                        }
                     }
 
-                    ast::TypeConstraint constraint;
-                    if (constraint_types.size() == 1) {
-                        // 単一型またはインターフェース
-                        // TODO: インターフェースかどうかは型チェック時に判断
-                        constraint = ast::TypeConstraint(constraint_types[0]);
-                    } else {
-                        // ユニオン型
-                        constraint = ast::TypeConstraint(ast::ConstraintKind::Union,
-                                                         std::move(constraint_types));
-                    }
-
+                    ast::TypeConstraint constraint(constraint_kind, std::move(interfaces));
                     where_clauses.emplace_back(std::move(type_param), std::move(constraint));
                 } while (consume_if(TokenKind::Comma));
             }
@@ -865,7 +870,8 @@ class Parser {
     ast::ExprPtr parse_match_expr(uint32_t start_pos);
     std::unique_ptr<ast::MatchPattern> parse_match_pattern();
 
-    // ジェネリックパラメータ（<T>, <T: Ord>, <T: int | string>, <T, U>）をパース
+    // ジェネリックパラメータ（<T>, <T: Interface>, <T: I + J>, <T: I | J>, <T, U>）をパース
+    // すべての制約はインターフェース境界として解釈される
     // 戻り値: pair<名前リスト（後方互換）, GenericParamリスト（制約付き）>
     std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2() {
         std::vector<std::string> names;
@@ -885,24 +891,28 @@ class Parser {
 
             // 型パラメータ名
             std::string param_name = expect_ident();
-            std::vector<std::string> constraints;
-            bool is_union_constraint = false;
+            std::vector<std::string> interfaces;
+            ast::ConstraintKind constraint_kind = ast::ConstraintKind::None;
 
-            // 型制約（: Constraint）
+            // インターフェース境界（: Interface）
             if (consume_if(TokenKind::Colon)) {
-                constraints.push_back(expect_ident());
+                interfaces.push_back(expect_ident());
+                constraint_kind = ast::ConstraintKind::Single;
 
-                // ユニオン型制約（T: int | string）または複数インターフェース（T: Ord + Clone）
+                // 複合インターフェース境界
+                // T: I | J (OR - いずれかを実装)
+                // T: I + J (AND - すべてを実装)
                 if (check(TokenKind::Pipe)) {
-                    // ユニオン型制約
-                    is_union_constraint = true;
+                    // OR制約: T: I | J
+                    constraint_kind = ast::ConstraintKind::Or;
                     while (consume_if(TokenKind::Pipe)) {
-                        constraints.push_back(expect_ident());
+                        interfaces.push_back(expect_ident());
                     }
-                } else {
-                    // 複数インターフェース制約（Ord + Clone）
+                } else if (check(TokenKind::Plus)) {
+                    // AND制約: T: I + J
+                    constraint_kind = ast::ConstraintKind::And;
                     while (consume_if(TokenKind::Plus)) {
-                        constraints.push_back(expect_ident());
+                        interfaces.push_back(expect_ident());
                     }
                 }
             }
@@ -910,19 +920,23 @@ class Parser {
             names.push_back(param_name);
 
             // GenericParamを作成
-            if (is_union_constraint) {
-                ast::TypeConstraint tc(ast::ConstraintKind::Union, constraints);
-                params.emplace_back(param_name, std::move(tc), true);
+            if (constraint_kind != ast::ConstraintKind::None) {
+                ast::TypeConstraint tc(constraint_kind, interfaces);
+                params.emplace_back(param_name, std::move(tc));
             } else {
-                params.emplace_back(param_name, constraints);
+                params.emplace_back(param_name);
             }
 
+            // デバッグ出力
             std::string constraint_str;
-            std::string separator = is_union_constraint ? " | " : " + ";
-            for (size_t i = 0; i < constraints.size(); ++i) {
-                if (i > 0)
-                    constraint_str += separator;
-                constraint_str += constraints[i];
+            if (!interfaces.empty()) {
+                std::string separator =
+                    (constraint_kind == ast::ConstraintKind::Or) ? " | " : " + ";
+                for (size_t i = 0; i < interfaces.size(); ++i) {
+                    if (i > 0)
+                        constraint_str += separator;
+                    constraint_str += interfaces[i];
+                }
             }
             debug::par::log(debug::par::Id::FuncDef,
                             "Generic param: " + param_name +

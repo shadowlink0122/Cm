@@ -85,6 +85,9 @@ class ProgramDeadCodeElimination {
         std::queue<std::string> worklist;
         worklist.push("main");
 
+        // インターフェースメソッド呼び出しを記録（Interface__method形式）
+        std::set<std::string> interface_methods;
+
         while (!worklist.empty()) {
             std::string current = worklist.front();
             worklist.pop();
@@ -98,6 +101,31 @@ class ProgramDeadCodeElimination {
                 if (!block)
                     continue;
 
+                // ステートメントから関数参照を収集
+                // （関数ポインタへの代入: _2 = add; など）
+                for (const auto& stmt : block->statements) {
+                    if (!stmt || stmt->kind != MirStatement::Assign)
+                        continue;
+
+                    const auto& assign = std::get<MirStatement::AssignData>(stmt->data);
+                    if (!assign.rvalue)
+                        continue;
+
+                    if (assign.rvalue->kind == MirRvalue::Use) {
+                        const auto& use_data = std::get<MirRvalue::UseData>(assign.rvalue->data);
+                        if (use_data.operand && use_data.operand->kind == MirOperand::FunctionRef) {
+                            if (const auto* name =
+                                    std::get_if<std::string>(&use_data.operand->data)) {
+                                if (used.find(*name) == used.end()) {
+                                    used.insert(*name);
+                                    worklist.push(*name);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ターミネータの呼び出しから関数名を収集
                 if (block->terminator && block->terminator->kind == MirTerminator::Call) {
                     const auto& call_data =
                         std::get<MirTerminator::CallData>(block->terminator->data);
@@ -120,10 +148,37 @@ class ProgramDeadCodeElimination {
                         }
                     }
 
-                    if (!callee.empty() && used.find(callee) == used.end()) {
-                        used.insert(callee);
-                        worklist.push(callee);
+                    if (!callee.empty()) {
+                        // インターフェースメソッド呼び出しを記録
+                        // Interface__method形式の場合、メソッド名を抽出
+                        size_t sep = callee.find("__");
+                        if (sep != std::string::npos) {
+                            std::string method_name = callee.substr(sep);  // "__method"
+                            interface_methods.insert(method_name);
+                        }
+
+                        if (used.find(callee) == used.end()) {
+                            used.insert(callee);
+                            worklist.push(callee);
+                        }
                     }
+                }
+            }
+        }
+
+        // インターフェースメソッドの実装を保持
+        // Interface__method形式の呼び出しがある場合、Type__method形式の関数も保持
+        for (const auto& func : program.functions) {
+            if (!func)
+                continue;
+
+            const std::string& name = func->name;
+            size_t sep = name.find("__");
+            if (sep != std::string::npos) {
+                std::string method_suffix = name.substr(sep);  // "__method"
+                if (interface_methods.find(method_suffix) != interface_methods.end()) {
+                    // このメソッド名に対応するインターフェースメソッド呼び出しがある
+                    used.insert(name);
                 }
             }
         }

@@ -440,6 +440,14 @@ class Interpreter {
             if (val.type() == typeid(std::string)) {
                 return std::any_cast<std::string>(val);
             }
+            // PointerValueの場合、参照先から関数名を取得
+            if (val.type() == typeid(PointerValue)) {
+                const auto& pv = std::any_cast<PointerValue>(val);
+                auto it = ctx.locals.find(pv.target_local);
+                if (it != ctx.locals.end() && it->second.type() == typeid(std::string)) {
+                    return std::any_cast<std::string>(it->second);
+                }
+            }
         }
 
         return "";

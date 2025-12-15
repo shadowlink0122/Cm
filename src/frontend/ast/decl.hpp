@@ -18,57 +18,75 @@ enum class Visibility {
 };
 
 // ============================================================
-// 型制約の種類
+// 型制約の種類（インターフェース境界）
 // ============================================================
 enum class ConstraintKind {
-    Interface,  // T: Eq (インターフェースを実装している)
-    Type,       // T: Polygon (具体的な型)
-    Union,      // T: int | string (複数の型のいずれか)
+    None,    // 制約なし
+    Single,  // T: Eq (単一インターフェースを実装している)
+    And,     // T: Eq + Ord (複数インターフェースをすべて実装している)
+    Or,      // T: Eq | Ord (複数インターフェースのいずれかを実装している)
 };
 
 // ============================================================
-// 型制約
+// インターフェース境界（型制約）
+// すべての制約はインターフェースを対象とする
+// 「型T はインターフェースI を実装している」ことを要求
 // ============================================================
 struct TypeConstraint {
-    ConstraintKind kind = ConstraintKind::Type;
-    std::vector<std::string>
-        types;  // Union: ["int", "string"], Interface: ["Eq"], Type: ["Polygon"]
+    ConstraintKind kind = ConstraintKind::None;
+    std::vector<std::string> interfaces;  // インターフェース名のリスト
 
     TypeConstraint() = default;
-    explicit TypeConstraint(std::string single_type) : kind(ConstraintKind::Type) {
-        types.push_back(std::move(single_type));
+
+    // 単一インターフェース制約
+    explicit TypeConstraint(std::string single_interface) : kind(ConstraintKind::Single) {
+        interfaces.push_back(std::move(single_interface));
     }
-    TypeConstraint(ConstraintKind k, std::vector<std::string> t) : kind(k), types(std::move(t)) {}
+
+    // 複合インターフェース制約
+    TypeConstraint(ConstraintKind k, std::vector<std::string> ifaces)
+        : kind(k), interfaces(std::move(ifaces)) {}
+
+    // 後方互換性のためのアクセサ
+    const std::vector<std::string>& types() const { return interfaces; }
+
+    bool is_empty() const { return kind == ConstraintKind::None || interfaces.empty(); }
+    bool is_and() const { return kind == ConstraintKind::And; }
+    bool is_or() const { return kind == ConstraintKind::Or; }
 };
 
 // ============================================================
-// ジェネリックパラメータ（型制約付き）
+// ジェネリックパラメータ（インターフェース境界付き）
 // ============================================================
 struct GenericParam {
     std::string name;                      // 型パラメータ名（T, U等）
-    std::vector<std::string> constraints;  // 型制約（Ord, Clone等） - 後方互換性
-    TypeConstraint type_constraint;        // 新しい型制約（ユニオン型対応）
-    bool is_union_constraint = false;      // T: int | string のようなユニオン制約か
+    std::vector<std::string> constraints;  // 後方互換性用
+    TypeConstraint type_constraint;        // インターフェース境界
 
     GenericParam() = default;
     explicit GenericParam(std::string n) : name(std::move(n)) {}
+
+    // 後方互換性: constraints リストから構築
     GenericParam(std::string n, std::vector<std::string> c)
         : name(std::move(n)), constraints(std::move(c)) {
-        // 後方互換性: constraintsをtype_constraintに変換
-        if (!c.empty()) {
-            if (c.size() == 1) {
-                type_constraint = TypeConstraint(c[0]);
+        if (!constraints.empty()) {
+            if (constraints.size() == 1) {
+                type_constraint = TypeConstraint(constraints[0]);
             } else {
-                // 複数の制約は「+」で結合されたインターフェース制約
-                type_constraint = TypeConstraint(ConstraintKind::Interface, c);
+                // 複数の制約は「+」で結合されたAND制約
+                type_constraint = TypeConstraint(ConstraintKind::And, constraints);
             }
         }
     }
-    GenericParam(std::string n, TypeConstraint tc, bool is_union = false)
-        : name(std::move(n)), type_constraint(std::move(tc)), is_union_constraint(is_union) {
+
+    // 新しい構築方法: TypeConstraint から
+    GenericParam(std::string n, TypeConstraint tc)
+        : name(std::move(n)), type_constraint(std::move(tc)) {
         // 後方互換性: type_constraintからconstraintsを設定
-        constraints = type_constraint.types;
+        constraints = type_constraint.interfaces;
     }
+
+    bool has_constraint() const { return !type_constraint.is_empty(); }
 };
 
 // ============================================================
@@ -203,23 +221,28 @@ struct InterfaceDecl {
 // ============================================================
 // impl定義
 // ============================================================
+// where句（関数やimplのインターフェース境界を記述）
+// where T: Interface, U: I + J, V: I | J
+// ============================================================
 
 struct WhereClause {
-    std::string type_param;     // T
-    TypeConstraint constraint;  // 型制約
+    std::string type_param;     // 型パラメータ名 (T, U, V等)
+    TypeConstraint constraint;  // インターフェース境界
 
     // 後方互換性のため
-    std::string constraint_type;  // 単一の型（非推奨、constraintを使用）
+    std::string constraint_type;  // 単一の型名（非推奨）
 
     WhereClause() = default;
-    WhereClause(std::string param, std::string single_type)
-        : type_param(std::move(param)), constraint_type(single_type) {
-        constraint = TypeConstraint(single_type);
+
+    WhereClause(std::string param, std::string single_interface)
+        : type_param(std::move(param)), constraint_type(single_interface) {
+        constraint = TypeConstraint(single_interface);
     }
+
     WhereClause(std::string param, TypeConstraint c)
         : type_param(std::move(param)), constraint(std::move(c)) {
-        if (!constraint.types.empty()) {
-            constraint_type = constraint.types[0];  // 後方互換性
+        if (!constraint.interfaces.empty()) {
+            constraint_type = constraint.interfaces[0];  // 後方互換性
         }
     }
 };

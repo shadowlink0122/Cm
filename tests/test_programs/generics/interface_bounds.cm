@@ -1,0 +1,65 @@
+// インターフェース境界のテスト
+// <T: Interface> - TはInterfaceを実装している型
+// <T: I + J> - TはIとJの両方を実装している型 (AND)
+// <T: I | J> - TはIまたはJを実装している型 (OR)
+
+// 構造体定義
+struct Point with Eq, Ord {
+    int x;
+    int y;
+}
+
+// Eqのみ実装した構造体
+struct Color with Eq {
+    int r;
+    int g;
+    int b;
+}
+
+int main() {
+    // 単一境界のテスト（プリミティブ型）
+    int x = 10;
+    int y = 10;
+    if (x == y) {
+        println("x == y: true");
+    }
+    
+    // 単一境界のテスト（構造体）
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+    
+    Point p2;
+    p2.x = 10;
+    p2.y = 20;
+    
+    if (p1 == p2) {
+        println("p1 == p2: true");
+    }
+    
+    // Ord境界のテスト
+    Point p3;
+    p3.x = 30;
+    p3.y = 40;
+    
+    if (p1 < p3) {
+        println("p1 < p3: true");
+    }
+    
+    // Color構造体のEqテスト
+    Color c1;
+    c1.r = 255;
+    c1.g = 0;
+    c1.b = 0;
+    
+    Color c2;
+    c2.r = 255;
+    c2.g = 0;
+    c2.b = 0;
+    
+    if (c1 == c2) {
+        println("c1 == c2: true");
+    }
+    
+    return 0;
+}
