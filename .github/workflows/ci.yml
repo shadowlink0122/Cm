@@ -38,11 +38,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            llvm_version: "14"
+            llvm_version: "18"
           - os: macos-latest
-            llvm_version: "14"
+            llvm_version: "18"
           - os: windows-latest
-            llvm_version: "17"
+            llvm_version: "18"
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -67,12 +67,12 @@ jobs:
           echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
           echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
       
-      # LLVM インストール (Windows)
-      - name: Install LLVM (Windows)
+      # LLVM インストール (Windows) - 既存のバージョンを使用
+      - name: Setup LLVM (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm --version=${{ matrix.llvm_version }}.0.0 -y
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          clang --version
       
       # Google Test インストール (Ubuntu)
       - name: Install Google Test (Ubuntu)
@@ -273,11 +273,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            llvm_version: "14"
+            llvm_version: "18"
           - os: macos-latest
-            llvm_version: "14"
+            llvm_version: "18"
           - os: windows-latest
-            llvm_version: "17"
+            llvm_version: "18"
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -299,10 +299,9 @@ jobs:
           brew install llvm@${{ matrix.llvm_version }}
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
       
-      - name: Install LLVM (Windows)
+      - name: Setup LLVM (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm --version=${{ matrix.llvm_version }}.0.0 -y
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
       - name: Download artifacts
@@ -354,11 +353,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            llvm_version: "14"
+            llvm_version: "18"
           - os: macos-latest
-            llvm_version: "14"
+            llvm_version: "18"
           - os: windows-latest
-            llvm_version: "17"
+            llvm_version: "18"
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -380,10 +379,9 @@ jobs:
           brew install llvm@${{ matrix.llvm_version }}
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
       
-      - name: Install LLVM (Windows)
+      - name: Setup LLVM (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm --version=${{ matrix.llvm_version }}.0.0 -y
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
       # Wasmtime インストール

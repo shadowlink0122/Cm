@@ -108,52 +108,6 @@ static MirStatementPtr clone_statement(const MirStatementPtr& stmt) {
     return result;
 }
 
-// ヘルパー関数：MirTerminatorのクローン
-static MirTerminatorPtr clone_terminator(const MirTerminatorPtr& term) {
-    if (!term)
-        return nullptr;
-
-    auto result = std::make_unique<MirTerminator>();
-    result->kind = term->kind;
-    result->span = term->span;
-
-    switch (term->kind) {
-        case MirTerminator::Goto: {
-            auto& goto_data = std::get<MirTerminator::GotoData>(term->data);
-            result->data = goto_data;
-            break;
-        }
-        case MirTerminator::SwitchInt: {
-            auto& switch_data = std::get<MirTerminator::SwitchIntData>(term->data);
-            result->data = MirTerminator::SwitchIntData{clone_operand(switch_data.discriminant),
-                                                        switch_data.targets, switch_data.otherwise};
-            break;
-        }
-        case MirTerminator::Call: {
-            auto& call_data = std::get<MirTerminator::CallData>(term->data);
-            std::vector<MirOperandPtr> cloned_args;
-            for (const auto& arg : call_data.args) {
-                cloned_args.push_back(clone_operand(arg));
-            }
-            result->data = MirTerminator::CallData{clone_operand(call_data.func),
-                                                   std::move(cloned_args),
-                                                   call_data.destination,
-                                                   call_data.success,
-                                                   call_data.unwind,
-                                                   call_data.interface_name,
-                                                   call_data.method_name,
-                                                   call_data.is_virtual};
-            break;
-        }
-        case MirTerminator::Return:
-        case MirTerminator::Unreachable:
-            result->data = std::monostate{};
-            break;
-    }
-
-    return result;
-}
-
 // ヘルパー関数：型置換マップを使ってMirTerminatorをクローンし、メソッド呼び出しを書き換え
 static MirTerminatorPtr clone_terminator_with_subst(
     const MirTerminatorPtr& term,
@@ -438,8 +392,6 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
             // パラメータ型の構造体定義を取得
             auto struct_it = hir_struct_defs->find(param.type->name);
             if (struct_it != hir_struct_defs->end() && struct_it->second) {
-                const auto* struct_def = struct_it->second;
-
                 // 引数の型名からtype_argsを抽出（Pair__int__string → [int, string]）
                 std::string base_name = param.type->name;
                 size_t underscore_pos = arg_type_name.find("__");

@@ -209,7 +209,8 @@ void MirLowering::emit_destructors(LoweringContext& ctx) {
         call_term->kind = MirTerminator::Call;
         call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
                                                   std::nullopt,  // void戻り値
-                                                  success_block, std::nullopt};
+                                                  success_block, std::nullopt,
+                                                  "", "", false};  // 通常の関数呼び出し
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(success_block);
     }

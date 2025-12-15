@@ -104,7 +104,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             call_term->kind = MirTerminator::Call;
             call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
                                                       std::nullopt,  // コンストラクタは戻り値なし
-                                                      success_block, std::nullopt};
+                                                      success_block, std::nullopt,
+                                                      "", "", false};  // 通常の関数呼び出し
             ctx.set_terminator(std::move(call_term));
             ctx.switch_to_block(success_block);
         }
@@ -155,8 +156,9 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                     place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
             }
         }
-    } else if (auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
+    } else if (std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
         // 配列インデックスへの代入
+        auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind);
         LocalId array;
 
         // objectが変数参照の場合は直接その変数を使用
@@ -220,7 +222,8 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
         call_term->kind = MirTerminator::Call;
         call_term->data = MirTerminator::CallData{std::move(func_operand), std::move(args),
                                                   std::nullopt,  // void戻り値
-                                                  success_block, std::nullopt};
+                                                  success_block, std::nullopt,
+                                                  "", "", false};  // 通常の関数呼び出し
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(success_block);
     }
