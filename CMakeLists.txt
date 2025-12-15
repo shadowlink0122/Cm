@@ -181,20 +181,18 @@ if(CM_USE_LLVM)
     
     # ランタイムライブラリはUnix系でのみビルド（Windows/MSVCは未対応）
     if(NOT WIN32)
-        # ランタイムライブラリ用のclangコマンドとターゲット設定
-        # macOS: システムclangを使用（-archフラグ対応）
-        # Linux: LLVM clangを使用（--targetフラグ対応）
+        # ランタイムライブラリ用のclangとターゲット設定
+        # 全プラットフォームで--target形式を使用（統一的でシンプル）
+        set(CM_RUNTIME_CLANG "clang")
+        
         if(APPLE)
-            # macOSではシステムclangを使用（-archをサポート）
-            set(CM_RUNTIME_CLANG "/usr/bin/clang")
             if(LLVM_HOST_TARGET MATCHES "x86_64")
-                set(CM_RUNTIME_ARCH_FLAG "-arch x86_64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin")
             elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-                set(CM_RUNTIME_ARCH_FLAG "-arch arm64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin")
             endif()
         else()
-            # Linuxでは--targetを使用
-            set(CM_RUNTIME_CLANG "clang")
+            # Linux
             if(LLVM_HOST_TARGET MATCHES "x86_64")
                 set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-unknown-linux-gnu")
             elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
