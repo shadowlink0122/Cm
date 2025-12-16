@@ -1,3 +1,10 @@
+---
+layout: default
+title: 環境構築
+parent: Tutorials
+nav_order: 2
+---
+
 # 環境構築
 
 **難易度:** 🟢 初級  

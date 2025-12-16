@@ -1,3 +1,10 @@
+---
+layout: default
+title: 構造体
+parent: Tutorials
+nav_order: 10
+---
+
 # 型システム編 - 構造体
 
 **難易度:** 🟡 中級  

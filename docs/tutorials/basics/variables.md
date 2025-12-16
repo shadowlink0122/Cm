@@ -1,3 +1,10 @@
+---
+layout: default
+title: 変数と型
+parent: Tutorials
+nav_order: 4
+---
+
 # 基本編 - 変数と型
 
 **難易度:** 🟢 初級  

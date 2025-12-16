@@ -1,3 +1,10 @@
+---
+layout: default
+title: 配列
+parent: Tutorials
+nav_order: 8
+---
+
 # 配列（Arrays）
 
 Cm言語の配列は、C++スタイルの固定長配列をサポートします。

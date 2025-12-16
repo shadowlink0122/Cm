@@ -1,3 +1,10 @@
+---
+layout: default
+title: パターンマッチング
+parent: Tutorials
+nav_order: 20
+---
+
 # 高度な機能編 - match式
 
 **難易度:** 🔴 上級  

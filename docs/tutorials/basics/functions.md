@@ -1,3 +1,10 @@
+---
+layout: default
+title: 関数
+parent: Tutorials
+nav_order: 7
+---
+
 # 基本編 - 制御構文
 
 **難易度:** 🟢 初級  

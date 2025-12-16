@@ -1,3 +1,10 @@
+---
+layout: default
+title: Release Notes
+nav_order: 3
+has_children: true
+---
+
 # リリースノート
 
 このディレクトリにはCm言語の各バージョンのリリースノートが含まれます。

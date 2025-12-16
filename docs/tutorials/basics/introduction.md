@@ -1,3 +1,10 @@
+---
+layout: default
+title: はじめに
+parent: Tutorials
+nav_order: 1
+---
+
 # はじめに - Cm言語とは
 
 **難易度:** 🟢 初級  
