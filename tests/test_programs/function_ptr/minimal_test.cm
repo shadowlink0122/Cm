@@ -1,0 +1,15 @@
+// 最小限の関数ポインタテスト
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    // 関数ポインタの宣言と代入
+    int*(int, int) op = &add;
+    
+    // 関数ポインタ経由での呼び出し
+    int result = op(3, 2);
+    println("{}", result);
+    return 0;
+}

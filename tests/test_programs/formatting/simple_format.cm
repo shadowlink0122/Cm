@@ -1,0 +1,19 @@
+// Phase 1: シンプルなフォーマット文字列のテスト
+import std::io::println;
+
+int main() {
+    // 単純な文字列出力（プレースホルダーなし）
+    println("Hello, Cm with format strings!");
+
+    // 基本的な位置引数
+    println("The value is: {}", 42);
+    println("The answer is: {}", -123);
+
+    // 複数の位置引数
+    println("{} + {} = {}", 10, 20, 30);
+
+    // 異なる型の混在
+    println("String: {}, Int: {}, Double: {}", "test", 100, 3.14);
+
+    return 0;
+}

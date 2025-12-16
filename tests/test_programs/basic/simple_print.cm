@@ -1,0 +1,7 @@
+// Simple print test that works with all backends
+import std::io::println;
+
+int main() {
+    println("Simple test");
+    return 0;
+}

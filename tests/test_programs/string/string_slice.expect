@@ -1,0 +1,6 @@
+s[0:5] = Hello
+s[7:12] = World
+s[:5] = Hello
+s[7:] = World!
+s[-6:-1] = World!
+s[:] = Hello, World!

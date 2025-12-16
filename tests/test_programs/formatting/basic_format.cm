@@ -1,0 +1,51 @@
+// Phase 1: 基本的なフォーマット文字列のテスト
+import std::io::println;
+
+int main() {
+    // 1. 単純な文字列出力（プレースホルダーなし）
+    println("Hello, World!");
+
+    // 2. 基本的な位置引数
+    println("The answer is: {}", 42);
+
+    // 3. 複数の位置引数
+    println("{} + {} = {}", 10, 20, 30);
+
+    // 4. 異なる型の混在
+    int age = 25;
+    double height = 175.5;
+    println("Name: {}, Age: {}, Height: {}", "Alice", age, height);
+
+    // 5. ブール値のフォーマット
+    bool is_ready = true;
+    println("System ready: {}", is_ready);
+
+    // 6. 数値フォーマット指定子
+    int n = 255;
+    println("Decimal: {}", n);
+    println("Hex: {:x}", n);
+    println("HEX: {:X}", n);
+    println("Binary: {:b}", n);
+    println("Octal: {:o}", n);
+
+    // 7. 浮動小数点のフォーマット
+    double pi = 3.14159265359;
+    println("Default: {}", pi);
+    println("2 decimal places: {:.2}", pi);
+    println("4 decimal places: {:.4}", pi);
+    println("Scientific: {:e}", pi);
+    println("SCIENTIFIC: {:E}", pi);
+
+    // 8. 幅指定とアライメント
+    println("Left:   |{:<10}|", "test");
+    println("Right:  |{:>10}|", "test");
+    println("Center: |{:^10}|", "test");
+
+    // 9. ゼロパディング
+    println("Zero padding: {:0>5}", 42);
+
+    // 10. エスケープ
+    println("Literal braces: {{ and }}");
+
+    return 0;
+}

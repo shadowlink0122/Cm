@@ -1,0 +1,320 @@
+// impl ブロックの使用例：コンストラクタ・デストラクタ
+
+// ============================================================
+// 基本的な例：Vec<T>
+// ============================================================
+
+struct Vec<T> {
+    private T* data;
+    private size_t size;
+    private size_t capacity;
+}
+
+// コンストラクタ・デストラクタ専用のimpl
+impl<T> Vec<T> {
+    // デフォルトコンストラクタ（overload不要）
+    self() {
+        this.data = null;
+        this.size = 0;
+        this.capacity = 0;
+    }
+
+    // 初期容量指定コンストラクタ（overload必須）
+    overload self(size_t initial_cap) {
+        this.data = new T[initial_cap];
+        this.size = 0;
+        this.capacity = initial_cap;
+    }
+
+    // 初期値で埋めるコンストラクタ（デフォルト引数付き）
+    overload self(T fill_value, size_t count = 10) {
+        this.data = new T[count];
+        this.size = count;
+        this.capacity = count;
+        for (size_t i = 0; i < count; i++) {
+            this.data[i] = fill_value;
+        }
+    }
+
+    // イニシャライザリストコンストラクタ
+    overload self(T[] init_list) {
+        this.capacity = init_list.len();
+        this.size = this.capacity;
+        this.data = new T[this.capacity];
+        for (size_t i = 0; i < this.size; i++) {
+            this.data[i] = init_list[i];
+        }
+    }
+
+    // コピーコンストラクタ
+    overload self(const Vec<T>& other) {
+        this.size = other.size;
+        this.capacity = other.capacity;
+        this.data = new T[this.capacity];
+        for (size_t i = 0; i < this.size; i++) {
+            this.data[i] = other.data[i];
+        }
+    }
+
+    // ムーブコンストラクタ
+    overload self(Vec<T>&& other) {
+        this.data = other.data;
+        this.size = other.size;
+        this.capacity = other.capacity;
+        // 所有権を移動
+        other.data = null;
+        other.size = 0;
+        other.capacity = 0;
+    }
+
+    // デストラクタ
+    ~self() {
+        if (this.data != null) {
+            delete[] this.data;
+        }
+    }
+}
+
+// メソッド実装（impl for 形式）
+interface VecOps<T> {
+    void push(T item);
+    T pop();
+    T& at(size_t index);
+    size_t len();
+    bool is_empty();
+}
+
+impl<T> Vec<T> for VecOps<T> {
+    // 通常の関数として記述（型パラメータは既にimplで宣言済み）
+    void push(T item) {
+        if (size >= capacity) {
+            grow();
+        }
+        data[size++] = item;
+    }
+
+    T pop() {
+        if (size == 0) {
+            panic("Pop from empty vector");
+        }
+        return data[--size];
+    }
+
+    T& at(size_t index) {
+        if (index >= size) {
+            panic("Index out of bounds");
+        }
+        return data[index];
+    }
+
+    size_t len() {
+        return size;
+    }
+
+    bool is_empty() {
+        return size == 0;
+    }
+
+    // プライベートヘルパー関数
+    private void grow() {
+        size_t new_cap = (capacity == 0) ? 1 : capacity * 2;
+        T* new_data = new T[new_cap];
+        for (size_t i = 0; i < size; i++) {
+            new_data[i] = move(data[i]);
+        }
+        delete[] data;
+        data = new_data;
+        capacity = new_cap;
+    }
+}
+
+// ============================================================
+// より複雑な例：スマートポインタ
+// ============================================================
+
+struct UniquePtr<T> {
+    private T* ptr;
+}
+
+impl<T> UniquePtr<T> {
+    // デフォルトコンストラクタ（overload不要）
+    self() {
+        this.ptr = null;
+    }
+
+    // ポインタからの構築（overload必須）
+    overload self(T* raw_ptr) {
+        this.ptr = raw_ptr;
+    }
+
+    // 値からの構築
+    overload self(T value) {
+        this.ptr = new T(move(value));
+    }
+
+    // ムーブコンストラクタのみ（コピー不可）
+    overload self(UniquePtr<T>&& other) {
+        this.ptr = other.ptr;
+        other.ptr = null;
+    }
+
+    // コピーコンストラクタは削除
+    self(const UniquePtr<T>&) = delete;
+
+    // デストラクタ
+    ~self() {
+        if (this.ptr != null) {
+            delete this.ptr;
+        }
+    }
+}
+
+interface SmartPointer<T> {
+    T& operator*();
+    T* operator->();
+    T* get();
+    T* release();
+    void reset(T* new_ptr = null);
+}
+
+impl<T> UniquePtr<T> for SmartPointer<T> {
+    T& operator*() {
+        return *ptr;
+    }
+
+    T* operator->() {
+        return ptr;
+    }
+
+    T* get() {
+        return ptr;
+    }
+
+    T* release() {
+        T* temp = ptr;
+        ptr = null;
+        return temp;
+    }
+
+    void reset(T* new_ptr = null) {
+        if (ptr != null) {
+            delete ptr;
+        }
+        ptr = new_ptr;
+    }
+}
+
+// ============================================================
+// デフォルト引数を活用した例：文字列バッファ
+// ============================================================
+
+struct StringBuffer {
+    private char* buffer;
+    private size_t length;
+    private size_t capacity;
+}
+
+impl StringBuffer {
+    // デフォルトバッファサイズ付きコンストラクタ（overload不要）
+    self(size_t initial_cap = 256) {
+        this.buffer = new char[initial_cap];
+        this.length = 0;
+        this.capacity = initial_cap;
+        this.buffer[0] = '\0';
+    }
+
+    // 文字列からの構築（デフォルト引数付き、overload必須）
+    overload self(const string& str, size_t extra_cap = 128) {
+        this.length = str.len();
+        this.capacity = this.length + extra_cap;
+        this.buffer = new char[this.capacity];
+        strcpy(this.buffer, str.c_str());
+    }
+
+    // フォーマット文字列コンストラクタ（可変長引数、overload必須）
+    overload self(const string& format, ...) {
+        va_list args;
+        va_start(args, format);
+
+        // 必要なサイズを計算
+        int needed = vsnprintf(null, 0, format.c_str(), args) + 1;
+        va_end(args);
+
+        this.capacity = needed + 128;  // 余裕を持たせる
+        this.buffer = new char[this.capacity];
+
+        va_start(args, format);
+        this.length = vsnprintf(this.buffer, this.capacity, format.c_str(), args);
+        va_end(args);
+    }
+
+    ~self() {
+        delete[] this.buffer;
+    }
+}
+
+// ============================================================
+// 使用例
+// ============================================================
+
+void demo_vectors() {
+    // 様々なコンストラクタの使用
+    Vec<int> v1;                    // デフォルト
+    Vec<int> v2(100);               // 初期容量100
+    Vec<int> v3(0, 20);             // 0を20個
+    Vec<int> v4(42);                // 42を10個（デフォルト）
+    Vec<int> v5({1, 2, 3, 4, 5});  // イニシャライザリスト
+
+    // コピーとムーブ
+    Vec<int> v6(v5);                // コピー
+    Vec<int> v7(move(v4));          // ムーブ
+
+    // 操作
+    v1.push(10);
+    v1.push(20);
+    v1.push(30);
+
+    int val = v1.pop();  // 30
+    println("Popped: " + val);
+
+    println("Length: " + v1.len());
+}
+
+void demo_smart_pointers() {
+    // UniquePtrの使用
+    UniquePtr<string> p1;                        // null
+    UniquePtr<string> p2(new string("Hello"));   // ポインタから
+    UniquePtr<string> p3("World");               // 値から
+    UniquePtr<string> p4(move(p3));              // ムーブ
+
+    // 操作
+    if (p2.get() != null) {
+        println(*p2);  // "Hello"
+        println(p2->len());  // 5
+    }
+
+    string* raw = p2.release();  // 所有権を放棄
+    p1.reset(raw);  // p1が所有権を取得
+}
+
+void demo_string_buffer() {
+    // StringBufferの使用
+    StringBuffer buf1;                           // デフォルト容量256
+    StringBuffer buf2(1024);                     // 容量1024
+    StringBuffer buf3("Hello");                  // 追加容量128（デフォルト）
+    StringBuffer buf4("World", 256);             // 追加容量256
+    StringBuffer buf5("Number: %d", 42);         // フォーマット文字列
+}
+
+int main() {
+    println("=== Vector Demo ===");
+    demo_vectors();
+
+    println("\n=== Smart Pointer Demo ===");
+    demo_smart_pointers();
+
+    println("\n=== String Buffer Demo ===");
+    demo_string_buffer();
+
+    return 0;
+}  // 全てのデストラクタが自動的に呼ばれる

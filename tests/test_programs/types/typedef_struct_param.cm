@@ -1,0 +1,20 @@
+// typedefした構造体を引数に取る関数
+struct Point {
+    int x;
+    int y;
+}
+
+typedef Vec2 = Point;
+
+int sum_coords(Vec2 p) {
+    return p.x + p.y;
+}
+
+int main() {
+    Vec2 p;
+    p.x = 10;
+    p.y = 20;
+    int result = sum_coords(p);
+    println("{}", result);
+    return 0;
+}

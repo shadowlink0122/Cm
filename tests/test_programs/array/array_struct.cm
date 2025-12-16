@@ -1,0 +1,38 @@
+// 構造体配列のテスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    // 構造体の配列 (C++スタイル)
+    Point[3] points;
+    
+    // 各要素を初期化
+    Point p0;
+    p0.x = 10;
+    p0.y = 20;
+    points[0] = p0;
+    
+    Point p1;
+    p1.x = 30;
+    p1.y = 40;
+    points[1] = p1;
+    
+    Point p2;
+    p2.x = 50;
+    p2.y = 60;
+    points[2] = p2;
+    
+    // 読み出しテスト
+    Point r0 = points[0];
+    Point r1 = points[1];
+    Point r2 = points[2];
+    
+    println("points[0] = ({}, {})", r0.x, r0.y);
+    println("points[1] = ({}, {})", r1.x, r1.y);
+    println("points[2] = ({}, {})", r2.x, r2.y);
+    
+    return 0;
+}

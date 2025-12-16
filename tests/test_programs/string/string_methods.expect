@@ -1,0 +1,12 @@
+len: 13
+charAt(0): H
+substring(0,5): Hello
+indexOf(World): 7
+toUpperCase: HELLO, WORLD!
+toLowerCase: hello, world!
+trim: [trimmed]
+startsWith(Hello): true
+endsWith(!): true
+includes(World): true
+repeat(3): ababab
+replace: Hello, Cm!

@@ -1,0 +1,26 @@
+// コンストラクタのオーバーロードテスト
+struct Resource {
+    int value;
+}
+
+impl Resource {
+    self() {
+        self.value = 0;
+        println("D0");
+    }
+    
+    overload self(int v) {
+        self.value = v;
+        println("P{}", self.value);
+    }
+    
+    ~self() {
+        println("~{}", self.value);
+    }
+}
+
+int main() {
+    Resource r1;
+    Resource r2(42);
+    return 0;
+}

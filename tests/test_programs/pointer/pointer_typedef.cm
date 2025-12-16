@@ -1,0 +1,27 @@
+// typedef型のポインタテスト
+
+typedef MyInt = int;
+typedef MyFloat = float;
+
+int main() {
+    // typedef int ポインタ
+    MyInt x = 42;
+    MyInt* p = &x;
+    
+    MyInt v = *p;
+    println("x = {x}");
+    println("*p = {v}");
+    
+    *p = 100;
+    println("after *p = 100: x = {x}");
+    
+    // typedef float ポインタ
+    MyFloat f = 3.14;
+    MyFloat* fp = &f;
+    
+    MyFloat fv = *fp;
+    println("f = {f}");
+    println("*fp = {fv}");
+    
+    return 0;
+}

@@ -2,23 +2,18 @@
 
 ## 概要
 
-Cm言語処理系は、HIR → Rust/WASM/TSトランスパイラとして実装します。将来的にはMIR最適化層とネイティブ直接生成を追加します。
+Cm言語処理系は、LLVMバックエンドによるネイティブコンパイラとして実装されています。
+
+> **2024年12月より、LLVMバックエンドを唯一のコード生成方式として採用しています。**
+> 以前検討されていたRust/TypeScript/C++へのトランスパイルは廃止されました。
 
 **開発言語**: C++20 (Clang 17+推奨, GCC 13+, MSVC 2019+)
 
-## 開発段階
-
-| Phase | 内容 | パイプライン |
-|-------|------|-------------|
-| **1 (現在)** | トランスパイラ | HIR → Rust/WASM/TS |
-| 2 | 最適化追加 | HIR → MIR → 出力 |
-| 3 | ネイティブ直接 | MIR → Cranelift/LLVM |
-
-## コンパイルパイプライン (Phase 1)
+## コンパイルパイプライン
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        Cm Compiler Pipeline (Phase 1)                       │
+│                        Cm Compiler Pipeline                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │   Source Code (.cm)                                                         │
@@ -46,21 +41,28 @@ Cm言語処理系は、HIR → Rust/WASM/TSトランスパイラとして実装�
 │         ▼                                                                   │
 │   ┌─────────────┐                                                           │
 │   │    HIR      │  High-level IR: 型情報付き、脱糖済み                       │
-│   │ (Rust∩TS)   │  マルチターゲット対応設計                                  │
 │   └─────────────┘                                                           │
 │         │                                                                   │
-│         ├────────────────────────────────────────┬───────────────┐          │
-│         ▼                    ▼                   ▼               ▼          │
-│   ┌──────────┐        ┌──────────┐        ┌──────────┐    ┌───────────┐    │
-│   │   Rust   │        │   WASM   │        │    TS    │    │Interpreter│    │
-│   │  (主力)  │        │(Rust経由)│        │          │    │ (開発用)  │    │
-│   └────┬─────┘        └────┬─────┘        └────┬─────┘    └───────────┘    │
-│        │                   │                   │                            │
-│        ▼                   ▼                   ▼                            │
-│   [rustc/cargo]       [wasm-pack]          [tsc]                            │
-│        │                   │                   │                            │
-│        ▼                   ▼                   ▼                            │
-│     Native              Browser              Node.js                        │
+│         ▼                                                                   │
+│   ┌─────────────┐                                                           │
+│   │    MIR      │  Mid-level IR: SSA形式、CFGベース                         │
+│   └─────────────┘                                                           │
+│         │                                                                   │
+│         ├────────────────────────────────────────┐                          │
+│         ▼                                        ▼                          │
+│   ┌─────────────┐                          ┌───────────┐                    │
+│   │  LLVM IR    │                          │Interpreter│                    │
+│   │ (CodeGen)   │                          │ (開発用)  │                    │
+│   └─────┬───────┘                          └───────────┘                    │
+│         │                                                                   │
+│         ├─────────────────────┬─────────────────────┐                       │
+│         ▼                     ▼                     ▼                       │
+│     ┌───────┐            ┌─────────┐           ┌────────┐                   │
+│     │x86_64 │            │  ARM64  │           │  WASM  │                   │
+│     └───┬───┘            └────┬────┘           └───┬────┘                   │
+│         │                     │                    │                        │
+│         ▼                     ▼                    ▼                        │
+│   Linux/Windows/macOS    macOS/Linux/組み込み   Browser                     │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -151,26 +153,43 @@ private:
 - 型情報が完全に付与
 - 糖衣構文が脱糖済み
 - 名前解決済み
-- **Rust/TS両対応の共通表現**
 
-### 6. バックエンド
+### 6. MIR（Mid-level IR）
 
-**詳細**: [backends.md](backends.md)
+**詳細**: [mir.md](mir.md)
 
-| バックエンド | 用途 | 経路 |
-|-------------|------|------|
-| Rust (主力) | ネイティブ | HIR → Rust → rustc |
-| WASM | Web | HIR → Rust → wasm-pack |
-| TypeScript | JS統合 | HIR → TS → tsc |
-| Interpreter | 開発 | HIR直接実行 |
+特徴:
+- SSA形式（Static Single Assignment）
+- CFG（Control Flow Graph）ベース
+- 最適化に適した表現
+
+### 7. LLVMバックエンド
+
+**詳細**: [../llvm_backend_implementation.md](../llvm_backend_implementation.md)
+
+| ターゲット | 用途 | 経路 |
+|------------|------|------|
+| x86_64 | デスクトップ | MIR → LLVM IR → x86_64 |
+| ARM64 | Apple Silicon/Linux | MIR → LLVM IR → ARM64 |
+| WASM | Web | MIR → LLVM IR → WASM |
+
+### 廃止されたバックエンド
+
+以下のバックエンドは2024年12月に廃止されました（ソースコードは参考のため保持）:
+
+| バックエンド | 廃止理由 |
+|-------------|----------|
+| Rustトランスパイラ | LLVMバックエンドに置き換え |
+| TypeScriptトランスパイラ | LLVMバックエンドに置き換え |
 
 ## Cb言語との設計比較
 
 | 項目 | Cb | Cm |
 |------|-----|-----|
-| 中間表現 | なし | HIR (→ MIR in Phase 2) |
-| 最適化 | 限定的 | Phase 2でSSA最適化 |
-| ターゲット | インタプリタのみ | Rust/WASM/TS |
+| 中間表現 | なし | HIR → MIR |
+| コード生成 | なし | LLVM IR |
+| 最適化 | 限定的 | MIR最適化 + LLVM最適化 |
+| ターゲット | インタプリタのみ | ネイティブ / WASM |
 | パッケージ管理 | なし | Cargo風 |
 | 開発言語 | C++ | C++20 |
 
@@ -192,20 +211,25 @@ src/
 │   ├── hir/
 │   │   ├── hir.hpp         # HIRノード定義
 │   │   └── builder.hpp     # HIRビルダー
+│   ├── mir/
+│   │   ├── mir_nodes.hpp   # MIRノード定義
+│   │   └── mir_lowering.hpp# HIR→MIR
 │   ├── type_check/
 │   │   ├── types.hpp       # 型定義
 │   │   └── checker.hpp     # 型検査器
 │   └── lowering/
 │       └── ast_to_hir.hpp  # AST→HIR
-├── backend/
-│   ├── rust/
-│   │   └── emitter.hpp     # Rust出力
-│   ├── typescript/
-│   │   └── emitter.hpp     # TypeScript出力
-│   ├── wasm/
-│   │   └── emitter.hpp     # WASM設定生成
+├── codegen/
+│   └── llvm/               # LLVMバックエンド（メイン）
+│       ├── context.hpp/cpp
+│       ├── mir_to_llvm.hpp/cpp
+│       ├── llvm_codegen.hpp/cpp
+│       └── runtime.c       # Cランタイム
+├── backends/               # レガシーバックエンド（参考のため保持）
+│   ├── rust/               # 廃止
+│   ├── typescript/         # 廃止
 │   └── interpreter/
-│       └── interpreter.hpp # HIRインタープリター
+│       └── interpreter.hpp # MIRインタープリター
 └── common/
     ├── source.hpp          # ソースコード管理
     ├── diagnostics.hpp     # エラー報告
@@ -214,21 +238,11 @@ src/
 
 ## 将来の拡張
 
-### Phase 2: MIR最適化
+### WebAssemblyターゲット
 
 ```
-HIR → MIR (SSA/CFG) → 最適化パス → 各バックエンド
+MIR → LLVM IR → WASM (wasm32-unknown-unknown)
 ```
-
-詳細: [mir.md](mir.md)
-
-### Phase 3: ネイティブ直接生成
-
-```
-MIR → LIR → Cranelift or LLVM → Native
-```
-
-詳細: [lir.md](lir.md)
 
 ### その他
 

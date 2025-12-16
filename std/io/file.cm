@@ -1,0 +1,153 @@
+// std.io.file - ファイル操作モジュール
+module std.io.file;
+
+// ============================================================
+// 外部関数宣言
+// ============================================================
+
+extern "C" void* cm_file_open(string path, string mode);
+extern "C" void cm_file_close(void* file);
+extern "C" int cm_file_read(void* file, char* buffer, int size);
+extern "C" int cm_file_write(void* file, char* buffer, int size);
+extern "C" bool cm_file_exists(string path);
+extern "C" bool cm_file_delete(string path);
+
+// ============================================================
+// ファイルハンドル
+// ============================================================
+
+export struct File {
+    void* handle;
+    string path;
+    bool is_open;
+};
+
+// ============================================================
+// ファイルモード
+// ============================================================
+
+export enum FileMode {
+    Read,      // 読み取り専用
+    Write,     // 書き込み（上書き）
+    Append,    // 追記
+    ReadWrite  // 読み書き
+};
+
+// ============================================================
+// パブリックAPI
+// ============================================================
+
+// ファイルを開く
+export File open(string path, FileMode mode) {
+    string mode_str;
+
+    if (mode == FileMode::Read) {
+        mode_str = "r";
+    } else if (mode == FileMode::Write) {
+        mode_str = "w";
+    } else if (mode == FileMode::Append) {
+        mode_str = "a";
+    } else if (mode == FileMode::ReadWrite) {
+        mode_str = "r+";
+    }
+
+    void* handle = cm_file_open(path, mode_str);
+
+    File file;
+    file.handle = handle;
+    file.path = path;
+    file.is_open = (handle != null);
+
+    return file;
+}
+
+// ファイルを閉じる
+export void close(File& file) {
+    if (file.is_open && file.handle != null) {
+        cm_file_close(file.handle);
+        file.is_open = false;
+        file.handle = null;
+    }
+}
+
+// ファイルから読み込む
+export int read(const File& file, string& buffer, int max_size) {
+    if (!file.is_open || file.handle == null) {
+        return -1;
+    }
+
+    // TODO: 適切なバッファ管理
+    char* temp_buffer = new char[max_size];
+    int bytes_read = cm_file_read(file.handle, temp_buffer, max_size);
+
+    if (bytes_read > 0) {
+        buffer = string(temp_buffer, bytes_read);
+    }
+
+    delete[] temp_buffer;
+    return bytes_read;
+}
+
+// ファイルに書き込む
+export int write(const File& file, string data) {
+    if (!file.is_open || file.handle == null) {
+        return -1;
+    }
+
+    // string から char* への変換（C++スタイル）
+    return cm_file_write(file.handle, const_cast<char*>(data.c_str()), data.length());
+}
+
+// ファイルの存在確認
+export bool exists(string path) {
+    return cm_file_exists(path);
+}
+
+// ファイルの削除
+export bool remove(string path) {
+    return cm_file_delete(path);
+}
+
+// ファイル全体を読み込む
+export string read_all(string path) {
+    File file = open(path, FileMode::Read);
+    if (!file.is_open) {
+        return "";
+    }
+
+    string content = "";
+    string buffer;
+
+    while (read(file, buffer, 1024) > 0) {
+        content += buffer;
+    }
+
+    close(file);
+    return content;
+}
+
+// ファイルに文字列を書き込む
+export bool write_all(string path, string content) {
+    File file = open(path, FileMode::Write);
+    if (!file.is_open) {
+        return false;
+    }
+
+    int written = write(file, content);
+    close(file);
+
+    return written == content.length();
+}
+
+// ファイルに追記
+export bool append(string path, string content) {
+    File file = open(path, FileMode::Append);
+    if (!file.is_open) {
+        return false;
+    }
+
+    int written = write(file, content);
+    close(file);
+
+    return written == content.length();
+}

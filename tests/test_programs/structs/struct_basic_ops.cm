@@ -1,0 +1,45 @@
+// 構造体の基本操作テスト
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p;
+
+    // メンバーへの代入
+    p.x = 10;
+    p.y = 20;
+
+    // メンバー値の読み取りと出力
+    println("Initial: x={}, y={}", p.x, p.y);
+
+    // メンバー値の再代入（演算を含む）
+    p.x = p.x + 5;  // 15
+    p.y = p.y * 2;  // 40
+
+    println("After operations: x={}, y={}", p.x, p.y);
+
+    // メンバー間の演算
+    int sum = p.x + p.y;  // 15 + 40 = 55
+    int product = p.x * p.y;  // 15 * 40 = 600
+
+    println("Sum: {}", sum);
+    println("Product: {}", product);
+
+    // 複数回の再代入
+    p.x = 100;
+    p.y = 200;
+    println("New values: x={}, y={}", p.x, p.y);
+
+    // メンバーを使った条件分岐
+    if (p.x > p.y) {
+        println("x is greater than y");
+    } else {
+        println("y is greater than or equal to x");
+    }
+
+    return 0;
+}

@@ -1,0 +1,24 @@
+// ufloat/udouble型のテスト
+int main() {
+    // ufloat (32bit non-negative float)
+    ufloat x = 1.5;
+    ufloat y = 2.5;
+    ufloat z = x + y;
+    
+    // udouble (64bit non-negative float)
+    udouble a = 3.14159265358979;
+    udouble b = 2.71828182845904;
+    udouble c = a * b;
+    
+    // 出力
+    println("{x} + {y} = {z:.1}");
+    println("{a} * {b} = {c:}");
+    
+    // 型変換
+    ufloat f = 1.0;
+    udouble d = 2.0;
+    udouble result = d + f;  // fがdoubleに昇格
+    println("Result: {result:.1}");
+    
+    return 0;
+}

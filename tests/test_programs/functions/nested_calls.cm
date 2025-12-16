@@ -1,0 +1,30 @@
+// ネストされた関数呼び出しのテスト
+import std::io::println;
+
+int double_val(int x) {
+    return x * 2;
+}
+
+int add_one(int x) {
+    return x + 1;
+}
+
+int square(int x) {
+    return x * x;
+}
+
+int main() {
+    // ネストされた呼び出し
+    int result = double_val(add_one(5));
+    println("double(add_one(5)) = {}", result);
+
+    // さらにネスト
+    int nested = square(double_val(3));
+    println("square(double(3)) = {}", nested);
+
+    // 演算と組み合わせ
+    int combined = add_one(square(2)) + double_val(3);
+    println("add_one(square(2)) + double(3) = {}", combined);
+
+    return 0;
+}

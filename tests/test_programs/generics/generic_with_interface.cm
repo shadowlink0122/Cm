@@ -1,0 +1,37 @@
+// interface を型引数として使用するテスト
+
+interface Printable {
+    void print();
+}
+
+struct Message {
+    private string text;
+}
+
+impl Message {
+    // Printable interfaceを実装
+    self(string text = "") {
+        // privateメンバの初期化
+        self.text = text;
+    }
+}
+
+impl Message for Printable {
+    void print() {
+        println("Message: {}", self.text);
+    }
+}
+
+// ジェネリック関数でinterface型を使う（制約チェックは将来実装）
+<T> void print_item(T item) {
+    item.print();
+}
+
+int main() {
+    Message msg = Message("Hello World");
+    
+    // ジェネリック関数呼び出し
+    print_item(msg);
+    
+    return 0;
+}

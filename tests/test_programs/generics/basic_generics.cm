@@ -1,0 +1,49 @@
+// 基本的なジェネリクス関数のテスト
+
+// ジェネリック identity 関数
+<T> T identity(T value) {
+    return value;
+}
+
+// ジェネリック最大値関数
+<T> T max(T a, T b) {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+// ジェネリック構造体
+struct Pair<T> {
+    T first;
+    T second;
+}
+
+// テスト関数
+int main() {
+    // int型でのidentityテスト
+    int x = identity(42);
+    println("identity(42) = {x}");
+
+    // int型でのmaxテスト
+    int m1 = max(10, 20);
+    println("max(10, 20) = {m1}");
+
+    // double型でのmaxテスト
+    double m2 = max(3.14, 2.71);
+    println("max(3.14, 2.71) = {m2}");
+
+    // ジェネリック構造体のテスト (int)
+    Pair<int> int_pair;
+    int_pair.first = 100;
+    int_pair.second = 200;
+    println("Int pair: ({}, {})", int_pair.first, int_pair.second);
+
+    // ジェネリック構造体のテスト (double)
+    Pair<double> dbl_pair;
+    dbl_pair.first = 1.5;
+    dbl_pair.second = 2.5;
+    println("Double pair: ({}, {})", dbl_pair.first, dbl_pair.second);
+
+    return 0;
+}

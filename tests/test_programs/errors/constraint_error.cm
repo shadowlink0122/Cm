@@ -1,0 +1,22 @@
+// 型制約エラーのテスト
+// このテストはコンパイルエラーを発生させる（string型はOrdを実装していない）
+
+// Ord制約付きジェネリック関数
+<T: Ord> T min(T a, T b) {
+    if (a < b) {
+        return a;
+    }
+    return b;
+}
+
+int main() {
+    // intはOrdを実装している - OK
+    int m1 = min(10, 5);
+    println("min(10, 5) = {m1}");
+    
+    // stringはOrdを実装していない - エラー
+    string s = min("hello", "world");
+    println("min(hello, world) = {s}");
+    
+    return 0;
+}

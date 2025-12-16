@@ -1,0 +1,72 @@
+// Option<T>型とmatch式の複合テスト
+
+// Option型をstructで表現
+struct Option<T> {
+    bool is_some;
+    T value;
+}
+
+// ヘルパー関数
+<T> Option<T> some(T value) {
+    Option<T> opt;
+    opt.is_some = true;
+    opt.value = value;
+    return opt;
+}
+
+<T> Option<T> none_like(T dummy) {
+    Option<T> opt;
+    opt.is_some = false;
+    return opt;
+}
+
+// match式を使ったOption処理
+<T> T unwrap_or_match(Option<T> opt, T default_value) {
+    // is_someフラグでマッチ
+    return match (opt.is_some) {
+        true => opt.value,
+        false => default_value,
+    };
+}
+
+// 値の変換（map相当）
+<T> int option_to_int(Option<T> opt, int none_value) {
+    return match (opt.is_some) {
+        true => 1,
+        false => none_value,
+    };
+}
+
+int main() {
+    // Some値のテスト
+    Option<int> some_val = some(42);
+    int v1 = unwrap_or_match(some_val, 0);
+    println("unwrap_or_match(Some(42), 0) = {v1}");
+    
+    // None値のテスト
+    Option<int> none_val = none_like(0);
+    int v2 = unwrap_or_match(none_val, -1);
+    println("unwrap_or_match(None, -1) = {v2}");
+    
+    // option_to_intのテスト
+    int code1 = option_to_int(some_val, 0);
+    int code2 = option_to_int(none_val, 0);
+    println("option_to_int(Some) = {code1}");
+    println("option_to_int(None) = {code2}");
+    
+    // 複数のOptionを組み合わせたテスト
+    Option<int> a = some(10);
+    Option<int> b = some(20);
+    
+    // 両方Someの場合のみ計算
+    int sum = match (a.is_some) {
+        true => match (b.is_some) {
+            true => a.value + b.value,
+            false => 0,
+        },
+        false => 0,
+    };
+    println("sum(Some(10), Some(20)) = {sum}");
+    
+    return 0;
+}

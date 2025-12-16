@@ -1,0 +1,57 @@
+// 7. 名前付きプレースホルダー風の記法
+import std::io::println;
+
+int main() {
+    // 変数の定義
+    int x = 10;
+    int y = 20;
+    string name = "Alice";
+    int age = 25;
+    double height = 165.5;
+    bool is_student = true;
+
+    println("=== 名前付きプレースホルダー風の記法 ===");
+    println("");
+
+    // 基本的な使用法 - プレースホルダー名と変数名を対応させる
+    println("名前: {name}", name);
+    println("年齢: {age}歳", age);
+    println("身長: {height}cm", height);
+    println("学生: {is_student}", is_student);
+
+    println("");
+    println("=== 複数の変数を使った例 ===");
+
+    // 複数の変数を自然に記述
+    println("x = {x}, y = {y}", x, y);
+    println("{x} + {y} = {sum}", x, y, x + y);
+    println("{x} * {y} = {product}", x, y, x * y);
+
+    // 計算結果の埋め込み
+    println("");
+    println("=== 計算式の結果 ===");
+
+    int a = 5;
+    int b = 3;
+    println("{a} + {b} = {result}", a, b, a + b);
+    println("{a} - {b} = {result}", a, b, a - b);
+    println("{a} > {b} は {condition}", a, b, a > b);
+
+    // より実用的な例
+    println("");
+    println("=== 実用的な例 ===");
+
+    // ユーザー情報の表示
+    println("ユーザー: {name} (年齢: {age}, 学生: {status})", name, age, is_student);
+
+    // ログメッセージ
+    int user_id = 12345;
+    println("[INFO] ユーザーID {user_id} がログインしました", user_id);
+    println("[DEBUG] x={x}, y={y}, 合計={total}", x, y, x + y);
+
+    // JSONライクな出力
+    println("{{ \"name\": \"{name}\", \"age\": {age}, \"student\": {is_student} }}",
+            name, age, is_student);
+
+    return 0;
+}

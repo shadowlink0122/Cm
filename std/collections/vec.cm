@@ -1,0 +1,317 @@
+// std.collections.vec - 動的配列モジュール
+module std.collections.vec;
+
+import std.core.{Option, Result, Clone, Default};
+
+// ============================================================
+// 動的配列（Vec）
+// ============================================================
+
+export struct Vec<T> {
+    data: *mut T,      // データポインタ
+    len: usize,        // 現在の要素数
+    capacity: usize,   // 確保済み容量
+}
+
+// ============================================================
+// 外部関数（メモリ管理）
+// ============================================================
+
+@[extern("cm_malloc")]
+fn malloc(size: usize) -> *mut void;
+
+@[extern("cm_realloc")]
+fn realloc(ptr: *mut void, new_size: usize) -> *mut void;
+
+@[extern("cm_free")]
+fn free(ptr: *mut void) -> void;
+
+@[extern("cm_memcpy")]
+fn memcpy(dest: *mut void, src: *const void, size: usize) -> void;
+
+@[extern("cm_memmove")]
+fn memmove(dest: *mut void, src: *const void, size: usize) -> void;
+
+// ============================================================
+// Vec実装
+// ============================================================
+
+impl<T> Vec<T> {
+    // 新しい空のVecを作成
+    export fn new() -> Vec<T> {
+        return Vec {
+            data: null,
+            len: 0,
+            capacity: 0,
+        };
+    }
+
+    // 指定容量で作成
+    export fn with_capacity(capacity: usize) -> Vec<T> {
+        if (capacity == 0) {
+            return Vec::new();
+        }
+
+        let data = malloc(capacity * sizeof(T)) as *mut T;
+        return Vec {
+            data: data,
+            len: 0,
+            capacity: capacity,
+        };
+    }
+
+    // 要素を追加
+    export fn push(&mut this, value: T) -> void {
+        if (this.len == this.capacity) {
+            this.grow();
+        }
+
+        // 要素を追加
+        this.data[this.len] = value;
+        this.len += 1;
+    }
+
+    // 要素を取り出す
+    export fn pop(&mut this) -> Option<T> {
+        if (this.len == 0) {
+            return Option::None;
+        }
+
+        this.len -= 1;
+        return Option::Some(this.data[this.len]);
+    }
+
+    // インデックスアクセス
+    export fn get(&this, index: usize) -> Option<&T> {
+        if (index >= this.len) {
+            return Option::None;
+        }
+        return Option::Some(&this.data[index]);
+    }
+
+    // ミュータブルなインデックスアクセス
+    export fn get_mut(&mut this, index: usize) -> Option<&mut T> {
+        if (index >= this.len) {
+            return Option::None;
+        }
+        return Option::Some(&mut this.data[index]);
+    }
+
+    // 要素を挿入
+    export fn insert(&mut this, index: usize, value: T) -> void {
+        assert!(index <= this.len, "index out of bounds");
+
+        if (this.len == this.capacity) {
+            this.grow();
+        }
+
+        // 要素を移動
+        if (index < this.len) {
+            let src = &this.data[index] as *const T;
+            let dest = &this.data[index + 1] as *mut T;
+            let count = this.len - index;
+            memmove(dest as *mut void, src as *const void, count * sizeof(T));
+        }
+
+        // 新要素を挿入
+        this.data[index] = value;
+        this.len += 1;
+    }
+
+    // 要素を削除
+    export fn remove(&mut this, index: usize) -> T {
+        assert!(index < this.len, "index out of bounds");
+
+        let value = this.data[index];
+        this.len -= 1;
+
+        // 要素を移動
+        if (index < this.len) {
+            let src = &this.data[index + 1] as *const T;
+            let dest = &this.data[index] as *mut T;
+            let count = this.len - index;
+            memmove(dest as *mut void, src as *const void, count * sizeof(T));
+        }
+
+        return value;
+    }
+
+    // クリア
+    export fn clear(&mut this) -> void {
+        this.len = 0;
+    }
+
+    // 長さを取得
+    export fn len(&this) -> usize {
+        return this.len;
+    }
+
+    // 空かどうか
+    export fn is_empty(&this) -> bool {
+        return this.len == 0;
+    }
+
+    // 容量を取得
+    export fn capacity(&this) -> usize {
+        return this.capacity;
+    }
+
+    // 容量を予約
+    export fn reserve(&mut this, additional: usize) -> void {
+        let required = this.len + additional;
+        if (required > this.capacity) {
+            this.grow_to(required);
+        }
+    }
+
+    // スライスとして取得
+    export fn as_slice(&this) -> &[T] {
+        return &this.data[0..this.len];
+    }
+
+    // ミュータブルスライスとして取得
+    export fn as_mut_slice(&mut this) -> &mut [T] {
+        return &mut this.data[0..this.len];
+    }
+
+    // イテレータを返す
+    export fn iter(&this) -> VecIter<T> {
+        return VecIter {
+            vec: this,
+            index: 0,
+        };
+    }
+
+    // 容量を拡張（内部関数）
+    fn grow(&mut this) -> void {
+        let new_capacity = if (this.capacity == 0) {
+            4
+        } else {
+            this.capacity * 2
+        };
+        this.grow_to(new_capacity);
+    }
+
+    // 指定容量に拡張（内部関数）
+    fn grow_to(&mut this, new_capacity: usize) -> void {
+        assert!(new_capacity >= this.len, "new capacity too small");
+
+        let new_data = if (this.data == null) {
+            malloc(new_capacity * sizeof(T)) as *mut T
+        } else {
+            realloc(this.data as *mut void, new_capacity * sizeof(T)) as *mut T
+        };
+
+        this.data = new_data;
+        this.capacity = new_capacity;
+    }
+}
+
+// ============================================================
+// Drop実装（デストラクタ）
+// ============================================================
+
+impl<T> Drop for Vec<T> {
+    fn drop(&mut this) -> void {
+        if (this.data != null) {
+            // 各要素のデストラクタを呼ぶ
+            for i in 0..this.len {
+                drop(this.data[i]);
+            }
+
+            // メモリを解放
+            free(this.data as *mut void);
+            this.data = null;
+            this.len = 0;
+            this.capacity = 0;
+        }
+    }
+}
+
+// ============================================================
+// Default実装
+// ============================================================
+
+impl<T> Default for Vec<T> {
+    static fn default() -> Vec<T> {
+        return Vec::new();
+    }
+}
+
+// ============================================================
+// Clone実装
+// ============================================================
+
+impl<T: Clone> Clone for Vec<T> {
+    fn clone(&this) -> Vec<T> {
+        let mut new_vec = Vec::with_capacity(this.len);
+        for i in 0..this.len {
+            new_vec.push(this.data[i].clone());
+        }
+        return new_vec;
+    }
+}
+
+// ============================================================
+// インデックスアクセス演算子
+// ============================================================
+
+impl<T> ops::Index<usize> for Vec<T> {
+    type Output = T;
+
+    fn index(&this, index: usize) -> &T {
+        assert!(index < this.len, "index out of bounds");
+        return &this.data[index];
+    }
+}
+
+impl<T> ops::IndexMut<usize> for Vec<T> {
+    fn index_mut(&mut this, index: usize) -> &mut T {
+        assert!(index < this.len, "index out of bounds");
+        return &mut this.data[index];
+    }
+}
+
+// ============================================================
+// イテレータ
+// ============================================================
+
+export struct VecIter<T> {
+    vec: &Vec<T>,
+    index: usize,
+}
+
+impl<T> Iterator for VecIter<T> {
+    type Item = &T;
+
+    fn next(&mut this) -> Option<&T> {
+        if (this.index < this.vec.len) {
+            let item = &this.vec.data[this.index];
+            this.index += 1;
+            return Option::Some(item);
+        }
+        return Option::None;
+    }
+}
+
+// ============================================================
+// ヘルパー関数
+// ============================================================
+
+// 配列からVecを作成
+export fn from_array<T, const N: usize>(arr: [T; N]) -> Vec<T> {
+    let mut vec = Vec::with_capacity(N);
+    for i in 0..N {
+        vec.push(arr[i]);
+    }
+    return vec;
+}
+
+// スライスからVecを作成
+export fn from_slice<T: Clone>(slice: &[T]) -> Vec<T> {
+    let mut vec = Vec::with_capacity(slice.len());
+    for item in slice {
+        vec.push(item.clone());
+    }
+    return vec;
+}

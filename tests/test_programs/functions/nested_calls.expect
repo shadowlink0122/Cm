@@ -1,0 +1,3 @@
+double(add_one(5)) = 12
+square(double(3)) = 36
+add_one(square(2)) + double(3) = 11

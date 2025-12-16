@@ -1,0 +1,92 @@
+// std.io - 標準入出力モジュール
+module std.io;
+
+// ============================================================
+// 外部関数宣言（ランタイムが提供）
+// ============================================================
+
+// プリミティブな出力関数（プラットフォーム依存）
+extern "C" void cm_print_string(string s);
+extern "C" void cm_print_int(int i);
+extern "C" void cm_print_float(float f);
+extern "C" void cm_print_bool(bool b);
+extern "C" void cm_print_char(char c);
+
+// ============================================================
+// パブリックAPI
+// ============================================================
+
+// 文字列を出力
+export void print(string s) {
+    cm_print_string(s);
+}
+
+// 文字列を出力して改行
+export void println(string s) {
+    cm_print_string(s);
+    cm_print_string("\n");
+}
+
+// 整数を出力
+export void print_int(int n) {
+    cm_print_int(n);
+}
+
+// 整数を出力して改行
+export void println_int(int n) {
+    cm_print_int(n);
+    cm_print_string("\n");
+}
+
+// 浮動小数点数を出力
+export void print_float(float f) {
+    cm_print_float(f);
+}
+
+// 浮動小数点数を出力して改行
+export void println_float(float f) {
+    cm_print_float(f);
+    cm_print_string("\n");
+}
+
+// ブール値を出力
+export void print_bool(bool b) {
+    cm_print_bool(b);
+}
+
+// ブール値を出力して改行
+export void println_bool(bool b) {
+    cm_print_bool(b);
+    cm_print_string("\n");
+}
+
+// 文字を出力
+export void print_char(char c) {
+    cm_print_char(c);
+}
+
+// エラー出力
+export void eprint(string s) {
+    // TODO: stderr への出力実装
+    cm_print_string("[ERROR] ");
+    cm_print_string(s);
+}
+
+// エラー出力して改行
+export void eprintln(string s) {
+    eprint(s);
+    cm_print_string("\n");
+}
+
+// デバッグ出力（条件付きコンパイル）
+@[cfg(debug)]
+export void debug_print(string s) {
+    cm_print_string("[DEBUG] ");
+    cm_print_string(s);
+    cm_print_string("\n");
+}
+
+// フォーマット付き出力（将来実装）
+// export void printf(string format, ...) {
+//     // TODO: フォーマット文字列のパースと可変長引数の処理
+// }

@@ -1,0 +1,23 @@
+// デフォルトコンストラクタのテスト
+// Type name() 形式
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point {
+    self() {
+        self.x = 100;
+        self.y = 200;
+    }
+}
+
+int main() {
+    // デフォルトコンストラクタを明示的に呼び出し
+    Point p();
+    
+    println("p: ({}, {})", p.x, p.y);
+    
+    return (p.x == 100 && p.y == 200) ? 0 : 1;
+}

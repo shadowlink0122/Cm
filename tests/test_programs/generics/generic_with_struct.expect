@@ -1,0 +1,3 @@
+Int box: 42
+Point box: (10, 20)
+get_value(int_box) = 42

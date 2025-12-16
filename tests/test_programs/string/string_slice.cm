@@ -1,0 +1,30 @@
+// 文字列スライスのテスト（Python風構文）
+
+int main() {
+    string s = "Hello, World!";
+    
+    // 基本的なスライス
+    string sub1 = s[0:5];
+    println("s[0:5] = {sub1}");
+    
+    string sub2 = s[7:12];
+    println("s[7:12] = {sub2}");
+    
+    // 開始省略（最初から）
+    string sub3 = s[:5];
+    println("s[:5] = {sub3}");
+    
+    // 終了省略（最後まで）
+    string sub4 = s[7:];
+    println("s[7:] = {sub4}");
+    
+    // 負のインデックス
+    string sub5 = s[-6:-1];
+    println("s[-6:-1] = {sub5}");
+    
+    // 全体コピー
+    string sub6 = s[:];
+    println("s[:] = {sub6}");
+    
+    return 0;
+}

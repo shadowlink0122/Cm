@@ -1,0 +1,62 @@
+// 否定演算子のテスト
+import std::io::println;
+
+int main() {
+    // bool値の否定
+    bool t = true;
+    bool f = false;
+
+    println("!true = {}", !t);
+    println("!false = {}", !f);
+
+    // リテラルの否定
+    println("Direct !true = {}", !true);
+    println("Direct !false = {}", !false);
+
+    // 二重否定
+    println("!!true = {}", !!true);
+    println("!!false = {}", !!false);
+
+    // if文での使用
+    if (!false) {
+        println("!false is true");
+    }
+
+    if (!true) {
+        println("This should not print");
+    } else {
+        println("!true is false");
+    }
+
+    // while文での使用
+    int count = 0;
+    while (!(count > 2)) {
+        println("Count: {}", count);
+        count = count + 1;
+    }
+
+    // 比較演算子との組み合わせ
+    int x = 5;
+    int y = 10;
+
+    if (!(x > y)) {
+        println("!(5 > 10) is true");
+    }
+
+    if (!(x == y)) {
+        println("!(5 == 10) is true");
+    }
+
+    // 論理演算子との組み合わせ
+    bool a = true;
+    bool b = false;
+
+    println("!(a && b) = {}", !(a && b));
+    println("!(a || b) = {}", !(a || b));
+
+    // De Morganの法則
+    println("!a || !b = {}", !a || !b);  // !(a && b)と同じ
+    println("!a && !b = {}", !a && !b);  // !(a || b)と同じ
+
+    return 0;
+}

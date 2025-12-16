@@ -1,0 +1,195 @@
+// 基本的なオーバーロードの例
+
+// ============================================================
+// 正しい使い方：overload修飾子を使用
+// ============================================================
+
+// 全ての宣言にoverloadが必要
+overload int calculate(int x) {
+    return x * 2;
+}
+
+overload double calculate(double x) {
+    return x * 3.14;
+}
+
+overload string calculate(string s) {
+    return "Calculated: " + s;
+}
+
+// デフォルト引数との併用
+overload void log(string message) {
+    println("[INFO] " + message);
+}
+
+overload void log(string level, string message) {
+    println("[" + level + "] " + message);
+}
+
+// ============================================================
+// エラーになる例（コメントアウト）
+// ============================================================
+
+/*
+// エラー：overloadなしで同名関数
+void process(int x) { }
+void process(double x) { }  // エラー！overloadが必要
+
+// エラー：一部だけoverload
+void handle(int x) { }
+overload void handle(double x) { }  // エラー！最初もoverload必要
+
+// エラー：同じシグネチャ
+overload int compute(int x) { return x; }
+overload int compute(int y) { return y * 2; }  // エラー！同じシグネチャ
+
+// エラー：戻り値の型だけ異なる
+overload int get() { return 1; }
+overload double get() { return 1.0; }  // エラー！パラメータが同じ
+*/
+
+// ============================================================
+// ジェネリック関数とオーバーロード
+// ============================================================
+
+// ジェネリック版（基本実装）
+<T: Ord> T max(T a, T b) {
+    return a > b ? a : b;
+}
+
+// 特殊化（文字列用）
+overload string max(string a, string b) {
+    // 文字列は長さで比較
+    return a.len() > b.len() ? a : b;
+}
+
+// パラメータ数が異なる版
+overload <T: Ord> T max(T a, T b, T c) {
+    return max(max(a, b), c);
+}
+
+// ============================================================
+// コンストラクタのオーバーロード
+// ============================================================
+
+struct Rectangle {
+    double width;
+    double height;
+}
+
+impl Rectangle {
+    // デフォルトコンストラクタ（overload不要）
+    self() {
+        this.width = 0;
+        this.height = 0;
+    }
+
+    // 正方形用コンストラクタ
+    overload self(double size) {
+        this.width = size;
+        this.height = size;
+    }
+
+    // 長方形用コンストラクタ
+    overload self(double w, double h) {
+        this.width = w;
+        this.height = h;
+    }
+
+    // コピーコンストラクタ
+    overload self(const Rectangle& other) {
+        this.width = other.width;
+        this.height = other.height;
+    }
+
+    // デストラクタ（オーバーロード不可）
+    ~self() {
+        // クリーンアップ処理
+    }
+}
+
+// メソッドのオーバーロード
+interface Shape {
+    double area();
+    void scale(double factor);
+}
+
+impl Rectangle for Shape {
+    double area() {
+        return width * height;
+    }
+
+    void scale(double factor) {
+        width *= factor;
+        height *= factor;
+    }
+
+    // オーバーロード版：異方向スケール
+    overload void scale(double x_factor, double y_factor) {
+        width *= x_factor;
+        height *= y_factor;
+    }
+}
+
+// ============================================================
+// 演算子オーバーロード（暗黙的に許可）
+// ============================================================
+
+struct Vector2D {
+    double x;
+    double y;
+}
+
+// 演算子はoverload不要（暗黙的に許可）
+Vector2D operator+(const Vector2D& a, const Vector2D& b) {
+    return Vector2D{a.x + b.x, a.y + b.y};
+}
+
+// スカラー倍
+Vector2D operator*(const Vector2D& v, double scalar) {
+    return Vector2D{v.x * scalar, v.y * scalar};
+}
+
+Vector2D operator*(double scalar, const Vector2D& v) {
+    return Vector2D{v.x * scalar, v.y * scalar};
+}
+
+// ============================================================
+// 使用例
+// ============================================================
+
+int main() {
+    // 基本的なオーバーロード
+    int i = calculate(10);           // 20
+    double d = calculate(10.0);      // 31.4
+    string s = calculate("test");    // "Calculated: test"
+
+    // ログ関数
+    log("Starting");                 // "[INFO] Starting"
+    log("ERROR", "Failed");          // "[ERROR] Failed"
+
+    // ジェネリックと特殊化
+    int max_int = max(5, 10);        // 10（ジェネリック版）
+    string max_str = max("hi", "hello"); // "hello"（長さで比較）
+    int max3 = max(5, 10, 3);        // 10（3引数版）
+
+    // コンストラクタのオーバーロード
+    Rectangle r1;                     // デフォルト
+    Rectangle r2(5.0);                // 正方形 5x5
+    Rectangle r3(3.0, 4.0);           // 長方形 3x4
+    Rectangle r4(r3);                 // コピー
+
+    // メソッドのオーバーロード
+    r3.scale(2.0);                    // 均等スケール
+    r3.scale(1.5, 2.0);               // 異方向スケール
+
+    // 演算子オーバーロード
+    Vector2D v1{1.0, 2.0};
+    Vector2D v2{3.0, 4.0};
+    Vector2D v3 = v1 + v2;            // {4.0, 6.0}
+    Vector2D v4 = v1 * 2.0;           // {2.0, 4.0}
+    Vector2D v5 = 3.0 * v1;           // {3.0, 6.0}
+
+    println("All tests completed!");
+    return 0;
+}

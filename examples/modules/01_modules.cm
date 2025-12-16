@@ -1,0 +1,53 @@
+// モジュールシステムの使用例
+
+// 標準ライブラリからインポート
+import std::io::{print, println};
+import std::collections::Vec;
+import std::core::{Option, Result};
+
+// エイリアス付きインポート
+import std::collections::HashMap as Map;
+
+// マクロのインポート
+import std::macros::{assert, println_macro, vec};
+
+int main() {
+    // std.ioモジュールの関数を使用
+    println("Hello from modular Cm!");
+
+    // Vecを使用
+    Vec<int> numbers = Vec<int>::new();
+    numbers.push(1);
+    numbers.push(2);
+    numbers.push(3);
+
+    // マクロを使用
+    assert!(numbers.len() == 3, "Vector should have 3 elements");
+
+    // vec!マクロで初期化
+    Vec<string> fruits = vec!["apple", "banana", "orange"];
+
+    // Option型を使用
+    Option<int> maybe_value = Option<int>::Some(42);
+    match (maybe_value) {
+        Option::Some(val) => println!("Value: {}", val),
+        Option::None => println("No value"),
+    }
+
+    // Result型でエラーハンドリング
+    Result<int, string> result = divide(10, 2);
+    match (result) {
+        Result::Ok(value) => println!("Result: {}", value),
+        Result::Err(msg) => println!("Error: {}", msg),
+    }
+
+    return 0;
+}
+
+// Result型を返す関数
+Result<int, string> divide(int a, int b) {
+    if (b == 0) {
+        return Result<int, string>::Err("Division by zero");
+    }
+    return Result<int, string>::Ok(a / b);
+}

@@ -1,0 +1,66 @@
+// ネストしたジェネリクスと型引数のテスト
+
+// ジェネリックなOptionタイプ
+struct Option<T> {
+    bool has_value;
+    T value;
+}
+
+// 複数の型パラメータを持つ構造体
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+// 複数の型パラメータを持つ関数
+<T, U> void print_pair(T first, U second) {
+    println("Pair: ({}, {})", first, second);
+}
+
+// ジェネリック関数の複数呼び出し
+<T> T first_of(T a, T b, T c) {
+    return a;
+}
+
+int main() {
+    // Option型のテスト (手動で値を設定)
+    Option<int> some_value;
+    some_value.has_value = true;
+    some_value.value = 42;
+
+    Option<int> no_value;
+    no_value.has_value = false;
+    no_value.value = 0;
+
+    if (some_value.has_value) {
+        println("Value: {}", some_value.value);
+    }
+
+    if (!no_value.has_value) {
+        println("No value (as expected)");
+    }
+
+    // Pair型のテスト (int, string)
+    Pair<int, string> p1;
+    p1.first = 100;
+    p1.second = "hello";
+    println("Pair<int, string>: ({}, {})", p1.first, p1.second);
+
+    // Pair型のテスト (double, bool)
+    Pair<double, bool> p2;
+    p2.first = 3.14;
+    p2.second = true;
+    println("Pair<double, bool>: ({}, {})", p2.first, p2.second);
+
+    // 複数型パラメータのテスト
+    print_pair(123, "test");
+    print_pair(3.14, true);
+
+    // ジェネリック関数の複数呼び出し
+    int i = first_of(1, 2, 3);
+    double d = first_of(1.1, 2.2, 3.3);
+    println("first_of(1, 2, 3) = {i}");
+    println("first_of(1.1, 2.2, 3.3) = {d}");
+
+    return 0;
+}

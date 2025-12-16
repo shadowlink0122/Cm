@@ -1,0 +1,54 @@
+// impl<T>ジェネリクスのテスト
+
+// ジェネリック構造体
+struct Container<T> {
+    T value;
+}
+
+// インターフェース定義
+interface Printable {
+    void print();
+}
+
+interface ValueHolder<T> {
+    T get();
+    void set(T val);
+}
+
+// impl<T>構文でジェネリック型にインターフェースを実装
+impl<T> Container<T> for Printable {
+    void print() {
+        println("Container holds a value");
+    }
+}
+
+// ジェネリックインターフェースの実装
+impl<T> Container<T> for ValueHolder<T> {
+    T get() {
+        return self.value;
+    }
+    
+    void set(T val) {
+        self.value = val;
+    }
+}
+
+int main() {
+    Container<int> c;
+    c.value = 42;
+    c.print();
+    
+    // ジェネリックメソッドの呼び出し
+    c.set(100);
+    int v = c.get();
+    println("c.get() = {v}");
+    
+    Container<string> cs;
+    cs.value = "Hello";
+    cs.print();
+    cs.set("World");
+    string sv = cs.get();
+    println("cs.get() = {sv}");
+    
+    return 0;
+}

@@ -1,0 +1,10 @@
+// 符号なし整数型のテスト：uint
+import std::io::println;
+
+int main() {
+    // uint (32bit unsigned)
+    uint ui = 3000000;
+    println("uint: {}", ui);
+
+    return 0;
+}

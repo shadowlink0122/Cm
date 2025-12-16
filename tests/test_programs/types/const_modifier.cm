@@ -1,0 +1,24 @@
+// const修飾子のテスト - 再代入不可
+import std::io::println;
+
+int main() {
+    // const変数は初期化後に変更不可
+    const int MAX = 100;
+    println("const MAX = {}", MAX);
+    
+    // MAX = 200;  // これはコンパイルエラーになるべき
+
+    // const double
+    const double PI = 3.14159;
+    println("const PI = {}", PI);
+    
+    // const string
+    const string GREETING = "Hello";
+    println("const GREETING = {}", GREETING);
+    
+    // constを使った計算（読み取りは可能）
+    int doubled = MAX * 2;
+    println("MAX * 2 = {}", doubled);
+
+    return 0;
+}

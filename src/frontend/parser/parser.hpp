@@ -1,0 +1,1294 @@
+#pragma once
+
+#include "../../common/debug/par.hpp"
+#include "../ast/decl.hpp"
+#include "../lexer/token.hpp"
+
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace cm {
+
+// ============================================================
+// 診断メッセージ
+// ============================================================
+enum class DiagKind { Error, Warning, Note };
+
+struct Diagnostic {
+    DiagKind kind;
+    Span span;
+    std::string message;
+
+    Diagnostic(DiagKind k, Span s, std::string m) : kind(k), span(s), message(std::move(m)) {}
+};
+
+// ============================================================
+// パーサ
+// ============================================================
+class Parser {
+   public:
+    Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)), pos_(0) {}
+
+    // プログラム全体を解析
+    ast::Program parse() {
+        debug::par::log(debug::par::Id::Start);
+
+        ast::Program program;
+        int iterations = 0;
+        const int MAX_ITERATIONS = 10000;
+        size_t last_pos = pos_;
+
+        while (!is_at_end() && iterations < MAX_ITERATIONS) {
+            // 無限ループ検出
+            if (pos_ == last_pos && iterations > 0) {
+                error("Parser stuck - no progress made");
+                if (!is_at_end()) {
+                    advance();  // 強制的に進める
+                }
+            }
+            last_pos = pos_;
+
+            if (auto decl = parse_top_level()) {
+                program.declarations.push_back(std::move(decl));
+            } else {
+                synchronize();
+            }
+            iterations++;
+        }
+
+        if (iterations >= MAX_ITERATIONS) {
+            error("Parser exceeded maximum iteration limit");
+        }
+
+        debug::par::log(debug::par::Id::End,
+                        std::to_string(program.declarations.size()) + " declarations");
+        return program;
+    }
+
+    const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
+    bool has_errors() const {
+        for (const auto& d : diagnostics_) {
+            if (d.kind == DiagKind::Error)
+                return true;
+        }
+        return false;
+    }
+
+   private:
+    // トップレベル宣言
+    ast::DeclPtr parse_top_level() {
+        // アトリビュートチェック（マクロなど）
+        if (check(TokenKind::At)) {
+            auto saved_pos = pos_;
+            std::vector<ast::AttributeNode> attrs;
+            while (check(TokenKind::At)) {
+                attrs.push_back(parse_attribute());
+            }
+
+            // @[macro]の場合 (廃止予定 - #macroを使用してください)
+            for (const auto& attr : attrs) {
+                if (attr.name == "macro") {
+                    // このパスは廃止予定
+                    pos_ = saved_pos;  // 位置を戻す
+                    return nullptr;    // @[macro]はサポートしない
+                }
+            }
+
+            // その他のアトリビュート付き宣言
+            pos_ = saved_pos;  // 位置を戻す
+        }
+
+        // module宣言
+        if (check(TokenKind::KwModule)) {
+            return parse_module();
+        }
+
+        // import
+        if (check(TokenKind::KwImport)) {
+            return parse_import_stmt();
+        }
+
+        // use
+        if (check(TokenKind::KwUse)) {
+            return parse_use();
+        }
+
+        // export
+        if (check(TokenKind::KwExport)) {
+            return parse_export();
+        }
+
+        // extern
+        if (check(TokenKind::KwExtern)) {
+            return parse_extern();
+        }
+
+        // 修飾子を収集
+        bool is_static = consume_if(TokenKind::KwStatic);
+        bool is_inline = consume_if(TokenKind::KwInline);
+        bool is_async = consume_if(TokenKind::KwAsync);
+
+        // struct
+        if (check(TokenKind::KwStruct)) {
+            return parse_struct(false);
+        }
+
+        // interface
+        if (check(TokenKind::KwInterface)) {
+            return parse_interface(false);
+        }
+
+        // impl
+        if (check(TokenKind::KwImpl)) {
+            return parse_impl();
+        }
+
+        // template
+        if (check(TokenKind::KwTemplate)) {
+            return parse_template_decl();
+        }
+
+        // enum
+        if (check(TokenKind::KwEnum)) {
+            return parse_enum_decl();
+        }
+
+        // typedef
+        if (check(TokenKind::KwTypedef)) {
+            return parse_typedef_decl();
+        }
+
+        // #macro (新しいC++風マクロ構文)
+        if (check(TokenKind::Hash)) {
+            // #macroか他のディレクティブか確認
+            auto saved_pos = pos_;
+            advance();  // consume '#'
+
+            if (check(TokenKind::KwMacro)) {
+                // マクロは未実装
+                error("Macro definitions (#macro) are not yet implemented");
+                // マクロ定義全体をスキップ
+                advance();  // consume 'macro'
+
+                // 安全なスキップ: 最大100トークンまでスキップ
+                int token_count = 0;
+                int brace_count = 0;
+                bool in_block = false;
+
+                while (!is_at_end() && token_count < 100) {
+                    if (current().kind == TokenKind::LBrace) {
+                        in_block = true;
+                        brace_count++;
+                    } else if (current().kind == TokenKind::RBrace && in_block) {
+                        brace_count--;
+                        if (brace_count == 0) {
+                            advance();  // consume final '}'
+                            break;
+                        }
+                    }
+                    advance();
+                    token_count++;
+                }
+
+                // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
+                if (token_count >= 100) {
+                    error("Failed to skip macro definition - too many tokens");
+                }
+                return nullptr;
+            }
+
+            // その他のディレクティブ（#test, #bench, #deprecated等）
+            // 現在未実装のディレクティブをチェック
+            if (check(TokenKind::Ident)) {
+                std::string directive_name = std::string(current().get_string());
+                if (directive_name == "test" || directive_name == "bench" ||
+                    directive_name == "deprecated" || directive_name == "inline" ||
+                    directive_name == "optimize") {
+                    // 未実装のディレクティブ
+                    error("Directive '#" + directive_name + "' is not yet implemented");
+                    // エラー後はスキップして続行
+                    while (!is_at_end() && current().kind != TokenKind::Semicolon &&
+                           current().kind != TokenKind::LBrace) {
+                        advance();
+                    }
+                    return nullptr;
+                }
+            }
+
+            pos_ = saved_pos;  // 位置を戻す
+            // 未知のディレクティブ
+            error("Unknown or invalid directive after '#'");
+            return nullptr;
+        }
+
+        // macro (旧構文 - 互換性のため)
+        if (check(TokenKind::KwMacro)) {
+            // マクロは未実装
+            error("Macro definitions (macro keyword) are not yet implemented");
+            advance();  // consume 'macro'
+
+            // 安全なスキップ: 最大100トークンまでスキップ
+            int token_count = 0;
+            int brace_count = 0;
+            bool in_block = false;
+
+            while (!is_at_end() && token_count < 100) {
+                if (current().kind == TokenKind::LBrace) {
+                    in_block = true;
+                    brace_count++;
+                } else if (current().kind == TokenKind::RBrace && in_block) {
+                    brace_count--;
+                    if (brace_count == 0) {
+                        advance();  // consume final '}'
+                        break;
+                    }
+                }
+                advance();
+                token_count++;
+            }
+
+            // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
+            if (token_count >= 100) {
+                error("Failed to skip macro definition - too many tokens");
+            }
+            return nullptr;
+        }
+
+        // constexpr
+        if (check(TokenKind::KwConstexpr)) {
+            return parse_constexpr();
+        }
+
+        // 関数 (型 名前 ...)
+        return parse_function(false, is_static, is_inline, is_async);
+    }
+
+    // 関数定義
+    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async,
+                                std::vector<ast::AttributeNode> directives = {}) {
+        uint32_t start_pos = current().start;
+        debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
+
+        // 明示的なジェネリックパラメータをチェック（例: <T> T max(T a, T b)）
+        auto [generic_params, generic_params_v2] = parse_generic_params_v2();
+
+        auto return_type = parse_type();
+        std::string name = expect_ident();
+
+        expect(TokenKind::LParen);
+        auto params = parse_params();
+        expect(TokenKind::RParen);
+
+        auto body = parse_block();
+
+        auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
+                                                        std::move(return_type), std::move(body));
+
+        // ジェネリックパラメータを設定（明示的に指定された場合）
+        if (!generic_params.empty()) {
+            func->generic_params = std::move(generic_params);
+            func->generic_params_v2 = std::move(generic_params_v2);
+
+            // デバッグ出力
+            std::string params_str = "Function '" + func->name + "' has generic params: ";
+            for (const auto& p : func->generic_params) {
+                params_str += p + " ";
+            }
+            debug::par::log(debug::par::Id::FuncDef, params_str, debug::Level::Info);
+        }
+
+        func->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        func->is_static = is_static;
+        func->is_inline = is_inline;
+        func->is_async = is_async;
+        func->attributes = std::move(directives);  // ディレクティブをアトリビュートとして保存
+
+        return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
+    }
+
+    // パラメータリスト
+    std::vector<ast::Param> parse_params() {
+        std::vector<ast::Param> params;
+        bool has_default = false;  // デフォルト引数が始まったかどうか
+
+        if (!check(TokenKind::RParen)) {
+            do {
+                ast::Param param;
+                param.qualifiers.is_const = consume_if(TokenKind::KwConst);
+                param.type = parse_type();
+
+                // C++スタイルの配列パラメータ: int[10] arr
+                param.type = check_array_suffix(std::move(param.type));
+
+                param.name = expect_ident();
+
+                // デフォルト引数をパース
+                if (consume_if(TokenKind::Eq)) {
+                    param.default_value = parse_expr();
+                    has_default = true;
+                } else if (has_default) {
+                    // デフォルト引数の後には必須引数は置けない
+                    error("Default argument required after parameter with default value");
+                }
+
+                params.push_back(std::move(param));
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        return params;
+    }
+
+    // 構造体
+    ast::DeclPtr parse_struct(bool is_export) {
+        uint32_t start_pos = current().start;
+        debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
+
+        expect(TokenKind::KwStruct);
+        std::string name = expect_ident();
+
+        // ジェネリックパラメータをチェック（例: struct Vec<T>）
+        auto [generic_params, generic_params_v2] = parse_generic_params_v2();
+
+        // with キーワード
+        std::vector<std::string> auto_impls;
+        if (consume_if(TokenKind::KwWith)) {
+            do {
+                auto_impls.push_back(expect_ident());
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        // where句をパース（例: where T: Eq, U: Ord + Clone, V: I | J）
+        // 構造体のジェネリックパラメータに制約を追加
+        if (consume_if(TokenKind::KwWhere)) {
+            do {
+                std::string type_param = expect_ident();
+                expect(TokenKind::Colon);
+
+                // インターフェース境界をパース
+                std::vector<std::string> interfaces;
+                interfaces.push_back(expect_ident());
+                ast::ConstraintKind constraint_kind = ast::ConstraintKind::Single;
+
+                // 複合インターフェース境界
+                if (check(TokenKind::Pipe)) {
+                    constraint_kind = ast::ConstraintKind::Or;
+                    while (consume_if(TokenKind::Pipe)) {
+                        interfaces.push_back(expect_ident());
+                    }
+                } else if (check(TokenKind::Plus)) {
+                    constraint_kind = ast::ConstraintKind::And;
+                    while (consume_if(TokenKind::Plus)) {
+                        interfaces.push_back(expect_ident());
+                    }
+                }
+
+                // 対応するジェネリックパラメータに制約を追加
+                for (auto& gp : generic_params_v2) {
+                    if (gp.name == type_param) {
+                        gp.type_constraint = ast::TypeConstraint(constraint_kind, interfaces);
+                        gp.constraints = interfaces;
+                        break;
+                    }
+                }
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        expect(TokenKind::LBrace);
+
+        std::vector<ast::Field> fields;
+        bool has_default_field = false;
+        while (!check(TokenKind::RBrace) && !is_at_end()) {
+            ast::Field field;
+
+            // private修飾子: impl/interfaceのselfポインタからのみアクセス可能
+            field.visibility = consume_if(TokenKind::KwPrivate) ? ast::Visibility::Private
+                                                                : ast::Visibility::Export;
+
+            // default修飾子: デフォルトメンバ（構造体に1つだけ）
+            if (consume_if(TokenKind::KwDefault)) {
+                if (has_default_field) {
+                    error("Only one default member allowed per struct");
+                }
+                field.is_default = true;
+                has_default_field = true;
+            }
+
+            field.qualifiers.is_const = consume_if(TokenKind::KwConst);
+            field.type = parse_type();
+
+            // C++スタイルの配列フィールド: int[10] data;
+            field.type = check_array_suffix(std::move(field.type));
+
+            field.name = expect_ident();
+            expect(TokenKind::Semicolon);
+            fields.push_back(std::move(field));
+        }
+
+        expect(TokenKind::RBrace);
+
+        auto decl = std::make_unique<ast::StructDecl>(std::move(name), std::move(fields));
+        decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        decl->auto_impls = std::move(auto_impls);
+
+        // ジェネリックパラメータを設定（明示的に指定された場合）
+        if (!generic_params.empty()) {
+            decl->generic_params = std::move(generic_params);
+            decl->generic_params_v2 = std::move(generic_params_v2);
+
+            // デバッグ出力
+            std::string params_str = "Struct '" + decl->name + "' has generic params: ";
+            for (const auto& p : decl->generic_params) {
+                params_str += p + " ";
+            }
+            debug::par::log(debug::par::Id::StructDef, params_str, debug::Level::Info);
+        }
+
+        return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
+    }
+
+    // 演算子の種類をパース
+    std::optional<ast::OperatorKind> parse_operator_kind() {
+        if (check(TokenKind::EqEq)) {
+            advance();
+            return ast::OperatorKind::Eq;
+        }
+        if (check(TokenKind::BangEq)) {
+            advance();
+            return ast::OperatorKind::Ne;
+        }
+        if (check(TokenKind::Lt)) {
+            advance();
+            return ast::OperatorKind::Lt;
+        }
+        if (check(TokenKind::Gt)) {
+            advance();
+            return ast::OperatorKind::Gt;
+        }
+        if (check(TokenKind::LtEq)) {
+            advance();
+            return ast::OperatorKind::Le;
+        }
+        if (check(TokenKind::GtEq)) {
+            advance();
+            return ast::OperatorKind::Ge;
+        }
+        if (check(TokenKind::Plus)) {
+            advance();
+            return ast::OperatorKind::Add;
+        }
+        if (check(TokenKind::Minus)) {
+            advance();
+            return ast::OperatorKind::Sub;
+        }
+        if (check(TokenKind::Star)) {
+            advance();
+            return ast::OperatorKind::Mul;
+        }
+        if (check(TokenKind::Slash)) {
+            advance();
+            return ast::OperatorKind::Div;
+        }
+        if (check(TokenKind::Percent)) {
+            advance();
+            return ast::OperatorKind::Mod;
+        }
+        if (check(TokenKind::Amp)) {
+            advance();
+            return ast::OperatorKind::BitAnd;
+        }
+        if (check(TokenKind::Pipe)) {
+            advance();
+            return ast::OperatorKind::BitOr;
+        }
+        if (check(TokenKind::Caret)) {
+            advance();
+            return ast::OperatorKind::BitXor;
+        }
+        if (check(TokenKind::LtLt)) {
+            advance();
+            return ast::OperatorKind::Shl;
+        }
+        if (check(TokenKind::GtGt)) {
+            advance();
+            return ast::OperatorKind::Shr;
+        }
+        if (check(TokenKind::Tilde)) {
+            advance();
+            return ast::OperatorKind::BitNot;
+        }
+        if (check(TokenKind::Bang)) {
+            advance();
+            return ast::OperatorKind::Not;
+        }
+        return std::nullopt;
+    }
+
+    // インターフェース
+    ast::DeclPtr parse_interface(bool is_export) {
+        expect(TokenKind::KwInterface);
+
+        // インターフェース名を取得
+        std::string name = expect_ident();
+
+        // ジェネリックパラメータをチェック（例: interface Eq<T>）
+        auto [generic_params, generic_params_v2] = parse_generic_params_v2();
+
+        expect(TokenKind::LBrace);
+
+        std::vector<ast::MethodSig> methods;
+        std::vector<ast::OperatorSig> operators;
+
+        while (!check(TokenKind::RBrace) && !is_at_end()) {
+            // operator キーワードをチェック
+            if (check(TokenKind::KwOperator)) {
+                advance();  // consume 'operator'
+                ast::OperatorSig op_sig;
+                op_sig.return_type = parse_type();
+
+                auto op_kind = parse_operator_kind();
+                if (!op_kind) {
+                    error("Expected operator symbol after 'operator'");
+                    continue;
+                }
+                op_sig.op = *op_kind;
+
+                expect(TokenKind::LParen);
+                op_sig.params = parse_params();
+                expect(TokenKind::RParen);
+                expect(TokenKind::Semicolon);
+                operators.push_back(std::move(op_sig));
+            } else {
+                // 通常のメソッドシグネチャ
+                ast::MethodSig sig;
+                sig.return_type = parse_type();
+                sig.name = expect_ident();
+                expect(TokenKind::LParen);
+                sig.params = parse_params();
+                expect(TokenKind::RParen);
+                expect(TokenKind::Semicolon);
+                methods.push_back(std::move(sig));
+            }
+        }
+
+        expect(TokenKind::RBrace);
+
+        auto decl = std::make_unique<ast::InterfaceDecl>(std::move(name), std::move(methods));
+        decl->operators = std::move(operators);
+        decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+
+        // ジェネリックパラメータを設定（明示的に指定された場合）
+        if (!generic_params.empty()) {
+            decl->generic_params = std::move(generic_params);
+            decl->generic_params_v2 = std::move(generic_params_v2);
+        }
+
+        return std::make_unique<ast::Decl>(std::move(decl));
+    }
+
+    // impl
+    // impl<T> Type<T> for InterfaceName<T> { ... } - ジェネリックメソッド実装
+    // impl Type for InterfaceName { ... } - メソッド実装（省略記法）
+    // impl<T> Type for InterfaceName<T> where T: SomeType { ... } - where句付き
+    // impl<T> Type<T> { ... } - ジェネリックコンストラクタ/デストラクタ
+    // impl Type<T> { ... } - コンストラクタ/デストラクタ専用
+    ast::DeclPtr parse_impl() {
+        expect(TokenKind::KwImpl);
+
+        // impl<T>構文のチェック
+        std::vector<std::string> generic_params;
+        std::vector<ast::GenericParam> generic_params_v2;
+        if (check(TokenKind::Lt)) {
+            // <T>または<T: Constraint>のパース
+            auto [params, params_v2] = parse_generic_params_v2();
+            generic_params = std::move(params);
+            generic_params_v2 = std::move(params_v2);
+        }
+
+        auto target = parse_type();  // Type (Vec<T> など、ジェネリクスは型に含まれる)
+
+        // forがあればメソッド実装、なければコンストラクタ/デストラクタ専用
+        if (consume_if(TokenKind::KwFor)) {
+            std::string iface = expect_ident();  // InterfaceName
+
+            // インターフェースの型引数をパース（例: ValueHolder<T>）
+            std::vector<ast::TypePtr> iface_type_args;
+            if (check(TokenKind::Lt)) {
+                advance();  // consume <
+                do {
+                    iface_type_args.push_back(parse_type());
+                } while (consume_if(TokenKind::Comma));
+                expect(TokenKind::Gt);
+            }
+
+            // where句をパース
+            // where T: Interface, U: I + J, V: I | J
+            std::vector<ast::WhereClause> where_clauses;
+            if (consume_if(TokenKind::KwWhere)) {
+                do {
+                    std::string type_param = expect_ident();
+                    expect(TokenKind::Colon);
+
+                    // インターフェース境界をパース
+                    std::vector<std::string> interfaces;
+                    interfaces.push_back(expect_ident());
+                    ast::ConstraintKind constraint_kind = ast::ConstraintKind::Single;
+
+                    // 複合インターフェース境界
+                    if (check(TokenKind::Pipe)) {
+                        // OR制約: T: I | J
+                        constraint_kind = ast::ConstraintKind::Or;
+                        while (consume_if(TokenKind::Pipe)) {
+                            interfaces.push_back(expect_ident());
+                        }
+                    } else if (check(TokenKind::Plus)) {
+                        // AND制約: T: I + J
+                        constraint_kind = ast::ConstraintKind::And;
+                        while (consume_if(TokenKind::Plus)) {
+                            interfaces.push_back(expect_ident());
+                        }
+                    }
+
+                    ast::TypeConstraint constraint(constraint_kind, std::move(interfaces));
+                    where_clauses.emplace_back(std::move(type_param), std::move(constraint));
+                } while (consume_if(TokenKind::Comma));
+            }
+
+            expect(TokenKind::LBrace);
+
+            auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
+            decl->interface_type_args = std::move(iface_type_args);
+            decl->where_clauses = std::move(where_clauses);
+
+            // ジェネリックパラメータを設定
+            if (!generic_params.empty()) {
+                decl->generic_params = std::move(generic_params);
+                decl->generic_params_v2 = std::move(generic_params_v2);
+            }
+
+            while (!check(TokenKind::RBrace) && !is_at_end()) {
+                try {
+                    // operator キーワードをチェック
+                    if (check(TokenKind::KwOperator)) {
+                        advance();  // consume 'operator'
+                        auto op_impl = std::make_unique<ast::OperatorImpl>();
+                        op_impl->return_type = parse_type();
+
+                        auto op_kind = parse_operator_kind();
+                        if (!op_kind) {
+                            error("Expected operator symbol after 'operator'");
+                            continue;
+                        }
+                        op_impl->op = *op_kind;
+
+                        expect(TokenKind::LParen);
+                        op_impl->params = parse_params();
+                        expect(TokenKind::RParen);
+                        op_impl->body = parse_block();
+                        decl->operators.push_back(std::move(op_impl));
+                    } else {
+                        // private修飾子をチェック
+                        bool is_private = consume_if(TokenKind::KwPrivate);
+
+                        auto func = parse_function(false, false, false, false);
+                        if (auto* f = func->as<ast::FunctionDecl>()) {
+                            // privateメソッドの場合はvisibilityを設定
+                            if (is_private) {
+                                f->visibility = ast::Visibility::Private;
+                            } else {
+                                // デフォルトはExport（外部から呼び出し可能）
+                                f->visibility = ast::Visibility::Export;
+                            }
+                            decl->methods.push_back(
+                                std::unique_ptr<ast::FunctionDecl>(static_cast<ast::FunctionDecl*>(
+                                    std::get<std::unique_ptr<ast::FunctionDecl>>(func->kind)
+                                        .release())));
+                        }
+                    }
+                } catch (...) {
+                    // エラー回復：次の関数定義または閉じ括弧まで進める
+                    synchronize();
+                }
+            }
+
+            expect(TokenKind::RBrace);
+            return std::make_unique<ast::Decl>(std::move(decl));
+        } else {
+            // コンストラクタ/デストラクタ専用impl
+            return parse_impl_ctor(std::move(target), std::move(generic_params),
+                                   std::move(generic_params_v2));
+        }
+    }
+
+    // コンストラクタ/デストラクタ専用implの解析
+    // impl<T> Type<T> { self() { ... } ~self() { ... } }
+    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<std::string> generic_params = {},
+                                 std::vector<ast::GenericParam> generic_params_v2 = {}) {
+        expect(TokenKind::LBrace);
+
+        auto decl = std::make_unique<ast::ImplDecl>(std::move(target));
+
+        // ジェネリックパラメータを設定
+        if (!generic_params.empty()) {
+            decl->generic_params = std::move(generic_params);
+            decl->generic_params_v2 = std::move(generic_params_v2);
+        }
+
+        while (!check(TokenKind::RBrace) && !is_at_end()) {
+            try {
+                // overload修飾子をチェック
+                bool is_overload = consume_if(TokenKind::KwOverload);
+
+                // デストラクタ: ~self()
+                if (check(TokenKind::Tilde)) {
+                    advance();  // consume ~
+                    if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                        advance();  // consume self
+                        expect(TokenKind::LParen);
+                        expect(TokenKind::RParen);
+                        auto body = parse_block();
+
+                        auto dtor = std::make_unique<ast::FunctionDecl>(
+                            "~self", std::vector<ast::Param>{}, ast::make_void(), std::move(body));
+                        dtor->is_destructor = true;
+
+                        if (decl->destructor) {
+                            error("Only one destructor allowed per impl block");
+                        }
+                        decl->destructor = std::move(dtor);
+                    } else {
+                        error("Expected 'self' after '~'");
+                        synchronize();
+                    }
+                }
+                // コンストラクタ: self() or overload self(...)
+                else if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                    advance();  // consume self
+                    expect(TokenKind::LParen);
+                    auto params = parse_params();
+                    expect(TokenKind::RParen);
+                    auto body = parse_block();
+
+                    auto ctor = std::make_unique<ast::FunctionDecl>(
+                        "self", std::move(params), ast::make_void(), std::move(body));
+                    ctor->is_constructor = true;
+                    ctor->is_overload = is_overload;
+
+                    decl->constructors.push_back(std::move(ctor));
+                } else {
+                    // selfでもデストラクタでもない場合、エラーを報告してスキップ
+                    error("Expected 'self' or '~self' in constructor impl block");
+                    // 次の有効なトークンまでスキップ
+                    while (
+                        !check(TokenKind::RBrace) && !is_at_end() &&
+                        !(current().kind == TokenKind::Ident && current().get_string() == "self") &&
+                        !check(TokenKind::Tilde) && !check(TokenKind::KwOverload)) {
+                        advance();
+                    }
+                }
+            } catch (...) {
+                synchronize();
+            }
+        }
+
+        expect(TokenKind::RBrace);
+        return std::make_unique<ast::Decl>(std::move(decl));
+    }
+
+    // ブロック
+    std::vector<ast::StmtPtr> parse_block() {
+        debug::par::log(debug::par::Id::Block, "", debug::Level::Trace);
+        expect(TokenKind::LBrace);
+
+        std::vector<ast::StmtPtr> stmts;
+        int iterations = 0;
+        const int MAX_BLOCK_ITERATIONS = 1000;
+        size_t last_pos = pos_;
+
+        while (!check(TokenKind::RBrace) && !is_at_end() && iterations < MAX_BLOCK_ITERATIONS) {
+            // 無限ループ検出
+            if (pos_ == last_pos && iterations > 0) {
+                error("Parser stuck in block - no progress made");
+                // エラー復旧: 次のセミコロンまたは閉じ括弧まで進める
+                while (!is_at_end() && current().kind != TokenKind::Semicolon &&
+                       current().kind != TokenKind::RBrace) {
+                    advance();
+                }
+                if (current().kind == TokenKind::Semicolon) {
+                    advance();
+                }
+                if (is_at_end() || current().kind == TokenKind::RBrace) {
+                    break;
+                }
+            }
+            last_pos = pos_;
+
+            if (auto stmt = parse_stmt()) {
+                stmts.push_back(std::move(stmt));
+            } else {
+                // parse_stmtが失敗した場合、エラー復旧
+                if (!is_at_end() && current().kind != TokenKind::RBrace) {
+                    // 少なくとも1トークン進める
+                    advance();
+                }
+            }
+            iterations++;
+        }
+
+        if (iterations >= MAX_BLOCK_ITERATIONS) {
+            error("Block parsing exceeded maximum iteration limit");
+        }
+
+        expect(TokenKind::RBrace);
+        return stmts;
+    }
+
+    // 文
+    ast::StmtPtr parse_stmt();
+
+    // パターン（switch文用）
+    std::unique_ptr<ast::Pattern> parse_pattern();
+    std::unique_ptr<ast::Pattern> parse_pattern_element();
+
+    // 式
+    ast::ExprPtr parse_expr();
+    ast::ExprPtr parse_assignment();
+    ast::ExprPtr parse_ternary();
+    ast::ExprPtr parse_logical_or();
+    ast::ExprPtr parse_logical_and();
+    ast::ExprPtr parse_bitwise_or();
+    ast::ExprPtr parse_bitwise_xor();
+    ast::ExprPtr parse_bitwise_and();
+    ast::ExprPtr parse_equality();
+    ast::ExprPtr parse_relational();
+    ast::ExprPtr parse_shift();
+    ast::ExprPtr parse_additive();
+    ast::ExprPtr parse_multiplicative();
+    ast::ExprPtr parse_unary();
+    ast::ExprPtr parse_postfix();
+    ast::ExprPtr parse_primary();
+    ast::ExprPtr parse_match_expr(uint32_t start_pos);
+    std::unique_ptr<ast::MatchPattern> parse_match_pattern();
+
+    // ジェネリックパラメータ（<T>, <T: Interface>, <T: I + J>, <T: I | J>, <T, U>）をパース
+    // すべての制約はインターフェース境界として解釈される
+    // 戻り値: pair<名前リスト（後方互換）, GenericParamリスト（制約付き）>
+    std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2() {
+        std::vector<std::string> names;
+        std::vector<ast::GenericParam> params;
+
+        if (!check(TokenKind::Lt)) {
+            return {names, params};  // ジェネリックパラメータがない場合
+        }
+
+        advance();  // '<' を消費
+
+        // パラメータリストをパース
+        do {
+            if (check(TokenKind::Gt)) {
+                break;  // 空のパラメータリスト
+            }
+
+            // 型パラメータ名
+            std::string param_name = expect_ident();
+            std::vector<std::string> interfaces;
+            ast::ConstraintKind constraint_kind = ast::ConstraintKind::None;
+
+            // インターフェース境界（: Interface）
+            if (consume_if(TokenKind::Colon)) {
+                interfaces.push_back(expect_ident());
+                constraint_kind = ast::ConstraintKind::Single;
+
+                // 複合インターフェース境界
+                // T: I | J (OR - いずれかを実装)
+                // T: I + J (AND - すべてを実装)
+                if (check(TokenKind::Pipe)) {
+                    // OR制約: T: I | J
+                    constraint_kind = ast::ConstraintKind::Or;
+                    while (consume_if(TokenKind::Pipe)) {
+                        interfaces.push_back(expect_ident());
+                    }
+                } else if (check(TokenKind::Plus)) {
+                    // AND制約: T: I + J
+                    constraint_kind = ast::ConstraintKind::And;
+                    while (consume_if(TokenKind::Plus)) {
+                        interfaces.push_back(expect_ident());
+                    }
+                }
+            }
+
+            names.push_back(param_name);
+
+            // GenericParamを作成
+            if (constraint_kind != ast::ConstraintKind::None) {
+                ast::TypeConstraint tc(constraint_kind, interfaces);
+                params.emplace_back(param_name, std::move(tc));
+            } else {
+                params.emplace_back(param_name);
+            }
+
+            // デバッグ出力
+            std::string constraint_str;
+            if (!interfaces.empty()) {
+                std::string separator =
+                    (constraint_kind == ast::ConstraintKind::Or) ? " | " : " + ";
+                for (size_t i = 0; i < interfaces.size(); ++i) {
+                    if (i > 0)
+                        constraint_str += separator;
+                    constraint_str += interfaces[i];
+                }
+            }
+            debug::par::log(debug::par::Id::FuncDef,
+                            "Generic param: " + param_name +
+                                (constraint_str.empty() ? "" : " : " + constraint_str),
+                            debug::Level::Debug);
+
+        } while (consume_if(TokenKind::Comma));
+
+        expect(TokenKind::Gt);  // '>' を消費
+
+        return {names, params};
+    }
+
+    // 後方互換性のため維持
+    std::vector<std::string> parse_generic_params() {
+        auto [names, _] = parse_generic_params_v2();
+        return names;
+    }
+
+    // 型解析
+    ast::TypePtr parse_type() {
+        ast::TypePtr type;
+
+        // ポインタ/参照
+        if (consume_if(TokenKind::Star)) {
+            type = ast::make_pointer(parse_type());
+            return type;
+        }
+        if (consume_if(TokenKind::Amp)) {
+            type = ast::make_reference(parse_type());
+            return type;
+        }
+
+        // 配列 [T] or [T; N]
+        if (consume_if(TokenKind::LBracket)) {
+            auto elem = parse_type();
+            std::optional<uint32_t> size;
+            if (consume_if(TokenKind::Semicolon)) {
+                if (check(TokenKind::IntLiteral)) {
+                    size = static_cast<uint32_t>(current().get_int());
+                    advance();
+                }
+            }
+            expect(TokenKind::RBracket);
+            return ast::make_array(std::move(elem), size);
+        }
+
+        // プリミティブ型
+        ast::TypePtr base_type;
+        switch (current().kind) {
+            case TokenKind::KwVoid:
+                advance();
+                base_type = ast::make_void();
+                break;
+            case TokenKind::KwBool:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Bool);
+                break;
+            case TokenKind::KwTiny:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Tiny);
+                break;
+            case TokenKind::KwShort:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Short);
+                break;
+            case TokenKind::KwInt:
+                advance();
+                base_type = ast::make_int();
+                break;
+            case TokenKind::KwLong:
+                advance();
+                base_type = ast::make_long();
+                break;
+            case TokenKind::KwUtiny:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::UTiny);
+                break;
+            case TokenKind::KwUshort:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::UShort);
+                break;
+            case TokenKind::KwUint:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::UInt);
+                break;
+            case TokenKind::KwUlong:
+                advance();
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::ULong);
+                break;
+            case TokenKind::KwFloat:
+                advance();
+                base_type = ast::make_float();
+                break;
+            case TokenKind::KwDouble:
+                advance();
+                base_type = ast::make_double();
+                break;
+            case TokenKind::KwUfloat:
+                advance();
+                base_type = ast::make_ufloat();
+                break;
+            case TokenKind::KwUdouble:
+                advance();
+                base_type = ast::make_udouble();
+                break;
+            case TokenKind::KwChar:
+                advance();
+                base_type = ast::make_char();
+                break;
+            case TokenKind::KwString:
+                advance();
+                base_type = ast::make_string();
+                break;
+            default:
+                break;
+        }
+
+        // 関数ポインタ型: int*(int, int)
+        // base_typeがあり、次が *( の場合
+        if (base_type && check(TokenKind::Star)) {
+            // *( パターンのチェック - 関数ポインタ
+            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                advance();  // consume *
+                advance();  // consume (
+
+                std::vector<ast::TypePtr> param_types;
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        param_types.push_back(parse_type());
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+
+                return ast::make_function_ptr(std::move(base_type), std::move(param_types));
+            }
+        }
+
+        if (base_type) {
+            return base_type;
+        }
+
+        // ユーザー定義型（ジェネリクス対応）
+        if (check(TokenKind::Ident)) {
+            std::string name = current_text();
+            advance();
+
+            // ジェネリック型引数をチェック（例: Vec<int>, Map<K, V>）
+            if (check(TokenKind::Lt)) {
+                advance();  // '<' を消費
+
+                std::vector<ast::TypePtr> type_args;
+
+                // 型引数をパース
+                do {
+                    type_args.push_back(parse_type());
+                } while (consume_if(TokenKind::Comma));
+
+                // '>' を期待
+                expect(TokenKind::Gt);
+
+                // ジェネリック型として返す
+                auto type = ast::make_named(name);
+                type->type_args = std::move(type_args);
+
+                // 関数ポインタ型: MyStruct*(int, int)
+                if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
+                    tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                    advance();  // consume *
+                    advance();  // consume (
+
+                    std::vector<ast::TypePtr> param_types;
+                    if (!check(TokenKind::RParen)) {
+                        do {
+                            param_types.push_back(parse_type());
+                        } while (consume_if(TokenKind::Comma));
+                    }
+                    expect(TokenKind::RParen);
+
+                    return ast::make_function_ptr(std::move(type), std::move(param_types));
+                }
+
+                return type;
+            }
+
+            // 関数ポインタ型: MyStruct*(int, int)
+            if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
+                tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                auto named_type = ast::make_named(name);
+                advance();  // consume *
+                advance();  // consume (
+
+                std::vector<ast::TypePtr> param_types;
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        param_types.push_back(parse_type());
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+
+                return ast::make_function_ptr(std::move(named_type), std::move(param_types));
+            }
+
+            return ast::make_named(name);
+        }
+
+        error("Expected type");
+        return ast::make_error();
+    }
+
+    // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*)
+    // parse_type()の呼び出し後に使用
+    ast::TypePtr check_array_suffix(ast::TypePtr base_type) {
+        // T[N] 形式をチェック
+        if (consume_if(TokenKind::LBracket)) {
+            std::optional<uint32_t> size;
+            if (check(TokenKind::IntLiteral)) {
+                size = static_cast<uint32_t>(current().get_int());
+                advance();
+            }
+            expect(TokenKind::RBracket);
+            return ast::make_array(std::move(base_type), size);
+        }
+        // T* 形式をチェック（C++スタイルのポインタ）
+        if (consume_if(TokenKind::Star)) {
+            return ast::make_pointer(std::move(base_type));
+        }
+        return base_type;
+    }
+
+    // モジュール関連パーサ（parser_module.cppで実装）
+    ast::DeclPtr parse_module();
+    ast::DeclPtr parse_import_stmt();
+    ast::DeclPtr parse_export();
+    ast::DeclPtr parse_use();
+    ast::DeclPtr parse_macro();
+    ast::DeclPtr parse_extern();
+    ast::DeclPtr parse_extern_decl();
+    ast::AttributeNode parse_directive();
+    ast::AttributeNode parse_attribute();
+    ast::DeclPtr parse_const_decl();
+    ast::DeclPtr parse_constexpr();
+    ast::DeclPtr parse_template_decl();
+    ast::DeclPtr parse_enum_decl();
+    ast::DeclPtr parse_typedef_decl();
+
+    // ユーティリティ
+    const Token& current() const { return tokens_[pos_]; }
+    const Token& previous() const { return tokens_[pos_ > 0 ? pos_ - 1 : 0]; }
+    bool is_at_end() const { return current().kind == TokenKind::Eof; }
+
+    bool check(TokenKind kind) const { return current().kind == kind; }
+
+    Token advance() {
+        if (!is_at_end())
+            ++pos_;
+        return previous();
+    }
+
+    bool consume_if(TokenKind kind) {
+        if (check(kind)) {
+            advance();
+            return true;
+        }
+        return false;
+    }
+
+    void expect(TokenKind kind) {
+        if (!consume_if(kind)) {
+            error(std::string("Expected '") + token_kind_to_string(kind) + "'");
+        }
+    }
+
+    std::string expect_ident() {
+        if (check(TokenKind::Ident)) {
+            std::string name(current().get_string());
+            advance();
+            return name;
+        }
+        error("Expected identifier, got '" + std::string(current().get_string()) + "'");
+        advance();  // エラー回復：1トークン進める
+        return "<error>";
+    }
+
+    std::string current_text() const {
+        if (check(TokenKind::Ident)) {
+            return std::string(current().get_string());
+        }
+        return "";
+    }
+
+    void error(const std::string& msg) {
+        debug::par::log(debug::par::Id::Error, msg, debug::Level::Error);
+        diagnostics_.emplace_back(DiagKind::Error, Span{current().start, current().end}, msg);
+    }
+
+    void synchronize() {
+        // 無限ループ防止のための最大スキップ数
+        const int MAX_SKIP = 1000;
+        int skipped = 0;
+
+        // 現在の位置を記憶（無限ループ検出用）
+        size_t last_pos = pos_;
+
+        advance();
+        while (!is_at_end() && skipped < MAX_SKIP) {
+            // 位置が進んでいるか確認
+            if (pos_ == last_pos) {
+                // 位置が進んでいない場合は強制的に進める
+                if (pos_ < tokens_.size() - 1) {
+                    pos_++;
+                } else {
+                    break;  // 既に最後にいる
+                }
+            }
+            last_pos = pos_;
+
+            if (previous().kind == TokenKind::Semicolon)
+                return;
+            switch (current().kind) {
+                case TokenKind::KwStruct:
+                case TokenKind::KwInterface:
+                case TokenKind::KwImpl:
+                case TokenKind::KwImport:
+                case TokenKind::KwExport:
+                case TokenKind::Hash:  // ディレクティブの開始位置で停止
+                    return;
+                // 型キーワードでも停止
+                case TokenKind::KwBool:
+                case TokenKind::KwInt:
+                case TokenKind::KwVoid:
+                case TokenKind::KwString:
+                case TokenKind::KwChar:
+                case TokenKind::KwFloat:
+                case TokenKind::KwDouble:
+                    return;
+                default:
+                    advance();
+                    skipped++;
+            }
+        }
+
+        if (skipped >= MAX_SKIP) {
+            error("Parser stuck in synchronization - too many tokens skipped");
+        }
+    }
+
+    bool is_type_start();
+
+    std::vector<Token> tokens_;
+    size_t pos_;
+    std::vector<Diagnostic> diagnostics_;
+};
+
+}  // namespace cm

@@ -1,0 +1,20 @@
+// enum型の非網羅的matchのテスト
+
+enum Color {
+    Red = 0,
+    Green = 1,
+    Blue = 2
+}
+
+int main() {
+    int c = Color::Red;
+    
+    // Blueがないため非網羅的
+    string name = match (c) {
+        Color::Red => "赤",
+        Color::Green => "緑",
+    };
+    
+    println("color = {name}");
+    return 0;
+}

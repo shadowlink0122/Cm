@@ -1,0 +1,44 @@
+import std::io::println;
+
+int main() {
+    // Very simple switch test with only integer operations
+    int x = 2;
+    int result = 0;
+
+    switch(x) {
+        case(1) {
+            result = 10;
+        }
+        case(2) {
+            result = 20;
+        }
+        case(3) {
+            result = 30;
+        }
+        else {
+            result = 99;
+        }
+    }
+
+    println(result);  // Should print 20
+
+    // Test with else case
+    int y = 5;
+    int result2 = 0;
+
+    switch(y) {
+        case(1) {
+            result2 = 10;
+        }
+        case(2) {
+            result2 = 20;
+        }
+        else {
+            result2 = 99;
+        }
+    }
+
+    println(result2);  // Should print 99
+
+    return 0;
+}

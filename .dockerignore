@@ -1,0 +1,36 @@
+# ビルド成果物
+build/
+*.out
+*.o
+*.so
+*.a
+*.dylib
+cm
+cm.exe
+
+# テスト成果物
+tests/**/*.actual
+tests/**/*.ast
+tests/**/*.hir
+tests/**/*.mir
+tests/**/*.ll
+tests/**/*.wasm
+.tmp/
+
+# IDE/エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# macOS
+.DS_Store
+
+# その他
+*.log
+node_modules/

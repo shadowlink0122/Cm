@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(Cm 
+project(Cm
     VERSION 0.1.0
-    LANGUAGES CXX
+    LANGUAGES C CXX
     DESCRIPTION "Cm Programming Language Compiler"
 )
 
@@ -13,11 +13,94 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Options
 option(CM_DEBUG_BUILD "Enable debug logging macros" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
-option(BUILD_TESTING "Build tests" ON)
+option(BUILD_TESTING "Build tests (use -DBUILD_TESTING=ON to enable)" OFF)
+option(CM_USE_LLVM "Enable LLVM backend" ON)
+option(CM_LLVM_STATIC "Link LLVM statically" OFF)
 
 # Debug build definition
 if(CM_DEBUG_BUILD)
     add_compile_definitions(CM_DEBUG_BUILD)
+endif()
+
+# LLVM Configuration
+if(CM_USE_LLVM)
+    # Find LLVM (try versions from newest to oldest, suppress warnings with QUIET)
+    # Support LLVM 14-18 for compatibility
+    find_package(LLVM 18 CONFIG QUIET)
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 17 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 16 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 15 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        find_package(LLVM 14 CONFIG QUIET)
+    endif()
+    if(NOT LLVM_FOUND)
+        # Final attempt without version requirement
+        find_package(LLVM CONFIG REQUIRED)
+    endif()
+
+    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+    message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+    # LLVM definitions
+    add_compile_definitions(CM_LLVM_ENABLED)
+    add_compile_definitions(${LLVM_DEFINITIONS})
+
+    # LLVM include directories (SYSTEM to suppress warnings from LLVM headers)
+    include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+
+    # Find the libraries that correspond to the LLVM components we need
+    llvm_map_components_to_libnames(llvm_libs
+        Core
+        Support
+        IRReader
+        Passes
+        CodeGen
+        MC
+        MCParser
+        MCJIT
+        ExecutionEngine
+        Target
+
+        # Target architectures (add as needed)
+        X86CodeGen X86AsmParser X86Desc X86Info
+        AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+        WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
+    )
+
+    # Create LLVM backend library
+    add_library(cm_llvm_backend INTERFACE)
+    target_include_directories(cm_llvm_backend INTERFACE
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
+        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
+    )
+
+    if(CM_LLVM_STATIC)
+        target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
+    else()
+        # Dynamic linking
+        target_link_libraries(cm_llvm_backend INTERFACE LLVM)
+        
+        # Set RPATH to find LLVM shared libraries at runtime
+        # This is crucial for finding libLLVM-*.so on Linux
+        get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
+        message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
+        
+        # Add RPATH settings
+        set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
+        set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    endif()
+
+    message(STATUS "LLVM backend enabled")
+else()
+    message(STATUS "LLVM backend disabled")
 endif()
 
 # Compiler warnings
@@ -43,21 +126,151 @@ elseif(MSVC)
 endif()
 
 # Output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+# cm実行ファイルはルートに、テスト実行ファイルはbuild/binに配置
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# テスト実行ファイル用の出力ディレクトリ
+set(TEST_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/src/mir_cpp)
 
-# Source files (to be added as development progresses)
-# add_subdirectory(src/common)
-# add_subdirectory(src/frontend)
-# add_subdirectory(src/middle)
-# add_subdirectory(src/backend)
+# Common library (header-only for now)
+add_library(cm_common INTERFACE)
+target_include_directories(cm_common INTERFACE ${CMAKE_SOURCE_DIR}/src/common)
 
-# Main executable (placeholder)
-# add_executable(cm src/main.cpp)
+# Frontend library (header-only for now)
+add_library(cm_frontend INTERFACE)
+target_include_directories(cm_frontend INTERFACE ${CMAKE_SOURCE_DIR}/src/frontend)
+target_link_libraries(cm_frontend INTERFACE cm_common)
+
+# Main executable
+set(CM_SOURCES
+    src/main.cpp
+    src/frontend/lexer/token.cpp
+    src/frontend/parser/parser_stmt.cpp
+    src/frontend/parser/parser_expr.cpp
+    src/frontend/parser/parser_module.cpp
+    src/mir/optimizations/optimization_pipeline.cpp
+    src/mir/lowering/mir_lowering_impl.cpp
+    src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
+    # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
+    src/mir/lowering/stmt_lowering_impl.cpp
+    src/mir/lowering/expr_lowering_impl.cpp
+)
+
+# Add LLVM sources if enabled
+if(CM_USE_LLVM)
+    list(APPEND CM_SOURCES
+        # Common codegen
+        src/codegen/common/type_converter.cpp
+        src/codegen/common/runtime_functions.cpp
+        # LLVM core (shared between native and wasm)
+        src/codegen/llvm/core/context.cpp
+        src/codegen/llvm/core/mir_to_llvm.cpp
+        src/codegen/llvm/core/interface.cpp
+        src/codegen/llvm/core/terminator.cpp
+        src/codegen/llvm/core/print_codegen.cpp
+        src/codegen/llvm/core/types.cpp
+        src/codegen/llvm/core/operators.cpp
+        src/codegen/llvm/core/utils.cpp
+        src/codegen/llvm/core/intrinsics.cpp
+        # LLVM native backend
+        src/codegen/llvm/native/codegen.cpp
+        src/codegen/llvm/native/target.cpp
+    )
+endif()
+
+add_executable(cm ${CM_SOURCES})
+target_link_libraries(cm cm_frontend)
+
+# Link LLVM backend if enabled
+if(CM_USE_LLVM)
+    target_link_libraries(cm cm_llvm_backend)
+    
+    # LLVMのホストターゲットを取得
+    execute_process(
+        COMMAND llvm-config --host-target
+        OUTPUT_VARIABLE LLVM_HOST_TARGET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    
+    # ランタイムライブラリはUnix系でのみビルド（Windows/MSVCは未対応）
+    if(NOT WIN32)
+        # ランタイムライブラリ用のclangとターゲット設定
+        # 全プラットフォームで--target形式を使用（統一的でシンプル）
+        set(CM_RUNTIME_CLANG "clang")
+        
+        if(APPLE)
+            if(LLVM_HOST_TARGET MATCHES "x86_64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin")
+            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin")
+            endif()
+        else()
+            # Linux
+            if(LLVM_HOST_TARGET MATCHES "x86_64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-unknown-linux-gnu")
+            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                set(CM_RUNTIME_ARCH_FLAG "--target=aarch64-unknown-linux-gnu")
+            else()
+                set(CM_RUNTIME_ARCH_FLAG "")
+            endif()
+        endif()
+        
+        message(STATUS "LLVM host target: ${LLVM_HOST_TARGET}")
+        message(STATUS "Runtime clang: ${CM_RUNTIME_CLANG}")
+        message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
+        
+        # Build LLVM runtime library
+        # Cランタイムをコンパイルしてbuild/lib/に配置
+        set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
+        set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
+
+        add_custom_command(
+            OUTPUT ${CM_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_RUNTIME_SOURCE}
+            COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
+        )
+
+
+        # Build WASM runtime library
+        set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
+        set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
+        set(CM_RUNTIME_WASM_PRINT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c)
+        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+
+        add_custom_command(
+            OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
+            DEPENDS ${CM_RUNTIME_WASM_SOURCE} ${CM_RUNTIME_WASM_FORMAT} ${CM_RUNTIME_WASM_PRINT}
+            COMMENT "Building Cm WASM runtime library"
+        )
+
+        add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
+        add_dependencies(cm cm_runtime)
+        
+        # ランタイムライブラリのパスをコンパイル時に埋め込む
+        target_compile_definitions(cm PRIVATE
+            CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+            CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+        )
+    else()
+        # Windows: ランタイムライブラリなし（ダミーパス）
+        message(WARNING "Runtime library build is not supported on Windows/MSVC")
+        target_compile_definitions(cm PRIVATE
+            CM_RUNTIME_PATH=""
+            CM_RUNTIME_WASM_PATH=""
+        )
+    endif()
+endif()
 
 # Testing
 if(BUILD_TESTING)
@@ -69,28 +282,76 @@ if(BUILD_TESTING)
     if(GTest_FOUND)
         include(GoogleTest)
         
-        # Unit tests
-        # add_executable(lexer_test tests/unit/lexer/lexer_test.cpp)
-        # target_link_libraries(lexer_test GTest::gtest_main)
-        # gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
-        
-        # Integration tests
-        # add_executable(integration_test tests/integration/full_pipeline_test.cpp)
-        # target_link_libraries(integration_test GTest::gtest_main)
-        # gtest_discover_tests(integration_test PROPERTIES LABELS "integration")
+        # Unit tests - Lexer
+        add_executable(lexer_test
+            tests/unit/lexer_test.cpp
+            src/frontend/lexer/token.cpp
+        )
+        set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_link_libraries(lexer_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
+
+        # Unit tests - HIR Lowering
+        add_executable(hir_lowering_test
+            tests/unit/hir_lowering_test.cpp
+            src/frontend/lexer/token.cpp
+            src/frontend/parser/parser_stmt.cpp
+            src/frontend/parser/parser_expr.cpp
+            src/frontend/parser/parser_module.cpp
+        )
+        set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
+
+        # Unit tests - MIR Lowering
+        add_executable(mir_lowering_test
+            tests/unit/mir_lowering_test.cpp
+            src/frontend/lexer/token.cpp
+            src/frontend/parser/parser_stmt.cpp
+            src/frontend/parser/parser_expr.cpp
+            src/frontend/parser/parser_module.cpp
+            src/mir/lowering/mir_lowering_impl.cpp
+            src/mir/lowering/stmt_lowering_impl.cpp
+            src/mir/lowering/expr_lowering_impl.cpp
+            src/mir/lowering/monomorphization_impl.cpp
+        )
+        set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
+
+        # Unit tests - MIR Optimization
+        add_executable(mir_optimization_test
+            tests/unit/mir_optimization_test.cpp
+            src/frontend/lexer/token.cpp
+            src/frontend/parser/parser_stmt.cpp
+            src/frontend/parser/parser_expr.cpp
+            src/frontend/parser/parser_module.cpp
+            src/mir/lowering/mir_lowering_impl.cpp
+            src/mir/lowering/stmt_lowering_impl.cpp
+            src/mir/lowering/expr_lowering_impl.cpp
+            src/mir/lowering/monomorphization_impl.cpp
+            src/mir/optimizations/optimization_pipeline.cpp
+        )
+        set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
+        gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
+
+        # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
+        # add_executable(mir_interpreter_test
+        #     tests/unit/mir_interpreter_test.cpp
+        #     src/frontend/lexer/token.cpp
+        #     src/frontend/parser/parser_stmt.cpp
+        #     src/frontend/parser/parser_expr.cpp
+        #     src/frontend/parser/parser_module.cpp
+        # )
+        # target_link_libraries(mir_interpreter_test GTest::gtest_main cm_frontend)
+        # gtest_discover_tests(mir_interpreter_test PROPERTIES LABELS "unit")
     else()
         message(STATUS "Google Test not found, skipping C++ tests")
+        message(STATUS "Install with: brew install googletest (macOS)")
     endif()
-    
-    # E2E tests (always available)
-    add_test(NAME e2e_tests
-        COMMAND ${CMAKE_COMMAND} -E env 
-            CM_BIN=$<TARGET_FILE:cm>
-            ${CMAKE_SOURCE_DIR}/tests/e2e/run_all.sh
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-    set_tests_properties(e2e_tests PROPERTIES LABELS "e2e")
 endif()
 
 # Installation
 # install(TARGETS cm RUNTIME DESTINATION bin)
+

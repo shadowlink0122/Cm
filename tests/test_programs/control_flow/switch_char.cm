@@ -1,0 +1,30 @@
+// Test switch with char type
+import std::io::println;
+
+int main() {
+    char c = 'B';
+    int result = 0;
+    
+    switch(c) {
+        case('A') { result = 1; }
+        case('B') { result = 2; }
+        case('C') { result = 3; }
+        else { result = 99; }
+    }
+    
+    println(result);  // Should print 2
+    
+    // Test with char variable in else case
+    char d = 'X';
+    int result2 = 0;
+    
+    switch(d) {
+        case('A') { result2 = 1; }
+        case('B') { result2 = 2; }
+        else { result2 = 99; }
+    }
+    
+    println(result2);  // Should print 99
+    
+    return 0;
+}

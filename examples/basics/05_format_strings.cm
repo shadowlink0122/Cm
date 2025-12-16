@@ -1,0 +1,56 @@
+// 6. フォーマット文字列の例
+import std::io::println;
+
+int main() {
+    // 基本的な文字列埋め込み
+    string name = "Alice";
+    int age = 25;
+    double height = 165.5;
+    bool is_student = true;
+
+    println("=== 基本的な文字列埋め込み ===");
+    println("名前: {}, 年齢: {}歳", name, age);
+    println("身長: {}cm, 学生: {}", height, is_student);
+
+    // 複数の値を組み合わせた出力
+    println("");
+    println("=== 計算結果の埋め込み ===");
+    int a = 10;
+    int b = 20;
+    println("{} + {} = {}", a, b, a + b);
+    println("{} * {} = {}", a, b, a * b);
+    println("{} / {} = {}", b, a, b / a);
+
+    // 複雑な式の埋め込み
+    println("");
+    println("=== 式の評価結果 ===");
+    int x = 5;
+    int y = 3;
+    println("({} + {}) * {} = {}", x, y, 2, (x + y) * 2);
+    println("x > y は {}", x > y);
+
+    // ビット演算の結果表示
+    println("");
+    println("=== ビット演算の結果 ===");
+    int bits1 = 12;  // 0b1100
+    int bits2 = 10;  // 0b1010
+    println("{} & {} = {}", bits1, bits2, bits1 & bits2);  // 8 (0b1000)
+    println("{} | {} = {}", bits1, bits2, bits1 | bits2);  // 14 (0b1110)
+    println("{} ^ {} = {}", bits1, bits2, bits1 ^ bits2);  // 6 (0b0110)
+
+    // 実用的な例
+    println("");
+    println("=== 実用的な使用例 ===");
+
+    // 配列のような出力
+    println("データ: [{}, {}, {}, {}]", 1, 2, 3, 4);
+
+    // JSONのような出力
+    println("{{ \"name\": \"{}\", \"age\": {}, \"active\": {} }}", name, age, is_student);
+
+    // ログメッセージ風
+    println("[INFO] ユーザー {} がログインしました (ID: {})", name, 12345);
+    println("[DEBUG] 処理時間: {}ms, メモリ使用量: {}MB", 125, 32.5);
+
+    return 0;
+}

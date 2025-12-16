@@ -1,0 +1,16 @@
+// 整数型のテスト：int
+import std::io::println;
+
+int main() {
+    // int (32bit signed)
+    int i = 100000;
+    println("int: {}", i);
+
+    // 演算テスト
+    int a = 10;
+    int b = 20;
+    int sum = a + b;
+    println("10 + 20 = {}", sum);
+
+    return 0;
+}

@@ -1,0 +1,19 @@
+// 1. Hello World - 基本的な関数とprint
+import std::io::println;
+
+int main() {
+    // シンプルな文字列出力
+    println("Hello, Cm!");
+
+    // 変数の自動キャプチャを使った出力
+    string lang = "Cm";
+    int year = 2025;
+    println("Welcome to {lang} language in {year}!");
+
+    // 位置引数を使った出力
+    string version = "v0.1.0";
+    bool ready = true;
+    println("Version: {version}, Ready: {ready}");
+
+    return 0;
+}

@@ -1,0 +1,32 @@
+Basic for loop:
+i = 0
+i = 1
+i = 2
+i = 3
+i = 4
+
+Nested for loops:
+i=0, j=0
+i=0, j=1
+i=0, j=2
+i=1, j=0
+i=1, j=1
+i=1, j=2
+i=2, j=0
+i=2, j=1
+i=2, j=2
+
+Break and continue:
+i = 0
+i = 1
+i = 3
+i = 4
+i = 5
+i = 6
+
+Reverse loop:
+i = 5
+i = 4
+i = 3
+i = 2
+i = 1
