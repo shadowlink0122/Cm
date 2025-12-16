@@ -1,9 +1,8 @@
-#include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
-
 #include "context.hpp"
 
 #include "../../../common/debug/codegen.hpp"
 
+#include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
 #if LLVM_VERSION_MAJOR >= 16

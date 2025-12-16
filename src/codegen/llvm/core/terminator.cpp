@@ -152,26 +152,25 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         // ポインタとして渡された場合（古い方法）
                                         auto dataFieldPtr = builder->CreateStructGEP(
                                             fatPtrType, receiverValue, 0, "data_field_ptr");
-                                        dataPtr = builder->CreateLoad(
-                                            ctx.getPtrType(), dataFieldPtr, "data_ptr");
+                                        dataPtr = builder->CreateLoad(ctx.getPtrType(),
+                                                                      dataFieldPtr, "data_ptr");
                                         auto vtableFieldPtr = builder->CreateStructGEP(
                                             fatPtrType, receiverValue, 1, "vtable_field_ptr");
                                         vtablePtr = builder->CreateLoad(
                                             ctx.getPtrType(), vtableFieldPtr, "vtable_ptr");
                                     } else {
                                         // 値として渡された場合（正しい方法）
-                                        dataPtr = builder->CreateExtractValue(
-                                            receiverValue, 0, "data_ptr");
-                                        vtablePtr = builder->CreateExtractValue(
-                                            receiverValue, 1, "vtable_ptr");
+                                        dataPtr = builder->CreateExtractValue(receiverValue, 0,
+                                                                              "data_ptr");
+                                        vtablePtr = builder->CreateExtractValue(receiverValue, 1,
+                                                                                "vtable_ptr");
                                     }
 
                                     int methodIndex = -1;
                                     if (currentProgram) {
                                         for (const auto& iface : currentProgram->interfaces) {
                                             if (iface && iface->name == actualTypeName) {
-                                                for (size_t i = 0; i < iface->methods.size();
-                                                     ++i) {
+                                                for (size_t i = 0; i < iface->methods.size(); ++i) {
                                                     if (iface->methods[i].name ==
                                                         callData.method_name) {
                                                         methodIndex = static_cast<int>(i);
@@ -187,9 +186,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         auto ptrSize = module->getDataLayout().getPointerSize();
                                         auto byteOffset = llvm::ConstantInt::get(
                                             ctx.getI64Type(), methodIndex * ptrSize);
-                                        auto funcPtrPtr =
-                                            builder->CreateGEP(ctx.getI8Type(), vtablePtr,
-                                                               byteOffset, "func_ptr_ptr");
+                                        auto funcPtrPtr = builder->CreateGEP(
+                                            ctx.getI8Type(), vtablePtr, byteOffset, "func_ptr_ptr");
                                         auto ptrPtrType =
                                             llvm::PointerType::get(ctx.getPtrType(), 0);
                                         auto funcPtrPtrCast = builder->CreateBitCast(
@@ -197,12 +195,10 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         auto funcPtr = builder->CreateLoad(
                                             ctx.getPtrType(), funcPtrPtrCast, "func_ptr");
 
-                                        std::vector<llvm::Type*> paramTypes = {
-                                            ctx.getPtrType()};
-                                        auto funcType = llvm::FunctionType::get(
-                                            ctx.getVoidType(), paramTypes, false);
-                                        auto funcPtrTypePtr =
-                                            llvm::PointerType::get(funcType, 0);
+                                        std::vector<llvm::Type*> paramTypes = {ctx.getPtrType()};
+                                        auto funcType = llvm::FunctionType::get(ctx.getVoidType(),
+                                                                                paramTypes, false);
+                                        auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
                                         auto funcPtrCast = builder->CreateBitCast(
                                             funcPtr, funcPtrTypePtr, "func_ptr_cast");
 
@@ -319,15 +315,17 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     vtablePtr = llvm::Constant::getNullValue(ctx.getPtrType());
                                 }
 
-                                // 引数が構造体へのポインタの場合、そのポインタをdata pointerとして使用
+                                // 引数が構造体へのポインタの場合、そのポインタをdata
+                                // pointerとして使用
                                 llvm::Value* dataPtr = args[i];
-                                
+
                                 // 構造体値の場合は、その値をヒープにコピーする
                                 // これにより、インターフェース呼び出し後もデータが有効になる
                                 if (!dataPtr->getType()->isPointerTy()) {
                                     // スタック上に永続的なコピーを作成（呼び出し後も有効）
                                     auto structType = dataPtr->getType();
-                                    auto structAlloca = builder->CreateAlloca(structType, nullptr, "interface_data");
+                                    auto structAlloca = builder->CreateAlloca(structType, nullptr,
+                                                                              "interface_data");
                                     builder->CreateStore(dataPtr, structAlloca);
                                     dataPtr = structAlloca;
                                 }
@@ -347,7 +345,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                 builder->CreateStore(vtablePtrCast, vtableFieldPtr);
 
                                 // Fat pointerを値として渡す
-                                auto fatPtrValue = builder->CreateLoad(fatPtrType, fatPtrAlloca, "fat_ptr_value");
+                                auto fatPtrValue =
+                                    builder->CreateLoad(fatPtrType, fatPtrAlloca, "fat_ptr_value");
                                 args[i] = fatPtrValue;
                                 continue;
                             }

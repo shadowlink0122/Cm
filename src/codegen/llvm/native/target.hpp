@@ -78,13 +78,13 @@ class TargetManager {
         if (config.noStd) {
             options.DisableIntegratedAS = false;
             options.MCOptions.ShowMCEncoding = false;
-            
-            // LLVM 17以降でMCUseDwarfDirectoryがenum型に変更
-            #if LLVM_VERSION_MAJOR >= 17
+
+// LLVM 17以降でMCUseDwarfDirectoryがenum型に変更
+#if LLVM_VERSION_MAJOR >= 17
             options.MCOptions.MCUseDwarfDirectory = llvm::MCTargetOptions::DisableDwarfDirectory;
-            #else
+#else
             options.MCOptions.MCUseDwarfDirectory = false;
-            #endif
+#endif
         }
 
         // 最適化レベル設定
