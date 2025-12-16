@@ -3,7 +3,7 @@
 # Site settings
 title: Cm Programming Language
 description: A modern systems programming language with C++ syntax and Rust-inspired features
-url: "https://yourusername.github.io"
+url: "https://shadowlink0122.github.io"
 baseurl: "/Cm"
 
 # Build settings
@@ -53,29 +53,9 @@ titles_from_headings:
   strip_title: true
   collections: true
 
-# Collections
-collections:
-  tutorials:
-    output: true
-    permalink: /tutorials/:path/
-  releases:
-    output: true
-    permalink: /releases/:path/
-
 # Defaults
 defaults:
   - scope:
       path: ""
-      type: "pages"
-    values:
-      layout: "default"
-  - scope:
-      path: "tutorials"
-      type: "tutorials"
-    values:
-      layout: "default"
-  - scope:
-      path: "releases"
-      type: "releases"
     values:
       layout: "default"
