@@ -1,0 +1,81 @@
+# Cm Language Documentation - GitHub Pages Configuration
+
+# Site settings
+title: Cm Programming Language
+description: A modern systems programming language with C++ syntax and Rust-inspired features
+url: "https://yourusername.github.io"
+baseurl: "/Cm"
+
+# Build settings
+theme: jekyll-theme-cayman
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    default_lang: cpp
+
+# Include files
+include:
+  - README.md
+  - tutorials
+  - releases
+
+# Exclude files
+exclude:
+  - .DS_Store
+  - archive
+  - debug
+  - move_files.sh
+
+# Navigation
+nav_order: 1
+
+# Plugins
+plugins:
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-titles-from-headings
+
+# Relative links
+relative_links:
+  enabled: true
+  collections: true
+
+# Optional front matter
+optional_front_matter:
+  remove_originals: false
+
+# Titles from headings
+titles_from_headings:
+  enabled: true
+  strip_title: true
+  collections: true
+
+# Collections
+collections:
+  tutorials:
+    output: true
+    permalink: /tutorials/:path/
+  releases:
+    output: true
+    permalink: /releases/:path/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "default"
+  - scope:
+      path: "tutorials"
+      type: "tutorials"
+    values:
+      layout: "default"
+  - scope:
+      path: "releases"
+      type: "releases"
+    values:
+      layout: "default"
