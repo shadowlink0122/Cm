@@ -1,0 +1,10 @@
+// モジュールのインポート
+import math;
+
+int main() {
+    int x = math::add(10, 20);
+    int y = math::mul(3, 4);
+    println("x = {}", x);  // 30
+    println("y = {}", y);  // 12
+    return 0;
+}
