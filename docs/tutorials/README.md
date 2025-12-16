@@ -1,3 +1,10 @@
+---
+layout: default
+title: Tutorials
+nav_order: 2
+has_children: true
+---
+
 # Cm言語チュートリアル v0.9.0
 
 **対象バージョン:** v0.9.0  

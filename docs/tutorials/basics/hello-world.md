@@ -1,3 +1,10 @@
+---
+layout: default
+title: Hello World
+parent: Tutorials
+nav_order: 3
+---
+
 # 基本編 - Hello, World!
 
 **難易度:** �� 初級  

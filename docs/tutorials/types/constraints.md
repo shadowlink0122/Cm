@@ -1,3 +1,10 @@
+---
+layout: default
+title: 型制約
+parent: Tutorials
+nav_order: 15
+---
+
 # 型システム編 - 型制約
 
 **難易度:** 🔴 上級  

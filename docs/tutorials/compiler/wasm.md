@@ -1,3 +1,10 @@
+---
+layout: default
+title: WASMバックエンド
+parent: Tutorials
+nav_order: 32
+---
+
 # コンパイラ編 - WASMバックエンド
 
 **難易度:** 🟡 中級  

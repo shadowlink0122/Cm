@@ -1,3 +1,10 @@
+---
+layout: default
+title: with自動実装
+parent: Tutorials
+nav_order: 23
+---
+
 # withキーワード（自動トレイト実装）
 
 `with`キーワードは、Rustの`#[derive(...)]`をC++風に再設計した機能で、インターフェースの自動実装を提供します。

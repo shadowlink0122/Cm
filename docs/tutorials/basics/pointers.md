@@ -1,3 +1,10 @@
+---
+layout: default
+title: ポインタ
+parent: Tutorials
+nav_order: 9
+---
+
 # ポインタ（Pointers）
 
 Cm言語のポインタは、C/C++互換のメモリアドレス操作を提供します。
