@@ -346,8 +346,9 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     vtablePtr, ctx.getPtrType(), "vtable_ptr_cast");
                                 builder->CreateStore(vtablePtrCast, vtableFieldPtr);
 
-                                // Fat pointerへのポインタとして渡す
-                                args[i] = fatPtrAlloca;
+                                // Fat pointerを値として渡す
+                                auto fatPtrValue = builder->CreateLoad(fatPtrType, fatPtrAlloca, "fat_ptr_value");
+                                args[i] = fatPtrValue;
                                 continue;
                             }
                         }

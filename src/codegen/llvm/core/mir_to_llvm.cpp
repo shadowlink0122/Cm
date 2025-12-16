@@ -20,9 +20,9 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
             if (local.type) {
                 // インターフェース型かチェック
                 if (isInterfaceType(local.type->name)) {
-                    // インターフェース型はfat pointerへのポインタとして渡す
+                    // インターフェース型はfat pointer構造体を値渡し
                     auto fatPtrType = getInterfaceFatPtrType(local.type->name);
-                    paramTypes.push_back(llvm::PointerType::get(fatPtrType, 0));
+                    paramTypes.push_back(fatPtrType);
                 } else {
                     auto llvmType = convertType(local.type);
                     // 構造体はポインタとして渡す（構造体型のポインタ）
