@@ -1,0 +1,8 @@
+asm: mov to register
+asm: mov from register
+asm: mov immediate
+asm: conditional move
+asm: push register
+asm: pop register
+asm: exchange registers
+asm: load effective address

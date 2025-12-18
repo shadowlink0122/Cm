@@ -1,0 +1,12 @@
+asm: cmp instruction
+asm: test instruction
+asm: jmp instruction
+asm: je (jump if equal)
+asm: jne (jump if not equal)
+asm: jg (jump if greater)
+asm: jl (jump if less)
+asm: jge (jump if greater or equal)
+asm: jle (jump if less or equal)
+asm: loop instruction
+asm: call instruction
+asm: ret instruction

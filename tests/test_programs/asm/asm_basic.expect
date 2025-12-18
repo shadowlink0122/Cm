@@ -1,0 +1,3 @@
+asm: nop
+asm: mov with interpolation
+asm: mfence

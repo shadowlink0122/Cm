@@ -1,0 +1,8 @@
+15 + 25 = 40
+Memory fence executed
+Compiler barrier
+CPUID instruction executed
+(Values not available in interpreter)
+Atomic increment of 41 = 42
+10 == 10: true
+10 == 20: false

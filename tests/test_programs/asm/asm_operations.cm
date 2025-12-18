@@ -1,0 +1,79 @@
+// tests/test_programs/asm/asm_operations.cm
+// アセンブリ命令による演算のテスト
+// 注意: ASM命令はコンパイルモードでのみ動作します
+// インタープリタモードでは警告が表示され、ASM命令はスキップされます
+
+import std::io::println;
+
+// インラインアセンブリを使った掛け算
+int multiplyWithAsm(int a, int b) {
+    int result = 0;
+
+    // x86-64でimul命令を使用
+    asm("mov {a}, %eax");
+    asm("imul {b}, %eax");
+    asm("mov %eax, {result}");
+
+    return result;
+}
+
+// ビットシフト演算
+int shiftLeftWithAsm(int value, int count) {
+    int result = 0;
+
+    // シフト命令
+    asm("mov {value}, %eax");
+    asm("mov {count}, %ecx");
+    asm("shl %cl, %eax");
+    asm("mov %eax, {result}");
+
+    return result;
+}
+
+// XOR演算によるスワップ
+void xorSwap(int* a, int* b) {
+    // XORを使った値の交換（レジスタのみ使用）
+    asm("mov ({a}), %eax");
+    asm("mov ({b}), %ebx");
+    asm("xor %ebx, %eax");
+    asm("xor %eax, %ebx");
+    asm("xor %ebx, %eax");
+    asm("mov %eax, ({a})");
+    asm("mov %ebx, ({b})");
+}
+
+// ビットカウント（popcount）
+int countBits(int value) {
+    int result = 0;
+
+    // popcnt命令を使用（SSE4.2）
+    asm("popcnt {value}, {result}");
+
+    return result;
+}
+
+int main() {
+    // 掛け算のテスト
+    int mul_result = multiplyWithAsm(6, 7);
+    println("6 * 7 = {mul_result}");
+
+    // シフト演算のテスト
+    int shift_result = shiftLeftWithAsm(3, 2);
+    println("3 << 2 = {shift_result}");
+
+    // XORスワップのテスト（インタプリタでは動作しない）
+    int x = 10;
+    int y = 20;
+    println("Before swap: x={x}, y={y}");
+    xorSwap(&x, &y);  // ポインタ演算が必要なためコメントアウト
+    println("After swap: x={x}, y={y}");
+
+    // ビットカウントのテスト
+    int bits = countBits(0xFF);  // 8ビット全て1
+    println("Bits in 0xFF = {bits}");
+
+    int bits2 = countBits(0x55);  // 01010101 = 4ビット
+    println("Bits in 0x55 = {bits2}");
+
+    return 0;
+}

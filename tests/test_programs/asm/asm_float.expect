@@ -1,0 +1,4 @@
+3.14 + 2.86 = 6.0 (expected)
+2.5 * 4.0 = 10.0 (expected)
+sqrt(16.0) = 4.0 (expected)
+Note: Actual FPU instructions not executed in interpreter

@@ -1,0 +1,24 @@
+=== Basic Variable Address Interpolation ===
+Address of x: 0x7fff0008
+Address of y: 0x7fff0018
+Address of pi: 0x7fff0028
+Address of flag: 0x7fff0038
+Address of ch: 0x7fff0048
+
+=== Hex Format Specifiers ===
+x address (lowercase hex): 0x7fff0008
+y address (uppercase hex): 0x7FFF0018
+
+=== Pointer Variables ===
+ptr_x points to: 0x7fff0008
+ptr_y points to: 0x7fff0018
+ptr_pi points to: 0x7fff0028
+
+=== Mixed Interpolation ===
+x=42 at address 0x7fff0008, ptr_x=0x7fff0008
+y=100 at 0x7fff0018
+pi=3.14159 at 0x7FFF0028
+
+=== Multiple Variables in One Line ===
+Variables: x=42, y=100, &x=0x7fff0008, &y=0x7fff0018
+Pointers: ptr_x=0x7fff0008, ptr_y=0x7FFF0018

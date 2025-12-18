@@ -1,0 +1,47 @@
+import std::io::println;
+
+// テスト: &variable文字列補間とポインタアドレス表示
+int main() {
+    // 基本型の変数
+    int x = 42;
+    int y = 100;
+    double pi = 3.14159;
+    bool flag = true;
+    char ch = 'Z';
+
+    println("=== Basic Variable Address Interpolation ===");
+    // &variable構文での直接アドレス表示
+    println("Address of x: {&x}");
+    println("Address of y: {&y}");
+    println("Address of pi: {&pi}");
+    println("Address of flag: {&flag}");
+    println("Address of ch: {&ch}");
+
+    println("\n=== Hex Format Specifiers ===");
+    // 16進数フォーマット指定
+    println("x address (lowercase hex): {&x:x}");
+    println("y address (uppercase hex): {&y:X}");
+
+    println("\n=== Pointer Variables ===");
+    // ポインタ変数のテスト
+    int* ptr_x = &x;
+    int* ptr_y = &y;
+    double* ptr_pi = &pi;
+
+    println("ptr_x points to: {ptr_x}");
+    println("ptr_y points to: {ptr_y}");
+    println("ptr_pi points to: {ptr_pi}");
+
+    println("\n=== Mixed Interpolation ===");
+    // 値とアドレスの混合表示
+    println("x={x} at address {&x}, ptr_x={ptr_x}");
+    println("y={y} at {&y:x}");
+    println("pi={pi} at {&pi:X}");
+
+    println("\n=== Multiple Variables in One Line ===");
+    // 複数変数の同時表示
+    println("Variables: x={x}, y={y}, &x={&x}, &y={&y}");
+    println("Pointers: ptr_x={ptr_x:x}, ptr_y={ptr_y:X}");
+
+    return 0;
+}

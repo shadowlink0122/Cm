@@ -1,0 +1,6 @@
+asm: add instruction
+asm: sub instruction
+asm: imul instruction
+asm: inc instruction
+asm: dec instruction
+asm: neg instruction
