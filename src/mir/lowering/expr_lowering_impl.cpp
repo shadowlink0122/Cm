@@ -902,26 +902,50 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         std::string format_spec =
                             format_str.substr(colon_pos, close_pos - colon_pos + 1);
 
-                        if (!var_name.empty() && std::isalpha(var_name[0])) {
+                        // &variable パターンをチェック
+                        if (!var_name.empty() && var_name[0] == '&') {
+                            // &variable形式 - アドレス取得 (後でサポート)
+                            std::string actual_var = var_name.substr(1);
+                            if (!actual_var.empty() && std::isalpha(actual_var[0])) {
+                                var_names.push_back("&" + actual_var);  // &付きで格納
+                                converted_format += "{" + format_spec;
+                            } else {
+                                // 無効な&フォーマット - そのまま処理
+                                converted_format += format_str.substr(pos, close_pos - pos + 1);
+                            }
+                        } else if (!var_name.empty() && std::isalpha(var_name[0])) {
                             // 変数名として有効
                             var_names.push_back(var_name);
                             converted_format += "{" + format_spec;  // {:x} のような形式に変換
                         } else {
-                            // 通常の位置プレースホルダ
-                            converted_format += format_str.substr(pos, close_pos - pos + 1);
+                            // 位置プレースホルダは無視（変数名ではないので処理しない）
+                            // 空のままにしてエラーにする
+                            return {var_names, format_str};  // エラー：変換せずに元の文字列を返す
                         }
                         pos = close_pos + 1;
                     } else {
                         // {name} の形式
                         std::string var_name = format_str.substr(pos + 1, close_pos - pos - 1);
 
-                        if (!var_name.empty() && std::isalpha(var_name[0])) {
+                        // &variable パターンをチェック
+                        if (!var_name.empty() && var_name[0] == '&') {
+                            // &variable形式 - アドレス取得 (後でサポート)
+                            std::string actual_var = var_name.substr(1);
+                            if (!actual_var.empty() && std::isalpha(actual_var[0])) {
+                                var_names.push_back("&" + actual_var);  // &付きで格納
+                                converted_format += "{}";
+                            } else {
+                                // 無効な&フォーマット - そのまま処理
+                                converted_format += format_str.substr(pos, close_pos - pos + 1);
+                            }
+                        } else if (!var_name.empty() && std::isalpha(var_name[0])) {
                             // 変数名として有効
                             var_names.push_back(var_name);
                             converted_format += "{}";  // 位置プレースホルダに変換
                         } else {
-                            // 通常の位置プレースホルダまたは空
-                            converted_format += format_str.substr(pos, close_pos - pos + 1);
+                            // 位置プレースホルダは無視（変数名ではないので処理しない）
+                            // 空のままにしてエラーにする
+                            return {var_names, format_str};  // エラー：変換せずに元の文字列を返す
                         }
                         pos = close_pos + 1;
                     }
@@ -1040,21 +1064,36 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
                     // 名前付き変数を解決して追加（プレースホルダの順番通り）
                     for (const auto& var_name : var_names) {
-                        auto var_id = ctx.resolve_variable(var_name);
-                        if (var_id) {
-                            arg_locals.push_back(*var_id);
+                        if (!var_name.empty() && var_name[0] == '&') {
+                            // &variable形式 - 後でサポート、今は通常変数として処理
+                            std::string actual_var = var_name.substr(1);
+                            auto var_id = ctx.resolve_variable(actual_var);
+                            if (var_id) {
+                                // TODO: アドレス取得を実装
+                                // 現在は通常の変数として処理
+                                arg_locals.push_back(*var_id);
+                            } else {
+                                // 変数が見つからない場合、エラー用のダミー値を追加
+                                auto err_type = hir::make_error();
+                                arg_locals.push_back(ctx.new_temp(err_type));
+                            }
                         } else {
-                            // 変数が見つからない場合、エラー用のダミー値を追加
-                            // TODO: エラー報告
-                            auto err_type = hir::make_error();
-                            arg_locals.push_back(ctx.new_temp(err_type));
+                            auto var_id = ctx.resolve_variable(var_name);
+                            if (var_id) {
+                                arg_locals.push_back(*var_id);
+                            } else {
+                                // 変数が見つからない場合、エラー用のダミー値を追加
+                                auto err_type = hir::make_error();
+                                arg_locals.push_back(ctx.new_temp(err_type));
+                            }
                         }
                     }
 
-                    // 明示的な引数を処理（名前付き変数の後に追加）
-                    for (size_t i = 1; i < call.args.size(); ++i) {
-                        LocalId arg_local = lower_expression(*call.args[i], ctx);
-                        arg_locals.push_back(arg_local);
+                    // 明示的な引数は無視（単一の文字列リテラルのみ許可）
+                    // 将来的にはエラーを報告する
+                    if (call.args.size() > 1) {
+                        // TODO: エラーを報告: println accepts only a single string literal. Use variable interpolation instead: println("{var}")
+                        // 現在は追加引数を無視
                     }
 
                     // 引数の数を追加
