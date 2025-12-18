@@ -18,7 +18,7 @@ impl Message {
 
 impl Message for Printable {
     void print() {
-        println("Message: {}", self.text);
+        println("Message: {self.text}");
     }
 }
 

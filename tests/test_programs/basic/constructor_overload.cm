@@ -11,11 +11,11 @@ impl Resource {
     
     overload self(int v) {
         self.value = v;
-        println("P{}", self.value);
+        println("P{self.value}");
     }
-    
+
     ~self() {
-        println("~{}", self.value);
+        println("~{self.value}");
     }
 }
 

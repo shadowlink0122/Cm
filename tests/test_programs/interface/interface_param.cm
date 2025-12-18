@@ -21,6 +21,6 @@ int main() {
     Number n;
     n.value = 42;
     int v = extract_value(n);
-    println("{}", v);
+    println("{v}");
     return 0;
 }

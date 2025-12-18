@@ -10,7 +10,7 @@ struct Point {
 
 impl Point for Printable {
     void print() {
-        println("{} {}", self.x, self.y);
+        println("{self.x} {self.y}");
     }
 }
 

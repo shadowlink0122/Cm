@@ -14,25 +14,25 @@ int main() {
     p.y = 20;
 
     // メンバー値の読み取りと出力
-    println("Initial: x={}, y={}", p.x, p.y);
+    println("Initial: x={p.x}, y={p.y}");
 
     // メンバー値の再代入（演算を含む）
     p.x = p.x + 5;  // 15
     p.y = p.y * 2;  // 40
 
-    println("After operations: x={}, y={}", p.x, p.y);
+    println("After operations: x={p.x}, y={p.y}");
 
     // メンバー間の演算
     int sum = p.x + p.y;  // 15 + 40 = 55
     int product = p.x * p.y;  // 15 * 40 = 600
 
-    println("Sum: {}", sum);
-    println("Product: {}", product);
+    println("Sum: {sum}");
+    println("Product: {product}");
 
     // 複数回の再代入
     p.x = 100;
     p.y = 200;
-    println("New values: x={}, y={}", p.x, p.y);
+    println("New values: x={p.x}, y={p.y}");
 
     // メンバーを使った条件分岐
     if (p.x > p.y) {

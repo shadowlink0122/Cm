@@ -15,6 +15,6 @@ int main() {
     p.x = 10;
     p.y = 20;
     int result = sum_coords(p);
-    println("{}", result);
+    println("{result}");
     return 0;
 }

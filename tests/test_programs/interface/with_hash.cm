@@ -21,9 +21,9 @@ int main() {
     int h2 = p2.hash();
     int h3 = p3.hash();
     
-    println("p1.hash() = {}", h1);
-    println("p2.hash() = {}", h2);
-    println("p3.hash() = {}", h3);
+    println("p1.hash() = {h1}");
+    println("p2.hash() = {h2}");
+    println("p3.hash() = {h3}");
     
     // 同じ値の構造体は同じハッシュ値
     if (h1 == h2) {

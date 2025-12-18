@@ -8,6 +8,6 @@ Integer double_it(Integer x) {
 int main() {
     Integer a = 21;
     Integer b = double_it(a);
-    println("{}", b);
+    println("{b}");
     return 0;
 }

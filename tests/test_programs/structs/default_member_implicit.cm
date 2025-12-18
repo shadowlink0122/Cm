@@ -17,8 +17,8 @@ int main() {
     // defaultメンバからの暗黙的な取得: int x = w → int x = w.value
     int x = w;
 
-    println("w.value = {}", w.value);
-    println("x = {}", x);
+    println("w.value = {w.value}");
+    println("x = {x}");
 
     // 期待値チェック
     return (w.value == 100 && x == 100) ? 0 : 1;

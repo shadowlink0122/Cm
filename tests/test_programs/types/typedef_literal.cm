@@ -5,6 +5,6 @@ int main() {
     // リテラル型の定義が成功することを確認
     // 現在は型チェックなしで文字列として扱われる
     string method = "GET";
-    println("{}", method);
+    println("{method}");
     return 0;
 }

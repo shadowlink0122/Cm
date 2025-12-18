@@ -17,7 +17,7 @@ int main() {
     // デフォルトコンストラクタを明示的に呼び出し
     Point p();
     
-    println("p: ({}, {})", p.x, p.y);
+    println("p: ({p.x}, {p.y})");
     
     return (p.x == 100 && p.y == 200) ? 0 : 1;
 }

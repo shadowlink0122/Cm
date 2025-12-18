@@ -11,7 +11,7 @@ struct Point {
 
 impl Point for Printable {
     void print() {
-        println("Point({}, {})", self.x, self.y);
+        println("Point({self.x}, {self.y})");
     }
 }
 

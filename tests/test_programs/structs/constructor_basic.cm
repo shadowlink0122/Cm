@@ -21,7 +21,7 @@ int main() {
     Point p1;
     p1.x = 1;
     p1.y = 2;
-    println("p1: ({}, {})", p1.x, p1.y);
+    println("p1: ({p1.x}, {p1.y})");
     
     return (p1.x == 1 && p1.y == 2) ? 0 : 1;
 }

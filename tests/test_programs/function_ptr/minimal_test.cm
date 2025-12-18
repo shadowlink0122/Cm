@@ -10,6 +10,6 @@ int main() {
     
     // 関数ポインタ経由での呼び出し
     int result = op(3, 2);
-    println("{}", result);
+    println("{result}");
     return 0;
 }

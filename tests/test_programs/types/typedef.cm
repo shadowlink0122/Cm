@@ -3,6 +3,6 @@ typedef Integer = int;
 
 int main() {
     Integer x = 42;
-    println("{}", x);
+    println("{x}");
     return 0;
 }

@@ -10,28 +10,28 @@ int main() {
     arr[0] = 1; arr[1] = 2; arr[2] = 3; arr[3] = 4; arr[4] = 5;
     
     // size/len
-    println("size = {}", arr.size());
-    println("len = {}", arr.len());
+    println("size = {arr.size(}"));
+    println("len = {arr.len(}"));
     
     // indexOf
-    println("indexOf(3) = {}", arr.indexOf(3));
-    println("indexOf(99) = {}", arr.indexOf(99));
+    println("indexOf(3) = {arr.indexOf(3}"));
+    println("indexOf(99) = {arr.indexOf(99}"));
     
     // includes
-    println("includes(4) = {}", arr.includes(4));
-    println("includes(99) = {}", arr.includes(99));
+    println("includes(4) = {arr.includes(4}"));
+    println("includes(99) = {arr.includes(99}"));
     
     // some
-    println("some(is_even) = {}", arr.some(is_even));
-    println("some(is_negative) = {}", arr.some(is_negative));
+    println("some(is_even) = {arr.some(is_even}"));
+    println("some(is_negative) = {arr.some(is_negative}"));
     
     // every
-    println("every(is_positive) = {}", arr.every(is_positive));
-    println("every(is_even) = {}", arr.every(is_even));
+    println("every(is_positive) = {arr.every(is_positive}"));
+    println("every(is_even) = {arr.every(is_even}"));
     
     // findIndex
-    println("findIndex(is_even) = {}", arr.findIndex(is_even));
-    println("findIndex(is_greater_than_3) = {}", arr.findIndex(is_greater_than_3));
+    println("findIndex(is_even) = {arr.findIndex(is_even}"));
+    println("findIndex(is_greater_than_3) = {arr.findIndex(is_greater_than_3}"));
     
     return 0;
 }

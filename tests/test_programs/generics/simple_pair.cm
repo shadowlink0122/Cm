@@ -14,7 +14,7 @@ struct Pair<T, U> {
 
 int main() {
     Pair<int, int> p = make_pair(1, 2);
-    println("{}", p.first);
-    println("{}", p.second);
+    println("{p.first}");
+    println("{p.second}");
     return 0;
 }

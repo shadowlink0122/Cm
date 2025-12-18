@@ -13,7 +13,7 @@ int main() {
     p.name = "Alice";
     
     // publicメンバは直接アクセス可能
-    println("Name: {}", p.name);
+    println("Name: {p.name}");
 
     return 0;
 }

@@ -22,7 +22,7 @@ int main() {
     // 引数付きコンストラクタ呼び出し
     Point p(10, 20);
     
-    println("p: ({}, {})", p.x, p.y);
+    println("p: ({p.x}, {p.y})");
     
     return (p.x == 10 && p.y == 20) ? 0 : 1;
 }

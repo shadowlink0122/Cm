@@ -28,7 +28,7 @@ int main() {
 
     int result = c.calculate(5);  // doubleValue(5) + 10 = 10 + 10 = 20
 
-    println("Result: {}", result);
+    println("Result: {result}");
 
     return (result == 20) ? 0 : 1;
 }

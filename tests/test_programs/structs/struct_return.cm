@@ -13,7 +13,7 @@ Point create_point(int x, int y) {
 
 int main() {
     Point p = create_point(10, 20);
-    println("{}", p.x);
-    println("{}", p.y);
+    println("{p.x}");
+    println("{p.y}");
     return 0;
 }

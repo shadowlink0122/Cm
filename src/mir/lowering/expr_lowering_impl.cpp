@@ -913,8 +913,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な&フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (!var_name.empty() && std::isalpha(var_name[0])) {
-                            // 変数名として有効
+                        } else if (!var_name.empty() && (std::isalpha(var_name[0]) || var_name.substr(0, 5) == "self.")) {
+                            // 変数名またはメンバーアクセスとして有効
+                            // self.x や p.field のような形式も許可
                             var_names.push_back(var_name);
                             converted_format += "{" + format_spec;  // {:x} のような形式に変換
                         } else {
@@ -938,8 +939,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な&フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (!var_name.empty() && std::isalpha(var_name[0])) {
-                            // 変数名として有効
+                        } else if (!var_name.empty() && (std::isalpha(var_name[0]) || var_name.substr(0, 5) == "self.")) {
+                            // 変数名またはメンバーアクセスとして有効
+                            // self.x や p.field のような形式も許可
                             var_names.push_back(var_name);
                             converted_format += "{}";  // 位置プレースホルダに変換
                         } else {
@@ -1078,13 +1080,72 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                 arg_locals.push_back(ctx.new_temp(err_type));
                             }
                         } else {
-                            auto var_id = ctx.resolve_variable(var_name);
-                            if (var_id) {
-                                arg_locals.push_back(*var_id);
+                            // メンバーアクセスかどうかチェック（"self.x" や "p.field" の形式）
+                            size_t dot_pos = var_name.find('.');
+                            if (dot_pos != std::string::npos) {
+                                // メンバーアクセスの処理
+                                std::string obj_name = var_name.substr(0, dot_pos);
+                                std::string member_name = var_name.substr(dot_pos + 1);
+
+                                // オブジェクトを解決
+                                auto obj_id = ctx.resolve_variable(obj_name);
+                                if (obj_id) {
+                                    // オブジェクトの型を取得
+                                    hir::TypePtr obj_type = nullptr;
+                                    if (*obj_id < ctx.func->locals.size()) {
+                                        obj_type = ctx.func->locals[*obj_id].type;
+                                    }
+
+                                    if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
+                                        // フィールドインデックスを取得
+                                        auto field_idx = ctx.get_field_index(obj_type->name, member_name);
+                                        if (field_idx) {
+                                            // フィールドの型を取得
+                                            hir::TypePtr field_type = hir::make_int();  // デフォルト
+                                            if (ctx.struct_defs && ctx.struct_defs->count(obj_type->name)) {
+                                                const auto* struct_def = ctx.struct_defs->at(obj_type->name);
+                                                if (*field_idx < struct_def->fields.size()) {
+                                                    field_type = struct_def->fields[*field_idx].type;
+                                                }
+                                            }
+
+                                            // フィールドアクセスのための一時変数
+                                            LocalId result = ctx.new_temp(field_type);
+
+                                            // Projectionを使ったアクセスを生成
+                                            MirPlace place{*obj_id};
+                                            place.projections.push_back(PlaceProjection::field(*field_idx));
+
+                                            ctx.push_statement(
+                                                MirStatement::assign(MirPlace{result},
+                                                                   MirRvalue::use(MirOperand::copy(place))));
+
+                                            arg_locals.push_back(result);
+                                        } else {
+                                            // フィールドが見つからない
+                                            auto err_type = hir::make_error();
+                                            arg_locals.push_back(ctx.new_temp(err_type));
+                                        }
+                                    } else {
+                                        // 構造体型でない
+                                        auto err_type = hir::make_error();
+                                        arg_locals.push_back(ctx.new_temp(err_type));
+                                    }
+                                } else {
+                                    // オブジェクトが見つからない
+                                    auto err_type = hir::make_error();
+                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                }
                             } else {
-                                // 変数が見つからない場合、エラー用のダミー値を追加
-                                auto err_type = hir::make_error();
-                                arg_locals.push_back(ctx.new_temp(err_type));
+                                // 通常の変数
+                                auto var_id = ctx.resolve_variable(var_name);
+                                if (var_id) {
+                                    arg_locals.push_back(*var_id);
+                                } else {
+                                    // 変数が見つからない場合、エラー用のダミー値を追加
+                                    auto err_type = hir::make_error();
+                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                }
                             }
                         }
                     }

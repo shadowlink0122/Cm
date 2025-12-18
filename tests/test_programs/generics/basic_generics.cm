@@ -37,13 +37,13 @@ int main() {
     Pair<int> int_pair;
     int_pair.first = 100;
     int_pair.second = 200;
-    println("Int pair: ({}, {})", int_pair.first, int_pair.second);
+    println("Int pair: ({int_pair.first}, {int_pair.second})");
 
     // ジェネリック構造体のテスト (double)
     Pair<double> dbl_pair;
     dbl_pair.first = 1.5;
     dbl_pair.second = 2.5;
-    println("Double pair: ({}, {})", dbl_pair.first, dbl_pair.second);
+    println("Double pair: ({dbl_pair.first}, {dbl_pair.second})");
 
     return 0;
 }
