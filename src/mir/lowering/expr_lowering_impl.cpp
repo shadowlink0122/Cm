@@ -884,15 +884,33 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 
         if (format_str[pos] == '{') {
             size_t end = pos + 1;
-            while (end < format_str.length() && format_str[end] != '}' && format_str[end] != ':') {
-                end++;
+            // :: は変数名の一部として扱う（enum値のため）
+            while (end < format_str.length() && format_str[end] != '}') {
+                // フォーマット指定子のコロンをチェック（:: ではない場合）
+                if (format_str[end] == ':' && (end + 1 >= format_str.length() || format_str[end + 1] != ':')) {
+                    break;  // フォーマット指定子の開始
+                }
+                if (format_str[end] == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
+                    end += 2;  // :: をスキップ
+                } else {
+                    end++;
+                }
             }
 
-            if (end < format_str.length()) {
+            if (end < format_str.length() || end == format_str.length()) {
                 std::string content = format_str.substr(pos + 1, end - pos - 1);
 
-                // フォーマット指定子を探す
-                size_t colon_pos = format_str.find(':', pos + 1);
+                // フォーマット指定子を探す（:: はスキップ）
+                size_t colon_pos = std::string::npos;
+                for (size_t i = pos + 1; i < format_str.length(); ++i) {
+                    if (format_str[i] == ':' && (i + 1 >= format_str.length() || format_str[i + 1] != ':')) {
+                        colon_pos = i;
+                        break;
+                    }
+                    if (format_str[i] == ':' && i + 1 < format_str.length() && format_str[i + 1] == ':') {
+                        i++;  // :: をスキップ
+                    }
+                }
                 size_t close_pos = format_str.find('}', pos + 1);
 
                 if (close_pos != std::string::npos) {
@@ -1067,13 +1085,31 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     // 名前付き変数を解決して追加（プレースホルダの順番通り）
                     for (const auto& var_name : var_names) {
                         if (!var_name.empty() && var_name[0] == '&') {
-                            // &variable形式 - 後でサポート、今は通常変数として処理
+                            // &variable形式 - アドレス取得を実装
                             std::string actual_var = var_name.substr(1);
                             auto var_id = ctx.resolve_variable(actual_var);
                             if (var_id) {
-                                // TODO: アドレス取得を実装
-                                // 現在は通常の変数として処理
-                                arg_locals.push_back(*var_id);
+                                // アドレス取得 - ポインタ型の一時変数を作成
+                                hir::TypePtr ptr_type = nullptr;
+
+                                // 変数の型を取得してポインタ型を作成
+                                if (*var_id < ctx.func->locals.size()) {
+                                    auto base_type = ctx.func->locals[*var_id].type;
+                                    ptr_type = hir::make_pointer(base_type);
+                                }
+
+                                if (!ptr_type) {
+                                    ptr_type = hir::make_pointer(hir::make_int());  // デフォルト
+                                }
+
+                                LocalId result = ctx.new_temp(ptr_type);
+
+                                // Ref演算でアドレスを取得（immutableポインタ）
+                                ctx.push_statement(
+                                    MirStatement::assign(MirPlace{result},
+                                                       MirRvalue::ref(MirPlace{*var_id}, false)));
+
+                                arg_locals.push_back(result);
                             } else {
                                 // 変数が見つからない場合、エラー用のダミー値を追加
                                 auto err_type = hir::make_error();
@@ -1159,16 +1195,23 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                     std::string enum_member = var_name.substr(scope_pos + 2);
 
                                     // enum定数を解決
-                                    // TODO: 実際のenum値の解決とMIR生成が必要
-                                    // 現時点では定数値として扱う
-                                    hir::TypePtr enum_type = hir::make_int();  // 仮の型
+                                    auto enum_value = ctx.get_enum_value(enum_name, enum_member);
+
+                                    hir::TypePtr enum_type = hir::make_int();  // enum型はintとして扱う
                                     LocalId result = ctx.new_temp(enum_type);
 
                                     // enum値を定数として生成
                                     MirConstant enum_const;
                                     enum_const.type = enum_type;
-                                    // TODO: 実際のenum値を取得
-                                    enum_const.value = int64_t(0);  // 仮の値
+
+                                    if (enum_value) {
+                                        // enum値が見つかった場合
+                                        enum_const.value = *enum_value;
+                                    } else {
+                                        // enum値が見つからない場合はエラー値
+                                        enum_const.value = int64_t(0);
+                                        debug_msg("MIR", "Warning: Enum value not found: " + var_name);
+                                    }
 
                                     ctx.push_statement(
                                         MirStatement::assign(MirPlace{result},
