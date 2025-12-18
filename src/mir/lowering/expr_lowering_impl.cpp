@@ -913,9 +913,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な&フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (!var_name.empty() && (std::isalpha(var_name[0]) || var_name.substr(0, 5) == "self.")) {
-                            // 変数名またはメンバーアクセスとして有効
-                            // self.x や p.field のような形式も許可
+                        } else if (!var_name.empty() && (std::isalpha(var_name[0]) || var_name.substr(0, 5) == "self." || var_name.find("::") != std::string::npos)) {
+                            // 変数名、メンバーアクセス、メソッド呼び出し、またはenum値として有効
+                            // self.x, p.field, r.area(), Color::Red のような形式も許可
                             var_names.push_back(var_name);
                             converted_format += "{" + format_spec;  // {:x} のような形式に変換
                         } else {
@@ -939,9 +939,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な&フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (!var_name.empty() && (std::isalpha(var_name[0]) || var_name.substr(0, 5) == "self.")) {
-                            // 変数名またはメンバーアクセスとして有効
-                            // self.x や p.field のような形式も許可
+                        } else if (!var_name.empty() && (std::isalpha(var_name[0]) || var_name.substr(0, 5) == "self." || var_name.find("::") != std::string::npos)) {
+                            // 変数名、メンバーアクセス、メソッド呼び出し、またはenum値として有効
+                            // self.x, p.field, r.area(), Color::Red のような形式も許可
                             var_names.push_back(var_name);
                             converted_format += "{}";  // 位置プレースホルダに変換
                         } else {
@@ -1087,6 +1087,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                 std::string obj_name = var_name.substr(0, dot_pos);
                                 std::string member_name = var_name.substr(dot_pos + 1);
 
+                                // メソッド呼び出しかどうかチェック（末尾が "()" の場合）
+                                bool is_method_call = false;
+                                if (member_name.size() > 2 &&
+                                    member_name.substr(member_name.size() - 2) == "()") {
+                                    is_method_call = true;
+                                    member_name = member_name.substr(0, member_name.size() - 2);  // "()" を除去
+                                }
+
                                 // オブジェクトを解決
                                 auto obj_id = ctx.resolve_variable(obj_name);
                                 if (obj_id) {
@@ -1096,8 +1104,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                         obj_type = ctx.func->locals[*obj_id].type;
                                     }
 
-                                    if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
-                                        // フィールドインデックスを取得
+                                    if (is_method_call) {
+                                        // メソッド呼び出しの処理
+                                        // 現時点では未サポート - エラー値を返す
+                                        // TODO: ブロック分割とターミネータを使った適切な実装が必要
+                                        auto err_type = hir::make_error();
+                                        arg_locals.push_back(ctx.new_temp(err_type));
+                                    } else if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
+                                        // フィールドアクセスの処理
                                         auto field_idx = ctx.get_field_index(obj_type->name, member_name);
                                         if (field_idx) {
                                             // フィールドの型を取得
@@ -1137,14 +1151,40 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                     arg_locals.push_back(ctx.new_temp(err_type));
                                 }
                             } else {
-                                // 通常の変数
-                                auto var_id = ctx.resolve_variable(var_name);
-                                if (var_id) {
-                                    arg_locals.push_back(*var_id);
+                                // enum値かどうかチェック（"::" を含む場合）
+                                size_t scope_pos = var_name.find("::");
+                                if (scope_pos != std::string::npos) {
+                                    // enum値の処理（例: Color::Red）
+                                    std::string enum_name = var_name.substr(0, scope_pos);
+                                    std::string enum_member = var_name.substr(scope_pos + 2);
+
+                                    // enum定数を解決
+                                    // TODO: 実際のenum値の解決とMIR生成が必要
+                                    // 現時点では定数値として扱う
+                                    hir::TypePtr enum_type = hir::make_int();  // 仮の型
+                                    LocalId result = ctx.new_temp(enum_type);
+
+                                    // enum値を定数として生成
+                                    MirConstant enum_const;
+                                    enum_const.type = enum_type;
+                                    // TODO: 実際のenum値を取得
+                                    enum_const.value = int64_t(0);  // 仮の値
+
+                                    ctx.push_statement(
+                                        MirStatement::assign(MirPlace{result},
+                                                           MirRvalue::use(MirOperand::constant(enum_const))));
+
+                                    arg_locals.push_back(result);
                                 } else {
-                                    // 変数が見つからない場合、エラー用のダミー値を追加
-                                    auto err_type = hir::make_error();
-                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                    // 通常の変数
+                                    auto var_id = ctx.resolve_variable(var_name);
+                                    if (var_id) {
+                                        arg_locals.push_back(*var_id);
+                                    } else {
+                                        // 変数が見つからない場合、エラー用のダミー値を追加
+                                        auto err_type = hir::make_error();
+                                        arg_locals.push_back(ctx.new_temp(err_type));
+                                    }
                                 }
                             }
                         }
