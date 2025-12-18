@@ -18,6 +18,6 @@ typedef Num = Number;
 int main() {
     Num n;
     n.value = 100;
-    println("{}", n.get_value());
+    println("{n.get_value(}"));
     return 0;
 }

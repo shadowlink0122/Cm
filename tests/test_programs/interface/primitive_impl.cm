@@ -18,9 +18,9 @@ int main() {
     int b = -3;
     int c = 0;
     
-    println("{}", a.abs());
-    println("{}", b.abs());
-    println("{}", c.abs());
+    println("{a.abs(}"));
+    println("{b.abs(}"));
+    println("{c.abs(}"));
     
     return 0;
 }

@@ -6,8 +6,8 @@ enum Status {
 }
 
 int main() {
-    println("{}", Status::Error);
-    println("{}", Status::Unknown);
-    println("{}", Status::Success);
+    println("{Status::Error}");
+    println("{Status::Unknown}");
+    println("{Status::Success}");
     return 0;
 }

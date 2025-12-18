@@ -36,12 +36,12 @@ IntResult divide(int a, int b) {
 int main() {
     IntResult r1 = divide(10, 2);
     if (r1.tag == ResultTag::Ok) {
-        println("{}", r1.value);
+        println("{r1.value}");
     }
     
     IntResult r2 = divide(10, 0);
     if (r2.tag == ResultTag::Err) {
-        println("{}", r2.error);
+        println("{r2.error}");
     }
     
     return 0;

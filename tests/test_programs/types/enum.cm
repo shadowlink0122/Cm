@@ -6,8 +6,8 @@ enum Color {
 }
 
 int main() {
-    println("{}", Color::Red);
-    println("{}", Color::Green);
-    println("{}", Color::Blue);
+    println("{Color::Red}");
+    println("{Color::Green}");
+    println("{Color::Blue}");
     return 0;
 }
