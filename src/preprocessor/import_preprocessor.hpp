@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 namespace cm::preprocessor {
@@ -20,12 +21,14 @@ public:
     };
 
 private:
-    // 循環参照検出のためのセット
-    std::unordered_set<std::string> processing_modules;
-    std::unordered_set<std::string> processed_modules;
+    // 循環参照検出とキャッシュ
+    std::unordered_set<std::string> imported_modules;  // インポート済みモジュール（再インポート防止）
+    std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
+    std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ
 
     // モジュール検索パス
     std::vector<std::filesystem::path> search_paths;
+    std::filesystem::path project_root;  // プロジェクトルート
 
     // デバッグモード
     bool debug_mode;
@@ -63,13 +66,31 @@ private:
     // インポート文をパース
     struct ImportInfo {
         std::string module_name;
-        std::vector<std::string> items;  // 空の場合は全てインポート
+        std::string alias;  // "as" エイリアス
+        std::vector<std::string> items;  // 選択的インポート項目
+        std::vector<std::pair<std::string, std::string>> item_aliases;  // 項目ごとのエイリアス
         bool is_wildcard = false;
+        bool is_from_import = false;  // from構文
+        bool is_relative = false;  // 相対パス（./ or ../）
     };
     ImportInfo parse_import_statement(const std::string& import_line);
 
-    // 循環参照をチェック
-    bool check_circular_dependency(const std::string& module_path);
+    // インポートアイテムをパース（ヘルパー関数）
+    void parse_import_items(const std::string& items_str, ImportInfo& info);
+
+    // プロジェクトルートを検出
+    std::filesystem::path find_project_root(const std::filesystem::path& current_path);
+
+    // モジュールパスを解決（相対/絶対パスのサポート）
+    std::filesystem::path resolve_module_path(const std::string& module_specifier,
+                                             const std::filesystem::path& current_file);
+
+    // module文でエントリーポイントを検出
+    std::filesystem::path find_module_entry_point(const std::filesystem::path& directory);
+
+    // 循環依存エラーメッセージを生成
+    std::string format_circular_dependency_error(const std::vector<std::string>& stack,
+                                                const std::string& module);
 };
 
 }  // namespace cm::preprocessor

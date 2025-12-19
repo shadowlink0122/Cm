@@ -1,0 +1,9 @@
+// test_simple.cm - シンプルなモジュールテスト
+
+import ./math as M;
+
+int main() {
+    float pi = 3.14159;
+    println("Simple test: PI = {pi}");
+    return 0;
+}

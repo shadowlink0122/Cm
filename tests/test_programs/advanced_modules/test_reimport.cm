@@ -1,0 +1,28 @@
+// test_reimport.cm - 再インポート防止のテスト
+
+// 同じモジュールを複数回インポート（重複は自動的に防止される）
+import ./math;
+import ./math as Math1;
+import ./math as Math2;
+
+// 選択的インポートでも同じモジュール
+import { PI } from ./math;
+
+int main() {
+    println("Testing reimport prevention:");
+
+    // どれも同じモジュールを参照
+    println("Via direct: {math::PI}");
+    println("Via Math1: {Math1::PI}");
+    println("Via Math2: {Math2::PI}");
+    println("Via from: {PI}");
+
+    // 全て同じ値になるはず
+    if (math::PI == Math1::PI && Math1::PI == Math2::PI && Math2::PI == PI) {
+        println("Success: All references point to the same module");
+    } else {
+        println("Error: Different values detected");
+    }
+
+    return 0;
+}

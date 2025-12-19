@@ -1,0 +1,9 @@
+// circular_b.cm - 循環依存テスト B
+module circular_b;
+
+// 循環依存を作る（エラーになるはず）
+import ./circular_a;
+
+export int func_b() {
+    return func_a() + 1;
+}
