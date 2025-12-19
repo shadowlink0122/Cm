@@ -4,6 +4,9 @@
 #include <iostream>
 #include <regex>
 #include <sstream>
+#include <map>
+#include <set>
+#include <algorithm>
 
 namespace cm::preprocessor {
 
@@ -330,8 +333,12 @@ std::string ImportPreprocessor::filter_exports(
 }
 
 std::string ImportPreprocessor::remove_export_keywords(const std::string& source) {
+    // 先にexport構文を処理
+    std::string processed = process_export_syntax(source);
+    processed = process_namespace_exports(processed);
+
     std::stringstream result;
-    std::stringstream input(source);
+    std::stringstream input(processed);
     std::string line;
 
     while (std::getline(input, line)) {
@@ -345,6 +352,212 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
         line = std::regex_replace(line, default_regex, "");
 
         result << line << "\n";
+    }
+
+    return result.str();
+}
+
+std::string ImportPreprocessor::process_export_syntax(const std::string& source) {
+    std::stringstream result;
+    std::stringstream input(source);
+    std::string line;
+    std::vector<std::string> lines;
+
+    // 全行を読み込む
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+
+    // 定義を収集するためのマップ
+    std::map<std::string, std::pair<int, std::string>> definitions;  // name -> (line_start, definition)
+    std::set<std::string> exported_names;
+
+    // Phase 1: 定義を収集
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string& line = lines[i];
+
+        // 関数定義を検出
+        std::regex func_regex(R"(^\s*(?:export\s+)?(?:int|float|double|void|bool|char)\s+(\w+)\s*\()");
+        std::smatch match;
+        if (std::regex_search(line, match, func_regex)) {
+            std::string name = match[1];
+            std::string def = line;
+            int brace_count = 0;
+            size_t j = i;
+
+            // 関数本体を収集
+            for (; j < lines.size(); ++j) {
+                if (j > i) def += "\n" + lines[j];
+                for (char c : lines[j]) {
+                    if (c == '{') brace_count++;
+                    else if (c == '}') {
+                        brace_count--;
+                        if (brace_count == 0) break;
+                    }
+                }
+                if (brace_count == 0 && lines[j].find('}') != std::string::npos) break;
+            }
+
+            definitions[name] = {i, def};
+            i = j;  // スキップ
+        }
+
+        // 構造体定義を検出
+        std::regex struct_regex(R"(^\s*(?:export\s+)?struct\s+(\w+)\s*\{)");
+        if (std::regex_search(line, match, struct_regex)) {
+            std::string name = match[1];
+            std::string def = line;
+            int brace_count = 1;
+
+            // 構造体本体を収集
+            for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
+                def += "\n" + lines[j];
+                for (char c : lines[j]) {
+                    if (c == '{') brace_count++;
+                    else if (c == '}') brace_count--;
+                }
+                if (brace_count == 0) {
+                    i = j;
+                    break;
+                }
+            }
+
+            definitions[name] = {i, def};
+        }
+    }
+
+    // Phase 2: export { name1, name2, ... } を検出
+    std::regex export_list_regex(R"(^\s*export\s*\{([^}]+)\})");
+    bool has_export_list = false;
+
+    for (size_t i = 0; i < lines.size(); ++i) {
+        std::smatch match;
+        if (std::regex_search(lines[i], match, export_list_regex)) {
+            has_export_list = true;
+            std::string names = match[1];
+
+            // 名前をパース
+            std::stringstream ss(names);
+            std::string name;
+            while (std::getline(ss, name, ',')) {
+                // トリム
+                name.erase(0, name.find_first_not_of(" \t\n\r"));
+                name.erase(name.find_last_not_of(" \t\n\r") + 1);
+                if (!name.empty()) {
+                    exported_names.insert(name);
+                }
+            }
+
+            // export {...} 行をコメント化
+            lines[i] = "// " + lines[i] + " (processed)";
+        }
+    }
+
+    // Phase 3: 出力を生成
+    if (has_export_list) {
+        // 名前列挙形式の場合、定義を再配置
+        std::set<int> processed_lines;
+
+        // エクスポートされた定義を先に出力
+        for (const auto& name : exported_names) {
+            if (definitions.count(name) > 0) {
+                result << "export " << definitions[name].second << "\n";
+                processed_lines.insert(definitions[name].first);
+            }
+        }
+
+        // その他の行を出力
+        for (size_t i = 0; i < lines.size(); ++i) {
+            if (processed_lines.count(i) == 0) {
+                // 既に処理された定義はスキップ
+                bool skip = false;
+                for (const auto& [name, info] : definitions) {
+                    if (info.first == i && exported_names.count(name) > 0) {
+                        skip = true;
+                        break;
+                    }
+                }
+                if (!skip) {
+                    result << lines[i] << "\n";
+                }
+            }
+        }
+    } else {
+        // 通常の形式はそのまま返す
+        return source;
+    }
+
+    return result.str();
+}
+
+std::string ImportPreprocessor::process_namespace_exports(const std::string& source) {
+    std::stringstream result;
+    std::stringstream input(source);
+    std::string line;
+    bool in_namespace_export = false;
+    std::string namespace_name;
+    std::vector<std::string> namespace_content;
+    int brace_depth = 0;
+
+    while (std::getline(input, line)) {
+        // export NS { ... } を検出
+        std::regex ns_export_regex(R"(^\s*export\s+(\w+)\s*\{)");
+        std::smatch match;
+
+        if (!in_namespace_export && std::regex_search(line, match, ns_export_regex)) {
+            // サブ名前空間エクスポートの開始
+            namespace_name = match[1];
+            in_namespace_export = true;
+            brace_depth = 1;
+
+            // namespace宣言に変換
+            result << "namespace " << namespace_name << " {\n";
+
+            // 開き括弧の後の内容があればそれも処理
+            size_t brace_pos = line.find('{');
+            if (brace_pos != std::string::npos && brace_pos + 1 < line.length()) {
+                std::string rest = line.substr(brace_pos + 1);
+                namespace_content.push_back(rest);
+            }
+        } else if (in_namespace_export) {
+            // サブ名前空間内のコンテンツを収集
+            for (char c : line) {
+                if (c == '{') brace_depth++;
+                else if (c == '}') {
+                    brace_depth--;
+                    if (brace_depth == 0) {
+                        // 名前空間の終了
+                        in_namespace_export = false;
+
+                        // 収集したコンテンツを出力
+                        for (const auto& content_line : namespace_content) {
+                            result << "    " << content_line << "\n";
+                        }
+
+                        // 閉じ括弧の前までを出力
+                        size_t close_pos = line.find('}');
+                        if (close_pos > 0) {
+                            std::string before_close = line.substr(0, close_pos);
+                            if (!before_close.empty()) {
+                                result << "    " << before_close << "\n";
+                            }
+                        }
+
+                        result << "} // namespace " << namespace_name << "\n";
+                        namespace_content.clear();
+                        break;
+                    }
+                }
+            }
+
+            if (in_namespace_export) {
+                // まだ名前空間内
+                namespace_content.push_back(line);
+            }
+        } else {
+            // 通常の行
+            result << line << "\n";
+        }
     }
 
     return result.str();

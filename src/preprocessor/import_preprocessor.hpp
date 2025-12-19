@@ -63,6 +63,12 @@ private:
     // exportキーワードを削除
     std::string remove_export_keywords(const std::string& source);
 
+    // export構文を処理（外部定義+名前列挙のサポート）
+    std::string process_export_syntax(const std::string& source);
+
+    // サブ名前空間を処理（export NS { ... }）
+    std::string process_namespace_exports(const std::string& source);
+
     // インポート文をパース
     struct ImportInfo {
         std::string module_name;

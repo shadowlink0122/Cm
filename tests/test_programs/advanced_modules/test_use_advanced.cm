@@ -1,0 +1,59 @@
+// test_use_advanced.cm - 新機能を使用するテスト
+
+// 外部定義+名前列挙モジュール
+import ./test_export_syntax as Math;
+
+// サブ名前空間モジュール
+import ./test_namespace_export as Graphics;
+
+int main() {
+    println("Testing export syntax (external definition + name enumeration):");
+
+    // 公開された関数を使用
+    int sum = Math::add(10, 20);
+    int product = Math::multiply(5, 6);
+    println("10 + 20 = {sum}");
+    println("5 * 6 = {product}");
+
+    // 公開された構造体を使用
+    Math::Calculator calc;
+    calc.value = 100;
+    println("Calculator value: {calc.value}");
+
+    // divide と internal_helper は公開されていないので使えない
+    // int quotient = Math::divide(10, 2);  // エラーになるはず
+
+    println("\nTesting namespace exports:");
+
+    // グローバル関数
+    int global_result = Graphics::global_func();
+    println("Global function result: {global_result}");
+
+    // 2D名前空間
+    Graphics::drawing2d::Point2D p1;
+    p1.x = 0;
+    p1.y = 0;
+
+    Graphics::drawing2d::Point2D p2;
+    p2.x = 3;
+    p2.y = 4;
+
+    int dist_sq = Graphics::drawing2d::distance(p1, p2);
+    println("2D distance squared: {dist_sq}");
+
+    // 3D名前空間
+    Graphics::drawing3d::Point3D p3;
+    p3.x = 0;
+    p3.y = 0;
+    p3.z = 0;
+
+    Graphics::drawing3d::Point3D p4;
+    p4.x = 1;
+    p4.y = 2;
+    p4.z = 3;
+
+    int manhattan = Graphics::drawing3d::manhattan_distance(p3, p4);
+    println("3D Manhattan distance: {manhattan}");
+
+    return 0;
+}
