@@ -72,13 +72,25 @@ std::string ImportPreprocessor::process_imports(
 
     // 各行を処理
     while (std::getline(input, line)) {
-        // インポート文を検出
-        std::regex import_regex(R"(^\s*import\s+(.+)\s*;)");
+        // インポート文を検出（コメントも考慮）
+        std::regex import_regex(R"(^\s*import\s+([^;]+)\s*;.*$)");
         std::smatch match;
 
+        if (debug_mode) {
+            std::cout << "[PREPROCESSOR] Processing line: " << line << "\n";
+        }
+
         if (std::regex_match(line, match, import_regex)) {
+            if (debug_mode) {
+                std::cout << "[PREPROCESSOR] Matched import regex: " << match[0] << "\n";
+            }
+            // コメントを除去してからパース
+            std::string import_statement = line.substr(0, line.find("//"));
+            // 末尾の空白を除去
+            import_statement.erase(import_statement.find_last_not_of(" \t\n\r") + 1);
+
             // インポート文をパース
-            auto import_info = parse_import_statement(line);
+            auto import_info = parse_import_statement(import_statement);
 
             // 標準ライブラリのインポートはスキップ（コンパイラに処理させる）
             if (import_info.module_name.find("std::") == 0 || import_info.module_name == "std") {
@@ -120,9 +132,11 @@ std::string ImportPreprocessor::process_imports(
             module_source = process_imports(module_source, module_path, imported_files);
 
             // エクスポートフィルタリング（選択的インポートの場合）
-            if (!import_info.items.empty() && !import_info.is_wildcard) {
-                module_source = filter_exports(module_source, import_info.items);
-            }
+            // TODO: 選択的インポートのフィルタリング実装を改善する必要がある
+            // 現在は全てのエクスポートを含める
+            // if (!import_info.items.empty() && !import_info.is_wildcard) {
+            //     module_source = filter_exports(module_source, import_info.items);
+            // }
 
             // exportキーワードを削除
             module_source = remove_export_keywords(module_source);
@@ -189,9 +203,71 @@ std::string ImportPreprocessor::filter_exports(
     const std::string& module_source,
     const std::vector<std::string>& import_items
 ) {
-    // 簡易実装：選択的インポートの場合、エクスポートマーカーのない要素を削除
-    // 現在は全体をそのまま返す（後で実装）
-    return module_source;
+    // 選択的インポート：指定されたアイテムのみを抽出
+    std::stringstream result;
+    std::stringstream input(module_source);
+    std::string line;
+    bool in_export_block = false;
+    std::string current_export_name;
+    std::vector<std::string> block_lines;
+    int brace_depth = 0;
+
+    while (std::getline(input, line)) {
+        // エクスポートされた関数/構造体を検出
+        std::smatch match;
+        if (std::regex_search(line, match, std::regex(R"(export\s+(?:int|void|float|double|bool|char|struct|interface|enum)\s+(\w+))"))) {
+            current_export_name = match[1];
+
+            // 指定されたアイテムかチェック
+            if (std::find(import_items.begin(), import_items.end(), current_export_name) != import_items.end()) {
+                in_export_block = true;
+                block_lines.clear();
+                block_lines.push_back(line);
+
+                // 開き括弧をカウント
+                for (char c : line) {
+                    if (c == '{') brace_depth++;
+                    else if (c == '}') brace_depth--;
+                }
+
+                // 1行で完結する場合
+                if (brace_depth == 0 && (line.find(';') != std::string::npos || line.find('}') != std::string::npos)) {
+                    for (const auto& block_line : block_lines) {
+                        result << block_line << "\n";
+                    }
+                    in_export_block = false;
+                    block_lines.clear();
+                }
+            }
+        } else if (in_export_block) {
+            // エクスポートブロック内
+            block_lines.push_back(line);
+
+            // 括弧の深さを追跡
+            for (char c : line) {
+                if (c == '{') brace_depth++;
+                else if (c == '}') brace_depth--;
+            }
+
+            // ブロックの終了を検出
+            if (brace_depth == 0) {
+                // ブロック全体を出力
+                for (const auto& block_line : block_lines) {
+                    result << block_line << "\n";
+                }
+                in_export_block = false;
+                block_lines.clear();
+            }
+        } else if (line.find("export") == std::string::npos) {
+            // エクスポートされていない行はそのまま保持（型定義など）
+            // ただし、関数定義は除外
+            if (!std::regex_search(line, std::regex(R"(^\s*(?:int|void|float|double|bool|char)\s+\w+\s*\()"))) {
+                result << line << "\n";
+            }
+        }
+    }
+
+    return result.str();
 }
 
 std::string ImportPreprocessor::remove_export_keywords(const std::string& source) {
@@ -227,7 +303,7 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
     std::regex wildcard_import(R"(^\s*import\s+([a-zA-Z_][a-zA-Z0-9_:]*)::\*\s*;)");
 
     // import module_name::{item1, item2}; 形式（選択的）
-    std::regex selective_import(R"(^\s*import\s+([a-zA-Z_][a-zA-Z0-9_:]*)::\{([^}]+)\}\s*;)");
+    std::regex selective_import(R"(^\s*import\s+([a-zA-Z_][a-zA-Z0-9_]*)::\{([^}]+)\}\s*;)");
 
     std::smatch match;
 

@@ -1,0 +1,14 @@
+// test_selective_filter.cm - 選択的インポートフィルタリングのテスト
+
+import math_lib::{add};  // addのみをインポート
+
+int main() {
+    // addは使える
+    int sum = add(10, 20);
+    println("10 + 20 = {sum}");
+
+    // multiplyはインポートしていないので使えないはず
+    // int product = multiply(5, 6);  // これはエラーになるはず
+
+    return 0;
+}

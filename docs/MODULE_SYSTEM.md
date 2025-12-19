@@ -3,7 +3,7 @@
 ## 🎯 実装完了項目
 
 ### 1. レクサー拡張
-- ✅ 新キーワード追加: `module`, `import`, `export`, `from`, `as`, `use`, `pub`, `macro`
+- ✅ 新キーワード追加: `module`, `import`, `export`, `from`, `as`
 - ✅ トークン定義とマッピング更新
 
 ### 2. AST拡張
@@ -11,10 +11,9 @@
   - `ModulePath`: モジュールパス表現
   - `ImportDecl`: import文
   - `ExportDecl`: export文
+  - `FromDecl`: from
+  - `AsDecl`: as
   - `ModuleDecl`: module宣言
-  - `MacroDecl`: マクロ定義
-  - `UseDecl`: use文
-  - `Attribute`: アトリビュート
 
 ### 3. 標準ライブラリ構造
 ```
@@ -26,8 +25,6 @@ std/
 │   └── file.cm    # ファイル操作
 ├── collections/   # コレクション
 │   └── vec.cm     # 動的配列Vec<T>
-└── macros/        # 標準マクロ
-    └── mod.cm     # assert!, println!, vec!等
 ```
 
 ## 📝 モジュール構文
@@ -50,7 +47,7 @@ import std.io.*;
 ### Export文
 ```cm
 // 関数のエクスポート
-export fn add(a: int, b: int) -> int { ... }
+export int add(int a, int b) { ... }
 
 // 型のエクスポート
 export struct Point { x: f64, y: f64 }
@@ -69,35 +66,6 @@ module math.geometry;
 // モジュール内の定義...
 ```
 
-## 🔧 マクロシステム
-
-### 関数風マクロ
-```cm
-@[macro]
-fn assert!(condition: expr, msg: string = "") {
-    if (!$condition) {
-        panic!($msg);
-    }
-}
-```
-
-### アトリビュートマクロ
-```cm
-@[derive("Debug", "Clone")]
-struct Person {
-    name: string,
-    age: int,
-}
-```
-
-### プロシージャマクロ
-```cm
-@[proc_macro]
-fn sql!(query: string) -> expr {
-    // SQLをコンパイル時に検証
-}
-```
-
 ## 🏗️ アーキテクチャ
 
 ### モジュール解決プロセス
@@ -110,12 +78,6 @@ fn sql!(query: string) -> expr {
 3. **循環依存チェック**: 依存グラフを構築
 4. **順次コンパイル**: 依存順にコンパイル
 5. **シンボル登録**: エクスポートを名前空間に登録
-
-### 外部関数インターフェース（FFI）
-```cm
-@[extern("cm_print")]
-fn print_impl(s: string) -> void;
-```
 
 プラットフォーム別実装:
 - **Unix/Linux**: システムコール直接呼び出し
@@ -153,10 +115,10 @@ import std.io.{println};
 import std.collections.Vec;
 import std.core.{Option, Result};
 
-fn main() {
-    let mut vec = Vec::new();
+int main() {
+    auto vec = Vec::new();
     vec.push(42);
-    println!("Vector length: {}", vec.len());
+    println("Vector length: {vec.len()}");
 }
 ```
 
@@ -165,19 +127,8 @@ fn main() {
 ```cm
 module math.geometry;
 
-export struct Point { x: f64, y: f64 }
-export fn distance(p1: &Point, p2: &Point) -> f64 { ... }
-```
-
-### 10_macros.cm
-マクロシステムの活用:
-```cm
-@[macro]
-fn time_it!(label: string, code: block) {
-    let start = get_time();
-    $code
-    println!("{}: {}ms", $label, get_time() - start);
-}
+export struct Point { double x, double y }
+export double distance(&Point p1, &Point p2) { ... }
 ```
 
 ## 🎯 設計方針

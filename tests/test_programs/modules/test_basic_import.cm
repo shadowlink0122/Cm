@@ -3,10 +3,10 @@
 import math_lib;
 
 int main() {
-    // モジュール修飾名でアクセス
-    int sum = math_lib::add(5, 3);
-    int product = math_lib::multiply(4, 7);
-    int doubled = math_lib::double_value(10);
+    // プリプロセッサ方式では直接アクセス
+    int sum = add(5, 3);
+    int product = multiply(4, 7);
+    int doubled = double_value(10);
 
     println("5 + 3 = {sum}");
     println("4 * 7 = {product}");

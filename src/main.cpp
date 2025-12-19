@@ -17,6 +17,7 @@
 #include "mir/mir_lowering.hpp"
 #include "mir/mir_printer.hpp"
 #include "mir/optimizations/all_passes.hpp"
+#include "module/module_resolver.hpp"
 #include "preprocessor/import_preprocessor.hpp"
 
 #include <cstdlib>
@@ -300,6 +301,12 @@ int main(int argc, char* argv[]) {
     }
 
     try {
+        // ========== Initialize Module Resolver ==========
+        if (opts.debug)
+            std::cout << "=== Module Resolver Init ===\n";
+
+        module::initialize_module_resolver();
+
         // ========== Import Preprocessor ==========
         if (opts.debug)
             std::cout << "=== Import Preprocessor ===\n";
