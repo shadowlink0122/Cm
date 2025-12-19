@@ -7,3 +7,9 @@ import ./circular_b;
 export int func_a() {
     return 42;
 }
+
+int main() {
+    int result = func_b();
+    println("Result from func_b: {result}");
+    return 0;
+}

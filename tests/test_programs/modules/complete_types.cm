@@ -1,4 +1,5 @@
 // complete_types.cm - 完全なモジュール機能のデモンストレーション
+module complete_types;
 
 // 構造体のエクスポート
 export struct Vector2D {

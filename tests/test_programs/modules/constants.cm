@@ -1,4 +1,5 @@
 // constants.cm - 定数と変数のエクスポートテスト
+module constants;
 
 // グローバル変数のエクスポート
 export int global_counter = 0;

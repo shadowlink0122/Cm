@@ -1,4 +1,5 @@
 // data_types.cm - 様々なデータ型のエクスポートテスト
+module data_types;
 
 // 定数のエクスポート
 export const float PI = 3.14159;

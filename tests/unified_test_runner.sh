@@ -247,8 +247,12 @@ run_single_test() {
 
     case "$BACKEND" in
         interpreter)
+            # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
             # インタプリタで実行
-            run_with_timeout "$CM_EXECUTABLE" run "$test_file" > "$output_file" 2>&1 || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         typescript)
@@ -320,8 +324,12 @@ run_single_test() {
             fi
             rm -f "$llvm_exec"
 
+            # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
             # LLVM経由でネイティブ実行ファイル生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm "$test_file" -o "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # 実行
@@ -678,6 +686,38 @@ run_parallel_test() {
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local output_file="$TEMP_DIR/${category}_${test_name}_$$.out"
 
+    # .skipファイルのチェック
+    local skip_file="${test_file%.cm}.skip"
+    local category_skip_file="$(dirname "$test_file")/.skip"
+
+    # ファイル固有の.skipファイルがある場合
+    if [ -f "$skip_file" ]; then
+        if [ -s "$skip_file" ]; then
+            # ファイルに内容がある場合、バックエンド名でフィルタ
+            if grep -qw "$BACKEND" "$skip_file" 2>/dev/null; then
+                echo "SKIP:Skipped for $BACKEND" > "$result_file"
+                return
+            fi
+        else
+            # ファイルが空の場合、すべてのバックエンドでスキップ
+            echo "SKIP:Skip file exists" > "$result_file"
+            return
+        fi
+    fi
+
+    # カテゴリ全体の.skipファイルがある場合
+    if [ -f "$category_skip_file" ]; then
+        if [ -s "$category_skip_file" ]; then
+            if grep -qw "$BACKEND" "$category_skip_file" 2>/dev/null; then
+                echo "SKIP:Category skipped for $BACKEND" > "$result_file"
+                return
+            fi
+        else
+            echo "SKIP:Category skip file exists" > "$result_file"
+            return
+        fi
+    fi
+
     # バックエンド固有のexpectファイルがあれば優先
     if [ -f "$backend_expect_file" ]; then
         expect_file="$backend_expect_file"
@@ -703,11 +743,17 @@ run_parallel_test() {
 
     case "$BACKEND" in
         interpreter)
-            run_with_timeout_silent "$CM_EXECUTABLE" run "$test_file" > "$output_file" 2>&1 || exit_code=$?
+            # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
         llvm)
+            # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
             local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
-            run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm "$test_file" -o "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
                 

@@ -1,4 +1,5 @@
 // interfaces.cm - インターフェースとenumのエクスポートテスト
+module interfaces;
 
 // 列挙型のエクスポート
 export enum Status {
