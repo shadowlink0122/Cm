@@ -264,3 +264,7 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 ## ライセンス
 
 検討中
+
+---
+
+© 2024-2025 Cm言語プロジェクト
