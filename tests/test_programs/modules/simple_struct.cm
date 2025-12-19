@@ -1,0 +1,19 @@
+// simple_struct.cm - 構造体のエクスポートテスト
+
+// 構造体のエクスポート
+export struct Point {
+    float x;
+    float y;
+}
+
+// 構造体を使う関数
+export Point makePoint(float x, float y) {
+    Point p;
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+export void printPoint(Point p) {
+    println("Point: ({p.x}, {p.y})");
+}

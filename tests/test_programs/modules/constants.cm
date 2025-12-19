@@ -1,0 +1,18 @@
+// constants.cm - 定数と変数のエクスポートテスト
+
+// グローバル変数のエクスポート
+export int global_counter = 0;
+export float pi_value = 3.14159;
+
+// 変数操作関数
+export void increment_counter() {
+    global_counter = global_counter + 1;
+}
+
+export int get_counter() {
+    return global_counter;
+}
+
+export float get_pi() {
+    return pi_value;
+}

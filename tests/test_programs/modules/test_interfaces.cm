@@ -1,0 +1,30 @@
+// test_interfaces.cm - インターフェースとenumインポートのテスト
+
+import interfaces;
+
+int main() {
+    // 構造体とインターフェースの使用
+    Circle c = makeCircle(10.0, 20.0, 5.0);
+    c.draw();
+
+    float area = c.getArea();
+    println("Circle area: {area}");
+
+    // Enumの使用
+    Status s1 = checkStatus(0);
+    if (s1 == Status::Success) {
+        println("Status is Success");
+    }
+
+    Status s2 = checkStatus(-1);
+    if (s2 == Status::Error) {
+        println("Status is Error");
+    }
+
+    Status s3 = checkStatus(1);
+    if (s3 == Status::Pending) {
+        println("Status is Pending");
+    }
+
+    return 0;
+}

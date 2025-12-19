@@ -1,0 +1,30 @@
+// test_complete_types.cm - 完全なモジュールテスト
+
+import complete_types;
+
+int main() {
+    // 構造体の使用
+    float x = 3.0;
+    float y = 4.0;
+    Vector2D v = createVector(x, y);
+    println("Vector created: ({v.x}, {v.y})");
+
+    float len = vectorLength(v);
+    println("Vector squared length: {len}");
+
+    // Enumの使用
+    Direction d = Direction::North;
+    print("Direction: ");
+    printDirection(d);
+
+    Direction opposite = oppositeDirection(d);
+    print("Opposite: ");
+    printDirection(opposite);
+
+    // 複数の方向をテスト
+    Direction east = Direction::East;
+    print("East opposite: ");
+    printDirection(oppositeDirection(east));
+
+    return 0;
+}

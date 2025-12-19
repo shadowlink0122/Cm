@@ -1,0 +1,21 @@
+// test_constants.cm - 定数と変数インポートのテスト
+
+import constants;
+
+int main() {
+    // グローバル変数の使用
+    println("Initial counter: {get_counter()}");
+
+    increment_counter();
+    println("After increment: {get_counter()}");
+
+    increment_counter();
+    println("After second increment: {get_counter()}");
+
+    // 定数値の使用
+    float pi = get_pi();
+    float circumference = 2.0 * pi * 5.0;
+    println("Circumference of circle with radius 5: {circumference}");
+
+    return 0;
+}

@@ -1,0 +1,59 @@
+// data_types.cm - 様々なデータ型のエクスポートテスト
+
+// 定数のエクスポート
+export const float PI = 3.14159;
+export const int MAX_SIZE = 1024;
+
+// 変数のエクスポート
+export int global_counter = 0;
+
+// 構造体のエクスポート
+export struct Point {
+    float x;
+    float y;
+};
+
+// インターフェースのエクスポート
+export interface Drawable {
+    void draw();
+    void move(float dx, float dy);
+};
+
+// 構造体にインターフェースを実装（暗黙的にエクスポート）
+impl Drawable for Point {
+    void draw() {
+        println("Drawing point at ({this.x}, {this.y})");
+    }
+
+    void move(float dx, float dy) {
+        this.x = this.x + dx;
+        this.y = this.y + dy;
+    }
+}
+
+// 列挙型のエクスポート
+export enum Color {
+    Red,
+    Green,
+    Blue
+};
+
+// 関連関数のエクスポート
+export Point createPoint(float x, float y) {
+    Point p;
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+export float distance(Point p1, Point p2) {
+    float dx = p2.x - p1.x;
+    float dy = p2.y - p1.y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+// 内部ヘルパー関数（エクスポートされない）
+float sqrt(float n) {
+    // 簡易実装
+    return n;  // TODO: 実際の平方根実装
+}
