@@ -1,0 +1,15 @@
+// test_selective_import.cm - 選択的インポートのテスト
+
+// 特定の関数だけをインポート（正しい構文）
+import math_lib::{add, multiply};
+
+int main() {
+    // モジュール修飾子なしで直接アクセス
+    int sum = add(5, 3);
+    int product = multiply(4, 7);
+
+    println("5 + 3 = {sum}");
+    println("4 * 7 = {product}");
+
+    return 0;
+}

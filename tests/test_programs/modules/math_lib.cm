@@ -1,0 +1,19 @@
+// math_lib.cm - シンプルな数学ライブラリモジュール
+
+// 関数をエクスポート
+export int add(int a, int b) {
+    return a + b;
+}
+
+export int multiply(int a, int b) {
+    return a * b;
+}
+
+// エクスポートされない内部関数
+int internal_helper(int x) {
+    return x * 2;
+}
+
+export int double_value(int x) {
+    return internal_helper(x);
+}

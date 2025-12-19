@@ -1,0 +1,16 @@
+// test_basic_import.cm - 基本的なインポートのテスト
+
+import math_lib;
+
+int main() {
+    // モジュール修飾名でアクセス
+    int sum = math_lib::add(5, 3);
+    int product = math_lib::multiply(4, 7);
+    int doubled = math_lib::double_value(10);
+
+    println("5 + 3 = {sum}");
+    println("4 * 7 = {product}");
+    println("10 * 2 = {doubled}");
+
+    return 0;
+}

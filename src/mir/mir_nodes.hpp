@@ -501,6 +501,8 @@ struct LocalDecl {
 // ============================================================
 struct MirFunction {
     std::string name;
+    std::string module_path;          // モジュールパス（例："std::io", ""は現在のモジュール）
+    bool is_export = false;           // エクスポートされているか
     std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
     LocalId return_local;             // 戻り値用のローカル（_0）
@@ -559,6 +561,8 @@ struct MirStructField {
 
 struct MirStruct {
     std::string name;
+    std::string module_path;          // モジュールパス
+    bool is_export = false;           // エクスポートされているか
     std::vector<MirStructField> fields;
     uint32_t size;   // 構造体全体のサイズ
     uint32_t align;  // アライメント要求
@@ -623,11 +627,34 @@ struct VTable {
 
 using VTablePtr = std::unique_ptr<VTable>;
 
+// ============================================================
+// Module（モジュール）
+// ============================================================
+struct MirImport {
+    std::vector<std::string> path;  // e.g., ["std", "io"]
+    std::string alias;               // エイリアス（空の場合はなし）
+    std::vector<std::string> items;  // 選択的インポート項目
+    bool is_wildcard = false;        // ワイルドカードインポートか
+};
+
+using MirImportPtr = std::unique_ptr<MirImport>;
+
+struct MirModule {
+    std::string name;                        // モジュール名
+    std::vector<std::string> path;           // モジュールパス (e.g., ["std", "io"])
+    std::vector<MirImportPtr> imports;       // インポート
+    std::vector<std::string> exports;        // エクスポートされる名前のリスト
+};
+
+using MirModulePtr = std::unique_ptr<MirModule>;
+
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
     std::vector<MirStructPtr> structs;        // 構造体定義
     std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
     std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
+    std::vector<MirModulePtr> modules;        // モジュール
+    std::vector<MirImportPtr> imports;        // インポート
     std::string filename;
 
     // 関数を名前で検索
@@ -636,6 +663,26 @@ struct MirProgram {
             if (func && func->name == name) {
                 return func.get();
             }
+        }
+        return nullptr;
+    }
+
+    // モジュール修飾名で関数を検索（例: "math::add"）
+    const MirFunction* find_function_qualified(const std::string& qualified_name) const {
+        // モジュール修飾名を分割
+        size_t pos = qualified_name.find("::");
+        if (pos != std::string::npos) {
+            std::string module = qualified_name.substr(0, pos);
+            std::string func_name = qualified_name.substr(pos + 2);
+
+            for (const auto& func : functions) {
+                if (func && func->name == func_name && func->module_path == module) {
+                    return func.get();
+                }
+            }
+        } else {
+            // 修飾なしの場合は通常の検索
+            return find_function(qualified_name);
         }
         return nullptr;
     }

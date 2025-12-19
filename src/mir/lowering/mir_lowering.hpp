@@ -28,6 +28,9 @@ class MirLowering : public MirLoweringBase {
 
     // HIRプログラムをMIRに変換
     MirProgram lower(const hir::HirProgram& hir_program) {
+        // Pass 0: インポートを処理
+        process_imports(hir_program);
+
         // Pass 1: 構造体、typedef、enum、インターフェースの登録
         register_declarations(hir_program);
 

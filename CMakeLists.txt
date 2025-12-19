@@ -154,6 +154,8 @@ set(CM_SOURCES
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
+    src/preprocessor/import_preprocessor.cpp
+    src/module/module_resolver.cpp
     src/mir/optimizations/optimization_pipeline.cpp
     src/mir/lowering/mir_lowering_impl.cpp
     src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable

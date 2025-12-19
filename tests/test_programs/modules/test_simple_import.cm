@@ -1,0 +1,8 @@
+// test_simple_import.cm - 最もシンプルなインポートテスト
+
+import math_lib;
+
+int main() {
+    println("Import test - compiled successfully");
+    return 0;
+}

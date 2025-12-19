@@ -46,6 +46,11 @@ class MirLoweringBase {
     // インターフェース定義 (インターフェース名 -> HirInterface)
     std::unordered_map<std::string, const hir::HirInterface*> interface_defs_;
 
+    // モジュール関連
+    std::string current_module_path;  // 現在のモジュールパス
+    std::vector<MirImportPtr> imports;  // インポートリスト
+    std::unordered_map<std::string, std::string> imported_modules;  // エイリアス -> モジュールパス
+
    public:
     MirLoweringBase() = default;
     virtual ~MirLoweringBase() = default;
@@ -83,6 +88,36 @@ class MirLoweringBase {
 
     // typedef定義を登録
     void register_typedef(const hir::HirTypedef& td) { typedef_defs[td.name] = td.type; }
+
+    // インポートを処理
+    void process_imports(const hir::HirProgram& hir_program) {
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* imp = std::get_if<std::unique_ptr<hir::HirImport>>(&decl->kind)) {
+                auto mir_import = std::make_unique<MirImport>();
+                mir_import->path = (*imp)->path;
+                mir_import->alias = (*imp)->alias;
+
+                // モジュール名を構築（例: ["std", "io"] -> "std::io"）
+                std::string module_name;
+                for (size_t i = 0; i < mir_import->path.size(); ++i) {
+                    if (i > 0) module_name += "::";
+                    module_name += mir_import->path[i];
+                }
+
+                // インポートマップに追加
+                if (!mir_import->alias.empty()) {
+                    imported_modules[mir_import->alias] = module_name;
+                } else {
+                    // エイリアスがない場合は最後のセグメントを使用
+                    if (!mir_import->path.empty()) {
+                        imported_modules[mir_import->path.back()] = module_name;
+                    }
+                }
+
+                mir_program.imports.push_back(std::move(mir_import));
+            }
+        }
+    }
 
     // typedefとenumを解決（エイリアスを実際の型に展開）
     hir::TypePtr resolve_typedef(hir::TypePtr type) {

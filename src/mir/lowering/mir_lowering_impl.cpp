@@ -116,6 +116,8 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     // MirFunctionを作成
     auto mir_func = std::make_unique<MirFunction>();
     mir_func->name = func.name;
+    mir_func->module_path = current_module_path;  // モジュールパスを設定
+    mir_func->is_export = func.is_export;  // エクスポートフラグを設定
 
     // 戻り値用のローカル変数（typedefを解決）
     mir_func->return_local = 0;

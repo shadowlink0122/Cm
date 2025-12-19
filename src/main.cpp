@@ -17,6 +17,7 @@
 #include "mir/mir_lowering.hpp"
 #include "mir/mir_printer.hpp"
 #include "mir/optimizations/all_passes.hpp"
+#include "preprocessor/import_preprocessor.hpp"
 
 #include <cstdlib>
 #include <fstream>
@@ -299,6 +300,36 @@ int main(int argc, char* argv[]) {
     }
 
     try {
+        // ========== Import Preprocessor ==========
+        if (opts.debug)
+            std::cout << "=== Import Preprocessor ===\n";
+
+        preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
+        auto preprocess_result = import_preprocessor.process(code, opts.input_file);
+
+        if (!preprocess_result.success) {
+            std::cerr << "プリプロセッサエラー: " << preprocess_result.error_message << "\n";
+            return 1;
+        }
+
+        if (opts.debug && !preprocess_result.imported_modules.empty()) {
+            std::cout << "インポートされたモジュール:\n";
+            for (const auto& module : preprocess_result.imported_modules) {
+                std::cout << "  - " << module << "\n";
+            }
+            std::cout << "\n";
+        }
+
+        // プリプロセス後のコードを使用
+        code = preprocess_result.processed_source;
+
+        // デバッグ時はプリプロセス後のコードを出力
+        if (opts.debug) {
+            std::cout << "=== Preprocessed Code ===\n";
+            std::cout << code << "\n";
+            std::cout << "=== End Preprocessed Code ===\n\n";
+        }
+
         // ========== Lexer ==========
         if (opts.debug)
             std::cout << "=== Lexer ===\n";
