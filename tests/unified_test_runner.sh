@@ -170,6 +170,43 @@ run_single_test() {
     local output_file="$TEMP_DIR/${category}_${test_name}.out"
     local error_file="$TEMP_DIR/${category}_${test_name}.err"
 
+    # .skipファイルのチェック
+    local skip_file="${test_file%.cm}.skip"
+    local category_skip_file="$(dirname "$test_file")/.skip"
+
+    # ファイル固有の.skipファイルがある場合
+    if [ -f "$skip_file" ]; then
+        # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
+        if [ -s "$skip_file" ]; then
+            # ファイルに内容がある場合、バックエンド名でフィルタ
+            if grep -qw "$BACKEND" "$skip_file" 2>/dev/null; then
+                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND"
+                ((SKIPPED++))
+                return
+            fi
+        else
+            # ファイルが空の場合、すべてのバックエンドでスキップ
+            echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists"
+            ((SKIPPED++))
+            return
+        fi
+    fi
+
+    # カテゴリ全体の.skipファイルがある場合
+    if [ -f "$category_skip_file" ]; then
+        if [ -s "$category_skip_file" ]; then
+            if grep -qw "$BACKEND" "$category_skip_file" 2>/dev/null; then
+                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skipped for $BACKEND"
+                ((SKIPPED++))
+                return
+            fi
+        else
+            echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skip file exists"
+            ((SKIPPED++))
+            return
+        fi
+    fi
+
     # バックエンド固有のexpectファイルがあれば優先して使用
     if [ -f "$backend_expect_file" ]; then
         expect_file="$backend_expect_file"

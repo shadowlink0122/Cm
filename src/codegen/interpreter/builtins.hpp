@@ -829,6 +829,31 @@ class BuiltinManager {
             return std::string(1, std::any_cast<char>(arg));
         } else if (arg.type() == typeid(std::string)) {
             return std::any_cast<std::string>(arg);
+        } else if (arg.type() == typeid(PointerValue)) {
+            // ポインタ値（アドレス）を表示
+            PointerValue ptr = std::any_cast<PointerValue>(arg);
+            char buf[32];
+            // ポインタの値として、LocalIdと配列インデックスを組み合わせた仮想アドレスを生成
+            // ベースアドレスを設定して、よりリアルなアドレスに見せる
+            uintptr_t base_addr = 0x7fff0000;  // スタック領域の典型的なアドレス
+            uintptr_t addr = base_addr + (static_cast<uintptr_t>(ptr.target_local) *
+                                          8);  // 8バイトアラインメント
+            if (ptr.array_index) {
+                addr += (*ptr.array_index * 8);  // 配列要素のオフセット
+            }
+
+            // フォーマット指定子をチェック
+            if (type_spec == "x") {
+                // 小文字16進数（0xプレフィックス付き）
+                snprintf(buf, sizeof(buf), "0x%lx", (unsigned long)addr);
+            } else if (type_spec == "X") {
+                // 大文字16進数（0xプレフィックス付き）
+                snprintf(buf, sizeof(buf), "0x%lX", (unsigned long)addr);
+            } else {
+                // デフォルト：10進数
+                snprintf(buf, sizeof(buf), "%lu", (unsigned long)addr);
+            }
+            return buf;
         }
         return "{}";
     }
@@ -847,6 +872,20 @@ class BuiltinManager {
             return std::string(1, std::any_cast<char>(val));
         } else if (val.type() == typeid(bool)) {
             return std::any_cast<bool>(val) ? "true" : "false";
+        } else if (val.type() == typeid(PointerValue)) {
+            // ポインタ値を10進数アドレスとして表示（デフォルト）
+            PointerValue ptr = std::any_cast<PointerValue>(val);
+            char buf[32];
+            // ベースアドレスを設定して、よりリアルなアドレスに見せる
+            uintptr_t base_addr = 0x7fff0000;  // スタック領域の典型的なアドレス
+            uintptr_t addr = base_addr + (static_cast<uintptr_t>(ptr.target_local) *
+                                          8);  // 8バイトアラインメント
+            if (ptr.array_index) {
+                addr += (*ptr.array_index * 8);  // 配列要素のオフセット
+            }
+            // デフォルトは10進数
+            snprintf(buf, sizeof(buf), "%lu", (unsigned long)addr);
+            return buf;
         }
         return "";
     }

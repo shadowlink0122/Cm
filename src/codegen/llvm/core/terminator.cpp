@@ -4,6 +4,8 @@
 
 #include "mir_to_llvm.hpp"
 
+#include <iostream>
+
 namespace cm::codegen::llvm_backend {
 
 void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {

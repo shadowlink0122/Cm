@@ -11,12 +11,11 @@ int main() {
 
     println("=== Basic Variable Address Interpolation ===");
     // &variable構文での直接アドレス表示
-    println("Address of x: {&x}");
-    println("Address of y: {&y}");
-    println("Address of pi: {&pi}");
-    println("Address of flag: {&flag}");
-    println("Address of ch: {&ch}");
-
+    println("Address of x: {&x:x}");
+    println("Address of y: {&y:x}");
+    println("Address of pi: {&pi:x}");
+    println("Address of flag: {&flag:x}");
+    println("Address of ch: {&ch:x}");
     println("\n=== Hex Format Specifiers ===");
     // 16進数フォーマット指定
     println("x address (lowercase hex): {&x:x}");
@@ -34,7 +33,7 @@ int main() {
 
     println("\n=== Mixed Interpolation ===");
     // 値とアドレスの混合表示
-    println("x={x} at address {&x}, ptr_x={ptr_x}");
+    println("x={x} at address {&x:x}, ptr_x={ptr_x}");
     println("y={y} at {&y:x}");
     println("pi={pi} at {&pi:X}");
 

@@ -423,6 +423,68 @@ char* cm_format_uint(unsigned int value) {
     return buffer;
 }
 
+char* cm_format_long(long long value) {
+    char* buffer = (char*)wasm_alloc(32);
+    size_t len = 0;
+
+    if (value == 0) {
+        buffer[0] = '0';
+        buffer[1] = '\0';
+        return buffer;
+    }
+
+    int is_negative = value < 0;
+    unsigned long long abs_value = is_negative ? -value : value;
+
+    // 数値を文字列に変換（逆順）
+    char temp[32];
+    int temp_len = 0;
+    while (abs_value > 0) {
+        temp[temp_len++] = '0' + (abs_value % 10);
+        abs_value /= 10;
+    }
+
+    // 負の符号を追加
+    if (is_negative) {
+        buffer[len++] = '-';
+    }
+
+    // 逆順を正順に
+    for (int i = temp_len - 1; i >= 0; i--) {
+        buffer[len++] = temp[i];
+    }
+
+    buffer[len] = '\0';
+    return buffer;
+}
+
+char* cm_format_ulong(unsigned long long value) {
+    char* buffer = (char*)wasm_alloc(32);
+    size_t len = 0;
+
+    if (value == 0) {
+        buffer[0] = '0';
+        buffer[1] = '\0';
+        return buffer;
+    }
+
+    // 数値を文字列に変換（逆順）
+    char temp[32];
+    int temp_len = 0;
+    while (value > 0) {
+        temp[temp_len++] = '0' + (value % 10);
+        value /= 10;
+    }
+
+    // 逆順を正順に
+    for (int i = temp_len - 1; i >= 0; i--) {
+        buffer[len++] = temp[i];
+    }
+
+    buffer[len] = '\0';
+    return buffer;
+}
+
 char* cm_format_bool(char value) {
     if (value) {
         char* buffer = (char*)wasm_alloc(5);
@@ -549,6 +611,7 @@ char* cm_format_int_hex(long long value) {
         uval /= 16;
     }
 
+    // WASMでは線形メモリオフセットなので0xプレフィックスは付けない
     int j = 0;
     while (i > 0) {
         buffer[j++] = temp[--i];
@@ -577,6 +640,7 @@ char* cm_format_int_HEX(long long value) {
         uval /= 16;
     }
 
+    // WASMでは線形メモリオフセットなので0xプレフィックスは付けない
     int j = 0;
     while (i > 0) {
         buffer[j++] = temp[--i];
@@ -896,10 +960,10 @@ char* cm_format_replace_int(const char* format, int value) {
     char* value_str;
     switch (spec) {
         case 'x':
-            value_str = cm_format_int_hex((long long)value);
+            value_str = cm_format_int_hex((long long)value);  // 整数には0xプレフィックスなし
             break;
         case 'X':
-            value_str = cm_format_int_HEX((long long)value);
+            value_str = cm_format_int_HEX((long long)value);  // 整数には0xプレフィックスなし
             break;
         case 'b':
             value_str = cm_format_int_binary((long long)value);
@@ -998,10 +1062,10 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
     char* value_str;
     switch (spec) {
         case 'x':
-            value_str = cm_format_int_hex((long long)value);
+            value_str = cm_format_int_hex((long long)value);  // 整数には0xプレフィックスなし
             break;
         case 'X':
-            value_str = cm_format_int_HEX((long long)value);
+            value_str = cm_format_int_HEX((long long)value);  // 整数には0xプレフィックスなし
             break;
         case 'b':
             value_str = cm_format_int_binary((long long)value);
@@ -1014,6 +1078,161 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
             break;
     }
     
+    return cm_format_replace(format, value_str);
+}
+
+// ポインタ専用のフォーマット関数（デフォルトで10進数表示）
+char* cm_format_replace_ptr(const char* format, long long value) {
+    if (!format) return 0;
+
+    size_t fmt_len = wasm_strlen(format);
+
+    // プレースホルダーを探す
+    size_t start = 0;
+    int found = 0;
+    for (size_t i = 0; i < fmt_len; i++) {
+        if (format[i] == '{') {
+            start = i;
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        char* result = (char*)wasm_alloc(fmt_len + 1);
+        for (size_t i = 0; i < fmt_len; i++) {
+            result[i] = format[i];
+        }
+        result[fmt_len] = '\0';
+        return result;
+    }
+
+    size_t end = start;
+    for (size_t i = start + 1; i < fmt_len; i++) {
+        if (format[i] == '}') {
+            end = i;
+            break;
+        }
+    }
+
+    // フォーマット指定子を抽出
+    char spec = extract_format_spec(format, start, end);
+
+    // 指定子に応じた値の文字列化
+    char* value_str;
+    if (spec == 'x') {
+        // 小文字16進数（明示的指定時は0xプレフィックス付き）
+        char* hex_str = cm_format_int_hex(value);
+        size_t hex_len = wasm_strlen(hex_str);
+        value_str = (char*)wasm_alloc(hex_len + 3);  // "0x" + hex + '\0'
+        value_str[0] = '0';
+        value_str[1] = 'x';
+        for (size_t i = 0; i <= hex_len; i++) {
+            value_str[i + 2] = hex_str[i];
+        }
+    } else if (spec == 'X') {
+        // 大文字16進数（明示的指定時は0xプレフィックス付き）
+        char* hex_str = cm_format_int_HEX(value);
+        size_t hex_len = wasm_strlen(hex_str);
+        value_str = (char*)wasm_alloc(hex_len + 3);  // "0x" + hex + '\0'
+        value_str[0] = '0';
+        value_str[1] = 'x';
+        for (size_t i = 0; i <= hex_len; i++) {
+            value_str[i + 2] = hex_str[i];
+        }
+    } else if (spec == 'b') {
+        value_str = cm_format_int_binary(value);
+    } else if (spec == 'o') {
+        value_str = cm_format_int_octal(value);
+    } else {
+        // デフォルトは10進数
+        value_str = cm_format_long(value);
+    }
+
+    return cm_format_replace(format, value_str);
+}
+
+char* cm_format_replace_long(const char* format, long long value) {
+    if (!format) return 0;
+
+    size_t fmt_len = wasm_strlen(format);
+
+    // プレースホルダーを探す
+    size_t start = 0;
+    int found = 0;
+    for (size_t i = 0; i < fmt_len; i++) {
+        if (format[i] == '{') {
+            start = i;
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        char* result = (char*)wasm_alloc(fmt_len + 1);
+        for (size_t i = 0; i < fmt_len; i++) {
+            result[i] = format[i];
+        }
+        result[fmt_len] = '\0';
+        return result;
+    }
+
+    size_t end = start;
+    for (size_t i = start + 1; i < fmt_len; i++) {
+        if (format[i] == '}') {
+            end = i;
+            break;
+        }
+    }
+
+    // フォーマット指定子を抽出
+    char spec = extract_format_spec(format, start, end);
+
+    // 指定子に応じた値の文字列化
+    char* value_str;
+    switch (spec) {
+        case 'x': {
+            // 小文字16進数（明示的指定時は0xプレフィックス付き）
+            char* hex_str = cm_format_int_hex(value);
+            size_t hex_len = wasm_strlen(hex_str);
+            value_str = (char*)wasm_alloc(hex_len + 3);  // "0x" + hex + '\0'
+            value_str[0] = '0';
+            value_str[1] = 'x';
+            for (size_t i = 0; i <= hex_len; i++) {
+                value_str[i + 2] = hex_str[i];
+            }
+            break;
+        }
+        case 'X': {
+            // 大文字16進数（明示的指定時は0xプレフィックス付き）
+            char* hex_str = cm_format_int_HEX(value);
+            size_t hex_len = wasm_strlen(hex_str);
+            value_str = (char*)wasm_alloc(hex_len + 3);  // "0x" + hex + '\0'
+            value_str[0] = '0';
+            value_str[1] = 'x';
+            for (size_t i = 0; i <= hex_len; i++) {
+                value_str[i + 2] = hex_str[i];
+            }
+            break;
+        }
+        case 'b':
+            value_str = cm_format_int_binary(value);
+            break;
+        case 'o':
+            value_str = cm_format_int_octal(value);
+            break;
+        default:
+            value_str = cm_format_long(value);
+            break;
+    }
+
+    return cm_format_replace(format, value_str);
+}
+
+char* cm_format_replace_ulong(const char* format, unsigned long long value) {
+    if (!format) return 0;
+
+    char* value_str = cm_format_ulong(value);
     return cm_format_replace(format, value_str);
 }
 

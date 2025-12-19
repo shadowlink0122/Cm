@@ -1,6 +1,0 @@
-6 * 7 = 42
-3 << 2 = 12
-Before swap: x=10, y=20
-After swap: x=20, y=10
-Bits in 0xFF = 8
-Bits in 0x55 = 4

@@ -279,6 +279,13 @@ struct MirRvalue {
         rv->data = RefData{is_mutable ? BorrowKind::Mutable : BorrowKind::Shared, std::move(place)};
         return rv;
     }
+
+    static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type) {
+        auto rv = std::make_unique<MirRvalue>();
+        rv->kind = Cast;
+        rv->data = CastData{std::move(operand), target_type};
+        return rv;
+    }
 };
 
 // ============================================================

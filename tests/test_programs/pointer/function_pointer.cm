@@ -47,7 +47,7 @@ int main() {
     
     // 引数なし関数ポインタ
     int*() getter = &get_value;
-    println("{getter(}"));  // 42
+    println("{getter()}");  // 42
     
     // void戻り値の関数ポインタ
     void*(int) printer = &print_int;

@@ -383,6 +383,22 @@ char* cm_format_uint(unsigned int value) {
     return buffer;
 }
 
+char* cm_format_long(long long value) {
+    char* buffer = (char*)malloc(32);
+    if (buffer) {
+        snprintf(buffer, 32, "%lld", value);
+    }
+    return buffer;
+}
+
+char* cm_format_ulong(unsigned long long value) {
+    char* buffer = (char*)malloc(32);
+    if (buffer) {
+        snprintf(buffer, 32, "%llu", value);
+    }
+    return buffer;
+}
+
 char* cm_format_double(double value) {
     char* buffer = (char*)malloc(64);
     if (buffer) {
@@ -430,7 +446,7 @@ char* cm_format_char(char value) {
 char* cm_format_int_hex(long long value) {
     char* buffer = (char*)malloc(32);
     if (buffer) {
-        snprintf(buffer, 32, "%llx", value);
+        snprintf(buffer, 32, "%llx", value);  // 0xプレフィックスなし
     }
     return buffer;
 }
@@ -438,7 +454,7 @@ char* cm_format_int_hex(long long value) {
 char* cm_format_int_HEX(long long value) {
     char* buffer = (char*)malloc(32);
     if (buffer) {
-        snprintf(buffer, 32, "%llX", value);
+        snprintf(buffer, 32, "%llX", value);  // 0xプレフィックスなし
     }
     return buffer;
 }
@@ -658,6 +674,168 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
 
     char* result = cm_format_replace(format, formatted_value);
     free(formatted_value);
+    return result;
+}
+
+// ポインタ専用のフォーマット関数（デフォルトで10進数表示）
+char* cm_format_replace_ptr(const char* format, long long value) {
+    if (!format) return NULL;
+
+    const char* start = strchr(format, '{');
+    if (!start) {
+        char* result = (char*)malloc(strlen(format) + 1);
+        if (result) strcpy(result, format);
+        return result;
+    }
+
+    const char* end = strchr(start, '}');
+    if (!end) {
+        char* result = (char*)malloc(strlen(format) + 1);
+        if (result) strcpy(result, format);
+        return result;
+    }
+
+    char specifier[32] = {0};
+    size_t spec_len = end - start - 1;
+    if (spec_len > 0 && spec_len < sizeof(specifier)) {
+        strncpy(specifier, start + 1, spec_len);
+    }
+
+    char* formatted_value = NULL;
+    if (strcmp(specifier, ":x") == 0) {
+        // 小文字16進数（ポインタなので0xプレフィックス付き）
+        char* hex_str = cm_format_int_hex(value);
+        if (hex_str) {
+            formatted_value = (char*)malloc(strlen(hex_str) + 3);
+            if (formatted_value) {
+                snprintf(formatted_value, strlen(hex_str) + 3, "0x%s", hex_str);
+            }
+            free(hex_str);
+        }
+    } else if (strcmp(specifier, ":X") == 0) {
+        // 大文字16進数（ポインタなので0xプレフィックス付き）
+        char* hex_str = cm_format_int_HEX(value);
+        if (hex_str) {
+            formatted_value = (char*)malloc(strlen(hex_str) + 3);
+            if (formatted_value) {
+                snprintf(formatted_value, strlen(hex_str) + 3, "0x%s", hex_str);
+            }
+            free(hex_str);
+        }
+    } else if (strcmp(specifier, ":b") == 0) {
+        formatted_value = cm_format_int_binary(value);
+    } else if (strcmp(specifier, ":o") == 0) {
+        formatted_value = cm_format_int_octal(value);
+    } else {
+        // デフォルトは10進数
+        formatted_value = cm_format_long(value);
+    }
+
+    if (!formatted_value) return NULL;
+
+    char* result = cm_format_replace(format, formatted_value);
+    free(formatted_value);
+    return result;
+}
+
+char* cm_format_replace_long(const char* format, long long value) {
+    if (!format) return NULL;
+
+    const char* start = strchr(format, '{');
+    if (!start) {
+        char* result = (char*)malloc(strlen(format) + 1);
+        if (result) strcpy(result, format);
+        return result;
+    }
+
+    const char* end = strchr(start, '}');
+    if (!end) {
+        char* result = (char*)malloc(strlen(format) + 1);
+        if (result) strcpy(result, format);
+        return result;
+    }
+
+    char specifier[32] = {0};
+    size_t spec_len = end - start - 1;
+    if (spec_len > 0 && spec_len < sizeof(specifier)) {
+        strncpy(specifier, start + 1, spec_len);
+    }
+
+    char* formatted_value = NULL;
+    if (strcmp(specifier, ":x") == 0) {
+        formatted_value = cm_format_int_hex(value);
+    } else if (strcmp(specifier, ":X") == 0) {
+        formatted_value = cm_format_int_HEX(value);
+    } else if (strcmp(specifier, ":b") == 0) {
+        formatted_value = cm_format_int_binary(value);
+    } else if (strcmp(specifier, ":o") == 0) {
+        formatted_value = cm_format_int_octal(value);
+    } else if (strncmp(specifier, ":0>", 3) == 0) {
+        int width = atoi(specifier + 3);
+        char* long_str = cm_format_long(value);
+        int val_len = strlen(long_str);
+
+        if (width <= val_len) {
+            formatted_value = long_str;
+        } else {
+            formatted_value = (char*)malloc(width + 1);
+            if (formatted_value) {
+                int padding = width - val_len;
+                for (int i = 0; i < padding; i++) formatted_value[i] = '0';
+                strcpy(formatted_value + padding, long_str);
+            }
+            free(long_str);
+        }
+    } else {
+        formatted_value = cm_format_long(value);
+    }
+
+    if (!formatted_value) return NULL;
+
+    char* result = cm_format_replace(format, formatted_value);
+    free(formatted_value);
+    return result;
+}
+
+char* cm_format_replace_ulong(const char* format, unsigned long long value) {
+    if (!format) return NULL;
+
+    char* formatted_value = cm_format_ulong(value);
+    if (!formatted_value) return NULL;
+
+    char* result = cm_format_replace(format, formatted_value);
+    free(formatted_value);
+    return result;
+}
+
+// アドレス表示用の専用関数 - &変数名:アドレス値 の形式で表示
+char* cm_format_address(const char* var_name, void* address) {
+    // 変数名が空の場合は単純にアドレス値のみを返す
+    if (!var_name || strlen(var_name) == 0) {
+        char* buffer = (char*)malloc(32);
+        if (buffer) {
+            snprintf(buffer, 32, "%lld", (long long)address);
+        }
+        return buffer;
+    }
+
+    // &変数名:アドレス値 の形式でフォーマット
+    char* buffer = (char*)malloc(strlen(var_name) + 32);
+    if (buffer) {
+        snprintf(buffer, strlen(var_name) + 32, "&%s:%lld", var_name, (long long)address);
+    }
+    return buffer;
+}
+
+// 文字列補間用のアドレス置換関数
+char* cm_format_replace_address(const char* format, const char* var_name, void* address) {
+    if (!format) return NULL;
+
+    char* formatted_address = cm_format_address(var_name, address);
+    if (!formatted_address) return NULL;
+
+    char* result = cm_format_replace(format, formatted_address);
+    free(formatted_address);
     return result;
 }
 

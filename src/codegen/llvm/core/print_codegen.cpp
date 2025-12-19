@@ -2,7 +2,10 @@
 /// @brief Print/Format関連のコード生成
 /// terminator.cppから分離したprint/println/format処理
 
+#include "../../../common/debug.hpp"
 #include "mir_to_llvm.hpp"
+
+#include <iostream>
 
 namespace cm::codegen::llvm_backend {
 
@@ -95,8 +98,30 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
                                               const hir::TypePtr& hirType) {
     auto valueType = value->getType();
 
+    // HIR型がPointer型の場合、ポインタを16進数で表示
+    if (hirType && hirType->kind == hir::TypeKind::Pointer) {
+        // ポインタを整数（64ビット）にキャストして16進数表示
+        llvm::Value* ptrAsInt = nullptr;
+        if (value->getType()->isPointerTy()) {
+            ptrAsInt = builder->CreatePtrToInt(value, ctx.getI64Type(), "ptr_to_int");
+        } else if (value->getType()->isIntegerTy()) {
+            // すでに整数の場合（アドレス演算子の結果など）
+            ptrAsInt = value;
+        } else {
+            return currentStr;
+        }
+
+        // cm_format_replace_ptr を使用してポインタをフォーマット
+        // デフォルトで16進数表示、{:X} で大文字16進数
+        auto replaceFunc = module->getOrInsertFunction(
+            "cm_format_replace_ptr",
+            llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()}, false));
+        auto result = builder->CreateCall(replaceFunc, {currentStr, ptrAsInt});
+        return result;
+    }
+
     if (valueType->isPointerTy()) {
-        // 文字列型
+        // 文字列型（HIRがString型の場合）
         auto replaceFunc = module->getOrInsertFunction(
             "cm_format_replace_string",
             llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()}, false));
@@ -145,24 +170,44 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
         }
 
         // 整数型
-        auto intVal = value;
-        if (intType->getBitWidth() != 32) {
-            unsigned srcBits = intType->getBitWidth();
-            if (srcBits < 32) {
-                if (isUnsigned) {
-                    intVal = builder->CreateZExt(value, ctx.getI32Type());
-                } else {
-                    intVal = builder->CreateSExt(value, ctx.getI32Type());
-                }
-            } else {
-                intVal = builder->CreateTrunc(value, ctx.getI32Type());
-            }
-        }
+        unsigned srcBits = intType->getBitWidth();
 
-        auto replaceFunc = module->getOrInsertFunction(
-            isUnsigned ? "cm_format_replace_uint" : "cm_format_replace_int",
-            llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI32Type()}, false));
-        return builder->CreateCall(replaceFunc, {currentStr, intVal});
+        // 64ビット整数の場合は専用の関数を使用
+        if (srcBits > 32) {
+            // アドレスやlongの値は64ビットとして処理
+            auto longVal = value;
+            if (srcBits != 64) {
+                if (srcBits < 64) {
+                    longVal = isUnsigned ? builder->CreateZExt(value, ctx.getI64Type())
+                                         : builder->CreateSExt(value, ctx.getI64Type());
+                } else {
+                    longVal = builder->CreateTrunc(value, ctx.getI64Type());
+                }
+            }
+
+            auto replaceFunc = module->getOrInsertFunction(
+                isUnsigned ? "cm_format_replace_ulong" : "cm_format_replace_long",
+                llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()},
+                                        false));
+            return builder->CreateCall(replaceFunc, {currentStr, longVal});
+        } else {
+            // 32ビット以下の場合は従来通り
+            auto intVal = value;
+            if (srcBits != 32) {
+                if (srcBits < 32) {
+                    intVal = isUnsigned ? builder->CreateZExt(value, ctx.getI32Type())
+                                        : builder->CreateSExt(value, ctx.getI32Type());
+                } else {
+                    intVal = builder->CreateTrunc(value, ctx.getI32Type());
+                }
+            }
+
+            auto replaceFunc = module->getOrInsertFunction(
+                isUnsigned ? "cm_format_replace_uint" : "cm_format_replace_int",
+                llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI32Type()},
+                                        false));
+            return builder->CreateCall(replaceFunc, {currentStr, intVal});
+        }
     }
 
     if (valueType->isFloatingPointTy()) {

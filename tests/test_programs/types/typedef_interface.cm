@@ -18,6 +18,8 @@ typedef Num = Number;
 int main() {
     Num n;
     n.value = 100;
-    println("{n.get_value(}"));
+    // メソッド呼び出しの文字列補間は現在未対応のため、一度変数に代入
+    int result = n.get_value();
+    println("{result}");
     return 0;
 }

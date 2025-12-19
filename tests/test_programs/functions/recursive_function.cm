@@ -19,15 +19,15 @@ int fibonacci(int n) {
 
 int main() {
     println("Factorial:");
-    println("0! = {factorial(0}"));
-    println("1! = {factorial(1}"));
-    println("5! = {factorial(5}"));
-    println("10! = {factorial(10}"));
+    println("0! = {factorial(0)}");
+    println("1! = {factorial(1)}");
+    println("5! = {factorial(5)}");
+    println("10! = {factorial(10)}");
 
     println("Fibonacci:");
-    println("fib(0) = {fibonacci(0}"));
-    println("fib(1) = {fibonacci(1}"));
-    println("fib(10) = {fibonacci(10}"));
+    println("fib(0) = {fibonacci(0)}");
+    println("fib(1) = {fibonacci(1)}");
+    println("fib(10) = {fibonacci(10)}");
 
     return 0;
 }

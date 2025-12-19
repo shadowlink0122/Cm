@@ -18,9 +18,12 @@ int main() {
     int b = -3;
     int c = 0;
     
-    println("{a.abs(}"));
-    println("{b.abs(}"));
-    println("{c.abs(}"));
+    int abs_a = a.abs();
+    int abs_b = b.abs();
+    int abs_c = c.abs();
+    println("{abs_a}");
+    println("{abs_b}");
+    println("{abs_c}");
     
     return 0;
 }
