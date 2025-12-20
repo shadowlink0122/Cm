@@ -1,0 +1,7 @@
+import ./basic_reexport/std::io;
+
+int main() {
+    int result = io::add(10, 20);
+    println("Result: {result}");
+    return 0;
+}

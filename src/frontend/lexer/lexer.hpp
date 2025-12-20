@@ -99,6 +99,7 @@ class Lexer {
             {"match", TokenKind::KwMatch},
             {"module", TokenKind::KwModule},
             {"mutable", TokenKind::KwMutable},
+            {"namespace", TokenKind::KwNamespace},
             {"new", TokenKind::KwNew},
             {"null", TokenKind::KwNull},
             {"operator", TokenKind::KwOperator},

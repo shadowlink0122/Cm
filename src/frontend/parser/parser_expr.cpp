@@ -578,14 +578,20 @@ ast::ExprPtr Parser::parse_primary() {
                         debug::Level::Debug);
         advance();
 
-        // enum値アクセス: EnumName::MemberName
+        // 名前空間またはenum値アクセス: A::B または A::B::C::...
+        // 複数レベルの::をサポート
         if (consume_if(TokenKind::ColonColon)) {
-            std::string member = expect_ident();
+            std::string qualified_name = name;
+            do {
+                std::string member = expect_ident();
+                qualified_name += "::" + member;
+                debug::par::log(debug::par::Id::IdentifierRef,
+                                "Building qualified name: " + qualified_name, debug::Level::Debug);
+            } while (consume_if(TokenKind::ColonColon));
+
             debug::par::log(debug::par::Id::IdentifierRef,
-                            "Found enum access: " + name + "::" + member, debug::Level::Debug);
-            // EnumName::Memberを "EnumName::Member" という識別子として扱う
-            std::string enum_access = name + "::" + member;
-            return ast::make_ident(std::move(enum_access), Span{start_pos, previous().end});
+                            "Final qualified name: " + qualified_name, debug::Level::Debug);
+            return ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
         }
 
         debug::par::log(debug::par::Id::VariableDetected, "Variable/Function reference: " + name,
@@ -681,14 +687,18 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern() {
         std::string name(current().get_string());
         advance();
 
-        // enum値アクセス: EnumName::Member
+        // 名前空間またはenum値アクセス: A::B または A::B::C::...
         if (consume_if(TokenKind::ColonColon)) {
-            std::string member = expect_ident();
-            std::string enum_access = name + "::" + member;
+            std::string qualified_name = name;
+            do {
+                std::string member = expect_ident();
+                qualified_name += "::" + member;
+            } while (consume_if(TokenKind::ColonColon));
+
             auto enum_expr =
-                ast::make_ident(std::move(enum_access), Span{start_pos, previous().end});
+                ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
             debug::par::log(debug::par::Id::PrimaryExpr,
-                            "Match pattern: enum " + name + "::" + member, debug::Level::Debug);
+                            "Match pattern: qualified name " + qualified_name, debug::Level::Debug);
             return ast::MatchPattern::make_enum_variant(std::move(enum_expr));
         }
 

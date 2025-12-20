@@ -108,6 +108,7 @@ struct FunctionDecl {
     bool is_constructor = false;  // self() コンストラクタ
     bool is_destructor = false;   // ~self() デストラクタ
     bool is_overload = false;     // overload修飾子
+    bool is_extern = false;       // extern "C" 関数
 
     // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
     std::vector<AttributeNode> attributes;
@@ -309,6 +310,16 @@ struct GlobalVarDecl {
 
     GlobalVarDecl(std::string n, TypePtr t, ExprPtr init, bool c = false)
         : name(std::move(n)), type(std::move(t)), init_expr(std::move(init)), is_const(c) {}
+};
+
+// ============================================================
+// Extern "C" ブロック宣言
+// ============================================================
+struct ExternBlockDecl {
+    std::string language;  // "C" など
+    std::vector<std::unique_ptr<FunctionDecl>> declarations;
+
+    explicit ExternBlockDecl(std::string lang) : language(std::move(lang)) {}
 };
 
 // ImportDeclはmodule.hppに移動

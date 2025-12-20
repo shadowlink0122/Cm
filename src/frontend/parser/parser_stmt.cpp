@@ -394,6 +394,7 @@ bool Parser::is_type_start() {
             return true;
         case TokenKind::Ident:
             // 識別子の後に識別子が来たら変数宣言 (Type name)
+            // 識別子の後に::が来たら名前空間修飾型の可能性 (ns::Type name)
             // 識別子の後に<が来たらジェネリック型の可能性 (Type<T> name)
             // 識別子の後に[が来たら配列型の可能性 (Type[N] name)
             // 識別子の後に*が来たらポインタ型の可能性 (Type* name)
@@ -401,6 +402,41 @@ bool Parser::is_type_start() {
                 auto next_kind = tokens_[pos_ + 1].kind;
                 if (next_kind == TokenKind::Ident) {
                     return true;
+                }
+                // 名前空間修飾型: ns::Type name
+                if (next_kind == TokenKind::ColonColon) {
+                    // :: の後をスキップして変数名があるかチェック
+                    size_t i = pos_ + 2;
+                    // ns::ns2::...::Type パターンをスキップ
+                    while (i + 1 < tokens_.size() && tokens_[i].kind == TokenKind::Ident &&
+                           tokens_[i + 1].kind == TokenKind::ColonColon) {
+                        i += 2;  // Ident:: をスキップ
+                    }
+                    // 最後の型名をチェック
+                    if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                        i++;
+                        // 型名の後に変数名があるかチェック
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                            return true;
+                        }
+                        // ジェネリック型: ns::Type<T> name
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Lt) {
+                            // <...> をスキップ
+                            i++;
+                            int depth = 1;
+                            while (i < tokens_.size() && depth > 0) {
+                                if (tokens_[i].kind == TokenKind::Lt)
+                                    depth++;
+                                else if (tokens_[i].kind == TokenKind::Gt)
+                                    depth--;
+                                i++;
+                            }
+                            if (depth == 0 && i < tokens_.size() &&
+                                tokens_[i].kind == TokenKind::Ident) {
+                                return true;
+                            }
+                        }
+                    }
                 }
                 // ポインタ型: Type* name
                 if (next_kind == TokenKind::Star) {

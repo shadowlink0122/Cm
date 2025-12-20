@@ -27,6 +27,11 @@ class ImportPreprocessor {
     std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
     std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ
 
+    // モジュール名前空間の追跡（モジュール名 -> 名前空間）
+    std::unordered_map<std::string, std::string> module_namespaces;
+    // 再エクスポートの追跡（親モジュール -> {子モジュール名, ...}）
+    std::unordered_map<std::string, std::vector<std::string>> module_reexports;
+
     // モジュール検索パス
     std::vector<std::filesystem::path> search_paths;
     std::filesystem::path project_root;  // プロジェクトルート
@@ -80,11 +85,12 @@ class ImportPreprocessor {
         std::vector<std::string> items;  // 選択的インポート項目
         std::vector<std::pair<std::string, std::string>> item_aliases;  // 項目ごとのエイリアス
         bool is_wildcard = false;
-        bool is_from_import = false;  // from構文
-        bool is_relative = false;     // 相対パス（./ or ../）
-        size_t line_number = 0;       // インポート文の行番号
-        std::string source_file;      // ソースファイル名
-        std::string source_line;      // インポート文の元のコード
+        bool is_recursive_wildcard = false;  // import ./path/* 形式
+        bool is_from_import = false;         // from構文
+        bool is_relative = false;            // 相対パス（./ or ../）
+        size_t line_number = 0;              // インポート文の行番号
+        std::string source_file;             // ソースファイル名
+        std::string source_line;             // インポート文の元のコード
     };
     ImportInfo parse_import_statement(const std::string& import_line);
     ImportInfo parse_import_statement(const std::string& import_line, size_t line_num,
@@ -106,6 +112,23 @@ class ImportPreprocessor {
     // 循環依存エラーメッセージを生成
     std::string format_circular_dependency_error(const std::vector<std::string>& stack,
                                                  const std::string& module);
+
+    // モジュール宣言から名前空間を抽出
+    std::string extract_module_namespace(const std::string& module_source);
+
+    // 再エクスポートを検出して追跡
+    std::vector<std::string> extract_reexports(const std::string& module_source);
+
+    // ディレクトリ内のすべてのモジュールを再帰的に検出
+    std::vector<std::filesystem::path> find_all_modules_recursive(
+        const std::filesystem::path& directory);
+
+    // 指定した名前空間内の内容を抽出
+    std::string extract_namespace_content(const std::string& source,
+                                          const std::string& namespace_name);
+
+    // implの暗黙的エクスポート処理
+    std::string process_implicit_impl_export(const std::string& source);
 };
 
 }  // namespace cm::preprocessor

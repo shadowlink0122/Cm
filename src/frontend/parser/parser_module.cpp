@@ -29,15 +29,81 @@ ast::DeclPtr Parser::parse_module() {
 }
 
 // ============================================================
+// Namespace宣言
+// ============================================================
+ast::DeclPtr Parser::parse_namespace() {
+    uint32_t start_pos = current().start;
+    expect(TokenKind::KwNamespace);
+
+    std::string namespace_name = expect_ident();
+
+    expect(TokenKind::LBrace);
+
+    // namespace内の宣言をパース
+    std::vector<ast::DeclPtr> declarations;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        auto decl = parse_top_level();
+        if (decl) {
+            declarations.push_back(std::move(decl));
+        }
+    }
+
+    expect(TokenKind::RBrace);
+
+    // NamespaceDecl を ModuleDecl として扱う（内部表現を統一）
+    ast::ModulePath path;
+    path.segments.push_back(namespace_name);
+    auto module_decl = std::make_unique<ast::ModuleDecl>(std::move(path));
+    module_decl->declarations = std::move(declarations);
+
+    return std::make_unique<ast::Decl>(std::move(module_decl), Span{start_pos, previous().end});
+}
+
+// ============================================================
 // Import文
 // ============================================================
 ast::DeclPtr Parser::parse_import_stmt() {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwImport);
 
+    // 相対パスのチェック
+    bool is_relative = false;
+    std::string path_prefix;
+
+    if (consume_if(TokenKind::Dot)) {
+        is_relative = true;
+        if (consume_if(TokenKind::Slash)) {
+            path_prefix = "./";
+        } else if (consume_if(TokenKind::Dot)) {
+            // ..
+            if (consume_if(TokenKind::Slash)) {
+                path_prefix = "../";
+            } else {
+                error("Expected '/' after '..'");
+                return nullptr;
+            }
+        } else {
+            error("Expected '/' after '.'");
+            return nullptr;
+        }
+    }
+
     // モジュールパス
     ast::ModulePath path;
+
+    // 相対パスの場合、プレフィックスを最初のセグメントとして追加
+    if (is_relative) {
+        path.segments.push_back(path_prefix);
+    }
+
     path.segments.push_back(expect_ident());
+
+    // スラッシュで区切られた深い階層パス: import ./io/file
+    while (consume_if(TokenKind::Slash)) {
+        path.segments.push_back(expect_ident());
+    }
+
+    // または :: で区切られた階層パス: import std::io
     while (consume_if(TokenKind::ColonColon)) {
         path.segments.push_back(expect_ident());
     }
@@ -133,16 +199,48 @@ ast::DeclPtr Parser::parse_export() {
 
         std::vector<ast::ExportItem> items;
         do {
+            // 階層的再エクスポートのチェック: io::{file, stream}
+            std::vector<std::string> namespace_parts;
             std::string name = expect_ident();
-            std::optional<std::string> alias;
 
-            // as エイリアス
-            if (check(TokenKind::Ident) && current_text() == "as") {
-                advance();
-                alias = expect_ident();
+            // io:: のような階層パスをパース
+            while (consume_if(TokenKind::ColonColon)) {
+                namespace_parts.push_back(name);
+
+                // 次が { の場合は、階層的再エクスポート
+                if (check(TokenKind::LBrace)) {
+                    advance();  // consume {
+
+                    // { の中のアイテムをパース
+                    do {
+                        std::string item_name = expect_ident();
+
+                        // 階層パスを作成
+                        ast::ModulePath ns_path;
+                        ns_path.segments = namespace_parts;
+
+                        items.push_back(ast::ExportItem(item_name, ns_path));
+                    } while (consume_if(TokenKind::Comma));
+
+                    expect(TokenKind::RBrace);
+                    break;  // 階層的再エクスポートの処理完了
+                }
+
+                name = expect_ident();
             }
 
-            items.push_back(ast::ExportItem(std::move(name)));
+            // 通常のエクスポート項目（階層なし）
+            if (namespace_parts.empty()) {
+                std::optional<std::string> alias;
+
+                // as エイリアス
+                if (check(TokenKind::Ident) && current_text() == "as") {
+                    advance();
+                    alias = expect_ident();
+                }
+
+                items.push_back(ast::ExportItem(std::move(name)));
+            }
         } while (consume_if(TokenKind::Comma));
 
         expect(TokenKind::RBrace);
@@ -597,7 +695,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export) {
 // extern宣言
 // ============================================================
 ast::DeclPtr Parser::parse_extern() {
-    // uint32_t start_pos = current().start;  // TODO: use when ExternBlock node is implemented
+    uint32_t start_pos = current().start;
     expect(TokenKind::KwExtern);
 
     // extern "C" { ... } or extern "C" function
@@ -607,16 +705,16 @@ ast::DeclPtr Parser::parse_extern() {
 
         if (consume_if(TokenKind::LBrace)) {
             // extern "C" { ... } ブロック
-            std::vector<ast::DeclPtr> decls;
+            auto extern_block = std::make_unique<ast::ExternBlockDecl>(lang);
             while (!check(TokenKind::RBrace) && !is_at_end()) {
-                if (auto decl = parse_extern_decl()) {
-                    decls.push_back(std::move(decl));
+                if (auto func = parse_extern_func_decl()) {
+                    extern_block->declarations.push_back(std::move(func));
                 }
             }
             expect(TokenKind::RBrace);
 
-            // TODO: ExternBlockノードを作成
-            return nullptr;  // 一時的な実装
+            return std::make_unique<ast::Decl>(std::move(extern_block),
+                                               Span{start_pos, previous().end});
         } else {
             // 単一の extern "C" 宣言
             return parse_extern_decl();
@@ -627,14 +725,14 @@ ast::DeclPtr Parser::parse_extern() {
     return parse_extern_decl();
 }
 
-// extern宣言の個別解析
-ast::DeclPtr Parser::parse_extern_decl() {
-    // 関数プロトタイプ
-    auto return_type = parse_type();
+// extern宣言の個別解析（FunctionDecl版）
+std::unique_ptr<ast::FunctionDecl> Parser::parse_extern_func_decl() {
+    // 関数プロトタイプ - C言語スタイルの型をサポート
+    auto return_type = parse_extern_type();
     std::string name = expect_ident();
 
     expect(TokenKind::LParen);
-    auto params = parse_params();
+    auto params = parse_extern_params();
     expect(TokenKind::RParen);
 
     expect(TokenKind::Semicolon);
@@ -644,8 +742,61 @@ ast::DeclPtr Parser::parse_extern_decl() {
                                                     std::move(return_type),
                                                     std::vector<ast::StmtPtr>()  // 空のボディ
     );
+    func->is_extern = true;
 
-    // externフラグを設定（TODO: FunctionDeclにis_externフラグを追加）
+    return func;
+}
+
+// C言語スタイルの型をパース（後置ポインタ T* をサポート）
+ast::TypePtr Parser::parse_extern_type() {
+    // const修飾子をスキップ（C言語互換）
+    bool is_const = consume_if(TokenKind::KwConst);
+    (void)is_const;  // 現時点では使用しない
+
+    // 基本型をパース
+    ast::TypePtr base_type = parse_type();
+
+    // 後置ポインタをチェック（C言語スタイル: char*, int* など）
+    while (check(TokenKind::Star)) {
+        advance();  // consume *
+        base_type = ast::make_pointer(std::move(base_type));
+    }
+
+    return base_type;
+}
+
+// extern関数用のパラメータパース
+std::vector<ast::Param> Parser::parse_extern_params() {
+    std::vector<ast::Param> params;
+
+    if (check(TokenKind::RParen)) {
+        return params;
+    }
+
+    do {
+        ast::Param param;
+
+        // const修飾子をスキップ
+        param.qualifiers.is_const = consume_if(TokenKind::KwConst);
+
+        // 型をパース（C言語スタイル）
+        param.type = parse_extern_type();
+
+        // パラメータ名（オプション）
+        if (check(TokenKind::Ident)) {
+            param.name = current_text();
+            advance();
+        }
+
+        params.push_back(std::move(param));
+    } while (consume_if(TokenKind::Comma));
+
+    return params;
+}
+
+// extern宣言の個別解析（DeclPtr版）
+ast::DeclPtr Parser::parse_extern_decl() {
+    auto func = parse_extern_func_decl();
     return std::make_unique<ast::Decl>(std::move(func));
 }
 

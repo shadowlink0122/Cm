@@ -1,0 +1,9 @@
+module strutil;
+
+export int str_length(int dummy) {
+    return dummy * 2;
+}
+
+export int concat(int a, int b) {
+    return a + b;
+}

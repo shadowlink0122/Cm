@@ -1,0 +1,8 @@
+// Test std library import
+import std::io;
+
+int main() {
+    // 標準ライブラリの関数を使用
+    io::println("Hello from std::io!");
+    return 0;
+}

@@ -104,6 +104,11 @@ class Parser {
             return parse_module();
         }
 
+        // namespace宣言
+        if (check(TokenKind::KwNamespace)) {
+            return parse_namespace();
+        }
+
         // import
         if (check(TokenKind::KwImport)) {
             return parse_import_stmt();
@@ -1142,6 +1147,17 @@ class Parser {
             std::string name = current_text();
             advance();
 
+            // namespace::Type 形式をサポート
+            while (check(TokenKind::ColonColon)) {
+                advance();  // :: を消費
+                if (!check(TokenKind::Ident)) {
+                    error("Expected identifier after '::'");
+                    return ast::make_error();
+                }
+                name += "::" + current_text();
+                advance();
+            }
+
             // ジェネリック型引数をチェック（例: Vec<int>, Map<K, V>）
             if (check(TokenKind::Lt)) {
                 advance();  // '<' を消費
@@ -1227,12 +1243,16 @@ class Parser {
 
     // モジュール関連パーサ（parser_module.cppで実装）
     ast::DeclPtr parse_module();
+    ast::DeclPtr parse_namespace();
     ast::DeclPtr parse_import_stmt();
     ast::DeclPtr parse_export();
     ast::DeclPtr parse_use();
     ast::DeclPtr parse_macro();
     ast::DeclPtr parse_extern();
     ast::DeclPtr parse_extern_decl();
+    std::unique_ptr<ast::FunctionDecl> parse_extern_func_decl();
+    ast::TypePtr parse_extern_type();
+    std::vector<ast::Param> parse_extern_params();
     ast::AttributeNode parse_directive();
     ast::AttributeNode parse_attribute();
     ast::DeclPtr parse_const_decl(bool is_export = false);

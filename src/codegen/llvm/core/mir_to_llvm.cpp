@@ -133,6 +133,11 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
 // 関数変換
 void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
+    // 外部関数（extern）は宣言のみで本体を生成しない
+    if (func.is_extern) {
+        return;
+    }
+
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMFunction, func.name,
                             cm::debug::Level::Debug);
 

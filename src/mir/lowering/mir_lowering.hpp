@@ -1229,6 +1229,15 @@ class MirLowering : public MirLoweringBase {
                     hir_functions[(*func)->name] = func->get();
                     mir_program.functions.push_back(std::move(mir_func));
                 }
+            } else if (auto* extern_block =
+                           std::get_if<std::unique_ptr<hir::HirExternBlock>>(&decl->kind)) {
+                // extern "C" ブロック内の関数を処理
+                for (const auto& func : (*extern_block)->functions) {
+                    if (auto mir_func = lower_function(*func)) {
+                        hir_functions[func->name] = func.get();
+                        mir_program.functions.push_back(std::move(mir_func));
+                    }
+                }
             }
         }
     }

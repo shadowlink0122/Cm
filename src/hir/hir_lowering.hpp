@@ -50,7 +50,10 @@ class HirLowering {
 
         // Pass 2: 宣言を変換
         for (auto& decl : program.declarations) {
-            if (auto hir_decl = lower_decl(*decl)) {
+            // ModuleDecl/Namespace は特別に処理
+            if (auto* mod = decl->as<ast::ModuleDecl>()) {
+                process_namespace(*mod, "", hir);
+            } else if (auto hir_decl = lower_decl(*decl)) {
                 hir.declarations.push_back(std::move(hir_decl));
             }
         }
@@ -58,6 +61,44 @@ class HirLowering {
         debug::hir::log(debug::hir::Id::LowerEnd,
                         std::to_string(hir.declarations.size()) + " declarations");
         return hir;
+    }
+
+    // ネストしたnamespaceを再帰的に処理
+    void process_namespace(ast::ModuleDecl& mod, const std::string& parent_namespace,
+                           HirProgram& hir) {
+        std::string namespace_name = mod.path.segments.empty() ? "" : mod.path.segments[0];
+        std::string full_namespace =
+            parent_namespace.empty() ? namespace_name : parent_namespace + "::" + namespace_name;
+
+        debug::hir::log(debug::hir::Id::NodeCreate, "processing namespace " + full_namespace,
+                        debug::Level::Debug);
+
+        // namespace内の各宣言を処理
+        for (auto& inner_decl : mod.declarations) {
+            // ネストしたnamespaceの処理
+            if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
+                process_namespace(*nested_mod, full_namespace, hir);
+            } else if (auto* func = inner_decl->as<ast::FunctionDecl>()) {
+                // 関数名に完全なnamespaceプレフィックスを追加
+                std::string original_name = func->name;
+                func->name = full_namespace + "::" + original_name;
+                if (auto hir_decl = lower_function(*func)) {
+                    hir.declarations.push_back(std::move(hir_decl));
+                }
+                func->name = original_name;
+            } else if (auto* st = inner_decl->as<ast::StructDecl>()) {
+                std::string original_name = st->name;
+                st->name = full_namespace + "::" + original_name;
+                if (auto hir_decl = lower_struct(*st)) {
+                    hir.declarations.push_back(std::move(hir_decl));
+                }
+                st->name = original_name;
+            } else {
+                if (auto hir_decl = lower_decl(*inner_decl)) {
+                    hir.declarations.push_back(std::move(hir_decl));
+                }
+            }
+        }
     }
 
    private:
@@ -104,8 +145,31 @@ class HirLowering {
             return lower_typedef(*td);
         } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
             return lower_global_var(*gv);
+        } else if (auto* mod = decl.as<ast::ModuleDecl>()) {
+            return lower_module(*mod);
+        } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
+            return lower_extern_block(*extern_block);
         }
         return nullptr;
+    }
+
+    // extern "C" ブロック
+    HirDeclPtr lower_extern_block(ast::ExternBlockDecl& extern_block) {
+        // extern "C"ブロック内の関数を個別に処理
+        // HIRレベルではexternブロックを展開して個別の関数宣言として扱う
+        auto hir_extern = std::make_unique<HirExternBlock>();
+        hir_extern->language = extern_block.language;
+        for (const auto& func : extern_block.declarations) {
+            auto hir_func = std::make_unique<HirFunction>();
+            hir_func->name = func->name;
+            hir_func->return_type = func->return_type;
+            hir_func->is_extern = true;
+            for (const auto& p : func->params) {
+                hir_func->params.push_back({p.name, p.type});
+            }
+            hir_extern->functions.push_back(std::move(hir_func));
+        }
+        return std::make_unique<HirDecl>(std::move(hir_extern));
     }
 
     // 関数
@@ -452,6 +516,20 @@ class HirLowering {
         }
 
         return std::make_unique<HirDecl>(std::move(hir_global));
+    }
+
+    // Module/Namespace (namespace内の宣言を名前空間プレフィックス付きでフラット化)
+    HirDeclPtr lower_module(ast::ModuleDecl& mod) {
+        // namespace名を取得（最初のセグメントのみ使用）
+        std::string namespace_name = mod.path.segments.empty() ? "" : mod.path.segments[0];
+
+        debug::hir::log(debug::hir::Id::NodeCreate, "namespace " + namespace_name,
+                        debug::Level::Debug);
+
+        // namespace内の各宣言を処理
+        // 暫定実装: 宣言をフラット化せず、nullptrを返す
+        // 実際の処理はlower()関数で行う
+        return nullptr;
     }
 
     // 文の変換
@@ -1237,11 +1315,13 @@ class HirLowering {
             // 関数ポインタからの呼び出しかチェック
             // - func_defs_にある場合は通常の関数呼び出し
             // - 組み込み関数の場合は通常の関数呼び出し
+            // - 名前空間付き関数呼び出し（::を含む）は直接呼び出し
             // - それ以外は関数ポインタ変数
             bool is_builtin = builtin_funcs.find(func_name) != builtin_funcs.end();
             bool is_defined = func_defs_.find(func_name) != func_defs_.end();
+            bool is_namespaced = func_name.find("::") != std::string::npos;
 
-            if (!is_builtin && !is_defined) {
+            if (!is_builtin && !is_defined && !is_namespaced) {
                 hir->is_indirect = true;
                 debug::hir::log(debug::hir::Id::CallTarget,
                                 "indirect call via variable: " + func_name, debug::Level::Debug);
@@ -1757,8 +1837,15 @@ class HirLowering {
                 }
             }
 
+            // 名前空間を除去した型名を取得（メソッド呼び出し用）
+            std::string method_type_name = type_name;
+            size_t last_colon = type_name.rfind("::");
+            if (last_colon != std::string::npos) {
+                method_type_name = type_name.substr(last_colon + 2);
+            }
+
             auto hir = std::make_unique<HirCall>();
-            hir->func_name = type_name + "__" + mem.member;
+            hir->func_name = method_type_name + "__" + mem.member;
 
             // selfを第一引数として追加
             hir->args.push_back(std::move(obj_hir));

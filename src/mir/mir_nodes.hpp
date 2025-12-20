@@ -503,6 +503,7 @@ struct MirFunction {
     std::string name;
     std::string module_path;  // モジュールパス（例："std::io", ""は現在のモジュール）
     bool is_export = false;           // エクスポートされているか
+    bool is_extern = false;           // extern "C" 関数か
     std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
     LocalId return_local;             // 戻り値用のローカル（_0）

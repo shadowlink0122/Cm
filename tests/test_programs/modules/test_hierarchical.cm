@@ -1,0 +1,9 @@
+// test_hierarchical.cm - Test hierarchical module direct import
+import ./hierarchical/std/io/file::{read_file, write_file};
+
+int main() {
+    // 直接インポートでファイル関数をテスト
+    int result = read_file(5);
+    println("Read result: {result}");
+    return 0;
+}

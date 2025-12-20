@@ -1,0 +1,27 @@
+// err_duplicate_impl.cm - impl重複エラーテスト
+
+interface Printable {
+    void print();
+}
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point for Printable {
+    void print() {
+        println("Point 1");
+    }
+}
+
+// 同じ型への同じインターフェース実装 - エラー
+impl Point for Printable {
+    void print() {
+        println("Point 2");
+    }
+}
+
+int main() {
+    return 0;
+}

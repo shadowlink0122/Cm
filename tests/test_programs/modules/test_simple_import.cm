@@ -1,20 +1,16 @@
 // test_simple_import.cm - シンプルなインポートテスト
 
-import simple_math;
+import ./simple_math/math::{add_int, add_double, multiply_int};
 
 int main() {
-    // インポートした定数を使用
-    println("MAGIC_NUMBER = {simple_math::MAGIC_NUMBER}");
-    println("SIMPLE_PI = {simple_math::SIMPLE_PI}");
-
     // インポートした関数を使用
-    int sum = simple_math::add_int(10, 20);
+    int sum = add_int(10, 20);
     println("10 + 20 = {sum}");
 
-    double dsum = simple_math::add_double(1.5, 2.5);
+    double dsum = add_double(1.5, 2.5);
     println("1.5 + 2.5 = {dsum}");
 
-    int product = simple_math::multiply_int(6, 7);
+    int product = multiply_int(6, 7);
     println("6 * 7 = {product}");
 
     return 0;

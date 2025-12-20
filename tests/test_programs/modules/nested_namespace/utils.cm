@@ -1,0 +1,10 @@
+// utils.cm - Utility functions
+module utils;
+
+export int double_value(int x) {
+    return x * 2;
+}
+
+export int triple_value(int x) {
+    return x * 3;
+}

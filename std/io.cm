@@ -5,44 +5,39 @@ module std::io;
 // C言語ランタイムライブラリの関数宣言
 extern "C" {
     // 文字列出力
-    void cm_print_string(const char* str);
-    void cm_println_string(const char* str);
+    void cm_print_string(string str);
+    void cm_println_string(string str);
     
     // 整数出力
     void cm_print_int(int value);
     void cm_println_int(int value);
-    void cm_print_uint(unsigned int value);
-    void cm_println_uint(unsigned int value);
+    void cm_print_uint(uint value);
+    void cm_println_uint(uint value);
     
     // 浮動小数点数出力
     void cm_print_double(double value);
     void cm_println_double(double value);
     
     // ブール値出力
-    void cm_print_bool(char value, char with_newline);
+    void cm_print_bool(int value, int with_newline);
     
     // フォーマット付き出力
-    char* cm_format_int(int value);
-    char* cm_format_uint(unsigned int value);
-    char* cm_format_double(double value);
-    char* cm_format_bool(char value);
-    char* cm_format_char(char value);
-    char* cm_format_replace(const char* format, const char* value);
-    char* cm_format_replace_int(const char* format, int value);
-    char* cm_format_replace_uint(const char* format, unsigned int value);
-    char* cm_format_replace_double(const char* format, double value);
-    char* cm_format_replace_string(const char* format, const char* value);
-    char* cm_string_concat(const char* left, const char* right);
+    string cm_format_int(int value);
+    string cm_format_uint(uint value);
+    string cm_format_double(double value);
+    string cm_format_bool(char value);
+    string cm_format_char(char value);
+    string cm_format_replace(string format, string value);
+    string cm_format_replace_int(string format, int value);
+    string cm_format_replace_uint(string format, uint value);
+    string cm_format_replace_double(string format, double value);
+    string cm_format_replace_string(string format, string value);
+    string cm_string_concat(string left, string right);
 }
 
-// Rust風フォーマット文字列対応のprintln
-// 可変長引数をサポート
-// 例:
-//   println("Hello, World!");  // 単純な文字列
-//   println("Value: {}", 42);  // 位置引数
-//   println("{} + {} = {}", 1, 2, 3);  // 複数の位置引数
-export void println(...) {
-    __builtin_println(...);
+// 基本的な出力関数
+export void println(string message) {
+    cm_println_string(message);
 }
 
 // 後方互換性のための単純な出力関数（廃止予定）
@@ -59,7 +54,11 @@ export void println_double(double value) {
 }
 
 export void println_bool(bool value) {
-    cm_print_bool(value ? 1 : 0, 1);
+    if (value) {
+        cm_print_bool(1, 1);
+    } else {
+        cm_print_bool(0, 1);
+    }
 }
 
 // 改行なし出力
@@ -71,12 +70,7 @@ export void print(int value) {
     cm_print_int(value);
 }
 
-// 入力
-export string readln() {
-    return __builtin_readln();
-}
-
 // エラー出力
 export void eprintln(string message) {
-    __builtin_eprintln_string(message);
+    cm_println_string(message);
 }

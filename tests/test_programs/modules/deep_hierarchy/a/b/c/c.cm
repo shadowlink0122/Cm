@@ -1,0 +1,6 @@
+// c.cm - 最深部のモジュール
+module c;
+
+export int deep_value() {
+    return 42;
+}

@@ -137,6 +137,64 @@ class TypeChecker {
     // typedef定義のキャッシュ (エイリアス名 -> 実際の型)
     std::unordered_map<std::string, ast::TypePtr> typedef_defs_;
 
+    // ネストしたnamespaceを再帰的に登録
+    void register_namespace(ast::ModuleDecl& mod, const std::string& parent_namespace) {
+        std::string namespace_name = mod.path.segments.empty() ? "" : mod.path.segments[0];
+        std::string full_namespace =
+            parent_namespace.empty() ? namespace_name : parent_namespace + "::" + namespace_name;
+
+        debug::tc::log(debug::tc::Id::Resolved, "Processing namespace: " + full_namespace,
+                       debug::Level::Debug);
+
+        // namespace内の各宣言を処理
+        for (auto& inner_decl : mod.declarations) {
+            if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
+                register_namespace(*nested_mod, full_namespace);
+            } else if (auto* func = inner_decl->as<ast::FunctionDecl>()) {
+                std::string original_name = func->name;
+                func->name = full_namespace + "::" + original_name;
+                register_declaration(*inner_decl);
+                func->name = original_name;
+            } else if (auto* st = inner_decl->as<ast::StructDecl>()) {
+                std::string original_name = st->name;
+                st->name = full_namespace + "::" + original_name;
+                register_declaration(*inner_decl);
+                st->name = original_name;
+            } else {
+                register_declaration(*inner_decl);
+            }
+        }
+    }
+
+    // ネストしたnamespaceを再帰的にチェック
+    void check_namespace(ast::ModuleDecl& mod, const std::string& parent_namespace) {
+        std::string namespace_name = mod.path.segments.empty() ? "" : mod.path.segments[0];
+        std::string full_namespace =
+            parent_namespace.empty() ? namespace_name : parent_namespace + "::" + namespace_name;
+
+        debug::tc::log(debug::tc::Id::Resolved, "Checking namespace: " + full_namespace,
+                       debug::Level::Debug);
+
+        // namespace内の各宣言をチェック
+        for (auto& inner_decl : mod.declarations) {
+            if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
+                check_namespace(*nested_mod, full_namespace);
+            } else if (auto* func = inner_decl->as<ast::FunctionDecl>()) {
+                std::string original_name = func->name;
+                func->name = full_namespace + "::" + original_name;
+                check_declaration(*inner_decl);
+                func->name = original_name;
+            } else if (auto* st = inner_decl->as<ast::StructDecl>()) {
+                std::string original_name = st->name;
+                st->name = full_namespace + "::" + original_name;
+                check_declaration(*inner_decl);
+                st->name = original_name;
+            } else {
+                check_declaration(*inner_decl);
+            }
+        }
+    }
+
     // フォーマット文字列から変数名を抽出
     std::vector<std::string> extract_format_variables(const std::string& format_str) {
         std::vector<std::string> variables;
@@ -158,6 +216,12 @@ class TypeChecker {
 
     // 宣言の登録（パス1）
     void register_declaration(ast::Decl& decl) {
+        // ModuleDecl/Namespaceの処理
+        if (auto* mod = decl.as<ast::ModuleDecl>()) {
+            register_namespace(*mod, "");
+            return;
+        }
+
         if (auto* func = decl.as<ast::FunctionDecl>()) {
             // ジェネリックパラメータがある場合は記録
             if (!func->generic_params.empty()) {
@@ -227,12 +291,28 @@ class TypeChecker {
         } else if (auto* impl = decl.as<ast::ImplDecl>()) {
             // impl定義からメソッド情報を登録
             register_impl(*impl);
+        } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
+            // extern "C" ブロック内の関数を登録
+            for (const auto& func : extern_block->declarations) {
+                std::vector<ast::TypePtr> param_types;
+                for (const auto& p : func->params) {
+                    param_types.push_back(p.type);
+                }
+                scopes_.global().define_function(func->name, std::move(param_types),
+                                                 func->return_type);
+            }
         }
     }
 
     // 宣言のチェック（パス2）
     void check_declaration(ast::Decl& decl) {
         debug::tc::log(debug::tc::Id::CheckDecl, "", debug::Level::Trace);
+
+        // ModuleDecl/Namespaceの処理
+        if (auto* mod = decl.as<ast::ModuleDecl>()) {
+            check_namespace(*mod, "");
+            return;
+        }
 
         if (auto* func = decl.as<ast::FunctionDecl>()) {
             check_function(*func);
@@ -280,6 +360,11 @@ class TypeChecker {
 
         // インターフェース実装を記録
         if (!impl.interface_name.empty()) {
+            // impl上書き禁止: 同じ型への同じインターフェース実装を検出
+            if (impl_interfaces_[type_name].count(impl.interface_name) > 0) {
+                throw std::runtime_error("Duplicate impl: " + type_name + " already implements " +
+                                         impl.interface_name);
+            }
             impl_interfaces_[type_name].insert(impl.interface_name);
             debug::tc::log(debug::tc::Id::Resolved,
                            type_name + " implements " + impl.interface_name, debug::Level::Debug);
@@ -287,6 +372,12 @@ class TypeChecker {
 
         // メソッド実装の場合
         for (const auto& method : impl.methods) {
+            // メソッド名重複禁止: 異なるインターフェースでも同名メソッドを検出
+            if (type_methods_[type_name].count(method->name) > 0) {
+                throw std::runtime_error("Duplicate method: " + type_name +
+                                         " already has method '" + method->name + "'");
+            }
+
             MethodInfo info;
             info.name = method->name;
             info.return_type = method->return_type;
@@ -1337,48 +1428,62 @@ class TypeChecker {
                       "Pointer type does not support method calls. Use (*ptr).method() instead.");
                 return ast::make_error();
             }
-            // まず通常のメソッドを探す
-            auto it = type_methods_.find(type_name);
-            if (it != type_methods_.end()) {
-                auto method_it = it->second.find(member.member);
-                if (method_it != it->second.end()) {
-                    const auto& method_info = method_it->second;
 
-                    // privateメソッドのアクセスチェック
-                    if (method_info.visibility == ast::Visibility::Private) {
-                        // impl内（current_impl_target_type_が設定されている）からの呼び出しのみ許可
-                        if (current_impl_target_type_.empty() ||
-                            current_impl_target_type_ != type_name) {
-                            error(Span{}, "Cannot call private method '" + member.member +
-                                              "' from outside impl block of '" + type_name + "'");
-                            return ast::make_error();
-                        }
-                    }
+            // メソッド検索用の型名リストを作成（名前空間付きと名前空間なし）
+            std::vector<std::string> type_names_to_search = {type_name};
+            // 名前空間付きの場合、名前空間を除去した型名も検索
+            size_t last_colon = type_name.rfind("::");
+            if (last_colon != std::string::npos) {
+                type_names_to_search.push_back(type_name.substr(last_colon + 2));
+            }
 
-                    // 引数の型チェック
-                    if (member.args.size() != method_info.param_types.size()) {
-                        error(Span{}, "Method '" + member.member + "' expects " +
-                                          std::to_string(method_info.param_types.size()) +
-                                          " arguments, got " + std::to_string(member.args.size()));
-                    } else {
-                        for (size_t i = 0; i < member.args.size(); ++i) {
-                            auto arg_type = infer_type(*member.args[i]);
-                            if (!types_compatible(method_info.param_types[i], arg_type)) {
-                                std::string expected =
-                                    ast::type_to_string(*method_info.param_types[i]);
-                                std::string actual = ast::type_to_string(*arg_type);
-                                error(Span{}, "Argument type mismatch in method call '" +
-                                                  member.member + "': expected " + expected +
-                                                  ", got " + actual);
+            // 通常のメソッドを探す（名前空間付き/なし両方を試行）
+            for (const auto& search_type : type_names_to_search) {
+                auto it = type_methods_.find(search_type);
+                if (it != type_methods_.end()) {
+                    auto method_it = it->second.find(member.member);
+                    if (method_it != it->second.end()) {
+                        const auto& method_info = method_it->second;
+
+                        // privateメソッドのアクセスチェック
+                        if (method_info.visibility == ast::Visibility::Private) {
+                            // impl内（current_impl_target_type_が設定されている）からの呼び出しのみ許可
+                            if (current_impl_target_type_.empty() ||
+                                (current_impl_target_type_ != type_name &&
+                                 current_impl_target_type_ != search_type)) {
+                                error(Span{}, "Cannot call private method '" + member.member +
+                                                  "' from outside impl block of '" + type_name +
+                                                  "'");
+                                return ast::make_error();
                             }
                         }
-                    }
 
-                    debug::tc::log(debug::tc::Id::Resolved,
-                                   type_name + "." + member.member +
-                                       "() : " + ast::type_to_string(*method_info.return_type),
-                                   debug::Level::Debug);
-                    return method_info.return_type;
+                        // 引数の型チェック
+                        if (member.args.size() != method_info.param_types.size()) {
+                            error(Span{}, "Method '" + member.member + "' expects " +
+                                              std::to_string(method_info.param_types.size()) +
+                                              " arguments, got " +
+                                              std::to_string(member.args.size()));
+                        } else {
+                            for (size_t i = 0; i < member.args.size(); ++i) {
+                                auto arg_type = infer_type(*member.args[i]);
+                                if (!types_compatible(method_info.param_types[i], arg_type)) {
+                                    std::string expected =
+                                        ast::type_to_string(*method_info.param_types[i]);
+                                    std::string actual = ast::type_to_string(*arg_type);
+                                    error(Span{}, "Argument type mismatch in method call '" +
+                                                      member.member + "': expected " + expected +
+                                                      ", got " + actual);
+                                }
+                            }
+                        }
+
+                        debug::tc::log(debug::tc::Id::Resolved,
+                                       type_name + "." + member.member +
+                                           "() : " + ast::type_to_string(*method_info.return_type),
+                                       debug::Level::Debug);
+                        return method_info.return_type;
+                    }
                 }
             }
 

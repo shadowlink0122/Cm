@@ -47,6 +47,7 @@ enum class TokenKind {
     KwMatch,
     KwModule,  // module declaration
     KwMutable,
+    KwNamespace,  // namespace declaration
     KwNew,
     KwNull,
     KwOperator,  // operator overloading in interface/impl

@@ -63,9 +63,14 @@ struct ImportDecl {
 struct ExportItem {
     std::string name;                       // エクスポート名
     std::optional<ModulePath> from_module;  // 再エクスポート元
+    std::optional<ModulePath> namespace_path;  // 階層的再エクスポート用パス (e.g., io::file)
 
     ExportItem(std::string n, std::optional<ModulePath> from = std::nullopt)
         : name(std::move(n)), from_module(std::move(from)) {}
+
+    // 階層的再エクスポート用コンストラクタ
+    ExportItem(std::string n, ModulePath ns_path, std::optional<ModulePath> from = std::nullopt)
+        : name(std::move(n)), from_module(std::move(from)), namespace_path(std::move(ns_path)) {}
 };
 
 // ============================================================

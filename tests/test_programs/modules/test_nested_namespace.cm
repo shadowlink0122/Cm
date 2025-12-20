@@ -1,0 +1,14 @@
+// test_nested_namespace.cm - Test utility functions
+import ./nested_namespace/utils::{double_value, triple_value};
+
+int main() {
+    int x = 5;
+    int doubled = double_value(x);
+    int tripled = triple_value(x);
+    
+    println("Original: {x}");
+    println("Doubled: {doubled}");
+    println("Tripled: {tripled}");
+    
+    return 0;
+}

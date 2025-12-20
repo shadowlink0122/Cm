@@ -1,0 +1,9 @@
+// test_basic_reexport.cm - std::io 再エクスポートテスト
+import ./basic_reexport/std::io::add;
+
+int main() {
+    // std.cm が module std; を宣言し、io を再エクスポート
+    int result = add(10, 20);
+    println("Result: {result}");
+    return 0;
+}

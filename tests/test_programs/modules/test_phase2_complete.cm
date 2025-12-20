@@ -1,0 +1,13 @@
+// test_phase2_complete.cm - 直接インポートテスト
+import ./phase2_complete/lib/utils/strutil::{str_length, concat};
+
+int main() {
+    // 直接インポートした関数をテスト
+    int len = str_length(10);
+    int result = concat(5, 7);
+    
+    println("String length result: {len}");
+    println("Concat result: {result}");
+    
+    return 0;
+}

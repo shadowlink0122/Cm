@@ -72,6 +72,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "module";
         case TokenKind::KwMutable:
             return "mutable";
+        case TokenKind::KwNamespace:
+            return "namespace";
         case TokenKind::KwNew:
             return "new";
         case TokenKind::KwNull:

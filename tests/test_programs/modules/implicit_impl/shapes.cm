@@ -1,0 +1,23 @@
+// shapes.cm - implの暗黙的エクスポートテスト用モジュール
+module shapes;
+
+interface Printable {
+    void print();
+}
+
+// 構造体をエクスポート
+export struct Point {
+    int x;
+    int y;
+}
+
+// implは明示的にexportしないが、Pointがエクスポートされているので暗黙的にエクスポート
+impl Point for Printable {
+    void print() {
+        println("Point");
+    }
+}
+
+export int get_value() {
+    return 42;
+}

@@ -1,0 +1,9 @@
+// Test namespace access
+import ./selective_import/math;
+
+int main() {
+    // 名前空間アクセス形式でテスト
+    int result = math::add(10, 20);
+    println("Result: {result}");
+    return 0;
+}

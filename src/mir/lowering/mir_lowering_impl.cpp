@@ -119,11 +119,24 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     mir_func->name = func.name;
     mir_func->module_path = current_module_path;  // モジュールパスを設定
     mir_func->is_export = func.is_export;         // エクスポートフラグを設定
+    mir_func->is_extern = func.is_extern;         // externフラグを設定
 
     // 戻り値用のローカル変数（typedefを解決）
     mir_func->return_local = 0;
     auto resolved_return_type = resolve_typedef(func.return_type);
     mir_func->locals.emplace_back(0, "@return", resolved_return_type, true, false);
+
+    // extern関数は宣言のみでボディなし
+    if (func.is_extern) {
+        // パラメータを記録
+        for (const auto& param : func.params) {
+            auto resolved_param_type = resolve_typedef(param.type);
+            LocalId param_id = static_cast<LocalId>(mir_func->locals.size());
+            mir_func->locals.emplace_back(param_id, param.name, resolved_param_type, false, false);
+            mir_func->arg_locals.push_back(param_id);
+        }
+        return mir_func;
+    }
 
     // エントリーブロックを作成
     mir_func->entry_block = 0;

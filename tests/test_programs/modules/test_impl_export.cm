@@ -1,0 +1,16 @@
+// test_impl_export.cm - モジュール構造体テスト
+import ./impl_export/calculator;
+
+int main() {
+    calculator::Doubler d;
+    d.factor = 2;
+    int result1 = calculator::double_it(10);
+    
+    calculator::Tripler t;
+    t.factor = 3;
+    int result2 = calculator::triple_it(10);
+    
+    println("Doubler: {result1}");
+    println("Tripler: {result2}");
+    return 0;
+}

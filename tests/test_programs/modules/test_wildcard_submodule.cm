@@ -1,0 +1,10 @@
+// test_wildcard_submodule.cm - ワイルドカードサブモジュールインポート
+import ./basic_reexport/std::io::*;
+
+int main() {
+    int sum = add(10, 20);
+    int product = multiply(3, 4);
+    println("Sum: {sum}");
+    println("Product: {product}");
+    return 0;
+}

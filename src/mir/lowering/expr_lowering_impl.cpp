@@ -1879,9 +1879,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         if (var_id) {
             func_operand = MirOperand::copy(MirPlace{*var_id});
         } else {
-            // 変数が見つからない場合はエラー
-            std::cerr << "[MIR] Error: Function pointer variable '" << call.func_name
-                      << "' not found\n";
+            // 変数が見つからない場合は直接関数参照として処理
+            // extern関数などは変数ではなく関数として登録されている
             func_operand = MirOperand::function_ref(call.func_name);
         }
     } else {

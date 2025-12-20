@@ -270,6 +270,7 @@ struct HirFunction {
     TypePtr return_type;
     std::vector<HirStmtPtr> body;
     bool is_export = false;
+    bool is_extern = false;  // extern "C" 関数
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_overload = false;                          // overloadキーワードの有無
@@ -407,10 +408,17 @@ struct HirGlobalVar {
     bool is_export = false;
 };
 
-using HirDeclKind = std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
-                                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
-                                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>,
-                                 std::unique_ptr<HirTypedef>, std::unique_ptr<HirGlobalVar>>;
+// extern "C" ブロック
+struct HirExternBlock {
+    std::string language;  // "C" など
+    std::vector<std::unique_ptr<HirFunction>> functions;
+};
+
+using HirDeclKind =
+    std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
+                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
+                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>, std::unique_ptr<HirTypedef>,
+                 std::unique_ptr<HirGlobalVar>, std::unique_ptr<HirExternBlock>>;
 
 struct HirDecl {
     HirDeclKind kind;
