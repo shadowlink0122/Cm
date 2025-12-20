@@ -846,8 +846,10 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
         }
     }
 
-    // Phase 2: export { name1, name2, ... } を検出
+    // Phase 2: export { name1, name2, ... } および export { ns::{item1, item2} } を検出
     std::regex export_list_regex(R"(^\s*export\s*\{([^}]+)\})");
+    // 階層再構築パターン: ns::{item1, item2}
+    std::regex hierarchical_regex(R"((\w+)::\{([^}]+)\})");
     bool has_export_list = false;
 
     for (size_t i = 0; i < lines.size(); ++i) {
@@ -856,15 +858,35 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
             has_export_list = true;
             std::string names = match[1];
 
-            // 名前をパース
-            std::stringstream ss(names);
-            std::string name;
-            while (std::getline(ss, name, ',')) {
-                // トリム
-                name.erase(0, name.find_first_not_of(" \t\n\r"));
-                name.erase(name.find_last_not_of(" \t\n\r") + 1);
-                if (!name.empty()) {
-                    exported_names.insert(name);
+            // 階層再構築パターンをチェック: io::{file, stream}
+            std::smatch hier_match;
+            if (std::regex_search(names, hier_match, hierarchical_regex)) {
+                std::string namespace_name = hier_match[1];
+                std::string sub_items = hier_match[2];
+                
+                // サブアイテムをパース
+                std::stringstream sub_ss(sub_items);
+                std::string sub_item;
+                while (std::getline(sub_ss, sub_item, ',')) {
+                    // トリム
+                    sub_item.erase(0, sub_item.find_first_not_of(" \t\n\r"));
+                    sub_item.erase(sub_item.find_last_not_of(" \t\n\r") + 1);
+                    if (!sub_item.empty()) {
+                        // 階層形式: namespace::item として記録
+                        exported_names.insert(namespace_name + "::" + sub_item);
+                    }
+                }
+            } else {
+                // 通常の名前リストをパース
+                std::stringstream ss(names);
+                std::string name;
+                while (std::getline(ss, name, ',')) {
+                    // トリム
+                    name.erase(0, name.find_first_not_of(" \t\n\r"));
+                    name.erase(name.find_last_not_of(" \t\n\r") + 1);
+                    if (!name.empty()) {
+                        exported_names.insert(name);
+                    }
                 }
             }
 

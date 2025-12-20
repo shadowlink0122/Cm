@@ -1,0 +1,7 @@
+// std.cm - 階層再構築エクスポートテスト
+module std;
+
+import ./io;
+
+// io名前空間ごと再エクスポート
+export { io };

@@ -5,6 +5,13 @@
 
 ---
 
+## ドキュメント
+
+- **ユーザーガイド**: [MODULE_USER_GUIDE.md](../guides/MODULE_USER_GUIDE.md)
+- **設計文書**: [MODULE_SYSTEM_FINAL.md](MODULE_SYSTEM_FINAL.md)
+
+---
+
 ## 実装完了した機能 ✅
 
 ### Phase 1: 基本的なモジュールシステム（完了）
