@@ -13,6 +13,19 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // 変数をスコープに登録
     ctx.register_variable(let.name, local);
 
+    // const変数の場合、初期値が定数リテラルならその値を保存
+    // これにより文字列補間でconst変数の値を直接使用できる
+    if (let.is_const && let.init) {
+        if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&let.init->kind)) {
+            if (*lit) {
+                MirConstant const_val;
+                const_val.type = let.type;
+                const_val.value = (*lit)->value;
+                ctx.register_const_value(let.name, const_val);
+            }
+        }
+    }
+
     // static変数の場合、初期化コードは生成しない
     // LLVMバックエンドでグローバル変数としてゼロ初期化で生成される
     // インタプリタでは初回呼び出し時にのみ初期化される

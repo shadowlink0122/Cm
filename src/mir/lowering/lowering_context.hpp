@@ -68,6 +68,10 @@ class LoweringContext {
     // インターフェース名のセット - 親クラスから参照
     const std::unordered_set<std::string>* interface_names = nullptr;
 
+    // const変数の値のキャッシュ (変数名 -> 定数値)
+    // 文字列補間で使用するため、const変数の初期値を保持
+    std::unordered_map<std::string, MirConstant> const_values;
+
     explicit LoweringContext(MirFunction* f) : func(f) {
         // 初期スコープを作成
         push_scope();
@@ -240,6 +244,20 @@ class LoweringContext {
             if (var_it != it->end()) {
                 return var_it->second;
             }
+        }
+        return std::nullopt;
+    }
+
+    // const変数の値を登録
+    void register_const_value(const std::string& name, const MirConstant& value) {
+        const_values[name] = value;
+    }
+
+    // const変数の値を取得
+    std::optional<MirConstant> get_const_value(const std::string& name) {
+        auto it = const_values.find(name);
+        if (it != const_values.end()) {
+            return it->second;
         }
         return std::nullopt;
     }

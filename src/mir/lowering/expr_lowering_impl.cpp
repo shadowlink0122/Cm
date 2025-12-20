@@ -1688,13 +1688,24 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             }
                                         } else {
                                             // 通常の変数
-                                            auto var_id = ctx.resolve_variable(var_name);
-                                            if (var_id) {
-                                                arg_locals.push_back(*var_id);
+                                            // まずconst値をチェック（定数として登録されている場合）
+                                            auto const_val = ctx.get_const_value(var_name);
+                                            if (const_val) {
+                                                // const変数の値を一時変数に格納
+                                                LocalId const_temp = ctx.new_temp(const_val->type);
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{const_temp},
+                                                    MirRvalue::use(MirOperand::constant(*const_val))));
+                                                arg_locals.push_back(const_temp);
                                             } else {
-                                                // 変数が見つからない場合、エラー用のダミー値を追加
-                                                auto err_type = hir::make_error();
-                                                arg_locals.push_back(ctx.new_temp(err_type));
+                                                auto var_id = ctx.resolve_variable(var_name);
+                                                if (var_id) {
+                                                    arg_locals.push_back(*var_id);
+                                                } else {
+                                                    // 変数が見つからない場合、エラー用のダミー値を追加
+                                                    auto err_type = hir::make_error();
+                                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                                }
                                             }
                                         }
                                     }
