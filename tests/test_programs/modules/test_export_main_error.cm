@@ -1,0 +1,12 @@
+// test_export_main_error.cm - main関数のエクスポートエラーテスト
+// このファイルはコンパイルエラーになるべき
+
+// 正常なエクスポート
+export int helper_func() {
+    return 42;
+}
+
+// エラー: main関数はエクスポートできない
+export int main() {
+    return 0;
+}

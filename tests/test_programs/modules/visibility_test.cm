@@ -1,0 +1,44 @@
+// visibility_test.cm - エクスポート可視性のテスト
+
+// エクスポートされる要素
+export struct PublicStruct {
+    int public_field;
+};
+
+export int public_function() {
+    // エクスポートされた関数内からプライベート関数を呼べる
+    return private_function() + 10;
+}
+
+export const int PUBLIC_CONST = 100;
+
+// エクスポートされない要素（プライベート）
+struct PrivateStruct {
+    int private_field;
+};
+
+int private_function() {
+    return 42;
+}
+
+const int PRIVATE_CONST = 50;
+
+// エクスポート内でプライベート要素を使用
+export int use_private_items() {
+    PrivateStruct priv;
+    priv.private_field = PRIVATE_CONST;
+
+    PublicStruct pub;
+    pub.public_field = PUBLIC_CONST;
+
+    return priv.private_field + private_function();
+}
+
+// エクスポートされたimplでプライベート型を使用（これはOK）
+export impl PublicStruct {
+    int get_value() {
+        PrivateStruct helper;
+        helper.private_field = this.public_field;
+        return helper.private_field + PRIVATE_CONST;
+    }
+};

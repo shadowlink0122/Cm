@@ -1,0 +1,45 @@
+// テスト: グローバルとローカルのconst変数を混在して使用
+export const int GLOBAL_VERSION = 10;
+export const int GLOBAL_BUILD = 42;
+
+int testMixedConst() {
+    // 関数ローカルのconst変数
+    const int local_count = 99;
+    const int local_status = 1;
+
+    // グローバルとローカルの両方を使用
+    string msg1 = "Global: {GLOBAL_VERSION}.{GLOBAL_BUILD}";
+    string msg2 = "Local: {local_count}, Status: {local_status}";
+    string msg3 = "Mixed: v{GLOBAL_VERSION}.{GLOBAL_BUILD} ({local_count} items)";
+
+    // 結果を表示
+    println("msg1 = \"{msg1}\"");
+    println("msg2 = \"{msg2}\"");
+    println("msg3 = \"{msg3}\"");
+
+    // 検証
+    int errors = 0;
+    if (msg1 != "Global: 10.42") {
+        println("FAIL: msg1 expected 'Global: 10.42'");
+        errors = errors + 1;
+    }
+    if (msg2 != "Local: 99, Status: 1") {
+        println("FAIL: msg2 expected 'Local: 99, Status: 1'");
+        errors = errors + 1;
+    }
+    if (msg3 != "Mixed: v10.42 (99 items)") {
+        println("FAIL: msg3 expected 'Mixed: v10.42 (99 items)'");
+        errors = errors + 1;
+    }
+    
+    if (errors == 0) {
+        println("PASS: Mixed const interpolation works");
+    }
+    
+    return errors;
+}
+
+int main() {
+    int result = testMixedConst();
+    return result;
+}

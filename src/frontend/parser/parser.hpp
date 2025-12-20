@@ -114,8 +114,50 @@ class Parser {
             return parse_use();
         }
 
-        // export
+        // export (v4: 宣言時エクスポートと分離エクスポートの両方をサポート)
         if (check(TokenKind::KwExport)) {
+            // 次のトークンを先読み
+            auto saved_pos = pos_;
+            advance();  // consume 'export'
+
+            // export struct, export interface, export enum, export typedef, export const
+            if (check(TokenKind::KwStruct)) {
+                // 既に正しい位置にいる（'struct'トークンの位置）
+                return parse_struct(true);
+            }
+            if (check(TokenKind::KwInterface)) {
+                // 既に正しい位置にいる
+                return parse_interface(true);
+            }
+            if (check(TokenKind::KwEnum)) {
+                // 既に正しい位置にいる
+                return parse_enum_decl(true);
+            }
+            if (check(TokenKind::KwTypedef)) {
+                // 既に正しい位置にいる
+                return parse_typedef_decl(true);
+            }
+            if (check(TokenKind::KwConst)) {
+                // 既に正しい位置にいる
+                return parse_const_decl(true);
+            }
+            if (check(TokenKind::KwImpl)) {
+                // 既に正しい位置にいる
+                return parse_impl_export();
+            }
+
+            // export function (型から始まる関数の場合)
+            if (is_type_start()) {
+                // 修飾子を収集
+                bool is_static = consume_if(TokenKind::KwStatic);
+                bool is_inline = consume_if(TokenKind::KwInline);
+                bool is_async = consume_if(TokenKind::KwAsync);
+
+                return parse_function(true, is_static, is_inline, is_async);
+            }
+
+            // それ以外は分離エクスポート (export NAME1, NAME2;)
+            pos_ = saved_pos;
             return parse_export();
         }
 
@@ -151,12 +193,17 @@ class Parser {
 
         // enum
         if (check(TokenKind::KwEnum)) {
-            return parse_enum_decl();
+            return parse_enum_decl(false);
         }
 
         // typedef
         if (check(TokenKind::KwTypedef)) {
-            return parse_typedef_decl();
+            return parse_typedef_decl(false);
+        }
+
+        // const (v4: トップレベルconst宣言のサポート)
+        if (check(TokenKind::KwConst)) {
+            return parse_const_decl(false);
         }
 
         // #macro (新しいC++風マクロ構文)
@@ -275,6 +322,11 @@ class Parser {
 
         auto return_type = parse_type();
         std::string name = expect_ident();
+
+        // main関数はエクスポート不可
+        if (is_export && name == "main") {
+            error("main関数はエクスポートできません");
+        }
 
         expect(TokenKind::LParen);
         auto params = parse_params();
@@ -415,6 +467,12 @@ class Parser {
             }
 
             field.qualifiers.is_const = consume_if(TokenKind::KwConst);
+
+            // 修飾子の後で再度RBraceをチェック（空の構造体や最後のフィールドの後）
+            if (check(TokenKind::RBrace)) {
+                break;
+            }
+
             field.type = parse_type();
 
             // C++スタイルの配列フィールド: int[10] data;
@@ -1177,11 +1235,12 @@ class Parser {
     ast::DeclPtr parse_extern_decl();
     ast::AttributeNode parse_directive();
     ast::AttributeNode parse_attribute();
-    ast::DeclPtr parse_const_decl();
+    ast::DeclPtr parse_const_decl(bool is_export = false);
     ast::DeclPtr parse_constexpr();
     ast::DeclPtr parse_template_decl();
-    ast::DeclPtr parse_enum_decl();
-    ast::DeclPtr parse_typedef_decl();
+    ast::DeclPtr parse_enum_decl(bool is_export = false);
+    ast::DeclPtr parse_typedef_decl(bool is_export = false);
+    ast::DeclPtr parse_impl_export();
 
     // ユーティリティ
     const Token& current() const { return tokens_[pos_]; }

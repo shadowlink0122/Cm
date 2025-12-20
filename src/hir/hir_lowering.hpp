@@ -102,6 +102,8 @@ class HirLowering {
             return lower_enum(*en);
         } else if (auto* td = decl.as<ast::TypedefDecl>()) {
             return lower_typedef(*td);
+        } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
+            return lower_global_var(*gv);
         }
         return nullptr;
     }
@@ -430,6 +432,26 @@ class HirLowering {
         hir_typedef->type = td.type;
 
         return std::make_unique<HirDecl>(std::move(hir_typedef));
+    }
+
+    // グローバル変数/定数
+    HirDeclPtr lower_global_var(ast::GlobalVarDecl& gv) {
+        debug::hir::log(debug::hir::Id::NodeCreate,
+                        std::string(gv.is_const ? "const " : "var ") + gv.name,
+                        debug::Level::Debug);
+
+        auto hir_global = std::make_unique<HirGlobalVar>();
+        hir_global->name = gv.name;
+        hir_global->type = gv.type;
+        hir_global->is_const = gv.is_const;
+        hir_global->is_export = (gv.visibility == ast::Visibility::Export);
+
+        // 初期化式を変換
+        if (gv.init_expr) {
+            hir_global->init = lower_expr(*gv.init_expr);
+        }
+
+        return std::make_unique<HirDecl>(std::move(hir_global));
     }
 
     // 文の変換

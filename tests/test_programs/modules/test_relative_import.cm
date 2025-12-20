@@ -1,0 +1,37 @@
+// test_relative_import.cm - 相対インポートテスト
+
+// サブディレクトリからインポート
+import ./utils/common;
+import ./utils/logger;
+import ./app/main_app;
+
+int main() {
+    println("=== Relative Import Test ===");
+
+    // commonモジュールの使用
+    println("Version: {common::VERSION}");
+    println("App Name: {common::APP_NAME}");
+
+    common::Config cfg = common::create_default_config();
+    common::print_config(cfg);
+
+    println("");
+
+    // loggerモジュールの使用
+    logger::Logger log = logger::create_logger(logger::LogLevel::DEBUG);
+    logger::log(log, logger::LogLevel::DEBUG, "Debug message");
+    logger::log(log, logger::LogLevel::INFO, "Info message");
+    logger::log(log, logger::LogLevel::WARN, "Warning message");
+    logger::log(log, logger::LogLevel::ERROR, "Error message");
+
+    println("");
+
+    // main_appモジュールの使用
+    main_app::Application app = main_app::create_app("TestApplication");
+    main_app::run_app(app);
+
+    println("");
+    println("=== Test Complete ===");
+
+    return 0;
+}

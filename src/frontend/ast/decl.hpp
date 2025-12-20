@@ -263,6 +263,9 @@ struct ImplDecl {
     std::vector<std::unique_ptr<FunctionDecl>> constructors;  // self()
     std::unique_ptr<FunctionDecl> destructor;                 // ~self()
 
+    // v4 module system: export impl blocks
+    bool is_export = false;
+
     ImplDecl(std::string iface, TypePtr target)
         : interface_name(std::move(iface)), target_type(std::move(target)) {}
 
@@ -292,6 +295,20 @@ struct EnumDecl {
 
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}
+};
+
+// ============================================================
+// グローバル変数/定数宣言 (v4: const/global変数サポート)
+// ============================================================
+struct GlobalVarDecl {
+    std::string name;
+    TypePtr type;
+    ExprPtr init_expr;
+    bool is_const = false;
+    Visibility visibility = Visibility::Private;
+
+    GlobalVarDecl(std::string n, TypePtr t, ExprPtr init, bool c = false)
+        : name(std::move(n)), type(std::move(t)), init_expr(std::move(init)), is_const(c) {}
 };
 
 // ImportDeclはmodule.hppに移動

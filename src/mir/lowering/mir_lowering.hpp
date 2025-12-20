@@ -72,6 +72,13 @@ class MirLowering : public MirLoweringBase {
             }
         }
 
+        // グローバルconst変数を収集（文字列補間で使用）
+        for (const auto& decl : hir_program.declarations) {
+            if (auto* gv = std::get_if<std::unique_ptr<hir::HirGlobalVar>>(&decl->kind)) {
+                register_global_var(**gv);
+            }
+        }
+
         // 構造体定義を収集（typedef/enumが登録された後に処理）
         for (const auto& decl : hir_program.declarations) {
             if (auto* st = std::get_if<std::unique_ptr<hir::HirStruct>>(&decl->kind)) {

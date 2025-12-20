@@ -61,9 +61,10 @@ struct LiteralUnionType : Type {
 // typedef宣言
 // ============================================================
 struct TypedefDecl {
-    std::string name;                      // エイリアス名
-    TypePtr type;                          // 実際の型
-    std::vector<std::string> type_params;  // ジェネリックパラメータ
+    std::string name;                             // エイリアス名
+    TypePtr type;                                 // 実際の型
+    std::vector<std::string> type_params;         // ジェネリックパラメータ
+    Visibility visibility = Visibility::Private;  // v4 module system
 
     TypedefDecl(std::string n, TypePtr t) : name(std::move(n)), type(std::move(t)) {}
 

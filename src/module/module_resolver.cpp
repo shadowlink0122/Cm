@@ -1,13 +1,13 @@
 #include "module_resolver.hpp"
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
-
 #include "../frontend/lexer/lexer.hpp"
 #include "../frontend/parser/parser.hpp"
 #include "../hir/hir_lowering.hpp"
 #include "../mir/mir_lowering.hpp"
+
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 namespace cm::module {
 
@@ -133,10 +133,8 @@ bool ModuleResolver::compile_module(const std::string& module_name) {
     return true;
 }
 
-const mir::MirFunction* ModuleResolver::find_exported_function(
-    const std::string& module_name,
-    const std::string& function_name
-) {
+const mir::MirFunction* ModuleResolver::find_exported_function(const std::string& module_name,
+                                                               const std::string& function_name) {
     auto* module_info = load_module(module_name);
     if (!module_info) {
         return nullptr;
@@ -159,10 +157,8 @@ const mir::MirFunction* ModuleResolver::find_exported_function(
     return nullptr;
 }
 
-const mir::MirStruct* ModuleResolver::find_exported_struct(
-    const std::string& module_name,
-    const std::string& struct_name
-) {
+const mir::MirStruct* ModuleResolver::find_exported_struct(const std::string& module_name,
+                                                           const std::string& struct_name) {
     auto* module_info = load_module(module_name);
     if (!module_info) {
         return nullptr;
@@ -185,7 +181,8 @@ const mir::MirStruct* ModuleResolver::find_exported_struct(
     return nullptr;
 }
 
-std::unique_ptr<hir::HirProgram> ModuleResolver::parse_module_file(const std::filesystem::path& path) {
+std::unique_ptr<hir::HirProgram> ModuleResolver::parse_module_file(
+    const std::filesystem::path& path) {
     // ファイルを読み込む
     std::ifstream file(path);
     if (!file) {

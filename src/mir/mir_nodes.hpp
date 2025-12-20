@@ -501,7 +501,7 @@ struct LocalDecl {
 // ============================================================
 struct MirFunction {
     std::string name;
-    std::string module_path;          // モジュールパス（例："std::io", ""は現在のモジュール）
+    std::string module_path;  // モジュールパス（例："std::io", ""は現在のモジュール）
     bool is_export = false;           // エクスポートされているか
     std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
@@ -561,8 +561,8 @@ struct MirStructField {
 
 struct MirStruct {
     std::string name;
-    std::string module_path;          // モジュールパス
-    bool is_export = false;           // エクスポートされているか
+    std::string module_path;  // モジュールパス
+    bool is_export = false;   // エクスポートされているか
     std::vector<MirStructField> fields;
     uint32_t size;   // 構造体全体のサイズ
     uint32_t align;  // アライメント要求
@@ -631,7 +631,7 @@ using VTablePtr = std::unique_ptr<VTable>;
 // Module（モジュール）
 // ============================================================
 struct MirImport {
-    std::vector<std::string> path;  // e.g., ["std", "io"]
+    std::vector<std::string> path;   // e.g., ["std", "io"]
     std::string alias;               // エイリアス（空の場合はなし）
     std::vector<std::string> items;  // 選択的インポート項目
     bool is_wildcard = false;        // ワイルドカードインポートか
@@ -640,10 +640,10 @@ struct MirImport {
 using MirImportPtr = std::unique_ptr<MirImport>;
 
 struct MirModule {
-    std::string name;                        // モジュール名
-    std::vector<std::string> path;           // モジュールパス (e.g., ["std", "io"])
-    std::vector<MirImportPtr> imports;       // インポート
-    std::vector<std::string> exports;        // エクスポートされる名前のリスト
+    std::string name;                   // モジュール名
+    std::vector<std::string> path;      // モジュールパス (e.g., ["std", "io"])
+    std::vector<MirImportPtr> imports;  // インポート
+    std::vector<std::string> exports;   // エクスポートされる名前のリスト
 };
 
 using MirModulePtr = std::unique_ptr<MirModule>;

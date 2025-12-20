@@ -1,16 +1,50 @@
-// test_basic_import.cm - 基本的なインポートのテスト
+// test_basic_import.cm - 基本的なインポートテスト
+// すべてのエクスポートをインポート
 
-import math_lib;
+import math_utils;
+import string_utils;
 
 int main() {
-    // プリプロセッサ方式では直接アクセス
-    int sum = add(5, 3);
-    int product = multiply(4, 7);
-    int doubled = double_value(10);
+    // math_utilsからインポートした定数を使用
+    println("PI = {math_utils::PI}");
+    println("E = {math_utils::E}");
 
-    println("5 + 3 = {sum}");
-    println("4 * 7 = {product}");
-    println("10 * 2 = {doubled}");
+    // math_utilsからインポートした構造体を使用
+    math_utils::Vector2D v1;
+    v1.x = 0.0;
+    v1.y = 0.0;
+
+    math_utils::Vector2D v2;
+    v2.x = 3.0;
+    v2.y = 4.0;
+
+    // math_utilsからインポートした関数を使用
+    double sum = math_utils::add(10.5, 20.5);
+    println("10.5 + 20.5 = {sum}");
+
+    double product = math_utils::multiply(3.0, 7.0);
+    println("3.0 * 7.0 = {product}");
+
+    double dist = math_utils::distance(v1, v2);
+    println("Distance: {dist}");
+
+    // string_utilsからインポートした関数を使用
+    string hello = "Hello";
+    string world = "World";
+    string combined = string_utils::concat(hello, world);
+    println("Concat: {combined}");
+
+    int len = string_utils::strlen(hello);
+    println("Length of 'Hello': {len}");
+
+    // string_utilsからインポートした構造体を使用
+    string_utils::StringBuilder sb;
+    sb.buffer = "Test String";
+    sb.length = 11;
+
+    // Stringableインターフェースのメソッドを呼び出し
+    string result = sb.to_string();
+    println("StringBuilder result: {result}");
 
     return 0;
 }

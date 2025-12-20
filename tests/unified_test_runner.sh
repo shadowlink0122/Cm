@@ -167,8 +167,11 @@ run_single_test() {
     local category="$(basename "$(dirname "$test_file")")"
     local expect_file="${test_file%.cm}.expect"
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
+    local error_expect_file="${test_file%.cm}.error"
+    local backend_error_file="${test_file%.cm}.error.${BACKEND}"
     local output_file="$TEMP_DIR/${category}_${test_name}.out"
     local error_file="$TEMP_DIR/${category}_${test_name}.err"
+    local is_error_test=false
 
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
@@ -207,14 +210,22 @@ run_single_test() {
         fi
     fi
 
+    # バックエンド固有のerrorファイルがあれば優先して使用
+    if [ -f "$backend_error_file" ]; then
+        error_expect_file="$backend_error_file"
+        is_error_test=true
+    elif [ -f "$error_expect_file" ]; then
+        is_error_test=true
+    fi
+
     # バックエンド固有のexpectファイルがあれば優先して使用
     if [ -f "$backend_expect_file" ]; then
         expect_file="$backend_expect_file"
     fi
 
-    # expectファイルがない場合はスキップ
-    if [ ! -f "$expect_file" ]; then
-        echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No expect file"
+    # expectファイルもerrorファイルもない場合はスキップ
+    if [ ! -f "$expect_file" ] && [ ! -f "$error_expect_file" ]; then
+        echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No expect/error file"
         ((SKIPPED++))
         return
     fi
@@ -349,7 +360,10 @@ run_single_test() {
             rm -f "$wasm_file"
 
             # LLVM経由でWebAssembly生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_file" -o "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+            # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 # WASMランタイムで実行
@@ -466,8 +480,24 @@ EOJS
         return
     fi
 
+    # .errorファイルがある場合（エラーテスト）
+    if [ "$is_error_test" = true ]; then
+        # エラーが期待される（exit code 1を期待）
+        if [ $exit_code -eq 1 ]; then
+            echo -e "${GREEN}[PASS]${NC} $category/$test_name"
+            ((PASSED++))
+        elif [ $exit_code -eq 0 ]; then
+            echo -e "${RED}[FAIL]${NC} $category/$test_name - Expected error but succeeded"
+            ((FAILED++))
+        else
+            echo -e "${RED}[FAIL]${NC} $category/$test_name - Wrong exit code (expected 1, got $exit_code)"
+            if [ "$VERBOSE" = true ]; then
+                cat "$output_file"
+            fi
+            ((FAILED++))
+        fi
     # エラーファイルに期待される出力がある場合（コンパイルエラーテスト等）
-    if grep -q "error\|Error\|エラー" "$expect_file" 2>/dev/null; then
+    elif grep -q "error\|Error\|エラー" "$expect_file" 2>/dev/null; then
         # エラーが期待される場合
         if [ $exit_code -ne 0 ]; then
             # エラー出力を比較
@@ -684,7 +714,10 @@ run_parallel_test() {
     local category="$(basename "$(dirname "$test_file")")"
     local expect_file="${test_file%.cm}.expect"
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
+    local error_expect_file="${test_file%.cm}.error"
+    local backend_error_file="${test_file%.cm}.error.${BACKEND}"
     local output_file="$TEMP_DIR/${category}_${test_name}_$$.out"
+    local is_error_test=false
 
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
@@ -718,14 +751,22 @@ run_parallel_test() {
         fi
     fi
 
+    # バックエンド固有のerrorファイルがあれば優先して使用
+    if [ -f "$backend_error_file" ]; then
+        error_expect_file="$backend_error_file"
+        is_error_test=true
+    elif [ -f "$error_expect_file" ]; then
+        is_error_test=true
+    fi
+
     # バックエンド固有のexpectファイルがあれば優先
     if [ -f "$backend_expect_file" ]; then
         expect_file="$backend_expect_file"
     fi
 
-    # expectファイルがない場合
-    if [ ! -f "$expect_file" ]; then
-        echo "SKIP:No expect file" > "$result_file"
+    # expectファイルもerrorファイルもない場合はスキップ
+    if [ ! -f "$expect_file" ] && [ ! -f "$error_expect_file" ]; then
+        echo "SKIP:No expect/error file" > "$result_file"
         return
     fi
 
@@ -768,7 +809,9 @@ run_parallel_test() {
             ;;
         llvm-wasm)
             local wasm_file="$TEMP_DIR/wasm_${test_name}_$$.wasm"
-            run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_file" -o "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 if command -v wasmtime >/dev/null 2>&1; then
                     run_with_timeout_silent wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
@@ -794,7 +837,18 @@ run_parallel_test() {
     fi
 
     # 結果比較
-    if grep -q "error\|Error\|エラー" "$expect_file" 2>/dev/null; then
+    # .errorファイルがある場合（エラーテスト）
+    if [ "$is_error_test" = true ]; then
+        # エラーが期待される（exit code 1を期待）
+        if [ $exit_code -eq 1 ]; then
+            echo "PASS" > "$result_file"
+        elif [ $exit_code -eq 0 ]; then
+            echo "FAIL:Expected error but succeeded" > "$result_file"
+        else
+            echo "FAIL:Wrong exit code (expected 1, got $exit_code)" > "$result_file"
+        fi
+    # エラーファイルに期待される出力がある場合（コンパイルエラーテスト等）
+    elif grep -q "error\|Error\|エラー" "$expect_file" 2>/dev/null; then
         if [ $exit_code -ne 0 ]; then
             if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then
                 echo "PASS" > "$result_file"

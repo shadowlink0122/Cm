@@ -1,30 +1,30 @@
 #pragma once
 
+#include "../hir/hir_nodes.hpp"
+#include "../mir/mir_nodes.hpp"
+
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "../hir/hir_nodes.hpp"
-#include "../mir/mir_nodes.hpp"
-
 namespace cm::module {
 
 // モジュール情報を保持する構造体
 struct ModuleInfo {
-    std::string name;                        // モジュール名（例: "math_lib"）
-    std::string path;                        // ファイルパス
-    std::vector<std::string> exports;        // エクスポートされる名前
-    std::unique_ptr<hir::HirProgram> hir;    // HIR表現
-    std::unique_ptr<mir::MirProgram> mir;    // MIR表現（コンパイル後）
-    bool is_loaded = false;                  // ロード済みかどうか
-    bool is_compiled = false;                // コンパイル済みかどうか
+    std::string name;                      // モジュール名（例: "math_lib"）
+    std::string path;                      // ファイルパス
+    std::vector<std::string> exports;      // エクスポートされる名前
+    std::unique_ptr<hir::HirProgram> hir;  // HIR表現
+    std::unique_ptr<mir::MirProgram> mir;  // MIR表現（コンパイル後）
+    bool is_loaded = false;                // ロード済みかどうか
+    bool is_compiled = false;              // コンパイル済みかどうか
 };
 
 // モジュール解決器
 class ModuleResolver {
-private:
+   private:
     // モジュールキャッシュ（モジュール名 -> ModuleInfo）
     std::unordered_map<std::string, std::unique_ptr<ModuleInfo>> modules;
 
@@ -34,7 +34,7 @@ private:
     // 現在のディレクトリ
     std::filesystem::path current_dir;
 
-public:
+   public:
     ModuleResolver();
 
     // モジュール検索パスを追加
@@ -50,23 +50,19 @@ public:
     bool compile_module(const std::string& module_name);
 
     // エクスポートされた関数を検索
-    const mir::MirFunction* find_exported_function(
-        const std::string& module_name,
-        const std::string& function_name
-    );
+    const mir::MirFunction* find_exported_function(const std::string& module_name,
+                                                   const std::string& function_name);
 
     // エクスポートされた構造体を検索
-    const mir::MirStruct* find_exported_struct(
-        const std::string& module_name,
-        const std::string& struct_name
-    );
+    const mir::MirStruct* find_exported_struct(const std::string& module_name,
+                                               const std::string& struct_name);
 
     // すべてのロード済みモジュールを取得
     const std::unordered_map<std::string, std::unique_ptr<ModuleInfo>>& get_modules() const {
         return modules;
     }
 
-private:
+   private:
     // モジュールファイルをパース
     std::unique_ptr<hir::HirProgram> parse_module_file(const std::filesystem::path& path);
 

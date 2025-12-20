@@ -1,0 +1,52 @@
+// test_export_syntax.cm - エクスポート構文のテスト
+// インポートはまだ実装されていないので、エクスポート構文のみをテスト
+
+// 構造体のエクスポート
+export struct Point {
+    double x;
+    double y;
+}
+
+// 関数のエクスポート（main以外）
+export double calculate(double a, double b) {
+    return a + b;
+}
+
+// 定数のエクスポート
+export const int VERSION = 1;
+
+// インターフェースのエクスポート
+export interface Drawable {
+    void draw();
+}
+
+// Enumのエクスポート
+export enum Status {
+    OK,
+    ERROR
+}
+
+// typedefのエクスポート
+export typedef ID = int;
+
+// プライベート関数（エクスポートしない）
+double helper(double x) {
+    return x * 2.0;
+}
+
+// main関数（エクスポートしない）
+int main() {
+    Point p;
+    p.x = 1.0;
+    p.y = 2.0;
+
+    double result = calculate(p.x, p.y);
+    println("Result: {result}");
+
+    println("Version: {VERSION}");
+
+    Status s = Status::OK;
+    ID id = 42;
+
+    return 0;
+}

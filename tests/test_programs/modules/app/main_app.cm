@@ -1,0 +1,40 @@
+// app/main_app.cm - メインアプリケーション
+// 親ディレクトリからの相対インポート
+
+// 親ディレクトリのutilsからインポート
+import ../utils/common;
+import ../utils/logger;
+
+// ルートからの絶対インポートも可能
+import math_utils;
+
+// アプリケーション構造体
+export struct Application {
+    string name;
+    logger::Logger log;
+    common::Config config;
+};
+
+// アプリケーション初期化
+export Application create_app(string name) {
+    Application app;
+    app.name = name;
+    app.log = logger::create_logger(logger::LogLevel::INFO);
+    app.config = common::create_default_config();
+    app.config.name = name;
+    return app;
+}
+
+// アプリケーション実行
+export void run_app(Application app) {
+    logger::log(app.log, logger::LogLevel::INFO, "Application starting: {app.name}");
+
+    // math_utilsの機能も使用
+    double result = math_utils::add(common::VERSION, 0.5);
+    println("Version calculation: {result}");
+
+    // configを表示
+    common::print_config(app.config);
+
+    logger::log(app.log, logger::LogLevel::INFO, "Application finished");
+}

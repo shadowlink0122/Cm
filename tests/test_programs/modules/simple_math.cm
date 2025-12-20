@@ -1,0 +1,23 @@
+// simple_math.cm - シンプルな数学モジュール（構造体なし）
+
+// 定数をエクスポート
+export const int MAGIC_NUMBER = 42;
+export const double SIMPLE_PI = 3.14;
+
+// 関数をエクスポート
+export int add_int(int a, int b) {
+    return a + b;
+}
+
+export double add_double(double a, double b) {
+    return a + b;
+}
+
+export int multiply_int(int a, int b) {
+    return a * b;
+}
+
+// プライベート関数（エクスポートしない）
+int internal_calc(int x) {
+    return x * 2;
+}

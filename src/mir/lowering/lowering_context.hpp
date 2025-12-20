@@ -68,6 +68,9 @@ class LoweringContext {
     // インターフェース名のセット - 親クラスから参照
     const std::unordered_set<std::string>* interface_names = nullptr;
 
+    // グローバルconst変数の値 - 親クラスから参照
+    const std::unordered_map<std::string, MirConstant>* global_const_values = nullptr;
+
     // const変数の値のキャッシュ (変数名 -> 定数値)
     // 文字列補間で使用するため、const変数の初期値を保持
     std::unordered_map<std::string, MirConstant> const_values;
@@ -253,12 +256,22 @@ class LoweringContext {
         const_values[name] = value;
     }
 
-    // const変数の値を取得
+    // const変数の値を取得（関数ローカルとグローバルの両方をチェック）
     std::optional<MirConstant> get_const_value(const std::string& name) {
+        // まず関数ローカルのconst変数をチェック
         auto it = const_values.find(name);
         if (it != const_values.end()) {
             return it->second;
         }
+
+        // 次にグローバルconst変数をチェック
+        if (global_const_values) {
+            auto global_it = global_const_values->find(name);
+            if (global_it != global_const_values->end()) {
+                return global_it->second;
+            }
+        }
+
         return std::nullopt;
     }
 

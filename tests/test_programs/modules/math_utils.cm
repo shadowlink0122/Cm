@@ -1,0 +1,48 @@
+// math_utils.cm - 数学ユーティリティモジュール
+// v4モジュールシステムテスト: 宣言時エクスポート
+
+// 定数をエクスポート
+export const double PI = 3.14159265359;
+export const double E = 2.71828182846;
+
+// 構造体をエクスポート
+export struct Vector2D {
+    double x;
+    double y;
+};
+
+// 関数をエクスポート
+export double add(double a, double b) {
+    return a + b;
+}
+
+export double multiply(double a, double b) {
+    return a * b;
+}
+
+export double distance(Vector2D v1, Vector2D v2) {
+    double dx = v2.x - v1.x;
+    double dy = v2.y - v1.y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+// プライベート関数（エクスポートしない）
+double internal_helper(double x) {
+    return x * x;
+}
+
+// 内部でのみ使用する関数
+double sqrt(double x) {
+    // 簡単な平方根の近似実装
+    if (x < 0) return 0;
+    if (x == 0) return 0;
+
+    double guess = x;
+    double epsilon = 0.00001;
+
+    while ((guess * guess - x) > epsilon) {
+        guess = (guess + x / guess) / 2.0;
+    }
+
+    return guess;
+}

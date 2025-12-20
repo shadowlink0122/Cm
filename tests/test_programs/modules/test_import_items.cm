@@ -1,8 +1,0 @@
-// test_import_items.cm - 選択的インポートテスト
-
-import math_lib::{add};
-
-int main() {
-    println("Selective import test - compiled successfully");
-    return 0;
-}

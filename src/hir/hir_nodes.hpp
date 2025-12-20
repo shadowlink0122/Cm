@@ -398,10 +398,19 @@ struct HirTypedef {
     bool is_export = false;
 };
 
-using HirDeclKind =
-    std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
-                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
-                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>, std::unique_ptr<HirTypedef>>;
+// グローバル変数/定数定義
+struct HirGlobalVar {
+    std::string name;
+    TypePtr type;
+    HirExprPtr init;
+    bool is_const;
+    bool is_export = false;
+};
+
+using HirDeclKind = std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
+                                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
+                                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>,
+                                 std::unique_ptr<HirTypedef>, std::unique_ptr<HirGlobalVar>>;
 
 struct HirDecl {
     HirDeclKind kind;

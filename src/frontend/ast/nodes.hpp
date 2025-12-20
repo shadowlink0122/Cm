@@ -135,13 +135,13 @@ struct MacroDecl;
 struct UseDecl;
 struct EnumDecl;
 struct TypedefDecl;
+struct GlobalVarDecl;
 
-using DeclKind =
-    std::variant<std::unique_ptr<FunctionDecl>, std::unique_ptr<StructDecl>,
-                 std::unique_ptr<InterfaceDecl>, std::unique_ptr<ImplDecl>,
-                 std::unique_ptr<ImportDecl>, std::unique_ptr<ExportDecl>,
-                 std::unique_ptr<ModuleDecl>, std::unique_ptr<MacroDecl>, std::unique_ptr<UseDecl>,
-                 std::unique_ptr<EnumDecl>, std::unique_ptr<TypedefDecl>>;
+using DeclKind = std::variant<
+    std::unique_ptr<FunctionDecl>, std::unique_ptr<StructDecl>, std::unique_ptr<InterfaceDecl>,
+    std::unique_ptr<ImplDecl>, std::unique_ptr<ImportDecl>, std::unique_ptr<ExportDecl>,
+    std::unique_ptr<ModuleDecl>, std::unique_ptr<MacroDecl>, std::unique_ptr<UseDecl>,
+    std::unique_ptr<EnumDecl>, std::unique_ptr<TypedefDecl>, std::unique_ptr<GlobalVarDecl>>;
 
 struct Decl : Node {
     DeclKind kind;

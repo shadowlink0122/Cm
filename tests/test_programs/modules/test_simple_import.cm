@@ -1,8 +1,21 @@
-// test_simple_import.cm - 最もシンプルなインポートテスト
+// test_simple_import.cm - シンプルなインポートテスト
 
-import math_lib;
+import simple_math;
 
 int main() {
-    println("Import test - compiled successfully");
+    // インポートした定数を使用
+    println("MAGIC_NUMBER = {simple_math::MAGIC_NUMBER}");
+    println("SIMPLE_PI = {simple_math::SIMPLE_PI}");
+
+    // インポートした関数を使用
+    int sum = simple_math::add_int(10, 20);
+    println("10 + 20 = {sum}");
+
+    double dsum = simple_math::add_double(1.5, 2.5);
+    println("1.5 + 2.5 = {dsum}");
+
+    int product = simple_math::multiply_int(6, 7);
+    println("6 * 7 = {product}");
+
     return 0;
 }

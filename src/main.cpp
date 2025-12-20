@@ -10,6 +10,7 @@
 
 #include "codegen/interpreter/interpreter.hpp"
 #include "common/debug_messages.hpp"
+#include "common/source_location.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
@@ -353,10 +354,15 @@ int main(int argc, char* argv[]) {
 
         if (parser.has_errors()) {
             std::cerr << "構文エラーが発生しました\n";
+            // ソース位置管理を作成
+            SourceLocationManager loc_mgr(code, opts.input_file);
+
             // 診断情報を表示
             for (const auto& diag : parser.diagnostics()) {
-                std::cerr << "  " << (diag.kind == DiagKind::Error ? "エラー" : "警告") << ": "
-                          << diag.message << "\n";
+                // エラーメッセージをフォーマットして表示
+                std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                std::cerr << loc_mgr.format_error_location(diag.span,
+                                                           error_type + ": " + diag.message);
             }
             std::exit(1);  // エラー時はexit(1)で終了
         }
@@ -374,6 +380,16 @@ int main(int argc, char* argv[]) {
         TypeChecker checker;
         if (!checker.check(program)) {
             std::cerr << "型エラーが発生しました\n";
+            // ソース位置管理を作成
+            SourceLocationManager loc_mgr(code, opts.input_file);
+
+            // 診断情報を表示
+            for (const auto& diag : checker.diagnostics()) {
+                // エラーメッセージをフォーマットして表示
+                std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                std::cerr << loc_mgr.format_error_location(diag.span,
+                                                           error_type + ": " + diag.message);
+            }
             return 1;
         }
         if (opts.debug)

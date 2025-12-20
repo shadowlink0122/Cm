@@ -46,8 +46,12 @@ class MirLoweringBase {
     // インターフェース定義 (インターフェース名 -> HirInterface)
     std::unordered_map<std::string, const hir::HirInterface*> interface_defs_;
 
+    // グローバルconst変数の値 (変数名 -> 定数値)
+    // 文字列補間で使用するため、モジュールレベルのconst変数の初期値を保持
+    std::unordered_map<std::string, MirConstant> global_const_values;
+
     // モジュール関連
-    std::string current_module_path;  // 現在のモジュールパス
+    std::string current_module_path;    // 現在のモジュールパス
     std::vector<MirImportPtr> imports;  // インポートリスト
     std::unordered_map<std::string, std::string> imported_modules;  // エイリアス -> モジュールパス
 
@@ -100,7 +104,8 @@ class MirLoweringBase {
                 // モジュール名を構築（例: ["std", "io"] -> "std::io"）
                 std::string module_name;
                 for (size_t i = 0; i < mir_import->path.size(); ++i) {
-                    if (i > 0) module_name += "::";
+                    if (i > 0)
+                        module_name += "::";
                     module_name += mir_import->path[i];
                 }
 
@@ -167,6 +172,22 @@ class MirLoweringBase {
     void register_enum(const hir::HirEnum& e) {
         for (const auto& member : e.members) {
             enum_defs[e.name][member.name] = member.value;
+        }
+    }
+
+    // グローバルconst変数を登録
+    void register_global_var(const hir::HirGlobalVar& gv) {
+        // const変数のみ登録（文字列補間で使用）
+        if (gv.is_const && gv.init) {
+            // 初期化式がリテラルの場合のみ値を保存
+            if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&gv.init->kind)) {
+                if (*lit) {
+                    MirConstant const_val;
+                    const_val.type = gv.type;
+                    const_val.value = (*lit)->value;
+                    global_const_values[gv.name] = const_val;
+                }
+            }
         }
     }
 

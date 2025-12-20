@@ -1,12 +1,12 @@
 #include "import_preprocessor.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <regex>
-#include <sstream>
 #include <map>
+#include <regex>
 #include <set>
-#include <algorithm>
+#include <sstream>
 
 namespace cm::preprocessor {
 
@@ -34,11 +34,11 @@ ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
     if (const char* env_path = std::getenv("CM_MODULE_PATH")) {
         std::stringstream ss(env_path);
         std::string path;
-        #ifdef _WIN32
+#ifdef _WIN32
         const char delimiter = ';';
-        #else
+#else
         const char delimiter = ':';
-        #endif
+#endif
         while (std::getline(ss, path, delimiter)) {
             if (!path.empty()) {
                 search_paths.push_back(std::filesystem::path(path));
@@ -52,9 +52,7 @@ void ImportPreprocessor::add_search_path(const std::filesystem::path& path) {
 }
 
 ImportPreprocessor::ProcessResult ImportPreprocessor::process(
-    const std::string& source_code,
-    const std::filesystem::path& source_file
-) {
+    const std::string& source_code, const std::filesystem::path& source_file) {
     ProcessResult result;
     result.success = true;
 
@@ -76,17 +74,17 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
     return result;
 }
 
-std::string ImportPreprocessor::process_imports(
-    const std::string& source,
-    const std::filesystem::path& current_file,
-    std::unordered_set<std::string>& imported_files
-) {
+std::string ImportPreprocessor::process_imports(const std::string& source,
+                                                const std::filesystem::path& current_file,
+                                                std::unordered_set<std::string>& imported_files) {
     std::stringstream result;
     std::stringstream input(source);
     std::string line;
+    size_t line_number = 0;  // 行番号を追跡
 
     // 各行を処理
     while (std::getline(input, line)) {
+        line_number++;
         // インポート文を検出（複数パターンに対応）
         // 基本: import module;
         // エイリアス: import module as alias;
@@ -110,11 +108,17 @@ std::string ImportPreprocessor::process_imports(
 
             // インポート文をパース
             auto import_info = parse_import_statement(import_statement);
+            import_info.line_number = line_number;
+            // ファイル名を相対パスに変換
+            import_info.source_file =
+                std::filesystem::relative(current_file, std::filesystem::current_path()).string();
+            import_info.source_line = line;
 
             // 標準ライブラリのインポートはスキップ（コンパイラに処理させる）
             if (import_info.module_name.find("std::") == 0 || import_info.module_name == "std") {
                 if (debug_mode) {
-                    std::cout << "[PREPROCESSOR] Skipping standard library import: " << import_info.module_name << "\n";
+                    std::cout << "[PREPROCESSOR] Skipping standard library import: "
+                              << import_info.module_name << "\n";
                 }
                 result << line << "\n";
                 continue;
@@ -131,24 +135,51 @@ std::string ImportPreprocessor::process_imports(
             // モジュールパスを解決
             auto module_path = resolve_module_path(import_info.module_name, current_file);
             if (module_path.empty()) {
-                throw std::runtime_error("Module not found: " + import_info.module_name);
+                // 詳細なエラーメッセージ
+                std::stringstream error;
+                error << import_info.source_file << ":" << import_info.line_number << ":8: ";
+                error << "エラー: モジュールが見つかりません: " << import_info.module_name << "\n";
+                error << "  " << import_info.source_line << "\n";
+                error << "         ^" << std::string(import_info.module_name.length() - 1, '~')
+                      << "\n";
+                throw std::runtime_error(error.str());
             }
 
             // 正規化されたパスを取得
             std::string canonical_path = std::filesystem::canonical(module_path).string();
 
+            // 循環依存チェック（再インポート防止より先に行う）
+            if (std::find(import_stack.begin(), import_stack.end(), canonical_path) !=
+                import_stack.end()) {
+                // 詳細なエラーメッセージを生成
+                std::stringstream error;
+                error << "Circular dependency detected:\n";
+                error << import_info.source_file << ":" << import_info.line_number << ":1: ";
+                error << "エラー: 循環依存が検出されました\n";
+                error << "  " << import_info.source_line << "\n";
+
+                // インポートスタックを表示（相対パスで）
+                error << "\n依存関係:\n";
+                auto cwd = std::filesystem::current_path();
+                for (size_t i = 0; i < import_stack.size(); ++i) {
+                    auto rel_path = std::filesystem::relative(import_stack[i], cwd);
+                    error << "  " << (i + 1) << ". " << rel_path.string() << "\n";
+                }
+                auto rel_canonical = std::filesystem::relative(canonical_path, cwd);
+                error << "  " << (import_stack.size() + 1) << ". " << rel_canonical.string()
+                      << " (循環参照)\n";
+
+                throw std::runtime_error(error.str());
+            }
+
             // 再インポート防止チェック
             if (imported_modules.count(canonical_path) > 0) {
                 if (debug_mode) {
-                    std::cout << "[PREPROCESSOR] Skipping already imported: " << canonical_path << "\n";
+                    std::cout << "[PREPROCESSOR] Skipping already imported: " << canonical_path
+                              << "\n";
                 }
                 result << "// Already imported: " << import_info.module_name << "\n";
                 continue;
-            }
-
-            // 循環依存チェック
-            if (std::find(import_stack.begin(), import_stack.end(), canonical_path) != import_stack.end()) {
-                throw std::runtime_error(format_circular_dependency_error(import_stack, canonical_path));
             }
 
             // インポートスタックに追加
@@ -183,8 +214,8 @@ std::string ImportPreprocessor::process_imports(
 
             // エイリアスの処理
             if (!import_info.alias.empty()) {
-                result << "\n// ===== Begin module: " << import_info.module_name
-                      << " (as " << import_info.alias << ") =====\n";
+                result << "\n// ===== Begin module: " << import_info.module_name << " (as "
+                       << import_info.alias << ") =====\n";
                 result << "namespace " << import_info.alias << " {\n";
                 result << module_source;
                 result << "} // namespace " << import_info.alias << "\n";
@@ -199,9 +230,11 @@ std::string ImportPreprocessor::process_imports(
                 }
                 result << "// ===== End from " << import_info.module_name << " =====\n\n";
             } else {
-                // 通常のインポート
+                // 通常のインポート - エクスポートされた項目にプレフィックスを追加
                 result << "\n// ===== Begin module: " << import_info.module_name << " =====\n";
-                result << module_source;
+                std::string prefixed_source =
+                    add_module_prefix(module_source, import_info.module_name);
+                result << prefixed_source;
                 result << "\n// ===== End module: " << import_info.module_name << " =====\n\n";
             }
 
@@ -217,9 +250,7 @@ std::string ImportPreprocessor::process_imports(
 }
 
 std::filesystem::path ImportPreprocessor::find_module_file(
-    const std::string& module_name,
-    const std::filesystem::path& current_file
-) {
+    const std::string& module_name, const std::filesystem::path& current_file) {
     // モジュール名をファイルパスに変換
     std::string filename = module_name;
     std::replace(filename.begin(), filename.end(), ':', '/');
@@ -261,10 +292,8 @@ std::string ImportPreprocessor::load_module_file(const std::filesystem::path& mo
     return buffer.str();
 }
 
-std::string ImportPreprocessor::filter_exports(
-    const std::string& module_source,
-    const std::vector<std::string>& import_items
-) {
+std::string ImportPreprocessor::filter_exports(const std::string& module_source,
+                                               const std::vector<std::string>& import_items) {
     // 選択的インポート：指定されたアイテムのみを抽出
     std::stringstream result;
     std::stringstream input(module_source);
@@ -273,27 +302,49 @@ std::string ImportPreprocessor::filter_exports(
     std::string current_export_name;
     std::vector<std::string> block_lines;
     int brace_depth = 0;
+    bool found_opening_brace = false;
 
     while (std::getline(input, line)) {
         // エクスポートされた関数/構造体を検出
         std::smatch match;
-        if (std::regex_search(line, match, std::regex(R"(export\s+(?:int|void|float|double|bool|char|struct|interface|enum)\s+(\w+))"))) {
+        if (!in_export_block &&
+            std::regex_search(
+                line, match,
+                std::regex(
+                    R"(export\s+(?:int|void|float|double|bool|char|struct|interface|enum)\s+(\w+))"))) {
             current_export_name = match[1];
 
             // 指定されたアイテムかチェック
-            if (std::find(import_items.begin(), import_items.end(), current_export_name) != import_items.end()) {
+            if (std::find(import_items.begin(), import_items.end(), current_export_name) !=
+                import_items.end()) {
                 in_export_block = true;
                 block_lines.clear();
                 block_lines.push_back(line);
+                brace_depth = 0;
+                found_opening_brace = false;
 
-                // 開き括弧をカウント
-                for (char c : line) {
-                    if (c == '{') brace_depth++;
-                    else if (c == '}') brace_depth--;
+                // 開き括弧をチェック
+                if (line.find('{') != std::string::npos) {
+                    found_opening_brace = true;
+                    // 括弧の深さを正確にカウント
+                    for (char c : line) {
+                        if (c == '{')
+                            brace_depth++;
+                        else if (c == '}')
+                            brace_depth--;
+                    }
                 }
 
-                // 1行で完結する場合
-                if (brace_depth == 0 && (line.find(';') != std::string::npos || line.find('}') != std::string::npos)) {
+                // 1行で完結する場合（セミコロンで終わる宣言）
+                if (!found_opening_brace && line.find(';') != std::string::npos) {
+                    for (const auto& block_line : block_lines) {
+                        result << block_line << "\n";
+                    }
+                    in_export_block = false;
+                    block_lines.clear();
+                }
+                // 1行で完結する場合（括弧が閉じている）
+                else if (found_opening_brace && brace_depth == 0) {
                     for (const auto& block_line : block_lines) {
                         result << block_line << "\n";
                     }
@@ -305,25 +356,36 @@ std::string ImportPreprocessor::filter_exports(
             // エクスポートブロック内
             block_lines.push_back(line);
 
-            // 括弧の深さを追跡
-            for (char c : line) {
-                if (c == '{') brace_depth++;
-                else if (c == '}') brace_depth--;
+            // まだ開き括弧を見つけていない場合
+            if (!found_opening_brace && line.find('{') != std::string::npos) {
+                found_opening_brace = true;
             }
 
-            // ブロックの終了を検出
-            if (brace_depth == 0) {
-                // ブロック全体を出力
-                for (const auto& block_line : block_lines) {
-                    result << block_line << "\n";
+            // 括弧の深さを追跡
+            if (found_opening_brace) {
+                for (char c : line) {
+                    if (c == '{')
+                        brace_depth++;
+                    else if (c == '}')
+                        brace_depth--;
                 }
-                in_export_block = false;
-                block_lines.clear();
+
+                // ブロックの終了を検出
+                if (brace_depth == 0) {
+                    // ブロック全体を出力
+                    for (const auto& block_line : block_lines) {
+                        result << block_line << "\n";
+                    }
+                    in_export_block = false;
+                    block_lines.clear();
+                    found_opening_brace = false;
+                }
             }
         } else if (line.find("export") == std::string::npos) {
             // エクスポートされていない行はそのまま保持（型定義など）
             // ただし、関数定義は除外
-            if (!std::regex_search(line, std::regex(R"(^\s*(?:int|void|float|double|bool|char)\s+\w+\s*\()"))) {
+            if (!std::regex_search(
+                    line, std::regex(R"(^\s*(?:int|void|float|double|bool|char)\s+\w+\s*\()"))) {
                 result << line << "\n";
             }
         }
@@ -369,7 +431,8 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
     }
 
     // 定義を収集するためのマップ
-    std::map<std::string, std::pair<int, std::string>> definitions;  // name -> (line_start, definition)
+    std::map<std::string, std::pair<int, std::string>>
+        definitions;  // name -> (line_start, definition)
     std::set<std::string> exported_names;
 
     // Phase 1: 定義を収集
@@ -377,7 +440,8 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
         const std::string& line = lines[i];
 
         // 関数定義を検出
-        std::regex func_regex(R"(^\s*(?:export\s+)?(?:int|float|double|void|bool|char)\s+(\w+)\s*\()");
+        std::regex func_regex(
+            R"(^\s*(?:export\s+)?(?:int|float|double|void|bool|char)\s+(\w+)\s*\()");
         std::smatch match;
         if (std::regex_search(line, match, func_regex)) {
             std::string name = match[1];
@@ -387,15 +451,19 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
 
             // 関数本体を収集
             for (; j < lines.size(); ++j) {
-                if (j > i) def += "\n" + lines[j];
+                if (j > i)
+                    def += "\n" + lines[j];
                 for (char c : lines[j]) {
-                    if (c == '{') brace_count++;
+                    if (c == '{')
+                        brace_count++;
                     else if (c == '}') {
                         brace_count--;
-                        if (brace_count == 0) break;
+                        if (brace_count == 0)
+                            break;
                     }
                 }
-                if (brace_count == 0 && lines[j].find('}') != std::string::npos) break;
+                if (brace_count == 0 && lines[j].find('}') != std::string::npos)
+                    break;
             }
 
             definitions[name] = {i, def};
@@ -413,8 +481,10 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
             for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
                 def += "\n" + lines[j];
                 for (char c : lines[j]) {
-                    if (c == '{') brace_count++;
-                    else if (c == '}') brace_count--;
+                    if (c == '{')
+                        brace_count++;
+                    else if (c == '}')
+                        brace_count--;
                 }
                 if (brace_count == 0) {
                     i = j;
@@ -522,7 +592,8 @@ std::string ImportPreprocessor::process_namespace_exports(const std::string& sou
         } else if (in_namespace_export) {
             // サブ名前空間内のコンテンツを収集
             for (char c : line) {
-                if (c == '{') brace_depth++;
+                if (c == '{')
+                    brace_depth++;
                 else if (c == '}') {
                     brace_depth--;
                     if (brace_depth == 0) {
@@ -564,8 +635,7 @@ std::string ImportPreprocessor::process_namespace_exports(const std::string& sou
 }
 
 ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
-    const std::string& import_line
-) {
+    const std::string& import_line) {
     ImportInfo info;
 
     // セミコロンを削除
@@ -675,7 +745,8 @@ void ImportPreprocessor::parse_import_items(const std::string& items_str, Import
     }
 }
 
-std::filesystem::path ImportPreprocessor::find_project_root(const std::filesystem::path& current_path) {
+std::filesystem::path ImportPreprocessor::find_project_root(
+    const std::filesystem::path& current_path) {
     auto path = std::filesystem::absolute(current_path);
 
     // プロジェクトルートの検出優先順位：
@@ -710,9 +781,7 @@ std::filesystem::path ImportPreprocessor::find_project_root(const std::filesyste
 }
 
 std::filesystem::path ImportPreprocessor::resolve_module_path(
-    const std::string& module_specifier,
-    const std::filesystem::path& current_file
-) {
+    const std::string& module_specifier, const std::filesystem::path& current_file) {
     // 相対パス（./ または ../）の場合
     if (module_specifier.substr(0, 2) == "./" || module_specifier.substr(0, 3) == "../") {
         if (current_file.empty()) {
@@ -730,7 +799,8 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
         }
 
         // ディレクトリ内のエントリーポイントを探す
-        if (std::filesystem::exists(relative_path) && std::filesystem::is_directory(relative_path)) {
+        if (std::filesystem::exists(relative_path) &&
+            std::filesystem::is_directory(relative_path)) {
             auto entry = find_module_entry_point(relative_path);
             if (!entry.empty()) {
                 return entry;
@@ -749,6 +819,24 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
     // 絶対パス（プロジェクトルートから）
     std::string filename = module_specifier;
     std::replace(filename.begin(), filename.end(), ':', '/');
+
+    // まず現在のファイルと同じディレクトリをチェック
+    if (!current_file.empty()) {
+        auto current_dir = current_file.parent_path();
+        auto same_dir_path = current_dir / (filename + ".cm");
+        if (std::filesystem::exists(same_dir_path)) {
+            return std::filesystem::canonical(same_dir_path);
+        }
+
+        // ディレクトリ内のエントリーポイントも探す
+        auto dir_path = current_dir / filename;
+        if (std::filesystem::exists(dir_path) && std::filesystem::is_directory(dir_path)) {
+            auto entry = find_module_entry_point(dir_path);
+            if (!entry.empty()) {
+                return entry;
+            }
+        }
+    }
 
     // 検索パスから探す
     for (const auto& search_path : search_paths) {
@@ -771,7 +859,8 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
     return {};  // 見つからない
 }
 
-std::filesystem::path ImportPreprocessor::find_module_entry_point(const std::filesystem::path& directory) {
+std::filesystem::path ImportPreprocessor::find_module_entry_point(
+    const std::filesystem::path& directory) {
     // module文を含むファイルを探す
     for (const auto& entry : std::filesystem::directory_iterator(directory)) {
         if (entry.path().extension() == ".cm") {
@@ -781,7 +870,8 @@ std::filesystem::path ImportPreprocessor::find_module_entry_point(const std::fil
             int line_count = 0;
             while (std::getline(file, line) && line_count++ < 10) {
                 // コメントをスキップ
-                if (line.find("//") == 0) continue;
+                if (line.find("//") == 0)
+                    continue;
 
                 // module文を検出
                 std::regex module_regex(R"(^\s*module\s+([a-zA-Z_][a-zA-Z0-9_:]*)\s*;)");
@@ -802,9 +892,7 @@ std::filesystem::path ImportPreprocessor::find_module_entry_point(const std::fil
 }
 
 std::string ImportPreprocessor::format_circular_dependency_error(
-    const std::vector<std::string>& stack,
-    const std::string& module
-) {
+    const std::vector<std::string>& stack, const std::string& module) {
     std::stringstream error;
     error << "Circular dependency detected:\n";
     for (size_t i = 0; i < stack.size(); ++i) {
@@ -812,6 +900,45 @@ std::string ImportPreprocessor::format_circular_dependency_error(
     }
     error << "  " << (stack.size() + 1) << ". " << module << " (circular reference)\n";
     return error.str();
+}
+
+std::string ImportPreprocessor::add_module_prefix(const std::string& source,
+                                                  const std::string& module_name) {
+    // すでにexportキーワードは削除されているので、関数と定数の宣言に
+    // モジュール名をプレフィックスとして追加する
+
+    std::string result;
+    std::istringstream input(source);
+    std::string line;
+
+    while (std::getline(input, line)) {
+        // const定数の宣言を検出してプレフィックスを追加
+        std::regex const_regex(R"(^(\s*const\s+\w+\s+)(\w+)(\s*=.*)$)");
+        std::smatch const_match;
+        if (std::regex_match(line, const_match, const_regex)) {
+            result += const_match[1].str() + module_name + "::" + const_match[2].str() +
+                      const_match[3].str() + "\n";
+            continue;
+        }
+
+        // 関数宣言を検出してプレフィックスを追加
+        // 型 関数名(パラメータ) { の形式
+        std::regex func_regex(R"(^(\s*\w+\s+)(\w+)(\s*\([^)]*\)\s*\{.*)$)");
+        std::smatch func_match;
+        if (std::regex_match(line, func_match, func_regex)) {
+            // main関数は除外
+            if (func_match[2].str() != "main") {
+                result += func_match[1].str() + module_name + "::" + func_match[2].str() +
+                          func_match[3].str() + "\n";
+                continue;
+            }
+        }
+
+        // その他の行はそのまま出力
+        result += line + "\n";
+    }
+
+    return result;
 }
 
 }  // namespace cm::preprocessor

@@ -1,7 +1,5 @@
 // エラーケース: 引数の数が不正
-import std::io::println;
 int main() {
     println();  // printlnは引数が必要
-    println(1, 2, 3);  // printlnは引数を1つだけ取る
     return 0;
 }

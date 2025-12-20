@@ -1,0 +1,12 @@
+// test_simple.cm - 最もシンプルなテスト
+// 現在動作する部分のみ
+
+int helper() {
+    return 42;
+}
+
+int main() {
+    int value = helper();
+    println("Value: {value}");
+    return 0;
+}

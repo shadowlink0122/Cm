@@ -1,0 +1,21 @@
+// v4モジュールシステムのテスト：再エクスポート
+module utils;
+
+// サブモジュールからインポート
+import ./math_module;
+import ./graphics_module;
+
+// 独自の関数定義
+float lerp(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+// 再エクスポート（from句を使用）
+export PI, E from ./math_module;
+export Point, Rectangle from ./graphics_module;
+
+// ワイルドカード再エクスポート
+export * from ./helpers;
+
+// 独自の関数をエクスポート
+export lerp;

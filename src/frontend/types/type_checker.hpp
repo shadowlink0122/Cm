@@ -936,12 +936,13 @@ class TypeChecker {
                 if (auto* ident = binary.left->as<ast::IdentExpr>()) {
                     auto sym = scopes_.current().lookup(ident->name);
                     if (sym && sym->is_const) {
-                        error(Span{}, "Cannot assign to const variable '" + ident->name + "'");
+                        error(binary.left->span,
+                              "Cannot assign to const variable '" + ident->name + "'");
                         return ast::make_error();
                     }
                 }
                 if (!types_compatible(ltype, rtype)) {
-                    error(Span{}, "Assignment type mismatch");
+                    error(binary.left->span, "Assignment type mismatch");
                 }
                 return ltype;
             }
@@ -1022,6 +1023,17 @@ class TypeChecker {
             // 組み込み関数の特別処理
             if (ident->name == "println" || ident->name == "print") {
                 // println/print は特別扱い（可変長引数をサポート）
+
+                // 引数の数チェック（最低1個、最大1個）
+                if (call.args.empty()) {
+                    error(Span{}, "'" + ident->name + "' requires at least 1 argument");
+                    return ast::make_error();
+                }
+                if (call.args.size() > 1) {
+                    error(Span{}, "'" + ident->name + "' takes only 1 argument, got " +
+                                      std::to_string(call.args.size()));
+                    return ast::make_error();
+                }
 
                 // 引数の型チェック（すべての型を受け入れる）
                 for (auto& arg : call.args) {

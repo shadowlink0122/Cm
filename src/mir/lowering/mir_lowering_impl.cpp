@@ -68,6 +68,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.global_const_values = &global_const_values;
 
     // selfパラメータを登録
     auto self_type = hir::make_named(type_name);
@@ -117,7 +118,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     auto mir_func = std::make_unique<MirFunction>();
     mir_func->name = func.name;
     mir_func->module_path = current_module_path;  // モジュールパスを設定
-    mir_func->is_export = func.is_export;  // エクスポートフラグを設定
+    mir_func->is_export = func.is_export;         // エクスポートフラグを設定
 
     // 戻り値用のローカル変数（typedefを解決）
     mir_func->return_local = 0;
@@ -134,6 +135,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.global_const_values = &global_const_values;
 
     // デストラクタを持つ型の情報をコンテキストに渡す
     for (const auto& type_name : types_with_destructor) {
