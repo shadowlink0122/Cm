@@ -380,3 +380,30 @@ import ./lib/io/*;
 file::read_file(5);
 stream::open_stream(3);
 ```
+
+### 階層再構築エクスポート
+
+`export { ns::{item1, item2} }` 構文を使用して、インポートしたモジュールを親名前空間内に再配置できます：
+
+```cm
+// std.cm
+module std;
+
+import ./io/file;
+import ./io/stream;
+
+// fileとstreamをio名前空間内に配置して再エクスポート
+export { io::{file, stream} };
+```
+
+使用側：
+
+```cm
+import ./std;
+
+int main() {
+    std::io::file::read_file(5);
+    std::io::stream::open_stream(3);
+    return 0;
+}
+```

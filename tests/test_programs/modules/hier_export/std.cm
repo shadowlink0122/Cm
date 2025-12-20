@@ -1,7 +1,8 @@
 // std.cm - 階層再構築エクスポートテスト
 module std;
 
-import ./io;
+import ./io/file;
+import ./io/stream;
 
-// io名前空間ごと再エクスポート
-export { io };
+// 階層再構築エクスポート: io名前空間内にfileとstreamを配置
+export { io::{file, stream} };

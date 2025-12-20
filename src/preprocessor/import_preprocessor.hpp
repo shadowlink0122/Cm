@@ -129,6 +129,9 @@ class ImportPreprocessor {
 
     // implの暗黙的エクスポート処理
     std::string process_implicit_impl_export(const std::string& source);
+    
+    // 階層再構築エクスポート処理: export { ns::{item1, item2} }
+    std::string process_hierarchical_reexport(const std::string& source);
 };
 
 }  // namespace cm::preprocessor

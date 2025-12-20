@@ -731,6 +731,9 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
     // 先にexport構文を処理
     std::string processed = process_export_syntax(source);
     processed = process_namespace_exports(processed);
+    
+    // 階層再構築エクスポートを処理: export { ns::{item1, item2} }
+    processed = process_hierarchical_reexport(processed);
 
     // implの暗黙的エクスポート: exportされた構造体のimplも自動的にエクスポート
     processed = process_implicit_impl_export(processed);
@@ -1612,6 +1615,142 @@ std::string ImportPreprocessor::process_implicit_impl_export(const std::string& 
         result << line << "\n";
     }
 
+    return result.str();
+}
+
+std::string ImportPreprocessor::process_hierarchical_reexport(const std::string& source) {
+    // export { ns::{item1, item2} } パターンを検出
+    // 例: export { io::{file, stream} }
+    // これは、fileとstreamの名前空間をio名前空間内に移動する
+    
+    std::regex hier_export_regex(R"(//\s*\{\s*(\w+)::\{([^}]+)\}\s*\};\s*\(processed\))");
+    std::smatch match;
+    
+    if (!std::regex_search(source, match, hier_export_regex)) {
+        return source;  // 階層再構築パターンがない場合はそのまま返す
+    }
+    
+    std::string parent_ns = match[1].str();  // 例: "io"
+    std::string items_str = match[2].str();  // 例: "file, stream"
+    
+    // アイテムをパース
+    std::set<std::string> items_to_move;
+    std::stringstream items_ss(items_str);
+    std::string item;
+    while (std::getline(items_ss, item, ',')) {
+        // トリム
+        item.erase(0, item.find_first_not_of(" \t\n\r"));
+        item.erase(item.find_last_not_of(" \t\n\r") + 1);
+        if (!item.empty()) {
+            items_to_move.insert(item);
+        }
+    }
+    
+    if (items_to_move.empty()) {
+        return source;
+    }
+    
+    // 各アイテムの名前空間を抽出して、親名前空間内に配置
+    std::stringstream result;
+    std::istringstream input(source);
+    std::string line;
+    
+    // 移動する名前空間の内容を収集
+    std::map<std::string, std::string> namespace_contents;
+    std::string current_ns;
+    std::stringstream current_content;
+    int brace_depth = 0;
+    bool in_target_ns = false;
+    
+    // Pass 1: 対象の名前空間を収集
+    while (std::getline(input, line)) {
+        std::regex ns_start_regex(R"(^\s*namespace\s+(\w+)\s*\{)");
+        std::smatch ns_match;
+        
+        if (!in_target_ns && std::regex_search(line, ns_match, ns_start_regex)) {
+            std::string ns_name = ns_match[1].str();
+            if (items_to_move.count(ns_name) > 0) {
+                current_ns = ns_name;
+                in_target_ns = true;
+                brace_depth = 1;
+                current_content.str("");
+                current_content.clear();
+                continue;  // namespace行自体はスキップ
+            }
+        }
+        
+        if (in_target_ns) {
+            for (char c : line) {
+                if (c == '{') brace_depth++;
+                else if (c == '}') brace_depth--;
+            }
+            
+            if (brace_depth == 0) {
+                // 名前空間の終了（閉じ括弧の行は含めない）
+                namespace_contents[current_ns] = current_content.str();
+                in_target_ns = false;
+                current_ns.clear();
+            } else {
+                current_content << line << "\n";
+            }
+        }
+    }
+    
+    // Pass 2: 出力を生成
+    input.clear();
+    input.str(source);
+    in_target_ns = false;
+    brace_depth = 0;
+    bool parent_ns_opened = false;
+    bool items_inserted = false;
+    
+    while (std::getline(input, line)) {
+        std::regex ns_start_regex(R"(^\s*namespace\s+(\w+)\s*\{)");
+        std::smatch ns_match;
+        
+        // 対象の名前空間をスキップ
+        if (!in_target_ns && std::regex_search(line, ns_match, ns_start_regex)) {
+            std::string ns_name = ns_match[1].str();
+            if (items_to_move.count(ns_name) > 0) {
+                in_target_ns = true;
+                brace_depth = 1;
+                current_ns = ns_name;
+                continue;
+            }
+        }
+        
+        if (in_target_ns) {
+            for (char c : line) {
+                if (c == '{') brace_depth++;
+                else if (c == '}') brace_depth--;
+            }
+            
+            if (brace_depth == 0) {
+                in_target_ns = false;
+                current_ns.clear();
+            }
+            continue;  // 対象の名前空間は出力しない
+        }
+        
+        // export コメントの位置で親名前空間と内容を挿入
+        if (!items_inserted && line.find("(processed)") != std::string::npos &&
+            line.find(parent_ns + "::") != std::string::npos) {
+            
+            result << "namespace " << parent_ns << " {\n";
+            for (const auto& [ns_name, content] : namespace_contents) {
+                result << "namespace " << ns_name << " {\n";
+                result << content;
+                result << "} // namespace " << ns_name << "\n";
+            }
+            result << "} // namespace " << parent_ns << "\n";
+            result << "// " << line << "\n";  // 元のコメントもコメントとして保持
+            items_inserted = true;
+            continue;
+        }
+        
+        result << line << "\n";
+    }
+    
     return result.str();
 }
 
