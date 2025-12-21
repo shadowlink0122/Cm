@@ -1,5 +1,5 @@
 // lowering_decl.cpp - 宣言のlowering
-#include "lowering_fwd.hpp"
+#include "fwd.hpp"
 
 namespace cm::hir {
 

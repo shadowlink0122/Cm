@@ -1153,16 +1153,21 @@ type_checker.hpp (2532行) →
 └── type_checker_utils.cpp (~300行) - ユーティリティ関数
 ```
 
-#### 5. mir_lowering.hppの分割（高優先度）
-**現状**: 1272行（ヘッダーオンリー）
-**課題**: 独自のMIR型定義を使用しており、分割にはインターフェースの整理が必要
-**方針**: 自動実装生成とメインロジックを分離
+#### 5. mir/lowering/の分割（✅ 完了）
+**現状**: 分割済み
+**実装済み**: 
 ```
-mir_lowering.hpp (1272行) →
-├── mir_lowering.hpp (~300行) - クラス宣言
-├── mir_lowering.cpp (~300行) - メインエントリーポイント
-├── mir_lowering_register.cpp (~300行) - 登録関連関数
-└── mir_lowering_autoimpl.cpp (~400行) - 自動実装生成
+src/mir/lowering/
+├── lowering.hpp (~1200行) - メインヘッダー、クラス宣言
+├── lowering_impl.cpp - 演算子実装
+├── lowering_base.hpp - 基本lowering機能
+├── lowering_context.hpp - loweringコンテキスト
+├── stmt_lowering.hpp / stmt_lowering_impl.cpp - 文のlowering
+├── expr_lowering.hpp - 式lowering共通ヘッダー
+├── expr_lowering_basic.cpp - 基本式のlowering
+├── expr_lowering_ops.cpp - 演算子のlowering
+├── expr_lowering_call.cpp - 関数呼び出しのlowering
+└── monomorphization*.cpp - ジェネリクス特殊化
 ```
 
 #### 6. interpreter.hppの分割（中優先度）

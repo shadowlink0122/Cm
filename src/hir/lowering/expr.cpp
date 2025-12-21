@@ -1,5 +1,5 @@
 // lowering_expr.cpp - 式のlowering
-#include "lowering_fwd.hpp"
+#include "fwd.hpp"
 
 namespace cm::hir {
 

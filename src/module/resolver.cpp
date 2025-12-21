@@ -1,9 +1,9 @@
-#include "module_resolver.hpp"
+#include "resolver.hpp"
 
 #include "../frontend/lexer/lexer.hpp"
 #include "../frontend/parser/parser.hpp"
-#include "../hir/lowering.hpp"
-#include "../mir/mir_lowering.hpp"
+#include "../hir/lowering/lowering.hpp"
+#include "../mir/lowering/lowering.hpp"
 
 #include <fstream>
 #include <iostream>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../../common/debug/codegen.hpp"
-#include "../../../mir/mir_nodes.hpp"
+#include "../../../mir/nodes.hpp"
 #include "../core/context.hpp"
 #include "../core/intrinsics.hpp"
 #include "../core/mir_to_llvm.hpp"

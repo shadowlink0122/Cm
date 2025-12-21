@@ -14,12 +14,12 @@
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
-#include "hir/lowering.hpp"
-#include "mir/mir_lowering.hpp"
-#include "mir/mir_printer.hpp"
+#include "hir/lowering/lowering.hpp"
+#include "mir/lowering/lowering.hpp"
+#include "mir/printer.hpp"
 #include "mir/optimizations/all_passes.hpp"
-#include "module/module_resolver.hpp"
-#include "preprocessor/import_preprocessor.hpp"
+#include "module/resolver.hpp"
+#include "preprocessor/import.hpp"
 
 #include <cstdlib>
 #include <fstream>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "expr_lowering.hpp"
-#include "lowering_base.hpp"
+#include "expr.hpp"
+#include "base.hpp"
 
 namespace cm::mir {
 

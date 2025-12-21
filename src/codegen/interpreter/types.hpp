@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../common/debug/interp.hpp"
-#include "../../mir/mir_nodes.hpp"
+#include "../../mir/nodes.hpp"
 
 #include <any>
 #include <functional>

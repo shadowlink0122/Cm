@@ -162,22 +162,22 @@ set(CM_SOURCES
     src/frontend/types/checking/generic.cpp
     src/frontend/types/checking/auto_impl.cpp
     src/frontend/types/checking/utils.cpp
-    src/preprocessor/import_preprocessor.cpp
-    src/module/module_resolver.cpp
+    src/preprocessor/import.cpp
+    src/module/resolver.cpp
     # HIR lowering (AST -> HIR)
-    src/hir/lowering.cpp
-    src/hir/lowering_decl.cpp
-    src/hir/lowering_stmt.cpp
-    src/hir/lowering_expr.cpp
+    src/hir/lowering/impl.cpp
+    src/hir/lowering/decl.cpp
+    src/hir/lowering/stmt.cpp
+    src/hir/lowering/expr.cpp
     # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
-    src/mir/lowering/lowering_impl.cpp
+    src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
-    src/mir/lowering/stmt_lowering_impl.cpp
-    src/mir/lowering/expr_lowering_basic.cpp
-    src/mir/lowering/expr_lowering_ops.cpp
-    src/mir/lowering/expr_lowering_call.cpp
+    src/mir/lowering/stmt.cpp
+    src/mir/lowering/expr_basic.cpp
+    src/mir/lowering/expr_ops.cpp
+    src/mir/lowering/expr_call.cpp
 )
 
 # Add LLVM sources if enabled
@@ -328,11 +328,11 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
-            src/mir/lowering/lowering_impl.cpp
-            src/mir/lowering/stmt_lowering_impl.cpp
-            src/mir/lowering/expr_lowering_basic.cpp
-            src/mir/lowering/expr_lowering_ops.cpp
-            src/mir/lowering/expr_lowering_call.cpp
+            src/mir/lowering/impl.cpp
+            src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr_basic.cpp
+            src/mir/lowering/expr_ops.cpp
+            src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
@@ -346,11 +346,11 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
-            src/mir/lowering/lowering_impl.cpp
-            src/mir/lowering/stmt_lowering_impl.cpp
-            src/mir/lowering/expr_lowering_basic.cpp
-            src/mir/lowering/expr_lowering_ops.cpp
-            src/mir/lowering/expr_lowering_call.cpp
+            src/mir/lowering/impl.cpp
+            src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr_basic.cpp
+            src/mir/lowering/expr_ops.cpp
+            src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
             src/mir/optimizations/optimization_pipeline.cpp
         )

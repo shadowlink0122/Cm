@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lowering_base.hpp"
+#include "base.hpp"
 
 namespace cm::mir {
 

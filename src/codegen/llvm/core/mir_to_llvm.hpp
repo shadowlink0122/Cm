@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../mir/mir_nodes.hpp"
+#include "../../../mir/nodes.hpp"
 #include "context.hpp"
 
 #include <llvm/IR/BasicBlock.h>

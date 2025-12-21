@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../hir/nodes.hpp"
-#include "../mir_nodes.hpp"
-#include "lowering_context.hpp"
+#include "../nodes.hpp"
+#include "context.hpp"
 
 #include <unordered_map>
 #include <unordered_set>

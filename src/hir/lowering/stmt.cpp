@@ -1,5 +1,5 @@
 // lowering_stmt.cpp - 文のlowering
-#include "lowering_fwd.hpp"
+#include "fwd.hpp"
 
 namespace cm::hir {
 

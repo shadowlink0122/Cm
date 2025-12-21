@@ -2,7 +2,7 @@
 // lower_binary, lower_unary
 
 #include "../../common/debug.hpp"
-#include "expr_lowering.hpp"
+#include "expr.hpp"
 
 namespace cm::mir {
 

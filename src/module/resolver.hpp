@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../hir/nodes.hpp"
-#include "../mir/mir_nodes.hpp"
+#include "../mir/nodes.hpp"
 
 #include <filesystem>
 #include <memory>

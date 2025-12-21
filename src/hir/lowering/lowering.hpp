@@ -2,4 +2,4 @@
 // 新しいコードは lowering_fwd.hpp を直接使用してください
 #pragma once
 
-#include "lowering_fwd.hpp"
+#include "fwd.hpp"

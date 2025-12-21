@@ -3,7 +3,7 @@
 // lower_ternary, lower_struct_literal, lower_array_literal, convert_to_string
 
 #include "../../common/debug.hpp"
-#include "expr_lowering.hpp"
+#include "expr.hpp"
 
 namespace cm::mir {
 

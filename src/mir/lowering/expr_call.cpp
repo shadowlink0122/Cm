@@ -2,7 +2,7 @@
 // extract_named_placeholders, lower_call
 
 #include "../../common/debug.hpp"
-#include "expr_lowering.hpp"
+#include "expr.hpp"
 
 namespace cm::mir {
 

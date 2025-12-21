@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../common/debug/hir.hpp"
-#include "../frontend/ast/decl.hpp"
-#include "nodes.hpp"
+#include "../../common/debug/hir.hpp"
+#include "../../frontend/ast/decl.hpp"
+#include "../nodes.hpp"
 
 #include <set>
 #include <unordered_map>

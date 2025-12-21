@@ -1,5 +1,5 @@
 #include "../../common/debug.hpp"
-#include "stmt_lowering.hpp"
+#include "stmt.hpp"
 
 namespace cm::mir {
 

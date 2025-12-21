@@ -1,5 +1,5 @@
 // lowering.cpp - メインエントリポイントとヘルパー関数
-#include "lowering_fwd.hpp"
+#include "fwd.hpp"
 
 namespace cm::hir {
 

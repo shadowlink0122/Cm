@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../mir_nodes.hpp"
+#include "../nodes.hpp"
 
 #include <iostream>
 #include <memory>
