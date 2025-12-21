@@ -1,3 +1,4 @@
+import std::io::println;
 // test_implicit_impl.cm - implの暗黙的エクスポートとメソッド呼び出しテスト
 import ./implicit_impl/shapes;
 

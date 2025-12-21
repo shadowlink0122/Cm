@@ -279,6 +279,44 @@ struct NewExpr {
 };
 
 // ============================================================
+// sizeof式 - コンパイル時に型/式のサイズを取得
+// ============================================================
+struct SizeofExpr {
+    TypePtr target_type;  // sizeof(型) の場合
+    ExprPtr target_expr;  // sizeof(式) の場合
+
+    explicit SizeofExpr(TypePtr t) : target_type(std::move(t)) {}
+    explicit SizeofExpr(ExprPtr e) : target_expr(std::move(e)) {}
+};
+
+// ============================================================
+// typeof式 - 式の型を取得（型コンテキストで使用）
+// ============================================================
+struct TypeofExpr {
+    ExprPtr target_expr;
+
+    explicit TypeofExpr(ExprPtr e) : target_expr(std::move(e)) {}
+};
+
+// ============================================================
+// alignof式 - 型のアラインメントを取得
+// ============================================================
+struct AlignofExpr {
+    TypePtr target_type;
+
+    explicit AlignofExpr(TypePtr t) : target_type(std::move(t)) {}
+};
+
+// ============================================================
+// typename_of式 - 型の名前を文字列で取得
+// ============================================================
+struct TypenameOfExpr {
+    TypePtr target_type;
+
+    explicit TypenameOfExpr(TypePtr t) : target_type(std::move(t)) {}
+};
+
+// ============================================================
 // 構造体リテラル (StructName{field1: val1, field2: val2})
 // 名前付き初期化のみ対応
 // ============================================================
@@ -438,6 +476,26 @@ inline ExprPtr make_struct_literal(std::string type_name, std::vector<StructLite
 
 inline ExprPtr make_array_literal(std::vector<ExprPtr> elements, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<ArrayLiteralExpr>(std::move(elements)), s);
+}
+
+inline ExprPtr make_sizeof(TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<SizeofExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_sizeof_expr(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<SizeofExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_typeof(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TypeofExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_alignof(TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<AlignofExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_typename_of(TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TypenameOfExpr>(std::move(type)), s);
 }
 
 }  // namespace cm::ast

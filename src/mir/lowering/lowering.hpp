@@ -1,7 +1,7 @@
 #pragma once
 
-#include "expr.hpp"
 #include "base.hpp"
+#include "expr.hpp"
 #include "monomorphization.hpp"
 #include "stmt.hpp"
 

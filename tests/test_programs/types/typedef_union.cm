@@ -1,3 +1,4 @@
+import std::io::println;
 // ユニオン型のテスト
 typedef Number = int | double;
 

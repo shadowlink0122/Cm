@@ -1,3 +1,4 @@
+import std::io::println;
 // test_nested_namespace.cm - Test utility functions
 import ./nested_namespace/utils::{double_value, triple_value};
 

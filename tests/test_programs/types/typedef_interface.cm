@@ -1,3 +1,4 @@
+import std::io::println;
 // インターフェースを実装した構造体のtypedef
 interface Valuable {
     int get_value();

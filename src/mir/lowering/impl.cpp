@@ -1,6 +1,6 @@
 #include "../../common/debug.hpp"
-#include "lowering.hpp"
 #include "context.hpp"
+#include "lowering.hpp"
 
 namespace cm::mir {
 

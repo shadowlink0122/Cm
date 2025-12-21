@@ -99,8 +99,10 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
     try {
         std::unordered_set<std::string> imported_files;
 
-        // インポートを処理
-        result.processed_source = process_imports(source_code, source_file, imported_files);
+        // インポートを処理（ソースマップも生成）
+        result.processed_source =
+            process_imports(source_code, source_file, imported_files, result.source_map,
+                            result.module_ranges, source_file.string());
 
         // インポートされたモジュールリストを作成
         for (const auto& file : imported_files) {
@@ -116,11 +118,38 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
 
 std::string ImportPreprocessor::process_imports(const std::string& source,
                                                 const std::filesystem::path& current_file,
-                                                std::unordered_set<std::string>& imported_files) {
+                                                std::unordered_set<std::string>& imported_files,
+                                                SourceMap& source_map,
+                                                std::vector<ModuleRange>& module_ranges,
+                                                const std::string& import_chain,
+                                                size_t import_line_in_parent) {
     std::stringstream result;
     std::stringstream input(source);
     std::string line;
-    size_t line_number = 0;  // 行番号を追跡
+    size_t line_number = 0;  // 元ファイルの行番号を追跡
+
+    std::string current_file_str =
+        current_file.empty()
+            ? "<unknown>"
+            : std::filesystem::relative(current_file, std::filesystem::current_path()).string();
+
+    // 出力行を追加するヘルパー
+    auto emit_line = [&](const std::string& output_line, const std::string& orig_file,
+                         size_t orig_line, const std::string& chain) {
+        result << output_line << "\n";
+        source_map.push_back({orig_file, orig_line, chain});
+    };
+
+    // 複数行のソースを追加するヘルパー
+    auto emit_source = [&](const std::string& src, const std::string& orig_file,
+                           const std::string& chain, size_t start_line = 1) {
+        std::stringstream ss(src);
+        std::string l;
+        size_t ln = start_line;
+        while (std::getline(ss, l)) {
+            emit_line(l, orig_file, ln++, chain);
+        }
+    };
 
     // 各行を処理
     while (std::getline(input, line)) {
@@ -249,8 +278,13 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
                     // モジュールを読み込み
                     std::string sub_module_source = load_module_file(sub_module_path);
+                    std::string sub_file_str =
+                        std::filesystem::relative(sub_module_path, std::filesystem::current_path())
+                            .string();
+                    std::string sub_chain = import_chain + " -> " + sub_file_str;
                     sub_module_source =
-                        process_imports(sub_module_source, sub_module_path, imported_files);
+                        process_imports(sub_module_source, sub_module_path, imported_files,
+                                        source_map, module_ranges, sub_chain, line_number);
                     sub_module_source = remove_export_keywords(sub_module_source);
 
                     import_stack.pop_back();
@@ -382,14 +416,24 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
             // キャッシュチェック
             std::string module_source;
+            std::string module_file_str =
+                std::filesystem::relative(module_path, std::filesystem::current_path()).string();
+            std::string module_chain = import_chain + " -> " + module_file_str;
+
+            // 再帰呼び出し用のダミーソースマップ（実際のマッピングは出力時に行う）
+            SourceMap dummy_source_map;
+            std::vector<ModuleRange> dummy_module_ranges;
+
             if (module_cache.count(canonical_path) > 0) {
                 module_source = module_cache[canonical_path];
             } else {
                 // モジュールファイルを読み込む
                 module_source = load_module_file(module_path);
 
-                // モジュール内のインポートを再帰的に処理
-                module_source = process_imports(module_source, module_path, imported_files);
+                // モジュール内のインポートを再帰的に処理（ダミーソースマップを使用）
+                module_source =
+                    process_imports(module_source, module_path, imported_files, dummy_source_map,
+                                    dummy_module_ranges, module_chain, line_number);
 
                 // キャッシュに保存
                 module_cache[canonical_path] = module_source;
@@ -423,8 +467,9 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                        !import_info.is_wildcard) {
                 // from構文または選択的インポート（::{items}）の場合
                 // 名前空間でラップせずにインポート（直接アクセス可能）
-                result << "\n// ===== Selective import from " << import_info.module_name
-                       << " =====\n";
+                emit_line("", "<generated>", 0, import_chain);
+                emit_line("// ===== Selective import from " + import_info.module_name + " =====",
+                          "<generated>", 0, import_chain);
 
                 // サブモジュールパスがある場合、そのサブモジュールの名前空間内の内容を展開
                 std::string submodule_ns;
@@ -436,6 +481,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     }
                 }
 
+                std::string source_to_emit;
                 if (!submodule_ns.empty()) {
                     // サブモジュールの名前空間内の内容を抽出
                     std::string extracted = extract_namespace_content(module_source, submodule_ns);
@@ -444,15 +490,21 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                         if (!import_info.items.empty()) {
                             extracted = filter_exports(extracted, import_info.items);
                         }
-                        result << remove_export_keywords(extracted) << "\n";
+                        source_to_emit = remove_export_keywords(extracted);
                     } else {
-                        result << module_source << "\n";
+                        source_to_emit = module_source;
                     }
                 } else {
-                    result << module_source << "\n";
+                    source_to_emit = module_source;
                 }
-                result << "// ===== End selective import from " << import_info.module_name
-                       << " =====\n\n";
+
+                // emit_sourceでソースマップに追加
+                emit_source(source_to_emit, module_file_str, module_chain, 1);
+
+                emit_line(
+                    "// ===== End selective import from " + import_info.module_name + " =====",
+                    "<generated>", 0, import_chain);
+                emit_line("", "<generated>", 0, import_chain);
             } else if (import_info.is_wildcard && !import_info.is_recursive_wildcard) {
                 // ワイルドカードインポート（::*）の場合
                 // サブモジュールパスがある場合、そのサブモジュールの名前空間内の内容を展開
@@ -481,7 +533,9 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                        << " =====\n\n";
             } else {
                 // 通常のインポート - namespaceでラップ
-                result << "\n// ===== Begin module: " << import_info.module_name << " =====\n";
+                emit_line("", "<generated>", 0, import_chain);
+                emit_line("// ===== Begin module: " + import_info.module_name + " =====",
+                          "<generated>", 0, import_chain);
 
                 // ./path/module::submodule 形式をチェック
                 std::string submodule_path;
@@ -559,28 +613,32 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 // （モジュールソース内ですでに正しい名前空間が生成されている）
                 if (submodule_path.empty()) {
                     for (const auto& ns : namespace_parts) {
-                        result << "namespace " << ns << " {\n";
+                        emit_line("namespace " + ns + " {", "<generated>", 0, import_chain);
                     }
                 }
 
                 // exportキーワードを削除
                 std::string cleaned_source = remove_export_keywords(module_source);
-                result << cleaned_source;
+                // モジュールソースの各行をemit_sourceで出力（元ファイルの行番号を追跡）
+                emit_source(cleaned_source, module_file_str, module_chain, 1);
 
                 // 名前空間を逆順で閉じる
                 if (submodule_path.empty()) {
                     for (auto it = namespace_parts.rbegin(); it != namespace_parts.rend(); ++it) {
-                        result << "} // namespace " << *it << "\n";
+                        // namespace閉じ行はコンパイラ生成なので、元ファイル情報なし
+                        emit_line("} // namespace " + *it, "<generated>", 0, import_chain);
                     }
                 }
-                result << "// ===== End module: " << import_info.module_name << " =====\n\n";
+                emit_line("// ===== End module: " + import_info.module_name + " =====",
+                          "<generated>", 0, import_chain);
+                emit_line("", "<generated>", 0, import_chain);
             }
 
             // imported_filesに追加（後方互換性のため）
             imported_files.insert(canonical_path);
         } else {
             // インポート文以外はそのまま出力
-            result << line << "\n";
+            emit_line(line, current_file_str, line_number, import_chain);
         }
     }
 
@@ -1159,6 +1217,14 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
                     info.module_name = name.substr(0, last_colon);
                 }
             }
+        }
+    }
+
+    // 引用符を除去
+    if (info.module_name.size() >= 2) {
+        if ((info.module_name.front() == '"' && info.module_name.back() == '"') ||
+            (info.module_name.front() == '\'' && info.module_name.back() == '\'')) {
+            info.module_name = info.module_name.substr(1, info.module_name.size() - 2);
         }
     }
 

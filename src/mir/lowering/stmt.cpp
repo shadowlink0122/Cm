@@ -1,5 +1,6 @@
-#include "../../common/debug.hpp"
 #include "stmt.hpp"
+
+#include "../../common/debug.hpp"
 
 namespace cm::mir {
 

@@ -1,3 +1,4 @@
+import std::io::println;
 // 配列要素へのポインタテスト
 
 int main() {

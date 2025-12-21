@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体を引数に取る関数
 struct Point {
     int x;

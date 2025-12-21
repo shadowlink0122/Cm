@@ -1,3 +1,4 @@
+import std::io::println;
 // プリミティブ型へのimplテスト
 
 interface Abs {

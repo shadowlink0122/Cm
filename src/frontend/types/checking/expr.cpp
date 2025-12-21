@@ -9,6 +9,9 @@ namespace cm {
 ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
     debug::tc::log(debug::tc::Id::CheckExpr, "", debug::Level::Trace);
 
+    // エラー表示用に現在の式のSpanを保存
+    current_span_ = expr.span;
+
     ast::TypePtr inferred_type;
 
     if (auto* lit = expr.as<ast::LiteralExpr>()) {
@@ -35,6 +38,48 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         inferred_type = infer_array_literal(*array_lit);
     } else if (auto* struct_lit = expr.as<ast::StructLiteralExpr>()) {
         inferred_type = infer_struct_literal(*struct_lit);
+    } else if (auto* sizeof_expr = expr.as<ast::SizeofExpr>()) {
+        // sizeof(型)の場合、型が有効かチェック
+        // 無効な場合は変数として解釈を試みる
+        if (sizeof_expr->target_type) {
+            auto& target_type = sizeof_expr->target_type;
+            // 構造体型として解析されたが、実際には変数かもしれない
+            if (target_type->kind == ast::TypeKind::Struct) {
+                std::string name = target_type->name;
+                // typedefや構造体として定義されているかチェック
+                bool is_valid_type = false;
+                if (typedef_defs_.count(name) > 0) {
+                    is_valid_type = true;
+                } else if (struct_defs_.count(name) > 0) {
+                    is_valid_type = true;
+                }
+
+                if (!is_valid_type) {
+                    // 変数として解決を試みる
+                    auto sym = scopes_.current().lookup(name);
+                    if (sym && sym->type && sym->type->kind != ast::TypeKind::Error) {
+                        // 変数として有効 - target_exprを設定
+                        sizeof_expr->target_expr = ast::make_ident(name, {});
+                        sizeof_expr->target_expr->type = sym->type;
+                        sizeof_expr->target_type = nullptr;
+                    }
+                }
+            }
+        }
+        // sizeof(式) の場合は式の型チェックを行う
+        if (sizeof_expr->target_expr) {
+            infer_type(*sizeof_expr->target_expr);
+        }
+        // sizeof は常に uint (符号なし整数) を返す
+        inferred_type = ast::make_uint();
+    } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
+        // typeof(式) - 式の型を推論
+        if (typeof_expr->target_expr) {
+            infer_type(*typeof_expr->target_expr);
+            // typeof自体は型を返すが、ここでは式としてerrorを返す
+            // (typeofは通常、型コンテキストで使用される)
+        }
+        inferred_type = ast::make_error();
     } else {
         inferred_type = ast::make_error();
     }
@@ -85,7 +130,7 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
 
     auto struct_it = struct_defs_.find(lit.type_name);
     if (struct_it == struct_defs_.end()) {
-        error(Span{}, "Unknown struct type: " + lit.type_name);
+        error(current_span_, "Unknown struct type: " + lit.type_name);
         return ast::make_error();
     }
 
@@ -113,7 +158,7 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
                 }
             }
         }
-        error(Span{}, "Undefined variable '" + ident.name + "'");
+        error(current_span_, "Undefined variable '" + ident.name + "'");
         return ast::make_error();
     }
     debug::tc::log(debug::tc::Id::Resolved, ident.name + " : " + ast::type_to_string(*sym->type),
@@ -140,7 +185,7 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
         case ast::BinaryOp::And:
         case ast::BinaryOp::Or:
             if (ltype->kind != ast::TypeKind::Bool || rtype->kind != ast::TypeKind::Bool) {
-                error(Span{}, "Logical operators require bool operands");
+                error(current_span_, "Logical operators require bool operands");
             }
             return std::make_shared<ast::Type>(ast::TypeKind::Bool);
 
@@ -170,12 +215,34 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->is_numeric() && rtype->is_numeric()) {
                 return common_type(ltype, rtype);
             }
-            error(Span{}, "Add operator requires numeric operands or string concatenation");
+            // ポインタ演算: pointer + int または int + pointer
+            if (ltype->kind == ast::TypeKind::Pointer && rtype->is_integer()) {
+                return ltype;  // pointer + int = pointer
+            }
+            if (ltype->is_integer() && rtype->kind == ast::TypeKind::Pointer) {
+                return rtype;  // int + pointer = pointer
+            }
+            error(current_span_, "Add operator requires numeric operands or string concatenation");
+            return ast::make_error();
+
+        case ast::BinaryOp::Sub:
+            if (ltype->is_numeric() && rtype->is_numeric()) {
+                return common_type(ltype, rtype);
+            }
+            // ポインタ演算: pointer - int
+            if (ltype->kind == ast::TypeKind::Pointer && rtype->is_integer()) {
+                return ltype;  // pointer - int = pointer
+            }
+            // ポインタ差分: pointer - pointer = int (要素数の差)
+            if (ltype->kind == ast::TypeKind::Pointer && rtype->kind == ast::TypeKind::Pointer) {
+                return ast::make_long();  // ポインタ差分はlong
+            }
+            error(current_span_, "Sub operator requires numeric operands");
             return ast::make_error();
 
         default:
             if (!ltype->is_numeric() || !rtype->is_numeric()) {
-                error(Span{}, "Arithmetic operators require numeric operands");
+                error(current_span_, "Arithmetic operators require numeric operands");
                 return ast::make_error();
             }
             return common_type(ltype, rtype);
@@ -190,22 +257,22 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
     switch (unary.op) {
         case ast::UnaryOp::Neg:
             if (!otype->is_numeric()) {
-                error(Span{}, "Negation requires numeric operand");
+                error(current_span_, "Negation requires numeric operand");
             }
             return otype;
         case ast::UnaryOp::Not:
             if (otype->kind != ast::TypeKind::Bool) {
-                error(Span{}, "Logical not requires bool operand");
+                error(current_span_, "Logical not requires bool operand");
             }
             return std::make_shared<ast::Type>(ast::TypeKind::Bool);
         case ast::UnaryOp::BitNot:
             if (!otype->is_integer()) {
-                error(Span{}, "Bitwise not requires integer operand");
+                error(current_span_, "Bitwise not requires integer operand");
             }
             return otype;
         case ast::UnaryOp::Deref:
             if (otype->kind != ast::TypeKind::Pointer) {
-                error(Span{}, "Cannot dereference non-pointer");
+                error(current_span_, "Cannot dereference non-pointer");
                 return ast::make_error();
             }
             return otype->element_type;
@@ -219,7 +286,7 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
         case ast::UnaryOp::PostInc:
         case ast::UnaryOp::PostDec:
             if (!otype->is_numeric()) {
-                error(Span{}, "Increment/decrement requires numeric operand");
+                error(current_span_, "Increment/decrement requires numeric operand");
             }
             return otype;
     }
@@ -230,14 +297,14 @@ ast::TypePtr TypeChecker::infer_ternary(ast::TernaryExpr& ternary) {
     auto cond_type = infer_type(*ternary.condition);
     if (!cond_type ||
         (cond_type->kind != ast::TypeKind::Bool && cond_type->kind != ast::TypeKind::Int)) {
-        error(Span{}, "Ternary condition must be bool or int");
+        error(current_span_, "Ternary condition must be bool or int");
     }
 
     auto then_type = infer_type(*ternary.then_expr);
     auto else_type = infer_type(*ternary.else_expr);
 
     if (!types_compatible(then_type, else_type)) {
-        error(Span{}, "Ternary branches have incompatible types");
+        error(current_span_, "Ternary branches have incompatible types");
     }
 
     return then_type;
@@ -247,26 +314,31 @@ ast::TypePtr TypeChecker::infer_index(ast::IndexExpr& idx) {
     auto obj_type = infer_type(*idx.object);
     auto index_type = infer_type(*idx.index);
     if (!index_type || !index_type->is_integer()) {
-        error(Span{}, "Array index must be an integer type");
+        error(current_span_, "Array index must be an integer type");
     }
 
     if (!obj_type) {
         return ast::make_error();
     }
 
+    // typedefを解決
+    obj_type = resolve_typedef(obj_type);
+
     if (obj_type->kind == ast::TypeKind::Array) {
-        return obj_type->element_type;
+        // 要素型もtypedefを解決
+        return resolve_typedef(obj_type->element_type);
     }
 
     if (obj_type->kind == ast::TypeKind::Pointer) {
-        return obj_type->element_type;
+        // 要素型もtypedefを解決
+        return resolve_typedef(obj_type->element_type);
     }
 
     if (obj_type->kind == ast::TypeKind::String) {
         return ast::make_char();
     }
 
-    error(Span{}, "Index access on non-array type");
+    error(current_span_, "Index access on non-array type");
     return ast::make_error();
 }
 
@@ -276,19 +348,19 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
     if (slice.start) {
         auto start_type = infer_type(*slice.start);
         if (!start_type || !start_type->is_integer()) {
-            error(Span{}, "Slice start index must be an integer type");
+            error(current_span_, "Slice start index must be an integer type");
         }
     }
     if (slice.end) {
         auto end_type = infer_type(*slice.end);
         if (!end_type || !end_type->is_integer()) {
-            error(Span{}, "Slice end index must be an integer type");
+            error(current_span_, "Slice end index must be an integer type");
         }
     }
     if (slice.step) {
         auto step_type = infer_type(*slice.step);
         if (!step_type || !step_type->is_integer()) {
-            error(Span{}, "Slice step must be an integer type");
+            error(current_span_, "Slice step must be an integer type");
         }
     }
 
@@ -304,14 +376,14 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
         return ast::make_string();
     }
 
-    error(Span{}, "Slice access on non-array/string type");
+    error(current_span_, "Slice access on non-array/string type");
     return ast::make_error();
 }
 
 ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
     auto scrutinee_type = infer_type(*match.scrutinee);
     if (!scrutinee_type) {
-        error(Span{}, "Cannot infer type of match scrutinee");
+        error(current_span_, "Cannot infer type of match scrutinee");
         return ast::make_error();
     }
 
@@ -322,7 +394,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
         if (arm.guard) {
             auto guard_type = infer_type(*arm.guard);
             if (!guard_type || guard_type->kind != ast::TypeKind::Bool) {
-                error(Span{}, "Match guard must be a boolean expression");
+                error(current_span_, "Match guard must be a boolean expression");
             }
         }
 
@@ -331,12 +403,12 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
         if (!result_type) {
             result_type = body_type;
         } else if (!types_compatible(result_type, body_type)) {
-            error(Span{}, "Match arms have incompatible types");
+            error(current_span_, "Match arms have incompatible types");
         }
     }
 
     if (!result_type) {
-        error(Span{}, "Match expression has no arms");
+        error(current_span_, "Match expression has no arms");
         return ast::make_error();
     }
 
@@ -401,7 +473,7 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
 
     if (scrutinee_type->kind == ast::TypeKind::Bool) {
         if (!covered_values.count("true") || !covered_values.count("false")) {
-            error(Span{},
+            error(current_span_,
                   "Non-exhaustive match: missing 'true' or 'false' pattern (or add '_' wildcard)");
         }
         return;
@@ -417,8 +489,8 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
 
         for (const auto& variant : all_variants) {
             if (!covered_values.count(variant)) {
-                error(Span{}, "Non-exhaustive match: missing pattern for '" + variant +
-                                  "' (or add '_' wildcard)");
+                error(current_span_, "Non-exhaustive match: missing pattern for '" + variant +
+                                         "' (or add '_' wildcard)");
                 return;
             }
         }
@@ -436,8 +508,8 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
 
         for (const auto& variant : all_variants) {
             if (!covered_values.count(variant)) {
-                error(Span{}, "Non-exhaustive match: missing pattern for '" + variant +
-                                  "' (or add '_' wildcard)");
+                error(current_span_, "Non-exhaustive match: missing pattern for '" + variant +
+                                         "' (or add '_' wildcard)");
                 return;
             }
         }
@@ -445,7 +517,8 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
     }
 
     if (scrutinee_type->is_integer()) {
-        error(Span{}, "Non-exhaustive match: integer patterns require a '_' wildcard pattern");
+        error(current_span_,
+              "Non-exhaustive match: integer patterns require a '_' wildcard pattern");
     }
 }
 
@@ -458,7 +531,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             if (pattern->value) {
                 auto lit_type = infer_type(*pattern->value);
                 if (!types_compatible(lit_type, expected_type)) {
-                    error(Span{}, "Pattern type does not match scrutinee type");
+                    error(current_span_, "Pattern type does not match scrutinee type");
                 }
             }
             break;
@@ -473,7 +546,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             if (pattern->value) {
                 auto enum_type = infer_type(*pattern->value);
                 if (!types_compatible(enum_type, expected_type)) {
-                    error(Span{}, "Enum pattern type does not match scrutinee type");
+                    error(current_span_, "Enum pattern type does not match scrutinee type");
                 }
             }
             break;

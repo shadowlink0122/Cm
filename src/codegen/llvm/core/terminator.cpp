@@ -114,8 +114,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 break;
             }
 
-            if (funcName == "print" || funcName == "println" || funcName == "std::io::print" ||
-                funcName == "std::io::println") {
+            if (funcName == "__print__" || funcName == "__println__" ||
+                funcName == "std::io::print" || funcName == "std::io::println") {
                 bool isNewline = funcName.find("println") != std::string::npos;
                 generatePrintCall(callData, isNewline);
                 builder->CreateBr(blocks[callData.success]);

@@ -1,3 +1,4 @@
+import std::io::println;
 // 負の値を持つenum
 enum Status {
     Error = -1,

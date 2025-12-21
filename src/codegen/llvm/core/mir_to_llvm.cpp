@@ -387,7 +387,7 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             auto& binop = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
             auto lhs = convertOperand(*binop.lhs);
             auto rhs = convertOperand(*binop.rhs);
-            return convertBinaryOp(binop.op, lhs, rhs);
+            return convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
         }
         case mir::MirRvalue::UnaryOp: {
             auto& unop = std::get<mir::MirRvalue::UnaryOpData>(rvalue.data);

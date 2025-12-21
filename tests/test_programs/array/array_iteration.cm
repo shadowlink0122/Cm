@@ -1,3 +1,4 @@
+import std::io::println;
 // array_iteration.cm - 配列のイテレーション統合テスト
 
 struct Point {

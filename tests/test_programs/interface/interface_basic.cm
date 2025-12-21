@@ -1,3 +1,4 @@
+import std::io::println;
 // interface_basic.cm - interface基本機能の統合テスト
 
 // 1. 基本的なinterface定義とimpl

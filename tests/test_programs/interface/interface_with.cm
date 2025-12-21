@@ -1,3 +1,4 @@
+import std::io::println;
 // interface_with.cm - with自動実装の統合テスト
 
 interface Eq<T> {

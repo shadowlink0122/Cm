@@ -1050,6 +1050,27 @@ class Parser {
         // プリミティブ型
         ast::TypePtr base_type;
         switch (current().kind) {
+            case TokenKind::KwAuto:
+                advance();
+                // autoは型推論を意味する
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Inferred);
+                break;
+            case TokenKind::KwTypeof: {
+                // typeof(式) - 式の型を取得
+                advance();
+                expect(TokenKind::LParen);
+                auto expr = parse_expr();
+                expect(TokenKind::RParen);
+                // 式の型をtype checkerで解決する必要があるため、
+                // ここではInferred型として扱い、後で解決する
+                // exprへの参照を保持するためにInferredWithExpr型が必要だが、
+                // 簡略化のため、TypeAliasを一時的に使用
+                auto type = std::make_shared<ast::Type>(ast::TypeKind::Inferred);
+                type->name = "__typeof__";
+                // 注: 完全な実装には、式への参照を型に保持する機能が必要
+                base_type = type;
+                break;
+            }
             case TokenKind::KwVoid:
                 advance();
                 base_type = ast::make_void();
@@ -1221,8 +1242,9 @@ class Parser {
         return ast::make_error();
     }
 
-    // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*)
+    // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*, T*[N], T[N]*)
     // parse_type()の呼び出し後に使用
+    // 再帰的に処理して複合型をサポート
     ast::TypePtr check_array_suffix(ast::TypePtr base_type) {
         // T[N] 形式をチェック
         if (consume_if(TokenKind::LBracket)) {
@@ -1232,11 +1254,15 @@ class Parser {
                 advance();
             }
             expect(TokenKind::RBracket);
-            return ast::make_array(std::move(base_type), size);
+            auto arr_type = ast::make_array(std::move(base_type), size);
+            // 配列の後にさらにサフィックスがあるかチェック（例: int[2]*）
+            return check_array_suffix(std::move(arr_type));
         }
         // T* 形式をチェック（C++スタイルのポインタ）
         if (consume_if(TokenKind::Star)) {
-            return ast::make_pointer(std::move(base_type));
+            auto ptr_type = ast::make_pointer(std::move(base_type));
+            // ポインタの後にさらにサフィックスがあるかチェック（例: int*[2]）
+            return check_array_suffix(std::move(ptr_type));
         }
         return base_type;
     }

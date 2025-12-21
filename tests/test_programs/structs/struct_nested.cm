@@ -1,3 +1,4 @@
+import std::io::println;
 // struct_nested.cm - ネストした構造体の統合テスト
 
 struct Inner {

@@ -1,3 +1,4 @@
+import std::io::println;
 // test_simple.cm - シンプルなモジュールテスト
 
 import ./math as M;

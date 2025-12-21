@@ -1,3 +1,4 @@
+import std::io::println;
 // 基本的なinterface/impl テスト
 
 interface Printable {

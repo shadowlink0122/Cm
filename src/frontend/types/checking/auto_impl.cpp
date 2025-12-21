@@ -8,7 +8,7 @@ namespace cm {
 
 void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::string& iface_name) {
     if (interface_names_.find(iface_name) == interface_names_.end()) {
-        error(Span{}, "Unknown interface '" + iface_name + "' in 'with' clause");
+        error(current_span_, "Unknown interface '" + iface_name + "' in 'with' clause");
         return;
     }
 

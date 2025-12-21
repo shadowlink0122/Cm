@@ -1,3 +1,4 @@
+import std::io::println;
 // デストラクタの順序テスト（LIFO順）
 struct Item {
     int id;

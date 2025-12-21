@@ -1,3 +1,4 @@
+import std::io::println;
 // Option<T>型とmatch式の複合テスト
 
 // Option型をstructで表現

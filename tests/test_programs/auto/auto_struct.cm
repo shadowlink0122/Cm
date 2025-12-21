@@ -1,0 +1,19 @@
+import std::io::println;
+// auto型と構造体
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p = {x: 10, y: 20};
+    
+    // ポインタ
+    auto ptr = &p;
+    int px = ptr->x;
+    int py = ptr->y;
+    println("ptr->x = {px}, ptr->y = {py}");
+    
+    return 0;
+}

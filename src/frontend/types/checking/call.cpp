@@ -8,15 +8,17 @@ namespace cm {
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
-        // 組み込み関数の特別処理
-        if (ident->name == "println" || ident->name == "print") {
-            if (call.args.empty()) {
-                error(Span{}, "'" + ident->name + "' requires at least 1 argument");
+        // 組み込み関数の特別処理（printlnはstd::io::printlnからインポート）
+        if (ident->name == "__println__" || ident->name == "__print__" ||
+            ident->name == "println" || ident->name == "print") {
+            // println() は引数なしでも許可（空行出力）
+            if (ident->name != "println" && ident->name != "__println__" && call.args.empty()) {
+                error(current_span_, "'" + ident->name + "' requires at least 1 argument");
                 return ast::make_error();
             }
             if (call.args.size() > 1) {
-                error(Span{}, "'" + ident->name + "' takes only 1 argument, got " +
-                                  std::to_string(call.args.size()));
+                error(current_span_, "'" + ident->name + "' takes only 1 argument, got " +
+                                         std::to_string(call.args.size()));
                 return ast::make_error();
             }
 
@@ -44,7 +46,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
         if (!sym) {
-            error(Span{}, "'" + ident->name + "' is not a function");
+            error(current_span_, "'" + ident->name + "' is not a function");
             return ast::make_error();
         }
 
@@ -55,18 +57,18 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             size_t param_count = fn_type->param_types.size();
 
             if (arg_count != param_count) {
-                error(Span{}, "Function pointer '" + ident->name + "' expects " +
-                                  std::to_string(param_count) + " arguments, got " +
-                                  std::to_string(arg_count));
+                error(current_span_, "Function pointer '" + ident->name + "' expects " +
+                                         std::to_string(param_count) + " arguments, got " +
+                                         std::to_string(arg_count));
             } else {
                 for (size_t i = 0; i < arg_count; ++i) {
                     auto arg_type = infer_type(*call.args[i]);
                     if (!types_compatible(fn_type->param_types[i], arg_type)) {
                         std::string expected = ast::type_to_string(*fn_type->param_types[i]);
                         std::string actual = ast::type_to_string(*arg_type);
-                        error(Span{}, "Argument type mismatch in call to function pointer '" +
-                                          ident->name + "': expected " + expected + ", got " +
-                                          actual);
+                        error(current_span_,
+                              "Argument type mismatch in call to function pointer '" + ident->name +
+                                  "': expected " + expected + ", got " + actual);
                     }
                 }
             }
@@ -75,7 +77,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         }
 
         if (!sym->is_function) {
-            error(Span{}, "'" + ident->name + "' is not a function");
+            error(current_span_, "'" + ident->name + "' is not a function");
             return ast::make_error();
         }
 
@@ -86,14 +88,14 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 
         if (arg_count < required_count || arg_count > param_count) {
             if (required_count == param_count) {
-                error(Span{}, "Function '" + ident->name + "' expects " +
-                                  std::to_string(param_count) + " arguments, got " +
-                                  std::to_string(arg_count));
+                error(current_span_, "Function '" + ident->name + "' expects " +
+                                         std::to_string(param_count) + " arguments, got " +
+                                         std::to_string(arg_count));
             } else {
-                error(Span{}, "Function '" + ident->name + "' expects " +
-                                  std::to_string(required_count) + " to " +
-                                  std::to_string(param_count) + " arguments, got " +
-                                  std::to_string(arg_count));
+                error(current_span_, "Function '" + ident->name + "' expects " +
+                                         std::to_string(required_count) + " to " +
+                                         std::to_string(param_count) + " arguments, got " +
+                                         std::to_string(arg_count));
             }
         } else {
             for (size_t i = 0; i < arg_count; ++i) {
@@ -101,8 +103,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 if (!types_compatible(sym->param_types[i], arg_type)) {
                     std::string expected = ast::type_to_string(*sym->param_types[i]);
                     std::string actual = ast::type_to_string(*arg_type);
-                    error(Span{}, "Argument type mismatch in call to '" + ident->name +
-                                      "': expected " + expected + ", got " + actual);
+                    error(current_span_, "Argument type mismatch in call to '" + ident->name +
+                                             "': expected " + expected + ", got " + actual);
                 }
             }
         }
@@ -135,7 +137,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
         // ポインタ型はビルトインメソッドを持たない
         if (obj_type->kind == ast::TypeKind::Pointer) {
-            error(Span{},
+            error(current_span_,
                   "Pointer type does not support method calls. Use (*ptr).method() instead.");
             return ast::make_error();
         }
@@ -160,17 +162,19 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         if (current_impl_target_type_.empty() ||
                             (current_impl_target_type_ != type_name &&
                              current_impl_target_type_ != search_type)) {
-                            error(Span{}, "Cannot call private method '" + member.member +
-                                              "' from outside impl block of '" + type_name + "'");
+                            error(current_span_, "Cannot call private method '" + member.member +
+                                                     "' from outside impl block of '" + type_name +
+                                                     "'");
                             return ast::make_error();
                         }
                     }
 
                     // 引数の型チェック
                     if (member.args.size() != method_info.param_types.size()) {
-                        error(Span{}, "Method '" + member.member + "' expects " +
-                                          std::to_string(method_info.param_types.size()) +
-                                          " arguments, got " + std::to_string(member.args.size()));
+                        error(current_span_, "Method '" + member.member + "' expects " +
+                                                 std::to_string(method_info.param_types.size()) +
+                                                 " arguments, got " +
+                                                 std::to_string(member.args.size()));
                     } else {
                         for (size_t i = 0; i < member.args.size(); ++i) {
                             auto arg_type = infer_type(*member.args[i]);
@@ -178,9 +182,9 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                                 std::string expected =
                                     ast::type_to_string(*method_info.param_types[i]);
                                 std::string actual = ast::type_to_string(*arg_type);
-                                error(Span{}, "Argument type mismatch in method call '" +
-                                                  member.member + "': expected " + expected +
-                                                  ", got " + actual);
+                                error(current_span_, "Argument type mismatch in method call '" +
+                                                         member.member + "': expected " + expected +
+                                                         ", got " + actual);
                             }
                         }
                     }
@@ -235,18 +239,19 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                 const auto& method_info = method_it->second;
 
                 if (member.args.size() != method_info.param_types.size()) {
-                    error(Span{}, "Method '" + member.member + "' expects " +
-                                      std::to_string(method_info.param_types.size()) +
-                                      " arguments, got " + std::to_string(member.args.size()));
+                    error(current_span_, "Method '" + member.member + "' expects " +
+                                             std::to_string(method_info.param_types.size()) +
+                                             " arguments, got " +
+                                             std::to_string(member.args.size()));
                 } else {
                     for (size_t i = 0; i < member.args.size(); ++i) {
                         auto arg_type = infer_type(*member.args[i]);
                         if (!types_compatible(method_info.param_types[i], arg_type)) {
                             std::string expected = ast::type_to_string(*method_info.param_types[i]);
                             std::string actual = ast::type_to_string(*arg_type);
-                            error(Span{}, "Argument type mismatch in method call '" +
-                                              member.member + "': expected " + expected + ", got " +
-                                              actual);
+                            error(current_span_, "Argument type mismatch in method call '" +
+                                                     member.member + "': expected " + expected +
+                                                     ", got " + actual);
                         }
                     }
                 }
@@ -268,7 +273,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             return ast::make_void();
         }
 
-        error(Span{}, "Unknown method '" + member.member + "' for type '" + type_name + "'");
+        error(current_span_, "Unknown method '" + member.member + "' for type '" + type_name + "'");
         return ast::make_error();
     }
 
@@ -293,12 +298,13 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                     return resolved_field_type;
                 }
             }
-            error(Span{}, "Unknown field '" + member.member + "' in struct '" + type_name + "'");
+            error(current_span_,
+                  "Unknown field '" + member.member + "' in struct '" + type_name + "'");
         } else {
-            error(Span{}, "Unknown struct type '" + type_name + "'");
+            error(current_span_, "Unknown struct type '" + type_name + "'");
         }
     } else {
-        error(Span{}, "Field access on non-struct type '" + type_name + "'");
+        error(current_span_, "Field access on non-struct type '" + type_name + "'");
     }
 
     return ast::make_error();
@@ -309,7 +315,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
 
     if (member.member == "size" || member.member == "len" || member.member == "length") {
         if (!member.args.empty()) {
-            error(Span{}, "Array " + member.member + "() takes no arguments");
+            error(current_span_, "Array " + member.member + "() takes no arguments");
         }
         debug::tc::log(debug::tc::Id::Resolved,
                        "Array builtin: " + type_name + "." + member.member + "() : uint",
@@ -318,7 +324,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
-            error(Span{}, "Array indexOf() takes 1 argument");
+            error(current_span_, "Array indexOf() takes 1 argument");
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -327,7 +333,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "includes" || member.member == "contains") {
         if (member.args.size() != 1) {
-            error(Span{}, "Array " + member.member + "() takes 1 argument");
+            error(current_span_, "Array " + member.member + "() takes 1 argument");
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -336,7 +342,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "some") {
         if (member.args.size() != 1) {
-            error(Span{}, "Array some() takes 1 predicate function");
+            error(current_span_, "Array some() takes 1 predicate function");
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -345,7 +351,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "every") {
         if (member.args.size() != 1) {
-            error(Span{}, "Array every() takes 1 predicate function");
+            error(current_span_, "Array every() takes 1 predicate function");
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -354,7 +360,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "findIndex") {
         if (member.args.size() != 1) {
-            error(Span{}, "Array findIndex() takes 1 predicate function");
+            error(current_span_, "Array findIndex() takes 1 predicate function");
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -363,7 +369,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "reduce") {
         if (member.args.size() < 1 || member.args.size() > 2) {
-            error(Span{}, "Array reduce() takes 1-2 arguments (callback, [initial])");
+            error(current_span_, "Array reduce() takes 1-2 arguments (callback, [initial])");
         }
         for (auto& arg : member.args) {
             infer_type(*arg);
@@ -372,7 +378,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "forEach") {
         if (member.args.size() != 1) {
-            error(Span{}, "Array forEach() takes 1 callback function");
+            error(current_span_, "Array forEach() takes 1 callback function");
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -380,7 +386,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         return ast::make_void();
     }
 
-    error(Span{}, "Unknown array method '" + member.member + "'");
+    error(current_span_, "Unknown array method '" + member.member + "'");
     return ast::make_error();
 }
 
@@ -389,7 +395,7 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
 
     if (member.member == "len" || member.member == "size" || member.member == "length") {
         if (!member.args.empty()) {
-            error(Span{}, "String " + member.member + "() takes no arguments");
+            error(current_span_, "String " + member.member + "() takes no arguments");
         }
         debug::tc::log(debug::tc::Id::Resolved,
                        "String builtin: " + type_name + "." + member.member + "() : uint",
@@ -398,23 +404,24 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     }
     if (member.member == "charAt" || member.member == "at") {
         if (member.args.size() != 1) {
-            error(Span{}, "String " + member.member + "() takes 1 argument");
+            error(current_span_, "String " + member.member + "() takes 1 argument");
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (!arg_type->is_integer()) {
-                error(Span{}, "String " + member.member + "() index must be integer");
+                error(current_span_, "String " + member.member + "() index must be integer");
             }
         }
         return ast::make_char();
     }
     if (member.member == "substring" || member.member == "slice") {
         if (member.args.size() < 1 || member.args.size() > 2) {
-            error(Span{}, "String " + member.member + "() takes 1-2 arguments");
+            error(current_span_, "String " + member.member + "() takes 1-2 arguments");
         } else {
             for (auto& arg : member.args) {
                 auto arg_type = infer_type(*arg);
                 if (!arg_type->is_integer()) {
-                    error(Span{}, "String " + member.member + "() arguments must be integers");
+                    error(current_span_,
+                          "String " + member.member + "() arguments must be integers");
                 }
             }
         }
@@ -422,11 +429,11 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     }
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
-            error(Span{}, "String indexOf() takes 1 argument");
+            error(current_span_, "String indexOf() takes 1 argument");
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (arg_type->kind != ast::TypeKind::String) {
-                error(Span{}, "String indexOf() argument must be string");
+                error(current_span_, "String indexOf() argument must be string");
             }
         }
         return ast::make_int();
@@ -434,48 +441,48 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     if (member.member == "toUpperCase" || member.member == "toLowerCase" ||
         member.member == "trim") {
         if (!member.args.empty()) {
-            error(Span{}, "String " + member.member + "() takes no arguments");
+            error(current_span_, "String " + member.member + "() takes no arguments");
         }
         return ast::make_string();
     }
     if (member.member == "startsWith" || member.member == "endsWith" ||
         member.member == "includes" || member.member == "contains") {
         if (member.args.size() != 1) {
-            error(Span{}, "String " + member.member + "() takes 1 argument");
+            error(current_span_, "String " + member.member + "() takes 1 argument");
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (arg_type->kind != ast::TypeKind::String) {
-                error(Span{}, "String " + member.member + "() argument must be string");
+                error(current_span_, "String " + member.member + "() argument must be string");
             }
         }
         return ast::make_bool();
     }
     if (member.member == "repeat") {
         if (member.args.size() != 1) {
-            error(Span{}, "String repeat() takes 1 argument");
+            error(current_span_, "String repeat() takes 1 argument");
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (!arg_type->is_integer()) {
-                error(Span{}, "String repeat() count must be integer");
+                error(current_span_, "String repeat() count must be integer");
             }
         }
         return ast::make_string();
     }
     if (member.member == "replace") {
         if (member.args.size() != 2) {
-            error(Span{}, "String replace() takes 2 arguments");
+            error(current_span_, "String replace() takes 2 arguments");
         } else {
             for (auto& arg : member.args) {
                 auto arg_type = infer_type(*arg);
                 if (arg_type->kind != ast::TypeKind::String) {
-                    error(Span{}, "String replace() arguments must be strings");
+                    error(current_span_, "String replace() arguments must be strings");
                 }
             }
         }
         return ast::make_string();
     }
 
-    error(Span{}, "Unknown string method '" + member.member + "'");
+    error(current_span_, "Unknown string method '" + member.member + "'");
     return ast::make_error();
 }
 

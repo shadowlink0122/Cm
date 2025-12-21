@@ -1,3 +1,4 @@
+import std::io::println;
 // ネストしたジェネリクスと型引数のテスト
 
 // ジェネリックなOptionタイプ

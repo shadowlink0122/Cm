@@ -58,6 +58,54 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         return lower_struct_literal(*struct_lit, type);
     } else if (auto* array_lit = expr.as<ast::ArrayLiteralExpr>()) {
         return lower_array_literal(*array_lit, type);
+    } else if (auto* sizeof_expr = expr.as<ast::SizeofExpr>()) {
+        // sizeof(T) または sizeof(expr) をコンパイル時定数として評価
+        int64_t size = 0;
+        std::string type_name;
+        if (sizeof_expr->target_type) {
+            size = calculate_type_size(sizeof_expr->target_type);
+            type_name = ast::type_to_string(*sizeof_expr->target_type);
+        } else if (sizeof_expr->target_expr && sizeof_expr->target_expr->type) {
+            size = calculate_type_size(sizeof_expr->target_expr->type);
+            type_name = ast::type_to_string(*sizeof_expr->target_expr->type);
+        }
+        debug::hir::log(debug::hir::Id::LiteralLower,
+                        "sizeof(" + type_name + ") = " + std::to_string(size), debug::Level::Debug);
+        auto lit = std::make_unique<HirLiteral>();
+        lit->value = size;
+        return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
+    } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
+        // typeof(expr) - 式の型を返すが、値としては0を返す（型コンテキストで使用）
+        // 式として評価される場合はエラーとして扱う
+        debug::hir::log(debug::hir::Id::Warning, "typeof expression used in value context",
+                        debug::Level::Warn);
+        auto lit = std::make_unique<HirLiteral>();
+        lit->value = static_cast<int64_t>(0);
+        return std::make_unique<HirExpr>(std::move(lit), ast::make_error());
+    } else if (auto* alignof_expr = expr.as<ast::AlignofExpr>()) {
+        // alignof(T) - 型のアラインメントをコンパイル時定数として評価
+        int64_t alignment = 0;
+        std::string type_name;
+        if (alignof_expr->target_type) {
+            alignment = calculate_type_align(alignof_expr->target_type);
+            type_name = ast::type_to_string(*alignof_expr->target_type);
+        }
+        debug::hir::log(debug::hir::Id::LiteralLower,
+                        "alignof(" + type_name + ") = " + std::to_string(alignment), debug::Level::Debug);
+        auto lit = std::make_unique<HirLiteral>();
+        lit->value = alignment;
+        return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
+    } else if (auto* typename_expr = expr.as<ast::TypenameOfExpr>()) {
+        // typename(T) - 型の名前を文字列として返す
+        std::string type_name;
+        if (typename_expr->target_type) {
+            type_name = ast::type_to_string(*typename_expr->target_type);
+        }
+        debug::hir::log(debug::hir::Id::LiteralLower,
+                        "typename = \"" + type_name + "\"", debug::Level::Debug);
+        auto lit = std::make_unique<HirLiteral>();
+        lit->value = type_name;
+        return std::make_unique<HirExpr>(std::move(lit), ast::make_string());
     }
 
     debug::hir::log(debug::hir::Id::Warning, "Unknown expression type, using null literal",
@@ -216,10 +264,27 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
     std::string func_name;
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
         func_name = ident->name;
+        
+        // インポートエイリアスをチェック
+        auto alias_it = import_aliases_.find(func_name);
+        if (alias_it != import_aliases_.end()) {
+            func_name = alias_it->second;
+            debug::hir::log(debug::hir::Id::CallTarget, 
+                "resolved import alias: " + ident->name + " -> " + func_name, 
+                debug::Level::Trace);
+        } else if (func_name == "println") {
+            // フォールバック: printlnは常に__println__にマップ
+            func_name = "__println__";
+        } else if (func_name == "print") {
+            // フォールバック: printは常に__print__にマップ
+            func_name = "__print__";
+        }
+        
         hir->func_name = func_name;
         debug::hir::log(debug::hir::Id::CallTarget, "function: " + func_name, debug::Level::Trace);
 
-        static const std::set<std::string> builtin_funcs = {"println", "print", "printf",
+        static const std::set<std::string> builtin_funcs = {"printf",
+                                                            "__println__", "__print__",
                                                             "sprintf", "exit",  "panic"};
 
         bool is_builtin = builtin_funcs.find(func_name) != builtin_funcs.end();

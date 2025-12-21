@@ -1,3 +1,4 @@
+import std::io::println;
 // Test constant import
 import ./simple_math/math::{MAGIC_NUMBER, SIMPLE_PI};
 

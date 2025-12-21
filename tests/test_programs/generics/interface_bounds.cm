@@ -1,3 +1,4 @@
+import std::io::println;
 // インターフェース境界のテスト
 // <T: Interface> - TはInterfaceを実装している型
 // <T: I + J> - TはIとJの両方を実装している型 (AND)

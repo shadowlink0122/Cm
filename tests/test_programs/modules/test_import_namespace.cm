@@ -1,3 +1,4 @@
+import std::io::println;
 // test_import_namespace.cm - 名前空間アクセスの統合テスト
 
 // 1. モジュール全体インポート（名前空間アクセス用）

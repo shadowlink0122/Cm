@@ -1,3 +1,4 @@
+import std::io::println;
 // 複数の構造体に対するEq自動実装テスト
 struct Point with Eq {
     int x;

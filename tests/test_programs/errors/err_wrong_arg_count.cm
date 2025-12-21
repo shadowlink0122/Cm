@@ -1,5 +1,6 @@
-// エラーケース: 引数の数が不正
+import std::io::println;
+// エラーケース: 引数の数が不正（2つ以上の引数は無効）
 int main() {
-    println();  // printlnは引数が必要
+    println("a", "b");  // printlnは最大1引数
     return 0;
 }

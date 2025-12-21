@@ -1,3 +1,4 @@
+import std::io::println;
 // test_import_features.cm - 新しいインポート機能のテスト
 
 // 1. エイリアス付きインポート

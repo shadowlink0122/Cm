@@ -54,6 +54,7 @@ class TypeChecker {
     void check_import(ast::ImportDecl& import);
     void check_function(ast::FunctionDecl& func);
     void register_println();
+    void register_print();
 
     // ============================================================
     // 文のチェック (stmt.cpp)
@@ -135,6 +136,9 @@ class TypeChecker {
     ast::TypePtr current_return_type_;
     std::vector<Diagnostic> diagnostics_;
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
+
+    // 現在チェック中の文/式のSpan（エラー表示用）
+    Span current_span_;
 
     // 型ごとのメソッド情報 (型名 → メソッド名 → メソッド情報)
     std::unordered_map<std::string, std::unordered_map<std::string, MethodInfo>> type_methods_;

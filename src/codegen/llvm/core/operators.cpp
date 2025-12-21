@@ -21,17 +21,97 @@ static void coerceFloatTypes(llvm::IRBuilder<>* builder, llvm::Value*& lhs, llvm
     }
 }
 
+// 型から要素サイズを計算するヘルパー関数
+static int64_t getElementSize(const hir::TypePtr& type) {
+    if (!type)
+        return 1;
+
+    // ポインタ型の場合、要素型のサイズを返す
+    if (type->kind == ast::TypeKind::Pointer && type->element_type) {
+        return getElementSize(type->element_type);
+    }
+
+    switch (type->kind) {
+        case ast::TypeKind::Bool:
+        case ast::TypeKind::Tiny:
+        case ast::TypeKind::UTiny:
+        case ast::TypeKind::Char:
+            return 1;
+        case ast::TypeKind::Short:
+        case ast::TypeKind::UShort:
+            return 2;
+        case ast::TypeKind::Int:
+        case ast::TypeKind::UInt:
+        case ast::TypeKind::Float:
+        case ast::TypeKind::UFloat:
+            return 4;
+        case ast::TypeKind::Long:
+        case ast::TypeKind::ULong:
+        case ast::TypeKind::Double:
+        case ast::TypeKind::UDouble:
+        case ast::TypeKind::Pointer:
+        case ast::TypeKind::Reference:
+            return 8;
+        default:
+            return 1;
+    }
+}
+
 // 二項演算変換
-llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs) {
+llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs,
+                                        const hir::TypePtr& result_type) {
     switch (op) {
         // 算術演算
         case mir::MirBinaryOp::Add: {
-            // 文字列連結の処理
             auto lhsType = lhs->getType();
             auto rhsType = rhs->getType();
 
-            // 両方またはどちらかがポインタ（文字列）の場合
-            if (lhsType->isPointerTy() || rhsType->isPointerTy()) {
+            // ポインタ演算: pointer + int
+            if (lhsType->isPointerTy() && rhsType->isIntegerTy()) {
+                // 要素サイズを取得
+                int64_t elem_size = 1;
+                if (result_type && result_type->kind == ast::TypeKind::Pointer &&
+                    result_type->element_type) {
+                    elem_size = getElementSize(result_type->element_type);
+                }
+
+                auto idx = rhs;
+                if (rhsType->getIntegerBitWidth() != 64) {
+                    idx = builder->CreateSExt(rhs, ctx.getI64Type(), "idx_ext");
+                }
+
+                // オフセットを要素サイズで乗算
+                if (elem_size > 1) {
+                    auto size_val = llvm::ConstantInt::get(ctx.getI64Type(), elem_size);
+                    idx = builder->CreateMul(idx, size_val, "scaled_idx");
+                }
+
+                return builder->CreateGEP(ctx.getI8Type(), lhs, idx, "ptr_add");
+            }
+
+            // ポインタ演算: int + pointer
+            if (lhsType->isIntegerTy() && rhsType->isPointerTy()) {
+                int64_t elem_size = 1;
+                if (result_type && result_type->kind == ast::TypeKind::Pointer &&
+                    result_type->element_type) {
+                    elem_size = getElementSize(result_type->element_type);
+                }
+
+                auto idx = lhs;
+                if (lhsType->getIntegerBitWidth() != 64) {
+                    idx = builder->CreateSExt(lhs, ctx.getI64Type(), "idx_ext");
+                }
+
+                if (elem_size > 1) {
+                    auto size_val = llvm::ConstantInt::get(ctx.getI64Type(), elem_size);
+                    idx = builder->CreateMul(idx, size_val, "scaled_idx");
+                }
+
+                return builder->CreateGEP(ctx.getI8Type(), rhs, idx, "ptr_add");
+            }
+
+            // 文字列連結の処理（両方がポインタ）
+            if (lhsType->isPointerTy() && rhsType->isPointerTy()) {
                 // 左側を文字列に変換
                 llvm::Value* lhsStr = lhs;
                 if (!lhsType->isPointerTy()) {
@@ -112,7 +192,40 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateAdd(lhs, rhs, "add");
         }
         case mir::MirBinaryOp::Sub: {
-            if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
+            auto lhsType = lhs->getType();
+            auto rhsType = rhs->getType();
+
+            // ポインタ演算: pointer - int
+            if (lhsType->isPointerTy() && rhsType->isIntegerTy()) {
+                int64_t elem_size = 1;
+                if (result_type && result_type->kind == ast::TypeKind::Pointer &&
+                    result_type->element_type) {
+                    elem_size = getElementSize(result_type->element_type);
+                }
+
+                auto idx = rhs;
+                if (rhsType->getIntegerBitWidth() != 64) {
+                    idx = builder->CreateSExt(rhs, ctx.getI64Type(), "idx_ext");
+                }
+
+                // オフセットを要素サイズで乗算してから負にする
+                if (elem_size > 1) {
+                    auto size_val = llvm::ConstantInt::get(ctx.getI64Type(), elem_size);
+                    idx = builder->CreateMul(idx, size_val, "scaled_idx");
+                }
+
+                auto negIdx = builder->CreateNeg(idx, "neg_idx");
+                return builder->CreateGEP(ctx.getI8Type(), lhs, negIdx, "ptr_sub");
+            }
+
+            // ポインタ差分: pointer - pointer (バイト単位の差)
+            if (lhsType->isPointerTy() && rhsType->isPointerTy()) {
+                auto lhsInt = builder->CreatePtrToInt(lhs, ctx.getI64Type(), "ptr_to_int");
+                auto rhsInt = builder->CreatePtrToInt(rhs, ctx.getI64Type(), "ptr_to_int");
+                return builder->CreateSub(lhsInt, rhsInt, "ptr_diff");
+            }
+
+            if (lhsType->isFloatingPointTy() || rhsType->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFSub(lhs, rhs, "fsub");
             }

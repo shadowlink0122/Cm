@@ -1,3 +1,4 @@
+import std::io::println;
 // test_import_advanced.cm - 高度なインポートの統合テスト
 
 // 1. ワイルドカードサブモジュールインポート

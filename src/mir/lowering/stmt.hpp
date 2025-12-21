@@ -1,7 +1,7 @@
 #pragma once
 
-#include "expr.hpp"
 #include "base.hpp"
+#include "expr.hpp"
 
 namespace cm::mir {
 

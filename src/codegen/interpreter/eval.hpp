@@ -434,6 +434,63 @@ class Evaluator {
             }
         }
 
+        // ポインタ比較
+        if (lhs.type() == typeid(PointerValue) && rhs.type() == typeid(PointerValue)) {
+            const auto& l = std::any_cast<const PointerValue&>(lhs);
+            const auto& r = std::any_cast<const PointerValue&>(rhs);
+
+            // 同じローカル変数を指し、配列インデックス/フィールドインデックスも同じ場合は等しい
+            bool equal = (l.target_local == r.target_local) && (l.array_index == r.array_index) &&
+                         (l.field_index == r.field_index);
+
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(equal);
+                case MirBinaryOp::Ne:
+                    return Value(!equal);
+                default:
+                    break;
+            }
+        }
+
+        // ポインタ演算: pointer + int
+        if (lhs.type() == typeid(PointerValue) && rhs.type() == typeid(int64_t)) {
+            PointerValue ptr = std::any_cast<PointerValue>(lhs);
+            int64_t offset = std::any_cast<int64_t>(rhs);
+
+            if (op == MirBinaryOp::Add) {
+                if (ptr.array_index.has_value()) {
+                    ptr.array_index = ptr.array_index.value() + offset;
+                } else {
+                    ptr.array_index = offset;
+                }
+                return Value(ptr);
+            }
+            if (op == MirBinaryOp::Sub) {
+                if (ptr.array_index.has_value()) {
+                    ptr.array_index = ptr.array_index.value() - offset;
+                } else {
+                    ptr.array_index = -offset;
+                }
+                return Value(ptr);
+            }
+        }
+
+        // ポインタ演算: int + pointer
+        if (lhs.type() == typeid(int64_t) && rhs.type() == typeid(PointerValue)) {
+            int64_t offset = std::any_cast<int64_t>(lhs);
+            PointerValue ptr = std::any_cast<PointerValue>(rhs);
+
+            if (op == MirBinaryOp::Add) {
+                if (ptr.array_index.has_value()) {
+                    ptr.array_index = ptr.array_index.value() + offset;
+                } else {
+                    ptr.array_index = offset;
+                }
+                return Value(ptr);
+            }
+        }
+
         return Value{};
     }
 

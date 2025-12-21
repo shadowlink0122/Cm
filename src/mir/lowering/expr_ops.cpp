@@ -506,11 +506,11 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
     // 結果用の一時変数
     LocalId result = ctx.new_temp(result_type);
 
-    // BinaryOp Rvalueを作成
+    // BinaryOp Rvalueを作成（ポインタ演算の場合は型情報を含める）
     auto bin_rvalue = std::make_unique<MirRvalue>();
     bin_rvalue->kind = MirRvalue::BinaryOp;
     bin_rvalue->data = MirRvalue::BinaryOpData{mir_op, MirOperand::copy(MirPlace{lhs}),
-                                               MirOperand::copy(MirPlace{rhs})};
+                                               MirOperand::copy(MirPlace{rhs}), result_type};
 
     ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(bin_rvalue)));
 
@@ -553,8 +553,9 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
                 // BinaryOp Rvalueを作成
                 auto bin_rvalue = std::make_unique<MirRvalue>();
                 bin_rvalue->kind = MirRvalue::BinaryOp;
-                bin_rvalue->data = MirRvalue::BinaryOpData{op, MirOperand::copy(MirPlace{var_id}),
-                                                           MirOperand::copy(MirPlace{one})};
+                bin_rvalue->data =
+                    MirRvalue::BinaryOpData{op, MirOperand::copy(MirPlace{var_id}),
+                                            MirOperand::copy(MirPlace{one}), unary.operand->type};
 
                 ctx.push_statement(
                     MirStatement::assign(MirPlace{new_value}, std::move(bin_rvalue)));

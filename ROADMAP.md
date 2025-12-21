@@ -2,7 +2,7 @@
 
 ## 開発方針
 
-> **LLVMベースアーキテクチャ**: 2024年12月より、LLVM IRを唯一のコード生成バックエンドとして採用。
+> **LLVMベースアーキテクチャ**: 2025年12月より、LLVM IRを唯一のコード生成バックエンドとして採用。
 > Rust/TypeScript/C++へのトランスパイルは今後行いません。
 
 ## Version 0.1.0 ✅
@@ -10,7 +10,7 @@
 ### 完成済み機能
 - ✅ 基本的な式と文の実行（インタプリタ）
 - ✅ フォーマット文字列（変数自動キャプチャ）
-  - ✅ ポインタデリファレンス補間 `{*ptr}` （2024年12月19日追加）
+  - ✅ ポインタデリファレンス補間 `{*ptr}` （2025年12月19日追加）
   - ✅ アドレス補間 `{&variable}`
   - ✅ フォーマット指定子（`:x`, `:X`, `:b`, `:o`）
 - ✅ MIRインタプリタ
@@ -343,7 +343,7 @@ Result divide(int a, int b) {
 | static修飾子（変数） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | デフォルト引数 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### 完了した作業（2024年12月14日）
+### 完了した作業（2025年12月14日）
 - ✅ パーサーレベルでのジェネリック構文サポート（<T>, <T: Constraint>）
 - ✅ GenericParam構造体による型制約情報の保持
 - ✅ ジェネリック型変数宣言のパース（Type<T> name）
@@ -361,7 +361,7 @@ Result divide(int a, int b) {
 - ✅ インターフェースメソッド呼び出しのモノモーフィゼーション時書き換え
 - ✅ ジェネリック構造体のLLVM/WASMモノモーフィゼーション（Pair<int>, Box<Point>等）
 
-### テスト結果（2024年12月14日）
+### テスト結果（2025年12月14日）
 - インタプリタ: 89/89 PASS（全テスト合格）
 - LLVM Native: 89/89 PASS（全テスト合格）
 - WASM: 89/89 PASS（全テスト合格）
@@ -416,7 +416,7 @@ Result<int, string> calculate() {
 | 複数型パラメータ（構造体） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 複数型パラメータ（関数） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### 完了した作業（2024年12月14日）
+### 完了した作業（2025年12月14日）
 
 #### ジェネリクス
 - ✅ パーサー: `impl<T>` 構文のサポート
@@ -492,7 +492,7 @@ v0.7.0は単一型パラメータのジェネリクスを完全サポートし�
 ### 目標
 v0.7.0で残存する問題を解決し、ジェネリクスを完全に実装。加えてmatch式を導入。
 
-### 完了した作業（2024年12月14日）
+### 完了した作業（2025年12月14日）
 
 #### v0.7.0の「既知の問題」の検証と解決
 v0.7.0で報告された以下の問題は、実際にはすでに解決されていました：
@@ -535,7 +535,7 @@ v0.7.0で報告された以下の問題は、実際にはすでに解決され�
 | 網羅性チェック（整数/bool） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 網羅性チェック（enum型） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### テスト結果（2024年12月14日）
+### テスト結果（2025年12月14日）
 - インタプリタ: 全テストパス
 - LLVM Native: 整数型match式パス
 - 新規テスト追加:
@@ -549,7 +549,7 @@ v0.7.0で報告された以下の問題は、実際にはすでに解決され�
   - `tests/test_programs/generics/simple_pair.cm`
   - `tests/test_programs/errors/constraint_error.cm`
 
-### v0.8.0 完了（2024年12月14日）
+### v0.8.0 完了（2025年12月14日）
 v0.8.0の全機能が実装完了しました：
 - ✅ match式（整数/文字列/bool型）
 - ✅ パターンガード（変数束縛含む）
@@ -595,7 +595,7 @@ match (result) {
 ### 目標
 動的・静的配列とベクター型の実装（ジェネリクスを活用）
 
-### 完了した作業（2024年12月15日最終更新）
+### 完了した作業（2025年12月15日最終更新）
 
 #### 新機能（この更新で追加）
 
@@ -697,14 +697,14 @@ match (result) {
 | インターフェース境界統一 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ufloat/udouble型 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### 実装完了（2024年12月15日最終更新）
+### 実装完了（2025年12月15日最終更新）
 
 #### operatorキーワード
 - ✅ パーサー: `impl S for Eq { operator bool ==(S other) {...} }` 構文
 - ✅ HIR/MIR: 明示的operator実装のlowering
 - ✅ インタプリタ: 明示的operator実装の実行
 - ✅ LLVM: 整数型・浮動小数点型両対応（float/double型変換修正済み）
-- ✅ WASM: 動作確認済み（2024年12月15日）
+- ✅ WASM: 動作確認済み（2025年12月15日）
 
 #### デッドコード削除（実装完了）
 - ✅ `ProgramDeadCodeElimination`: プログラム全体の未使用関数を削除
@@ -717,7 +717,7 @@ match (result) {
 
 ### 実装状況
 
-#### 完了（2024年12月15日更新）
+#### 完了（2025年12月15日更新）
 - **Lexer**: `operator`, `where`キーワード追加
 - **Parser**: `interface I<T>`でoperatorシグネチャをパース
 - **Parser**: `impl S for I`でoperator実装をパース
@@ -900,7 +900,7 @@ if (p == poly) {  // impl<T> Point for Eq<T> where T: Polygon を使用
 
 ### where句の使い分け
 
-### インターフェース境界の構文（2024年12月15日更新）
+### インターフェース境界の構文（2025年12月15日更新）
 
 すべての制約はインターフェース境界として解釈されます：
 
@@ -1002,7 +1002,7 @@ int main() {
 - `.map()`, `.filter()` - 結果として新しい配列を返すため動的メモリが必要
 - ラムダ式 - map/filter等で使用するクロージャのため先に実装が必要
 
-### 関数ポインタ（2024年12月15日完全実装）
+### 関数ポインタ（2025年12月15日完全実装）
 - ✅ パーサー: `int*(int, int) op;` 新しい簡潔な構文
 - ✅ 型チェッカー: 関数ポインタ型の互換性チェック
 - ✅ HIR/MIR: 関数参照と間接呼び出しの区別
@@ -1014,7 +1014,7 @@ int main() {
   - 高階関数（関数ポインタを引数に取る関数）
   - void戻り値の関数ポインタ
 
-### 文字列操作（2024年12月15日実装）
+### 文字列操作（2025年12月15日実装）
 - ✅ `.len()` / `.length()` / `.size()` - 文字列の長さ
 - ✅ `.charAt(index)` / `.at(index)` - 指定位置の文字
 - ✅ `.substring(start, end?)` / `.slice(start, end?)` - 部分文字列
@@ -1030,7 +1030,7 @@ int main() {
 - ✅ `s[index]` - 配列構文による文字アクセス
 - ✅ インタプリタ、LLVM Native、WASM対応済み
 
-### 文字列スライス（2024年12月15日実装）
+### 文字列スライス（2025年12月15日実装）
 Python風のスライス構文をサポート：
 - ✅ `s[start:end]` - 基本スライス
 - ✅ `s[start:]` - 開始位置から最後まで
@@ -1038,7 +1038,7 @@ Python風のスライス構文をサポート：
 - ✅ `s[:]` - 全体コピー
 - ✅ `s[-n:-m]` - 負のインデックス（末尾から）
 
-### テスト結果（2024年12月15日更新）
+### テスト結果（2025年12月15日更新）
 - インタプリタ: 全テストパス
 - LLVM Native: 121/122テストパス（1スキップ）
 - WASM: 全テストパス
@@ -1056,7 +1056,7 @@ Python風のスライス構文をサポート：
   - `tests/test_programs/pointer/pointer_typedef.cm`
   - `tests/test_programs/pointer/pointer_array_decay.cm`
 
-### 配列メソッド（2024年12月15日追加）
+### 配列メソッド（2025年12月15日追加）
 - ✅ `.size()` / `.len()` / `.length()` - 配列のサイズを取得（コンパイル時定数）
 - ✅ `.indexOf(value)` - 要素の位置を検索（見つからなければ-1）
 - ✅ `.includes(value)` / `.contains(value)` - 要素が含まれているか
@@ -1065,15 +1065,15 @@ Python風のスライス構文をサポート：
 - ✅ `.findIndex(predicate)` - 条件を満たす最初の要素のインデックス
 - ✅ インタプリタ対応済み（PointerValue/ArrayValue両対応）
 - ✅ LLVM Native動作確認済み
-- ✅ WASM対応済み（2024年12月15日追加）
+- ✅ WASM対応済み（2025年12月15日追加）
 
-### for-in構文（2024年12月15日追加）
+### for-in構文（2025年12月15日追加）
 - ✅ `for (Type var in arr)` - 型指定あり範囲for
 - ✅ `for (var in arr)` - 型推論あり範囲for
 - ✅ 構造体配列に対するfor-in
 - ✅ インタプリタ、LLVM、WASMすべてで動作確認済み
 
-### 完了した修正（2024年12月15日）
+### 完了した修正（2025年12月15日）
 - ✅ `resolve_typedef()`: ポインタ型・配列型の要素型を再帰的に解決
   - `*MyInt` → `*int` の自動変換
   - `MyFloat[10]` → `float[10]` の自動変換
@@ -1104,7 +1104,7 @@ Vec<int>[10] vectors;
 コンパイラの継続的な開発に伴い、いくつかのファイルが大きくなりすぎてメンテナンス性に影響が出ています。
 将来のボトルネックを防ぐため、以下のリファクタリングを計画しています。
 
-### 完了済み（2024年12月21日）
+### 完了済み（2025年12月21日更新）
 
 #### 1. builtins.hppの分割 ✅
 インタプリタの組み込み関数を責務ごとに分離：
@@ -1117,60 +1117,71 @@ builtins.hpp (926行) →
 └── builtins.hpp (78行) - メインヘッダー（統合）
 ```
 
-#### 2. expr_lowering_impl.cppの分割 ✅
+#### 2. MIR式lowering分割 ✅
 MIR式loweringを論理的なグループに分離：
 ```
-expr_lowering_impl.cpp (2507行) →
-├── expr_lowering_basic.cpp (538行) - リテラル、変数参照、メンバー、インデックス等
-├── expr_lowering_ops.cpp (696行) - 二項演算、単項演算
-└── expr_lowering_call.cpp (1298行) - 関数呼び出し、文字列補間
+src/mir/lowering/
+├── expr.hpp - 式lowering共通ヘッダー
+├── expr_basic.cpp - リテラル、変数参照、メンバー、インデックス等
+├── expr_ops.cpp - 二項演算、単項演算
+└── expr_call.cpp - 関数呼び出し、文字列補間
 ```
 
-#### 3. hir_lowering.hppの分割 ✅
-ヘッダーオンリー実装を責務ごとにcppファイルに分割：
+#### 3. HIR lowering分割 ✅
+HIR loweringをフォルダに整理し、責務ごとにcppファイルに分割：
 ```
-hir_lowering.hpp (2337行) →
-├── hir_lowering_fwd.hpp (95行) - クラス宣言
-├── hir_lowering.hpp (5行) - 後方互換性のためのラッパー
-├── hir_lowering.cpp (335行) - メインエントリポイント、演算子変換
-├── hir_lowering_decl.cpp (343行) - 宣言のlowering（関数、構造体、impl等）
-├── hir_lowering_stmt.cpp (394行) - 文のlowering（let、if、for、switch等）
-└── hir_lowering_expr.cpp (1066行) - 式のlowering（リテラル、二項演算、メソッド呼び出し等）
+src/hir/lowering/
+├── lowering.hpp - メインヘッダー
+├── fwd.hpp - 前方宣言
+├── impl.cpp - メインエントリポイント
+├── decl.cpp - 宣言のlowering（関数、構造体、impl等）
+├── stmt.cpp - 文のlowering（let、if、for、switch等）
+└── expr.cpp - 式のlowering（リテラル、二項演算、メソッド呼び出し等）
 ```
+
+#### 4. MIR lowering分割 ✅
+MIR loweringフォルダのファイル名を整理：
+```
+src/mir/lowering/
+├── lowering.hpp - メインヘッダー
+├── base.hpp - 基底クラスと共通機能
+├── context.hpp - loweringコンテキスト
+├── impl.cpp - 演算子実装
+├── stmt.hpp / stmt.cpp - 文のlowering
+├── expr.hpp - 式lowering共通ヘッダー
+├── expr_basic.cpp - 基本式のlowering
+├── expr_ops.cpp - 演算子のlowering
+├── expr_call.cpp - 関数呼び出しのlowering
+├── monomorphization.hpp - ジェネリクス特殊化ヘッダー
+└── monomorphization_impl.cpp - ジェネリクス特殊化実装
+```
+
+#### 5. type_checker分割 ✅
+型チェッカーを機能ごとにcppファイルに分割：
+```
+src/frontend/types/
+├── type_checker.hpp - クラス宣言、パブリックAPI
+└── checking/
+    ├── decl.cpp - 宣言の登録・チェック
+    ├── stmt.cpp - 文のチェック
+    ├── expr.cpp - 式の型推論
+    ├── call.cpp - 関数呼び出しの型チェック
+    ├── generic.cpp - ジェネリクス関連
+    ├── auto_impl.cpp - 自動実装（with）
+    └── utils.cpp - ユーティリティ関数
+```
+
+#### 6. ファイル名正規化 ✅
+フォルダ名と重複するファイル名を修正：
+- `preprocessor/import_preprocessor.*` → `preprocessor/import.*`
+- `module/module_resolver.*` → `module/resolver.*`
+- `mir/mir_nodes.hpp` → `mir/nodes.hpp`
+- `mir/mir_printer.hpp` → `mir/printer.hpp`
+- `mir/mir_lowering.hpp` → 削除（互換性ファイル）
 
 ### 計画中（優先度順）
 
-#### 4. type_checker.hppの分割（高優先度）
-**現状**: 2532行（ヘッダーオンリー）
-**課題**: ヘッダーオンリーでテンプレートや複雑な依存関係があり、分割には大きな作業が必要
-**方針**: クラス宣言と実装を分離し、機能ごとにcppファイルに分割
-```
-type_checker.hpp (2532行) →
-├── type_checker.hpp (~400行) - クラス宣言、パブリックAPI
-├── type_checker_registration.cpp (~500行) - register_* 関数
-├── type_checker_inference.cpp (~800行) - infer_* 関数（型推論）
-├── type_checker_check.cpp (~500行) - check_* 関数（型チェック）
-└── type_checker_utils.cpp (~300行) - ユーティリティ関数
-```
-
-#### 5. mir/lowering/の分割（✅ 完了）
-**現状**: 分割済み
-**実装済み**: 
-```
-src/mir/lowering/
-├── lowering.hpp (~1200行) - メインヘッダー、クラス宣言
-├── lowering_impl.cpp - 演算子実装
-├── lowering_base.hpp - 基本lowering機能
-├── lowering_context.hpp - loweringコンテキスト
-├── stmt_lowering.hpp / stmt_lowering_impl.cpp - 文のlowering
-├── expr_lowering.hpp - 式lowering共通ヘッダー
-├── expr_lowering_basic.cpp - 基本式のlowering
-├── expr_lowering_ops.cpp - 演算子のlowering
-├── expr_lowering_call.cpp - 関数呼び出しのlowering
-└── monomorphization*.cpp - ジェネリクス特殊化
-```
-
-#### 6. interpreter.hppの分割（中優先度）
+#### 7. interpreter.hppの分割（中優先度）
 **現状**: 601行
 **方針**: eval部分を別ファイルに分離
 ```
@@ -1180,7 +1191,7 @@ interpreter.hpp (601行) →
 └── interpreter_stmt.cpp (~200行) - 文実行
 ```
 
-#### 7. monomorphization_impl.cppの分割（低優先度）
+#### 8. monomorphization_impl.cppの分割（低優先度）
 **現状**: 1201行
 **方針**: 関数と構造体のモノモーフィゼーションを分離
 ```
@@ -1188,17 +1199,6 @@ monomorphization_impl.cpp (1201行) →
 ├── monomorphization_func.cpp (~600行) - 関数のモノモーフィゼーション
 └── monomorphization_struct.cpp (~600行) - 構造体のモノモーフィゼーション
 ```
-
-### 技術的課題
-
-1. **ヘッダーオンリー実装の分割**
-   - テンプレートクラスはヘッダーに残す必要がある
-   - 複雑な依存関係の解決が必要
-   - コンパイル時間とリンク時間のバランス
-
-2. **MIR型の統一**
-   - mir_lowering.hppとmir_nodes.hppで異なる型定義が使用されている
-   - 将来的に統一が必要
 
 ### ガイドライン
 
@@ -1208,20 +1208,9 @@ monomorphization_impl.cpp (1201行) →
 4. **テストの維持**: リファクタリング後も全テストがパスすることを確認
 5. **段階的な実施**: 一度に大きな変更をせず、小さな変更を積み重ねる
 
-### リファクタリング実施時の手順
-
-1. バックアップを作成
-2. 分割対象の関数境界を特定
-3. 新しいファイルを作成し、関数を移動
-4. ヘッダーに宣言を追加（必要に応じて）
-5. CMakeLists.txtを更新
-6. ビルドして重複定義エラーがないことを確認
-7. 全テストを実行して動作確認
-8. 元のファイルを削除（または不要部分を削除）
-
 ---
 
-## Version 0.10.1 - 文字列補間拡張 ✅ (2024年12月19日完了)
+## Version 0.10.1 - 文字列補間拡張 ✅ (2025年12月19日完了)
 
 ### 実装済み機能
 - ✅ ポインタデリファレンス補間 `{*ptr}`
@@ -1248,7 +1237,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 
 ## Version 0.10.0 - 型システム強化とモジュールシステム（進行中）
 
-### 現在の優先タスク（2024-12-20）
+### 現在の優先タスク（2025-12-20）
 
 #### ✅ 完了: 型システム
 - [x] **関数戻り値の型チェック**
@@ -1256,7 +1245,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
   - テスト: `tests/test_programs/type_checking/function_return_type_mismatch.cm`
   - 結果: `Type mismatch in variable declaration` エラーが表示される ✅
 
-#### ✅ 完了: グローバルconst変数の文字列補間（2024-12-20）
+#### ✅ 完了: グローバルconst変数の文字列補間（2025-12-20）
 - [x] **グローバルconst変数の文字列補間を実装**
   - 修正: `src/mir/lowering/expr_lowering_impl.cpp` (57-82行目)
   - 実装: `ctx.get_const_value()` を使用してグローバルconst変数を解決
@@ -1267,7 +1256,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 
 #### ✅ 完了: モジュールシステム実装（Phase 1）
 
-**状態**: 基本機能完了 (2024-12-20)
+**状態**: 基本機能完了 (2025-12-20)
 
 **完了した作業**:
 - ✅ 最終設計文書作成（`MODULE_SYSTEM_FINAL.md` v5.0）
@@ -1301,12 +1290,12 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 - テスト: `tests/test_programs/modules/`
 
 ### 現在の状況
-- **文字列補間の改善**: ✅ 完了（2024年12月20日）
+- **文字列補間の改善**: ✅ 完了（2025年12月20日）
   - ローカルconst変数の補間: ✅ 動作
   - グローバルconst変数の補間: ✅ 動作
 - **型システム**: ✅ 問題解決
   - 関数戻り値の型不一致が正しく検出される
-- **モジュールシステム**: ✅ Phase 1完了（2024年12月20日）
+- **モジュールシステム**: ✅ Phase 1完了（2025年12月20日）
   - 階層的インポート（`import std::io;`）: ✅ 動作
   - 再エクスポート（`export { io };`）: ✅ 動作
   - ネストした名前空間生成: ✅ 動作
@@ -1316,7 +1305,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 ### 目標
 型システムを強化し、モジュールシステム（import/export）を実装してプロジェクト分割を可能にする。
 
-### v0.9.0制約の完了（完了: 2024年12月16日）
+### v0.9.0制約の完了（完了: 2025年12月16日）
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
 | typedef型ポインタ（LLVM） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -1332,7 +1321,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 - ネストした名前空間を自動生成
 - シンプルで確実な動作
 
-#### Phase 1-3 完了機能（2024-12-21 最終更新）
+#### Phase 1-3 完了機能（2025-12-21 最終更新）
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
 | export文パース（基本） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -1357,7 +1346,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 | サブモジュール直接インポート（./path/std::io::func） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | サブモジュールワイルドカード（./path/std::io::*） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-#### implの可視性ルール（2024-12-21 決定）
+#### implの可視性ルール（2025-12-21 決定）
 | ルール | 状態 | 備考 |
 |--------|------|------|
 | implは暗黙的エクスポート | ✅ | 構造体がexportされていればimplも公開 |
@@ -1370,7 +1359,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 | 階層再構築エクスポート（io::{file}） | ✅ | 完全サポート |
 | モジュール間の型推論 | ⬜ | v0.11.0以降で検討 |
 
-### テスト結果（2024-12-21 最終確認）
+### テスト結果（2025-12-21 最終確認）
 
 全てのバックエンドで **165 passed, 0 failed**：
 
@@ -1387,7 +1376,7 @@ println("Address in hex: {&x:x}");         // "Address in hex: 0x305bc8c24"
 | std_import | ✅ | ✅ | ✅ |
 | ... (他27テスト) | ✅ | ✅ | ✅ |
 
-### 文字列補間の改善（2024年12月20日完了）
+### 文字列補間の改善（2025年12月20日完了）
 
 v0.9.0で実装された文字列補間機能を拡張し、const変数のサポートを追加：
 
@@ -1411,7 +1400,7 @@ v0.9.0で実装された文字列補間機能を拡張し、const変数のサポ
 
 注: パーサーレベルでの準備コードは存在するが、完全な実装はまだ行われていない。
 
-### 構造体拡張（2024-12-21 実装完了）
+### 構造体拡張（2025-12-21 実装完了）
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
 | 構造体メンバの配列 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -2100,7 +2089,7 @@ test:
 
 ## 廃止された機能
 
-以下の機能は2024年12月に廃止されました：
+以下の機能は2025年12月に廃止されました：
 
 - **Rustトランスパイラ** (`--emit-rust`): LLVMバックエンドに置き換え
 - **TypeScriptトランスパイラ** (`--emit-ts`): LLVMバックエンドに置き換え

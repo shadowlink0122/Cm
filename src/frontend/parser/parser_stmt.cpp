@@ -354,6 +354,7 @@ ast::StmtPtr Parser::parse_stmt() {
 // 型の開始かどうか
 bool Parser::is_type_start() {
     switch (current().kind) {
+        case TokenKind::KwAuto:
         case TokenKind::KwVoid:
         case TokenKind::KwBool:
         case TokenKind::KwTiny:

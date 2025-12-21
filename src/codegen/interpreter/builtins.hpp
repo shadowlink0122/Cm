@@ -39,6 +39,26 @@ class BuiltinManager {
         builtins_["std::io::print"] = [this](std::vector<Value> args, const auto& locals) -> Value {
             return format_println(args, locals, false);
         };
+        
+        // println と print は短縮形（import std::io::println 後に使用）
+        builtins_["println"] = [this](std::vector<Value> args,
+                                      const auto& locals) -> Value {
+            return format_println(args, locals, true);
+        };
+
+        builtins_["print"] = [this](std::vector<Value> args, const auto& locals) -> Value {
+            return format_println(args, locals, false);
+        };
+        
+        // __println__ と __print__ は内部実装として登録
+        builtins_["__println__"] = [this](std::vector<Value> args,
+                                          const auto& locals) -> Value {
+            return format_println(args, locals, true);
+        };
+
+        builtins_["__print__"] = [this](std::vector<Value> args, const auto& locals) -> Value {
+            return format_println(args, locals, false);
+        };
     }
 
     /// フォーマット付きprintln の共通処理

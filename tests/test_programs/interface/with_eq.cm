@@ -1,3 +1,4 @@
+import std::io::println;
 // with Eq 自動実装テスト
 // struct Point with Eq で Eq<Point> を自動実装
 

@@ -1,3 +1,4 @@
+import std::io::println;
 // enumの基本テスト
 enum Color {
     Red = 0,

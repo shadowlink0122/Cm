@@ -1,3 +1,4 @@
+import std::io::println;
 // Clone自動実装テスト
 struct Point with Clone {
     int x;

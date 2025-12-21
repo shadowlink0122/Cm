@@ -1,3 +1,4 @@
+import std::io::println;
 import ./basic_reexport/std::io;
 
 int main() {

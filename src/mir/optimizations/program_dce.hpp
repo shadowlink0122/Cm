@@ -44,7 +44,9 @@ class ProgramDeadCodeElimination {
 
         // 組み込み関数は常に使用される
         static const std::set<std::string> builtins = {"println",
+                                                       "__println__",
                                                        "print",
+                                                       "__print__",
                                                        "printf",
                                                        "sprintf",
                                                        "exit",

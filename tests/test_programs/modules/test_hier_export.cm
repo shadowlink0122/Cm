@@ -1,3 +1,4 @@
+import std::io::println;
 // test_hier_export.cm - 直接インポートテスト
 import ./hier_export/io/file;
 import ./hier_export/io/stream;

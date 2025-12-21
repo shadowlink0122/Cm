@@ -1,3 +1,4 @@
+import std::io::println;
 // Hash自動実装テスト
 struct Point with Hash {
     int x;

@@ -1,0 +1,24 @@
+// std::types - 型情報とイントロスペクション
+module std.types;
+
+// ============================================================
+// 型情報関数（コンパイラ組み込みのラッパー）
+// ============================================================
+
+// 型のサイズをバイト単位で取得
+// 使用例: uint s = size_of<int>(); // -> 4
+export <T> uint size_of() {
+    return __sizeof__(T);
+}
+
+// 型の名前を文字列で取得
+// 使用例: string n = type_name<int>(); // -> "int"
+export <T> string type_name() {
+    return __typename__(T);
+}
+
+// 型のアラインメントをバイト単位で取得
+// 使用例: uint a = align_of<double>(); // -> 8
+export <T> uint align_of() {
+    return __alignof__(T);
+}

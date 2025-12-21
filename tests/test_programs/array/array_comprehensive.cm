@@ -1,3 +1,4 @@
+import std::io::println;
 // array_basic.cm - 配列基本機能の統合テスト
 
 int main() {

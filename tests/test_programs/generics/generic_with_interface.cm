@@ -1,3 +1,4 @@
+import std::io::println;
 // interface を型引数として使用するテスト
 
 interface Printable {

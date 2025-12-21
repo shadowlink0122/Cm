@@ -1,3 +1,4 @@
+import std::io::println;
 // struct_constructor.cm - コンストラクタの統合テスト
 
 struct Point {

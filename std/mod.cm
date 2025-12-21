@@ -1,0 +1,18 @@
+// std - Cm言語標準ライブラリ
+// 
+// モジュール構成:
+//   std::io     - 入出力関数 (println, print, etc.)
+//   std::core   - コア機能 (型エイリアス, ユーティリティ関数)
+//   std::math   - 数学関数 (sin, cos, sqrt, etc.)
+//   std::types  - 型情報とイントロスペクション (sizeof, typename)
+//
+// 使用例:
+//   import std::io::println;
+//   import std::math::{sin, cos, PI};
+//   import std::core::{min, max, clamp};
+//   import std::types::{size_of, type_name};
+
+module std;
+
+// サブモジュールへのアクセスは直接インポートで行う
+// 例: import std::io::println;

@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体フィールドへのポインタテスト
 
 struct Point {

@@ -1,3 +1,4 @@
+import std::io::println;
 // テスト: モジュールレベルのconst変数を文字列補間で使用
 export const int VERSION = 1;
 export const int MAJOR = 2;

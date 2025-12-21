@@ -1,3 +1,4 @@
+import std::io::println;
 // impl_implicit_this.cm - impl内での暗黙的thisアクセス
 interface Getter {
     int get_x();

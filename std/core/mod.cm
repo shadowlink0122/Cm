@@ -1,216 +1,98 @@
-// std.core - コア機能モジュール（OS非依存）
+// std::core - コア機能モジュール
 module std.core;
 
 // ============================================================
-// 基本的な型エイリアス
+// 型エイリアス
 // ============================================================
 
-export type i8 = tiny;
-export type i16 = short;
-export type i32 = int;
-export type i64 = long;
+// 固定サイズ整数型
+typedef i8 = tiny;
+typedef i16 = short;
+typedef i32 = int;
+typedef i64 = long;
 
-export type u8 = utiny;
-export type u16 = ushort;
-export type u32 = uint;
-export type u64 = ulong;
+typedef u8 = utiny;
+typedef u16 = ushort;
+typedef u32 = uint;
+typedef u64 = ulong;
 
-export type f32 = float;
-export type f64 = double;
+// 浮動小数点型
+typedef f32 = float;
+typedef f64 = double;
 
-export type usize = uint;  // プラットフォーム依存（32/64bit）
-export type isize = int;   // プラットフォーム依存（32/64bit）
+// プラットフォーム依存サイズ型
+typedef usize = uint;
+typedef isize = int;
 
 // ============================================================
-// Option型（Nullable）
+// 外部関数宣言（ランタイム）
 // ============================================================
 
-export enum class Option<T> {
-    Some(T),
-    None
-};
+extern "C" void cm_panic(string message);
+extern "C" void cm_abort();
 
-export template<typename T>
-bool is_some(const Option<T>& opt) {
-    return opt == Option<T>::Some;
+// ============================================================
+// ユーティリティ関数
+// ============================================================
+
+// パニック - プログラムを異常終了
+export void panic(string message) {
+    cm_panic(message);
+    cm_abort();
 }
 
-export template<typename T>
-bool is_none(const Option<T>& opt) {
-    return opt == Option<T>::None;
-}
-
-export template<typename T>
-T unwrap(Option<T> opt) {
-    if (opt == Option<T>::None) {
-        panic("Called unwrap on None value");
-    }
-    return opt.value;
-}
-
-export template<typename T>
-T unwrap_or(Option<T> opt, T default_value) {
-    if (opt == Option<T>::None) {
-        return default_value;
-    }
-    return opt.value;
-}
-
-// ============================================================
-// Result型（エラーハンドリング）
-// ============================================================
-
-export enum class Result<T, E> {
-    Ok(T),
-    Err(E)
-};
-
-export template<typename T, typename E>
-bool is_ok(const Result<T, E>& res) {
-    return res == Result<T, E>::Ok;
-}
-
-export template<typename T, typename E>
-bool is_err(const Result<T, E>& res) {
-    return res == Result<T, E>::Err;
-}
-
-export template<typename T, typename E>
-T unwrap_result(Result<T, E> res) {
-    if (res == Result<T, E>::Err) {
-        panic("Called unwrap on Err value");
-    }
-    return res.value;
-}
-
-export template<typename T, typename E>
-E unwrap_err(Result<T, E> res) {
-    if (res == Result<T, E>::Ok) {
-        panic("Called unwrap_err on Ok value");
-    }
-    return res.error;
-}
-
-// ============================================================
-// 基本的なインターフェース
-// ============================================================
-
-export interface Clone {
-    virtual Clone* clone() const = 0;
-};
-
-export interface Copy {
-    // マーカーインターフェース（メソッドなし）
-};
-
-export interface Default {
-    static Default* default_value();
-};
-
-export interface Debug {
-    virtual string debug_str() const = 0;
-};
-
-export interface Display {
-    virtual string to_string() const = 0;
-};
-
-export interface PartialEq {
-    virtual bool eq(const PartialEq& other) const = 0;
-    virtual bool ne(const PartialEq& other) const {
-        return !eq(other);
-    }
-};
-
-export interface Eq : PartialEq {
-    // 反射律、対称律、推移律を満たす
-};
-
-// ============================================================
-// 順序付け
-// ============================================================
-
-export enum class Ordering {
-    Less,
-    Equal,
-    Greater
-};
-
-export interface PartialOrd : PartialEq {
-    virtual Option<Ordering> partial_cmp(const PartialOrd& other) const = 0;
-
-    virtual bool lt(const PartialOrd& other) const {
-        Option<Ordering> result = partial_cmp(other);
-        return is_some(result) && unwrap(result) == Ordering::Less;
-    }
-
-    virtual bool le(const PartialOrd& other) const {
-        Option<Ordering> result = partial_cmp(other);
-        return is_some(result) && unwrap(result) != Ordering::Greater;
-    }
-
-    virtual bool gt(const PartialOrd& other) const {
-        Option<Ordering> result = partial_cmp(other);
-        return is_some(result) && unwrap(result) == Ordering::Greater;
-    }
-
-    virtual bool ge(const PartialOrd& other) const {
-        Option<Ordering> result = partial_cmp(other);
-        return is_some(result) && unwrap(result) != Ordering::Less;
-    }
-};
-
-export interface Ord : Eq, PartialOrd {
-    virtual Ordering cmp(const Ord& other) const = 0;
-};
-
-// ============================================================
-// 基本的な関数
-// ============================================================
-
-// 値の交換
-export template<typename T>
-void swap(T& a, T& b) {
-    T tmp = a;
-    a = b;
-    b = tmp;
-}
-
-// 最小値
-export template<typename T>
-T min(T a, T b) {
+// 最小値を返す
+export <T> T min(T a, T b) {
     if (a < b) {
         return a;
-    } else {
-        return b;
     }
+    return b;
 }
 
-// 最大値
-export template<typename T>
-T max(T a, T b) {
+// 最大値を返す
+export <T> T max(T a, T b) {
     if (a > b) {
         return a;
-    } else {
-        return b;
     }
+    return b;
 }
 
-// クランプ
-export template<typename T>
-T clamp(T value, T min_val, T max_val) {
+// 値を範囲内にクランプ
+export <T> T clamp(T value, T min_val, T max_val) {
     if (value < min_val) {
         return min_val;
-    } else if (value > max_val) {
-        return max_val;
-    } else {
-        return value;
     }
+    if (value > max_val) {
+        return max_val;
+    }
+    return value;
 }
 
-// パニック関数（外部定義）
-extern "C" void cm_panic(const char* message);
+// 絶対値を返す
+export int abs(int x) {
+    if (x < 0) {
+        return -x;
+    }
+    return x;
+}
 
-export void panic(string message) {
-    cm_panic(message.c_str());
+export long abs(long x) {
+    if (x < 0) {
+        return -x;
+    }
+    return x;
+}
+
+export float abs(float x) {
+    if (x < 0.0) {
+        return -x;
+    }
+    return x;
+}
+
+export double abs(double x) {
+    if (x < 0.0) {
+        return -x;
+    }
+    return x;
 }

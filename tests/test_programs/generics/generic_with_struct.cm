@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体を型引数として使用するジェネリクスのテスト
 
 struct Point {

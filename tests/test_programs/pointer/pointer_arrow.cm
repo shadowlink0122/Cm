@@ -1,3 +1,4 @@
+import std::io::println;
 // アロー演算子テスト (ptr->member)
 
 struct Point {

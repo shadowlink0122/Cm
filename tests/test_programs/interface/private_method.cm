@@ -1,3 +1,4 @@
+import std::io::println;
 // privateメソッドのテスト
 // impl内でprivate修飾子を使ってメソッドを定義
 

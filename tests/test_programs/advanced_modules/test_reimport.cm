@@ -1,3 +1,4 @@
+import std::io::println;
 // test_reimport.cm - 再インポート防止のテスト
 
 // 同じモジュールを複数回インポート（重複は自動的に防止される）

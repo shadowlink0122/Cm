@@ -90,7 +90,8 @@ class MIRToLLVM {
     llvm::Constant* convertConstant(const mir::MirConstant& value);
 
     /// 二項演算変換
-    llvm::Value* convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs);
+    llvm::Value* convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs,
+                                 const hir::TypePtr& result_type = nullptr);
 
     /// 単項演算変換
     llvm::Value* convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand);

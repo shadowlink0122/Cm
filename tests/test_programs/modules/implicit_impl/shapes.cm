@@ -1,5 +1,6 @@
 // shapes.cm - implの暗黙的エクスポートテスト用モジュール
 module shapes;
+import std::io::println;
 
 interface Printable {
     void print();

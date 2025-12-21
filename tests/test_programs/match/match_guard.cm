@@ -1,3 +1,4 @@
+import std::io::println;
 // パターンガードのテスト（変数束縛版）
 
 int sign(int x) {

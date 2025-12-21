@@ -21,6 +21,7 @@ enum class TokenKind {
     // キーワード
     KwAs,  // import alias
     KwAsync,
+    KwAuto,  // auto type inference
     KwAwait,
     KwBreak,
     KwCase,  // switch case
@@ -55,6 +56,7 @@ enum class TokenKind {
     KwPrivate,
     KwPub,  // public visibility
     KwReturn,
+    KwSizeof,  // sizeof operator
     KwStatic,
     KwStruct,
     KwSwitch,    // switch statement
@@ -63,12 +65,19 @@ enum class TokenKind {
     KwTrue,
     KwTypedef,   // type alias
     KwTypename,  // template typename
+    KwTypeof,    // typeof operator
     KwUse,       // use statement (similar to import)
     KwVoid,
     KwVolatile,
     KwWhere,  // where clause for type constraints
     KwWhile,
     KwWith,
+    
+    // コンパイラ組み込み関数（真のインライン）
+    KwIntrinsicSizeof,    // __sizeof__
+    KwIntrinsicTypeof,    // __typeof__
+    KwIntrinsicTypename,  // __typename__
+    KwIntrinsicAlignof,   // __alignof__
 
     // 型キーワード
     KwInt,

@@ -1,3 +1,4 @@
+import std::io::println;
 // err_duplicate_method.cm - メソッド名重複エラーテスト
 
 interface Printable {

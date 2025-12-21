@@ -1,3 +1,4 @@
+import std::io::println;
 // struct_literal.cm - 構造体リテラルの統合テスト（暗黙的型推論）
 
 struct Point {

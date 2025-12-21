@@ -219,6 +219,9 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             }
             scopes_.global().define_function(func->name, std::move(param_types), func->return_type);
         }
+    } else if (auto* import = decl.as<ast::ImportDecl>()) {
+        // Pass 1でimportも処理してprintlnを登録
+        check_import(*import);
     }
 }
 
@@ -387,22 +390,35 @@ void TypeChecker::register_typedef(ast::TypedefDecl& td) {
 }
 
 void TypeChecker::check_import(ast::ImportDecl& import) {
-    if (import.path.to_string() == "std::io") {
+    std::string path_str = import.path.to_string();
+    
+    if (path_str == "std::io") {
         for (const auto& item : import.items) {
-            if (item.name == "println") {
+            if (item.name == "println" || item.name.empty()) {
                 register_println();
-            } else if (item.name.empty()) {
-                register_println();
+            }
+            if (item.name == "print" || item.name.empty()) {
+                register_print();
             }
         }
     } else if (import.path.segments.size() >= 3 && import.path.segments[0] == "std" &&
-               import.path.segments[1] == "io" && import.path.segments[2] == "println") {
-        register_println();
+               import.path.segments[1] == "io") {
+        if (import.path.segments[2] == "println") {
+            register_println();
+        } else if (import.path.segments[2] == "print") {
+            register_print();
+        }
     }
 }
 
 void TypeChecker::register_println() {
-    scopes_.global().define_function("println", {ast::make_void()}, ast::make_void());
+    // printlnは可変引数で、0個以上の引数を取る
+    scopes_.global().define_function("println", {}, ast::make_void(), 0);
+}
+
+void TypeChecker::register_print() {
+    // printは1個の引数を取る
+    scopes_.global().define_function("print", {ast::make_void()}, ast::make_void(), 1);
 }
 
 void TypeChecker::check_function(ast::FunctionDecl& func) {

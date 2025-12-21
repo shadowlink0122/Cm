@@ -174,8 +174,8 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 // 関数呼び出しのlowering
 LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
                                  LoweringContext& ctx) {
-    // println builtin特別処理
-    if (call.func_name == "println") {
+    // __println__ builtin特別処理
+    if (call.func_name == "__println__") {
         // 引数がない場合は空行を出力
         if (call.args.empty()) {
             BlockId success_block = ctx.new_block();

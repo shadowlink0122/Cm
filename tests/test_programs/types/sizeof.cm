@@ -1,0 +1,224 @@
+import std::io::println;
+// sizeof演算子テスト - 全型・変数対応
+
+// 構造体
+struct Point {
+    int x;
+    int y;
+}
+
+struct Empty {}
+
+struct Nested {
+    Point p;
+    int z;
+}
+
+// アラインメントテスト用構造体
+struct Aligned1 {
+    char c;
+    int i;
+}
+
+struct Aligned2 {
+    char c1;
+    char c2;
+    int i;
+}
+
+struct Aligned3 {
+    int i;
+    char c;
+}
+
+struct Aligned4 {
+    char c1;
+    long l;
+    char c2;
+}
+
+struct AllTypes {
+    bool b;
+    char c;
+    tiny t;
+    short s;
+    int i;
+    long l;
+    float f;
+    double d;
+}
+
+// typedef
+typedef MyInt = int;
+typedef MyPoint = Point;
+typedef IntPtr = int*;
+typedef IntArray = int[5];
+
+int main() {
+    // =====================================
+    // 基本型に対するsizeof
+    // =====================================
+    println("=== 基本型 ===");
+    int s_bool = sizeof(bool);
+    int s_char = sizeof(char);
+    int s_tiny = sizeof(tiny);
+    int s_utiny = sizeof(utiny);
+    int s_short = sizeof(short);
+    int s_ushort = sizeof(ushort);
+    int s_int = sizeof(int);
+    int s_uint = sizeof(uint);
+    int s_long = sizeof(long);
+    int s_ulong = sizeof(ulong);
+    int s_float = sizeof(float);
+    int s_double = sizeof(double);
+    
+    println("sizeof(bool) = {s_bool}");
+    println("sizeof(char) = {s_char}");
+    println("sizeof(tiny) = {s_tiny}");
+    println("sizeof(utiny) = {s_utiny}");
+    println("sizeof(short) = {s_short}");
+    println("sizeof(ushort) = {s_ushort}");
+    println("sizeof(int) = {s_int}");
+    println("sizeof(uint) = {s_uint}");
+    println("sizeof(long) = {s_long}");
+    println("sizeof(ulong) = {s_ulong}");
+    println("sizeof(float) = {s_float}");
+    println("sizeof(double) = {s_double}");
+    
+    // =====================================
+    // ポインタ型
+    // =====================================
+    println("\n=== ポインタ型 ===");
+    int s_intp = sizeof(int*);
+    int s_charp = sizeof(char*);
+    int s_pointp = sizeof(Point*);
+    int s_intpp = sizeof(int**);
+    println("sizeof(int*) = {s_intp}");
+    println("sizeof(char*) = {s_charp}");
+    println("sizeof(Point*) = {s_pointp}");
+    println("sizeof(int**) = {s_intpp}");
+    
+    // =====================================
+    // 配列型
+    // =====================================
+    println("\n=== 配列型 ===");
+    int s_arr1 = sizeof(int[1]);
+    int s_arr5 = sizeof(int[5]);
+    int s_arr10 = sizeof(int[10]);
+    int s_carr100 = sizeof(char[100]);
+    int s_larr3 = sizeof(long[3]);
+    int s_parr2 = sizeof(Point[2]);
+    println("sizeof(int[1]) = {s_arr1}");
+    println("sizeof(int[5]) = {s_arr5}");
+    println("sizeof(int[10]) = {s_arr10}");
+    println("sizeof(char[100]) = {s_carr100}");
+    println("sizeof(long[3]) = {s_larr3}");
+    println("sizeof(Point[2]) = {s_parr2}");
+    
+    // =====================================
+    // 構造体型
+    // =====================================
+    println("\n=== 構造体型 ===");
+    int s_point = sizeof(Point);
+    int s_empty = sizeof(Empty);
+    int s_nested = sizeof(Nested);
+    int s_alltypes = sizeof(AllTypes);
+    println("sizeof(Point) = {s_point}");
+    println("sizeof(Empty) = {s_empty}");
+    println("sizeof(Nested) = {s_nested}");
+    println("sizeof(AllTypes) = {s_alltypes}");
+    
+    // =====================================
+    // アラインメント
+    // =====================================
+    println("\n=== アラインメント ===");
+    int s_a1 = sizeof(Aligned1);
+    int s_a2 = sizeof(Aligned2);
+    int s_a3 = sizeof(Aligned3);
+    int s_a4 = sizeof(Aligned4);
+    println("sizeof(Aligned1) = {s_a1}");
+    println("sizeof(Aligned2) = {s_a2}");
+    println("sizeof(Aligned3) = {s_a3}");
+    println("sizeof(Aligned4) = {s_a4}");
+    
+    // =====================================
+    // typedef型
+    // =====================================
+    println("\n=== typedef型 ===");
+    int s_myint = sizeof(MyInt);
+    int s_mypoint = sizeof(MyPoint);
+    int s_intptr = sizeof(IntPtr);
+    int s_intarr = sizeof(IntArray);
+    println("sizeof(MyInt) = {s_myint}");
+    println("sizeof(MyPoint) = {s_mypoint}");
+    println("sizeof(IntPtr) = {s_intptr}");
+    println("sizeof(IntArray) = {s_intarr}");
+    
+    // =====================================
+    // 変数に対するsizeof
+    // =====================================
+    println("\n=== 変数 ===");
+    bool vb = true;
+    char vc = 'a';
+    tiny vt = 1;
+    short vs = 100;
+    int vi = 42;
+    long vl = 1000;
+    float vf = 3.14;
+    double vd = 2.718;
+    
+    int sv_b = sizeof(vb);
+    int sv_c = sizeof(vc);
+    int sv_t = sizeof(vt);
+    int sv_s = sizeof(vs);
+    int sv_i = sizeof(vi);
+    int sv_l = sizeof(vl);
+    int sv_f = sizeof(vf);
+    int sv_d = sizeof(vd);
+    
+    println("sizeof(vb) = {sv_b}");
+    println("sizeof(vc) = {sv_c}");
+    println("sizeof(vt) = {sv_t}");
+    println("sizeof(vs) = {sv_s}");
+    println("sizeof(vi) = {sv_i}");
+    println("sizeof(vl) = {sv_l}");
+    println("sizeof(vf) = {sv_f}");
+    println("sizeof(vd) = {sv_d}");
+    
+    // 構造体変数
+    Point pt = Point{x: 10, y: 20};
+    Nested nested = Nested{p: Point{x: 1, y: 2}, z: 3};
+    int sv_pt = sizeof(pt);
+    int sv_nested = sizeof(nested);
+    println("sizeof(pt) = {sv_pt}");
+    println("sizeof(nested) = {sv_nested}");
+    
+    // 配列変数
+    int[5] arr;
+    char[10] carr;
+    int sv_arr = sizeof(arr);
+    int sv_carr = sizeof(carr);
+    println("sizeof(arr) = {sv_arr}");
+    println("sizeof(carr) = {sv_carr}");
+    
+    // ポインタ変数
+    int x2 = 0;
+    int* pi = &x2;
+    int sv_pi = sizeof(pi);
+    println("sizeof(pi) = {sv_pi}");
+    
+    // =====================================
+    // リテラルに対するsizeof
+    // =====================================
+    println("\n=== リテラル ===");
+    int sl_int = sizeof(42);
+    int sl_double = sizeof(3.14);
+    int sl_char = sizeof('x');
+    int sl_bool = sizeof(true);
+    println("sizeof(42) = {sl_int}");
+    println("sizeof(3.14) = {sl_double}");
+    println("sizeof('x') = {sl_char}");
+    println("sizeof(true) = {sl_bool}");
+    
+    return 0;
+}

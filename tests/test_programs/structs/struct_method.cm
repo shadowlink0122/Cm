@@ -1,3 +1,4 @@
+import std::io::println;
 // struct_method.cm - 構造体のメソッド呼び出し統合テスト
 
 interface Valuable {

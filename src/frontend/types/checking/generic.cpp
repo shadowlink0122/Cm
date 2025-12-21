@@ -19,7 +19,7 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
     // シンボルテーブルから関数情報を取得
     auto sym = scopes_.current().lookup(func_name);
     if (!sym || !sym->is_function) {
-        error(Span{}, "'" + func_name + "' is not a function");
+        error(current_span_, "'" + func_name + "' is not a function");
         return ast::make_error();
     }
 
@@ -30,14 +30,14 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
 
     if (arg_count < required_count || arg_count > param_count) {
         if (required_count == param_count) {
-            error(Span{}, "Generic function '" + func_name + "' expects " +
-                              std::to_string(param_count) + " arguments, got " +
-                              std::to_string(arg_count));
+            error(current_span_, "Generic function '" + func_name + "' expects " +
+                                     std::to_string(param_count) + " arguments, got " +
+                                     std::to_string(arg_count));
         } else {
-            error(Span{}, "Generic function '" + func_name + "' expects " +
-                              std::to_string(required_count) + " to " +
-                              std::to_string(param_count) + " arguments, got " +
-                              std::to_string(arg_count));
+            error(current_span_, "Generic function '" + func_name + "' expects " +
+                                     std::to_string(required_count) + " to " +
+                                     std::to_string(param_count) + " arguments, got " +
+                                     std::to_string(arg_count));
         }
         return ast::make_error();
     }
@@ -114,9 +114,10 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
                                 constraints_str += " + ";
                             constraints_str += generic_param.constraints[i];
                         }
-                        error(Span{}, "Type '" + actual_type + "' does not satisfy constraint '" +
-                                          constraints_str + "' for type parameter '" +
-                                          generic_param.name + "' in function '" + func_name + "'");
+                        error(current_span_,
+                              "Type '" + actual_type + "' does not satisfy constraint '" +
+                                  constraints_str + "' for type parameter '" + generic_param.name +
+                                  "' in function '" + func_name + "'");
                     }
                 }
             }

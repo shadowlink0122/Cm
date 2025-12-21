@@ -1,3 +1,4 @@
+import std::io::println;
 // test_use_advanced.cm - 新機能を使用するテスト
 
 // 外部定義+名前列挙モジュール

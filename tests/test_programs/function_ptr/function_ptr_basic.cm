@@ -1,3 +1,4 @@
+import std::io::println;
 // 関数ポインタの基本テスト
 
 int add(int a, int b) {

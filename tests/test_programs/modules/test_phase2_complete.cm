@@ -1,3 +1,4 @@
+import std::io::println;
 // test_phase2_complete.cm - 直接インポートテスト
 import ./phase2_complete/lib/utils/strutil::{str_length, concat};
 

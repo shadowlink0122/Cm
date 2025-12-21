@@ -1,3 +1,4 @@
+import std::io::println;
 // Ord自動実装テスト
 struct Point with Eq, Ord {
     int x;

@@ -1,3 +1,4 @@
+import std::io::println;
 // デリファレンスとフィールドアクセスのテスト ((*ptr).member)
 
 struct Point {

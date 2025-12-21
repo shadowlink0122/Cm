@@ -1,3 +1,4 @@
+import std::io::println;
 // テスト: 関数戻り値の型不一致を検出
 string getString() {
     return "hello";

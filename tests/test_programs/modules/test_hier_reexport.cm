@@ -1,3 +1,4 @@
+import std::io::println;
 // test_hier_reexport.cm - 階層再構築エクスポートテスト
 import ./hier_export/std;
 

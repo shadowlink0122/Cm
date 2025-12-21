@@ -1,3 +1,4 @@
+import std::io::println;
 // test_export_syntax.cm - エクスポート構文のテスト
 // インポートはまだ実装されていないので、エクスポート構文のみをテスト
 

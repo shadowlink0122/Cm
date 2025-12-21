@@ -1,3 +1,4 @@
+import std::io::println;
 // typedefを関数シグネチャで使用
 typedef Integer = int;
 

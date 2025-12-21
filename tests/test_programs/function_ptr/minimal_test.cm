@@ -1,3 +1,4 @@
+import std::io::println;
 // 最小限の関数ポインタテスト
 
 int add(int a, int b) {

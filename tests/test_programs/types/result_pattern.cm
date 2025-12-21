@@ -1,3 +1,4 @@
+import std::io::println;
 // enumベースのResult型パターン
 enum ResultTag {
     Ok = 0,

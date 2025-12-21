@@ -1,3 +1,4 @@
+import std::io::println;
 // struct_modifiers.cm - 修飾子（private, default）の統合テスト
 
 // 1. private修飾子

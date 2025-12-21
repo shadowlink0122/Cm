@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体（interfaceを実装）を引数に取る関数
 interface Valuable {
     int get_value();

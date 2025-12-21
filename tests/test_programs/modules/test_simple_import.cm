@@ -1,3 +1,4 @@
+import std::io::println;
 // test_simple_import.cm - シンプルなインポートテスト
 
 import ./simple_math/math::{add_int, add_double, multiply_int};

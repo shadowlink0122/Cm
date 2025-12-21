@@ -1,3 +1,4 @@
+import std::io::println;
 // test_wildcard_submodule.cm - ワイルドカードサブモジュールインポート
 import ./basic_reexport/std::io::*;
 

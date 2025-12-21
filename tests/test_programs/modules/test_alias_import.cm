@@ -1,3 +1,4 @@
+import std::io::println;
 // test_alias_import.cm - エイリアスインポートのテスト
 import ./alias_import/very_long_module_name as m;
 

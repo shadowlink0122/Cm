@@ -7,7 +7,7 @@ namespace cm::codegen::llvm_backend {
 
 // 外部関数宣言
 llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
-    if (name == "print" || name == "println") {
+    if (name == "__print__" || name == "__println__") {
         auto printfType = llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType()}, true);
         auto func = module->getOrInsertFunction("printf", printfType);
         return llvm::cast<llvm::Function>(func.getCallee());

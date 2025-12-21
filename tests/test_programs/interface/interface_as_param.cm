@@ -1,3 +1,4 @@
+import std::io::println;
 // インターフェース型を引数に取る関数
 interface Printable {
     void print();

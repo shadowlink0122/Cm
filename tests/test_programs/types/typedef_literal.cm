@@ -1,3 +1,4 @@
+import std::io::println;
 // リテラル型のテスト
 typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 

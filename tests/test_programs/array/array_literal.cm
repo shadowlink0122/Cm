@@ -1,3 +1,4 @@
+import std::io::println;
 // array_literal.cm - 配列リテラルテスト
 int main() {
     // 基本的な配列リテラル

@@ -1,3 +1,4 @@
+import std::io::println;
 // 基本的なジェネリクス関数のテスト
 
 // ジェネリック identity 関数

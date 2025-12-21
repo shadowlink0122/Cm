@@ -1,3 +1,4 @@
+import std::io::println;
 // 配列メソッドのテスト
 
 bool is_positive(int x) { return x > 0; }

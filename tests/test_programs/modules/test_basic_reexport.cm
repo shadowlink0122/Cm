@@ -1,3 +1,4 @@
+import std::io::println;
 // test_basic_reexport.cm - std::io 再エクスポートテスト
 import ./basic_reexport/std::io::add;
 

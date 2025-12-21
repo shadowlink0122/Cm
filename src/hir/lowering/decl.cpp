@@ -281,6 +281,23 @@ HirDeclPtr HirLowering::lower_import(ast::ImportDecl& imp) {
     hir_imp->path = imp.path.segments;
     hir_imp->alias = "";
 
+    // std::io::println -> __println__ へのエイリアス登録
+    std::string path_str = imp.path.to_string();
+    if (path_str == "std::io::println") {
+        import_aliases_["println"] = "__println__";
+    } else if (path_str == "std::io::print") {
+        import_aliases_["print"] = "__print__";
+    } else if (path_str == "std::io") {
+        // ワイルドカードインポート時
+        for (const auto& item : imp.items) {
+            if (item.name == "println") {
+                import_aliases_["println"] = "__println__";
+            } else if (item.name == "print") {
+                import_aliases_["print"] = "__print__";
+            }
+        }
+    }
+
     return std::make_unique<HirDecl>(std::move(hir_imp));
 }
 

@@ -1,3 +1,4 @@
+import std::io::println;
 // オートインクリメントenum
 enum Priority {
     Low,        // 0

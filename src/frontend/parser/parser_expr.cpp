@@ -634,6 +634,144 @@ ast::ExprPtr Parser::parse_primary() {
         return std::make_unique<ast::Expr>(std::move(new_expr), Span{start_pos, previous().end});
     }
 
+    // sizeof式 - sizeof(型) または sizeof(式)
+    if (consume_if(TokenKind::KwSizeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'sizeof' expression",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+
+        // sizeof内では、型として解析できるものは全て型として解析
+        // キーワード型、識別子（ユーザー定義型）、ポインタ(*)、参照(&)、配列([)
+        bool could_be_type = false;
+        switch (current().kind) {
+            case TokenKind::KwAuto:
+            case TokenKind::KwVoid:
+            case TokenKind::KwBool:
+            case TokenKind::KwTiny:
+            case TokenKind::KwShort:
+            case TokenKind::KwInt:
+            case TokenKind::KwLong:
+            case TokenKind::KwUtiny:
+            case TokenKind::KwUshort:
+            case TokenKind::KwUint:
+            case TokenKind::KwUlong:
+            case TokenKind::KwFloat:
+            case TokenKind::KwDouble:
+            case TokenKind::KwUfloat:
+            case TokenKind::KwUdouble:
+            case TokenKind::KwChar:
+            case TokenKind::KwString:
+            case TokenKind::Star:
+            case TokenKind::Amp:
+            case TokenKind::LBracket:
+            case TokenKind::Ident:
+                could_be_type = true;
+                break;
+            default:
+                break;
+        }
+
+        if (could_be_type) {
+            auto type = parse_type();
+            type = check_array_suffix(std::move(type));  // T*, T[N] などをサポート
+            expect(TokenKind::RParen);
+            return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
+        } else {
+            // 式として解析
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // typeof式 - typeof(式)
+    if (consume_if(TokenKind::KwTypeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'typeof' expression",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        auto expr = parse_expr();
+        expect(TokenKind::RParen);
+        return ast::make_typeof(std::move(expr), Span{start_pos, previous().end});
+    }
+
+    // コンパイラ組み込み関数 __sizeof__(T) または __sizeof__(expr)
+    if (consume_if(TokenKind::KwIntrinsicSizeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__sizeof__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        
+        // sizeof と同じロジックで型または式を解析
+        bool could_be_type = false;
+        switch (current().kind) {
+            case TokenKind::KwAuto:
+            case TokenKind::KwVoid:
+            case TokenKind::KwBool:
+            case TokenKind::KwTiny:
+            case TokenKind::KwShort:
+            case TokenKind::KwInt:
+            case TokenKind::KwLong:
+            case TokenKind::KwUtiny:
+            case TokenKind::KwUshort:
+            case TokenKind::KwUint:
+            case TokenKind::KwUlong:
+            case TokenKind::KwFloat:
+            case TokenKind::KwDouble:
+            case TokenKind::KwUfloat:
+            case TokenKind::KwUdouble:
+            case TokenKind::KwChar:
+            case TokenKind::KwString:
+            case TokenKind::Star:
+            case TokenKind::Amp:
+            case TokenKind::LBracket:
+            case TokenKind::Ident:
+                could_be_type = true;
+                break;
+            default:
+                break;
+        }
+
+        if (could_be_type) {
+            auto type = parse_type();
+            type = check_array_suffix(std::move(type));
+            expect(TokenKind::RParen);
+            return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // コンパイラ組み込み関数 __typeof__(expr)
+    if (consume_if(TokenKind::KwIntrinsicTypeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__typeof__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        auto expr = parse_expr();
+        expect(TokenKind::RParen);
+        return ast::make_typeof(std::move(expr), Span{start_pos, previous().end});
+    }
+
+    // コンパイラ組み込み関数 __typename__(T)
+    if (consume_if(TokenKind::KwIntrinsicTypename)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__typename__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        auto type = parse_type();
+        expect(TokenKind::RParen);
+        return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+    }
+
+    // コンパイラ組み込み関数 __alignof__(T)
+    if (consume_if(TokenKind::KwIntrinsicAlignof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__alignof__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        auto type = parse_type();
+        expect(TokenKind::RParen);
+        return ast::make_alignof(std::move(type), Span{start_pos, previous().end});
+    }
+
     // match式
     if (consume_if(TokenKind::KwMatch)) {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found match expression", debug::Level::Debug);

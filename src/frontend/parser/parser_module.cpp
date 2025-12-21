@@ -661,6 +661,8 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export) {
                 error("typedefには有効な型が必要です");
                 return nullptr;
             }
+            // C++スタイルの配列・ポインタサフィックスをチェック (T*, T[N])
+            type = check_array_suffix(std::move(type));
             types.push_back(std::move(type));
         } while (consume_if(TokenKind::Pipe));
 

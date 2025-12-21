@@ -24,6 +24,8 @@ class HirLowering {
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
     std::unordered_set<std::string> types_with_default_ctor_;
+    std::unordered_map<std::string, TypePtr> typedef_defs_;  // typedef定義
+    std::unordered_map<std::string, std::string> import_aliases_;  // インポートエイリアス
 
     // ヘルパー関数
     std::string get_default_member_name(const std::string& struct_name) const;
@@ -78,6 +80,11 @@ class HirLowering {
     HirBinaryOp get_base_op(ast::BinaryOp op);
     bool is_compound_assign(ast::BinaryOp op);
     bool is_comparison_op(ast::BinaryOp op);
+
+    // 型サイズ計算（sizeof用）
+    int64_t calculate_type_size(const TypePtr& type);
+    int64_t calculate_type_align(const TypePtr& type);
+    std::pair<int64_t, int64_t> calculate_struct_layout(const std::vector<ast::Field>& fields);
 
     // デバッグ文字列
     std::string hir_binary_op_to_string(HirBinaryOp op);

@@ -1,3 +1,4 @@
+import std::io::println;
 // test_import_basic.cm - 基本的なインポートの統合テスト
 
 // 1. 選択的インポート（関数）

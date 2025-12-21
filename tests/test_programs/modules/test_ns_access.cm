@@ -1,3 +1,4 @@
+import std::io::println;
 // Test namespace access
 import ./selective_import/math;
 

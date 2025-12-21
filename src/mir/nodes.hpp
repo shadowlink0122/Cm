@@ -214,6 +214,7 @@ struct MirRvalue {
         MirBinaryOp op;
         MirOperandPtr lhs;
         MirOperandPtr rhs;
+        hir::TypePtr result_type;  // 結果の型（ポインタ演算で必要）
     };
 
     struct UnaryOpData {
@@ -252,10 +253,11 @@ struct MirRvalue {
         return rv;
     }
 
-    static MirRvaluePtr binary(MirBinaryOp op, MirOperandPtr lhs, MirOperandPtr rhs) {
+    static MirRvaluePtr binary(MirBinaryOp op, MirOperandPtr lhs, MirOperandPtr rhs,
+                               hir::TypePtr result_type = nullptr) {
         auto rv = std::make_unique<MirRvalue>();
         rv->kind = BinaryOp;
-        rv->data = BinaryOpData{op, std::move(lhs), std::move(rhs)};
+        rv->data = BinaryOpData{op, std::move(lhs), std::move(rhs), std::move(result_type)};
         return rv;
     }
 

@@ -1,3 +1,4 @@
+import std::io::println;
 // struct_array.cm - 構造体と配列の統合テスト
 
 struct Point {

@@ -14,9 +14,30 @@ namespace cm::preprocessor {
 // importステートメントを検出し、モジュールコードをインライン展開する
 class ImportPreprocessor {
    public:
+    // ソースマップエントリ：プリプロセス後の行が元のどのファイル・行に対応するか
+    struct SourceMapEntry {
+        std::string original_file;  // 元のファイルパス
+        size_t original_line;       // 元の行番号（1-indexed）
+        std::string import_chain;   // インポートチェーン（デバッグ用）
+    };
+
+    // ソースマップ：プリプロセス後の行番号（1-indexed） -> 元の位置情報
+    using SourceMap = std::vector<SourceMapEntry>;
+
+    // モジュール範囲：プリプロセス後のコードでモジュールがどの範囲にあるか
+    struct ModuleRange {
+        std::string file_path;    // モジュールファイルパス
+        std::string import_from;  // どのファイルからインポートされたか
+        size_t import_line;       // インポート文の行番号
+        size_t start_offset;      // プリプロセス後のコードでの開始オフセット
+        size_t end_offset;        // プリプロセス後のコードでの終了オフセット
+    };
+
     struct ProcessResult {
         std::string processed_source;               // 処理後のソースコード
         std::vector<std::string> imported_modules;  // インポートされたモジュール
+        SourceMap source_map;                       // ソースマップ
+        std::vector<ModuleRange> module_ranges;     // モジュール範囲情報
         bool success;
         std::string error_message;
     };
@@ -56,7 +77,10 @@ class ImportPreprocessor {
     // インポート文を検出して処理
     std::string process_imports(const std::string& source,
                                 const std::filesystem::path& current_file,
-                                std::unordered_set<std::string>& imported_files);
+                                std::unordered_set<std::string>& imported_files,
+                                SourceMap& source_map, std::vector<ModuleRange>& module_ranges,
+                                const std::string& import_chain = "",
+                                size_t import_line_in_parent = 0);
 
     // モジュールファイルを探す
     std::filesystem::path find_module_file(const std::string& module_name,

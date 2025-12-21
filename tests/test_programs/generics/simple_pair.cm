@@ -1,3 +1,4 @@
+import std::io::println;
 // シンプルな複数型パラメータテスト
 
 struct Pair<T, U> {

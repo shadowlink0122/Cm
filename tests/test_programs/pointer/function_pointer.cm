@@ -1,3 +1,4 @@
+import std::io::println;
 // 関数ポインタテスト - 新構文: int*(int, int)
 
 int add(int a, int b) {

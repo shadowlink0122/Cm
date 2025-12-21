@@ -1,3 +1,4 @@
+import std::io::println;
 // test_recursive_wildcard.cm - ワイルドカードインポートテスト
 // lib ディレクトリ以下のすべてのモジュールをインポート
 import ./recursive_wildcard/lib/*;

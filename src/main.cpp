@@ -16,8 +16,8 @@
 #include "frontend/types/type_checker.hpp"
 #include "hir/lowering/lowering.hpp"
 #include "mir/lowering/lowering.hpp"
-#include "mir/printer.hpp"
 #include "mir/optimizations/all_passes.hpp"
+#include "mir/printer.hpp"
 #include "module/resolver.hpp"
 #include "preprocessor/import.hpp"
 
@@ -25,6 +25,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <sys/wait.h>
@@ -379,16 +380,58 @@ int main(int argc, char* argv[]) {
             std::cout << "=== Type Checker ===\n";
         TypeChecker checker;
         if (!checker.check(program)) {
-            std::cerr << "型エラーが発生しました\n";
             // ソース位置管理を作成
             SourceLocationManager loc_mgr(code, opts.input_file);
 
+            // ソースマップがある場合、元ファイルの内容を読み込む
+            std::unordered_map<std::string, std::string> file_contents;
+            if (!preprocess_result.source_map.empty()) {
+                // ソースマップから参照されているファイルを収集
+                std::set<std::string> files_to_load;
+                for (const auto& entry : preprocess_result.source_map) {
+                    if (!entry.original_file.empty() && entry.original_file != "<unknown>" &&
+                        entry.original_file != "<generated>") {
+                        files_to_load.insert(entry.original_file);
+                    }
+                    // インポートチェーンからもファイルを収集
+                    if (!entry.import_chain.empty()) {
+                        std::string remaining = entry.import_chain;
+                        std::string delimiter = " -> ";
+                        size_t pos;
+                        while ((pos = remaining.find(delimiter)) != std::string::npos) {
+                            std::string part = remaining.substr(0, pos);
+                            if (!part.empty() && part != "<unknown>" && part != "<generated>") {
+                                files_to_load.insert(part);
+                            }
+                            remaining = remaining.substr(pos + delimiter.length());
+                        }
+                        if (!remaining.empty() && remaining != "<unknown>" &&
+                            remaining != "<generated>") {
+                            files_to_load.insert(remaining);
+                        }
+                    }
+                }
+                // 各ファイルの内容を読み込む
+                for (const auto& file : files_to_load) {
+                    std::ifstream ifs(file);
+                    if (ifs) {
+                        std::stringstream buffer;
+                        buffer << ifs.rdbuf();
+                        file_contents[file] = buffer.str();
+                    }
+                }
+            }
+
             // 診断情報を表示
             for (const auto& diag : checker.diagnostics()) {
-                // エラーメッセージをフォーマットして表示
-                std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
-                std::cerr << loc_mgr.format_error_location(diag.span,
-                                                           error_type + ": " + diag.message);
+                if (!preprocess_result.source_map.empty()) {
+                    std::cerr << loc_mgr.format_error_with_source_map(
+                        diag.span, diag.message, preprocess_result.source_map, file_contents);
+                } else {
+                    std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                    std::cerr << loc_mgr.format_error_location(diag.span,
+                                                               error_type + ": " + diag.message);
+                }
             }
             return 1;
         }
