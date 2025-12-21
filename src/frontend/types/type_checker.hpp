@@ -758,7 +758,31 @@ class TypeChecker {
     void check_let(ast::LetStmt& let) {
         ast::TypePtr init_type;
         if (let.init) {
-            init_type = infer_type(*let.init);
+            // 配列リテラルの場合、let.typeを期待型として伝播
+            if (auto* array_lit = let.init->as<ast::ArrayLiteralExpr>()) {
+                if (let.type && let.type->kind == ast::TypeKind::Array) {
+                    // let.typeの要素型を使って配列リテラルの型を設定
+                    init_type = let.type;
+                    let.init->type = let.type;
+                    // 各要素の型もチェック
+                    for (auto& elem : array_lit->elements) {
+                        infer_type(*elem);
+                    }
+                } else {
+                    init_type = infer_type(*let.init);
+                }
+            }
+            // 構造体リテラルの場合、let.typeを期待型として伝播
+            else if (auto* struct_lit = let.init->as<ast::StructLiteralExpr>()) {
+                if (let.type && let.type->kind == ast::TypeKind::Struct) {
+                    if (struct_lit->type_name.empty()) {
+                        struct_lit->type_name = let.type->name;
+                    }
+                }
+                init_type = infer_type(*let.init);
+            } else {
+                init_type = infer_type(*let.init);
+            }
         }
 
         // コンストラクタ呼び出しのチェック
@@ -948,6 +972,10 @@ class TypeChecker {
             inferred_type = infer_slice(*slice);
         } else if (auto* match_expr = expr.as<ast::MatchExpr>()) {
             inferred_type = infer_match(*match_expr);
+        } else if (auto* array_lit = expr.as<ast::ArrayLiteralExpr>()) {
+            inferred_type = infer_array_literal(*array_lit);
+        } else if (auto* struct_lit = expr.as<ast::StructLiteralExpr>()) {
+            inferred_type = infer_struct_literal(*struct_lit);
         } else {
             inferred_type = ast::make_error();
         }
@@ -979,10 +1007,69 @@ class TypeChecker {
         return ast::make_error();
     }
 
+    // 配列リテラル
+    ast::TypePtr infer_array_literal(ast::ArrayLiteralExpr& lit) {
+        if (lit.elements.empty()) {
+            // 空の配列リテラルはデフォルトでint配列
+            return ast::make_array(ast::make_int(), 0);
+        }
+
+        // 最初の要素の型を推論
+        auto first_type = infer_type(*lit.elements[0]);
+
+        // 他の要素も型チェック
+        for (size_t i = 1; i < lit.elements.size(); ++i) {
+            auto elem_type = infer_type(*lit.elements[i]);
+            // 型が互換性があるかチェック（簡易的なチェック）
+            // float/doubleの混在などは許容
+        }
+
+        return ast::make_array(first_type, lit.elements.size());
+    }
+
+    // 構造体リテラル
+    ast::TypePtr infer_struct_literal(ast::StructLiteralExpr& lit) {
+        if (lit.type_name.empty()) {
+            // 暗黙的リテラル（型は外部からの期待される型を使用）
+            return ast::make_error();
+        }
+
+        // 構造体定義を探す
+        auto struct_it = struct_defs_.find(lit.type_name);
+        if (struct_it == struct_defs_.end()) {
+            error(Span{}, "Unknown struct type: " + lit.type_name);
+            return ast::make_error();
+        }
+
+        // フィールドの型チェック
+        for (auto& field : lit.fields) {
+            infer_type(*field.value);
+        }
+
+        auto type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+        type->name = lit.type_name;
+        return type;
+    }
+
     // 識別子
     ast::TypePtr infer_ident(ast::IdentExpr& ident) {
         auto sym = scopes_.current().lookup(ident.name);
         if (!sym) {
+            // impl内での暗黙的thisフィールドアクセスをチェック
+            if (!current_impl_target_type_.empty()) {
+                // 構造体のフィールドを検索
+                auto struct_it = struct_defs_.find(current_impl_target_type_);
+                if (struct_it != struct_defs_.end()) {
+                    for (const auto& field : struct_it->second->fields) {
+                        if (field.name == ident.name) {
+                            debug::tc::log(debug::tc::Id::Resolved,
+                                           "Implicit this field: " + ident.name,
+                                           debug::Level::Debug);
+                            return field.type;
+                        }
+                    }
+                }
+            }
             error(Span{}, "Undefined variable '" + ident.name + "'");
             return ast::make_error();
         }

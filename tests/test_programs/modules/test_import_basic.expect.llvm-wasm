@@ -1,0 +1,7 @@
+add(10,20) = 30
+multiply(3,4) = 12
+MAGIC_NUMBER = 42
+SIMPLE_PI = 3.14
+add_int(100,200) = 300
+add_double(1.5,2.5) = 4.0
+multiply_int(6,7) = 42

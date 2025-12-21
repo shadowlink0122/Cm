@@ -330,19 +330,55 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 throw std::runtime_error(error.str());
             }
 
-            // 再インポート防止チェック
-            if (imported_modules.count(canonical_path) > 0) {
-                if (debug_mode) {
-                    std::cout << "[PREPROCESSOR] Skipping already imported: " << canonical_path
-                              << "\n";
+            // 選択的インポートの場合、新しいシンボルがあるかチェック
+            bool need_process = false;
+            std::vector<std::string> new_items;
+
+            if (!import_info.items.empty() && !import_info.is_wildcard) {
+                // 選択的インポート: 新しいシンボルのみをインポート
+                auto& imported = imported_symbols[canonical_path];
+                for (const auto& item : import_info.items) {
+                    if (imported.find(item) == imported.end()) {
+                        new_items.push_back(item);
+                        imported.insert(item);
+                        need_process = true;
+                    }
                 }
-                result << "// Already imported: " << import_info.module_name << "\n";
-                continue;
+
+                if (!need_process) {
+                    if (debug_mode) {
+                        std::cout << "[PREPROCESSOR] All symbols already imported from: "
+                                  << canonical_path << "\n";
+                    }
+                    result << "// All symbols already imported from: " << import_info.module_name
+                           << "\n";
+                    continue;
+                }
+
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] New symbols to import: ";
+                    for (const auto& item : new_items) {
+                        std::cout << item << " ";
+                    }
+                    std::cout << "\n";
+                }
+            } else {
+                // ワイルドカードまたはモジュール全体のインポート
+                // 再インポート防止チェック
+                if (imported_modules.count(canonical_path) > 0) {
+                    if (debug_mode) {
+                        std::cout << "[PREPROCESSOR] Skipping already imported: " << canonical_path
+                                  << "\n";
+                    }
+                    result << "// Already imported: " << import_info.module_name << "\n";
+                    continue;
+                }
+                imported_modules.insert(canonical_path);
+                need_process = true;
             }
 
             // インポートスタックに追加
             import_stack.push_back(canonical_path);
-            imported_modules.insert(canonical_path);
 
             // キャッシュチェック
             std::string module_source;
@@ -364,7 +400,12 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
             // エクスポートフィルタリング（選択的インポートの場合）
             if (!import_info.items.empty() && !import_info.is_wildcard) {
-                module_source = filter_exports(module_source, import_info.items);
+                // 新しいシンボルのみをフィルタリング
+                if (!new_items.empty()) {
+                    module_source = filter_exports(module_source, new_items);
+                } else {
+                    module_source = filter_exports(module_source, import_info.items);
+                }
             }
 
             // exportキーワードを削除
@@ -731,7 +772,7 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
     // 先にexport構文を処理
     std::string processed = process_export_syntax(source);
     processed = process_namespace_exports(processed);
-    
+
     // 階層再構築エクスポートを処理: export { ns::{item1, item2} }
     processed = process_hierarchical_reexport(processed);
 
@@ -866,7 +907,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
             if (std::regex_search(names, hier_match, hierarchical_regex)) {
                 std::string namespace_name = hier_match[1];
                 std::string sub_items = hier_match[2];
-                
+
                 // サブアイテムをパース
                 std::stringstream sub_ss(sub_items);
                 std::string sub_item;
@@ -1622,17 +1663,17 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
     // export { ns::{item1, item2} } パターンを検出
     // 例: export { io::{file, stream} }
     // これは、fileとstreamの名前空間をio名前空間内に移動する
-    
+
     std::regex hier_export_regex(R"(//\s*\{\s*(\w+)::\{([^}]+)\}\s*\};\s*\(processed\))");
     std::smatch match;
-    
+
     if (!std::regex_search(source, match, hier_export_regex)) {
         return source;  // 階層再構築パターンがない場合はそのまま返す
     }
-    
+
     std::string parent_ns = match[1].str();  // 例: "io"
     std::string items_str = match[2].str();  // 例: "file, stream"
-    
+
     // アイテムをパース
     std::set<std::string> items_to_move;
     std::stringstream items_ss(items_str);
@@ -1645,28 +1686,28 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
             items_to_move.insert(item);
         }
     }
-    
+
     if (items_to_move.empty()) {
         return source;
     }
-    
+
     // 各アイテムの名前空間を抽出して、親名前空間内に配置
     std::stringstream result;
     std::istringstream input(source);
     std::string line;
-    
+
     // 移動する名前空間の内容を収集
     std::map<std::string, std::string> namespace_contents;
     std::string current_ns;
     std::stringstream current_content;
     int brace_depth = 0;
     bool in_target_ns = false;
-    
+
     // Pass 1: 対象の名前空間を収集
     while (std::getline(input, line)) {
         std::regex ns_start_regex(R"(^\s*namespace\s+(\w+)\s*\{)");
         std::smatch ns_match;
-        
+
         if (!in_target_ns && std::regex_search(line, ns_match, ns_start_regex)) {
             std::string ns_name = ns_match[1].str();
             if (items_to_move.count(ns_name) > 0) {
@@ -1678,13 +1719,15 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
                 continue;  // namespace行自体はスキップ
             }
         }
-        
+
         if (in_target_ns) {
             for (char c : line) {
-                if (c == '{') brace_depth++;
-                else if (c == '}') brace_depth--;
+                if (c == '{')
+                    brace_depth++;
+                else if (c == '}')
+                    brace_depth--;
             }
-            
+
             if (brace_depth == 0) {
                 // 名前空間の終了（閉じ括弧の行は含めない）
                 namespace_contents[current_ns] = current_content.str();
@@ -1695,7 +1738,7 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
             }
         }
     }
-    
+
     // Pass 2: 出力を生成
     input.clear();
     input.str(source);
@@ -1703,11 +1746,11 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
     brace_depth = 0;
     bool parent_ns_opened = false;
     bool items_inserted = false;
-    
+
     while (std::getline(input, line)) {
         std::regex ns_start_regex(R"(^\s*namespace\s+(\w+)\s*\{)");
         std::smatch ns_match;
-        
+
         // 対象の名前空間をスキップ
         if (!in_target_ns && std::regex_search(line, ns_match, ns_start_regex)) {
             std::string ns_name = ns_match[1].str();
@@ -1718,24 +1761,25 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
                 continue;
             }
         }
-        
+
         if (in_target_ns) {
             for (char c : line) {
-                if (c == '{') brace_depth++;
-                else if (c == '}') brace_depth--;
+                if (c == '{')
+                    brace_depth++;
+                else if (c == '}')
+                    brace_depth--;
             }
-            
+
             if (brace_depth == 0) {
                 in_target_ns = false;
                 current_ns.clear();
             }
             continue;  // 対象の名前空間は出力しない
         }
-        
+
         // export コメントの位置で親名前空間と内容を挿入
         if (!items_inserted && line.find("(processed)") != std::string::npos &&
             line.find(parent_ns + "::") != std::string::npos) {
-            
             result << "namespace " << parent_ns << " {\n";
             for (const auto& [ns_name, content] : namespace_contents) {
                 result << "namespace " << ns_name << " {\n";
@@ -1747,10 +1791,10 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
             items_inserted = true;
             continue;
         }
-        
+
         result << line << "\n";
     }
-    
+
     return result.str();
 }
 

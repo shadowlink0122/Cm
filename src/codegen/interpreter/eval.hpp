@@ -155,6 +155,19 @@ class Evaluator {
                 if (proj.kind == ProjectionKind::Field) {
                     if (current->type() == typeid(StructValue)) {
                         auto& sv = std::any_cast<StructValue&>(*current);
+                        // フィールドが存在しない場合は空のValueを作成
+                        if (sv.fields.find(proj.field_id) == sv.fields.end()) {
+                            // 次のプロジェクションの種類で初期値を決定
+                            if (i + 1 < place.projections.size()) {
+                                if (place.projections[i + 1].kind == ProjectionKind::Index) {
+                                    sv.fields[proj.field_id] = Value(ArrayValue{});
+                                } else {
+                                    sv.fields[proj.field_id] = Value(StructValue{});
+                                }
+                            } else {
+                                sv.fields[proj.field_id] = Value(StructValue{});
+                            }
+                        }
                         current = &sv.fields[proj.field_id];
                     }
                 } else if (proj.kind == ProjectionKind::Index) {
@@ -170,6 +183,18 @@ class Evaluator {
                             auto& arr = std::any_cast<ArrayValue&>(*current);
                             if (static_cast<size_t>(index) >= arr.elements.size()) {
                                 arr.elements.resize(index + 1);
+                            }
+                            // 配列要素が空の場合、次のプロジェクションの種類で初期値を決定
+                            if (!arr.elements[index].has_value() ||
+                                arr.elements[index].type() == typeid(void)) {
+                                if (i + 1 < place.projections.size()) {
+                                    if (place.projections[i + 1].kind == ProjectionKind::Field) {
+                                        arr.elements[index] = Value(StructValue{});
+                                    } else if (place.projections[i + 1].kind ==
+                                               ProjectionKind::Index) {
+                                        arr.elements[index] = Value(ArrayValue{});
+                                    }
+                                }
                             }
                             current = &arr.elements[index];
                         }
@@ -467,6 +492,70 @@ class Evaluator {
                 }
 
                 return Value(ptr);
+            }
+            case MirRvalue::Aggregate: {
+                // 集約型（配列・構造体）の構築
+                auto& data = std::get<MirRvalue::AggregateData>(rvalue.data);
+
+                if (data.kind.type == AggregateKind::Type::Array) {
+                    // 配列リテラル
+                    ArrayValue arr;
+                    arr.element_type = data.kind.ty ? data.kind.ty->element_type : nullptr;
+                    for (const auto& op : data.operands) {
+                        if (op) {
+                            arr.elements.push_back(evaluate_operand(ctx, *op));
+                        }
+                    }
+                    return Value(arr);
+                } else if (data.kind.type == AggregateKind::Type::Struct) {
+                    // 構造体リテラル
+                    StructValue sv;
+                    sv.type_name = data.kind.name;
+                    // 構造体フィールドはFieldIdで管理されている想定
+                    // operandsはフィールド順に並んでいる
+                    for (size_t i = 0; i < data.operands.size(); ++i) {
+                        if (data.operands[i]) {
+                            sv.fields[static_cast<FieldId>(i)] =
+                                evaluate_operand(ctx, *data.operands[i]);
+                        }
+                    }
+                    return Value(sv);
+                }
+                return Value{};
+            }
+            case MirRvalue::Cast: {
+                // 型キャスト
+                auto& data = std::get<MirRvalue::CastData>(rvalue.data);
+                Value operand = data.operand ? evaluate_operand(ctx, *data.operand) : Value{};
+                // キャスト処理
+                if (data.target_type) {
+                    if (data.target_type->kind == hir::TypeKind::Int ||
+                        data.target_type->kind == hir::TypeKind::Long) {
+                        if (operand.type() == typeid(double)) {
+                            return Value(static_cast<int64_t>(std::any_cast<double>(operand)));
+                        } else if (operand.type() == typeid(bool)) {
+                            return Value(
+                                static_cast<int64_t>(std::any_cast<bool>(operand) ? 1 : 0));
+                        } else if (operand.type() == typeid(char)) {
+                            return Value(static_cast<int64_t>(std::any_cast<char>(operand)));
+                        }
+                    } else if (data.target_type->kind == hir::TypeKind::Double ||
+                               data.target_type->kind == hir::TypeKind::Float) {
+                        if (operand.type() == typeid(int64_t)) {
+                            return Value(static_cast<double>(std::any_cast<int64_t>(operand)));
+                        }
+                    } else if (data.target_type->kind == hir::TypeKind::Bool) {
+                        if (operand.type() == typeid(int64_t)) {
+                            return Value(std::any_cast<int64_t>(operand) != 0);
+                        }
+                    }
+                }
+                return operand;
+            }
+            case MirRvalue::FormatConvert: {
+                // フォーマット変換（文字列補間用）
+                auto& data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
+                return data.operand ? evaluate_operand(ctx, *data.operand) : Value{};
             }
             default:
                 return Value{};

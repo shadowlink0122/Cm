@@ -1,0 +1,38 @@
+// struct_nested.cm - ネストした構造体の統合テスト
+
+struct Inner {
+    int x;
+    int y;
+}
+
+struct Outer {
+    Inner inner;
+    int z;
+}
+
+int main() {
+    Outer o;
+    
+    // 1. 直接代入（ネストしたフィールドアクセス）
+    o.inner.x = 10;
+    o.inner.y = 20;
+    o.z = 30;
+    println("Direct: x={o.inner.x}, y={o.inner.y}, z={o.z}");
+    
+    // 2. 段階的な代入（中間変数経由）
+    Inner i;
+    i.x = 100;
+    i.y = 200;
+    o.inner = i;
+    o.z = 300;
+    
+    Inner result = o.inner;
+    println("Staged: x={result.x}, y={result.y}, z={o.z}");
+    
+    // 3. リテラル代入（暗黙的型推論）
+    o.inner = {x: 1000, y: 2000};
+    o.z = 3000;
+    println("Literal: x={o.inner.x}, y={o.inner.y}, z={o.z}");
+    
+    return 0;
+}

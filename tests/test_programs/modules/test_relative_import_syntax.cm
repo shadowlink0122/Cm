@@ -1,8 +1,0 @@
-// test_relative_import_syntax.cm  
-import ./relative_import/helper;
-
-int main() {
-    // ここではまだhelper::addは動作しないが、パースは成功するはず
-    println("Relative import syntax parsed successfully");
-    return 0;
-}

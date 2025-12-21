@@ -347,6 +347,57 @@ ast::ExprPtr Parser::parse_postfix() {
     auto expr = parse_primary();
 
     while (true) {
+        // 構造体リテラル: TypeName{field1: val1, ...}
+        // 名前付き初期化のみ対応（位置ベースは禁止）
+        // 識別子の後に { が来た場合
+        if (check(TokenKind::LBrace)) {
+            // 式が識別子の場合のみ構造体リテラルとして解析
+            if (auto* ident = expr->as<ast::IdentExpr>()) {
+                std::string type_name = ident->name;
+                uint32_t start_pos = expr->span.start;
+                advance();  // {
+
+                debug::par::log(debug::par::Id::PrimaryExpr, "Parsing struct literal: " + type_name,
+                                debug::Level::Debug);
+
+                std::vector<ast::StructLiteralField> fields;
+
+                if (!check(TokenKind::RBrace)) {
+                    do {
+                        // フィールド名:値 形式のみ（名前付き初期化必須）
+                        if (!check(TokenKind::Ident)) {
+                            error(
+                                "Expected field name in struct literal (named initialization "
+                                "required)");
+                        }
+
+                        std::string field_name(current().get_string());
+                        advance();  // フィールド名を消費
+
+                        if (!check(TokenKind::Colon)) {
+                            error("Expected ':' after field name '" + field_name +
+                                  "' in struct literal");
+                        }
+                        advance();  // : を消費
+
+                        auto value = parse_expr();
+                        fields.emplace_back(std::move(field_name), std::move(value));
+                    } while (consume_if(TokenKind::Comma));
+                }
+
+                expect(TokenKind::RBrace);
+
+                debug::par::log(
+                    debug::par::Id::PrimaryExpr,
+                    "Created struct literal with " + std::to_string(fields.size()) + " fields",
+                    debug::Level::Debug);
+
+                expr = ast::make_struct_literal(std::move(type_name), std::move(fields),
+                                                Span{start_pos, previous().end});
+                continue;
+            }
+        }
+
         // 関数呼び出し
         if (consume_if(TokenKind::LParen)) {
             debug::par::log(debug::par::Id::FunctionCall, "Detected function call",
@@ -543,6 +594,12 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_null_literal(Span{start_pos, previous().end});
     }
 
+    // this（impl内でのself参照）
+    if (consume_if(TokenKind::KwThis)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'this' reference", debug::Level::Debug);
+        return ast::make_ident("self", Span{start_pos, previous().end});
+    }
+
     // new式
     if (consume_if(TokenKind::KwNew)) {
         debug::par::log(debug::par::Id::NewExpr, "Found 'new' expression", debug::Level::Debug);
@@ -597,6 +654,61 @@ ast::ExprPtr Parser::parse_primary() {
         debug::par::log(debug::par::Id::VariableDetected, "Variable/Function reference: " + name,
                         debug::Level::Debug);
         return ast::make_ident(std::move(name), Span{start_pos, previous().end});
+    }
+
+    // 配列リテラル: [elem1, elem2, ...]
+    if (consume_if(TokenKind::LBracket)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found array literal", debug::Level::Debug);
+        std::vector<ast::ExprPtr> elements;
+
+        if (!check(TokenKind::RBracket)) {
+            do {
+                elements.push_back(parse_expr());
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        expect(TokenKind::RBracket);
+        debug::par::log(
+            debug::par::Id::PrimaryExpr,
+            "Created array literal with " + std::to_string(elements.size()) + " elements",
+            debug::Level::Debug);
+        return ast::make_array_literal(std::move(elements), Span{start_pos, previous().end});
+    }
+
+    // 暗黙的構造体リテラル: {field1: val1, field2: val2, ...}
+    // 型は文脈から推論される
+    if (consume_if(TokenKind::LBrace)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found implicit struct literal",
+                        debug::Level::Debug);
+        std::vector<ast::StructLiteralField> fields;
+
+        if (!check(TokenKind::RBrace)) {
+            do {
+                // フィールド名:値 形式のみ（名前付き初期化必須）
+                if (!check(TokenKind::Ident)) {
+                    error("Expected field name in struct literal (named initialization required)");
+                }
+
+                std::string field_name(current().get_string());
+                advance();  // フィールド名を消費
+
+                if (!check(TokenKind::Colon)) {
+                    error("Expected ':' after field name '" + field_name + "' in struct literal");
+                }
+                advance();  // : を消費
+
+                auto value = parse_expr();
+                fields.emplace_back(std::move(field_name), std::move(value));
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        expect(TokenKind::RBrace);
+        debug::par::log(
+            debug::par::Id::PrimaryExpr,
+            "Created implicit struct literal with " + std::to_string(fields.size()) + " fields",
+            debug::Level::Debug);
+        // 型名は空文字列（型推論で解決）
+        return ast::make_struct_literal("", std::move(fields), Span{start_pos, previous().end});
     }
 
     // 括弧式

@@ -108,11 +108,28 @@ struct HirTernary {
     HirExprPtr else_expr;
 };
 
+// 構造体リテラル
+struct HirStructLiteralField {
+    std::string name;  // フィールド名（必須）
+    HirExprPtr value;
+};
+
+struct HirStructLiteral {
+    std::string type_name;
+    std::vector<HirStructLiteralField> fields;
+};
+
+// 配列リテラル
+struct HirArrayLiteral {
+    std::vector<HirExprPtr> elements;
+};
+
 // 式の種類
-using HirExprKind = std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
-                                 std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>,
-                                 std::unique_ptr<HirCall>, std::unique_ptr<HirIndex>,
-                                 std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>>;
+using HirExprKind =
+    std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
+                 std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
+                 std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
+                 std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>>;
 
 struct HirExpr {
     HirExprKind kind;

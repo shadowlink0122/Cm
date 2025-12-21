@@ -1,0 +1,50 @@
+// struct_method.cm - 構造体のメソッド呼び出し統合テスト
+
+interface Valuable {
+    int get_value();
+}
+
+interface Printable {
+    void print();
+}
+
+struct Inner {
+    int value;
+}
+
+impl Inner for Valuable {
+    int get_value() {
+        return value;
+    }
+}
+
+struct Outer {
+    Inner inner;
+    int[3] arr;
+    int z;
+}
+
+impl Outer for Printable {
+    void print() {
+        // self経由でネストしたフィールドにアクセス
+        println("inner.value: {self.inner.value}");
+        println("arr: [{self.arr[0]}, {self.arr[1]}, {self.arr[2]}]");
+        println("z: {self.z}");
+    }
+}
+
+int main() {
+    Outer o;
+    o.inner.value = 42;
+    o.arr = [100, 200, 300];
+    o.z = 999;
+    
+    // 1. 複合メソッド呼び出し（o.inner.method()）
+    int v = o.inner.get_value();
+    println("inner.get_value(): {v}");
+    
+    // 2. self経由のネストアクセス（impl内）
+    o.print();
+    
+    return 0;
+}

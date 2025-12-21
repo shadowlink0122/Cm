@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -22,6 +23,8 @@ class ImportPreprocessor {
 
    private:
     // 循環参照検出とキャッシュ
+    std::unordered_map<std::string, std::set<std::string>>
+        imported_symbols;  // インポート済みシンボル（ファイルパス -> シンボルセット）
     std::unordered_set<std::string>
         imported_modules;  // インポート済みモジュール（再インポート防止）
     std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
@@ -129,7 +132,7 @@ class ImportPreprocessor {
 
     // implの暗黙的エクスポート処理
     std::string process_implicit_impl_export(const std::string& source);
-    
+
     // 階層再構築エクスポート処理: export { ns::{item1, item2} }
     std::string process_hierarchical_reexport(const std::string& source);
 };

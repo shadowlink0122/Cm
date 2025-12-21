@@ -1,0 +1,81 @@
+// interface_basic.cm - interface基本機能の統合テスト
+
+// 1. 基本的なinterface定義とimpl
+interface Printable {
+    void print();
+}
+
+interface Getter {
+    int get_x();
+    int get_y();
+    int get_sum();
+}
+
+interface Geometry {
+    int area();
+    int perimeter();
+}
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point for Printable {
+    void print() {
+        println("Point({self.x}, {self.y})");
+    }
+}
+
+impl Point for Getter {
+    int get_x() {
+        return x;  // 暗黙的this
+    }
+    
+    int get_y() {
+        return y;  // 暗黙的this
+    }
+    
+    int get_sum() {
+        return x + y;  // 暗黙的this
+    }
+}
+
+struct Rectangle {
+    int width;
+    int height;
+}
+
+impl Rectangle for Geometry {
+    int area() {
+        return self.width * self.height;
+    }
+    
+    int perimeter() {
+        return 2 * (self.width + self.height);
+    }
+}
+
+int main() {
+    // 1. 基本的なinterface/impl
+    Point p;
+    p.x = 10;
+    p.y = 20;
+    p.print();
+    
+    // 2. 暗黙的thisアクセス
+    int vx = p.get_x();
+    int vy = p.get_y();
+    int vsum = p.get_sum();
+    println("x={vx}, y={vy}, sum={vsum}");
+    
+    // 3. 複数メソッド
+    Rectangle r;
+    r.width = 10;
+    r.height = 5;
+    int a = r.area();
+    int per = r.perimeter();
+    println("Area={a}, Perimeter={per}");
+    
+    return 0;
+}

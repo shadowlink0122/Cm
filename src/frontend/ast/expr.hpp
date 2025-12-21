@@ -279,6 +279,34 @@ struct NewExpr {
 };
 
 // ============================================================
+// 構造体リテラル (StructName{field1: val1, field2: val2})
+// 名前付き初期化のみ対応
+// ============================================================
+struct StructLiteralField {
+    std::string name;  // フィールド名（必須）
+    ExprPtr value;
+
+    StructLiteralField(std::string n, ExprPtr v) : name(std::move(n)), value(std::move(v)) {}
+};
+
+struct StructLiteralExpr {
+    std::string type_name;
+    std::vector<StructLiteralField> fields;
+
+    StructLiteralExpr(std::string name, std::vector<StructLiteralField> f)
+        : type_name(std::move(name)), fields(std::move(f)) {}
+};
+
+// ============================================================
+// 配列リテラル [val1, val2, val3]
+// ============================================================
+struct ArrayLiteralExpr {
+    std::vector<ExprPtr> elements;
+
+    ArrayLiteralExpr(std::vector<ExprPtr> elems) : elements(std::move(elems)) {}
+};
+
+// ============================================================
 // ラムダ式
 // ============================================================
 struct Param {
@@ -400,6 +428,16 @@ inline ExprPtr make_unary(UnaryOp op, ExprPtr operand, Span s = {}) {
 inline ExprPtr make_call(ExprPtr callee, std::vector<ExprPtr> args, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<CallExpr>(std::move(callee), std::move(args)),
                                   s);
+}
+
+inline ExprPtr make_struct_literal(std::string type_name, std::vector<StructLiteralField> fields,
+                                   Span s = {}) {
+    return std::make_unique<Expr>(
+        std::make_unique<StructLiteralExpr>(std::move(type_name), std::move(fields)), s);
+}
+
+inline ExprPtr make_array_literal(std::vector<ExprPtr> elements, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<ArrayLiteralExpr>(std::move(elements)), s);
 }
 
 }  // namespace cm::ast

@@ -217,6 +217,13 @@ class ProgramDeadCodeElimination {
                 if (local.type && local.type->kind == ast::TypeKind::Struct) {
                     used.insert(local.type->name);
                 }
+                // 配列の要素型も検査
+                if (local.type && local.type->kind == ast::TypeKind::Array &&
+                    local.type->element_type) {
+                    if (local.type->element_type->kind == ast::TypeKind::Struct) {
+                        used.insert(local.type->element_type->name);
+                    }
+                }
             }
         }
 

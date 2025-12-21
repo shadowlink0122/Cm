@@ -1,4 +1,5 @@
 // simple_math.cm - シンプルな数学モジュール（構造体なし）
+module math;
 
 // 定数をエクスポート
 export const int MAGIC_NUMBER = 42;

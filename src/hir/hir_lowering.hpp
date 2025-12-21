@@ -610,6 +610,34 @@ class HirLowering {
         if (let.init) {
             debug::hir::log(debug::hir::Id::LetInit, "initializer present", debug::Level::Trace);
 
+            // 暗黙的構造体リテラルに型を伝播
+            if (let.type && let.type->kind == ast::TypeKind::Struct) {
+                if (auto* struct_lit = let.init->as<ast::StructLiteralExpr>()) {
+                    if (struct_lit->type_name.empty()) {
+                        struct_lit->type_name = let.type->name;
+                        debug::hir::log(
+                            debug::hir::Id::LetInit,
+                            "Propagated type to implicit struct literal: " + let.type->name,
+                            debug::Level::Debug);
+                    }
+                }
+            }
+            // 配列リテラルへの型伝播
+            if (let.type && let.type->kind == ast::TypeKind::Array && let.type->element_type) {
+                if (auto* array_lit = let.init->as<ast::ArrayLiteralExpr>()) {
+                    // 配列要素が構造体の場合、各要素に型を伝播
+                    if (let.type->element_type->kind == ast::TypeKind::Struct) {
+                        for (auto& elem : array_lit->elements) {
+                            if (auto* struct_lit = elem->as<ast::StructLiteralExpr>()) {
+                                if (struct_lit->type_name.empty()) {
+                                    struct_lit->type_name = let.type->element_type->name;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // initが構造体のコンストラクタ呼び出し（Type name = Type(args)形式）かチェック
             bool is_constructor_init = false;
             if (auto* call = let.init->as<ast::CallExpr>()) {
@@ -978,6 +1006,10 @@ class HirLowering {
             return lower_ternary(*tern, type);
         } else if (auto* match_expr = expr.as<ast::MatchExpr>()) {
             return lower_match(*match_expr, type);
+        } else if (auto* struct_lit = expr.as<ast::StructLiteralExpr>()) {
+            return lower_struct_literal(*struct_lit, type);
+        } else if (auto* array_lit = expr.as<ast::ArrayLiteralExpr>()) {
+            return lower_array_literal(*array_lit, type);
         }
 
         // フォールバック: nullリテラル
@@ -1056,10 +1088,41 @@ class HirLowering {
             debug::hir::log(debug::hir::Id::AssignLower, "Assignment detected",
                             debug::Level::Debug);
 
-            // defaultメンバへの暗黙的な代入をチェック
-            // 左辺が構造体で右辺がプリミティブの場合、defaultメンバへの代入に変換
             auto lhs_type = binary.left->type;
             auto rhs_type = binary.right->type;
+
+            // 暗黙的構造体リテラルに左辺の型を伝播
+            if (lhs_type && lhs_type->kind == ast::TypeKind::Struct) {
+                if (auto* struct_lit = binary.right->as<ast::StructLiteralExpr>()) {
+                    if (struct_lit->type_name.empty()) {
+                        struct_lit->type_name = lhs_type->name;
+                        debug::hir::log(
+                            debug::hir::Id::AssignLower,
+                            "Propagated type to implicit struct literal in assignment: " +
+                                lhs_type->name,
+                            debug::Level::Debug);
+                    }
+                }
+            }
+
+            // 配列リテラルへの型伝播
+            if (lhs_type && lhs_type->kind == ast::TypeKind::Array && lhs_type->element_type) {
+                if (auto* array_lit = binary.right->as<ast::ArrayLiteralExpr>()) {
+                    // 配列要素が構造体の場合、各要素に型を伝播
+                    if (lhs_type->element_type->kind == ast::TypeKind::Struct) {
+                        for (auto& elem : array_lit->elements) {
+                            if (auto* struct_lit = elem->as<ast::StructLiteralExpr>()) {
+                                if (struct_lit->type_name.empty()) {
+                                    struct_lit->type_name = lhs_type->element_type->name;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // defaultメンバへの暗黙的な代入をチェック
+            // 左辺が構造体で右辺がプリミティブの場合、defaultメンバへの代入に変換
             if (lhs_type && lhs_type->kind == ast::TypeKind::Struct && rhs_type &&
                 rhs_type->kind != ast::TypeKind::Struct) {
                 std::string default_member = get_default_member_name(lhs_type->name);
@@ -2143,6 +2206,125 @@ class HirLowering {
 
         // その他の式はそのままlower
         return lower_expr(guard);
+    }
+
+    // 構造体リテラル
+    HirExprPtr lower_struct_literal(ast::StructLiteralExpr& lit, TypePtr expected_type) {
+        std::string type_name = lit.type_name;
+
+        // 暗黙的構造体リテラル（型名が空）の場合、expected_typeから推論
+        if (type_name.empty() && expected_type) {
+            if (expected_type->kind == ast::TypeKind::Struct && !expected_type->name.empty()) {
+                type_name = expected_type->name;
+                debug::hir::log(debug::hir::Id::LiteralLower,
+                                "Inferred struct type from context: " + type_name,
+                                debug::Level::Debug);
+            }
+        }
+
+        debug::hir::log(debug::hir::Id::LiteralLower, "Lowering struct literal: " + type_name,
+                        debug::Level::Debug);
+
+        auto hir_lit = std::make_unique<HirStructLiteral>();
+        hir_lit->type_name = type_name;
+
+        // 構造体の型を取得
+        TypePtr struct_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+        struct_type->name = type_name;
+
+        // 構造体定義を取得（フィールドの型推論に使用）
+        const ast::StructDecl* struct_def = nullptr;
+        if (!type_name.empty()) {
+            auto struct_it = struct_defs_.find(type_name);
+            if (struct_it != struct_defs_.end()) {
+                struct_def = struct_it->second;
+            }
+        }
+
+        // フィールドをlower
+        for (auto& field : lit.fields) {
+            HirStructLiteralField hir_field;
+            hir_field.name = field.name;
+
+            // フィールドの値をチェックして、暗黙的構造体リテラルならば型を推論
+            if (struct_def) {
+                for (auto& def_field : struct_def->fields) {
+                    if (def_field.name == field.name) {
+                        // ネストした暗黙的構造体リテラルに型を伝播
+                        if (auto* nested_lit = field.value->as<ast::StructLiteralExpr>()) {
+                            if (nested_lit->type_name.empty() && def_field.type &&
+                                def_field.type->kind == ast::TypeKind::Struct) {
+                                nested_lit->type_name = def_field.type->name;
+                                debug::hir::log(
+                                    debug::hir::Id::LiteralLower,
+                                    "Propagated type to nested struct: " + def_field.type->name,
+                                    debug::Level::Debug);
+                            }
+                        }
+                        // ネストした配列リテラルの型推論
+                        // TODO: 配列リテラル内の構造体も処理
+                        break;
+                    }
+                }
+            }
+
+            hir_field.value = lower_expr(*field.value);
+            hir_lit->fields.push_back(std::move(hir_field));
+        }
+
+        return std::make_unique<HirExpr>(std::move(hir_lit), struct_type);
+    }
+
+    // 配列リテラル
+    HirExprPtr lower_array_literal(ast::ArrayLiteralExpr& lit, TypePtr expected_type) {
+        debug::hir::log(
+            debug::hir::Id::LiteralLower,
+            "Lowering array literal with " + std::to_string(lit.elements.size()) + " elements",
+            debug::Level::Debug);
+
+        auto hir_lit = std::make_unique<HirArrayLiteral>();
+
+        // 要素の期待される型を取得
+        TypePtr expected_elem_type = nullptr;
+        if (expected_type && expected_type->kind == ast::TypeKind::Array &&
+            expected_type->element_type) {
+            expected_elem_type = expected_type->element_type;
+            debug::hir::log(debug::hir::Id::LiteralLower,
+                            "Using expected element type: " + expected_elem_type->name,
+                            debug::Level::Debug);
+        }
+
+        // 要素の型を推論
+        TypePtr elem_type = expected_elem_type;
+        for (auto& elem : lit.elements) {
+            // 配列内の暗黙的構造体リテラルに型を伝播
+            if (expected_elem_type && expected_elem_type->kind == ast::TypeKind::Struct) {
+                if (auto* nested_lit = elem->as<ast::StructLiteralExpr>()) {
+                    if (nested_lit->type_name.empty()) {
+                        nested_lit->type_name = expected_elem_type->name;
+                        debug::hir::log(
+                            debug::hir::Id::LiteralLower,
+                            "Propagated type to array element struct: " + expected_elem_type->name,
+                            debug::Level::Debug);
+                    }
+                }
+            }
+
+            auto lowered_elem = lower_expr(*elem);
+            if (!elem_type) {
+                elem_type = lowered_elem->type;
+            }
+            hir_lit->elements.push_back(std::move(lowered_elem));
+        }
+
+        if (!elem_type) {
+            elem_type = hir::make_int();  // デフォルト
+        }
+
+        // 配列型を作成
+        TypePtr array_type = hir::make_array(elem_type, lit.elements.size());
+
+        return std::make_unique<HirExpr>(std::move(hir_lit), array_type);
     }
 
     // 比較演算子かどうか

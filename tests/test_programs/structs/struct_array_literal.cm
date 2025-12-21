@@ -1,0 +1,30 @@
+// struct_array_literal.cm - 構造体と配列のリテラル初期化テスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Container {
+    int[3] values;
+    int count;
+}
+
+int main() {
+    // 1. 構造体内の配列リテラル初期化
+    Container c;
+    c.values = [10, 20, 30];
+    c.count = 3;
+    println("Container: [{c.values[0]}, {c.values[1]}, {c.values[2]}], count={c.count}");
+    
+    // 2. 配列リテラル直接初期化
+    int[3] arr = [100, 200, 300];
+    println("arr = [{arr[0]}, {arr[1]}, {arr[2]}]");
+    
+    // 3. 構造体の配列（暗黙的型推論リテラル）
+    Point[2] points = [{x: 1, y: 2}, {x: 3, y: 4}];
+    println("points[0]: ({points[0].x}, {points[0].y})");
+    println("points[1]: ({points[1].x}, {points[1].y})");
+    
+    return 0;
+}

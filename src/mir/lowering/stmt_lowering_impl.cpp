@@ -146,6 +146,98 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
     // 右辺値をlowering
     LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
 
+    // 左辺値のMirPlaceを構築するヘルパー関数
+    // 複雑な左辺値（c.values[0], points[0].x など）を再帰的に処理
+    auto build_lvalue_place = [&](const hir::HirExpr* expr, MirPlace& place,
+                                  hir::TypePtr& current_type) -> bool {
+        // 再帰的にプロジェクションを構築
+        std::function<bool(const hir::HirExpr*,
+                           std::vector<std::function<void(MirPlace&, LoweringContext&)>>&,
+                           hir::TypePtr&)>
+            build_projections;
+        build_projections =
+            [&](const hir::HirExpr* e,
+                std::vector<std::function<void(MirPlace&, LoweringContext&)>>& projections,
+                hir::TypePtr& typ) -> bool {
+            if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&e->kind)) {
+                // ベース変数
+                auto var_id = ctx.resolve_variable((*var_ref)->name);
+                if (var_id) {
+                    place.local = *var_id;
+                    if (*var_id < ctx.func->locals.size()) {
+                        typ = ctx.func->locals[*var_id].type;
+                    }
+                    return true;
+                }
+                return false;
+            } else if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&e->kind)) {
+                // メンバーアクセス: object.member
+                hir::TypePtr inner_type;
+                if (!build_projections((*member)->object.get(), projections, inner_type)) {
+                    return false;
+                }
+
+                // フィールドプロジェクションを追加
+                std::string field_name = (*member)->member;
+                projections.push_back(
+                    [field_name, inner_type, &ctx](MirPlace& p, LoweringContext&) {
+                        if (inner_type && inner_type->kind == hir::TypeKind::Struct) {
+                            auto field_idx = ctx.get_field_index(inner_type->name, field_name);
+                            if (field_idx) {
+                                p.projections.push_back(PlaceProjection::field(*field_idx));
+                            }
+                        }
+                    });
+
+                // 次の型を取得
+                if (inner_type && inner_type->kind == hir::TypeKind::Struct) {
+                    auto field_idx = ctx.get_field_index(inner_type->name, field_name);
+                    if (field_idx && ctx.struct_defs && ctx.struct_defs->count(inner_type->name)) {
+                        const auto* struct_def = ctx.struct_defs->at(inner_type->name);
+                        if (*field_idx < struct_def->fields.size()) {
+                            typ = struct_def->fields[*field_idx].type;
+                        }
+                    }
+                }
+                return true;
+            } else if (auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&e->kind)) {
+                // インデックスアクセス: object[index]
+                hir::TypePtr inner_type;
+                if (!build_projections((*index)->object.get(), projections, inner_type)) {
+                    return false;
+                }
+
+                // インデックスを評価
+                LocalId idx = expr_lowering->lower_expression(*(*index)->index, ctx);
+
+                // インデックスプロジェクションを追加
+                projections.push_back([idx](MirPlace& p, LoweringContext&) {
+                    p.projections.push_back(PlaceProjection::index(idx));
+                });
+
+                // 次の型を取得（配列の要素型）
+                if (inner_type && inner_type->kind == hir::TypeKind::Array &&
+                    inner_type->element_type) {
+                    typ = inner_type->element_type;
+                }
+                return true;
+            }
+            return false;
+        };
+
+        std::vector<std::function<void(MirPlace&, LoweringContext&)>> projections;
+        if (!build_projections(expr, projections, current_type)) {
+            return false;
+        }
+
+        // プロジェクションを適用
+        for (auto& proj : projections) {
+            proj(place, ctx);
+        }
+
+        return true;
+    };
+
     // 左辺値の種類に応じて処理
     if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&assign.target->kind)) {
         // 単純な変数代入
@@ -154,53 +246,17 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
             ctx.push_statement(MirStatement::assign(
                 MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }
-    } else if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind)) {
-        // メンバーアクセス（構造体フィールド）への代入
-        // オブジェクトをlowering
-        LocalId object = expr_lowering->lower_expression(*(*member)->object, ctx);
+    } else if (std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind) ||
+               std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
+        // 複雑な左辺値: メンバーアクセスまたはインデックスアクセス
+        // これには c.values[0], points[0].x, arr[i], obj.field などが含まれる
+        MirPlace place{0};
+        hir::TypePtr current_type;
 
-        // オブジェクトの型から構造体名を取得
-        auto obj_type = (*member)->object->type;
-        if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
-            // 構造体のフィールドインデックスを取得
-            auto field_idx = ctx.get_field_index(obj_type->name, (*member)->member);
-            if (field_idx) {
-                // Projectionを使ったアクセスを生成
-                MirPlace place{object};
-                place.projections.push_back(PlaceProjection::field(*field_idx));
-
-                ctx.push_statement(MirStatement::assign(
-                    place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
-            }
+        if (build_lvalue_place(assign.target.get(), place, current_type)) {
+            ctx.push_statement(
+                MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }
-    } else if (std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
-        // 配列インデックスへの代入
-        auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind);
-        LocalId array;
-
-        // objectが変数参照の場合は直接その変数を使用
-        if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*index)->object->kind)) {
-            // 変数名から変数IDを取得
-            auto var_id = ctx.resolve_variable((*var_ref)->name);
-            if (var_id) {
-                array = *var_id;
-            } else {
-                // フォールバック：通常の評価
-                array = expr_lowering->lower_expression(*(*index)->object, ctx);
-            }
-        } else {
-            // その他の場合は通常の評価
-            array = expr_lowering->lower_expression(*(*index)->object, ctx);
-        }
-
-        LocalId idx = expr_lowering->lower_expression(*(*index)->index, ctx);
-        LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
-
-        // 配列[idx] = value
-        MirPlace place{array};
-        place.projections.push_back(PlaceProjection::index(idx));
-        ctx.push_statement(
-            MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
     }
     // その他の左辺値タイプは未対応
 }

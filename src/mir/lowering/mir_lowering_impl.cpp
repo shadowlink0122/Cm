@@ -70,7 +70,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.interface_names = &interface_names;
     ctx.global_const_values = &global_const_values;
 
-    // selfパラメータを登録
+    // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）
     auto self_type = hir::make_named(type_name);
     LocalId self_id = ctx.new_local("self", self_type, false);
     mir_func->arg_locals.push_back(self_id);
