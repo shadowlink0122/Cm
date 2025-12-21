@@ -475,11 +475,23 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
-        // メンバアクセス
-        if (consume_if(TokenKind::Dot)) {
+        // メンバアクセス (. または ->)
+        if (check(TokenKind::Dot) || check(TokenKind::ThinArrow)) {
+            bool is_arrow = consume_if(TokenKind::ThinArrow);
+            if (!is_arrow) {
+                consume_if(TokenKind::Dot);
+            }
+
             std::string member = expect_ident();
-            debug::par::log(debug::par::Id::MemberAccess, "Accessing member: " + member,
-                            debug::Level::Debug);
+            debug::par::log(
+                debug::par::Id::MemberAccess,
+                std::string(is_arrow ? "Arrow" : "Dot") + " accessing member: " + member,
+                debug::Level::Debug);
+
+            // -> の場合は暗黙のデリファレンスを追加
+            if (is_arrow) {
+                expr = ast::make_unary(ast::UnaryOp::Deref, std::move(expr));
+            }
 
             // メソッド呼び出し
             if (consume_if(TokenKind::LParen)) {

@@ -14,7 +14,7 @@
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
-#include "hir/hir_lowering.hpp"
+#include "hir/lowering.hpp"
 #include "mir/mir_lowering.hpp"
 #include "mir/mir_printer.hpp"
 #include "mir/optimizations/all_passes.hpp"

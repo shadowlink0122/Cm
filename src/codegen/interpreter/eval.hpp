@@ -111,6 +111,21 @@ class Evaluator {
                             } else {
                                 return Value{};
                             }
+                        }
+                        // 構造体フィールドへの参照の場合
+                        else if (ptr.field_index.has_value()) {
+                            if (target_it->second.type() == typeid(StructValue)) {
+                                auto& sv = std::any_cast<StructValue&>(target_it->second);
+                                auto field_it =
+                                    sv.fields.find(static_cast<FieldId>(ptr.field_index.value()));
+                                if (field_it != sv.fields.end()) {
+                                    result = field_it->second;
+                                } else {
+                                    return Value{};
+                                }
+                            } else {
+                                return Value{};
+                            }
                         } else {
                             result = target_it->second;
                         }
@@ -253,6 +268,15 @@ class Evaluator {
                                 }
                                 arr.elements[idx] = value;
                             }
+                        }
+                    }
+                    // 構造体フィールドへの参照の場合
+                    else if (ptr.field_index.has_value()) {
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end() &&
+                            target_it->second.type() == typeid(StructValue)) {
+                            auto& sv = std::any_cast<StructValue&>(target_it->second);
+                            sv.fields[static_cast<FieldId>(ptr.field_index.value())] = value;
                         }
                     } else {
                         ctx.locals[ptr.target_local] = value;
@@ -474,7 +498,7 @@ class Evaluator {
                 PointerValue ptr;
                 ptr.target_local = data.place.local;
 
-                // プロジェクションがある場合（配列要素への参照など）
+                // プロジェクションがある場合（配列要素や構造体フィールドへの参照など）
                 if (!data.place.projections.empty()) {
                     for (const auto& proj : data.place.projections) {
                         if (proj.kind == ProjectionKind::Index) {
@@ -487,6 +511,9 @@ class Evaluator {
                                     ptr.array_index = std::any_cast<int>(idx_it->second);
                                 }
                             }
+                        } else if (proj.kind == ProjectionKind::Field) {
+                            // フィールドインデックスを設定
+                            ptr.field_index = proj.field_id;
                         }
                     }
                 }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../common/span.hpp"
-#include "hir_types.hpp"
+#include "types.hpp"
 
 #include <memory>
 #include <variant>

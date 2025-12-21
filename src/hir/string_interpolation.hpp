@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../frontend/ast/nodes.hpp"
-#include "hir_nodes.hpp"
+#include "nodes.hpp"
 
 #include <memory>
 #include <string>

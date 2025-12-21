@@ -9,10 +9,10 @@
 // - lowering/stmt_lowering.hpp    : 文のlowering
 // - lowering/expr_lowering.hpp    : 式のlowering
 // - lowering/monomorphization.hpp : モノモーフィゼーション
-// - lowering/mir_lowering.hpp     : メインクラス
+// - lowering/lowering.hpp         : メインクラス
 // ============================================================
 
-#include "lowering/mir_lowering.hpp"
+#include "lowering/lowering.hpp"
 
 // 後方互換性のためのエイリアス
 namespace cm::mir {

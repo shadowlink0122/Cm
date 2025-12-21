@@ -111,6 +111,9 @@ class StmtLowering : public MirLoweringBase {
 
     // ブロック文のlowering
     void lower_block(const hir::HirBlock& block, LoweringContext& ctx);
+
+    // スコープ終了時のデストラクタ呼び出しを生成
+    void emit_scope_destructors(LoweringContext& ctx);
 };
 
 }  // namespace cm::mir

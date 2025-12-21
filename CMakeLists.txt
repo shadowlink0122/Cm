@@ -154,10 +154,24 @@ set(CM_SOURCES
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
+    # Type checking (分割済み)
+    src/frontend/types/checking/decl.cpp
+    src/frontend/types/checking/stmt.cpp
+    src/frontend/types/checking/expr.cpp
+    src/frontend/types/checking/call.cpp
+    src/frontend/types/checking/generic.cpp
+    src/frontend/types/checking/auto_impl.cpp
+    src/frontend/types/checking/utils.cpp
     src/preprocessor/import_preprocessor.cpp
     src/module/module_resolver.cpp
+    # HIR lowering (AST -> HIR)
+    src/hir/lowering.cpp
+    src/hir/lowering_decl.cpp
+    src/hir/lowering_stmt.cpp
+    src/hir/lowering_expr.cpp
+    # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
-    src/mir/lowering/mir_lowering_impl.cpp
+    src/mir/lowering/lowering_impl.cpp
     src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt_lowering_impl.cpp
@@ -314,7 +328,7 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
-            src/mir/lowering/mir_lowering_impl.cpp
+            src/mir/lowering/lowering_impl.cpp
             src/mir/lowering/stmt_lowering_impl.cpp
             src/mir/lowering/expr_lowering_basic.cpp
             src/mir/lowering/expr_lowering_ops.cpp
@@ -332,7 +346,7 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
-            src/mir/lowering/mir_lowering_impl.cpp
+            src/mir/lowering/lowering_impl.cpp
             src/mir/lowering/stmt_lowering_impl.cpp
             src/mir/lowering/expr_lowering_basic.cpp
             src/mir/lowering/expr_lowering_ops.cpp

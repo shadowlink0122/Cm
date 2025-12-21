@@ -1,0 +1,23 @@
+// デストラクタの順序テスト（LIFO順）
+struct Item {
+    int id;
+}
+
+impl Item {
+    self(int i) {
+        self.id = i;
+        println("C{self.id}");
+    }
+    
+    ~self() {
+        println("D{self.id}");
+    }
+}
+
+int main() {
+    Item a(1);
+    Item b(2);
+    Item c(3);
+    println("M");
+    return 0;
+}

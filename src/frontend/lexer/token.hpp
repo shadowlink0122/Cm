@@ -124,10 +124,11 @@ enum class TokenKind {
     Question,
     Colon,
     ColonColon,
-    Arrow,
-    At,        // @ for attributes
-    Ellipsis,  // ... for variadic
-    Hash,      // # for preprocessor directives
+    Arrow,      // =>
+    ThinArrow,  // -> for pointer member access
+    At,         // @ for attributes
+    Ellipsis,   // ... for variadic
+    Hash,       // # for preprocessor directives
 
     // 区切り
     LParen,

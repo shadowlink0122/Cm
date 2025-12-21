@@ -35,6 +35,7 @@ struct PointerValue {
     LocalId target_local;                // 参照先のローカル変数ID
     hir::TypePtr element_type;           // 参照先の型
     std::optional<int64_t> array_index;  // 配列要素への参照の場合のインデックス
+    std::optional<size_t> field_index;  // 構造体フィールドへの参照の場合のフィールドインデックス
 };
 
 // ============================================================

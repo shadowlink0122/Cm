@@ -2,7 +2,7 @@
 
 #include "../frontend/lexer/lexer.hpp"
 #include "../frontend/parser/parser.hpp"
-#include "../hir/hir_lowering.hpp"
+#include "../hir/lowering.hpp"
 #include "../mir/mir_lowering.hpp"
 
 #include <fstream>

@@ -125,7 +125,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         } else if (!var_name.empty() && var_name[0] == '*') {
                             // *variable形式 - ポインタのデリファレンス
                             std::string ptr_var = var_name.substr(1);
-                            if (!ptr_var.empty() && std::isalpha(ptr_var[0])) {
+                            // (*ptr).x 形式もサポート
+                            if (!ptr_var.empty() &&
+                                (std::isalpha(ptr_var[0]) || ptr_var[0] == '(')) {
                                 var_names.push_back("*" + ptr_var);  // *付きで格納
                                 converted_format += "{}";
                             } else {
@@ -135,8 +137,11 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         } else if (!var_name.empty() &&
                                    (std::isalpha(var_name[0]) || var_name[0] == '!' ||
                                     var_name[0] == '*' ||  // デリファレンスを許可
+                                    var_name[0] == '(' ||  // (*ptr).x 形式を許可
                                     var_name.substr(0, 5) == "self." ||
-                                    var_name.find("::") != std::string::npos)) {
+                                    var_name.find("::") != std::string::npos ||
+                                    var_name.find("->") !=
+                                        std::string::npos)) {  // ptr->x 形式を許可
                             // 変数名、メンバーアクセス、メソッド呼び出し、enum値、または否定演算子として有効
                             // self.x, p.field, r.area(), Color::Red, !true のような形式も許可
                             debug_msg("MIR", "Extracted placeholder: " + var_name);
@@ -374,6 +379,74 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                         } else if (!var_name.empty() && var_name[0] == '*') {
                             // *variable形式 - ポインタのデリファレンス
                             std::string ptr_var = var_name.substr(1);
+
+                            // (*ptr).member形式のチェック
+                            bool is_paren_deref = (ptr_var.size() > 2 && ptr_var[0] == '(' &&
+                                                   ptr_var.find(')') != std::string::npos);
+                            if (is_paren_deref) {
+                                size_t close_paren = ptr_var.find(')');
+                                std::string actual_ptr = ptr_var.substr(1, close_paren - 1);
+                                std::string member_part = ptr_var.substr(close_paren + 1);
+
+                                // メンバーアクセス (.member)
+                                if (!member_part.empty() && member_part[0] == '.') {
+                                    std::string member_name = member_part.substr(1);
+                                    auto var_id = ctx.resolve_variable(actual_ptr);
+                                    if (var_id) {
+                                        hir::TypePtr ptr_type = nullptr;
+                                        hir::TypePtr struct_type = nullptr;
+
+                                        if (*var_id < ctx.func->locals.size()) {
+                                            ptr_type = ctx.func->locals[*var_id].type;
+                                            if (ptr_type &&
+                                                ptr_type->kind == hir::TypeKind::Pointer &&
+                                                ptr_type->element_type) {
+                                                struct_type = ptr_type->element_type;
+                                            }
+                                        }
+
+                                        if (struct_type &&
+                                            struct_type->kind == hir::TypeKind::Struct) {
+                                            auto field_idx =
+                                                ctx.get_field_index(struct_type->name, member_name);
+                                            if (field_idx) {
+                                                // フィールド型を取得
+                                                hir::TypePtr field_type = hir::make_int();
+                                                if (ctx.struct_defs &&
+                                                    ctx.struct_defs->count(struct_type->name)) {
+                                                    const auto* struct_def =
+                                                        ctx.struct_defs->at(struct_type->name);
+                                                    if (*field_idx < struct_def->fields.size()) {
+                                                        field_type =
+                                                            struct_def->fields[*field_idx].type;
+                                                    }
+                                                }
+
+                                                LocalId result = ctx.new_temp(field_type);
+
+                                                // Deref + Field プロジェクション
+                                                MirPlace place{*var_id};
+                                                place.projections.push_back(
+                                                    PlaceProjection::deref());
+                                                place.projections.push_back(
+                                                    PlaceProjection::field(*field_idx));
+
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{result},
+                                                    MirRvalue::use(MirOperand::copy(place))));
+
+                                                arg_locals.push_back(result);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    // フォールバック: エラーとして処理
+                                    auto err_type = hir::make_error();
+                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                    continue;
+                                }
+                            }
+
                             auto var_id = ctx.resolve_variable(ptr_var);
                             if (var_id) {
                                 // ポインタ変数の型を取得
@@ -413,6 +486,128 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                 auto err_type = hir::make_error();
                                 arg_locals.push_back(ctx.new_temp(err_type));
                             }
+                        } else if (!var_name.empty() && var_name[0] == '(' && var_name[1] == '*') {
+                            // (*ptr).member 形式 - ポインタデリファレンス + メンバーアクセス
+                            size_t close_paren = var_name.find(')');
+                            if (close_paren != std::string::npos) {
+                                std::string ptr_name = var_name.substr(2, close_paren - 2);
+                                std::string member_part = var_name.substr(close_paren + 1);
+
+                                if (!member_part.empty() && member_part[0] == '.') {
+                                    std::string member_name = member_part.substr(1);
+                                    auto var_id = ctx.resolve_variable(ptr_name);
+
+                                    if (var_id) {
+                                        hir::TypePtr ptr_type = nullptr;
+                                        hir::TypePtr struct_type = nullptr;
+
+                                        if (*var_id < ctx.func->locals.size()) {
+                                            ptr_type = ctx.func->locals[*var_id].type;
+                                            if (ptr_type &&
+                                                ptr_type->kind == hir::TypeKind::Pointer &&
+                                                ptr_type->element_type) {
+                                                struct_type = ptr_type->element_type;
+                                            }
+                                        }
+
+                                        if (struct_type &&
+                                            struct_type->kind == hir::TypeKind::Struct) {
+                                            auto field_idx =
+                                                ctx.get_field_index(struct_type->name, member_name);
+                                            if (field_idx) {
+                                                // フィールド型を取得
+                                                hir::TypePtr field_type = hir::make_int();
+                                                if (ctx.struct_defs &&
+                                                    ctx.struct_defs->count(struct_type->name)) {
+                                                    const auto* struct_def =
+                                                        ctx.struct_defs->at(struct_type->name);
+                                                    if (*field_idx < struct_def->fields.size()) {
+                                                        field_type =
+                                                            struct_def->fields[*field_idx].type;
+                                                    }
+                                                }
+
+                                                LocalId result = ctx.new_temp(field_type);
+
+                                                // Deref + Field プロジェクション
+                                                MirPlace place{*var_id};
+                                                place.projections.push_back(
+                                                    PlaceProjection::deref());
+                                                place.projections.push_back(
+                                                    PlaceProjection::field(*field_idx));
+
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{result},
+                                                    MirRvalue::use(MirOperand::copy(place))));
+
+                                                debug_msg("MIR", "(*ptr).member interpolation: " +
+                                                                     ptr_name + "." + member_name);
+                                                arg_locals.push_back(result);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // フォールバック: エラーとして処理
+                            auto err_type = hir::make_error();
+                            arg_locals.push_back(ctx.new_temp(err_type));
+                        } else if (!var_name.empty() && var_name.find("->") != std::string::npos) {
+                            // ptr->member 形式 - ポインタメンバアクセス
+                            size_t arrow_pos = var_name.find("->");
+                            std::string ptr_name = var_name.substr(0, arrow_pos);
+                            std::string member_name = var_name.substr(arrow_pos + 2);
+
+                            auto var_id = ctx.resolve_variable(ptr_name);
+                            if (var_id) {
+                                hir::TypePtr ptr_type = nullptr;
+                                hir::TypePtr struct_type = nullptr;
+
+                                if (*var_id < ctx.func->locals.size()) {
+                                    ptr_type = ctx.func->locals[*var_id].type;
+                                    if (ptr_type && ptr_type->kind == hir::TypeKind::Pointer &&
+                                        ptr_type->element_type) {
+                                        struct_type = ptr_type->element_type;
+                                    }
+                                }
+
+                                if (struct_type && struct_type->kind == hir::TypeKind::Struct) {
+                                    auto field_idx =
+                                        ctx.get_field_index(struct_type->name, member_name);
+                                    if (field_idx) {
+                                        // フィールド型を取得
+                                        hir::TypePtr field_type = hir::make_int();
+                                        if (ctx.struct_defs &&
+                                            ctx.struct_defs->count(struct_type->name)) {
+                                            const auto* struct_def =
+                                                ctx.struct_defs->at(struct_type->name);
+                                            if (*field_idx < struct_def->fields.size()) {
+                                                field_type = struct_def->fields[*field_idx].type;
+                                            }
+                                        }
+
+                                        LocalId result = ctx.new_temp(field_type);
+
+                                        // Deref + Field プロジェクション
+                                        MirPlace place{*var_id};
+                                        place.projections.push_back(PlaceProjection::deref());
+                                        place.projections.push_back(
+                                            PlaceProjection::field(*field_idx));
+
+                                        ctx.push_statement(MirStatement::assign(
+                                            MirPlace{result},
+                                            MirRvalue::use(MirOperand::copy(place))));
+
+                                        debug_msg("MIR", "ptr->member interpolation: " + ptr_name +
+                                                             "->" + member_name);
+                                        arg_locals.push_back(result);
+                                        continue;
+                                    }
+                                }
+                            }
+                            // フォールバック: エラーとして処理
+                            auto err_type = hir::make_error();
+                            arg_locals.push_back(ctx.new_temp(err_type));
                         } else {
                             // メンバーアクセスかどうかチェック（"self.x" や "p.field" の形式）
                             // または配列要素のフィールドアクセス（"arr[0].x" の形式）

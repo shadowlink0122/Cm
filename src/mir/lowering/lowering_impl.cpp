@@ -1,6 +1,6 @@
 #include "../../common/debug.hpp"
+#include "lowering.hpp"
 #include "lowering_context.hpp"
-#include "mir_lowering.hpp"
 
 namespace cm::mir {
 
@@ -287,13 +287,6 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
             mir_program.functions.push_back(std::move(mir_func));
         }
     }
-}
-
-// デストラクタを生成（構造体用）
-void MirLowering::generate_destructor([[maybe_unused]] const std::string& type_name,
-                                      [[maybe_unused]] LoweringContext& ctx) {
-    // TODO: デストラクタの実装
-    // 現在はプレースホルダー
 }
 
 }  // namespace cm::mir

@@ -443,7 +443,23 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                 "arr_elem_ptr");
                         }
                     } else if (proj.kind == mir::ProjectionKind::Field) {
-                        // 構造体フィールドへのアドレス（将来実装）
+                        // 構造体フィールドへのアドレス
+                        auto& localInfo = currentMIRFunction->locals[local];
+                        hir::TypePtr structType = localInfo.type;
+
+                        // 既にGEPで移動している場合、現在の型を追跡
+                        // フィールドアクセスでは元のローカル変数の型から辿る
+                        if (structType && structType->kind == hir::TypeKind::Struct) {
+                            auto it = structTypes.find(structType->name);
+                            if (it != structTypes.end()) {
+                                std::vector<llvm::Value*> indices;
+                                indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));
+                                indices.push_back(
+                                    llvm::ConstantInt::get(ctx.getI32Type(), proj.field_id));
+                                basePtr =
+                                    builder->CreateGEP(it->second, basePtr, indices, "field_ptr");
+                            }
+                        }
                     }
                 }
             }
@@ -755,6 +771,17 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     // 型情報が取得できない場合は、addrの型から推測
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         structType = allocaInst->getAllocatedType();
+                    } else if (auto loadInst = llvm::dyn_cast<llvm::LoadInst>(addr)) {
+                        // LoadInst（デリファレンス後）の場合、ロードされた型から構造体型を取得
+                        auto loadedType = loadInst->getType();
+                        if (loadedType->isPointerTy()) {
+#if LLVM_VERSION_MAJOR >= 15
+                            // opaque pointer: currentTypeから取得済み
+#else
+                            // typed pointer: ポインタの要素型を取得
+                            structType = loadedType->getPointerElementType();
+#endif
+                        }
                     } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
                         // GEPの結果型から構造体型を取得
                         // opaque pointerモードでは getSourceElementType と indices から推測
@@ -891,8 +918,29 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 break;
             }
             case mir::ProjectionKind::Deref: {
-                // デリファレンス
-                addr = builder->CreateLoad(ctx.getPtrType(), addr);
+                // デリファレンス：ポインタ変数から実際のポインタ値をロード
+                // LLVM 14では型付きポインタを使用するため、適切な型でロードする必要がある
+                llvm::Type* loadType = ctx.getPtrType();  // デフォルトはi8*/ptr
+
+                // 次のプロジェクションがFieldの場合、構造体へのポインタとしてロード
+                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                    currentType->element_type) {
+                    auto elemType = currentType->element_type;
+                    if (elemType->kind == hir::TypeKind::Struct) {
+                        auto it = structTypes.find(elemType->name);
+                        if (it != structTypes.end()) {
+                            loadType = llvm::PointerType::getUnqual(it->second);
+                        }
+                    }
+                }
+
+                addr = builder->CreateLoad(loadType, addr);
+
+                // 次のプロジェクションのために型を更新
+                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                    currentType->element_type) {
+                    currentType = currentType->element_type;
+                }
                 break;
             }
         }

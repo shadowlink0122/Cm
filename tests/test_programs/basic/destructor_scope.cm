@@ -1,0 +1,26 @@
+// デストラクタのスコープテスト
+struct Obj {
+    int id;
+}
+
+impl Obj {
+    self(int i) {
+        self.id = i;
+        println("C{self.id}");
+    }
+    
+    ~self() {
+        println("D{self.id}");
+    }
+}
+
+int main() {
+    Obj a(1);
+    {
+        Obj b(2);
+        {
+            Obj c(3);
+        }  // D3
+    }  // D2
+    return 0;
+}  // D1

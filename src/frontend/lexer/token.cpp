@@ -224,6 +224,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "::";
         case TokenKind::Arrow:
             return "=>";
+        case TokenKind::ThinArrow:
+            return "->";
         case TokenKind::At:
             return "@";
         case TokenKind::Ellipsis:

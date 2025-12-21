@@ -381,7 +381,8 @@ class Lexer {
                        : match('=') ? make(TokenKind::PlusEq)
                                     : make(TokenKind::Plus);
             case '-':
-                return match('-')   ? make(TokenKind::MinusMinus)
+                return match('>')   ? make(TokenKind::ThinArrow)
+                       : match('-') ? make(TokenKind::MinusMinus)
                        : match('=') ? make(TokenKind::MinusEq)
                                     : make(TokenKind::Minus);
             case '*':

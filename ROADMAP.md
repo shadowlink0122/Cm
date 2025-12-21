@@ -1126,35 +1126,46 @@ expr_lowering_impl.cpp (2507行) →
 └── expr_lowering_call.cpp (1298行) - 関数呼び出し、文字列補間
 ```
 
+#### 3. hir_lowering.hppの分割 ✅
+ヘッダーオンリー実装を責務ごとにcppファイルに分割：
+```
+hir_lowering.hpp (2337行) →
+├── hir_lowering_fwd.hpp (95行) - クラス宣言
+├── hir_lowering.hpp (5行) - 後方互換性のためのラッパー
+├── hir_lowering.cpp (335行) - メインエントリポイント、演算子変換
+├── hir_lowering_decl.cpp (343行) - 宣言のlowering（関数、構造体、impl等）
+├── hir_lowering_stmt.cpp (394行) - 文のlowering（let、if、for、switch等）
+└── hir_lowering_expr.cpp (1066行) - 式のlowering（リテラル、二項演算、メソッド呼び出し等）
+```
+
 ### 計画中（優先度順）
 
-#### 3. hir_lowering.hppの分割（高優先度）
-**現状**: 2329行のヘッダーオンリー実装
-**課題**: 多数のプライベートヘルパー関数がインラインで定義されており、分割が複雑
-**方針**: 
-- ヘッダーを宣言のみに変更
-- 実装を複数のcppファイルに分離
-- ヘルパー関数をクラスのプライベートメソッドとして整理
-
-**計画される分割**:
+#### 4. type_checker.hppの分割（高優先度）
+**現状**: 2532行（ヘッダーオンリー）
+**課題**: ヘッダーオンリーでテンプレートや複雑な依存関係があり、分割には大きな作業が必要
+**方針**: クラス宣言と実装を分離し、機能ごとにcppファイルに分割
 ```
-hir_lowering.hpp (2329行) →
-├── hir_lowering.hpp (~100行) - クラス宣言、メンバー変数のみ
-├── hir_lowering.cpp (~100行) - メインエントリポイント、ヘルパー関数
-├── hir_lowering_decl.cpp (~400行) - 宣言のlowering
-├── hir_lowering_stmt.cpp (~400行) - 文のlowering
-└── hir_lowering_expr.cpp (~1300行) - 式のlowering
+type_checker.hpp (2532行) →
+├── type_checker.hpp (~400行) - クラス宣言、パブリックAPI
+├── type_checker_registration.cpp (~500行) - register_* 関数
+├── type_checker_inference.cpp (~800行) - infer_* 関数（型推論）
+├── type_checker_check.cpp (~500行) - check_* 関数（型チェック）
+└── type_checker_utils.cpp (~300行) - ユーティリティ関数
 ```
 
-**必要な作業**:
-1. すべてのヘルパー関数をリストアップ（約40関数）
-2. 関数の依存関係を分析
-3. ヘッダーファイルに全関数の宣言を追加
-4. 実装を適切なcppファイルに移動
-5. CMakeLists.txtを更新
-6. ビルド確認とテスト
+#### 5. mir_lowering.hppの分割（高優先度）
+**現状**: 1272行（ヘッダーオンリー）
+**課題**: 独自のMIR型定義を使用しており、分割にはインターフェースの整理が必要
+**方針**: 自動実装生成とメインロジックを分離
+```
+mir_lowering.hpp (1272行) →
+├── mir_lowering.hpp (~300行) - クラス宣言
+├── mir_lowering.cpp (~300行) - メインエントリーポイント
+├── mir_lowering_register.cpp (~300行) - 登録関連関数
+└── mir_lowering_autoimpl.cpp (~400行) - 自動実装生成
+```
 
-#### 4. interpreter.hppの分割（中優先度）
+#### 6. interpreter.hppの分割（中優先度）
 **現状**: 601行
 **方針**: eval部分を別ファイルに分離
 ```
@@ -1164,7 +1175,7 @@ interpreter.hpp (601行) →
 └── interpreter_stmt.cpp (~200行) - 文実行
 ```
 
-#### 5. monomorphization_impl.cppの分割（低優先度）
+#### 7. monomorphization_impl.cppの分割（低優先度）
 **現状**: 1201行
 **方針**: 関数と構造体のモノモーフィゼーションを分離
 ```
@@ -1172,6 +1183,17 @@ monomorphization_impl.cpp (1201行) →
 ├── monomorphization_func.cpp (~600行) - 関数のモノモーフィゼーション
 └── monomorphization_struct.cpp (~600行) - 構造体のモノモーフィゼーション
 ```
+
+### 技術的課題
+
+1. **ヘッダーオンリー実装の分割**
+   - テンプレートクラスはヘッダーに残す必要がある
+   - 複雑な依存関係の解決が必要
+   - コンパイル時間とリンク時間のバランス
+
+2. **MIR型の統一**
+   - mir_lowering.hppとmir_nodes.hppで異なる型定義が使用されている
+   - 将来的に統一が必要
 
 ### ガイドライン
 

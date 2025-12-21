@@ -618,6 +618,106 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
             return lower_expression(*unary.operand, ctx);
         }
 
+        // インデックスアクセスの場合（&arr[i]）
+        if (auto index = std::get_if<std::unique_ptr<hir::HirIndex>>(&unary.operand->kind)) {
+            // 配列を取得
+            LocalId array;
+            if (auto* var_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*index)->object->kind)) {
+                auto var_id = ctx.resolve_variable((*var_ref)->name);
+                if (var_id) {
+                    array = *var_id;
+                } else {
+                    array = lower_expression(*(*index)->object, ctx);
+                }
+            } else {
+                array = lower_expression(*(*index)->object, ctx);
+            }
+
+            // インデックスを取得
+            LocalId idx = lower_expression(*(*index)->index, ctx);
+
+            // ポインタ型を作成
+            hir::TypePtr elem_type = hir::make_int();
+            if ((*index)->object && (*index)->object->type &&
+                (*index)->object->type->kind == hir::TypeKind::Array &&
+                (*index)->object->type->element_type) {
+                elem_type = (*index)->object->type->element_type;
+            }
+            hir::TypePtr ptr_type = hir::make_pointer(elem_type);
+            LocalId result = ctx.new_temp(ptr_type);
+
+            // プロジェクション付きPlaceへの参照
+            MirPlace place{array};
+            place.projections.push_back(PlaceProjection::index(idx));
+
+            auto ref_rvalue = std::make_unique<MirRvalue>();
+            ref_rvalue->kind = MirRvalue::Ref;
+            ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, place};
+
+            ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
+            return result;
+        }
+
+        // メンバーアクセスの場合（&obj.field）
+        if (auto member = std::get_if<std::unique_ptr<hir::HirMember>>(&unary.operand->kind)) {
+            // オブジェクトを取得
+            LocalId obj;
+            if (auto* var_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*member)->object->kind)) {
+                auto var_id = ctx.resolve_variable((*var_ref)->name);
+                if (var_id) {
+                    obj = *var_id;
+                } else {
+                    obj = lower_expression(*(*member)->object, ctx);
+                }
+            } else {
+                obj = lower_expression(*(*member)->object, ctx);
+            }
+
+            // フィールドインデックスを取得
+            hir::TypePtr obj_type = (*member)->object->type;
+            if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+                // フォールバック
+                LocalId operand = lower_expression(*unary.operand, ctx);
+                hir::TypePtr ptr_type = hir::make_pointer(unary.operand->type);
+                LocalId result = ctx.new_temp(ptr_type);
+                auto ref_rvalue = std::make_unique<MirRvalue>();
+                ref_rvalue->kind = MirRvalue::Ref;
+                ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, MirPlace{operand}};
+                ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
+                return result;
+            }
+
+            auto field_idx = ctx.get_field_index(obj_type->name, (*member)->member);
+            if (!field_idx) {
+                // フォールバック
+                LocalId operand = lower_expression(*unary.operand, ctx);
+                hir::TypePtr ptr_type = hir::make_pointer(unary.operand->type);
+                LocalId result = ctx.new_temp(ptr_type);
+                auto ref_rvalue = std::make_unique<MirRvalue>();
+                ref_rvalue->kind = MirRvalue::Ref;
+                ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, MirPlace{operand}};
+                ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
+                return result;
+            }
+
+            // ポインタ型を作成
+            hir::TypePtr ptr_type = hir::make_pointer(unary.operand->type);
+            LocalId result = ctx.new_temp(ptr_type);
+
+            // プロジェクション付きPlaceへの参照
+            MirPlace place{obj};
+            place.projections.push_back(PlaceProjection::field(*field_idx));
+
+            auto ref_rvalue = std::make_unique<MirRvalue>();
+            ref_rvalue->kind = MirRvalue::Ref;
+            ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, place};
+
+            ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
+            return result;
+        }
+
         // フォールバック：通常の評価
         LocalId operand = lower_expression(*unary.operand, ctx);
         hir::TypePtr ptr_type = hir::make_pointer(unary.operand->type);

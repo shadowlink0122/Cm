@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../hir/hir_nodes.hpp"
+#include "../hir/nodes.hpp"
 #include "../mir/mir_nodes.hpp"
 
 #include <filesystem>

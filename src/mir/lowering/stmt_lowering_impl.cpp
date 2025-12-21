@@ -221,6 +221,27 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                     typ = inner_type->element_type;
                 }
                 return true;
+            } else if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&e->kind)) {
+                // デリファレンス: *ptr
+                if ((*unary)->op == hir::HirUnaryOp::Deref) {
+                    hir::TypePtr inner_type;
+                    if (!build_projections((*unary)->operand.get(), projections, inner_type)) {
+                        return false;
+                    }
+
+                    // デリファレンスプロジェクションを追加
+                    projections.push_back([](MirPlace& p, LoweringContext&) {
+                        p.projections.push_back(PlaceProjection::deref());
+                    });
+
+                    // 次の型を取得（ポインタの要素型）
+                    if (inner_type && inner_type->kind == hir::TypeKind::Pointer &&
+                        inner_type->element_type) {
+                        typ = inner_type->element_type;
+                    }
+                    return true;
+                }
+                return false;
             }
             return false;
         };
@@ -247,9 +268,10 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                 MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }
     } else if (std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind) ||
-               std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind)) {
-        // 複雑な左辺値: メンバーアクセスまたはインデックスアクセス
-        // これには c.values[0], points[0].x, arr[i], obj.field などが含まれる
+               std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind) ||
+               std::get_if<std::unique_ptr<hir::HirUnary>>(&assign.target->kind)) {
+        // 複雑な左辺値: メンバーアクセス、インデックスアクセス、またはデリファレンス
+        // これには c.values[0], points[0].x, arr[i], obj.field, *ptr, (*ptr).x などが含まれる
         MirPlace place{0};
         hir::TypePtr current_type;
 
@@ -600,6 +622,9 @@ void StmtLowering::lower_block(const hir::HirBlock& block, LoweringContext& ctx)
         lower_statement(*defer_stmt, ctx);
     }
 
+    // スコープ終了時にデストラクタを呼び出し
+    emit_scope_destructors(ctx);
+
     // スコープを終了
     ctx.pop_scope();
 }
@@ -610,6 +635,34 @@ void StmtLowering::lower_defer(const hir::HirDefer& defer_stmt, LoweringContext&
     // defer文は、スコープ終了時に逆順で実行される
     if (defer_stmt.body) {
         ctx.add_defer(defer_stmt.body.get());
+    }
+}
+
+// スコープ終了時のデストラクタ呼び出しを生成
+void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
+    auto destructor_vars = ctx.get_current_scope_destructor_vars();
+    for (const auto& [local_id, type_name] : destructor_vars) {
+        std::string dtor_name = type_name + "__dtor";
+
+        // デストラクタ呼び出しを生成
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(MirPlace{local_id}));
+
+        BlockId success_block = ctx.new_block();
+
+        auto func_operand = MirOperand::function_ref(dtor_name);
+        auto call_term = std::make_unique<MirTerminator>();
+        call_term->kind = MirTerminator::Call;
+        call_term->data = MirTerminator::CallData{std::move(func_operand),
+                                                  std::move(args),
+                                                  std::nullopt,  // void戻り値
+                                                  success_block,
+                                                  std::nullopt,
+                                                  "",
+                                                  "",
+                                                  false};
+        ctx.set_terminator(std::move(call_term));
+        ctx.switch_to_block(success_block);
     }
 }
 

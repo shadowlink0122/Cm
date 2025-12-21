@@ -1266,9 +1266,6 @@ class MirLowering : public MirLoweringBase {
     // impl内のメソッドをlowering
     void lower_impl(const hir::HirImpl& impl);
 
-    // デストラクタを生成（構造体用）
-    void generate_destructor(const std::string& type_name, LoweringContext& ctx);
-
     // デストラクタ呼び出しを挿入
     void emit_destructors(LoweringContext& ctx);
 };
