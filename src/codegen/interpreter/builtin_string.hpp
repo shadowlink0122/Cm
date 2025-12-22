@@ -105,6 +105,30 @@ inline void register_string_builtins(BuiltinRegistry& builtins) {
         return Value(str[index]);
     };
 
+    // 文字列の最初の文字を取得
+    builtins["__builtin_string_first"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(char{0});
+        if (args[0].type() != typeid(std::string))
+            return Value(char{0});
+        const auto& str = std::any_cast<std::string>(args[0]);
+        if (str.empty())
+            return Value(char{0});
+        return Value(str[0]);
+    };
+
+    // 文字列の最後の文字を取得
+    builtins["__builtin_string_last"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(char{0});
+        if (args[0].type() != typeid(std::string))
+            return Value(char{0});
+        const auto& str = std::any_cast<std::string>(args[0]);
+        if (str.empty())
+            return Value(char{0});
+        return Value(str[str.size() - 1]);
+    };
+
     // 部分文字列を取得
     builtins["__builtin_string_substring"] = [](std::vector<Value> args, const auto&) -> Value {
         if (args.empty())

@@ -311,6 +311,78 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     return result;
 }
 
+// メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
+bool ExprLowering::get_member_place(const hir::HirMember& member, LoweringContext& ctx,
+                                    MirPlace& out_place, hir::TypePtr& out_type) {
+    // ネストしたメンバーアクセスを検出して、プロジェクションを連結する
+    std::vector<std::pair<std::string, std::string>> field_chain;
+    const hir::HirExpr* current = member.object.get();
+
+    // 最初のメンバー（自身）を追加
+    auto initial_type = member.object->type;
+    field_chain.push_back({initial_type ? initial_type->name : "", member.member});
+
+    // フィールドチェーンを構築
+    while (auto* inner_member = std::get_if<std::unique_ptr<hir::HirMember>>(&current->kind)) {
+        auto obj_type = (*inner_member)->object->type;
+        field_chain.push_back({obj_type ? obj_type->name : "", (*inner_member)->member});
+        current = (*inner_member)->object.get();
+    }
+
+    // ベースオブジェクトを取得（変数参照のみサポート）
+    if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&current->kind)) {
+        auto local_opt = ctx.resolve_variable((*var_ref)->name);
+        if (!local_opt)
+            return false;
+
+        LocalId object = *local_opt;
+        hir::TypePtr obj_type = nullptr;
+        if (object < ctx.func->locals.size()) {
+            obj_type = ctx.func->locals[object].type;
+        }
+
+        if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+            return false;
+        }
+
+        // フィールドチェーンを逆順にしてプロジェクションを構築
+        out_place = MirPlace{object};
+        hir::TypePtr current_type = obj_type;
+
+        for (auto it = field_chain.rbegin(); it != field_chain.rend(); ++it) {
+            const std::string& field_name = it->second;
+
+            if (!current_type || current_type->kind != hir::TypeKind::Struct) {
+                return false;
+            }
+
+            auto field_idx = ctx.get_field_index(current_type->name, field_name);
+            if (!field_idx) {
+                return false;
+            }
+
+            out_place.projections.push_back(PlaceProjection::field(*field_idx));
+
+            // 次のフィールドの型を取得
+            if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
+                const auto* struct_def = ctx.struct_defs->at(current_type->name);
+                if (*field_idx < struct_def->fields.size()) {
+                    current_type = struct_def->fields[*field_idx].type;
+                } else {
+                    current_type = hir::make_int();
+                }
+            } else {
+                current_type = hir::make_int();
+            }
+        }
+
+        out_type = current_type;
+        return true;
+    }
+
+    return false;
+}
+
 // 配列インデックスのlowering
 LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringContext& ctx) {
     // オブジェクトとインデックスをlowering
@@ -332,14 +404,65 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
 
     // 要素型を取得
     hir::TypePtr elem_type = hir::make_int();  // デフォルト
-    if (index_expr.object && index_expr.object->type &&
-        index_expr.object->type->kind == hir::TypeKind::Array &&
-        index_expr.object->type->element_type) {
-        elem_type = index_expr.object->type->element_type;
+    bool is_slice = false;
+    if (index_expr.object && index_expr.object->type) {
+        if (index_expr.object->type->kind == hir::TypeKind::Array) {
+            if (index_expr.object->type->element_type) {
+                elem_type = index_expr.object->type->element_type;
+            }
+            // 動的配列（スライス）かどうかを判定
+            is_slice = !index_expr.object->type->array_size.has_value();
+        }
     }
 
     LocalId result = ctx.new_temp(elem_type);
 
+    // スライスの場合は関数呼び出しを生成
+    if (is_slice) {
+        // 要素型が配列の場合（多次元スライス）はサブスライスを取得
+        bool is_multidim = elem_type && elem_type->kind == hir::TypeKind::Array;
+
+        std::string get_func = "cm_slice_get_i32";
+        if (is_multidim) {
+            // 多次元スライスの場合はサブスライスを取得（CmSlice*を返す）
+            get_func = "cm_slice_get_subslice";
+        } else if (elem_type) {
+            auto elem_kind = elem_type->kind;
+            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                get_func = "cm_slice_get_i8";
+            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
+                get_func = "cm_slice_get_i64";
+            } else if (elem_kind == hir::TypeKind::Double || elem_kind == hir::TypeKind::Float) {
+                get_func = "cm_slice_get_f64";
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
+                       elem_kind == hir::TypeKind::Struct) {
+                get_func = "cm_slice_get_ptr";
+            }
+        }
+
+        BlockId success_block = ctx.new_block();
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(MirPlace{array}));
+        args.push_back(MirOperand::copy(MirPlace{index}));
+
+        auto call_term = std::make_unique<MirTerminator>();
+        call_term->kind = MirTerminator::Call;
+        call_term->data = MirTerminator::CallData{MirOperand::function_ref(get_func),
+                                                  std::move(args),
+                                                  MirPlace{result},
+                                                  success_block,
+                                                  std::nullopt,
+                                                  "",
+                                                  "",
+                                                  false};
+        ctx.set_terminator(std::move(call_term));
+        ctx.switch_to_block(success_block);
+
+        return result;
+    }
+
+    // 通常の配列インデックス
     MirPlace place{array};
     place.projections.push_back(PlaceProjection::index(index));
 

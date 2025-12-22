@@ -331,8 +331,8 @@ class LLVMCodeGen {
             std::string runtimePath = findRuntimeLibrary();
             // WASI用：_startはランタイムから提供される
             // --allow-undefined: FFI関数（JavaScript等）を未定義のままリンク可能に
-            linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath + " -o " +
-                      options.outputFile;
+            linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath +
+                      " -o " + options.outputFile;
         } else {
             // ネイティブ：システムリンカ使用
 
@@ -341,14 +341,16 @@ class LLVMCodeGen {
 
 #ifdef __APPLE__
             // macOSではclangを使用してリンク
-            linkCmd = "clang ";
+            // -dead_strip: 未使用関数を削除
+            linkCmd = "clang -Wl,-dead_strip ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
             linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
 #else
             // Linuxでもclangを使用（crt0.oなどが自動的にリンクされる）
-            linkCmd = "clang ";
+            // --gc-sections: 未使用セクションを削除
+            linkCmd = "clang -Wl,--gc-sections ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }

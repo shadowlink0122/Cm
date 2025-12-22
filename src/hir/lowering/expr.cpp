@@ -58,6 +58,8 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         return lower_struct_literal(*struct_lit, type);
     } else if (auto* array_lit = expr.as<ast::ArrayLiteralExpr>()) {
         return lower_array_literal(*array_lit, type);
+    } else if (auto* lambda_expr = expr.as<ast::LambdaExpr>()) {
+        return lower_lambda(*lambda_expr, type);
     } else if (auto* sizeof_expr = expr.as<ast::SizeofExpr>()) {
         // sizeof(T) または sizeof(expr) をコンパイル時定数として評価
         int64_t size = 0;
@@ -91,7 +93,8 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
             type_name = ast::type_to_string(*alignof_expr->target_type);
         }
         debug::hir::log(debug::hir::Id::LiteralLower,
-                        "alignof(" + type_name + ") = " + std::to_string(alignment), debug::Level::Debug);
+                        "alignof(" + type_name + ") = " + std::to_string(alignment),
+                        debug::Level::Debug);
         auto lit = std::make_unique<HirLiteral>();
         lit->value = alignment;
         return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
@@ -101,8 +104,8 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         if (typename_expr->target_type) {
             type_name = ast::type_to_string(*typename_expr->target_type);
         }
-        debug::hir::log(debug::hir::Id::LiteralLower,
-                        "typename = \"" + type_name + "\"", debug::Level::Debug);
+        debug::hir::log(debug::hir::Id::LiteralLower, "typename = \"" + type_name + "\"",
+                        debug::Level::Debug);
         auto lit = std::make_unique<HirLiteral>();
         lit->value = type_name;
         return std::make_unique<HirExpr>(std::move(lit), ast::make_string());
@@ -232,6 +235,93 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
         }
     }
 
+    // 配列/スライスの比較演算
+    if (binary.op == ast::BinaryOp::Eq || binary.op == ast::BinaryOp::Ne) {
+        auto lhs_type = binary.left->type;
+        auto rhs_type = binary.right->type;
+
+        bool lhs_is_array = lhs_type && lhs_type->kind == ast::TypeKind::Array;
+        bool rhs_is_array = rhs_type && rhs_type->kind == ast::TypeKind::Array;
+
+        if (lhs_is_array && rhs_is_array) {
+            debug::hir::log(debug::hir::Id::BinaryExprLower, "Array/slice comparison",
+                            debug::Level::Debug);
+
+            // cm_array_equal(lhs, rhs, lhs_len, rhs_len, elem_size)を呼び出す
+            auto hir = std::make_unique<HirCall>();
+
+            bool lhs_dynamic = !lhs_type->array_size.has_value();
+            bool rhs_dynamic = !rhs_type->array_size.has_value();
+
+            // 動的スライス同士の比較
+            if (lhs_dynamic && rhs_dynamic) {
+                hir->func_name = "cm_slice_equal";
+                hir->args.push_back(lower_expr(*binary.left));
+                hir->args.push_back(lower_expr(*binary.right));
+            } else {
+                // 固定配列を含む比較
+                hir->func_name = "cm_array_equal";
+                hir->args.push_back(lower_expr(*binary.left));
+                hir->args.push_back(lower_expr(*binary.right));
+
+                // 配列の長さ
+                int64_t lhs_len = lhs_type->array_size.value_or(0);
+                int64_t rhs_len = rhs_type->array_size.value_or(0);
+
+                auto lhs_len_lit = std::make_unique<HirLiteral>();
+                lhs_len_lit->value = lhs_len;
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(lhs_len_lit), ast::make_long()));
+
+                auto rhs_len_lit = std::make_unique<HirLiteral>();
+                rhs_len_lit->value = rhs_len;
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(rhs_len_lit), ast::make_long()));
+
+                // 要素サイズ
+                int64_t elem_size = 8;  // デフォルト
+                if (lhs_type->element_type) {
+                    switch (lhs_type->element_type->kind) {
+                        case ast::TypeKind::Tiny:
+                        case ast::TypeKind::UTiny:
+                        case ast::TypeKind::Char:
+                        case ast::TypeKind::Bool:
+                            elem_size = 1;
+                            break;
+                        case ast::TypeKind::Short:
+                        case ast::TypeKind::UShort:
+                            elem_size = 2;
+                            break;
+                        case ast::TypeKind::Int:
+                        case ast::TypeKind::UInt:
+                        case ast::TypeKind::Float:
+                            elem_size = 4;
+                            break;
+                        default:
+                            elem_size = 8;
+                            break;
+                    }
+                }
+
+                auto elem_size_lit = std::make_unique<HirLiteral>();
+                elem_size_lit->value = elem_size;
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(elem_size_lit), ast::make_long()));
+            }
+
+            // != の場合は結果を反転
+            if (binary.op == ast::BinaryOp::Ne) {
+                auto call_expr = std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
+                auto not_op = std::make_unique<HirUnary>();
+                not_op->op = HirUnaryOp::Not;
+                not_op->operand = std::move(call_expr);
+                return std::make_unique<HirExpr>(std::move(not_op), type);
+            }
+
+            return std::make_unique<HirExpr>(std::move(hir), type);
+        }
+    }
+
     auto hir = std::make_unique<HirBinary>();
     hir->op = convert_binary_op(binary.op);
     debug::hir::log(debug::hir::Id::BinaryOp, hir_binary_op_to_string(hir->op),
@@ -264,14 +354,14 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
     std::string func_name;
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
         func_name = ident->name;
-        
+
         // インポートエイリアスをチェック
         auto alias_it = import_aliases_.find(func_name);
         if (alias_it != import_aliases_.end()) {
             func_name = alias_it->second;
-            debug::hir::log(debug::hir::Id::CallTarget, 
-                "resolved import alias: " + ident->name + " -> " + func_name, 
-                debug::Level::Trace);
+            debug::hir::log(debug::hir::Id::CallTarget,
+                            "resolved import alias: " + ident->name + " -> " + func_name,
+                            debug::Level::Trace);
         } else if (func_name == "println") {
             // フォールバック: printlnは常に__println__にマップ
             func_name = "__println__";
@@ -279,13 +369,12 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
             // フォールバック: printは常に__print__にマップ
             func_name = "__print__";
         }
-        
+
         hir->func_name = func_name;
         debug::hir::log(debug::hir::Id::CallTarget, "function: " + func_name, debug::Level::Trace);
 
-        static const std::set<std::string> builtin_funcs = {"printf",
-                                                            "__println__", "__print__",
-                                                            "sprintf", "exit",  "panic"};
+        static const std::set<std::string> builtin_funcs = {"printf",  "__println__", "__print__",
+                                                            "sprintf", "exit",        "panic"};
 
         bool is_builtin = builtin_funcs.find(func_name) != builtin_funcs.end();
         bool is_defined = func_defs_.find(func_name) != func_defs_.end();
@@ -395,6 +484,38 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
 
     // 配列スライス
     if (obj_type && obj_type->kind == ast::TypeKind::Array) {
+        bool is_dynamic_slice = !obj_type->array_size.has_value();
+
+        if (is_dynamic_slice) {
+            // 動的スライスの場合は専用関数を使用
+            debug::hir::log(debug::hir::Id::IndexLower, "Dynamic slice subslice",
+                            debug::Level::Debug);
+            auto hir = std::make_unique<HirCall>();
+            hir->func_name = "cm_slice_subslice";
+            hir->args.push_back(std::move(obj_hir));
+
+            if (slice.start) {
+                hir->args.push_back(lower_expr(*slice.start));
+            } else {
+                auto zero = std::make_unique<HirLiteral>();
+                zero->value = int64_t{0};
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(zero), ast::make_long()));
+            }
+
+            if (slice.end) {
+                hir->args.push_back(lower_expr(*slice.end));
+            } else {
+                // endが省略された場合は-1を渡して関数内で処理
+                auto neg_one = std::make_unique<HirLiteral>();
+                neg_one->value = int64_t{-1};
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(neg_one), ast::make_long()));
+            }
+
+            return std::make_unique<HirExpr>(std::move(hir), type);
+        }
+
+        // 固定配列の場合
         debug::hir::log(debug::hir::Id::IndexLower, "Array slice", debug::Level::Debug);
         auto hir = std::make_unique<HirCall>();
         hir->func_name = "__builtin_array_slice";
@@ -450,9 +571,10 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
         if (slice.end) {
             hir->args.push_back(lower_expr(*slice.end));
         } else {
-            auto neg_one = std::make_unique<HirLiteral>();
-            neg_one->value = int64_t{-1};
-            hir->args.push_back(std::make_unique<HirExpr>(std::move(neg_one), ast::make_int()));
+            // endが省略された場合は配列の長さを使用
+            auto arr_len_end = std::make_unique<HirLiteral>();
+            arr_len_end->value = arr_len;
+            hir->args.push_back(std::make_unique<HirExpr>(std::move(arr_len_end), ast::make_int()));
         }
 
         if (slice.step) {
@@ -492,13 +614,38 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
         // 配列のビルトインメソッド処理
         if (obj_type && obj_type->kind == ast::TypeKind::Array) {
-            if (mem.member == "size" || mem.member == "len" || mem.member == "length") {
-                auto lit = std::make_unique<HirLiteral>();
-                if (obj_type->array_size.has_value()) {
-                    lit->value = static_cast<int64_t>(obj_type->array_size.value());
-                } else {
-                    lit->value = int64_t{0};
+            // dim() - 配列の次元数を返す
+            if (mem.member == "dim") {
+                // 次元数を計算
+                int dim = 1;
+                TypePtr t = obj_type->element_type;
+                while (t && t->kind == ast::TypeKind::Array) {
+                    dim++;
+                    t = t->element_type;
                 }
+                auto lit = std::make_unique<HirLiteral>();
+                lit->value = static_cast<int64_t>(dim);
+                debug::hir::log(debug::hir::Id::MethodCallLower,
+                                "Array builtin dim() = " + std::to_string(dim),
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(lit), ast::make_int());
+            }
+
+            // 動的配列（スライス）の場合はlenを関数呼び出しで処理
+            if (!obj_type->array_size.has_value()) {
+                if (mem.member == "size" || mem.member == "len" || mem.member == "length") {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "__builtin_slice_len";
+                    hir->args.push_back(std::move(obj_hir));
+                    debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin len()",
+                                    debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), ast::make_usize());
+                }
+            }
+            // 静的配列の場合はサイズを定数リテラルとして返す
+            else if (mem.member == "size" || mem.member == "len" || mem.member == "length") {
+                auto lit = std::make_unique<HirLiteral>();
+                lit->value = static_cast<int64_t>(obj_type->array_size.value());
                 debug::hir::log(
                     debug::hir::Id::MethodCallLower,
                     "Array builtin size() = " + std::to_string(obj_type->array_size.value_or(0)),
@@ -524,18 +671,32 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "reduce") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_reduce";
-                hir->args.push_back(std::move(obj_hir));
+                // 要素型に応じてサフィックスを決定
+                std::string suffix = "_i32";  // デフォルト
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    suffix = "_i64";
+                }
+                hir->func_name = "__builtin_array_reduce" + suffix;
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
                 auto size_lit = std::make_unique<HirLiteral>();
                 size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
                 hir->args.push_back(
                     std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // コールバック関数と初期値
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
                 }
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin reduce()",
                                 debug::Level::Debug);
-                return std::make_unique<HirExpr>(std::move(hir), ast::make_int());
+                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
             }
 
             if (mem.member == "some") {
@@ -636,6 +797,378 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin includes()",
                                 debug::Level::Debug);
                 return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
+            }
+
+            if (mem.member == "map") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_array_map";
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // コールバック関数
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin map()",
+                                debug::Level::Debug);
+                // 結果の型は常に動的配列/スライス
+                TypePtr result_type = ast::make_array(obj_type->element_type, std::nullopt);
+                return std::make_unique<HirExpr>(std::move(hir), result_type);
+            }
+
+            if (mem.member == "filter") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_array_filter";
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // コールバック関数
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin filter()",
+                                debug::Level::Debug);
+                // 結果の型（動的配列/スライス）
+                TypePtr result_type = ast::make_array(obj_type->element_type, std::nullopt);
+                return std::make_unique<HirExpr>(std::move(hir), result_type);
+            }
+
+            if (mem.member == "reverse" && obj_type->array_size.has_value()) {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_array_reverse";
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin reverse()",
+                                debug::Level::Debug);
+                // 動的配列（スライス）を返す
+                auto return_type = ast::make_array(obj_type->element_type, std::nullopt);
+                return std::make_unique<HirExpr>(std::move(hir), return_type);
+            }
+
+            if (mem.member == "sort" && obj_type->array_size.has_value()) {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_array_sort";
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin sort()",
+                                debug::Level::Debug);
+                // 動的配列（スライス）を返す
+                auto return_type = ast::make_array(obj_type->element_type, std::nullopt);
+                return std::make_unique<HirExpr>(std::move(hir), return_type);
+            }
+
+            if (mem.member == "sortBy" && obj_type->array_size.has_value()) {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_array_sortBy";
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // コンパレータ関数
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin sortBy()",
+                                debug::Level::Debug);
+                // 動的配列（スライス）を返す
+                auto return_type = ast::make_array(obj_type->element_type, std::nullopt);
+                return std::make_unique<HirExpr>(std::move(hir), return_type);
+            }
+
+            // 固定サイズ配列のfirst（動的配列は後で処理）
+            if (mem.member == "first" && obj_type->array_size.has_value()) {
+                // 要素型が配列（多次元配列）の場合は、インデックスアクセスに変換
+                if (obj_type->element_type &&
+                    obj_type->element_type->kind == ast::TypeKind::Array) {
+                    // arr.first() -> arr[0]
+                    auto idx_lit = std::make_unique<HirLiteral>();
+                    idx_lit->value = int64_t{0};
+                    auto idx_expr = std::make_unique<HirExpr>(std::move(idx_lit), ast::make_int());
+                    auto index_op = std::make_unique<HirIndex>();
+                    index_op->object = std::move(obj_hir);
+                    index_op->index = std::move(idx_expr);
+                    debug::hir::log(debug::hir::Id::MethodCallLower,
+                                    "Array builtin first() - multidim", debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(index_op), obj_type->element_type);
+                }
+
+                auto hir = std::make_unique<HirCall>();
+                // 要素型に応じてサフィックスを決定
+                std::string suffix = "_i32";  // デフォルト
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    suffix = "_i64";
+                }
+                hir->func_name = "__builtin_array_first" + suffix;
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin first()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+            }
+
+            // 固定サイズ配列のlast（動的配列は後で処理）
+            if (mem.member == "last" && obj_type->array_size.has_value()) {
+                // 要素型が配列（多次元配列）の場合は、インデックスアクセスに変換
+                if (obj_type->element_type &&
+                    obj_type->element_type->kind == ast::TypeKind::Array) {
+                    // arr.last() -> arr[size-1]
+                    auto idx_lit = std::make_unique<HirLiteral>();
+                    idx_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(1) - 1);
+                    auto idx_expr = std::make_unique<HirExpr>(std::move(idx_lit), ast::make_int());
+                    auto index_op = std::make_unique<HirIndex>();
+                    index_op->object = std::move(obj_hir);
+                    index_op->index = std::move(idx_expr);
+                    debug::hir::log(debug::hir::Id::MethodCallLower,
+                                    "Array builtin last() - multidim", debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(index_op), obj_type->element_type);
+                }
+
+                auto hir = std::make_unique<HirCall>();
+                // 要素型に応じてサフィックスを決定
+                std::string suffix = "_i32";  // デフォルト
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    suffix = "_i64";
+                }
+                hir->func_name = "__builtin_array_last" + suffix;
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin last()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+            }
+
+            if (mem.member == "find") {
+                auto hir = std::make_unique<HirCall>();
+                // 要素型に応じてサフィックスを決定
+                std::string suffix = "_i32";  // デフォルト
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    suffix = "_i64";
+                }
+                hir->func_name = "__builtin_array_find" + suffix;
+                // 配列のアドレス
+                auto addr_op = std::make_unique<HirUnary>();
+                addr_op->op = HirUnaryOp::AddrOf;
+                addr_op->operand = std::move(obj_hir);
+                auto ptr_type = ast::make_pointer(obj_type->element_type);
+                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+                // 配列サイズ
+                auto size_lit = std::make_unique<HirLiteral>();
+                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                hir->args.push_back(
+                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // コールバック関数
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin find()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+            }
+        }
+
+        // 動的配列（スライス）のビルトインメソッド処理
+        // 動的配列は array_size が設定されていない
+        if (obj_type && obj_type->kind == ast::TypeKind::Array &&
+            !obj_type->array_size.has_value()) {
+            if (mem.member == "len" || mem.member == "size" || mem.member == "length") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_slice_len";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin len()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_usize());
+            }
+
+            if (mem.member == "cap" || mem.member == "capacity") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_slice_cap";
+                hir->args.push_back(std::move(obj_hir));
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_usize());
+            }
+
+            if (mem.member == "push") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_slice_push";
+                hir->args.push_back(std::move(obj_hir));
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin push()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_void());
+            }
+
+            if (mem.member == "pop") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_slice_pop";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin pop()",
+                                debug::Level::Debug);
+                TypePtr elem_type =
+                    obj_type->element_type ? obj_type->element_type : ast::make_int();
+                return std::make_unique<HirExpr>(std::move(hir), elem_type);
+            }
+
+            if (mem.member == "remove" || mem.member == "delete") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_slice_delete";
+                hir->args.push_back(std::move(obj_hir));
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin remove()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_void());
+            }
+
+            if (mem.member == "clear") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_slice_clear";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin clear()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_void());
+            }
+
+            if (mem.member == "first") {
+                // 要素型が配列（多次元スライス）の場合は、インデックスアクセスに変換
+                if (obj_type->element_type &&
+                    obj_type->element_type->kind == ast::TypeKind::Array) {
+                    // slice.first() -> slice[0]
+                    auto idx_lit = std::make_unique<HirLiteral>();
+                    idx_lit->value = int64_t{0};
+                    auto idx_expr = std::make_unique<HirExpr>(std::move(idx_lit), ast::make_int());
+                    auto index_op = std::make_unique<HirIndex>();
+                    index_op->object = std::move(obj_hir);
+                    index_op->index = std::move(idx_expr);
+                    debug::hir::log(debug::hir::Id::MethodCallLower,
+                                    "Slice builtin first() - multidim", debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(index_op), obj_type->element_type);
+                }
+
+                auto hir = std::make_unique<HirCall>();
+                // スライスの場合はcm_slice_first_*を使用
+                std::string suffix = "_i32";  // デフォルト
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    suffix = "_i64";
+                }
+                hir->func_name = "cm_slice_first" + suffix;
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin first()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+            }
+
+            if (mem.member == "last") {
+                // 要素型が配列（多次元スライス）の場合はcm_slice_last_ptrを使用
+                if (obj_type->element_type &&
+                    obj_type->element_type->kind == ast::TypeKind::Array) {
+                    auto hir = std::make_unique<HirCall>();
+                    hir->func_name = "cm_slice_last_ptr";
+                    hir->args.push_back(std::move(obj_hir));
+                    debug::hir::log(debug::hir::Id::MethodCallLower,
+                                    "Slice builtin last() - multidim", debug::Level::Debug);
+                    return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+                }
+
+                auto hir = std::make_unique<HirCall>();
+                // スライスの場合はcm_slice_last_*を使用
+                std::string suffix = "_i32";  // デフォルト
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    suffix = "_i64";
+                }
+                hir->func_name = "cm_slice_last" + suffix;
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin last()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+            }
+
+            if (mem.member == "reverse") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "cm_slice_reverse";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin reverse()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), type);
+            }
+
+            if (mem.member == "sort") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "cm_slice_sort";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin sort()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), type);
             }
         }
 
@@ -760,6 +1293,22 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin replace()",
                                 debug::Level::Debug);
                 return std::make_unique<HirExpr>(std::move(hir), ast::make_string());
+            }
+            if (mem.member == "first") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_string_first";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin first()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_char());
+            }
+            if (mem.member == "last") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_string_last";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin last()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_char());
             }
         }
 
@@ -1135,6 +1684,95 @@ HirExprPtr HirLowering::lower_array_literal(ast::ArrayLiteralExpr& lit, TypePtr 
     TypePtr array_type = hir::make_array(elem_type, lit.elements.size());
 
     return std::make_unique<HirExpr>(std::move(hir_lit), array_type);
+}
+
+// ラムダ式
+HirExprPtr HirLowering::lower_lambda(ast::LambdaExpr& lambda, TypePtr expected_type) {
+    debug::hir::log(debug::hir::Id::ExprLower,
+                    "Lowering lambda with " + std::to_string(lambda.params.size()) + " params",
+                    debug::Level::Debug);
+
+    // パラメータを変換
+    // 型が指定されていない場合、expected_typeから推論
+    TypePtr return_type = nullptr;
+    std::vector<TypePtr> param_types;
+
+    if (expected_type && expected_type->kind == ast::TypeKind::Function) {
+        return_type = expected_type->return_type;
+        param_types = expected_type->param_types;
+    }
+
+    // 一意な名前を生成
+    static int lambda_counter = 0;
+    std::string lambda_name = "__lambda_" + std::to_string(lambda_counter++);
+
+    // ラムダを関数として生成
+    auto hir_func = std::make_unique<HirFunction>();
+    hir_func->name = lambda_name;
+
+    for (size_t i = 0; i < lambda.params.size(); ++i) {
+        HirParam param;
+        param.name = lambda.params[i].name;
+
+        // パラメータの型を決定
+        if (lambda.params[i].type) {
+            param.type = lambda.params[i].type;
+        } else if (i < param_types.size()) {
+            param.type = param_types[i];
+        } else {
+            param.type = hir::make_int();  // デフォルトはint
+        }
+
+        hir_func->params.push_back(std::move(param));
+    }
+
+    // 戻り値型
+    hir_func->return_type = lambda.return_type ? lambda.return_type : return_type;
+    if (!hir_func->return_type) {
+        hir_func->return_type = hir::make_int();  // デフォルトはint
+    }
+
+    // ボディを変換
+    if (lambda.is_expr_body()) {
+        // 式本体の場合、returnに変換
+        auto& body_expr = std::get<ast::ExprPtr>(lambda.body);
+        auto hir_expr = lower_expr(*body_expr);
+
+        auto ret = std::make_unique<HirReturn>();
+        ret->value = std::move(hir_expr);
+        auto ret_stmt = std::make_unique<HirStmt>(std::move(ret));
+        hir_func->body.push_back(std::move(ret_stmt));
+    } else {
+        // ブロック本体の場合
+        auto& body_stmts = std::get<std::vector<ast::StmtPtr>>(lambda.body);
+        for (auto& stmt : body_stmts) {
+            auto hir_stmt = lower_stmt(*stmt);
+            if (hir_stmt) {
+                hir_func->body.push_back(std::move(hir_stmt));
+            }
+        }
+    }
+
+    // ラムダ関数をリストに追加（後でプログラムに追加される）
+    lambda_functions_.push_back(std::move(hir_func));
+
+    // 関数ポインタ型を作成
+    std::vector<TypePtr> hir_param_types;
+    for (const auto& p : lambda_functions_.back()->params) {
+        hir_param_types.push_back(p.type);
+    }
+    TypePtr lambda_type =
+        hir::make_function_ptr(lambda_functions_.back()->return_type, hir_param_types);
+
+    debug::hir::log(debug::hir::Id::ExprLower, "Lambda lowered as function: " + lambda_name,
+                    debug::Level::Debug);
+
+    // 関数参照を返す
+    auto var_ref = std::make_unique<HirVarRef>();
+    var_ref->name = lambda_name;
+    var_ref->is_function_ref = true;
+
+    return std::make_unique<HirExpr>(std::move(var_ref), lambda_type);
 }
 
 }  // namespace cm::hir

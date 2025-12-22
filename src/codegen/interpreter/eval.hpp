@@ -95,6 +95,44 @@ class Evaluator {
                 // ポインタのデリファレンス
                 if (result.type() == typeid(PointerValue)) {
                     auto& ptr = std::any_cast<PointerValue&>(result);
+
+                    // 外部メモリへのポインタの場合
+                    if (ptr.is_external()) {
+                        // 型に応じて外部メモリから値を読み取る
+                        if (ptr.element_type) {
+                            switch (ptr.element_type->kind) {
+                                case hir::TypeKind::Int:
+                                    result = Value(static_cast<int64_t>(
+                                        *reinterpret_cast<int32_t*>(ptr.raw_ptr)));
+                                    break;
+                                case hir::TypeKind::Long:
+                                    result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Float:
+                                    result = Value(static_cast<double>(
+                                        *reinterpret_cast<float*>(ptr.raw_ptr)));
+                                    break;
+                                case hir::TypeKind::Double:
+                                    result = Value(*reinterpret_cast<double*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    result = Value(*reinterpret_cast<bool*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Char:
+                                    result = Value(*reinterpret_cast<char*>(ptr.raw_ptr));
+                                    break;
+                                default:
+                                    // デフォルトはint64_t
+                                    result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
+                                    break;
+                            }
+                        } else {
+                            // 型情報がない場合はint64_tとして読む
+                            result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
+                        }
+                        continue;
+                    }
+
                     // ターゲットローカル変数から値を取得
                     auto target_it = ctx.locals.find(ptr.target_local);
                     if (target_it != ctx.locals.end()) {
@@ -255,6 +293,64 @@ class Evaluator {
                 // ポインタのデリファレンスへの格納
                 if (current->type() == typeid(PointerValue)) {
                     auto& ptr = std::any_cast<PointerValue&>(*current);
+
+                    // 外部メモリへのポインタの場合
+                    if (ptr.is_external()) {
+                        // 型に応じて外部メモリに値を書き込む
+                        if (ptr.element_type) {
+                            switch (ptr.element_type->kind) {
+                                case hir::TypeKind::Int:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int32_t*>(ptr.raw_ptr) =
+                                            static_cast<int32_t>(std::any_cast<int64_t>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Long:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int64_t*>(ptr.raw_ptr) =
+                                            std::any_cast<int64_t>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Float:
+                                    if (value.type() == typeid(double)) {
+                                        *reinterpret_cast<float*>(ptr.raw_ptr) =
+                                            static_cast<float>(std::any_cast<double>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Double:
+                                    if (value.type() == typeid(double)) {
+                                        *reinterpret_cast<double*>(ptr.raw_ptr) =
+                                            std::any_cast<double>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    if (value.type() == typeid(bool)) {
+                                        *reinterpret_cast<bool*>(ptr.raw_ptr) =
+                                            std::any_cast<bool>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Char:
+                                    if (value.type() == typeid(char)) {
+                                        *reinterpret_cast<char*>(ptr.raw_ptr) =
+                                            std::any_cast<char>(value);
+                                    }
+                                    break;
+                                default:
+                                    // デフォルトはint64_t
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int64_t*>(ptr.raw_ptr) =
+                                            std::any_cast<int64_t>(value);
+                                    }
+                                    break;
+                            }
+                        } else if (value.type() == typeid(int64_t)) {
+                            // 型情報がない場合はint64_tとして書く
+                            *reinterpret_cast<int64_t*>(ptr.raw_ptr) =
+                                std::any_cast<int64_t>(value);
+                        }
+                        return;
+                    }
+
                     // 配列要素への参照の場合
                     if (ptr.array_index.has_value()) {
                         auto target_it = ctx.locals.find(ptr.target_local);

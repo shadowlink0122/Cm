@@ -1,7 +1,7 @@
 #pragma once
 
-#include "types.hpp"
 #include "decl.hpp"
+#include "types.hpp"
 
 #include <string>
 #include <variant>

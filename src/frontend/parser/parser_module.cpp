@@ -392,7 +392,8 @@ ast::DeclPtr Parser::parse_use() {
 
         expect(TokenKind::RBrace);
 
-        auto use_decl = std::make_unique<ast::UseDecl>(std::move(path), std::move(ffi_funcs), std::move(alias));
+        auto use_decl =
+            std::make_unique<ast::UseDecl>(std::move(path), std::move(ffi_funcs), std::move(alias));
         return std::make_unique<ast::Decl>(std::move(use_decl), Span{start_pos, previous().end});
     }
 

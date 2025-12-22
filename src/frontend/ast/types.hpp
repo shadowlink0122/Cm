@@ -140,14 +140,13 @@ struct Type {
     // ヘルパー
     bool is_primitive() const { return kind >= TypeKind::Void && kind <= TypeKind::CString; }
 
-    bool is_integer() const { 
-        return (kind >= TypeKind::Tiny && kind <= TypeKind::ULong) ||
-               kind == TypeKind::ISize || kind == TypeKind::USize;
+    bool is_integer() const {
+        return (kind >= TypeKind::Tiny && kind <= TypeKind::ULong) || kind == TypeKind::ISize ||
+               kind == TypeKind::USize;
     }
 
-    bool is_signed() const { 
-        return (kind >= TypeKind::Tiny && kind <= TypeKind::Long) ||
-               kind == TypeKind::ISize;
+    bool is_signed() const {
+        return (kind >= TypeKind::Tiny && kind <= TypeKind::Long) || kind == TypeKind::ISize;
     }
 
     bool is_floating() const {

@@ -38,12 +38,26 @@ void MIRToLLVM::generateVTables(const mir::MirProgram& program) {
 
         for (const auto& entry : vtable->entries) {
             // 実装関数を検索
+            llvm::Function* implFunc = nullptr;
+
+            // まず直接名前で検索
             auto funcIt = functions.find(entry.impl_function_name);
             if (funcIt != functions.end()) {
-                vtableEntries.push_back(funcIt->second);
+                implFunc = funcIt->second;
+            } else {
+                // サフィックス付きの名前で検索（例: Point__print_SPoint）
+                for (const auto& [funcName, func] : functions) {
+                    if (funcName.find(entry.impl_function_name + "_") == 0) {
+                        implFunc = func;
+                        break;
+                    }
+                }
+            }
+
+            if (implFunc) {
+                vtableEntries.push_back(implFunc);
             } else {
                 // 関数がまだ宣言されていない場合は、後で解決するためにnullを入れる
-                // これは関数宣言順序の問題を避けるため
                 vtableEntries.push_back(llvm::Constant::getNullValue(ctx.getPtrType()));
             }
         }

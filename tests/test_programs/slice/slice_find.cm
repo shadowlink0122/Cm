@@ -1,0 +1,24 @@
+// .find() メソッドのテスト
+import std::io::println;
+
+bool is_even(int x) {
+    return x % 2 == 0;
+}
+
+bool is_gt_100(int x) {
+    return x > 100;
+}
+
+int main() {
+    int[5] arr = [1, 3, 4, 7, 9];
+    
+    // 最初の偶数を見つける
+    int found = arr.find(is_even);
+    println("first even: {found}");
+    
+    // 100より大きい要素（存在しない→0を返す）
+    int not_found = arr.find(is_gt_100);
+    println("gt_100: {not_found}");
+    
+    return 0;
+}

@@ -177,10 +177,10 @@ struct MacroDecl {
 // FFI関数宣言（use libc { ... }用）
 // ============================================================
 struct FFIFunctionDecl {
-    std::string name;                      // 関数名
-    TypePtr return_type;                   // 戻り値型
+    std::string name;                                     // 関数名
+    TypePtr return_type;                                  // 戻り値型
     std::vector<std::pair<std::string, TypePtr>> params;  // パラメータ
-    bool is_variadic = false;              // 可変引数（...）
+    bool is_variadic = false;                             // 可変引数（...）
 
     FFIFunctionDecl() = default;
     FFIFunctionDecl(std::string n) : name(std::move(n)) {}
@@ -196,15 +196,15 @@ struct UseDecl {
     };
 
     Kind kind = ModuleUse;
-    ModulePath path;                          // ライブラリ/モジュールパス
-    std::optional<std::string> alias;         // エイリアス（as句）
-    bool is_pub = false;                      // pub use
-    std::vector<FFIFunctionDecl> ffi_funcs;   // FFI関数宣言（FFIUseの場合）
+    ModulePath path;                         // ライブラリ/モジュールパス
+    std::optional<std::string> alias;        // エイリアス（as句）
+    bool is_pub = false;                     // pub use
+    std::vector<FFIFunctionDecl> ffi_funcs;  // FFI関数宣言（FFIUseの場合）
 
     // アトリビュート
-    bool is_static_link = false;              // #[static]
-    bool is_framework = false;                // #[framework] (macOS)
-    std::optional<std::string> os_condition;  // #[os(linux)] など
+    bool is_static_link = false;                  // #[static]
+    bool is_framework = false;                    // #[framework] (macOS)
+    std::optional<std::string> os_condition;      // #[os(linux)] など
     std::optional<std::string> target_condition;  // #[target(wasm)] など
 
     // モジュールuseコンストラクタ

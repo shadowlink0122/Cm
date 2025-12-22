@@ -492,10 +492,16 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                         }
                         source_to_emit = remove_export_keywords(extracted);
                     } else {
-                        source_to_emit = module_source;
+                        source_to_emit = remove_export_keywords(module_source);
                     }
                 } else {
-                    source_to_emit = module_source;
+                    // フィルタリングして出力
+                    if (!import_info.items.empty()) {
+                        source_to_emit = filter_exports(module_source, import_info.items);
+                    } else {
+                        source_to_emit = module_source;
+                    }
+                    source_to_emit = remove_export_keywords(source_to_emit);
                 }
 
                 // emit_sourceでソースマップに追加
@@ -843,7 +849,8 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
 
     while (std::getline(input, line)) {
         // module 宣言を削除（namespace内で不要）
-        std::regex module_regex(R"(^\s*module\s+[\w:]+\s*;\s*$)");
+        // module名はワードキャラクター、コロン、ドットを含む
+        std::regex module_regex(R"(^\s*module\s+[\w:.]+\s*;\s*$)");
         if (std::regex_match(line, module_regex)) {
             result << "// " << line << " (removed)\n";
             continue;
@@ -891,10 +898,50 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
     for (size_t i = 0; i < lines.size(); ++i) {
         const std::string& line = lines[i];
 
+        // use libc { ... } ブロックを検出
+        std::regex use_libc_regex(R"(^\s*use\s+libc\s*(?:as\s+\w+\s*)?\{)");
+        std::smatch match;
+        if (std::regex_search(line, match, use_libc_regex)) {
+            // ブロック全体を収集
+            std::string def = line;
+            int brace_count = 1;
+            size_t start_i = i;
+
+            // use libc ブロック内の関数名も収集
+            std::vector<std::string> ffi_func_names;
+
+            for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
+                def += "\n" + lines[j];
+                for (char c : lines[j]) {
+                    if (c == '{')
+                        brace_count++;
+                    else if (c == '}')
+                        brace_count--;
+                }
+
+                // 関数宣言を検出: 戻り値型 関数名(...)
+                std::regex ffi_func_regex(R"(\s+(\w+)\s*\()");
+                std::smatch func_match;
+                if (std::regex_search(lines[j], func_match, ffi_func_regex)) {
+                    ffi_func_names.push_back(func_match[1].str());
+                }
+
+                if (brace_count == 0) {
+                    i = j;
+                    break;
+                }
+            }
+
+            // 各FFI関数を定義として登録
+            for (const auto& func_name : ffi_func_names) {
+                definitions[func_name] = {static_cast<int>(start_i), def};
+            }
+            continue;
+        }
+
         // 関数定義を検出
         std::regex func_regex(
             R"(^\s*(?:export\s+)?(?:int|float|double|void|bool|char)\s+(\w+)\s*\()");
-        std::smatch match;
         if (std::regex_search(line, match, func_regex)) {
             std::string name = match[1];
             std::string def = line;
@@ -918,7 +965,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                     break;
             }
 
-            definitions[name] = {i, def};
+            definitions[name] = {static_cast<int>(i), def};
             i = j;  // スキップ
         }
 
@@ -944,7 +991,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                 }
             }
 
-            definitions[name] = {i, def};
+            definitions[name] = {static_cast<int>(i), def};
         }
     }
 
@@ -1001,12 +1048,18 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
     if (has_export_list) {
         // 名前列挙形式の場合、定義を再配置
         std::set<int> processed_lines;
+        std::set<int> output_lines;  // 既に出力した行
 
         // エクスポートされた定義を先に出力
         for (const auto& name : exported_names) {
             if (definitions.count(name) > 0) {
-                result << "export " << definitions[name].second << "\n";
-                processed_lines.insert(definitions[name].first);
+                int line_num = definitions[name].first;
+                // 同じ行番号の定義は一度だけ出力
+                if (output_lines.count(line_num) == 0) {
+                    result << definitions[name].second << "\n";
+                    output_lines.insert(line_num);
+                }
+                processed_lines.insert(line_num);
             }
         }
 
@@ -1016,7 +1069,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                 // 既に処理された定義はスキップ
                 bool skip = false;
                 for (const auto& [name, info] : definitions) {
-                    if (info.first == i && exported_names.count(name) > 0) {
+                    if (info.first == static_cast<int>(i) && exported_names.count(name) > 0) {
                         skip = true;
                         break;
                     }
@@ -1201,21 +1254,19 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
         // ./path/module::submodule::item 形式をチェック
         // 相対パスで、最後が ::identifier (小文字始まり = 関数/変数) の場合、
         // それをアイテムとして扱う
-        if (info.is_relative) {
-            std::string& name = info.module_name;
-            // 最後の :: の位置を見つける
-            size_t last_colon = name.rfind("::");
-            if (last_colon != std::string::npos && last_colon > 0) {
-                std::string last_part = name.substr(last_colon + 2);
-                // 小文字で始まる、または * の場合はアイテム
-                if (!last_part.empty() && (std::islower(last_part[0]) || last_part == "*")) {
-                    if (last_part == "*") {
-                        info.is_wildcard = true;
-                    } else {
-                        info.items.push_back(last_part);
-                    }
-                    info.module_name = name.substr(0, last_colon);
+        std::string& name = info.module_name;
+        // 最後の :: の位置を見つける
+        size_t last_colon = name.rfind("::");
+        if (last_colon != std::string::npos && last_colon > 0) {
+            std::string last_part = name.substr(last_colon + 2);
+            // 小文字で始まる、または * の場合はアイテム
+            if (!last_part.empty() && (std::islower(last_part[0]) || last_part == "*")) {
+                if (last_part == "*") {
+                    info.is_wildcard = true;
+                } else {
+                    info.items.push_back(last_part);
                 }
+                info.module_name = name.substr(0, last_colon);
             }
         }
     }
@@ -1354,9 +1405,31 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
         segments.push_back(current_segment);
     }
 
-    // ファイル名を生成（最初は全パス、次にルートのみ）
+    // ファイル名を生成
+    // segments が3つ以上の場合（例: std::mem::malloc）、
+    // 最後の要素は関数/変数名として扱い、モジュールパスは最後の1つ手前まで
     std::string full_filename = module_specifier;
     std::replace(full_filename.begin(), full_filename.end(), ':', '/');
+
+    // モジュールパス（最後のセグメントが小文字始まりの場合、それは関数/変数名）
+    std::string module_path = full_filename;
+    if (segments.size() >= 3) {
+        // 最後のセグメントが小文字始まりなら、関数/変数名として扱う
+        const std::string& last_segment = segments.back();
+        if (!last_segment.empty() && std::islower(last_segment[0])) {
+            // モジュールパスは最後の1つ手前まで
+            module_path = "";
+            for (size_t i = 0; i < segments.size() - 1; ++i) {
+                if (i > 0)
+                    module_path += "/";
+                module_path += segments[i];
+            }
+            if (debug_mode) {
+                std::cout << "[PREPROCESSOR] Selective import detected, module path: "
+                          << module_path << "\n";
+            }
+        }
+    }
 
     // 最初のコンポーネントだけのファイル名
     std::string root_filename = segments.empty() ? module_specifier : segments[0];
@@ -1364,6 +1437,31 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
     // まず現在のファイルと同じディレクトリをチェック
     if (!current_file.empty()) {
         auto current_dir = current_file.parent_path();
+
+        // セグメントが3つ以上（選択的インポート）の場合、module_pathを優先
+        if (segments.size() >= 3 && module_path != full_filename) {
+            // 1. モジュールパス（std/mem.cm など）を試す
+            auto mod_file_path = current_dir / (module_path + ".cm");
+            if (std::filesystem::exists(mod_file_path)) {
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Found module file: " << mod_file_path << "\n";
+                }
+                return std::filesystem::canonical(mod_file_path);
+            }
+
+            // 2. ディレクトリ内のエントリーポイント（std/mem/mod.cm など）
+            auto mod_dir_path = current_dir / module_path;
+            if (std::filesystem::exists(mod_dir_path) &&
+                std::filesystem::is_directory(mod_dir_path)) {
+                auto entry = find_module_entry_point(mod_dir_path);
+                if (!entry.empty()) {
+                    if (debug_mode) {
+                        std::cout << "[PREPROCESSOR] Found module entry point: " << entry << "\n";
+                    }
+                    return entry;
+                }
+            }
+        }
 
         // 1. ルートコンポーネントのファイル（std.cm）を最初に試す
         //    これは再エクスポートベースの解決に必要
@@ -1403,6 +1501,33 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
 
     // 検索パスから探す
     for (const auto& search_path : search_paths) {
+        // セグメントが3つ以上（選択的インポート）の場合、module_pathを優先
+        if (segments.size() >= 3 && module_path != full_filename) {
+            // 0. モジュールパス（mem.cm など）を試す
+            auto mod_file_path = search_path / (module_path + ".cm");
+            if (std::filesystem::exists(mod_file_path)) {
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Found module file in search path: "
+                              << mod_file_path << "\n";
+                }
+                return std::filesystem::canonical(mod_file_path);
+            }
+
+            // 0.5. ディレクトリ内のエントリーポイント（mem/mod.cm など）
+            auto mod_dir_path = search_path / module_path;
+            if (std::filesystem::exists(mod_dir_path) &&
+                std::filesystem::is_directory(mod_dir_path)) {
+                auto entry = find_module_entry_point(mod_dir_path);
+                if (!entry.empty()) {
+                    if (debug_mode) {
+                        std::cout << "[PREPROCESSOR] Found module entry point in search path: "
+                                  << entry << "\n";
+                    }
+                    return entry;
+                }
+            }
+        }
+
         // 1. 完全パスを試す
         auto full_path = search_path / (full_filename + ".cm");
         if (std::filesystem::exists(full_path)) {

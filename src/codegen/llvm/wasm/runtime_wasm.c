@@ -21,9 +21,57 @@ void __wasi_proc_exit(int exit_code) __attribute__((noreturn));
 __attribute__((import_module("wasi_snapshot_preview1"), import_name("fd_write")))
 int __wasi_fd_write_direct(int fd, const void* iovs, size_t iovs_len, size_t* nwritten);
 
+// ============================================================
+// Memory operations (memcpy, memcmp, memmove, memset)
+// These must be defined before including runtime_slice.c
+// ============================================================
+void* memcpy(void* dest, const void* src, size_t n) {
+    char* d = (char*)dest;
+    const char* s = (const char*)src;
+    for (size_t i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+    return dest;
+}
+
+int memcmp(const void* s1, const void* s2, size_t n) {
+    const unsigned char* p1 = (const unsigned char*)s1;
+    const unsigned char* p2 = (const unsigned char*)s2;
+    for (size_t i = 0; i < n; i++) {
+        if (p1[i] != p2[i]) {
+            return (int)p1[i] - (int)p2[i];
+        }
+    }
+    return 0;
+}
+
+void* memmove(void* dest, const void* src, size_t n) {
+    char* d = (char*)dest;
+    const char* s = (const char*)src;
+    if (d < s) {
+        for (size_t i = 0; i < n; i++) {
+            d[i] = s[i];
+        }
+    } else {
+        for (size_t i = n; i > 0; i--) {
+            d[i - 1] = s[i - 1];
+        }
+    }
+    return dest;
+}
+
+void* memset(void* s, int c, size_t n) {
+    unsigned char* p = (unsigned char*)s;
+    for (size_t i = 0; i < n; i++) {
+        p[i] = (unsigned char)c;
+    }
+    return s;
+}
+
 // Include runtime components
 #include "runtime_format.c"
 #include "runtime_print.c"
+#include "runtime_slice.c"
 
 // ============================================================
 // Legacy aliases for compatibility

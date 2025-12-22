@@ -636,141 +636,227 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             arr_type = ctx.func->locals[*arr_id].type;
                                         }
 
-                                        MirPlace place{*arr_id};
-                                        hir::TypePtr current_type = arr_type;
-                                        bool valid = true;
+                                        // スライス（動的配列）かどうか判定
+                                        bool is_slice = arr_type &&
+                                                        arr_type->kind == hir::TypeKind::Array &&
+                                                        !arr_type->array_size.has_value();
 
-                                        // インデックスを処理
-                                        try {
-                                            int idx = std::stoi(index_str);
+                                        if (is_slice && remaining.empty()) {
+                                            // スライスのインデックスアクセス - cm_slice_get_*
+                                            // を呼び出す
+                                            hir::TypePtr elem_type = arr_type->element_type
+                                                                         ? arr_type->element_type
+                                                                         : hir::make_int();
+
+                                            std::string get_func = "cm_slice_get_i32";
+                                            auto elem_kind = elem_type->kind;
+                                            if (elem_kind == hir::TypeKind::Char ||
+                                                elem_kind == hir::TypeKind::Bool ||
+                                                elem_kind == hir::TypeKind::Tiny ||
+                                                elem_kind == hir::TypeKind::UTiny) {
+                                                get_func = "cm_slice_get_i8";
+                                            } else if (elem_kind == hir::TypeKind::Long ||
+                                                       elem_kind == hir::TypeKind::ULong) {
+                                                get_func = "cm_slice_get_i64";
+                                            } else if (elem_kind == hir::TypeKind::Double ||
+                                                       elem_kind == hir::TypeKind::Float) {
+                                                get_func = "cm_slice_get_f64";
+                                            } else if (elem_kind == hir::TypeKind::Pointer ||
+                                                       elem_kind == hir::TypeKind::String ||
+                                                       elem_kind == hir::TypeKind::Struct) {
+                                                get_func = "cm_slice_get_ptr";
+                                            }
+
+                                            LocalId result = ctx.new_temp(elem_type);
+                                            BlockId success_block = ctx.new_block();
+
+                                            // インデックス値を作成
                                             LocalId idx_local = ctx.new_temp(hir::make_int());
-                                            MirConstant idx_const;
-                                            idx_const.value = static_cast<int64_t>(idx);
-                                            idx_const.type = hir::make_int();
-                                            ctx.push_statement(MirStatement::assign(
-                                                MirPlace{idx_local},
-                                                MirRvalue::use(MirOperand::constant(idx_const))));
-
-                                            place.projections.push_back(
-                                                PlaceProjection::index(idx_local));
-
-                                            // 配列の要素型に更新
-                                            if (current_type &&
-                                                current_type->kind == hir::TypeKind::Array &&
-                                                current_type->element_type) {
-                                                current_type = current_type->element_type;
-                                            }
-                                        } catch (...) {
-                                            valid = false;
-                                        }
-
-                                        // 残りのフィールドアクセスを処理
-                                        while (!remaining.empty() && valid) {
-                                            size_t next_bracket = remaining.find('[');
-                                            size_t next_dot = remaining.find('.');
-
-                                            std::string field_part;
-                                            std::string next_index_part;
-
-                                            if (next_bracket != std::string::npos &&
-                                                (next_dot == std::string::npos ||
-                                                 next_bracket < next_dot)) {
-                                                field_part = remaining.substr(0, next_bracket);
-                                                size_t next_close =
-                                                    remaining.find(']', next_bracket);
-                                                if (next_close != std::string::npos) {
-                                                    next_index_part = remaining.substr(
-                                                        next_bracket + 1,
-                                                        next_close - next_bracket - 1);
-                                                    remaining = remaining.substr(next_close + 1);
-                                                    if (!remaining.empty() && remaining[0] == '.') {
-                                                        remaining = remaining.substr(1);
-                                                    }
-                                                } else {
-                                                    valid = false;
-                                                    break;
-                                                }
-                                            } else if (next_dot != std::string::npos) {
-                                                field_part = remaining.substr(0, next_dot);
-                                                remaining = remaining.substr(next_dot + 1);
-                                            } else {
-                                                field_part = remaining;
-                                                remaining.clear();
+                                            try {
+                                                int idx = std::stoi(index_str);
+                                                MirConstant idx_const;
+                                                idx_const.value = static_cast<int64_t>(idx);
+                                                idx_const.type = hir::make_int();
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{idx_local},
+                                                    MirRvalue::use(
+                                                        MirOperand::constant(idx_const))));
+                                            } catch (...) {
+                                                MirConstant idx_const;
+                                                idx_const.value = int64_t{0};
+                                                idx_const.type = hir::make_int();
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{idx_local},
+                                                    MirRvalue::use(
+                                                        MirOperand::constant(idx_const))));
                                             }
 
-                                            // フィールドアクセスを処理
-                                            if (!field_part.empty()) {
-                                                if (!current_type ||
-                                                    current_type->kind != hir::TypeKind::Struct) {
-                                                    valid = false;
-                                                    break;
-                                                }
+                                            std::vector<MirOperandPtr> call_args;
+                                            call_args.push_back(
+                                                MirOperand::copy(MirPlace{*arr_id}));
+                                            call_args.push_back(
+                                                MirOperand::copy(MirPlace{idx_local}));
 
-                                                auto field_idx = ctx.get_field_index(
-                                                    current_type->name, field_part);
-                                                if (!field_idx) {
-                                                    valid = false;
-                                                    break;
-                                                }
+                                            auto call_term = std::make_unique<MirTerminator>();
+                                            call_term->kind = MirTerminator::Call;
+                                            call_term->data = MirTerminator::CallData{
+                                                MirOperand::function_ref(get_func),
+                                                std::move(call_args),
+                                                MirPlace{result},
+                                                success_block,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                                            ctx.set_terminator(std::move(call_term));
+                                            ctx.switch_to_block(success_block);
+
+                                            arg_locals.push_back(result);
+                                        } else {
+                                            // 静的配列またはスライス+フィールドアクセスの処理
+                                            MirPlace place{*arr_id};
+                                            hir::TypePtr current_type = arr_type;
+                                            bool valid = true;
+
+                                            // インデックスを処理
+                                            try {
+                                                int idx = std::stoi(index_str);
+                                                LocalId idx_local = ctx.new_temp(hir::make_int());
+                                                MirConstant idx_const;
+                                                idx_const.value = static_cast<int64_t>(idx);
+                                                idx_const.type = hir::make_int();
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{idx_local},
+                                                    MirRvalue::use(
+                                                        MirOperand::constant(idx_const))));
 
                                                 place.projections.push_back(
-                                                    PlaceProjection::field(*field_idx));
+                                                    PlaceProjection::index(idx_local));
 
-                                                if (ctx.struct_defs &&
-                                                    ctx.struct_defs->count(current_type->name)) {
-                                                    const auto* struct_def =
-                                                        ctx.struct_defs->at(current_type->name);
-                                                    if (*field_idx < struct_def->fields.size()) {
-                                                        current_type =
-                                                            struct_def->fields[*field_idx].type;
+                                                // 配列の要素型に更新
+                                                if (current_type &&
+                                                    current_type->kind == hir::TypeKind::Array &&
+                                                    current_type->element_type) {
+                                                    current_type = current_type->element_type;
+                                                }
+                                            } catch (...) {
+                                                valid = false;
+                                            }
+
+                                            // 残りのフィールドアクセスを処理
+                                            while (!remaining.empty() && valid) {
+                                                size_t next_bracket = remaining.find('[');
+                                                size_t next_dot = remaining.find('.');
+
+                                                std::string field_part;
+                                                std::string next_index_part;
+
+                                                if (next_bracket != std::string::npos &&
+                                                    (next_dot == std::string::npos ||
+                                                     next_bracket < next_dot)) {
+                                                    field_part = remaining.substr(0, next_bracket);
+                                                    size_t next_close =
+                                                        remaining.find(']', next_bracket);
+                                                    if (next_close != std::string::npos) {
+                                                        next_index_part = remaining.substr(
+                                                            next_bracket + 1,
+                                                            next_close - next_bracket - 1);
+                                                        remaining =
+                                                            remaining.substr(next_close + 1);
+                                                        if (!remaining.empty() &&
+                                                            remaining[0] == '.') {
+                                                            remaining = remaining.substr(1);
+                                                        }
+                                                    } else {
+                                                        valid = false;
+                                                        break;
+                                                    }
+                                                } else if (next_dot != std::string::npos) {
+                                                    field_part = remaining.substr(0, next_dot);
+                                                    remaining = remaining.substr(next_dot + 1);
+                                                } else {
+                                                    field_part = remaining;
+                                                    remaining.clear();
+                                                }
+
+                                                // フィールドアクセスを処理
+                                                if (!field_part.empty()) {
+                                                    if (!current_type ||
+                                                        current_type->kind !=
+                                                            hir::TypeKind::Struct) {
+                                                        valid = false;
+                                                        break;
+                                                    }
+
+                                                    auto field_idx = ctx.get_field_index(
+                                                        current_type->name, field_part);
+                                                    if (!field_idx) {
+                                                        valid = false;
+                                                        break;
+                                                    }
+
+                                                    place.projections.push_back(
+                                                        PlaceProjection::field(*field_idx));
+
+                                                    if (ctx.struct_defs &&
+                                                        ctx.struct_defs->count(
+                                                            current_type->name)) {
+                                                        const auto* struct_def =
+                                                            ctx.struct_defs->at(current_type->name);
+                                                        if (*field_idx <
+                                                            struct_def->fields.size()) {
+                                                            current_type =
+                                                                struct_def->fields[*field_idx].type;
+                                                        } else {
+                                                            current_type = hir::make_int();
+                                                        }
                                                     } else {
                                                         current_type = hir::make_int();
                                                     }
-                                                } else {
-                                                    current_type = hir::make_int();
                                                 }
-                                            }
 
-                                            // 追加のインデックスを処理
-                                            if (!next_index_part.empty()) {
-                                                try {
-                                                    int next_idx = std::stoi(next_index_part);
-                                                    LocalId next_idx_local =
-                                                        ctx.new_temp(hir::make_int());
-                                                    MirConstant next_idx_const;
-                                                    next_idx_const.value =
-                                                        static_cast<int64_t>(next_idx);
-                                                    next_idx_const.type = hir::make_int();
-                                                    ctx.push_statement(MirStatement::assign(
-                                                        MirPlace{next_idx_local},
-                                                        MirRvalue::use(
-                                                            MirOperand::constant(next_idx_const))));
+                                                // 追加のインデックスを処理
+                                                if (!next_index_part.empty()) {
+                                                    try {
+                                                        int next_idx = std::stoi(next_index_part);
+                                                        LocalId next_idx_local =
+                                                            ctx.new_temp(hir::make_int());
+                                                        MirConstant next_idx_const;
+                                                        next_idx_const.value =
+                                                            static_cast<int64_t>(next_idx);
+                                                        next_idx_const.type = hir::make_int();
+                                                        ctx.push_statement(MirStatement::assign(
+                                                            MirPlace{next_idx_local},
+                                                            MirRvalue::use(MirOperand::constant(
+                                                                next_idx_const))));
 
-                                                    place.projections.push_back(
-                                                        PlaceProjection::index(next_idx_local));
+                                                        place.projections.push_back(
+                                                            PlaceProjection::index(next_idx_local));
 
-                                                    if (current_type &&
-                                                        current_type->kind ==
-                                                            hir::TypeKind::Array &&
-                                                        current_type->element_type) {
-                                                        current_type = current_type->element_type;
+                                                        if (current_type &&
+                                                            current_type->kind ==
+                                                                hir::TypeKind::Array &&
+                                                            current_type->element_type) {
+                                                            current_type =
+                                                                current_type->element_type;
+                                                        }
+                                                    } catch (...) {
+                                                        valid = false;
                                                     }
-                                                } catch (...) {
-                                                    valid = false;
                                                 }
                                             }
-                                        }
 
-                                        if (valid) {
-                                            LocalId result = ctx.new_temp(current_type);
-                                            ctx.push_statement(MirStatement::assign(
-                                                MirPlace{result},
-                                                MirRvalue::use(MirOperand::copy(place))));
-                                            arg_locals.push_back(result);
-                                        } else {
-                                            auto err_type = hir::make_error();
-                                            arg_locals.push_back(ctx.new_temp(err_type));
-                                        }
+                                            if (valid) {
+                                                LocalId result = ctx.new_temp(current_type);
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{result},
+                                                    MirRvalue::use(MirOperand::copy(place))));
+                                                arg_locals.push_back(result);
+                                            } else {
+                                                auto err_type = hir::make_error();
+                                                arg_locals.push_back(ctx.new_temp(err_type));
+                                            }
+                                        }  // end of static array / slice+field block
                                     } else {
                                         auto err_type = hir::make_error();
                                         arg_locals.push_back(ctx.new_temp(err_type));
@@ -804,53 +890,111 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
                                     if (is_method_call) {
                                         // メソッド呼び出しの処理
-                                        // 簡易実装：メソッド呼び出しを事前に実行
 
-                                        // メソッド呼び出しのための新しいブロックを作成
-                                        BlockId call_block = ctx.new_block();
-                                        BlockId after_call_block = ctx.new_block();
+                                        // スライス（動的配列）のメソッドかどうかチェック
+                                        if (obj_type && obj_type->kind == hir::TypeKind::Array &&
+                                            !obj_type->array_size.has_value()) {
+                                            // スライスのメソッド呼び出し
+                                            if (member_name == "len" || member_name == "length" ||
+                                                member_name == "size") {
+                                                LocalId result = ctx.new_temp(hir::make_uint());
+                                                BlockId success_block = ctx.new_block();
 
-                                        // 戻り値用の一時変数（とりあえずintとして扱う）
-                                        hir::TypePtr return_type = hir::make_int();
-                                        LocalId result = ctx.new_temp(return_type);
+                                                std::vector<MirOperandPtr> call_args;
+                                                call_args.push_back(
+                                                    MirOperand::copy(MirPlace{*obj_id}));
 
-                                        // メソッド名を構築
-                                        // インターフェースメソッドの場合は構造体名::インターフェース名::メソッド名
-                                        // 通常のメソッドの場合は構造体名::メソッド名
-                                        // ここでは簡易実装として、実際の関数名解決はコード生成時に行われる
-                                        std::string method_name =
-                                            obj_type->name + "::" + member_name;
+                                                auto call_term = std::make_unique<MirTerminator>();
+                                                call_term->kind = MirTerminator::Call;
+                                                call_term->data = MirTerminator::CallData{
+                                                    MirOperand::function_ref("cm_slice_len"),
+                                                    std::move(call_args),
+                                                    MirPlace{result},
+                                                    success_block,
+                                                    std::nullopt,
+                                                    "",
+                                                    "",
+                                                    false};
+                                                ctx.set_terminator(std::move(call_term));
+                                                ctx.switch_to_block(success_block);
 
-                                        // 引数リスト（selfパラメータ）
-                                        std::vector<MirOperandPtr> method_args;
-                                        method_args.push_back(MirOperand::copy(MirPlace{*obj_id}));
+                                                arg_locals.push_back(result);
+                                            } else if (member_name == "cap" ||
+                                                       member_name == "capacity") {
+                                                LocalId result = ctx.new_temp(hir::make_uint());
+                                                BlockId success_block = ctx.new_block();
 
-                                        // メソッド呼び出しのターミネータを作成
-                                        // インターフェースメソッドとして処理（仮想メソッド呼び出し）
-                                        auto call_term = std::make_unique<MirTerminator>();
-                                        call_term->kind = MirTerminator::Call;
-                                        call_term->data = MirTerminator::CallData{
-                                            MirOperand::function_ref(method_name),
-                                            std::move(method_args),
-                                            std::make_optional(MirPlace{result}),
-                                            after_call_block,
-                                            std::nullopt,  // unwindブロックなし
-                                            "",  // interface_name（後でコード生成時に解決）
-                                            member_name,  // method_name
-                                            true  // is_virtual（インターフェースメソッドの可能性）
-                                        };
+                                                std::vector<MirOperandPtr> call_args;
+                                                call_args.push_back(
+                                                    MirOperand::copy(MirPlace{*obj_id}));
 
-                                        // 現在のブロックから呼び出しブロックへジャンプ
-                                        ctx.set_terminator(MirTerminator::goto_block(call_block));
+                                                auto call_term = std::make_unique<MirTerminator>();
+                                                call_term->kind = MirTerminator::Call;
+                                                call_term->data = MirTerminator::CallData{
+                                                    MirOperand::function_ref("cm_slice_cap"),
+                                                    std::move(call_args),
+                                                    MirPlace{result},
+                                                    success_block,
+                                                    std::nullopt,
+                                                    "",
+                                                    "",
+                                                    false};
+                                                ctx.set_terminator(std::move(call_term));
+                                                ctx.switch_to_block(success_block);
 
-                                        // 呼び出しブロックを設定
-                                        ctx.switch_to_block(call_block);
-                                        ctx.get_current_block()->terminator = std::move(call_term);
+                                                arg_locals.push_back(result);
+                                            } else {
+                                                // 未知のスライスメソッド
+                                                auto err_type = hir::make_error();
+                                                arg_locals.push_back(ctx.new_temp(err_type));
+                                            }
+                                        } else {
+                                            // 構造体のメソッド呼び出し
+                                            std::string method_name_full =
+                                                obj_type->name + "::" + member_name;
 
-                                        // 呼び出し後のブロックに切り替え
-                                        ctx.switch_to_block(after_call_block);
+                                            // メソッド呼び出しのための新しいブロックを作成
+                                            BlockId call_block = ctx.new_block();
+                                            BlockId after_call_block = ctx.new_block();
 
-                                        arg_locals.push_back(result);
+                                            // 戻り値用の一時変数（とりあえずintとして扱う）
+                                            hir::TypePtr return_type = hir::make_int();
+                                            LocalId result = ctx.new_temp(return_type);
+
+                                            // 引数リスト（selfパラメータ）
+                                            std::vector<MirOperandPtr> method_args;
+                                            method_args.push_back(
+                                                MirOperand::copy(MirPlace{*obj_id}));
+
+                                            // メソッド呼び出しのターミネータを作成
+                                            // インターフェースメソッドとして処理（仮想メソッド呼び出し）
+                                            auto call_term = std::make_unique<MirTerminator>();
+                                            call_term->kind = MirTerminator::Call;
+                                            call_term->data = MirTerminator::CallData{
+                                                MirOperand::function_ref(method_name_full),
+                                                std::move(method_args),
+                                                std::make_optional(MirPlace{result}),
+                                                after_call_block,
+                                                std::nullopt,  // unwindブロックなし
+                                                "",  // interface_name（後でコード生成時に解決）
+                                                member_name,  // method_name
+                                                true  // is_virtual（インターフェースメソッドの可能性）
+                                            };
+
+                                            // 現在のブロックから呼び出しブロックへジャンプ
+                                            ctx.set_terminator(
+                                                MirTerminator::goto_block(call_block));
+
+                                            // 呼び出しブロックを設定
+                                            ctx.switch_to_block(call_block);
+                                            ctx.get_current_block()->terminator =
+                                                std::move(call_term);
+
+                                            // 呼び出し後のブロックに切り替え
+                                            ctx.switch_to_block(after_call_block);
+
+                                            arg_locals.push_back(result);
+                                        }
                                     } else if (obj_type &&
                                                obj_type->kind == hir::TypeKind::Struct) {
                                         // フィールドアクセスの処理（ネストしたアクセス、配列インデックスもサポート）
@@ -1136,8 +1280,73 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 ctx.switch_to_block(after_call_block);
 
                                                 arg_locals.push_back(result);
+                                            } else if (obj_type &&
+                                                       obj_type->kind == hir::TypeKind::Array &&
+                                                       !obj_type->array_size.has_value()) {
+                                                // スライス（動的配列）のメソッド呼び出し
+                                                debug_msg("MIR",
+                                                          "Slice method call: " + method_name);
+
+                                                if (method_name == "len" ||
+                                                    method_name == "length" ||
+                                                    method_name == "size") {
+                                                    // cm_slice_len 呼び出し
+                                                    LocalId result = ctx.new_temp(hir::make_uint());
+                                                    BlockId success_block = ctx.new_block();
+
+                                                    std::vector<MirOperandPtr> call_args;
+                                                    call_args.push_back(
+                                                        MirOperand::copy(MirPlace{*obj_id}));
+
+                                                    auto call_term =
+                                                        std::make_unique<MirTerminator>();
+                                                    call_term->kind = MirTerminator::Call;
+                                                    call_term->data = MirTerminator::CallData{
+                                                        MirOperand::function_ref("cm_slice_len"),
+                                                        std::move(call_args),
+                                                        MirPlace{result},
+                                                        success_block,
+                                                        std::nullopt,
+                                                        "",
+                                                        "",
+                                                        false};
+                                                    ctx.set_terminator(std::move(call_term));
+                                                    ctx.switch_to_block(success_block);
+
+                                                    arg_locals.push_back(result);
+                                                } else if (method_name == "cap" ||
+                                                           method_name == "capacity") {
+                                                    // cm_slice_cap 呼び出し
+                                                    LocalId result = ctx.new_temp(hir::make_uint());
+                                                    BlockId success_block = ctx.new_block();
+
+                                                    std::vector<MirOperandPtr> call_args;
+                                                    call_args.push_back(
+                                                        MirOperand::copy(MirPlace{*obj_id}));
+
+                                                    auto call_term =
+                                                        std::make_unique<MirTerminator>();
+                                                    call_term->kind = MirTerminator::Call;
+                                                    call_term->data = MirTerminator::CallData{
+                                                        MirOperand::function_ref("cm_slice_cap"),
+                                                        std::move(call_args),
+                                                        MirPlace{result},
+                                                        success_block,
+                                                        std::nullopt,
+                                                        "",
+                                                        "",
+                                                        false};
+                                                    ctx.set_terminator(std::move(call_term));
+                                                    ctx.switch_to_block(success_block);
+
+                                                    arg_locals.push_back(result);
+                                                } else {
+                                                    // 未知のメソッド
+                                                    auto err_type = hir::make_error();
+                                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                                }
                                             } else {
-                                                // 構造体型でない場合はエラー
+                                                // 構造体型でもスライスでもない場合はエラー
                                                 auto err_type = hir::make_error();
                                                 arg_locals.push_back(ctx.new_temp(err_type));
                                             }
@@ -1441,6 +1650,253 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         ctx.switch_to_block(success_block);
 
         // ダミーの戻り値
+        return ctx.new_temp(hir::make_void());
+    }
+
+    // スライスのlen/cap処理
+    if (call.func_name == "__builtin_slice_len" || call.func_name == "__builtin_slice_cap") {
+        if (!call.args.empty()) {
+            auto slice_expr = call.args[0].get();
+
+            // スライス変数を解決（変数参照またはメンバアクセス）
+            MirPlace slice_place{0};
+            hir::TypePtr slice_type = nullptr;
+            bool resolved = false;
+
+            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
+                auto slice_local_opt = ctx.resolve_variable((*var)->name);
+                if (slice_local_opt.has_value()) {
+                    slice_place = MirPlace{*slice_local_opt};
+                    resolved = true;
+                }
+            } else if (auto* mem =
+                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
+                // メンバアクセス（c.values のような形式）- 直接参照を取得
+                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
+                    resolved = true;
+                }
+            }
+
+            if (resolved) {
+                std::string func_name =
+                    (call.func_name == "__builtin_slice_len") ? "cm_slice_len" : "cm_slice_cap";
+
+                LocalId result = ctx.new_temp(hir::make_uint());
+                BlockId success_block = ctx.new_block();
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(slice_place));
+
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(func_name),
+                                                          std::move(args),
+                                                          MirPlace{result},
+                                                          success_block,
+                                                          std::nullopt,
+                                                          "",
+                                                          "",
+                                                          false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success_block);
+                return result;
+            }
+        }
+        return ctx.new_temp(hir::make_uint());
+    }
+
+    // スライスビルトイン関数の処理 - 通常の関数呼び出しとして変換
+    if (call.func_name == "__builtin_slice_push") {
+        if (call.args.size() >= 2) {
+            auto slice_expr = call.args[0].get();
+
+            // スライス変数を解決（変数参照またはメンバアクセス）
+            MirPlace slice_place{0};
+            hir::TypePtr slice_type = nullptr;
+            bool resolved = false;
+
+            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
+                auto slice_local_opt = ctx.resolve_variable((*var)->name);
+                if (slice_local_opt) {
+                    slice_place = MirPlace{*slice_local_opt};
+                    resolved = true;
+                    if (*slice_local_opt < ctx.func->locals.size()) {
+                        slice_type = ctx.func->locals[*slice_local_opt].type;
+                    }
+                }
+            } else if (auto* mem =
+                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
+                // メンバアクセス（c.values のような形式）- 直接参照を取得
+                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
+                    resolved = true;
+                }
+            }
+
+            if (resolved) {
+                LocalId value_local = lower_expression(*call.args[1], ctx);
+
+                // 要素型に基づいてランタイム関数を選択
+                std::string push_func = "cm_slice_push_i32";
+                if (slice_type && slice_type->element_type) {
+                    auto elem_kind = slice_type->element_type->kind;
+                    if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                        elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                        push_func = "cm_slice_push_i8";
+                    } else if (elem_kind == hir::TypeKind::Long ||
+                               elem_kind == hir::TypeKind::ULong) {
+                        push_func = "cm_slice_push_i64";
+                    } else if (elem_kind == hir::TypeKind::Double ||
+                               elem_kind == hir::TypeKind::Float) {
+                        push_func = "cm_slice_push_f64";
+                    } else if (elem_kind == hir::TypeKind::Pointer ||
+                               elem_kind == hir::TypeKind::String ||
+                               elem_kind == hir::TypeKind::Struct) {
+                        push_func = "cm_slice_push_ptr";
+                    }
+                }
+
+                BlockId success_block = ctx.new_block();
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(slice_place));
+                args.push_back(MirOperand::copy(MirPlace{value_local}));
+
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(push_func),
+                                                          std::move(args),
+                                                          std::nullopt,
+                                                          success_block,
+                                                          std::nullopt,
+                                                          "",
+                                                          "",
+                                                          false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success_block);
+                return ctx.new_temp(hir::make_void());
+            }
+        }
+        return ctx.new_temp(hir::make_void());
+    }
+
+    if (call.func_name == "__builtin_slice_pop") {
+        if (!call.args.empty()) {
+            auto slice_expr = call.args[0].get();
+            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
+                auto slice_local_opt = ctx.resolve_variable((*var)->name);
+                if (slice_local_opt.has_value()) {
+                    LocalId slice_local = slice_local_opt.value();
+
+                    std::string pop_func = "cm_slice_pop_i32";
+                    hir::TypePtr elem_type = hir::make_int();
+                    hir::TypePtr slice_type = nullptr;
+                    if (slice_local < ctx.func->locals.size()) {
+                        slice_type = ctx.func->locals[slice_local].type;
+                    }
+                    if (slice_type && slice_type->element_type) {
+                        elem_type = slice_type->element_type;
+                        auto elem_kind = elem_type->kind;
+                        if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                            elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                            pop_func = "cm_slice_pop_i8";
+                        } else if (elem_kind == hir::TypeKind::Long ||
+                                   elem_kind == hir::TypeKind::ULong) {
+                            pop_func = "cm_slice_pop_i64";
+                        } else if (elem_kind == hir::TypeKind::Double ||
+                                   elem_kind == hir::TypeKind::Float) {
+                            pop_func = "cm_slice_pop_f64";
+                        } else if (elem_kind == hir::TypeKind::Pointer ||
+                                   elem_kind == hir::TypeKind::String ||
+                                   elem_kind == hir::TypeKind::Struct) {
+                            pop_func = "cm_slice_pop_ptr";
+                        }
+                    }
+
+                    LocalId result = ctx.new_temp(elem_type);
+                    BlockId success_block = ctx.new_block();
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(MirPlace{slice_local}));
+
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data = MirTerminator::CallData{MirOperand::function_ref(pop_func),
+                                                              std::move(args),
+                                                              MirPlace{result},
+                                                              success_block,
+                                                              std::nullopt,
+                                                              "",
+                                                              "",
+                                                              false};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+                    return result;
+                }
+            }
+        }
+        return ctx.new_temp(result_type ? result_type : hir::make_int());
+    }
+
+    if (call.func_name == "__builtin_slice_delete") {
+        if (call.args.size() >= 2) {
+            auto slice_expr = call.args[0].get();
+            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
+                auto slice_local_opt = ctx.resolve_variable((*var)->name);
+                if (slice_local_opt.has_value()) {
+                    LocalId slice_local = slice_local_opt.value();
+                    LocalId index_local = lower_expression(*call.args[1], ctx);
+
+                    BlockId success_block = ctx.new_block();
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(MirPlace{slice_local}));
+                    args.push_back(MirOperand::copy(MirPlace{index_local}));
+
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref("cm_slice_delete"),
+                                                std::move(args),
+                                                std::nullopt,
+                                                success_block,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+                    return ctx.new_temp(hir::make_void());
+                }
+            }
+        }
+        return ctx.new_temp(hir::make_void());
+    }
+
+    if (call.func_name == "__builtin_slice_clear") {
+        if (!call.args.empty()) {
+            auto slice_expr = call.args[0].get();
+            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
+                auto slice_local_opt = ctx.resolve_variable((*var)->name);
+                if (slice_local_opt.has_value()) {
+                    LocalId slice_local = slice_local_opt.value();
+
+                    BlockId success_block = ctx.new_block();
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(MirPlace{slice_local}));
+
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref("cm_slice_clear"),
+                                                std::move(args),
+                                                std::nullopt,
+                                                success_block,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+                    return ctx.new_temp(hir::make_void());
+                }
+            }
+        }
         return ctx.new_temp(hir::make_void());
     }
 

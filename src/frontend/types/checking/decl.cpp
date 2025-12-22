@@ -228,9 +228,9 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
                     param_types.push_back(type);
                 }
                 // 可変長引数フラグを設定してFFI関数を登録
-                scopes_.global().define_function(ffi_func.name, std::move(param_types), 
-                                                  ffi_func.return_type, SIZE_MAX, 
-                                                  ffi_func.is_variadic);
+                scopes_.global().define_function(ffi_func.name, std::move(param_types),
+                                                 ffi_func.return_type, SIZE_MAX,
+                                                 ffi_func.is_variadic);
             }
         }
     } else if (auto* import = decl.as<ast::ImportDecl>()) {
@@ -405,7 +405,7 @@ void TypeChecker::register_typedef(ast::TypedefDecl& td) {
 
 void TypeChecker::check_import(ast::ImportDecl& import) {
     std::string path_str = import.path.to_string();
-    
+
     if (path_str == "std::io") {
         for (const auto& item : import.items) {
             if (item.name == "println" || item.name.empty()) {

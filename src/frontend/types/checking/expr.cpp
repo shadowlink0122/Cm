@@ -38,6 +38,8 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         inferred_type = infer_array_literal(*array_lit);
     } else if (auto* struct_lit = expr.as<ast::StructLiteralExpr>()) {
         inferred_type = infer_struct_literal(*struct_lit);
+    } else if (auto* lambda_expr = expr.as<ast::LambdaExpr>()) {
+        inferred_type = infer_lambda(*lambda_expr);
     } else if (auto* sizeof_expr = expr.as<ast::SizeofExpr>()) {
         // sizeof(型)の場合、型が有効かチェック
         // 無効な場合は変数として解釈を試みる
@@ -554,6 +556,72 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
         case ast::MatchPatternKind::Wildcard:
             break;
     }
+}
+
+ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
+    // ラムダ式の型チェック
+    // パラメータの型が明示されていない場合はエラー
+    std::vector<ast::TypePtr> param_types;
+
+    for (const auto& param : lambda.params) {
+        if (!param.type || param.type->kind == ast::TypeKind::Error) {
+            error(current_span_, "Lambda parameter '" + param.name +
+                                     "' must have an explicit type. "
+                                     "Use: (Type param_name) => { ... }");
+            return ast::make_error();
+        }
+        param_types.push_back(param.type);
+    }
+
+    // 新しいスコープを作成してパラメータを登録
+    scopes_.push();
+    for (const auto& param : lambda.params) {
+        scopes_.current().define(param.name, param.type);
+    }
+
+    // ラムダ本体の型チェック
+    // 現在の戻り値型を保存し、一時的にnullに
+    auto saved_return_type = current_return_type_;
+    current_return_type_ = nullptr;
+
+    ast::TypePtr return_type = ast::make_void();
+
+    if (lambda.is_expr_body()) {
+        // 式ボディ: (int x) => x * 2
+        auto& expr = std::get<ast::ExprPtr>(lambda.body);
+        return_type = infer_type(*expr);
+    } else {
+        // 文ボディ: (int x) => { return x * 2; }
+        auto& stmts = std::get<std::vector<ast::StmtPtr>>(lambda.body);
+
+        // まず戻り値の型を先に推論
+        for (auto& stmt : stmts) {
+            if (auto* ret = stmt->as<ast::ReturnStmt>()) {
+                if (ret->value) {
+                    return_type = infer_type(*ret->value);
+                    break;
+                }
+            }
+        }
+
+        // 戻り値型を設定してから文をチェック
+        current_return_type_ = return_type;
+        for (auto& stmt : stmts) {
+            check_statement(*stmt);
+        }
+    }
+
+    // 戻り値型を復元
+    current_return_type_ = saved_return_type;
+
+    scopes_.pop();
+
+    // 関数ポインタ型を構築: ReturnType*(ParamTypes...)
+    auto func_type = std::make_shared<ast::Type>(ast::TypeKind::Function);
+    func_type->return_type = return_type;
+    func_type->param_types = std::move(param_types);
+
+    return func_type;
 }
 
 }  // namespace cm

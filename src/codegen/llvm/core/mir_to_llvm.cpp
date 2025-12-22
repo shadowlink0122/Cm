@@ -7,10 +7,231 @@
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
+#include <set>
 
 namespace cm::codegen::llvm_backend {
 
+// 関数の一意なIDを生成（オーバーロードを区別するため）
+std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
+    // main関数は特別扱い
+    if (func.name == "main") {
+        return "main";
+    }
+
+    // ラムダ関数はそのまま
+    if (func.name.find("__lambda_") == 0) {
+        return func.name;
+    }
+
+    // ランタイム関数（cm_で始まる）はそのまま
+    if (func.name.find("cm_") == 0) {
+        return func.name;
+    }
+
+    // 外部関数（extern）はそのまま
+    if (func.is_extern) {
+        return func.name;
+    }
+
+    // 引数がない場合はそのまま
+    if (func.arg_locals.empty()) {
+        return func.name;
+    }
+
+    // 引数の型からサフィックスを生成
+    std::string suffix;
+    for (const auto& arg_local : func.arg_locals) {
+        if (arg_local < func.locals.size()) {
+            auto& local = func.locals[arg_local];
+            if (local.type) {
+                if (!suffix.empty())
+                    suffix += "_";
+                switch (local.type->kind) {
+                    case hir::TypeKind::Void:
+                        suffix += "v";
+                        break;
+                    case hir::TypeKind::Bool:
+                        suffix += "b";
+                        break;
+                    case hir::TypeKind::Char:
+                        suffix += "c";
+                        break;
+                    case hir::TypeKind::Tiny:
+                        suffix += "i8";
+                        break;
+                    case hir::TypeKind::UTiny:
+                        suffix += "u8";
+                        break;
+                    case hir::TypeKind::Short:
+                        suffix += "i16";
+                        break;
+                    case hir::TypeKind::UShort:
+                        suffix += "u16";
+                        break;
+                    case hir::TypeKind::Int:
+                        suffix += "i";
+                        break;
+                    case hir::TypeKind::UInt:
+                        suffix += "u";
+                        break;
+                    case hir::TypeKind::Long:
+                        suffix += "i64";
+                        break;
+                    case hir::TypeKind::ULong:
+                        suffix += "u64";
+                        break;
+                    case hir::TypeKind::Float:
+                        suffix += "f";
+                        break;
+                    case hir::TypeKind::Double:
+                        suffix += "d";
+                        break;
+                    case hir::TypeKind::String:
+                        suffix += "s";
+                        break;
+                    case hir::TypeKind::Pointer:
+                        suffix += "p";
+                        break;
+                    case hir::TypeKind::Struct:
+                        suffix += "S" + local.type->name;
+                        break;
+                    default:
+                        suffix += "x";
+                        break;
+                }
+            }
+        }
+    }
+
+    return suffix.empty() ? func.name : func.name + "_" + suffix;
+}
+
+// 呼び出し時の引数型から関数IDを生成
+std::string MIRToLLVM::generateCallFunctionId(const std::string& baseName,
+                                              const std::vector<mir::MirOperandPtr>& args) {
+    // main関数は特別扱い
+    if (baseName == "main") {
+        return "main";
+    }
+
+    // ラムダ関数はそのまま
+    if (baseName.find("__lambda_") == 0) {
+        return baseName;
+    }
+
+    // ランタイム関数（cm_で始まる）はそのまま
+    if (baseName.find("cm_") == 0) {
+        return baseName;
+    }
+
+    // 引数がない場合はそのまま
+    if (args.empty()) {
+        return baseName;
+    }
+
+    // 引数の型からサフィックスを生成
+    std::string suffix;
+    for (const auto& arg : args) {
+        auto type = getOperandType(*arg);
+        if (type) {
+            if (!suffix.empty())
+                suffix += "_";
+            switch (type->kind) {
+                case hir::TypeKind::Void:
+                    suffix += "v";
+                    break;
+                case hir::TypeKind::Bool:
+                    suffix += "b";
+                    break;
+                case hir::TypeKind::Char:
+                    suffix += "c";
+                    break;
+                case hir::TypeKind::Tiny:
+                    suffix += "i8";
+                    break;
+                case hir::TypeKind::UTiny:
+                    suffix += "u8";
+                    break;
+                case hir::TypeKind::Short:
+                    suffix += "i16";
+                    break;
+                case hir::TypeKind::UShort:
+                    suffix += "u16";
+                    break;
+                case hir::TypeKind::Int:
+                    suffix += "i";
+                    break;
+                case hir::TypeKind::UInt:
+                    suffix += "u";
+                    break;
+                case hir::TypeKind::Long:
+                    suffix += "i64";
+                    break;
+                case hir::TypeKind::ULong:
+                    suffix += "u64";
+                    break;
+                case hir::TypeKind::Float:
+                    suffix += "f";
+                    break;
+                case hir::TypeKind::Double:
+                    suffix += "d";
+                    break;
+                case hir::TypeKind::String:
+                    suffix += "s";
+                    break;
+                case hir::TypeKind::Pointer:
+                    suffix += "p";
+                    break;
+                case hir::TypeKind::Struct:
+                    suffix += "S" + type->name;
+                    break;
+                default:
+                    suffix += "x";
+                    break;
+            }
+        }
+    }
+
+    auto funcId = suffix.empty() ? baseName : baseName + "_" + suffix;
+
+    // マップに存在するか確認
+    if (functions.count(funcId) > 0) {
+        return funcId;
+    }
+
+    // 見つからない場合、ベース名で検索（インターフェースパラメータを持つ関数の可能性）
+    if (functions.count(baseName) > 0) {
+        return baseName;
+    }
+
+    // インターフェース型を含む関数名のパターンマッチング
+    // 例: print_it_SPrintable を print_it_SPoint の代わりに見つける
+    for (const auto& [funcName, func] : functions) {
+        // ベース名が一致し、かつ引数の数が同じ関数を探す
+        if (funcName.find(baseName + "_") == 0) {
+            // インターフェース名を含むサフィックスか確認
+            auto funcSuffix = funcName.substr(baseName.length() + 1);
+            // 構造体型が含まれているか確認（Sで始まる）
+            if (funcSuffix.find("S") != std::string::npos) {
+                return funcName;
+            }
+        }
+    }
+
+    return baseName;
+}
+
 llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func) {
+    // ランタイム関数（cm_で始まる）は既存の宣言を使用
+    if (func.name.find("cm_") == 0) {
+        // 既存の関数があればそれを返す
+        if (auto existingFunc = module->getFunction(func.name)) {
+            return existingFunc;
+        }
+        // なければ declareExternalFunction で宣言
+        return declareExternalFunction(func.name);
+    }
+
     // パラメータ型
     std::vector<llvm::Type*> paramTypes;
     for (const auto& arg_local : func.arg_locals) {
@@ -135,16 +356,31 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     }
 
     // 関数宣言（先に全て宣言）- vtable生成前に必要
+    // 重複した関数はスキップ
+    std::set<std::string> declaredFunctions;
     for (const auto& func : program.functions) {
+        auto funcId = generateFunctionId(*func);
+        // 既に宣言済みの場合はスキップ（重複を防ぐ）
+        if (declaredFunctions.count(funcId) > 0) {
+            continue;
+        }
+        declaredFunctions.insert(funcId);
         auto llvmFunc = convertFunctionSignature(*func);
-        functions[func->name] = llvmFunc;
+        functions[funcId] = llvmFunc;
     }
 
     // vtableを生成（関数宣言後に実行）
     generateVTables(program);
 
     // 関数実装
+    // 重複した関数はスキップ
+    declaredFunctions.clear();
     for (const auto& func : program.functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0) {
+            continue;
+        }
+        declaredFunctions.insert(funcId);
         convertFunction(*func);
     }
 
@@ -159,10 +395,21 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         return;
     }
 
+    // ランタイム関数（cm_print_*, cm_println_*など）はスキップ
+    // これらはランタイムライブラリで実装されている
+    if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
+        func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
+        func.name.find("cm_double_to_string") == 0 || func.name.find("cm_float_to_string") == 0 ||
+        func.name.find("cm_bool_to_string") == 0 || func.name.find("cm_char_to_string") == 0 ||
+        func.name.find("cm_string_concat") == 0) {
+        return;
+    }
+
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMFunction, func.name,
                             cm::debug::Level::Debug);
 
-    currentFunction = functions[func.name];
+    auto funcId = generateFunctionId(func);
+    currentFunction = functions[funcId];
     currentMIRFunction = &func;
     locals.clear();
     blocks.clear();
@@ -196,6 +443,49 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
                     continue;
                 }
+
+                // 動的配列（スライス）の場合
+                if (local.type->kind == hir::TypeKind::Array &&
+                    !local.type->array_size.has_value()) {
+                    // スライスポインタを格納するallocaを作成
+                    auto alloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
+                                                        "slice_" + std::to_string(i));
+
+                    // 要素サイズを計算
+                    int64_t elemSize = 4;
+                    if (local.type->element_type) {
+                        auto elemKind = local.type->element_type->kind;
+                        if (elemKind == hir::TypeKind::Array) {
+                            // 多次元スライス: 要素はCmSlice構造体（32バイト）
+                            elemSize = 32;
+                        } else if (elemKind == hir::TypeKind::Long ||
+                                   elemKind == hir::TypeKind::ULong ||
+                                   elemKind == hir::TypeKind::Double ||
+                                   elemKind == hir::TypeKind::Pointer ||
+                                   elemKind == hir::TypeKind::String) {
+                            elemSize = 8;
+                        } else if (elemKind == hir::TypeKind::Char ||
+                                   elemKind == hir::TypeKind::Bool) {
+                            elemSize = 1;
+                        } else if (elemKind == hir::TypeKind::Short ||
+                                   elemKind == hir::TypeKind::UShort) {
+                            elemSize = 2;
+                        }
+                    }
+
+                    // cm_slice_new呼び出しでスライスを初期化
+                    auto sliceNewFunc = declareExternalFunction("cm_slice_new");
+                    auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
+                    auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
+                    auto slicePtr =
+                        builder->CreateCall(sliceNewFunc, {elemSizeVal, initialCap}, "slice_ptr");
+                    builder->CreateStore(slicePtr, alloca);
+
+                    locals[i] = alloca;
+                    allocatedLocals.insert(i);
+                    continue;
+                }
+
                 auto llvmType = convertType(local.type);
 
                 // static変数はグローバル変数として作成
@@ -219,6 +509,61 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));
                     locals[i] = alloca;
                     allocatedLocals.insert(i);  // allocaされた変数を記録
+
+                    // 構造体型の場合、スライスメンバーを初期化
+                    if (local.type->kind == hir::TypeKind::Struct) {
+                        auto structName = local.type->name;
+                        auto structDefIt = structDefs.find(structName);
+                        if (structDefIt != structDefs.end()) {
+                            const auto* structDef = structDefIt->second;
+                            auto* structLLVMType = structTypes[structName];
+
+                            for (size_t fieldIdx = 0; fieldIdx < structDef->fields.size();
+                                 ++fieldIdx) {
+                                const auto& field = structDef->fields[fieldIdx];
+                                // スライスフィールドを探す
+                                if (field.type && field.type->kind == hir::TypeKind::Array &&
+                                    !field.type->array_size.has_value()) {
+                                    // スライスフィールドのGEPを取得
+                                    auto fieldPtr =
+                                        builder->CreateStructGEP(structLLVMType, alloca, fieldIdx,
+                                                                 "slice_field_" + field.name);
+
+                                    // 要素サイズを計算
+                                    int64_t elemSize = 4;
+                                    if (field.type->element_type) {
+                                        auto elemKind = field.type->element_type->kind;
+                                        if (elemKind == hir::TypeKind::Long ||
+                                            elemKind == hir::TypeKind::ULong ||
+                                            elemKind == hir::TypeKind::Double ||
+                                            elemKind == hir::TypeKind::Pointer ||
+                                            elemKind == hir::TypeKind::String) {
+                                            elemSize = 8;
+                                        } else if (elemKind == hir::TypeKind::Char ||
+                                                   elemKind == hir::TypeKind::Bool) {
+                                            elemSize = 1;
+                                        } else if (elemKind == hir::TypeKind::Short ||
+                                                   elemKind == hir::TypeKind::UShort) {
+                                            elemSize = 2;
+                                        } else if (elemKind == hir::TypeKind::Struct) {
+                                            // 構造体のサイズはポインタサイズ（簡略化）
+                                            elemSize = 8;
+                                        }
+                                    }
+
+                                    // cm_slice_new呼び出しでスライスを初期化
+                                    auto sliceNewFunc = declareExternalFunction("cm_slice_new");
+                                    auto elemSizeVal =
+                                        llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
+                                    auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
+                                    auto slicePtr =
+                                        builder->CreateCall(sliceNewFunc, {elemSizeVal, initialCap},
+                                                            "slice_init_" + field.name);
+                                    builder->CreateStore(slicePtr, fieldPtr);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -237,17 +582,23 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
     // 基本ブロック作成
     for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
+        // DCEで削除されたブロックはスキップ
+        if (!func.basic_blocks[i])
+            continue;
         auto bbName = "bb" + std::to_string(i);
         blocks[i] = llvm::BasicBlock::Create(ctx.getContext(), bbName, currentFunction);
     }
 
     // 最初のブロックへジャンプ
-    if (!func.basic_blocks.empty()) {
+    if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
         builder->CreateBr(blocks[0]);
     }
 
     // 各ブロックを変換
     for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
+        // DCEで削除されたブロックはスキップ
+        if (!func.basic_blocks[i])
+            continue;
         convertBasicBlock(*func.basic_blocks[i]);
     }
 }

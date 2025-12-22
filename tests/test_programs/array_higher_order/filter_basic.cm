@@ -1,0 +1,22 @@
+// 配列.filter()のテスト
+import std::io::println;
+
+int main() {
+    int[5] arr = [1, 2, 3, 4, 5];
+    
+    // ラムダ式で偶数のみを抽出
+    bool*(int) is_even = (int x) => { return x % 2 == 0; };
+    
+    // filter呼び出し
+    int[] evens = arr.filter(is_even);
+    
+    // 結果の長さを確認（2と4が抽出されるので2）
+    uint len = evens.len();
+    println("Filter result length: {len}");
+    
+    if (len == 2) {
+        println("PASS");
+        return 0;
+    }
+    return 1;
+}

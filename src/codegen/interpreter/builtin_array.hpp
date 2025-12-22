@@ -12,13 +12,22 @@ inline void register_array_builtins(BuiltinRegistry& builtins) {
     builtins["__builtin_array_slice"] = [](std::vector<Value> args, const auto&) -> Value {
         // args: [array, elem_size, arr_len, start, end]
         if (args.size() < 5)
-            return Value(std::vector<Value>{});
+            return Value(SliceValue{});
 
-        // 配列を取得
-        if (args[0].type() != typeid(std::vector<Value>)) {
-            return Value(std::vector<Value>{});
+        // 配列を取得（複数の型に対応）
+        std::vector<Value> const* arr_ptr = nullptr;
+        if (args[0].type() == typeid(std::vector<Value>)) {
+            arr_ptr = &std::any_cast<const std::vector<Value>&>(args[0]);
+        } else if (args[0].type() == typeid(ArrayValue)) {
+            arr_ptr = &std::any_cast<const ArrayValue&>(args[0]).elements;
+        } else if (args[0].type() == typeid(SliceValue)) {
+            arr_ptr = &std::any_cast<const SliceValue&>(args[0]).elements;
         }
-        const auto& arr = std::any_cast<std::vector<Value>>(args[0]);
+
+        if (!arr_ptr) {
+            return Value(SliceValue{});
+        }
+        const auto& arr = *arr_ptr;
 
         int64_t arr_len = 0;
         if (args[2].type() == typeid(int64_t))
@@ -42,17 +51,17 @@ inline void register_array_builtins(BuiltinRegistry& builtins) {
         if (start < 0)
             start = std::max(int64_t{0}, arr_len + start);
         if (end < 0)
-            end = arr_len + end + 1;
+            end = arr_len + end;  // -1なら最後から1つ前まで
         if (end > arr_len)
             end = arr_len;
         if (start >= end || start >= arr_len) {
-            return Value(std::vector<Value>{});
+            return Value(SliceValue{});
         }
 
-        std::vector<Value> result;
+        SliceValue result;
         for (int64_t i = start; i < end; i++) {
             if (i < static_cast<int64_t>(arr.size())) {
-                result.push_back(arr[i]);
+                result.elements.push_back(arr[i]);
             }
         }
         return Value(result);
@@ -179,6 +188,155 @@ inline void register_array_builtins(BuiltinRegistry& builtins) {
     };
     builtins["__builtin_array_includes"] = includes_impl;
     builtins["__builtin_array_includes_i32"] = includes_impl;
+
+    // 配列 reverse
+    builtins["__builtin_array_reverse"] = [](std::vector<Value> args, const auto& locals) -> Value {
+        if (args.size() < 2)
+            return Value(SliceValue{});
+
+        // 配列またはスライスデータを取得
+        std::vector<Value> const* arr_ptr = nullptr;
+        if (args[0].type() == typeid(PointerValue)) {
+            const auto& pv = std::any_cast<PointerValue>(args[0]);
+            auto it = locals.find(pv.target_local);
+            if (it != locals.end() && it->second.type() == typeid(ArrayValue)) {
+                arr_ptr = &std::any_cast<const ArrayValue&>(it->second).elements;
+            } else if (it != locals.end() && it->second.type() == typeid(SliceValue)) {
+                arr_ptr = &std::any_cast<const SliceValue&>(it->second).elements;
+            }
+        } else if (args[0].type() == typeid(ArrayValue)) {
+            arr_ptr = &std::any_cast<const ArrayValue&>(args[0]).elements;
+        } else if (args[0].type() == typeid(SliceValue)) {
+            arr_ptr = &std::any_cast<const SliceValue&>(args[0]).elements;
+        }
+
+        if (!arr_ptr)
+            return Value(SliceValue{});
+
+        int64_t size = 0;
+        if (args[1].type() == typeid(int64_t))
+            size = std::any_cast<int64_t>(args[1]);
+
+        // サイズが0の場合は配列/スライスのサイズを使用
+        if (size == 0) {
+            size = static_cast<int64_t>(arr_ptr->size());
+        }
+
+        SliceValue result;
+        for (int64_t i = size - 1; i >= 0 && i < static_cast<int64_t>(arr_ptr->size()); i--) {
+            result.elements.push_back((*arr_ptr)[i]);
+        }
+        return Value(result);
+    };
+
+    // 配列 first
+    builtins["__builtin_array_first"] = [](std::vector<Value> args, const auto& locals) -> Value {
+        if (args.size() < 2)
+            return Value{};
+
+        // 配列データを取得
+        std::vector<Value> const* arr_ptr = nullptr;
+        if (args[0].type() == typeid(PointerValue)) {
+            const auto& pv = std::any_cast<PointerValue>(args[0]);
+            auto it = locals.find(pv.target_local);
+            if (it != locals.end() && it->second.type() == typeid(ArrayValue)) {
+                arr_ptr = &std::any_cast<const ArrayValue&>(it->second).elements;
+            } else if (it != locals.end() && it->second.type() == typeid(SliceValue)) {
+                arr_ptr = &std::any_cast<const SliceValue&>(it->second).elements;
+            }
+        } else if (args[0].type() == typeid(ArrayValue)) {
+            arr_ptr = &std::any_cast<const ArrayValue&>(args[0]).elements;
+        } else if (args[0].type() == typeid(SliceValue)) {
+            arr_ptr = &std::any_cast<const SliceValue&>(args[0]).elements;
+        }
+
+        if (!arr_ptr || arr_ptr->empty())
+            return Value{};
+
+        return (*arr_ptr)[0];
+    };
+
+    // 配列 last
+    builtins["__builtin_array_last"] = [](std::vector<Value> args, const auto& locals) -> Value {
+        if (args.size() < 2)
+            return Value{};
+
+        // 配列データを取得
+        std::vector<Value> const* arr_ptr = nullptr;
+        int64_t arr_len = 0;
+
+        if (args[0].type() == typeid(PointerValue)) {
+            const auto& pv = std::any_cast<PointerValue>(args[0]);
+            auto it = locals.find(pv.target_local);
+            if (it != locals.end() && it->second.type() == typeid(ArrayValue)) {
+                const auto& av = std::any_cast<const ArrayValue&>(it->second);
+                arr_ptr = &av.elements;
+                arr_len = static_cast<int64_t>(av.elements.size());
+            } else if (it != locals.end() && it->second.type() == typeid(SliceValue)) {
+                const auto& sv = std::any_cast<const SliceValue&>(it->second);
+                arr_ptr = &sv.elements;
+                arr_len = static_cast<int64_t>(sv.elements.size());
+            }
+        } else if (args[0].type() == typeid(ArrayValue)) {
+            const auto& av = std::any_cast<const ArrayValue&>(args[0]);
+            arr_ptr = &av.elements;
+            arr_len = static_cast<int64_t>(av.elements.size());
+        } else if (args[0].type() == typeid(SliceValue)) {
+            const auto& sv = std::any_cast<const SliceValue&>(args[0]);
+            arr_ptr = &sv.elements;
+            arr_len = static_cast<int64_t>(sv.elements.size());
+        }
+
+        // 引数のサイズが0でなければそれを使用、0ならば配列の実際のサイズを使用
+        int64_t size = 0;
+        if (args[1].type() == typeid(int64_t))
+            size = std::any_cast<int64_t>(args[1]);
+        if (size == 0)
+            size = arr_len;
+
+        if (!arr_ptr || arr_ptr->empty() || size <= 0)
+            return Value{};
+
+        int64_t idx = std::min(size - 1, static_cast<int64_t>(arr_ptr->size()) - 1);
+        return (*arr_ptr)[idx];
+    };
+
+    // サフィックス付きバージョンも登録（LLVMと互換性のため）
+    builtins["__builtin_array_first_i32"] = builtins["__builtin_array_first"];
+    builtins["__builtin_array_first_i64"] = builtins["__builtin_array_first"];
+    builtins["__builtin_array_last_i32"] = builtins["__builtin_array_last"];
+    builtins["__builtin_array_last_i64"] = builtins["__builtin_array_last"];
+    builtins["__builtin_array_find_i32"] = builtins["__builtin_array_find"];
+    builtins["__builtin_array_find_i64"] = builtins["__builtin_array_find"];
+
+    // スライス用のfirst/last（引数1つ版）
+    builtins["cm_slice_first_i32"] = [](std::vector<Value> args, const auto& /*locals*/) -> Value {
+        if (args.empty())
+            return Value{};
+
+        if (args[0].type() == typeid(SliceValue)) {
+            const auto& sv = std::any_cast<const SliceValue&>(args[0]);
+            if (sv.elements.empty())
+                return Value{};
+            return sv.elements[0];
+        }
+        return Value{};
+    };
+    builtins["cm_slice_first_i64"] = builtins["cm_slice_first_i32"];
+
+    builtins["cm_slice_last_i32"] = [](std::vector<Value> args, const auto& /*locals*/) -> Value {
+        if (args.empty())
+            return Value{};
+
+        if (args[0].type() == typeid(SliceValue)) {
+            const auto& sv = std::any_cast<const SliceValue&>(args[0]);
+            if (sv.elements.empty())
+                return Value{};
+            return sv.elements[sv.elements.size() - 1];
+        }
+        return Value{};
+    };
+    builtins["cm_slice_last_i64"] = builtins["cm_slice_last_i32"];
 }
 
 }  // namespace cm::mir::interp

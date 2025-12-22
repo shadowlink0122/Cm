@@ -702,7 +702,7 @@ ast::ExprPtr Parser::parse_primary() {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found '__sizeof__' intrinsic",
                         debug::Level::Debug);
         expect(TokenKind::LParen);
-        
+
         // sizeof と同じロジックで型または式を解析
         bool could_be_type = false;
         switch (current().kind) {
@@ -867,10 +867,112 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_struct_literal("", std::move(fields), Span{start_pos, previous().end});
     }
 
-    // 括弧式
+    // 括弧式またはラムダ式
     if (consume_if(TokenKind::LParen)) {
-        debug::par::log(debug::par::Id::ParenExpr, "Found parenthesized expression",
+        debug::par::log(debug::par::Id::ParenExpr, "Found parenthesized expression or lambda",
                         debug::Level::Trace);
+
+        // 空の括弧の場合、() => ... のラムダかもしれない
+        if (check(TokenKind::RParen)) {
+            advance();  // )を消費
+            if (check(TokenKind::Arrow)) {
+                // () => ... ラムダ式
+                advance();  // => を消費
+                return parse_lambda_body({}, start_pos);
+            }
+            // ()だけの場合はエラー
+            error("Empty parentheses without lambda body");
+            return ast::make_null_literal();
+        }
+
+        // ラムダ式のパラメータ: (int x) または (int x, int y)
+        // 通常の括弧式: (expr)
+
+        // 先読みのためにトークン位置を保存
+        size_t saved_pos = pos_;
+        size_t saved_diag_count = diagnostics_.size();
+        std::vector<ast::Param> potential_params;
+        bool could_be_lambda = true;
+
+        // ラムダの先読み: 最初のトークンが型キーワードかどうか
+        // 型キーワード: int, bool, float, etc. または識別子（ユーザー定義型）
+        // ただし、true/false/null などのリテラルキーワードは除外
+        auto is_type_start = [](TokenKind kind) {
+            switch (kind) {
+                case TokenKind::KwVoid:
+                case TokenKind::KwBool:
+                case TokenKind::KwTiny:
+                case TokenKind::KwShort:
+                case TokenKind::KwInt:
+                case TokenKind::KwLong:
+                case TokenKind::KwUtiny:
+                case TokenKind::KwUshort:
+                case TokenKind::KwUint:
+                case TokenKind::KwUlong:
+                case TokenKind::KwFloat:
+                case TokenKind::KwDouble:
+                case TokenKind::KwChar:
+                case TokenKind::KwString:
+                case TokenKind::Ident:
+                case TokenKind::Star:      // *Type (ポインタ)
+                case TokenKind::Amp:       // &Type (参照)
+                case TokenKind::LBracket:  // [Type] (配列)
+                    return true;
+                default:
+                    return false;
+            }
+        };
+
+        // 最初のトークンが型の開始でなければ通常の括弧式
+        if (!is_type_start(current().kind)) {
+            could_be_lambda = false;
+        }
+
+        // パラメータリストとして解析を試みる
+        while (could_be_lambda) {
+            // 型をパース
+            auto param_type = parse_type();
+            if (!param_type || param_type->kind == ast::TypeKind::Error) {
+                could_be_lambda = false;
+                break;
+            }
+
+            // パラメータ名
+            if (!check(TokenKind::Ident)) {
+                could_be_lambda = false;
+                break;
+            }
+
+            ast::Param param;
+            param.type = param_type;
+            param.name = std::string(current().get_string());
+            advance();
+
+            potential_params.push_back(std::move(param));
+
+            if (check(TokenKind::RParen)) {
+                advance();  // )を消費
+                break;
+            }
+            if (!consume_if(TokenKind::Comma)) {
+                could_be_lambda = false;
+                break;
+            }
+        }
+
+        // => があればラムダ式
+        if (could_be_lambda && check(TokenKind::Arrow)) {
+            advance();  // => を消費
+
+            return parse_lambda_body(std::move(potential_params), start_pos);
+        }
+
+        // ラムダではないので、位置を戻して通常の括弧式として処理
+        // パース中に追加されたエラーも削除
+        pos_ = saved_pos;
+        while (diagnostics_.size() > saved_diag_count) {
+            diagnostics_.pop_back();
+        }
         auto expr = parse_expr();
         expect(TokenKind::RParen);
         debug::par::log(debug::par::Id::ParenClose, "Closed parenthesized expression",
@@ -883,6 +985,29 @@ ast::ExprPtr Parser::parse_primary() {
     debug::par::log(debug::par::Id::ExprError, error_msg, debug::Level::Error);
     error("Expected expression");
     return ast::make_null_literal();
+}
+
+// ラムダ式本体の解析
+// (params) => expr または (params) => { stmts }
+ast::ExprPtr Parser::parse_lambda_body(std::vector<ast::Param> params, uint32_t start_pos) {
+    debug::par::log(debug::par::Id::PrimaryExpr, "Parsing lambda body", debug::Level::Debug);
+
+    auto lambda = std::make_unique<ast::LambdaExpr>();
+    lambda->params = std::move(params);
+    lambda->return_type = nullptr;  // 型は推論
+
+    if (check(TokenKind::LBrace)) {
+        // ブロック本体
+        auto block = parse_block();
+        lambda->body = std::move(block);
+    } else {
+        // 式本体
+        auto expr = parse_expr();
+        lambda->body = std::move(expr);
+    }
+
+    debug::par::log(debug::par::Id::PrimaryExpr, "Lambda expression parsed", debug::Level::Debug);
+    return std::make_unique<ast::Expr>(std::move(lambda), Span{start_pos, previous().end});
 }
 
 // match式の解析

@@ -30,12 +30,56 @@ struct ArrayValue {
     hir::TypePtr element_type;
 };
 
+/// スライス（動的配列）の値を表現
+struct SliceValue {
+    std::vector<Value> elements;
+    hir::TypePtr element_type;
+    size_t capacity = 0;
+
+    size_t len() const { return elements.size(); }
+    size_t cap() const { return capacity > elements.size() ? capacity : elements.size(); }
+
+    void push(const Value& val) { elements.push_back(val); }
+
+    Value pop() {
+        if (elements.empty())
+            return Value{};
+        Value val = elements.back();
+        elements.pop_back();
+        return val;
+    }
+
+    void remove(size_t idx) {
+        if (idx < elements.size()) {
+            elements.erase(elements.begin() + idx);
+        }
+    }
+
+    void clear() { elements.clear(); }
+
+    Value get(size_t idx) const {
+        if (idx < elements.size()) {
+            return elements[idx];
+        }
+        return Value{};
+    }
+
+    void set(size_t idx, const Value& val) {
+        if (idx < elements.size()) {
+            elements[idx] = val;
+        }
+    }
+};
+
 /// ポインタの値を表現
 struct PointerValue {
-    LocalId target_local;                // 参照先のローカル変数ID
+    LocalId target_local;  // 参照先のローカル変数ID（外部メモリの場合は0xFFFFFFFF）
     hir::TypePtr element_type;           // 参照先の型
     std::optional<int64_t> array_index;  // 配列要素への参照の場合のインデックス
     std::optional<size_t> field_index;  // 構造体フィールドへの参照の場合のフィールドインデックス
+    void* raw_ptr = nullptr;  // FFI経由の外部メモリへの生ポインタ
+
+    bool is_external() const { return raw_ptr != nullptr; }
 };
 
 // ============================================================
@@ -78,43 +122,57 @@ struct ExecutionContext {
                     "Initialized struct local _" + std::to_string(local.id) + " as " + sv.type_name,
                     debug::Level::Debug);
             }
-            // 配列型の場合はArrayValueとして初期化
+            // 配列型の場合
             else if (local.type && local.type->kind == hir::TypeKind::Array) {
-                ArrayValue av;
-                av.element_type = local.type->element_type;
-                // 固定サイズ配列の場合はサイズを設定
-                if (local.type->array_size) {
-                    av.elements.resize(*local.type->array_size);
-                    // 要素を初期化
-                    for (auto& elem : av.elements) {
-                        if (av.element_type) {
-                            if (av.element_type->kind == hir::TypeKind::Int ||
-                                av.element_type->kind == hir::TypeKind::Long) {
-                                elem = Value(int64_t{0});
-                            } else if (av.element_type->kind == hir::TypeKind::Double ||
-                                       av.element_type->kind == hir::TypeKind::Float) {
-                                elem = Value(double{0.0});
-                            } else if (av.element_type->kind == hir::TypeKind::Bool) {
-                                elem = Value(false);
-                            } else if (av.element_type->kind == hir::TypeKind::String) {
-                                elem = Value(std::string{});
-                            } else if (av.element_type->kind == hir::TypeKind::Struct) {
-                                StructValue sv;
-                                sv.type_name = av.element_type->name;
-                                elem = Value(sv);
+                // 動的配列（スライス）の場合はSliceValueとして初期化
+                if (!local.type->array_size.has_value()) {
+                    SliceValue sv;
+                    sv.element_type = local.type->element_type;
+                    sv.capacity = 4;  // 初期容量
+                    locals[local.id] = Value(sv);
+                    debug::interp::log(debug::interp::Id::LocalInit,
+                                       "Initialized slice local _" + std::to_string(local.id),
+                                       debug::Level::Debug);
+                }
+                // 固定サイズ配列の場合はArrayValueとして初期化
+                else {
+                    ArrayValue av;
+                    av.element_type = local.type->element_type;
+                    // 固定サイズ配列の場合はサイズを設定
+                    if (local.type->array_size) {
+                        av.elements.resize(*local.type->array_size);
+                        // 要素を初期化
+                        for (auto& elem : av.elements) {
+                            if (av.element_type) {
+                                if (av.element_type->kind == hir::TypeKind::Int ||
+                                    av.element_type->kind == hir::TypeKind::Long) {
+                                    elem = Value(int64_t{0});
+                                } else if (av.element_type->kind == hir::TypeKind::Double ||
+                                           av.element_type->kind == hir::TypeKind::Float) {
+                                    elem = Value(double{0.0});
+                                } else if (av.element_type->kind == hir::TypeKind::Bool) {
+                                    elem = Value(false);
+                                } else if (av.element_type->kind == hir::TypeKind::String) {
+                                    elem = Value(std::string{});
+                                } else if (av.element_type->kind == hir::TypeKind::Struct) {
+                                    StructValue sv;
+                                    sv.type_name = av.element_type->name;
+                                    elem = Value(sv);
+                                } else {
+                                    elem = Value(int64_t{0});
+                                }
                             } else {
                                 elem = Value(int64_t{0});
                             }
-                        } else {
-                            elem = Value(int64_t{0});
                         }
                     }
+                    locals[local.id] = Value(av);
+                    debug::interp::log(debug::interp::Id::LocalInit,
+                                       "Initialized array local _" + std::to_string(local.id) +
+                                           " with " + std::to_string(av.elements.size()) +
+                                           " elements",
+                                       debug::Level::Debug);
                 }
-                locals[local.id] = Value(av);
-                debug::interp::log(debug::interp::Id::LocalInit,
-                                   "Initialized array local _" + std::to_string(local.id) +
-                                       " with " + std::to_string(av.elements.size()) + " elements",
-                                   debug::Level::Debug);
             }
         }
     }

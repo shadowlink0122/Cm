@@ -4,6 +4,7 @@
 #include "builtin_array.hpp"
 #include "builtin_format.hpp"
 #include "builtin_io.hpp"
+#include "builtin_slice.hpp"
 #include "builtin_string.hpp"
 #include "types.hpp"
 
@@ -23,6 +24,7 @@ class BuiltinManager {
         register_io_builtins(builtins_);
         register_string_builtins(builtins_);
         register_array_builtins(builtins_);
+        register_slice_builtins(builtins_);
         register_std_io_functions();
         register_libc_ffi_functions();
     }
@@ -43,8 +45,9 @@ class BuiltinManager {
 
         // printf - フォーマット出力（簡易実装）
         builtins_["printf"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
-            if (args.empty()) return Value(int64_t(0));
-            
+            if (args.empty())
+                return Value(int64_t(0));
+
             std::string format;
             if (args[0].type() == typeid(std::string)) {
                 format = std::any_cast<std::string>(args[0]);
@@ -112,16 +115,30 @@ class BuiltinManager {
             if (!args.empty() && args[0].type() == typeid(int64_t)) {
                 size_t size = static_cast<size_t>(std::any_cast<int64_t>(args[0]));
                 void* ptr = std::malloc(size);
-                return Value(reinterpret_cast<int64_t>(ptr));
+                // PointerValueとして返す（外部メモリへの参照）
+                PointerValue pv;
+                pv.target_local = static_cast<LocalId>(-1);  // 無効なローカルID
+                pv.raw_ptr = ptr;
+                return Value(pv);
             }
-            return Value(int64_t(0));
+            PointerValue null_ptr;
+            null_ptr.target_local = static_cast<LocalId>(-1);
+            null_ptr.raw_ptr = nullptr;
+            return Value(null_ptr);
         };
 
         // free - メモリ解放
         builtins_["free"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
-            if (!args.empty() && args[0].type() == typeid(int64_t)) {
-                void* ptr = reinterpret_cast<void*>(std::any_cast<int64_t>(args[0]));
-                std::free(ptr);
+            if (!args.empty()) {
+                void* ptr = nullptr;
+                if (args[0].type() == typeid(PointerValue)) {
+                    ptr = std::any_cast<PointerValue>(args[0]).raw_ptr;
+                } else if (args[0].type() == typeid(int64_t)) {
+                    ptr = reinterpret_cast<void*>(std::any_cast<int64_t>(args[0]));
+                }
+                if (ptr) {
+                    std::free(ptr);
+                }
             }
             return Value{};
         };
@@ -137,20 +154,18 @@ class BuiltinManager {
         builtins_["std::io::print"] = [this](std::vector<Value> args, const auto& locals) -> Value {
             return format_println(args, locals, false);
         };
-        
+
         // println と print は短縮形（import std::io::println 後に使用）
-        builtins_["println"] = [this](std::vector<Value> args,
-                                      const auto& locals) -> Value {
+        builtins_["println"] = [this](std::vector<Value> args, const auto& locals) -> Value {
             return format_println(args, locals, true);
         };
 
         builtins_["print"] = [this](std::vector<Value> args, const auto& locals) -> Value {
             return format_println(args, locals, false);
         };
-        
+
         // __println__ と __print__ は内部実装として登録
-        builtins_["__println__"] = [this](std::vector<Value> args,
-                                          const auto& locals) -> Value {
+        builtins_["__println__"] = [this](std::vector<Value> args, const auto& locals) -> Value {
             return format_println(args, locals, true);
         };
 

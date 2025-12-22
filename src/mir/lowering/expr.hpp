@@ -37,6 +37,10 @@ class ExprLowering : public MirLoweringBase {
                     return lower_struct_literal(*expr_ptr, ctx);
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirArrayLiteral>>) {
                     return lower_array_literal(*expr_ptr, expr.type, ctx);
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLambda>>) {
+                    // ラムダはHIR段階で関数参照に変換されるため、ここには来ない
+                    // 万が一来た場合はエラー
+                    return ctx.new_temp(hir::make_error());
                 } else {
                     // 未実装の式種別
                     return ctx.new_temp(hir::make_error());
@@ -59,6 +63,11 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_struct_literal(const hir::HirStructLiteral& lit, LoweringContext& ctx);
     LocalId lower_array_literal(const hir::HirArrayLiteral& lit, const hir::TypePtr& expected_type,
                                 LoweringContext& ctx);
+
+    // メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
+    // 成功時はtrue、失敗時はfalseを返す
+    bool get_member_place(const hir::HirMember& mem, LoweringContext& ctx, MirPlace& out_place,
+                          hir::TypePtr& out_type);
 
     // 文字列補間の処理
     LocalId process_string_interpolation(const std::string& format_str,

@@ -37,10 +37,12 @@ HirProgram HirLowering::lower(ast::Program& program) {
         } else if (auto* imp = decl->as<ast::ImportDecl>()) {
             // importエイリアスを先に登録
             std::string path_str = imp->path.to_string();
-            debug::hir::log(debug::hir::Id::NodeCreate, "import path: " + path_str, debug::Level::Debug);
+            debug::hir::log(debug::hir::Id::NodeCreate, "import path: " + path_str,
+                            debug::Level::Debug);
             if (path_str == "std::io::println") {
                 import_aliases_["println"] = "__println__";
-                debug::hir::log(debug::hir::Id::NodeCreate, "registered alias: println -> __println__", debug::Level::Debug);
+                debug::hir::log(debug::hir::Id::NodeCreate,
+                                "registered alias: println -> __println__", debug::Level::Debug);
             } else if (path_str == "std::io::print") {
                 import_aliases_["print"] = "__print__";
             } else if (path_str == "std::io") {
@@ -63,6 +65,13 @@ HirProgram HirLowering::lower(ast::Program& program) {
             hir.declarations.push_back(std::move(hir_decl));
         }
     }
+
+    // ラムダ関数を追加
+    for (auto& lambda_func : lambda_functions_) {
+        auto decl = std::make_unique<HirDecl>(std::move(lambda_func));
+        hir.declarations.push_back(std::move(decl));
+    }
+    lambda_functions_.clear();
 
     debug::hir::log(debug::hir::Id::LowerEnd,
                     std::to_string(hir.declarations.size()) + " declarations");

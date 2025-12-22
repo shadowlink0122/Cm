@@ -12,6 +12,19 @@ typedef int bool;
 #endif
 
 // ============================================================
+// CmSlice Structure (used by array methods)
+// ============================================================
+#ifndef CM_SLICE_DEFINED
+#define CM_SLICE_DEFINED
+typedef struct {
+    void* data;
+    int64_t len;
+    int64_t cap;
+    int64_t elem_size;
+} CmSlice;
+#endif
+
+// ============================================================
 // String Length Function (defined here to avoid dependency issues)
 // ============================================================
 static size_t wasm_strlen(const char* str) {
@@ -50,6 +63,17 @@ char __builtin_string_charAt(const char* str, int64_t index) {
     size_t len = wasm_strlen(str);
     if ((size_t)index >= len) return '\0';
     return str[index];
+}
+
+char __builtin_string_first(const char* str) {
+    if (!str || str[0] == '\0') return '\0';
+    return str[0];
+}
+
+char __builtin_string_last(const char* str) {
+    if (!str || str[0] == '\0') return '\0';
+    size_t len = wasm_strlen(str);
+    return str[len - 1];
 }
 
 char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
@@ -242,38 +266,76 @@ char* __builtin_string_replace(const char* str, const char* from, const char* to
 // ============================================================
 void* __builtin_array_slice(void* arr, int64_t elem_size, int64_t arr_len, 
                             int64_t start, int64_t end, int64_t* out_len) {
+    // スライス構造体（runtime_slice.cと同じ形式）
+    typedef struct {
+        void* data;
+        int64_t len;
+        int64_t cap;
+        int64_t elem_size;
+    } CmSlice;
+    
     if (!arr || elem_size <= 0 || arr_len <= 0) {
         if (out_len) *out_len = 0;
-        return 0;
+        CmSlice* slice = (CmSlice*)wasm_alloc(sizeof(CmSlice));
+        if (slice) {
+            slice->data = 0;
+            slice->len = 0;
+            slice->cap = 0;
+            slice->elem_size = elem_size;
+        }
+        return slice;
     }
     
+    // Python風: 負のインデックス処理
     if (start < 0) {
         start = arr_len + start;
         if (start < 0) start = 0;
     }
     if (end < 0) {
-        end = arr_len + end + 1;
+        end = arr_len + end;
+        if (end < 0) end = 0;
     }
     if (end > arr_len) end = arr_len;
     if (start >= end || start >= arr_len) {
         if (out_len) *out_len = 0;
-        return 0;
+        CmSlice* slice = (CmSlice*)wasm_alloc(sizeof(CmSlice));
+        if (slice) {
+            slice->data = 0;
+            slice->len = 0;
+            slice->cap = 0;
+            slice->elem_size = elem_size;
+        }
+        return slice;
     }
     
     int64_t slice_len = end - start;
-    char* result = (char*)wasm_alloc((size_t)(slice_len * elem_size));
-    if (!result) {
+    
+    // CmSlice構造体を作成
+    CmSlice* slice = (CmSlice*)wasm_alloc(sizeof(CmSlice));
+    if (!slice) {
+        if (out_len) *out_len = 0;
+        return 0;
+    }
+    
+    slice->data = wasm_alloc((size_t)(slice_len * elem_size));
+    if (!slice->data) {
         if (out_len) *out_len = 0;
         return 0;
     }
     
     // memcpyの代わりにバイト単位でコピー
     char* src = (char*)arr + (start * elem_size);
+    char* dst = (char*)slice->data;
     for (int64_t i = 0; i < slice_len * elem_size; i++) {
-        result[i] = src[i];
+        dst[i] = src[i];
     }
+    
+    slice->len = slice_len;
+    slice->cap = slice_len;
+    slice->elem_size = elem_size;
+    
     if (out_len) *out_len = slice_len;
-    return result;
+    return slice;
 }
 
 int64_t* __builtin_array_slice_int(int64_t* arr, int64_t arr_len,
@@ -1459,14 +1521,37 @@ char* cm_format_string(const char* fmt, ...) {
 }
 
 // ============================================================
-// String Compare
+// String Compare (Cm runtime functions)
 // ============================================================
-int strcmp(const char* s1, const char* s2) {
+int cm_strcmp(const char* s1, const char* s2) {
+    if (!s1 && !s2) return 0;
+    if (!s1) return -1;
+    if (!s2) return 1;
+    
     while (*s1 && (*s1 == *s2)) {
         s1++;
         s2++;
     }
     return (unsigned char)*s1 - (unsigned char)*s2;
+}
+
+int cm_strncmp(const char* s1, const char* s2, size_t n) {
+    if (!s1 && !s2) return 0;
+    if (!s1) return -1;
+    if (!s2) return 1;
+    
+    while (n > 0 && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0) return 0;
+    return (unsigned char)*s1 - (unsigned char)*s2;
+}
+
+// libc compatibility alias
+int strcmp(const char* s1, const char* s2) {
+    return cm_strcmp(s1, s2);
 }
 
 // ============================================================
@@ -1550,6 +1635,83 @@ int64_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, _Bool (*predic
     return -1;
 }
 
+// sortBy: カスタム比較関数でソートしたコピーを返す
+void* __builtin_array_sortBy_i32(int32_t* arr, int64_t size, int (*comparator)(int32_t, int32_t)) {
+    CmSlice* slice = (CmSlice*)wasm_alloc(sizeof(CmSlice));
+    if (!slice) return NULL;
+    
+    if (!arr || size <= 0 || !comparator) {
+        slice->data = NULL;
+        slice->len = 0;
+        return slice;
+    }
+    
+    int32_t* result = (int32_t*)wasm_alloc(size * sizeof(int32_t));
+    if (!result) {
+        return NULL;
+    }
+    
+    // コピー
+    for (int64_t i = 0; i < size; i++) {
+        result[i] = arr[i];
+    }
+    
+    // ソート（バブルソート）
+    for (int64_t i = 0; i < size - 1; i++) {
+        for (int64_t j = i + 1; j < size; j++) {
+            if (comparator(result[i], result[j]) > 0) {
+                int32_t tmp = result[i];
+                result[i] = result[j];
+                result[j] = tmp;
+            }
+        }
+    }
+    
+    slice->data = result;
+    slice->len = size;
+    return slice;
+}
+
+void* __builtin_array_sortBy_i64(int64_t* arr, int64_t size, int (*comparator)(int64_t, int64_t)) {
+    CmSlice* slice = (CmSlice*)wasm_alloc(sizeof(CmSlice));
+    if (!slice) return NULL;
+    
+    if (!arr || size <= 0 || !comparator) {
+        slice->data = NULL;
+        slice->len = 0;
+        return slice;
+    }
+    
+    int64_t* result = (int64_t*)wasm_alloc(size * sizeof(int64_t));
+    if (!result) {
+        return NULL;
+    }
+    
+    // コピー
+    for (int64_t i = 0; i < size; i++) {
+        result[i] = arr[i];
+    }
+    
+    // ソート（バブルソート）
+    for (int64_t i = 0; i < size - 1; i++) {
+        for (int64_t j = i + 1; j < size; j++) {
+            if (comparator(result[i], result[j]) > 0) {
+                int64_t tmp = result[i];
+                result[i] = result[j];
+                result[j] = tmp;
+            }
+        }
+    }
+    
+    slice->data = result;
+    slice->len = size;
+    return slice;
+}
+
+void* __builtin_array_sortBy(int32_t* arr, int64_t size, int (*comparator)(int32_t, int32_t)) {
+    return __builtin_array_sortBy_i32(arr, size, comparator);
+}
+
 // forEach: 各要素に関数を適用
 void __builtin_array_forEach_i64(int64_t* arr, int64_t size, void (*callback)(int64_t)) {
     if (!arr || !callback) return;
@@ -1584,4 +1746,204 @@ int32_t __builtin_array_reduce_i32(int32_t* arr, int64_t size,
         acc = callback(acc, arr[i]);
     }
     return acc;
+}
+
+// ============================================================
+// Array first/last/find Functions
+// ============================================================
+
+// first: 配列の最初の要素を返す
+int32_t __builtin_array_first_i32(int32_t* arr, int64_t size) {
+    if (!arr || size <= 0) return 0;
+    return arr[0];
+}
+
+int64_t __builtin_array_first_i64(int64_t* arr, int64_t size) {
+    if (!arr || size <= 0) return 0;
+    return arr[0];
+}
+
+// last: 配列の最後の要素を返す
+int32_t __builtin_array_last_i32(int32_t* arr, int64_t size) {
+    if (!arr || size <= 0) return 0;
+    return arr[size - 1];
+}
+
+int64_t __builtin_array_last_i64(int64_t* arr, int64_t size) {
+    if (!arr || size <= 0) return 0;
+    return arr[size - 1];
+}
+
+// find: 条件に合う最初の要素を返す
+int32_t __builtin_array_find_i32(int32_t* arr, int64_t size, _Bool (*predicate)(int32_t)) {
+    if (!arr || !predicate) return 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(arr[i])) return arr[i];
+    }
+    return 0;
+}
+
+int64_t __builtin_array_find_i64(int64_t* arr, int64_t size, _Bool (*predicate)(int64_t)) {
+    if (!arr || !predicate) return 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(arr[i])) return arr[i];
+    }
+    return 0;
+}
+
+// ============================================================
+// Array reverse/sort Functions (returning CmSlice)
+// ============================================================
+
+typedef struct {
+    void* data;
+    int64_t len;
+    int64_t cap;
+    int64_t elem_size;
+} CmSlice_wasm;
+
+// reverse: 配列を逆順にしたコピーを返す
+void* __builtin_array_reverse_i32(int32_t* arr, int64_t size) {
+    CmSlice_wasm* slice = (CmSlice_wasm*)wasm_alloc(sizeof(CmSlice_wasm));
+    if (!slice) return NULL;
+    
+    if (!arr || size <= 0) {
+        slice->data = NULL;
+        slice->len = 0;
+        slice->cap = 0;
+        slice->elem_size = sizeof(int32_t);
+        return slice;
+    }
+    
+    int32_t* result = (int32_t*)wasm_alloc(size * sizeof(int32_t));
+    if (!result) {
+        return NULL;
+    }
+    for (int64_t i = 0; i < size; i++) {
+        result[i] = arr[size - 1 - i];
+    }
+    
+    slice->data = result;
+    slice->len = size;
+    slice->cap = size;
+    slice->elem_size = sizeof(int32_t);
+    return slice;
+}
+
+void* __builtin_array_reverse_i64(int64_t* arr, int64_t size) {
+    CmSlice_wasm* slice = (CmSlice_wasm*)wasm_alloc(sizeof(CmSlice_wasm));
+    if (!slice) return NULL;
+    
+    if (!arr || size <= 0) {
+        slice->data = NULL;
+        slice->len = 0;
+        slice->cap = 0;
+        slice->elem_size = sizeof(int64_t);
+        return slice;
+    }
+    
+    int64_t* result = (int64_t*)wasm_alloc(size * sizeof(int64_t));
+    if (!result) {
+        return NULL;
+    }
+    for (int64_t i = 0; i < size; i++) {
+        result[i] = arr[size - 1 - i];
+    }
+    
+    slice->data = result;
+    slice->len = size;
+    slice->cap = size;
+    slice->elem_size = sizeof(int64_t);
+    return slice;
+}
+
+void* __builtin_array_reverse(int32_t* arr, int64_t size) {
+    return __builtin_array_reverse_i32(arr, size);
+}
+
+// sort: 配列をソートしたコピーを返す（単純なバブルソート）
+static void wasm_sort_i32(int32_t* arr, int64_t size) {
+    for (int64_t i = 0; i < size - 1; i++) {
+        for (int64_t j = 0; j < size - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                int32_t temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+static void wasm_sort_i64(int64_t* arr, int64_t size) {
+    for (int64_t i = 0; i < size - 1; i++) {
+        for (int64_t j = 0; j < size - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                int64_t temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void* __builtin_array_sort_i32(int32_t* arr, int64_t size) {
+    CmSlice_wasm* slice = (CmSlice_wasm*)wasm_alloc(sizeof(CmSlice_wasm));
+    if (!slice) return NULL;
+    
+    if (!arr || size <= 0) {
+        slice->data = NULL;
+        slice->len = 0;
+        slice->cap = 0;
+        slice->elem_size = sizeof(int32_t);
+        return slice;
+    }
+    
+    int32_t* result = (int32_t*)wasm_alloc(size * sizeof(int32_t));
+    if (!result) {
+        return NULL;
+    }
+    // コピー
+    for (int64_t i = 0; i < size; i++) {
+        result[i] = arr[i];
+    }
+    wasm_sort_i32(result, size);
+    
+    slice->data = result;
+    slice->len = size;
+    slice->cap = size;
+    slice->elem_size = sizeof(int32_t);
+    return slice;
+}
+
+void* __builtin_array_sort_i64(int64_t* arr, int64_t size) {
+    CmSlice_wasm* slice = (CmSlice_wasm*)wasm_alloc(sizeof(CmSlice_wasm));
+    if (!slice) return NULL;
+    
+    if (!arr || size <= 0) {
+        slice->data = NULL;
+        slice->len = 0;
+        slice->cap = 0;
+        slice->elem_size = sizeof(int64_t);
+        return slice;
+    }
+    
+    int64_t* result = (int64_t*)wasm_alloc(size * sizeof(int64_t));
+    if (!result) {
+        return NULL;
+    }
+    // コピー
+    for (int64_t i = 0; i < size; i++) {
+        result[i] = arr[i];
+    }
+    wasm_sort_i64(result, size);
+    
+    slice->data = result;
+    slice->len = size;
+    slice->cap = size;
+    slice->elem_size = sizeof(int64_t);
+    return slice;
+}
+
+void* __builtin_array_sort(int32_t* arr, int64_t size) {
+    return __builtin_array_sort_i32(arr, size);
 }

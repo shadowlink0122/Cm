@@ -215,12 +215,16 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
 
     if (for_in.var_type) {
         auto resolved_type = resolve_typedef(for_in.var_type);
-        if (!types_compatible(resolved_type, element_type)) {
+        // auto（Inferred型）の場合は要素型を使用
+        if (resolved_type->kind == ast::TypeKind::Inferred) {
+            for_in.var_type = element_type;
+        } else if (!types_compatible(resolved_type, element_type)) {
             error(stmt_span, "For-in variable type mismatch: expected '" +
                                  ast::type_to_string(*element_type) + "', got '" +
                                  ast::type_to_string(*resolved_type) + "'");
+        } else {
+            for_in.var_type = resolved_type;
         }
-        for_in.var_type = resolved_type;
     } else {
         for_in.var_type = element_type;
     }

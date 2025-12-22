@@ -123,6 +123,121 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             }
 
             // ============================================================
+            // 配列スライス呼び出し
+            // ============================================================
+            if (funcName == "__builtin_array_slice") {
+                // 引数: arr, elem_size, arr_len, start, end
+                // ランタイム関数: void* __builtin_array_slice(void* arr, i64 elem_size, i64
+                // arr_len, i64 start, i64 end, i64* out_len)
+
+                std::vector<llvm::Value*> args;
+                for (const auto& arg : callData.args) {
+                    args.push_back(convertOperand(*arg));
+                }
+
+                // 最初の引数（配列）をポインタに変換
+                llvm::Value* arrPtr = args[0];
+                if (arrPtr->getType()->isArrayTy()) {
+                    // 配列をallocaに格納してポインタを取得
+                    auto arrAlloca = builder->CreateAlloca(arrPtr->getType(), nullptr, "arr_tmp");
+                    builder->CreateStore(arrPtr, arrAlloca);
+                    arrPtr = builder->CreateBitCast(arrAlloca, ctx.getPtrType(), "arr_ptr");
+                } else if (!arrPtr->getType()->isPointerTy()) {
+                    arrPtr = builder->CreateIntToPtr(arrPtr, ctx.getPtrType(), "arr_ptr");
+                }
+
+                // out_len用のallocaを作成
+                auto outLenAlloca = builder->CreateAlloca(ctx.getI64Type(), nullptr, "out_len");
+                builder->CreateStore(llvm::ConstantInt::get(ctx.getI64Type(), 0), outLenAlloca);
+
+                // ランタイム関数を取得
+                auto sliceFunc = declareExternalFunction("__builtin_array_slice");
+
+                // 引数を整数型に変換（必要な場合）
+                std::vector<llvm::Value*> callArgs;
+                callArgs.push_back(arrPtr);  // void* arr
+                for (size_t i = 1; i < args.size() && i <= 4; ++i) {
+                    auto arg = args[i];
+                    if (arg->getType() != ctx.getI64Type()) {
+                        if (arg->getType()->isIntegerTy()) {
+                            arg = builder->CreateSExt(arg, ctx.getI64Type(), "sext");
+                        }
+                    }
+                    callArgs.push_back(arg);
+                }
+                // out_lenポインタをi8*にキャスト（LLVM 14互換性のため）
+                auto outLenCast =
+                    builder->CreateBitCast(outLenAlloca, ctx.getPtrType(), "out_len_cast");
+                callArgs.push_back(outLenCast);  // i8* out_len
+
+                auto result = builder->CreateCall(sliceFunc, callArgs, "slice_result");
+
+                if (callData.destination) {
+                    locals[callData.destination->local] = result;
+                }
+
+                if (callData.success != mir::INVALID_BLOCK) {
+                    builder->CreateBr(blocks[callData.success]);
+                }
+                break;
+            }
+
+            // ============================================================
+            // 固定配列比較呼び出し
+            // ============================================================
+            if (funcName == "cm_array_equal") {
+                // 引数: lhs, rhs, lhs_len, rhs_len, elem_size
+                // ランタイム関数: bool cm_array_equal(void* lhs, void* rhs, i64 lhs_len, i64
+                // rhs_len, i64 elem_size)
+
+                std::vector<llvm::Value*> args;
+                for (const auto& arg : callData.args) {
+                    args.push_back(convertOperand(*arg));
+                }
+
+                // lhsとrhsをポインタに変換
+                auto convertToPtr = [&](llvm::Value* val) -> llvm::Value* {
+                    if (val->getType()->isArrayTy()) {
+                        auto arrAlloca = builder->CreateAlloca(val->getType(), nullptr, "arr_tmp");
+                        builder->CreateStore(val, arrAlloca);
+                        return builder->CreateBitCast(arrAlloca, ctx.getPtrType(), "arr_ptr");
+                    } else if (!val->getType()->isPointerTy()) {
+                        return builder->CreateIntToPtr(val, ctx.getPtrType(), "arr_ptr");
+                    }
+                    return val;
+                };
+
+                llvm::Value* lhsPtr = convertToPtr(args[0]);
+                llvm::Value* rhsPtr = convertToPtr(args[1]);
+
+                // 残りの引数を整数型に変換
+                std::vector<llvm::Value*> callArgs;
+                callArgs.push_back(lhsPtr);
+                callArgs.push_back(rhsPtr);
+                for (size_t i = 2; i < args.size(); ++i) {
+                    auto arg = args[i];
+                    if (arg->getType() != ctx.getI64Type()) {
+                        if (arg->getType()->isIntegerTy()) {
+                            arg = builder->CreateSExt(arg, ctx.getI64Type(), "sext");
+                        }
+                    }
+                    callArgs.push_back(arg);
+                }
+
+                auto equalFunc = declareExternalFunction("cm_array_equal");
+                auto result = builder->CreateCall(equalFunc, callArgs, "array_eq_result");
+
+                if (callData.destination) {
+                    locals[callData.destination->local] = result;
+                }
+
+                if (callData.success != mir::INVALID_BLOCK) {
+                    builder->CreateBr(blocks[callData.success]);
+                }
+                break;
+            }
+
+            // ============================================================
             // 通常の関数呼び出し
             // ============================================================
             std::vector<llvm::Value*> args;
@@ -255,7 +370,9 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // 間接呼び出しの場合は直接呼び出しの処理をスキップ
             llvm::Function* callee = nullptr;
             if (!isIndirectCall && !funcName.empty()) {
-                callee = functions[funcName];
+                // オーバーロード対応：引数の型から関数IDを生成
+                auto funcId = generateCallFunctionId(funcName, callData.args);
+                callee = functions[funcId];
                 if (!callee) {
                     callee = declareExternalFunction(funcName);
                 }

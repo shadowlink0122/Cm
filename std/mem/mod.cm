@@ -1,0 +1,20 @@
+// std.mem - メモリ管理モジュール
+// FFI経由でlibc関数を公開
+// 
+// 使用例:
+//   import std::mem;
+//   // use libc { malloc, free } が展開される
+//
+module mem;
+
+// ============================================================
+// libc FFI宣言（インポート時にそのまま展開される）
+// ============================================================
+use libc {
+    void* malloc(usize size);
+    void* calloc(usize nmemb, usize size);
+    void* realloc(void* ptr, usize size);
+    void free(void* ptr);
+}
+
+export { malloc, calloc, realloc, free };

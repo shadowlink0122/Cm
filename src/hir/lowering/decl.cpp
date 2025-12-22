@@ -305,8 +305,7 @@ HirDeclPtr HirLowering::lower_import(ast::ImportDecl& imp) {
 
 // Use（FFI/モジュール）
 HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
-    debug::hir::log(debug::hir::Id::NodeCreate, "use " + use.path.to_string(),
-                    debug::Level::Trace);
+    debug::hir::log(debug::hir::Id::NodeCreate, "use " + use.path.to_string(), debug::Level::Trace);
 
     // FFI useの場合はexternブロックとして処理
     if (use.kind == ast::UseDecl::FFIUse) {

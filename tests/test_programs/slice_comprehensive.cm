@@ -1,0 +1,35 @@
+// スライスのLLVMバックエンドテスト
+
+int main() {
+    // 配列リテラルからスライス初期化
+    int[] arr = [1, 2, 3];
+    
+    // 要素数を表示
+    println("Initial length: {arr.len()}");
+    println("Initial capacity: {arr.cap()}");
+    
+    // 要素を追加
+    arr.push(4);
+    arr.push(5);
+    
+    println("After push: length = {arr.len()}");
+    
+    // 要素を取得
+    println("arr[0] = {arr[0]}");
+    println("arr[3] = {arr[3]}");
+    
+    // popで要素を削除
+    int val = arr.pop();
+    println("Popped value: {val}");
+    println("After pop: length = {arr.len()}");
+    
+    // removeで要素を削除
+    arr.remove(1);  // インデックス1を削除
+    println("After remove(1): length = {arr.len()}");
+    
+    // clearで全要素削除
+    arr.clear();
+    println("After clear: length = {arr.len()}");
+    
+    return 0;
+}

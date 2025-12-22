@@ -94,16 +94,22 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     // デフォルトのreturn
     auto* current = ctx.get_current_block();
     if (current && !current->terminator) {
-        MirConstant default_return;
-        default_return.type = resolved_return_type;
-        if (resolved_return_type && resolved_return_type->is_floating()) {
-            default_return.value = 0.0;
-        } else {
-            default_return.value = int64_t(0);
-        }
+        // 戻り値がvoid、構造体、配列（動的スライス含む）型でない場合のみデフォルト値を設定
+        if (resolved_return_type && resolved_return_type->kind != hir::TypeKind::Void &&
+            resolved_return_type->kind != hir::TypeKind::Struct &&
+            resolved_return_type->kind != hir::TypeKind::Array) {
+            MirConstant default_return;
+            default_return.type = resolved_return_type;
+            if (resolved_return_type->is_floating()) {
+                default_return.value = 0.0;
+            } else {
+                // すべての型で整数0を使用（LLVMコード生成側で適切に変換）
+                default_return.value = int64_t(0);
+            }
 
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{0}, MirRvalue::use(MirOperand::constant(default_return))));
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{0}, MirRvalue::use(MirOperand::constant(default_return))));
+        }
         ctx.set_terminator(MirTerminator::return_value());
     }
 
@@ -181,12 +187,13 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         // デストラクタを呼び出す
         emit_destructors(ctx);
 
-        // 構造体やvoid型はデフォルト値代入をスキップ
+        // 構造体、void、配列（動的スライス含む）型はデフォルト値代入をスキップ
         bool skip_default_assign = false;
         auto resolved_return_type = resolve_typedef(func.return_type);
         if (resolved_return_type) {
             if (resolved_return_type->kind == hir::TypeKind::Struct ||
-                resolved_return_type->kind == hir::TypeKind::Void) {
+                resolved_return_type->kind == hir::TypeKind::Void ||
+                resolved_return_type->kind == hir::TypeKind::Array) {
                 skip_default_assign = true;
             }
         }

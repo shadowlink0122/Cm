@@ -263,11 +263,10 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
     auto hir_for = std::make_unique<HirFor>();
 
     auto iterable_type = for_in.iterable->type;
-    uint32_t size = 0;
-    if (iterable_type && iterable_type->kind == ast::TypeKind::Array &&
-        iterable_type->array_size.has_value()) {
-        size = iterable_type->array_size.value();
-    }
+    bool is_fixed_array = iterable_type && iterable_type->kind == ast::TypeKind::Array &&
+                          iterable_type->array_size.has_value();
+    bool is_slice = iterable_type && iterable_type->kind == ast::TypeKind::Array &&
+                    !iterable_type->array_size.has_value();
 
     std::string idx_name = "__for_in_idx_" + for_in.var_name;
 
@@ -280,15 +279,30 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
     init_let->init = std::make_unique<HirExpr>(std::move(zero_lit), ast::make_int());
     hir_for->init = std::make_unique<HirStmt>(std::move(init_let));
 
-    // cond: __i < size
+    // cond: __i < size (固定配列) または __i < slice.len() (スライス)
     auto idx_ref = std::make_unique<HirVarRef>();
     idx_ref->name = idx_name;
-    auto size_lit = std::make_unique<HirLiteral>();
-    size_lit->value = static_cast<int64_t>(size);
     auto cond_binary = std::make_unique<HirBinary>();
     cond_binary->op = HirBinaryOp::Lt;
     cond_binary->lhs = std::make_unique<HirExpr>(std::move(idx_ref), ast::make_int());
-    cond_binary->rhs = std::make_unique<HirExpr>(std::move(size_lit), ast::make_int());
+
+    if (is_fixed_array) {
+        uint32_t size = iterable_type->array_size.value();
+        auto size_lit = std::make_unique<HirLiteral>();
+        size_lit->value = static_cast<int64_t>(size);
+        cond_binary->rhs = std::make_unique<HirExpr>(std::move(size_lit), ast::make_int());
+    } else if (is_slice) {
+        // スライスの場合: iterable.len() を呼び出す
+        auto len_call = std::make_unique<HirCall>();
+        len_call->func_name = "__builtin_slice_len";
+        len_call->args.push_back(lower_expr(*for_in.iterable));
+        cond_binary->rhs = std::make_unique<HirExpr>(std::move(len_call), ast::make_int());
+    } else {
+        // その他（エラーケース）: 0回ループ
+        auto zero = std::make_unique<HirLiteral>();
+        zero->value = int64_t{0};
+        cond_binary->rhs = std::make_unique<HirExpr>(std::move(zero), ast::make_int());
+    }
     hir_for->cond = std::make_unique<HirExpr>(std::move(cond_binary), ast::make_bool());
 
     // update: __i = __i + 1

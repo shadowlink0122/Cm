@@ -81,6 +81,7 @@ class TypeChecker {
     ast::TypePtr infer_index(ast::IndexExpr& idx);
     ast::TypePtr infer_slice(ast::SliceExpr& slice);
     ast::TypePtr infer_match(ast::MatchExpr& match_expr);
+    ast::TypePtr infer_lambda(ast::LambdaExpr& lambda);
 
     // ============================================================
     // 関数/メソッド呼び出し (call.cpp)

@@ -246,13 +246,14 @@ if(CM_USE_LLVM)
         
         # Build LLVM runtime library
         # Cランタイムをコンパイルしてbuild/lib/に配置
+        # -ffunction-sections: 関数ごとにセクションを分離（デッドコード削除を有効化）
         set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
         set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
         add_custom_command(
             OUTPUT ${CM_RUNTIME_OUTPUT}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 ${CM_RUNTIME_ARCH_FLAG}
+            COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
             COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
         )

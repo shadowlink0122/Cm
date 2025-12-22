@@ -46,8 +46,13 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
         case hir::TypeKind::Reference:
             return ctx.getPtrType();
         case hir::TypeKind::Array: {
+            // 動的配列（スライス）の場合はポインタ型を返す
+            if (!type->array_size.has_value()) {
+                return ctx.getPtrType();
+            }
+            // 静的配列の場合は配列型を返す
             auto elemType = convertType(type->element_type);
-            size_t size = type->array_size.value_or(0);
+            size_t size = type->array_size.value();
             return llvm::ArrayType::get(elemType, size);
         }
         case hir::TypeKind::Struct: {
@@ -120,8 +125,48 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
         // 文字リテラルはi8として生成
         return llvm::ConstantInt::get(ctx.getI8Type(), std::get<char>(constant.value));
     } else if (std::holds_alternative<int64_t>(constant.value)) {
-        return llvm::ConstantInt::get(ctx.getI32Type(), std::get<int64_t>(constant.value));
+        int64_t val = std::get<int64_t>(constant.value);
+
+        // 型情報がある場合、適切な型で生成
+        if (constant.type) {
+            switch (constant.type->kind) {
+                case hir::TypeKind::Pointer:
+                case hir::TypeKind::Reference:
+                case hir::TypeKind::String:
+                case hir::TypeKind::CString:
+                    // ポインタ型の場合は null pointer
+                    return llvm::ConstantPointerNull::get(
+                        llvm::PointerType::get(ctx.getContext(), 0));
+                case hir::TypeKind::Array:
+                    // 動的配列（スライス）の場合もポインタ
+                    if (!constant.type->array_size.has_value()) {
+                        return llvm::ConstantPointerNull::get(
+                            llvm::PointerType::get(ctx.getContext(), 0));
+                    }
+                    break;
+                case hir::TypeKind::Long:
+                case hir::TypeKind::ULong:
+                case hir::TypeKind::ISize:
+                case hir::TypeKind::USize:
+                    return llvm::ConstantInt::get(ctx.getI64Type(), val);
+                case hir::TypeKind::Short:
+                case hir::TypeKind::UShort:
+                    return llvm::ConstantInt::get(ctx.getI16Type(), val);
+                case hir::TypeKind::Tiny:
+                case hir::TypeKind::UTiny:
+                case hir::TypeKind::Char:
+                    return llvm::ConstantInt::get(ctx.getI8Type(), val);
+                default:
+                    break;
+            }
+        }
+        return llvm::ConstantInt::get(ctx.getI32Type(), val);
     } else if (std::holds_alternative<double>(constant.value)) {
+        // 型情報がある場合、適切な浮動小数点型で生成
+        if (constant.type && (constant.type->kind == hir::TypeKind::Float ||
+                              constant.type->kind == hir::TypeKind::UFloat)) {
+            return llvm::ConstantFP::get(ctx.getF32Type(), std::get<double>(constant.value));
+        }
         return llvm::ConstantFP::get(ctx.getF64Type(), std::get<double>(constant.value));
     } else if (std::holds_alternative<std::string>(constant.value)) {
         // 文字列リテラル
@@ -129,6 +174,16 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
         return builder->CreateGlobalStringPtr(str, "str");
     } else {
         // nullまたは未知の型
+        if (constant.type) {
+            if (constant.type->kind == hir::TypeKind::Pointer ||
+                constant.type->kind == hir::TypeKind::Reference ||
+                constant.type->kind == hir::TypeKind::String ||
+                constant.type->kind == hir::TypeKind::CString ||
+                (constant.type->kind == hir::TypeKind::Array &&
+                 !constant.type->array_size.has_value())) {
+                return llvm::ConstantPointerNull::get(llvm::PointerType::get(ctx.getContext(), 0));
+            }
+        }
         return llvm::Constant::getNullValue(ctx.getI32Type());
     }
 }

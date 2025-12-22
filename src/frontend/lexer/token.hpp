@@ -72,7 +72,7 @@ enum class TokenKind {
     KwWhere,  // where clause for type constraints
     KwWhile,
     KwWith,
-    
+
     // コンパイラ組み込み関数（真のインライン）
     KwIntrinsicSizeof,    // __sizeof__
     KwIntrinsicTypeof,    // __typeof__
@@ -88,8 +88,8 @@ enum class TokenKind {
     KwUshort,
     KwLong,
     KwUlong,
-    KwIsize,    // ポインタサイズ符号付き (FFI用)
-    KwUsize,    // ポインタサイズ符号なし (FFI用)
+    KwIsize,  // ポインタサイズ符号付き (FFI用)
+    KwUsize,  // ポインタサイズ符号なし (FFI用)
     KwFloat,
     KwDouble,
     KwUfloat,

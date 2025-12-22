@@ -24,8 +24,11 @@ class HirLowering {
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
     std::unordered_set<std::string> types_with_default_ctor_;
-    std::unordered_map<std::string, TypePtr> typedef_defs_;  // typedef定義
+    std::unordered_map<std::string, TypePtr> typedef_defs_;        // typedef定義
     std::unordered_map<std::string, std::string> import_aliases_;  // インポートエイリアス
+
+    // ラムダ関数のリスト（後でプログラムに追加）
+    std::vector<std::unique_ptr<HirFunction>> lambda_functions_;
 
     // ヘルパー関数
     std::string get_default_member_name(const std::string& struct_name) const;
@@ -73,6 +76,7 @@ class HirLowering {
     HirExprPtr lower_match(ast::MatchExpr& match, TypePtr type);
     HirExprPtr lower_struct_literal(ast::StructLiteralExpr& lit, TypePtr expected_type);
     HirExprPtr lower_array_literal(ast::ArrayLiteralExpr& lit, TypePtr expected_type);
+    HirExprPtr lower_lambda(ast::LambdaExpr& lambda, TypePtr expected_type);
 
     // 演算子変換
     HirOperatorKind convert_operator_kind(ast::OperatorKind kind);

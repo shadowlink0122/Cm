@@ -326,6 +326,8 @@ class Parser {
         auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
         auto return_type = parse_type();
+        // C++スタイルの配列戻り値型: int[] func(), int[3] func()
+        return_type = check_array_suffix(std::move(return_type));
         std::string name = expect_ident();
 
         // main関数はエクスポート不可
@@ -930,6 +932,7 @@ class Parser {
     ast::ExprPtr parse_unary();
     ast::ExprPtr parse_postfix();
     ast::ExprPtr parse_primary();
+    ast::ExprPtr parse_lambda_body(std::vector<ast::Param> params, uint32_t start_pos);
     ast::ExprPtr parse_match_expr(uint32_t start_pos);
     std::unique_ptr<ast::MatchPattern> parse_match_pattern();
 

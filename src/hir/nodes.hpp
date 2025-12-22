@@ -124,12 +124,27 @@ struct HirArrayLiteral {
     std::vector<HirExprPtr> elements;
 };
 
+// ラムダ式のパラメータ
+struct HirLambdaParam {
+    std::string name;
+    TypePtr type;
+};
+
+// ラムダ式
+struct HirLambda {
+    std::vector<HirLambdaParam> params;
+    TypePtr return_type;  // nullptrなら推論
+    std::vector<HirStmtPtr> body;
+    std::string generated_name;  // 生成されたクロージャ名
+};
+
 // 式の種類
 using HirExprKind =
     std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
                  std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
                  std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
-                 std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>>;
+                 std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>,
+                 std::unique_ptr<HirLambda>>;
 
 struct HirExpr {
     HirExprKind kind;
@@ -287,7 +302,7 @@ struct HirFunction {
     TypePtr return_type;
     std::vector<HirStmtPtr> body;
     bool is_export = false;
-    bool is_extern = false;  // extern "C" 関数
+    bool is_extern = false;    // extern "C" 関数
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_constructor = false;
     bool is_destructor = false;

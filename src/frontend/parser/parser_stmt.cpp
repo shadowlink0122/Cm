@@ -131,7 +131,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 kind == TokenKind::KwUfloat || kind == TokenKind::KwUdouble ||
                 kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
                 kind == TokenKind::KwString || kind == TokenKind::KwCstring ||
-                kind == TokenKind::KwVoid) {
+                kind == TokenKind::KwVoid || kind == TokenKind::KwAuto) {
                 lookahead++;  // 型キーワードをスキップ
             } else if (kind == TokenKind::Ident) {
                 lookahead++;  // カスタム型名をスキップ
@@ -149,8 +149,8 @@ ast::StmtPtr Parser::parse_stmt() {
                 }
             }
 
-            // 配列 [N] をスキップ
-            if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::LBracket) {
+            // 配列 [N] をスキップ（多次元配列対応）
+            while (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::LBracket) {
                 lookahead++;
                 if (lookahead < tokens_.size() &&
                     tokens_[lookahead].kind == TokenKind::IntLiteral) {
@@ -184,6 +184,8 @@ ast::StmtPtr Parser::parse_stmt() {
                                        tokens_[pos_ + 1].kind == TokenKind::KwIn);
             if (has_explicit_type) {
                 var_type = parse_type();
+                // C++スタイルの配列サフィックスをチェック (int[3] など)
+                var_type = check_array_suffix(std::move(var_type));
             }
             std::string var_name = expect_ident();
             expect(TokenKind::KwIn);
@@ -389,8 +391,8 @@ bool Parser::is_type_start() {
                     next_kind == TokenKind::KwUdouble || next_kind == TokenKind::KwChar ||
                     next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
                     next_kind == TokenKind::KwCstring || next_kind == TokenKind::KwIsize ||
-                    next_kind == TokenKind::KwUsize ||
-                    next_kind == TokenKind::KwVoid || next_kind == TokenKind::Ident) {
+                    next_kind == TokenKind::KwUsize || next_kind == TokenKind::KwVoid ||
+                    next_kind == TokenKind::Ident) {
                     // *int name or *Type name の形式
                     if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].kind == TokenKind::Ident) {
                         return true;

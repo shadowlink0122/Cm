@@ -259,12 +259,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOEQ(lhs, rhs, "feq");
             }
-            // 文字列比較
+            // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
-                    "strcmp", llvm::FunctionType::get(ctx.getI32Type(),
-                                                      {ctx.getPtrType(), ctx.getPtrType()}, false));
-                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "strcmp");
+                    "cm_strcmp",
+                    llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
                 return builder->CreateICmpEQ(cmpResult, llvm::ConstantInt::get(ctx.getI32Type(), 0),
                                              "streq");
             }
@@ -285,12 +286,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpONE(lhs, rhs, "fne");
             }
-            // 文字列比較
+            // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
-                    "strcmp", llvm::FunctionType::get(ctx.getI32Type(),
-                                                      {ctx.getPtrType(), ctx.getPtrType()}, false));
-                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "strcmp");
+                    "cm_strcmp",
+                    llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
                 return builder->CreateICmpNE(cmpResult, llvm::ConstantInt::get(ctx.getI32Type(), 0),
                                              "strne");
             }

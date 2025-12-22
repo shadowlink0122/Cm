@@ -334,6 +334,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
 ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypePtr obj_type) {
     std::string type_name = ast::type_to_string(*obj_type);
+    bool is_dynamic = !obj_type->array_size.has_value();
 
     if (member.member == "size" || member.member == "len" || member.member == "length") {
         if (!member.args.empty()) {
@@ -344,6 +345,47 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
                        debug::Level::Debug);
         return ast::make_uint();
     }
+
+    // 動的配列（スライス）専用メソッド
+    if (is_dynamic) {
+        if (member.member == "cap" || member.member == "capacity") {
+            if (!member.args.empty()) {
+                error(current_span_, "Slice " + member.member + "() takes no arguments");
+            }
+            return ast::make_usize();
+        }
+        if (member.member == "push") {
+            if (member.args.size() != 1) {
+                error(current_span_, "Slice push() takes 1 argument");
+            }
+            if (!member.args.empty()) {
+                infer_type(*member.args[0]);
+            }
+            return ast::make_void();
+        }
+        if (member.member == "pop") {
+            if (!member.args.empty()) {
+                error(current_span_, "Slice pop() takes no arguments");
+            }
+            return obj_type->element_type ? obj_type->element_type : ast::make_int();
+        }
+        if (member.member == "remove" || member.member == "delete") {
+            if (member.args.size() != 1) {
+                error(current_span_, "Slice " + member.member + "() takes 1 index argument");
+            }
+            if (!member.args.empty()) {
+                infer_type(*member.args[0]);
+            }
+            return ast::make_void();
+        }
+        if (member.member == "clear") {
+            if (!member.args.empty()) {
+                error(current_span_, "Slice clear() takes no arguments");
+            }
+            return ast::make_void();
+        }
+    }
+
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
             error(current_span_, "Array indexOf() takes 1 argument");
@@ -406,6 +448,90 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
             infer_type(*member.args[0]);
         }
         return ast::make_void();
+    }
+    if (member.member == "map") {
+        if (member.args.size() != 1) {
+            error(current_span_, "Array map() takes 1 callback function");
+        }
+        if (!member.args.empty()) {
+            auto callback_type = infer_type(*member.args[0]);
+            // コールバックの戻り値型から結果配列の要素型を推論
+            if (callback_type && callback_type->kind == ast::TypeKind::Function &&
+                callback_type->return_type) {
+                // 結果は変換後の要素型の配列
+                auto result_elem_type = callback_type->return_type;
+                // 配列型を作成（サイズは元の配列と同じ）
+                return ast::make_array(result_elem_type, obj_type->array_size);
+            }
+        }
+        // フォールバック：元と同じ配列型を返す
+        return ast::make_array(obj_type->element_type, obj_type->array_size);
+    }
+    if (member.member == "filter") {
+        if (member.args.size() != 1) {
+            error(current_span_, "Array filter() takes 1 predicate function");
+        }
+        if (!member.args.empty()) {
+            infer_type(*member.args[0]);
+        }
+        // フィルター結果は同じ要素型の配列（サイズは動的）
+        return ast::make_array(obj_type->element_type, 0);
+    }
+    if (member.member == "reverse") {
+        if (!member.args.empty()) {
+            error(current_span_, "Array reverse() takes no arguments");
+        }
+        // 逆順の動的配列を返す（サイズは動的）
+        return ast::make_array(obj_type->element_type, std::nullopt);
+    }
+    if (member.member == "sort") {
+        if (!member.args.empty()) {
+            error(current_span_,
+                  "Array sort() takes no arguments (use sortBy for custom comparator)");
+        }
+        // ソート済み動的配列を返す（サイズは動的）
+        return ast::make_array(obj_type->element_type, std::nullopt);
+    }
+    if (member.member == "sortBy") {
+        if (member.args.size() != 1) {
+            error(current_span_, "Array sortBy() takes 1 comparator function");
+        }
+        if (!member.args.empty()) {
+            infer_type(*member.args[0]);
+        }
+        // ソート済み配列を返す（同じ型）
+        return ast::make_array(obj_type->element_type, obj_type->array_size);
+    }
+    if (member.member == "first") {
+        if (!member.args.empty()) {
+            error(current_span_, "Array first() takes no arguments");
+        }
+        // 最初の要素を返す
+        return obj_type->element_type ? obj_type->element_type : ast::make_error();
+    }
+    if (member.member == "last") {
+        if (!member.args.empty()) {
+            error(current_span_, "Array last() takes no arguments");
+        }
+        // 最後の要素を返す
+        return obj_type->element_type ? obj_type->element_type : ast::make_error();
+    }
+    if (member.member == "find") {
+        if (member.args.size() != 1) {
+            error(current_span_, "Array find() takes 1 predicate function");
+        }
+        if (!member.args.empty()) {
+            infer_type(*member.args[0]);
+        }
+        // 見つかった要素を返す（オプショナル型が望ましいが、現時点では要素型を返す）
+        return obj_type->element_type ? obj_type->element_type : ast::make_error();
+    }
+    if (member.member == "dim") {
+        if (!member.args.empty()) {
+            error(current_span_, "Array dim() takes no arguments");
+        }
+        // 次元数（整数）を返す
+        return ast::make_int();
     }
 
     error(current_span_, "Unknown array method '" + member.member + "'");
@@ -502,6 +628,18 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
             }
         }
         return ast::make_string();
+    }
+    if (member.member == "first") {
+        if (!member.args.empty()) {
+            error(current_span_, "String first() takes no arguments");
+        }
+        return ast::make_char();
+    }
+    if (member.member == "last") {
+        if (!member.args.empty()) {
+            error(current_span_, "String last() takes no arguments");
+        }
+        return ast::make_char();
     }
 
     error(current_span_, "Unknown string method '" + member.member + "'");

@@ -62,6 +62,13 @@ class MIRToLLVM {
     llvm::Type* convertType(const hir::TypePtr& type);
 
    private:
+    /// 関数のユニークIDを生成（オーバーロード対応）
+    std::string generateFunctionId(const mir::MirFunction& func);
+
+    /// 呼び出し時の引数型から関数IDを生成
+    std::string generateCallFunctionId(const std::string& baseName,
+                                       const std::vector<mir::MirOperandPtr>& args);
+
     /// 関数シグネチャ変換
     llvm::Function* convertFunctionSignature(const mir::MirFunction& func);
 
