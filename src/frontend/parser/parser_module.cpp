@@ -323,6 +323,9 @@ ast::DeclPtr Parser::parse_impl_export() {
 
 // ============================================================
 // Use文
+// use std::io;              -- モジュールエイリアス
+// use libc { ... };         -- FFI宣言
+// use libc as c { ... };    -- 名前空間付きFFI宣言
 // ============================================================
 ast::DeclPtr Parser::parse_use() {
     uint32_t start_pos = current().start;
@@ -342,8 +345,59 @@ ast::DeclPtr Parser::parse_use() {
         alias = expect_ident();
     }
 
-    ast::UseDecl use_decl(std::move(path), std::move(alias));
+    // FFI宣言ブロック: use libc { ... }
+    if (check(TokenKind::LBrace)) {
+        advance();  // consume '{'
 
+        std::vector<ast::FFIFunctionDecl> ffi_funcs;
+
+        while (!check(TokenKind::RBrace) && !is_at_end()) {
+            ast::FFIFunctionDecl ffi_func;
+
+            // 戻り値型をパース
+            ffi_func.return_type = parse_extern_type();
+
+            // 関数名
+            ffi_func.name = expect_ident();
+
+            // パラメータリスト
+            expect(TokenKind::LParen);
+            if (!check(TokenKind::RParen)) {
+                do {
+                    // 可変引数チェック
+                    if (check(TokenKind::Ellipsis)) {
+                        advance();
+                        ffi_func.is_variadic = true;
+                        break;  // 可変引数は最後のパラメータ
+                    }
+
+                    // パラメータの型をパース
+                    auto param_type = parse_extern_type();
+
+                    // パラメータ名（オプション）
+                    std::string param_name;
+                    if (check(TokenKind::Ident)) {
+                        param_name = current_text();
+                        advance();
+                    }
+
+                    ffi_func.params.push_back({param_name, param_type});
+                } while (consume_if(TokenKind::Comma));
+            }
+            expect(TokenKind::RParen);
+            expect(TokenKind::Semicolon);
+
+            ffi_funcs.push_back(std::move(ffi_func));
+        }
+
+        expect(TokenKind::RBrace);
+
+        auto use_decl = std::make_unique<ast::UseDecl>(std::move(path), std::move(ffi_funcs), std::move(alias));
+        return std::make_unique<ast::Decl>(std::move(use_decl), Span{start_pos, previous().end});
+    }
+
+    // 通常のモジュールuse
+    ast::UseDecl use_decl(std::move(path), std::move(alias));
     expect(TokenKind::Semicolon);
 
     return std::make_unique<ast::Decl>(std::make_unique<ast::UseDecl>(std::move(use_decl)),

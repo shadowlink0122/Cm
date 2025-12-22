@@ -1,0 +1,13 @@
+// FFI printf テスト: 可変長引数関数
+use libc {
+    int printf(char* format, ...);
+}
+
+int main() {
+    printf("Number: %d\n", 42);
+    printf("Two numbers: %d and %d\n", 10, 20);
+    return 0;
+}
+// EXPECT: 0
+// EXPECT_OUTPUT: Number: 42
+// EXPECT_OUTPUT: Two numbers: 10 and 20

@@ -219,6 +219,20 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             }
             scopes_.global().define_function(func->name, std::move(param_types), func->return_type);
         }
+    } else if (auto* use_decl = decl.as<ast::UseDecl>()) {
+        // FFI use宣言を処理
+        if (use_decl->kind == ast::UseDecl::FFIUse) {
+            for (const auto& ffi_func : use_decl->ffi_funcs) {
+                std::vector<ast::TypePtr> param_types;
+                for (const auto& [name, type] : ffi_func.params) {
+                    param_types.push_back(type);
+                }
+                // 可変長引数フラグを設定してFFI関数を登録
+                scopes_.global().define_function(ffi_func.name, std::move(param_types), 
+                                                  ffi_func.return_type, SIZE_MAX, 
+                                                  ffi_func.is_variadic);
+            }
+        }
     } else if (auto* import = decl.as<ast::ImportDecl>()) {
         // Pass 1でimportも処理してprintlnを登録
         check_import(*import);

@@ -55,8 +55,19 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         }
     }
 
-    // 関数型
-    auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+    // 関数型（可変長引数を考慮）
+    auto funcType = llvm::FunctionType::get(returnType, paramTypes, func.is_variadic);
+
+    // extern関数の場合は既存の関数を再利用（重複宣言を防ぐ）
+    if (func.is_extern) {
+        // 既存の関数があればそれを返す
+        if (auto existingFunc = module->getFunction(func.name)) {
+            return existingFunc;
+        }
+        // なければ宣言のみ作成
+        auto callee = module->getOrInsertFunction(func.name, funcType);
+        return llvm::cast<llvm::Function>(callee.getCallee());
+    }
 
     // 関数作成
     auto llvmFunc =

@@ -11,9 +11,11 @@ namespace cm::ast {
 struct Expr;
 struct Stmt;
 struct Decl;
+struct Type;  // FFI関数宣言用
 using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
 using DeclPtr = std::unique_ptr<Decl>;
+using TypePtr = std::shared_ptr<Type>;  // FFI関数宣言用
 
 // ============================================================
 // モジュールパス (e.g., std.io.print)
@@ -172,15 +174,47 @@ struct MacroDecl {
 };
 
 // ============================================================
-// Use文（Rustスタイルのインポート）
+// FFI関数宣言（use libc { ... }用）
+// ============================================================
+struct FFIFunctionDecl {
+    std::string name;                      // 関数名
+    TypePtr return_type;                   // 戻り値型
+    std::vector<std::pair<std::string, TypePtr>> params;  // パラメータ
+    bool is_variadic = false;              // 可変引数（...）
+
+    FFIFunctionDecl() = default;
+    FFIFunctionDecl(std::string n) : name(std::move(n)) {}
+};
+
+// ============================================================
+// Use文（FFI/モジュールインポート）
 // ============================================================
 struct UseDecl {
-    ModulePath path;                   // モジュールパス
-    std::optional<std::string> alias;  // エイリアス
-    bool is_pub = false;               // pub use
+    enum Kind {
+        ModuleUse,  // use std::io; (モジュールエイリアス)
+        FFIUse      // use libc { ... }; (FFI宣言)
+    };
 
+    Kind kind = ModuleUse;
+    ModulePath path;                          // ライブラリ/モジュールパス
+    std::optional<std::string> alias;         // エイリアス（as句）
+    bool is_pub = false;                      // pub use
+    std::vector<FFIFunctionDecl> ffi_funcs;   // FFI関数宣言（FFIUseの場合）
+
+    // アトリビュート
+    bool is_static_link = false;              // #[static]
+    bool is_framework = false;                // #[framework] (macOS)
+    std::optional<std::string> os_condition;  // #[os(linux)] など
+    std::optional<std::string> target_condition;  // #[target(wasm)] など
+
+    // モジュールuseコンストラクタ
     UseDecl(ModulePath p, std::optional<std::string> a = std::nullopt)
-        : path(std::move(p)), alias(std::move(a)) {}
+        : kind(ModuleUse), path(std::move(p)), alias(std::move(a)) {}
+
+    // FFI useコンストラクタ
+    UseDecl(ModulePath p, std::vector<FFIFunctionDecl> funcs,
+            std::optional<std::string> a = std::nullopt)
+        : kind(FFIUse), path(std::move(p)), alias(std::move(a)), ffi_funcs(std::move(funcs)) {}
 };
 
 }  // namespace cm::ast

@@ -137,6 +137,8 @@ class Lexer {
             {"ushort", TokenKind::KwUshort},
             {"long", TokenKind::KwLong},
             {"ulong", TokenKind::KwUlong},
+            {"isize", TokenKind::KwIsize},
+            {"usize", TokenKind::KwUsize},
             {"float", TokenKind::KwFloat},
             {"double", TokenKind::KwDouble},
             {"ufloat", TokenKind::KwUfloat},
@@ -144,6 +146,7 @@ class Lexer {
             {"bool", TokenKind::KwBool},
             {"char", TokenKind::KwChar},
             {"string", TokenKind::KwString},
+            {"cstring", TokenKind::KwCstring},
         };
     }
 

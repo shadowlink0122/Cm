@@ -111,6 +111,31 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         }
     }
 
+    // string → *char 暗黙変換 (FFI用)
+    if (a->kind == ast::TypeKind::Pointer && b->kind == ast::TypeKind::String) {
+        if (a->element_type && a->element_type->kind == ast::TypeKind::Char) {
+            return true;
+        }
+    }
+
+    // cstring ↔ string 暗黙変換 (FFI用)
+    if ((a->kind == ast::TypeKind::CString && b->kind == ast::TypeKind::String) ||
+        (a->kind == ast::TypeKind::String && b->kind == ast::TypeKind::CString)) {
+        return true;
+    }
+
+    // cstring ↔ *char 暗黙変換 (FFI用)
+    if (a->kind == ast::TypeKind::CString && b->kind == ast::TypeKind::Pointer) {
+        if (b->element_type && b->element_type->kind == ast::TypeKind::Char) {
+            return true;
+        }
+    }
+    if (b->kind == ast::TypeKind::CString && a->kind == ast::TypeKind::Pointer) {
+        if (a->element_type && a->element_type->kind == ast::TypeKind::Char) {
+            return true;
+        }
+    }
+
     return false;
 }
 

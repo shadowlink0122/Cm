@@ -655,12 +655,15 @@ ast::ExprPtr Parser::parse_primary() {
             case TokenKind::KwUshort:
             case TokenKind::KwUint:
             case TokenKind::KwUlong:
+            case TokenKind::KwIsize:
+            case TokenKind::KwUsize:
             case TokenKind::KwFloat:
             case TokenKind::KwDouble:
             case TokenKind::KwUfloat:
             case TokenKind::KwUdouble:
             case TokenKind::KwChar:
             case TokenKind::KwString:
+            case TokenKind::KwCstring:
             case TokenKind::Star:
             case TokenKind::Amp:
             case TokenKind::LBracket:
@@ -714,12 +717,15 @@ ast::ExprPtr Parser::parse_primary() {
             case TokenKind::KwUshort:
             case TokenKind::KwUint:
             case TokenKind::KwUlong:
+            case TokenKind::KwIsize:
+            case TokenKind::KwUsize:
             case TokenKind::KwFloat:
             case TokenKind::KwDouble:
             case TokenKind::KwUfloat:
             case TokenKind::KwUdouble:
             case TokenKind::KwChar:
             case TokenKind::KwString:
+            case TokenKind::KwCstring:
             case TokenKind::Star:
             case TokenKind::Amp:
             case TokenKind::LBracket:

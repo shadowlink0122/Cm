@@ -15,6 +15,8 @@ HirDeclPtr HirLowering::lower_decl(ast::Decl& decl) {
         return lower_impl(*impl);
     } else if (auto* imp = decl.as<ast::ImportDecl>()) {
         return lower_import(*imp);
+    } else if (auto* use = decl.as<ast::UseDecl>()) {
+        return lower_use(*use);
     } else if (auto* en = decl.as<ast::EnumDecl>()) {
         return lower_enum(*en);
     } else if (auto* td = decl.as<ast::TypedefDecl>()) {
@@ -297,6 +299,47 @@ HirDeclPtr HirLowering::lower_import(ast::ImportDecl& imp) {
             }
         }
     }
+
+    return std::make_unique<HirDecl>(std::move(hir_imp));
+}
+
+// Use（FFI/モジュール）
+HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
+    debug::hir::log(debug::hir::Id::NodeCreate, "use " + use.path.to_string(),
+                    debug::Level::Trace);
+
+    // FFI useの場合はexternブロックとして処理
+    if (use.kind == ast::UseDecl::FFIUse) {
+        auto hir_extern = std::make_unique<HirExternBlock>();
+        hir_extern->language = "C";  // デフォルトはC ABI
+
+        for (const auto& ffi_func : use.ffi_funcs) {
+            auto hir_func = std::make_unique<HirFunction>();
+            hir_func->name = ffi_func.name;
+            hir_func->return_type = ffi_func.return_type;
+            hir_func->is_extern = true;
+            hir_func->is_variadic = ffi_func.is_variadic;  // 可変長引数フラグを伝播
+
+            for (const auto& [param_name, param_type] : ffi_func.params) {
+                hir_func->params.push_back({param_name, param_type});
+            }
+
+            // 名前空間エイリアスの場合、呼び出し時の名前をマップ
+            if (use.alias) {
+                std::string aliased_name = *use.alias + "::" + ffi_func.name;
+                import_aliases_[aliased_name] = ffi_func.name;
+            }
+
+            hir_extern->functions.push_back(std::move(hir_func));
+        }
+
+        return std::make_unique<HirDecl>(std::move(hir_extern));
+    }
+
+    // 通常のモジュールuseの場合
+    auto hir_imp = std::make_unique<HirImport>();
+    hir_imp->path = use.path.segments;
+    hir_imp->alias = use.alias.value_or("");
 
     return std::make_unique<HirDecl>(std::move(hir_imp));
 }

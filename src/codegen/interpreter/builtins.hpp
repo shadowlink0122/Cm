@@ -24,10 +24,108 @@ class BuiltinManager {
         register_string_builtins(builtins_);
         register_array_builtins(builtins_);
         register_std_io_functions();
+        register_libc_ffi_functions();
     }
 
    private:
     BuiltinRegistry builtins_;
+
+    /// libc FFI関数を登録（インタプリタ用）
+    void register_libc_ffi_functions() {
+        // puts - 文字列を出力して改行
+        builtins_["puts"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (!args.empty() && args[0].type() == typeid(std::string)) {
+                std::cout << std::any_cast<std::string>(args[0]) << std::endl;
+                return Value(int64_t(0));
+            }
+            return Value(int64_t(-1));
+        };
+
+        // printf - フォーマット出力（簡易実装）
+        builtins_["printf"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (args.empty()) return Value(int64_t(0));
+            
+            std::string format;
+            if (args[0].type() == typeid(std::string)) {
+                format = std::any_cast<std::string>(args[0]);
+            } else {
+                return Value(int64_t(-1));
+            }
+
+            // 簡易printf実装：%d, %s, %f をサポート
+            std::string output;
+            size_t arg_idx = 1;
+            for (size_t i = 0; i < format.size(); ++i) {
+                if (format[i] == '%' && i + 1 < format.size()) {
+                    char spec = format[i + 1];
+                    if (spec == 'd' || spec == 'i') {
+                        if (arg_idx < args.size()) {
+                            if (args[arg_idx].type() == typeid(int64_t)) {
+                                output += std::to_string(std::any_cast<int64_t>(args[arg_idx]));
+                            }
+                            arg_idx++;
+                        }
+                        i++;
+                    } else if (spec == 's') {
+                        if (arg_idx < args.size()) {
+                            if (args[arg_idx].type() == typeid(std::string)) {
+                                output += std::any_cast<std::string>(args[arg_idx]);
+                            }
+                            arg_idx++;
+                        }
+                        i++;
+                    } else if (spec == 'f') {
+                        if (arg_idx < args.size()) {
+                            if (args[arg_idx].type() == typeid(double)) {
+                                output += std::to_string(std::any_cast<double>(args[arg_idx]));
+                            }
+                            arg_idx++;
+                        }
+                        i++;
+                    } else if (spec == '%') {
+                        output += '%';
+                        i++;
+                    } else {
+                        output += format[i];
+                    }
+                } else if (format[i] == '\\' && i + 1 < format.size() && format[i + 1] == 'n') {
+                    output += '\n';
+                    i++;
+                } else {
+                    output += format[i];
+                }
+            }
+            std::cout << output;
+            return Value(int64_t(output.size()));
+        };
+
+        // strlen - 文字列長を取得
+        builtins_["strlen"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (!args.empty() && args[0].type() == typeid(std::string)) {
+                return Value(int64_t(std::any_cast<std::string>(args[0]).size()));
+            }
+            return Value(int64_t(0));
+        };
+
+        // malloc - メモリ確保（インタプリタでは実際のmallocを呼ぶ）
+        builtins_["malloc"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (!args.empty() && args[0].type() == typeid(int64_t)) {
+                size_t size = static_cast<size_t>(std::any_cast<int64_t>(args[0]));
+                void* ptr = std::malloc(size);
+                return Value(reinterpret_cast<int64_t>(ptr));
+            }
+            return Value(int64_t(0));
+        };
+
+        // free - メモリ解放
+        builtins_["free"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (!args.empty() && args[0].type() == typeid(int64_t)) {
+                void* ptr = reinterpret_cast<void*>(std::any_cast<int64_t>(args[0]));
+                std::free(ptr);
+            }
+            return Value{};
+        };
+    }
 
     /// std::io 名前空間の関数を登録
     void register_std_io_functions() {

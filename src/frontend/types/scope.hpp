@@ -17,6 +17,7 @@ struct Symbol {
     ast::TypePtr type;
     bool is_const = false;
     bool is_function = false;
+    bool is_variadic = false;  // FFI関数の可変長引数（printf等）
 
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
@@ -35,18 +36,20 @@ class Scope {
     bool define(const std::string& name, ast::TypePtr type, bool is_const = false) {
         if (symbols_.count(name))
             return false;  // 既存
-        symbols_[name] = Symbol{name, std::move(type), is_const, false, {}, nullptr};
+        symbols_[name] = Symbol{name, std::move(type), is_const, false, false, {}, nullptr, 0};
         return true;
     }
 
     // 関数登録
     bool define_function(const std::string& name, std::vector<ast::TypePtr> params,
-                         ast::TypePtr ret, size_t required_params = SIZE_MAX) {
+                         ast::TypePtr ret, size_t required_params = SIZE_MAX,
+                         bool is_variadic = false) {
         if (symbols_.count(name))
             return false;
         Symbol sym;
         sym.name = name;
         sym.is_function = true;
+        sym.is_variadic = is_variadic;
         sym.param_types = params;  // コピーを保持
         sym.return_type = ret;
         // 関数ポインタ型を設定（関数名を参照したときにこの型を返す）

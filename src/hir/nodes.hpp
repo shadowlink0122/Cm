@@ -288,6 +288,7 @@ struct HirFunction {
     std::vector<HirStmtPtr> body;
     bool is_export = false;
     bool is_extern = false;  // extern "C" 関数
+    bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_overload = false;                          // overloadキーワードの有無

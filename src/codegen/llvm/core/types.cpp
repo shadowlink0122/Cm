@@ -29,6 +29,10 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
         case hir::TypeKind::Long:
         case hir::TypeKind::ULong:
             return ctx.getI64Type();
+        case hir::TypeKind::ISize:
+        case hir::TypeKind::USize:
+            // ポインタサイズ整数（64ビット想定）
+            return ctx.getI64Type();
         case hir::TypeKind::Float:
         case hir::TypeKind::UFloat:
             return ctx.getF32Type();
@@ -36,6 +40,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
         case hir::TypeKind::UDouble:
             return ctx.getF64Type();
         case hir::TypeKind::String:
+        case hir::TypeKind::CString:
             return ctx.getPtrType();
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference:

@@ -330,7 +330,8 @@ class LLVMCodeGen {
             // WASMランタイムライブラリのパスを検索
             std::string runtimePath = findRuntimeLibrary();
             // WASI用：_startはランタイムから提供される
-            linkCmd = "wasm-ld --entry=_start " + objFile + " " + runtimePath + " -o " +
+            // --allow-undefined: FFI関数（JavaScript等）を未定義のままリンク可能に
+            linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath + " -o " +
                       options.outputFile;
         } else {
             // ネイティブ：システムリンカ使用

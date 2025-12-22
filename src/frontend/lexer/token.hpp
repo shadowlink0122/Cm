@@ -88,6 +88,8 @@ enum class TokenKind {
     KwUshort,
     KwLong,
     KwUlong,
+    KwIsize,    // ポインタサイズ符号付き (FFI用)
+    KwUsize,    // ポインタサイズ符号なし (FFI用)
     KwFloat,
     KwDouble,
     KwUfloat,
@@ -95,6 +97,7 @@ enum class TokenKind {
     KwBool,
     KwChar,
     KwString,
+    KwCstring,  // NULL終端文字列 (FFI用)
 
     // 演算子
     Plus,

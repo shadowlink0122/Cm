@@ -1,0 +1,23 @@
+// FFI malloc/free テスト
+use libc {
+    void* malloc(usize size);
+    void free(void* ptr);
+}
+
+int main() {
+    // 整数1つ分のメモリを確保
+    usize size = 4;
+    void* ptr = malloc(size);
+    int* p = ptr;
+    *p = 12345;
+    
+    int value = *p;
+    println("Allocated: {value}");
+    
+    // メモリ解放
+    free(ptr);
+    
+    return value - 12345;  // 0を返すべき
+}
+// EXPECT: 0
+// EXPECT_OUTPUT: Allocated: 12345

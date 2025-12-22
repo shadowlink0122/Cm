@@ -81,12 +81,34 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_error();
         }
 
-        // 通常の関数の引数チェック（デフォルト引数を考慮）
+        // 通常の関数の引数チェック（デフォルト引数と可変長引数を考慮）
         size_t arg_count = call.args.size();
         size_t param_count = sym->param_types.size();
         size_t required_count = sym->required_params;
 
-        if (arg_count < required_count || arg_count > param_count) {
+        // 可変長引数の場合は最低限の引数数をチェック
+        if (sym->is_variadic) {
+            if (arg_count < param_count) {
+                error(current_span_, "Variadic function '" + ident->name + "' requires at least " +
+                                         std::to_string(param_count) + " arguments, got " +
+                                         std::to_string(arg_count));
+            } else {
+                // 固定引数の型チェック
+                for (size_t i = 0; i < param_count; ++i) {
+                    auto arg_type = infer_type(*call.args[i]);
+                    if (!types_compatible(sym->param_types[i], arg_type)) {
+                        std::string expected = ast::type_to_string(*sym->param_types[i]);
+                        std::string actual = ast::type_to_string(*arg_type);
+                        error(current_span_, "Argument type mismatch in call to '" + ident->name +
+                                                 "': expected " + expected + ", got " + actual);
+                    }
+                }
+                // 可変長引数の型は推論のみ
+                for (size_t i = param_count; i < arg_count; ++i) {
+                    infer_type(*call.args[i]);
+                }
+            }
+        } else if (arg_count < required_count || arg_count > param_count) {
             if (required_count == param_count) {
                 error(current_span_, "Function '" + ident->name + "' expects " +
                                          std::to_string(param_count) + " arguments, got " +

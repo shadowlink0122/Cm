@@ -126,10 +126,12 @@ ast::StmtPtr Parser::parse_stmt() {
                 kind == TokenKind::KwTiny || kind == TokenKind::KwUtiny ||
                 kind == TokenKind::KwShort || kind == TokenKind::KwUshort ||
                 kind == TokenKind::KwLong || kind == TokenKind::KwUlong ||
+                kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
                 kind == TokenKind::KwFloat || kind == TokenKind::KwDouble ||
                 kind == TokenKind::KwUfloat || kind == TokenKind::KwUdouble ||
                 kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
-                kind == TokenKind::KwString || kind == TokenKind::KwVoid) {
+                kind == TokenKind::KwString || kind == TokenKind::KwCstring ||
+                kind == TokenKind::KwVoid) {
                 lookahead++;  // 型キーワードをスキップ
             } else if (kind == TokenKind::Ident) {
                 lookahead++;  // カスタム型名をスキップ
@@ -261,11 +263,12 @@ ast::StmtPtr Parser::parse_stmt() {
             is_static_var = (next_kind == TokenKind::KwInt || next_kind == TokenKind::KwFloat ||
                              next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwChar ||
                              next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
-                             next_kind == TokenKind::KwVoid || next_kind == TokenKind::KwTiny ||
-                             next_kind == TokenKind::KwShort || next_kind == TokenKind::KwLong ||
-                             next_kind == TokenKind::KwUint || next_kind == TokenKind::KwUtiny ||
-                             next_kind == TokenKind::KwUshort || next_kind == TokenKind::KwUlong ||
-                             next_kind == TokenKind::KwUfloat ||
+                             next_kind == TokenKind::KwCstring || next_kind == TokenKind::KwVoid ||
+                             next_kind == TokenKind::KwTiny || next_kind == TokenKind::KwShort ||
+                             next_kind == TokenKind::KwLong || next_kind == TokenKind::KwUint ||
+                             next_kind == TokenKind::KwUtiny || next_kind == TokenKind::KwUshort ||
+                             next_kind == TokenKind::KwUlong || next_kind == TokenKind::KwIsize ||
+                             next_kind == TokenKind::KwUsize || next_kind == TokenKind::KwUfloat ||
                              next_kind == TokenKind::KwUdouble || next_kind == TokenKind::Ident);
         }
     }
@@ -365,12 +368,15 @@ bool Parser::is_type_start() {
         case TokenKind::KwUshort:
         case TokenKind::KwUint:
         case TokenKind::KwUlong:
+        case TokenKind::KwIsize:
+        case TokenKind::KwUsize:
         case TokenKind::KwFloat:
         case TokenKind::KwDouble:
         case TokenKind::KwUfloat:
         case TokenKind::KwUdouble:
         case TokenKind::KwChar:
         case TokenKind::KwString:
+        case TokenKind::KwCstring:
             return true;
         case TokenKind::Star:
             // *type name の形式かチェック（*p = x のような式と区別）
@@ -382,6 +388,8 @@ bool Parser::is_type_start() {
                     next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwUfloat ||
                     next_kind == TokenKind::KwUdouble || next_kind == TokenKind::KwChar ||
                     next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
+                    next_kind == TokenKind::KwCstring || next_kind == TokenKind::KwIsize ||
+                    next_kind == TokenKind::KwUsize ||
                     next_kind == TokenKind::KwVoid || next_kind == TokenKind::Ident) {
                     // *int name or *Type name の形式
                     if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].kind == TokenKind::Ident) {

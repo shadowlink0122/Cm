@@ -1111,6 +1111,14 @@ class Parser {
                 advance();
                 base_type = std::make_shared<ast::Type>(ast::TypeKind::ULong);
                 break;
+            case TokenKind::KwIsize:
+                advance();
+                base_type = ast::make_isize();
+                break;
+            case TokenKind::KwUsize:
+                advance();
+                base_type = ast::make_usize();
+                break;
             case TokenKind::KwFloat:
                 advance();
                 base_type = ast::make_float();
@@ -1134,6 +1142,10 @@ class Parser {
             case TokenKind::KwString:
                 advance();
                 base_type = ast::make_string();
+                break;
+            case TokenKind::KwCstring:
+                advance();
+                base_type = ast::make_cstring();
                 break;
             default:
                 break;

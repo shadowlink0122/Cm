@@ -39,6 +39,7 @@ class HirLowering {
     HirDeclPtr lower_interface(ast::InterfaceDecl& iface);
     HirDeclPtr lower_impl(ast::ImplDecl& impl);
     HirDeclPtr lower_import(ast::ImportDecl& imp);
+    HirDeclPtr lower_use(ast::UseDecl& use);
     HirDeclPtr lower_enum(ast::EnumDecl& en);
     HirDeclPtr lower_typedef(ast::TypedefDecl& td);
     HirDeclPtr lower_global_var(ast::GlobalVarDecl& gv);
