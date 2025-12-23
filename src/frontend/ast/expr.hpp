@@ -428,6 +428,16 @@ struct MatchExpr {
 };
 
 // ============================================================
+// キャスト式 - expr as Type
+// ============================================================
+struct CastExpr {
+    ExprPtr operand;     // キャスト対象の式
+    TypePtr target_type; // キャスト先の型
+
+    CastExpr(ExprPtr e, TypePtr t) : operand(std::move(e)), target_type(std::move(t)) {}
+};
+
+// ============================================================
 // 式作成ヘルパー
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
@@ -496,6 +506,10 @@ inline ExprPtr make_alignof(TypePtr type, Span s = {}) {
 
 inline ExprPtr make_typename_of(TypePtr type, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<TypenameOfExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<CastExpr>(std::move(expr), std::move(type)), s);
 }
 
 }  // namespace cm::ast

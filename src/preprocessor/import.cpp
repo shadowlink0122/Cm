@@ -713,11 +713,12 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
         // 定数: export const type name = ...
         std::regex const_export_regex(
             R"(export\s+const\s+(?:int|float|double|bool|char|string|uint)\s+(\w+)\s*=)");
-        // impl: export impl Type for Interface
-        std::regex impl_export_regex(R"(export\s+impl\s+(\w+)\s+for\s+(\w+))");
-        // 関数/構造体など: export type name
+        // impl: export impl Type for Interface (implはexportが付かないこともある)
+        std::regex impl_regex(R"(^\s*(?:export\s+)?impl\s+(\w+)\s+for\s+(\w+))");
+        // 関数/構造体など: export (type|struct|interface|enum) name
+        // typeは組み込み型またはユーザー定義型（識別子）
         std::regex export_regex(
-            R"(export\s+(?:int|void|float|double|bool|char|string|uint|struct|interface|enum)\s+(\w+))");
+            R"(export\s+(?:int|void|float|double|bool|char|string|uint|struct|interface|enum|\w+\*?)\s+(\w+))");
 
         bool matched = false;
 
@@ -727,10 +728,10 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
             current_export_name = match[1];
             matched = true;
         }
-        // implパターンを試す (Type for Interface)
+        // implパターンを試す (Type for Interface) - exportの有無に関わらず
         else if (!in_wanted_block && !in_unwanted_block &&
-                 std::regex_search(line, match, impl_export_regex)) {
-            // impl Typeはインポートリストの"Type"に一致
+                 std::regex_search(line, match, impl_regex)) {
+            // impl TypeはインポートリストのTypeに一致
             current_export_name = match[1];
             matched = true;
         }
@@ -840,8 +841,10 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
     // 階層再構築エクスポートを処理: export { ns::{item1, item2} }
     processed = process_hierarchical_reexport(processed);
 
-    // implの暗黙的エクスポート: exportされた構造体のimplも自動的にエクスポート
-    processed = process_implicit_impl_export(processed);
+    // Note: implの暗黙的エクスポートは現在無効化
+    // パーサーが "export impl" をサポートしていないため
+    // 将来的にはパーサーを修正してサポートする予定
+    // processed = process_implicit_impl_export(processed);
 
     std::stringstream result;
     std::stringstream input(processed);
@@ -863,14 +866,10 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
             continue;
         }
 
-        // export キーワードを削除
-        // "export" を削除
-        std::regex export_regex(R"(\bexport\s+)");
-        line = std::regex_replace(line, export_regex, "");
-
-        // "export default" を削除（すでに "export " が削除されているので "default" のみ削除）
-        std::regex default_regex(R"(\bdefault\s+)");
-        line = std::regex_replace(line, default_regex, "");
+        // Note: exportキーワードは保持する
+        // 以前はエクスポートされた宣言からexportを削除していたが、
+        // これにより関数定義がパーサーで変数宣言として誤認識される問題があった
+        // パーサーはexportキーワードを適切に処理するため、削除不要
 
         result << line << "\n";
     }
@@ -1252,21 +1251,34 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
         info.module_name = match[1];
 
         // ./path/module::submodule::item 形式をチェック
-        // 相対パスで、最後が ::identifier (小文字始まり = 関数/変数) の場合、
-        // それをアイテムとして扱う
+        // 最後が ::identifier (小文字始まり = 関数/変数) の場合、それをアイテムとして扱う
         std::string& name = info.module_name;
         // 最後の :: の位置を見つける
         size_t last_colon = name.rfind("::");
         if (last_colon != std::string::npos && last_colon > 0) {
             std::string last_part = name.substr(last_colon + 2);
-            // 小文字で始まる、または * の場合はアイテム
-            if (!last_part.empty() && (std::islower(last_part[0]) || last_part == "*")) {
-                if (last_part == "*") {
-                    info.is_wildcard = true;
-                } else {
-                    info.items.push_back(last_part);
-                }
+            // * の場合はワイルドカード
+            if (last_part == "*") {
+                info.is_wildcard = true;
                 info.module_name = name.substr(0, last_colon);
+            }
+            // 小文字始まりの場合、関数/変数として扱う
+            // ただし、相対パスで :: が1つだけの場合はサブモジュール全体として扱う
+            // 例: ./path/module::submodule → サブモジュール全体
+            // 例: ./path/module::submodule::func → funcを選択的インポート
+            // 例: std::io::println → printlnを選択的インポート
+            else if (!last_part.empty() && std::islower(last_part[0])) {
+                // 相対パスの場合、::が2つ以上あるかチェック
+                // ./path/module::sub::func のように、funcは関数として扱う
+                size_t first_colon = name.find("::");
+                if (!info.is_relative || first_colon != last_colon) {
+                    // 絶対パス、または相対パスで::が複数ある場合
+                    // 最後のセグメントは関数/変数
+                    info.items.push_back(last_part);
+                    info.module_name = name.substr(0, last_colon);
+                }
+                // 相対パスで::が1つだけの場合（例: ./path/std::io）
+                // サブモジュールパスとして保持（名前空間としてインポート）
             }
         }
     }
@@ -1855,7 +1867,8 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
     // 例: export { io::{file, stream} }
     // これは、fileとstreamの名前空間をio名前空間内に移動する
 
-    std::regex hier_export_regex(R"(//\s*\{\s*(\w+)::\{([^}]+)\}\s*\};\s*\(processed\))");
+    // コメント化された形式: // export { io::{file, stream} }; (processed)
+    std::regex hier_export_regex(R"(//\s*export\s*\{\s*(\w+)::\{([^}]+)\}\s*\};\s*\(processed\))");
     std::smatch match;
 
     if (!std::regex_search(source, match, hier_export_regex)) {

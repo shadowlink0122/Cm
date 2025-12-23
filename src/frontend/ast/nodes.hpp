@@ -54,6 +54,7 @@ struct StructLiteralExpr;
 struct ArrayLiteralExpr;
 struct LambdaExpr;
 struct MatchExpr;
+struct CastExpr;
 
 // 式の種類
 using ExprKind =
@@ -64,7 +65,8 @@ using ExprKind =
                  std::unique_ptr<NewExpr>, std::unique_ptr<SizeofExpr>, std::unique_ptr<TypeofExpr>,
                  std::unique_ptr<AlignofExpr>, std::unique_ptr<TypenameOfExpr>,
                  std::unique_ptr<StructLiteralExpr>, std::unique_ptr<ArrayLiteralExpr>,
-                 std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>>;
+                 std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>,
+                 std::unique_ptr<CastExpr>>;
 
 struct Expr : Node {
     ExprKind kind;

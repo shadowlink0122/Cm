@@ -1,0 +1,6 @@
+int to double: 42
+double to int: 3
+bool to int: 1
+char to int: 65
+chain cast: 10
+All cast tests passed!

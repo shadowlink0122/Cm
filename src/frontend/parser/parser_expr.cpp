@@ -539,6 +539,15 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
+        // キャスト式: expr as Type
+        if (consume_if(TokenKind::KwAs)) {
+            debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
+                            debug::Level::Debug);
+            auto target_type = parse_type();
+            expr = ast::make_cast(std::move(expr), std::move(target_type));
+            continue;
+        }
+
         break;
     }
 

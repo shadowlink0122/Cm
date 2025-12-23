@@ -1,0 +1,10 @@
+int allocation test:
+int array values verified
+int array freed
+struct allocation test:
+Point values verified: (10, 20)
+Point freed
+multiple structs test:
+Point array values verified
+Point array freed
+All memory tests passed!

@@ -109,6 +109,15 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         auto lit = std::make_unique<HirLiteral>();
         lit->value = type_name;
         return std::make_unique<HirExpr>(std::move(lit), ast::make_string());
+    } else if (auto* cast_expr = expr.as<ast::CastExpr>()) {
+        // キャスト式: expr as Type
+        debug::hir::log(debug::hir::Id::CastExprLower, "Lowering cast expression",
+                        debug::Level::Debug);
+        auto operand = lower_expr(*cast_expr->operand);
+        auto hir_cast = std::make_unique<HirCast>();
+        hir_cast->operand = std::move(operand);
+        hir_cast->target_type = cast_expr->target_type;
+        return std::make_unique<HirExpr>(std::move(hir_cast), cast_expr->target_type);
     }
 
     debug::hir::log(debug::hir::Id::Warning, "Unknown expression type, using null literal",

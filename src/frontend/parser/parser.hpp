@@ -1154,8 +1154,8 @@ class Parser {
                 break;
         }
 
-        // 関数ポインタ型: int*(int, int)
-        // base_typeがあり、次が *( の場合
+        // 関数ポインタ型: int*(int, int) または ポインタ型: void*
+        // base_typeがあり、次が * の場合
         if (base_type && check(TokenKind::Star)) {
             // *( パターンのチェック - 関数ポインタ
             if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
@@ -1171,6 +1171,10 @@ class Parser {
                 expect(TokenKind::RParen);
 
                 return ast::make_function_ptr(std::move(base_type), std::move(param_types));
+            } else {
+                // 単純なポインタ型: void*, int*, etc.
+                advance();  // consume *
+                return ast::make_pointer(std::move(base_type));
             }
         }
 
@@ -1212,9 +1216,35 @@ class Parser {
                 auto type = ast::make_named(name);
                 type->type_args = std::move(type_args);
 
-                // 関数ポインタ型: MyStruct*(int, int)
-                if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
-                    tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                // 関数ポインタ型: Vec<T>*(int, int) または ポインタ型: Vec<T>*
+                if (check(TokenKind::Star)) {
+                    if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                        advance();  // consume *
+                        advance();  // consume (
+
+                        std::vector<ast::TypePtr> param_types;
+                        if (!check(TokenKind::RParen)) {
+                            do {
+                                param_types.push_back(parse_type());
+                            } while (consume_if(TokenKind::Comma));
+                        }
+                        expect(TokenKind::RParen);
+
+                        return ast::make_function_ptr(std::move(type), std::move(param_types));
+                    } else {
+                        // 単純なポインタ型: Vec<T>*
+                        advance();  // consume *
+                        return ast::make_pointer(std::move(type));
+                    }
+                }
+
+                return type;
+            }
+
+            // 関数ポインタ型: MyStruct*(int, int) または ポインタ型: MyStruct*
+            if (check(TokenKind::Star)) {
+                auto named_type = ast::make_named(name);
+                if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
                     advance();  // consume *
                     advance();  // consume (
 
@@ -1226,28 +1256,12 @@ class Parser {
                     }
                     expect(TokenKind::RParen);
 
-                    return ast::make_function_ptr(std::move(type), std::move(param_types));
+                    return ast::make_function_ptr(std::move(named_type), std::move(param_types));
+                } else {
+                    // 単純なポインタ型: MyStruct*
+                    advance();  // consume *
+                    return ast::make_pointer(std::move(named_type));
                 }
-
-                return type;
-            }
-
-            // 関数ポインタ型: MyStruct*(int, int)
-            if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
-                tokens_[pos_ + 1].kind == TokenKind::LParen) {
-                auto named_type = ast::make_named(name);
-                advance();  // consume *
-                advance();  // consume (
-
-                std::vector<ast::TypePtr> param_types;
-                if (!check(TokenKind::RParen)) {
-                    do {
-                        param_types.push_back(parse_type());
-                    } while (consume_if(TokenKind::Comma));
-                }
-                expect(TokenKind::RParen);
-
-                return ast::make_function_ptr(std::move(named_type), std::move(param_types));
             }
 
             return ast::make_named(name);

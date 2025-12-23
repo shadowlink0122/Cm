@@ -535,9 +535,15 @@ class Evaluator {
             const auto& l = std::any_cast<const PointerValue&>(lhs);
             const auto& r = std::any_cast<const PointerValue&>(rhs);
 
-            // 同じローカル変数を指し、配列インデックス/フィールドインデックスも同じ場合は等しい
-            bool equal = (l.target_local == r.target_local) && (l.array_index == r.array_index) &&
-                         (l.field_index == r.field_index);
+            // 外部ポインタの場合はraw_ptrも比較
+            bool equal;
+            if (l.is_external() || r.is_external()) {
+                equal = (l.raw_ptr == r.raw_ptr);
+            } else {
+                // 同じローカル変数を指し、配列インデックス/フィールドインデックスも同じ場合は等しい
+                equal = (l.target_local == r.target_local) && (l.array_index == r.array_index) &&
+                        (l.field_index == r.field_index);
+            }
 
             switch (op) {
                 case MirBinaryOp::Eq:
@@ -546,6 +552,72 @@ class Evaluator {
                     return Value(!equal);
                 default:
                     break;
+            }
+        }
+
+        // ポインタとnull（空のValue）の比較
+        if (lhs.type() == typeid(PointerValue) && !rhs.has_value()) {
+            const auto& ptr = std::any_cast<const PointerValue&>(lhs);
+            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
+                                              : (ptr.target_local == static_cast<LocalId>(-1));
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(is_null);
+                case MirBinaryOp::Ne:
+                    return Value(!is_null);
+                default:
+                    break;
+            }
+        }
+
+        // null（空のValue）とポインタの比較
+        if (!lhs.has_value() && rhs.type() == typeid(PointerValue)) {
+            const auto& ptr = std::any_cast<const PointerValue&>(rhs);
+            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
+                                              : (ptr.target_local == static_cast<LocalId>(-1));
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(is_null);
+                case MirBinaryOp::Ne:
+                    return Value(!is_null);
+                default:
+                    break;
+            }
+        }
+
+        // ポインタとnull（int64_t 0）の比較
+        if (lhs.type() == typeid(PointerValue) && rhs.type() == typeid(int64_t)) {
+            int64_t rhs_val = std::any_cast<int64_t>(rhs);
+            if (rhs_val == 0) {  // nullとの比較
+                const auto& ptr = std::any_cast<const PointerValue&>(lhs);
+                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
+                                                  : (ptr.target_local == static_cast<LocalId>(-1));
+                switch (op) {
+                    case MirBinaryOp::Eq:
+                        return Value(is_null);
+                    case MirBinaryOp::Ne:
+                        return Value(!is_null);
+                    default:
+                        break;
+                }
+            }
+        }
+
+        // null（int64_t 0）とポインタの比較
+        if (lhs.type() == typeid(int64_t) && rhs.type() == typeid(PointerValue)) {
+            int64_t lhs_val = std::any_cast<int64_t>(lhs);
+            if (lhs_val == 0) {  // nullとの比較
+                const auto& ptr = std::any_cast<const PointerValue&>(rhs);
+                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
+                                                  : (ptr.target_local == static_cast<LocalId>(-1));
+                switch (op) {
+                    case MirBinaryOp::Eq:
+                        return Value(is_null);
+                    case MirBinaryOp::Ne:
+                        return Value(!is_null);
+                    default:
+                        break;
+                }
             }
         }
 
@@ -718,6 +790,9 @@ class Evaluator {
                                 static_cast<int64_t>(std::any_cast<bool>(operand) ? 1 : 0));
                         } else if (operand.type() == typeid(char)) {
                             return Value(static_cast<int64_t>(std::any_cast<char>(operand)));
+                        } else if (operand.type() == typeid(void*)) {
+                            // ポインタから整数へのキャスト
+                            return Value(reinterpret_cast<int64_t>(std::any_cast<void*>(operand)));
                         }
                     } else if (data.target_type->kind == hir::TypeKind::Double ||
                                data.target_type->kind == hir::TypeKind::Float) {
@@ -727,6 +802,15 @@ class Evaluator {
                     } else if (data.target_type->kind == hir::TypeKind::Bool) {
                         if (operand.type() == typeid(int64_t)) {
                             return Value(std::any_cast<int64_t>(operand) != 0);
+                        }
+                    } else if (data.target_type->kind == hir::TypeKind::Pointer) {
+                        // 整数からポインタへのキャスト
+                        if (operand.type() == typeid(int64_t)) {
+                            return Value(reinterpret_cast<void*>(std::any_cast<int64_t>(operand)));
+                        }
+                        // ポインタ間のキャスト（型のみ変更）
+                        if (operand.type() == typeid(void*)) {
+                            return operand;  // 既にvoid*なのでそのまま
                         }
                     }
                 }

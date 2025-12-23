@@ -2023,11 +2023,17 @@ v0.10.0で実装したスライスと高階関数をLLVM/WASMバックエンド�
 - ✅ `tests/test_programs/slice/slice_reduce.cm`
 - ✅ `tests/test_programs/arrays/multidim_array.cm`
 - ✅ `tests/test_programs/slice/multidim_slice.cm`
+- ✅ `tests/test_programs/allocator/allocator_interface.cm`
+
+### バグ修正（2025年12月23日）
+- ✅ インタプリタ: ポインタとnull（int64_t 0）の比較（`ptr != null`）が正しく動作しない問題を修正
+- ✅ std::mem: malloc/free等のFFI関数引数を`int`に統一（インタプリタとの互換性）
+- ✅ WASMランタイム: malloc/realloc/calloc引数を`int32_t`に統一
 
 ### テスト結果（2025年12月23日）
-- インタプリタ: 231/242 passed (11 skipped)
-- LLVM Native: 231/242 passed (11 skipped)
-- WASM: 231/242 passed (11 skipped)
+- インタプリタ: 230/243 passed (13 skipped)
+- LLVM Native: 230/243 passed (13 skipped)
+- WASM: 230/243 passed (13 skipped)
 
 ### 構文例
 ```cm

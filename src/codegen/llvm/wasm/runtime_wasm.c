@@ -170,7 +170,7 @@ int printf(const char* format, ...) {
 // ============================================================
 // Memory allocation (wrapping wasm_alloc from runtime_format.c)
 // ============================================================
-void* malloc(uint64_t size) {
+void* malloc(int32_t size) {
     return wasm_alloc((size_t)size);
 }
 
@@ -179,7 +179,7 @@ void free(void* ptr) {
     (void)ptr;
 }
 
-void* calloc(uint64_t nmemb, uint64_t size) {
+void* calloc(int32_t nmemb, int32_t size) {
     size_t total = (size_t)(nmemb * size);
     void* ptr = wasm_alloc(total);
     if (ptr) {
@@ -191,7 +191,7 @@ void* calloc(uint64_t nmemb, uint64_t size) {
     return ptr;
 }
 
-void* realloc(void* ptr, uint64_t size) {
+void* realloc(void* ptr, int32_t size) {
     // Simple implementation: allocate new, copy old data
     // Note: This doesn't actually free the old memory
     void* new_ptr = wasm_alloc((size_t)size);

@@ -138,13 +138,19 @@ struct HirLambda {
     std::string generated_name;  // 生成されたクロージャ名
 };
 
+// キャスト式
+struct HirCast {
+    HirExprPtr operand;
+    TypePtr target_type;
+};
+
 // 式の種類
 using HirExprKind =
     std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
                  std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
                  std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
                  std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>,
-                 std::unique_ptr<HirLambda>>;
+                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>>;
 
 struct HirExpr {
     HirExprKind kind;

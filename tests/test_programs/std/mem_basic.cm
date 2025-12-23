@@ -8,7 +8,7 @@ import std::io::println;
 
 int main() {
     // メモリ確保（FFI経由）
-    usize size = 8;
+    int size = 8;
     void* ptr = malloc(size);
     
     // メモリ解放

@@ -1,0 +1,84 @@
+// Test: Memory Management Functions
+// Tests the std::mem module functions with actual value verification
+
+import std::mem::{malloc, free};
+
+struct Point {
+    int x;
+    int y;
+}
+
+void test_int_allocation() {
+    print("int allocation test:\n");
+    
+    int* arr = malloc(sizeof(int) * 3) as int*;
+    
+    // 値を書き込み
+    arr[0] = 42;
+    arr[1] = 100;
+    arr[2] = -7;
+    
+    // 値を検証
+    if (arr[0] == 42 && arr[1] == 100 && arr[2] == -7) {
+        print("int array values verified\n");
+    } else {
+        print("ERROR: int array values incorrect\n");
+    }
+    
+    free(arr);
+    print("int array freed\n");
+}
+
+void test_struct_allocation() {
+    print("struct allocation test:\n");
+    
+    void* raw = malloc(sizeof(Point));
+    Point* p = raw as Point*;
+    
+    // 値を書き込み
+    p->x = 10;
+    p->y = 20;
+    
+    // 値を検証
+    if (p->x == 10 && p->y == 20) {
+        print("Point values verified: (10, 20)\n");
+    } else {
+        print("ERROR: Point values incorrect\n");
+    }
+    
+    free(raw);
+    print("Point freed\n");
+}
+
+void test_multiple_structs() {
+    print("multiple structs test:\n");
+    
+    void* raw = malloc(sizeof(Point) * 2);
+    Point* points = raw as Point*;
+    
+    // 2つのPointを初期化
+    points[0].x = 1;
+    points[0].y = 2;
+    points[1].x = 3;
+    points[1].y = 4;
+    
+    // 値を検証
+    if (points[0].x == 1 && points[0].y == 2 &&
+        points[1].x == 3 && points[1].y == 4) {
+        print("Point array values verified\n");
+    } else {
+        print("ERROR: Point array values incorrect\n");
+    }
+    
+    free(raw);
+    print("Point array freed\n");
+}
+
+int main() {
+    test_int_allocation();
+    test_struct_allocation();
+    test_multiple_structs();
+    
+    print("All memory tests passed!\n");
+    return 0;
+}

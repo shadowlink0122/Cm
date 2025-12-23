@@ -1,0 +1,41 @@
+// カスタムアロケータと as T キャストのテスト
+import std::mem::{malloc, free, Allocator, DefaultAllocator};
+
+struct Point {
+    int x;
+    int y;
+}
+
+void main() {
+    // デフォルトアロケータを使用
+    DefaultAllocator alloc = DefaultAllocator{};
+    
+    // sizeof(T)でメモリを確保し、as T* でキャスト
+    void* raw = alloc.alloc(sizeof(Point));
+    Point* p = raw as Point*;
+    
+    // ポインタ経由で初期化
+    p->x = 10;
+    p->y = 20;
+    
+    println("Point: ({p->x}, {p->y})");
+    
+    // メモリを解放
+    alloc.dealloc(raw);
+    
+    // 複数オブジェクトの確保
+    int count = 3;
+    void* arr_raw = alloc.alloc(sizeof(int) * count);
+    int* arr = arr_raw as int*;
+    
+    // 配列として使用
+    arr[0] = 100;
+    arr[1] = 200;
+    arr[2] = 300;
+    
+    println("Array: [{arr[0]}, {arr[1]}, {arr[2]}]");
+    
+    alloc.dealloc(arr_raw);
+    
+    println("Allocator cast tests passed!");
+}

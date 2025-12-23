@@ -1,0 +1,21 @@
+// ポインタキャストのテスト
+import std::mem::{malloc, free};
+
+void main() {
+    // void* から int* へのキャスト
+    void* raw = malloc(sizeof(int));
+    int* p = raw as int*;
+    *p = 42;
+    println("pointer cast value: {*p}");
+    free(raw);
+    
+    // int* から void* へのキャスト
+    int x = 100;
+    int* px = &x;
+    void* raw2 = px as void*;
+    // raw2 を int* にキャストして値を取得
+    int* back = raw2 as int*;
+    println("cast back: {*back}");
+    
+    println("Pointer cast tests passed!");
+}

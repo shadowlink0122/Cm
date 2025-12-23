@@ -1,0 +1,31 @@
+// as T キャスト構文のテスト
+
+void main() {
+    // int -> double キャスト
+    int i = 42;
+    double d = i as double;
+    println("int to double: {d}");
+    
+    // double -> int キャスト
+    double pi = 3.14159;
+    int pi_int = pi as int;
+    println("double to int: {pi_int}");
+    
+    // bool -> int キャスト
+    bool flag = true;
+    int b = flag as int;
+    println("bool to int: {b}");
+    
+    // char -> int キャスト
+    char c = 'A';
+    int c_int = c as int;
+    println("char to int: {c_int}");
+    
+    // 連鎖キャスト
+    double x = 10.5;
+    int y = x as int;
+    double z = y as double;
+    println("chain cast: {z}");
+    
+    println("All cast tests passed!");
+}

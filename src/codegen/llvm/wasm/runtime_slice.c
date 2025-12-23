@@ -7,7 +7,7 @@
 
 // Forward declarations for WASM memory functions
 void* wasm_alloc(size_t size);
-void* realloc(void* ptr, uint64_t size);
+void* realloc(void* ptr, int32_t size);
 void cm_free(void* ptr);
 // memcpy and memcmp are defined in runtime_wasm.c before this file is included
 

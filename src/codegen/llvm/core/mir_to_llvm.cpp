@@ -884,6 +884,14 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateBitCast(value, targetType, "ptr_cast");
             }
 
+            // int <-> ポインタ変換
+            if (sourceType->isIntegerTy() && targetType->isPointerTy()) {
+                return builder->CreateIntToPtr(value, targetType, "inttoptr");
+            }
+            if (sourceType->isPointerTy() && targetType->isIntegerTy()) {
+                return builder->CreatePtrToInt(value, targetType, "ptrtoint");
+            }
+
             return value;
         }
         default:

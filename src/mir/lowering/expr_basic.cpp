@@ -694,4 +694,21 @@ LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
     return str_result;
 }
 
+// キャスト式のlowering
+LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx) {
+    debug_msg("MIR", "Lowering cast expression");
+
+    // オペランドをlowering
+    LocalId operand = lower_expression(*cast.operand, ctx);
+
+    // ターゲット型で結果変数を作成
+    LocalId result = ctx.new_temp(cast.target_type);
+
+    // キャスト命令を生成
+    ctx.push_statement(MirStatement::assign(
+        MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type)));
+
+    return result;
+}
+
 }  // namespace cm::mir
