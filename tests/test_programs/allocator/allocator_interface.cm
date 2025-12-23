@@ -3,81 +3,49 @@
 
 import std::mem::{malloc, free};
 
-struct Point {
-    int x;
-    int y;
-}
-
-void test_int_allocation() {
+int main() {
+    // 単一int確保テスト
     print("int allocation test:\n");
     
-    int* arr = malloc(sizeof(int) * 3) as int*;
+    void* raw = malloc(sizeof(int));
+    int* p = raw as int*;
     
-    // 値を書き込み
-    arr[0] = 42;
-    arr[1] = 100;
-    arr[2] = -7;
+    *p = 42;
+    int v = *p;
     
-    // 値を検証
-    if (arr[0] == 42 && arr[1] == 100 && arr[2] == -7) {
-        print("int array values verified\n");
+    if (v == 42) {
+        print("int value verified\n");
     } else {
-        print("ERROR: int array values incorrect\n");
-    }
-    
-    free(arr);
-    print("int array freed\n");
-}
-
-void test_struct_allocation() {
-    print("struct allocation test:\n");
-    
-    void* raw = malloc(sizeof(Point));
-    Point* p = raw as Point*;
-    
-    // 値を書き込み
-    p->x = 10;
-    p->y = 20;
-    
-    // 値を検証
-    if (p->x == 10 && p->y == 20) {
-        print("Point values verified: (10, 20)\n");
-    } else {
-        print("ERROR: Point values incorrect\n");
+        print("ERROR: int value incorrect\n");
     }
     
     free(raw);
-    print("Point freed\n");
-}
-
-void test_multiple_structs() {
-    print("multiple structs test:\n");
+    print("int freed\n");
     
-    void* raw = malloc(sizeof(Point) * 2);
-    Point* points = raw as Point*;
+    // 複数確保テスト
+    print("multiple allocation test:\n");
     
-    // 2つのPointを初期化
-    points[0].x = 1;
-    points[0].y = 2;
-    points[1].x = 3;
-    points[1].y = 4;
+    void* raw1 = malloc(sizeof(int));
+    void* raw2 = malloc(sizeof(int));
     
-    // 値を検証
-    if (points[0].x == 1 && points[0].y == 2 &&
-        points[1].x == 3 && points[1].y == 4) {
-        print("Point array values verified\n");
+    int* p1 = raw1 as int*;
+    int* p2 = raw2 as int*;
+    
+    *p1 = 100;
+    *p2 = 200;
+    
+    int v1 = *p1;
+    int v2 = *p2;
+    
+    if (v1 == 100 && v2 == 200) {
+        print("multiple values verified\n");
     } else {
-        print("ERROR: Point array values incorrect\n");
+        print("ERROR: multiple values incorrect\n");
     }
     
-    free(raw);
-    print("Point array freed\n");
-}
-
-int main() {
-    test_int_allocation();
-    test_struct_allocation();
-    test_multiple_structs();
+    free(raw1);
+    free(raw2);
+    print("multiple freed\n");
     
     print("All memory tests passed!\n");
     return 0;

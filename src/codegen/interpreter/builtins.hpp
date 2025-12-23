@@ -127,6 +127,59 @@ class BuiltinManager {
             return Value(null_ptr);
         };
 
+        // realloc - メモリ再確保
+        builtins_["realloc"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (args.size() >= 2) {
+                void* old_ptr = nullptr;
+                if (args[0].type() == typeid(PointerValue)) {
+                    old_ptr = std::any_cast<PointerValue>(args[0]).raw_ptr;
+                } else if (args[0].type() == typeid(int64_t)) {
+                    old_ptr = reinterpret_cast<void*>(std::any_cast<int64_t>(args[0]));
+                }
+                
+                size_t new_size = 0;
+                if (args[1].type() == typeid(int64_t)) {
+                    new_size = static_cast<size_t>(std::any_cast<int64_t>(args[1]));
+                } else if (args[1].type() == typeid(uint64_t)) {
+                    new_size = static_cast<size_t>(std::any_cast<uint64_t>(args[1]));
+                }
+                
+                void* new_ptr = std::realloc(old_ptr, new_size);
+                PointerValue pv;
+                pv.target_local = static_cast<LocalId>(-1);
+                pv.raw_ptr = new_ptr;
+                return Value(pv);
+            }
+            PointerValue null_ptr;
+            null_ptr.target_local = static_cast<LocalId>(-1);
+            null_ptr.raw_ptr = nullptr;
+            return Value(null_ptr);
+        };
+
+        // calloc - ゼロ初期化メモリ確保
+        builtins_["calloc"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
+            if (args.size() >= 2) {
+                size_t nmemb = 0;
+                size_t size = 0;
+                if (args[0].type() == typeid(int64_t)) {
+                    nmemb = static_cast<size_t>(std::any_cast<int64_t>(args[0]));
+                }
+                if (args[1].type() == typeid(int64_t)) {
+                    size = static_cast<size_t>(std::any_cast<int64_t>(args[1]));
+                }
+                
+                void* ptr = std::calloc(nmemb, size);
+                PointerValue pv;
+                pv.target_local = static_cast<LocalId>(-1);
+                pv.raw_ptr = ptr;
+                return Value(pv);
+            }
+            PointerValue null_ptr;
+            null_ptr.target_local = static_cast<LocalId>(-1);
+            null_ptr.raw_ptr = nullptr;
+            return Value(null_ptr);
+        };
+
         // free - メモリ解放
         builtins_["free"] = [](std::vector<Value> args, const auto& /* locals */) -> Value {
             if (!args.empty()) {

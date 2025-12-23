@@ -11,7 +11,7 @@ export <T> uint size_of() {
     return __sizeof__(T);
 }
 
-// 型の名前を文字列で取得
+// 型の名前を文字列で取得（型指定）
 // 使用例: string n = type_name<int>(); // -> "int"
 export <T> string type_name() {
     return __typename__(T);
@@ -22,3 +22,13 @@ export <T> string type_name() {
 export <T> uint align_of() {
     return __alignof__(T);
 }
+
+// ============================================================
+// 変数の型名を取得するには typeof(変数) を使用
+// 使用例:
+//   int x = 42;
+//   string t = typeof(x);  // -> "int"
+//
+//   Point pt = Point{x: 10, y: 20};
+//   string t = typeof(pt); // -> "Point"
+// ============================================================

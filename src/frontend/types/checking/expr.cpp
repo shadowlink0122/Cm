@@ -82,6 +82,12 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             // (typeofは通常、型コンテキストで使用される)
         }
         inferred_type = ast::make_error();
+    } else if (auto* typename_expr = expr.as<ast::TypenameOfExpr>()) {
+        // __typename__(型) または __typename__(式) - 文字列を返す
+        if (typename_expr->target_expr) {
+            infer_type(*typename_expr->target_expr);
+        }
+        inferred_type = ast::make_string();
     } else if (auto* cast_expr = expr.as<ast::CastExpr>()) {
         // キャスト式: expr as Type
         // オペランドの型を推論

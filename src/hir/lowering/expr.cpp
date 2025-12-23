@@ -99,10 +99,19 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         lit->value = alignment;
         return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
     } else if (auto* typename_expr = expr.as<ast::TypenameOfExpr>()) {
-        // typename(T) - 型の名前を文字列として返す
+        // typename(T) または typename(expr) - 型の名前を文字列として返す
         std::string type_name;
         if (typename_expr->target_type) {
+            // 型が直接指定された場合
             type_name = ast::type_to_string(*typename_expr->target_type);
+        } else if (typename_expr->target_expr) {
+            // 式が指定された場合、式の型を取得
+            auto lowered = lower_expr(*typename_expr->target_expr);
+            if (lowered && lowered->type) {
+                type_name = ast::type_to_string(*lowered->type);
+            } else {
+                type_name = "<unknown>";
+            }
         }
         debug::hir::log(debug::hir::Id::LiteralLower, "typename = \"" + type_name + "\"",
                         debug::Level::Debug);

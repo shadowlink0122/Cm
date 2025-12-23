@@ -121,6 +121,12 @@ class Evaluator {
                                 case hir::TypeKind::Char:
                                     result = Value(*reinterpret_cast<char*>(ptr.raw_ptr));
                                     break;
+                                case hir::TypeKind::Struct: {
+                                    // 構造体の場合、PointerValueを保持して後続のフィールドアクセスで処理
+                                    // resultをPointerValueのまま保持
+                                    // 次のField projectionで処理される
+                                    break;
+                                }
                                 default:
                                     // デフォルトはint64_t
                                     result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
@@ -807,6 +813,15 @@ class Evaluator {
                         // 整数からポインタへのキャスト
                         if (operand.type() == typeid(int64_t)) {
                             return Value(reinterpret_cast<void*>(std::any_cast<int64_t>(operand)));
+                        }
+                        // PointerValueのキャスト（型情報を更新）
+                        if (operand.type() == typeid(PointerValue)) {
+                            PointerValue pv = std::any_cast<PointerValue>(operand);
+                            // ターゲット型のポイント先の型情報を設定
+                            if (data.target_type->element_type) {
+                                pv.element_type = data.target_type->element_type;
+                            }
+                            return Value(pv);
                         }
                         // ポインタ間のキャスト（型のみ変更）
                         if (operand.type() == typeid(void*)) {

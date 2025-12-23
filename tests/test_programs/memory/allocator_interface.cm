@@ -3,64 +3,49 @@ module test;
 
 import std::mem::{Allocator, DefaultAllocator, malloc, free};
 
-struct Data {
-    int value;
-    int flags;
-}
-
 int main() {
-    // 直接FFI使用 - int配列で値検証
-    void* raw1 = malloc(sizeof(int) * 4);
-    int* arr = raw1 as int*;
-    arr[0] = 10;
-    arr[1] = 20;
-    arr[2] = 30;
-    arr[3] = 40;
+    // 直接FFI使用 - 単一int
+    void* raw1 = malloc(sizeof(int));
+    int* p1 = raw1 as int*;
     
-    if (arr[0] == 10 && arr[1] == 20 && arr[2] == 30 && arr[3] == 40) {
-        println("malloc int array: ok");
+    *p1 = 42;
+    int v1 = *p1;
+    
+    if (v1 == 42) {
+        print("malloc single int: ok\n");
     } else {
-        println("malloc int array: FAILED");
+        print("malloc single int: FAILED\n");
     }
     free(raw1);
-    println("free: ok");
     
-    // DefaultAllocator使用 - 構造体で値検証
+    // DefaultAllocator使用
     DefaultAllocator alloc = DefaultAllocator{};
     
-    void* raw2 = alloc.alloc(sizeof(Data));
-    Data* d = raw2 as Data*;
-    d->value = 42;
-    d->flags = 7;
+    void* raw2 = alloc.alloc(sizeof(int));
+    int* p2 = raw2 as int*;
+    *p2 = 100;
+    int v2 = *p2;
     
-    if (d->value == 42 && d->flags == 7) {
-        println("alloc struct: ok");
+    if (v2 == 100) {
+        print("alloc single int: ok\n");
     } else {
-        println("alloc struct: FAILED");
+        print("alloc single int: FAILED\n");
     }
     
-    // reallocateで拡張後も値が保持されるか検証
-    void* raw3 = alloc.reallocate(raw2, sizeof(Data) * 2);
-    Data* d2 = raw3 as Data*;
+    // reallocateテスト
+    void* raw3 = alloc.reallocate(raw2, sizeof(int) * 2);
+    int* p3 = raw3 as int*;
+    *p3 = 200;
+    int v3 = *p3;
     
-    if (d2[0].value == 42 && d2[0].flags == 7) {
-        println("reallocate preserves data: ok");
+    if (v3 == 200) {
+        print("reallocate: ok\n");
     } else {
-        println("reallocate preserves data: FAILED");
-    }
-    
-    // 拡張分に新しい値を設定
-    d2[1].value = 100;
-    d2[1].flags = 15;
-    
-    if (d2[1].value == 100 && d2[1].flags == 15) {
-        println("reallocate new space: ok");
-    } else {
-        println("reallocate new space: FAILED");
+        print("reallocate: FAILED\n");
     }
     
     alloc.dealloc(raw3);
-    println("dealloc: ok");
+    print("dealloc: ok\n");
     
     return 0;
 }

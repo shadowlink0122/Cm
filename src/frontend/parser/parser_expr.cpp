@@ -696,14 +696,21 @@ ast::ExprPtr Parser::parse_primary() {
         }
     }
 
-    // typeof式 - typeof(式)
+    // typeof式 - typeof(式) で型名を文字列として取得
     if (consume_if(TokenKind::KwTypeof)) {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found 'typeof' expression",
                         debug::Level::Debug);
         expect(TokenKind::LParen);
-        auto expr = parse_expr();
-        expect(TokenKind::RParen);
-        return ast::make_typeof(std::move(expr), Span{start_pos, previous().end});
+        // 型か式かを判定
+        if (is_type_start()) {
+            auto type = parse_type();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of_expr(std::move(expr), Span{start_pos, previous().end});
+        }
     }
 
     // コンパイラ組み込み関数 __sizeof__(T) または __sizeof__(expr)
@@ -758,23 +765,36 @@ ast::ExprPtr Parser::parse_primary() {
     }
 
     // コンパイラ組み込み関数 __typeof__(expr)
+    // コンパイラ組み込み関数 __typeof__(expr) - typeofと同じ動作
     if (consume_if(TokenKind::KwIntrinsicTypeof)) {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found '__typeof__' intrinsic",
                         debug::Level::Debug);
         expect(TokenKind::LParen);
-        auto expr = parse_expr();
-        expect(TokenKind::RParen);
-        return ast::make_typeof(std::move(expr), Span{start_pos, previous().end});
+        if (is_type_start()) {
+            auto type = parse_type();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of_expr(std::move(expr), Span{start_pos, previous().end});
+        }
     }
 
-    // コンパイラ組み込み関数 __typename__(T)
+    // コンパイラ組み込み関数 __typename__(T) - typeofと同じ動作（後方互換性）
     if (consume_if(TokenKind::KwIntrinsicTypename)) {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found '__typename__' intrinsic",
                         debug::Level::Debug);
         expect(TokenKind::LParen);
-        auto type = parse_type();
-        expect(TokenKind::RParen);
-        return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        if (is_type_start()) {
+            auto type = parse_type();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of_expr(std::move(expr), Span{start_pos, previous().end});
+        }
     }
 
     // コンパイラ組み込み関数 __alignof__(T)

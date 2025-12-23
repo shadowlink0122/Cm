@@ -1,0 +1,9 @@
+=== Allocator Cast Test ===
+Test: int via allocator
+  int value: PASS (99)
+Test: double via allocator
+  double value: PASS (2.71828)
+Test: reallocate
+  reallocate: PASS (456)
+
+Allocator cast tests passed!

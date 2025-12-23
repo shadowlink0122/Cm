@@ -309,11 +309,14 @@ struct AlignofExpr {
 
 // ============================================================
 // typename_of式 - 型の名前を文字列で取得
+// __typename__(型) または __typename__(式) の両方に対応
 // ============================================================
 struct TypenameOfExpr {
-    TypePtr target_type;
+    TypePtr target_type;      // 型指定の場合
+    ExprPtr target_expr;      // 式指定の場合
 
     explicit TypenameOfExpr(TypePtr t) : target_type(std::move(t)) {}
+    explicit TypenameOfExpr(ExprPtr e) : target_expr(std::move(e)) {}
 };
 
 // ============================================================
@@ -506,6 +509,10 @@ inline ExprPtr make_alignof(TypePtr type, Span s = {}) {
 
 inline ExprPtr make_typename_of(TypePtr type, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<TypenameOfExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_typename_of_expr(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TypenameOfExpr>(std::move(expr)), s);
 }
 
 inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {

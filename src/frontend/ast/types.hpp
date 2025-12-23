@@ -326,10 +326,10 @@ inline std::string type_to_string(const Type& t) {
             return "&" + (t.element_type ? type_to_string(*t.element_type) : "?");
         case TypeKind::Array:
             if (t.array_size) {
-                return "[" + (t.element_type ? type_to_string(*t.element_type) : "?") + "; " +
+                return (t.element_type ? type_to_string(*t.element_type) : "?") + "[" +
                        std::to_string(*t.array_size) + "]";
             }
-            return "[" + (t.element_type ? type_to_string(*t.element_type) : "?") + "]";
+            return (t.element_type ? type_to_string(*t.element_type) : "?") + "[]";
         case TypeKind::Struct:
         case TypeKind::Interface: {
             std::string result = t.name;

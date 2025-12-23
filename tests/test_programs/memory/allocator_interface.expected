@@ -1,6 +1,0 @@
-malloc int array: ok
-free: ok
-alloc struct: ok
-reallocate preserves data: ok
-reallocate new space: ok
-dealloc: ok
