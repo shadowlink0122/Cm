@@ -512,35 +512,76 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
                                         if (struct_type &&
                                             struct_type->kind == hir::TypeKind::Struct) {
-                                            auto field_idx =
-                                                ctx.get_field_index(struct_type->name, member_name);
-                                            if (field_idx) {
-                                                // フィールド型を取得
-                                                hir::TypePtr field_type = hir::make_int();
-                                                if (ctx.struct_defs &&
-                                                    ctx.struct_defs->count(struct_type->name)) {
-                                                    const auto* struct_def =
-                                                        ctx.struct_defs->at(struct_type->name);
-                                                    if (*field_idx < struct_def->fields.size()) {
-                                                        field_type =
-                                                            struct_def->fields[*field_idx].type;
-                                                    }
+                                            // member_name に -> が含まれる場合（チェーンアクセス）
+                                            MirPlace place{*var_id};
+                                            place.projections.push_back(PlaceProjection::deref());
+                                            hir::TypePtr current_type = struct_type;
+                                            std::string remaining = member_name;
+                                            bool valid = true;
+
+                                            while (!remaining.empty() && valid) {
+                                                size_t next_arrow = remaining.find("->");
+                                                size_t next_dot = remaining.find('.');
+                                                std::string field_part;
+                                                bool needs_deref = false;
+
+                                                if (next_arrow != std::string::npos &&
+                                                    (next_dot == std::string::npos || next_arrow < next_dot)) {
+                                                    field_part = remaining.substr(0, next_arrow);
+                                                    remaining = remaining.substr(next_arrow + 2);
+                                                    needs_deref = true;
+                                                } else if (next_dot != std::string::npos) {
+                                                    field_part = remaining.substr(0, next_dot);
+                                                    remaining = remaining.substr(next_dot + 1);
+                                                } else {
+                                                    field_part = remaining;
+                                                    remaining.clear();
                                                 }
 
-                                                LocalId result = ctx.new_temp(field_type);
+                                                // ポインタ型の場合はDerefを追加
+                                                if (current_type && current_type->kind == hir::TypeKind::Pointer) {
+                                                    place.projections.push_back(PlaceProjection::deref());
+                                                    current_type = current_type->element_type;
+                                                }
 
-                                                // Deref + Field プロジェクション
-                                                MirPlace place{*var_id};
-                                                place.projections.push_back(
-                                                    PlaceProjection::deref());
-                                                place.projections.push_back(
-                                                    PlaceProjection::field(*field_idx));
+                                                if (!current_type || current_type->kind != hir::TypeKind::Struct) {
+                                                    valid = false;
+                                                    break;
+                                                }
 
+                                                auto field_idx = ctx.get_field_index(current_type->name, field_part);
+                                                if (!field_idx) {
+                                                    valid = false;
+                                                    break;
+                                                }
+
+                                                place.projections.push_back(PlaceProjection::field(*field_idx));
+
+                                                // フィールド型を取得
+                                                hir::TypePtr field_type = hir::make_int();
+                                                if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
+                                                    const auto* struct_def = ctx.struct_defs->at(current_type->name);
+                                                    if (*field_idx < struct_def->fields.size()) {
+                                                        field_type = struct_def->fields[*field_idx].type;
+                                                    }
+                                                }
+                                                current_type = field_type;
+
+                                                // アロー演算子の場合、次にDerefを追加
+                                                if (needs_deref && current_type && 
+                                                    current_type->kind == hir::TypeKind::Pointer) {
+                                                    place.projections.push_back(PlaceProjection::deref());
+                                                    current_type = current_type->element_type;
+                                                }
+                                            }
+
+                                            if (valid) {
+                                                LocalId result = ctx.new_temp(current_type);
                                                 ctx.push_statement(MirStatement::assign(
                                                     MirPlace{result},
                                                     MirRvalue::use(MirOperand::copy(place))));
 
-                                                debug_msg("MIR", "(*ptr).member interpolation: " +
+                                                debug_msg("MIR", "(*ptr).chain interpolation: " +
                                                                      ptr_name + "." + member_name);
                                                 arg_locals.push_back(result);
                                                 continue;
@@ -558,6 +599,13 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                             std::string ptr_name = var_name.substr(0, arrow_pos);
                             std::string member_name = var_name.substr(arrow_pos + 2);
 
+                            // ptr_name にドットが含まれる場合（obj.field->member形式）は
+                            // else節のドットアクセス処理に任せる
+                            if (ptr_name.find('.') != std::string::npos) {
+                                // 以下のelse節（dot_pos処理）にフォールスルー
+                                goto handle_dot_access;
+                            }
+
                             auto var_id = ctx.resolve_variable(ptr_name);
                             if (var_id) {
                                 hir::TypePtr ptr_type = nullptr;
@@ -572,33 +620,66 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                 }
 
                                 if (struct_type && struct_type->kind == hir::TypeKind::Struct) {
-                                    auto field_idx =
-                                        ctx.get_field_index(struct_type->name, member_name);
-                                    if (field_idx) {
+                                    // member_name に -> が含まれる場合（チェーンアクセス）
+                                    // ptr->field1->field2 のような形式を処理
+                                    MirPlace place{*var_id};
+                                    place.projections.push_back(PlaceProjection::deref());
+                                    hir::TypePtr current_type = struct_type;
+                                    std::string remaining = member_name;
+                                    bool valid = true;
+
+                                    while (!remaining.empty() && valid) {
+                                        size_t next_arrow = remaining.find("->");
+                                        std::string field_part;
+                                        bool needs_deref = false;
+
+                                        if (next_arrow != std::string::npos) {
+                                            field_part = remaining.substr(0, next_arrow);
+                                            remaining = remaining.substr(next_arrow + 2);
+                                            needs_deref = true;  // 次のフィールドのためにDeref必要
+                                        } else {
+                                            field_part = remaining;
+                                            remaining.clear();
+                                        }
+
+                                        if (!current_type || current_type->kind != hir::TypeKind::Struct) {
+                                            valid = false;
+                                            break;
+                                        }
+
+                                        auto field_idx = ctx.get_field_index(current_type->name, field_part);
+                                        if (!field_idx) {
+                                            valid = false;
+                                            break;
+                                        }
+
+                                        place.projections.push_back(PlaceProjection::field(*field_idx));
+
                                         // フィールド型を取得
                                         hir::TypePtr field_type = hir::make_int();
-                                        if (ctx.struct_defs &&
-                                            ctx.struct_defs->count(struct_type->name)) {
-                                            const auto* struct_def =
-                                                ctx.struct_defs->at(struct_type->name);
+                                        if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
+                                            const auto* struct_def = ctx.struct_defs->at(current_type->name);
                                             if (*field_idx < struct_def->fields.size()) {
                                                 field_type = struct_def->fields[*field_idx].type;
                                             }
                                         }
+                                        current_type = field_type;
 
-                                        LocalId result = ctx.new_temp(field_type);
+                                        // 次のアローアクセスのためにDerefを追加
+                                        if (needs_deref && current_type && 
+                                            current_type->kind == hir::TypeKind::Pointer) {
+                                            place.projections.push_back(PlaceProjection::deref());
+                                            current_type = current_type->element_type;
+                                        }
+                                    }
 
-                                        // Deref + Field プロジェクション
-                                        MirPlace place{*var_id};
-                                        place.projections.push_back(PlaceProjection::deref());
-                                        place.projections.push_back(
-                                            PlaceProjection::field(*field_idx));
-
+                                    if (valid) {
+                                        LocalId result = ctx.new_temp(current_type);
                                         ctx.push_statement(MirStatement::assign(
                                             MirPlace{result},
                                             MirRvalue::use(MirOperand::copy(place))));
 
-                                        debug_msg("MIR", "ptr->member interpolation: " + ptr_name +
+                                        debug_msg("MIR", "ptr->chain interpolation: " + ptr_name +
                                                              "->" + member_name);
                                         arg_locals.push_back(result);
                                         continue;
@@ -609,6 +690,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                             auto err_type = hir::make_error();
                             arg_locals.push_back(ctx.new_temp(err_type));
                         } else {
+                        handle_dot_access:
                             // メンバーアクセスかどうかチェック（"self.x" や "p.field" の形式）
                             // または配列要素のフィールドアクセス（"arr[0].x" の形式）
                             size_t dot_pos = var_name.find('.');
@@ -1008,16 +1090,20 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                         std::string remaining = member_name;
 
                                         while (!remaining.empty() && valid) {
-                                            // 配列インデックスをチェック
+                                            // 配列インデックス、ドット、アロー演算子をチェック
                                             size_t bracket_pos = remaining.find('[');
                                             size_t dot_pos = remaining.find('.');
+                                            size_t arrow_pos = remaining.find("->");
+                                            bool is_arrow = false;
 
                                             std::string field_part;
                                             std::string index_part;
 
                                             if (bracket_pos != std::string::npos &&
                                                 (dot_pos == std::string::npos ||
-                                                 bracket_pos < dot_pos)) {
+                                                 bracket_pos < dot_pos) &&
+                                                (arrow_pos == std::string::npos ||
+                                                 bracket_pos < arrow_pos)) {
                                                 // arr[0] または arr[0].field のような形式
                                                 field_part = remaining.substr(0, bracket_pos);
                                                 size_t close_bracket =
@@ -1029,11 +1115,21 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     remaining = remaining.substr(close_bracket + 1);
                                                     if (!remaining.empty() && remaining[0] == '.') {
                                                         remaining = remaining.substr(1);
+                                                    } else if (remaining.size() >= 2 && remaining.substr(0, 2) == "->") {
+                                                        remaining = remaining.substr(2);
+                                                        is_arrow = true;
                                                     }
                                                 } else {
                                                     valid = false;
                                                     break;
                                                 }
+                                            } else if (arrow_pos != std::string::npos &&
+                                                       (dot_pos == std::string::npos ||
+                                                        arrow_pos < dot_pos)) {
+                                                // field->next のような形式（ポインタデリファレンス）
+                                                field_part = remaining.substr(0, arrow_pos);
+                                                remaining = remaining.substr(arrow_pos + 2);
+                                                is_arrow = true;
                                             } else if (dot_pos != std::string::npos) {
                                                 // field.next のような形式
                                                 field_part = remaining.substr(0, dot_pos);
@@ -1046,6 +1142,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
                                             // フィールドアクセスを処理
                                             if (!field_part.empty()) {
+                                                // ポインタ型の場合はDerefを追加
+                                                if (current_type &&
+                                                    current_type->kind == hir::TypeKind::Pointer) {
+                                                    place.projections.push_back(
+                                                        PlaceProjection::deref());
+                                                    current_type = current_type->element_type;
+                                                }
+
                                                 if (!current_type ||
                                                     current_type->kind != hir::TypeKind::Struct) {
                                                     valid = false;
@@ -1075,6 +1179,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     }
                                                 } else {
                                                     current_type = hir::make_int();
+                                                }
+
+                                                // アロー演算子の場合、ポインタをDerefする
+                                                if (is_arrow && current_type &&
+                                                    current_type->kind == hir::TypeKind::Pointer) {
+                                                    place.projections.push_back(
+                                                        PlaceProjection::deref());
+                                                    current_type = current_type->element_type;
                                                 }
                                             }
 
