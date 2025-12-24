@@ -2055,66 +2055,194 @@ int[] slice = fixed;  // 暗黙変換
 
 ---
 
-## Version 0.12.0 - Debug/Display自動実装とクロージャ
+## Version 0.12.0 - クロージャとJavaScriptトランスパイラ
 
 ### 目標
-Debug/Display自動実装、クロージャ（変数キャプチャ）、動的メモリ確保を実装。
+クロージャ（変数キャプチャ）の完全実装、JavaScriptトランスパイラの追加、開発ツールの充実。
 
-### Debug/Display自動実装
+### 完了した作業（2025年12月24日）
+
+#### クロージャ（変数キャプチャ）
+- ✅ パーサー: ラムダ式での外部変数参照の検出
+- ✅ HIR/MIR: キャプチャ変数の追跡と関数パラメータへの変換
+- ✅ インタプリタ: クロージャの実行（ClosureValue型）
+- ✅ LLVM Native: `_closure`版高階関数（map/filter）の生成とリンク
+- ✅ WASM: `_closure`版高階関数の生成とリンク
+- ✅ テスト: `tests/test_programs/iterator/iter_closure.cm`
+
+#### Debug/Display自動実装
+- ✅ `with Debug` による `.debug()` メソッドの自動生成
+- ✅ `with Display` による `.toString()` メソッドの自動生成
+- ✅ ネストした構造体のDebug出力
+- ✅ テスト: `tests/test_programs/interface/with_debug.cm`, `with_display.cm`
+
+### 実装状況
+
+#### クロージャ
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
-| Debug自動実装 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Display自動実装 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| 型→文字列変換関数 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| std::io I/O関数移動 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| クロージャ（変数キャプチャ） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| map/filterでのクロージャ使用 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### クロージャと動的メモリ
+#### Debug/Display自動実装
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
-| クロージャ（変数キャプチャ） | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| new T[n] 動的確保 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| delete 解放 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Vec<T> 型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| イテレータ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Debug自動実装 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Display自動実装 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ネストしたDebug | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+### JavaScriptトランスパイラ（優先度：高）
+| 機能 | パーサー | 型チェック | HIR/MIR | codegen | テスト |
+|------|----------|-----------|---------|---------|------|
+| `--target=js` 基本出力 | - | - | ✅ | ⬜ | ⬜ |
+| `--target=web` ブラウザ向け | - | - | ✅ | ⬜ | ⬜ |
+| 基本型のJS変換 | - | - | - | ⬜ | ⬜ |
+| 関数のJS変換 | - | - | - | ⬜ | ⬜ |
+| 構造体のJS変換 | - | - | - | ⬜ | ⬜ |
+| 配列/スライスのJS変換 | - | - | - | ⬜ | ⬜ |
+| extern "js" FFI | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| DOM操作API | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### 開発ツール
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| `cm lint` コード品質チェック | ⬜ | 未使用変数、型不一致等 |
+| `cm format` コードフォーマッタ | ⬜ | 統一されたコードスタイル |
+| VSCode構文ハイライト | ⬜ | .cm ファイルの色分け |
+| VSCodeエラーマーカー | ⬜ | コンパイルエラーの表示 |
+| VSCode定義ジャンプ | ⬜ | Go to Definition |
+| VSCode補完機能 | ⬜ | IntelliSense |
 
 ### 構文例
+
+#### クロージャ（実装済み）
 ```cm
-// Debug自動実装
-struct Point with Debug {
+int[5] arr = [1, 2, 3, 4, 5];
+int multiplier = 10;
+
+// クロージャ: multiplierをキャプチャ
+int*(int) scale = (int x) => { return x * multiplier; };
+int[] scaled = arr.map(scale);
+// scaled = [10, 20, 30, 40, 50]
+
+// filterでもクロージャ使用可能
+int threshold = 3;
+bool*(int) above = (int x) => { return x > threshold; };
+int[] filtered = arr.filter(above);
+// filtered = [4, 5]
+```
+
+#### Debug/Display（実装済み）
+```cm
+struct Point with Debug, Display {
     int x;
     int y;
 }
-println("{}", p.debug());  // "Point { x: 10, y: 20 }"
 
-// クロージャ（変数キャプチャ）
-int multiplier = 3;
-int[] result = arr.map((int x) => { return x * multiplier; });
-
-// 動的メモリ確保
-int[] dynamic = new int[n];
-delete dynamic;
-
-// Vec<T>
-Vec<int> vec;
-vec.push(1);
-vec.push(2);
-// スコープ終了時に自動解放
+Point p;
+p.x = 10; p.y = 20;
+println("{}", p.debug());     // "Point { x: 10, y: 20 }"
+println("{}", p.toString());  // "(10, 20)"
 ```
+
+#### JavaScriptトランスパイラ（計画）
+```bash
+# JavaScript出力（Node.js向け）
+cm compile --target=js app.cm -o app.js
+
+# Web向け出力（ブラウザ向け、HTMLローダー付き）
+cm compile --target=web app.cm -o dist/
+# 生成: dist/app.js, dist/index.html
+```
+
+```cm
+// JavaScript FFI（計画）
+extern "js" {
+    void console_log(string message);
+    void alert(string message);
+}
+
+// DOM操作（計画）
+extern "js" {
+    JSObject document_getElementById(string id);
+    void element_setText(JSObject elem, string text);
+}
+
+int main() {
+    console_log("Hello from Cm!");
+    JSObject btn = document_getElementById("myButton");
+    element_setText(btn, "Click me!");
+    return 0;
+}
+```
+
+#### 開発ツール（計画）
+```bash
+# コード品質チェック
+cm lint src/
+
+# コードフォーマット
+cm format src/ --write
+
+# VSCode拡張機能
+# - 構文ハイライト (.cm ファイル)
+# - エラー箇所のマーカー表示
+# - 定義へのジャンプ (F12)
+# - ホバーで型情報表示
+```
+
+### 実装優先順位
+
+1. **JavaScriptトランスパイラ**（優先度：高）
+   - MIRからJavaScriptへの変換
+   - 基本型、関数、構造体のサポート
+   - extern "js" FFIによるブラウザAPI連携
+
+2. **開発ツール**（優先度：中）
+   - `cm lint` / `cm format`
+   - VSCode拡張機能
 
 ---
 
-## Version 0.13.0 - 参照と所有権
+## Version 0.13.0 - イテレータと参照
 
 ### 目標
-参照型とmoveセマンティクスの実装（メモリ安全性の基盤）
+イテレータの完全実装（index/item両方の取得）と参照型の基礎実装。
 
-### 設計方針
-- **const以外は全て可変**（`mut`キーワードは不要）
-- **ポインタ（T*）**: C互換、手動管理、unsafe
-- **参照（&T）**: 借用チェック付き、安全、読み取り専用
-- **move**: 所有権の明示的移動
+### イテレータ（優先度：低）
+| 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
+|------|----------|-----------|---------|-------------|------|------|------|
+| for-in index取得 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| for-in (index, item) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Iterator インターフェース | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| カスタムイテレータ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
-### 実装項目
+#### 現在の状態
+- ✅ `for (item in arr)` - 要素のみ取得（実装済み）
+- ⬜ `for ((index, item) in arr)` - インデックスと要素の両方取得
+- ⬜ `for (index in 0..n)` - 範囲イテレータ
+
+#### 構文例（計画）
+```cm
+int[5] arr = [10, 20, 30, 40, 50];
+
+// 現在: 要素のみ
+for (int x in arr) {
+    println("{x}");
+}
+
+// 計画: インデックスと要素
+for ((int i, int x) in arr) {
+    println("{i}: {x}");
+}
+
+// 計画: 範囲イテレータ
+for (int i in 0..5) {
+    println("{i}");
+}
+```
+
+### 参照型
 | 機能 | パーサー | 型チェック | HIR/MIR | インタプリタ | LLVM | WASM | テスト |
 |------|----------|-----------|---------|-------------|------|------|------|
 | &T 参照型 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -2122,6 +2250,12 @@ vec.push(2);
 | 借用チェッカー | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | ライフタイム基礎 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Drop trait | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### 設計方針
+- **const以外は全て可変**（`mut`キーワードは不要）
+- **ポインタ（T*）**: C互換、手動管理、unsafe
+- **参照（&T）**: 借用チェック付き、安全、読み取り専用
+- **move**: 所有権の明示的移動
 
 ### 構文例
 ```cm
@@ -2222,10 +2356,20 @@ isize sys_write(int fd, *void buf, usize count) {
 
 ---
 
-## Version 0.16.0 - WASMフロントエンド
+## Version 0.16.0 - WASM Webフロントエンド
 
 ### 目標
-ブラウザ環境でのCmアプリケーション実行基盤
+WASM + JavaScriptローダーによるブラウザ環境でのCmアプリケーション実行基盤
+
+### v0.12.0のJSトランスパイラとの違い
+| アプローチ | v0.12.0 JSトランスパイラ | v0.16.0 WASM Webフロントエンド |
+|-----------|-------------------------|------------------------------|
+| 出力形式 | 純粋なJavaScript | WASM + JSローダー |
+| パフォーマンス | JS実行速度 | ネイティブに近い速度 |
+| ファイルサイズ | 小さい | やや大きい |
+| デバッグ | 容易（ソースマップ） | やや困難 |
+| ブラウザ互換性 | 広い | WASM対応ブラウザのみ |
+| 用途 | 軽量スクリプト、UI | 計算集約型アプリ |
 
 ### 実装項目
 | 機能 | パーサー | 型チェック | HIR/MIR | ビルドツール | ランタイム | テスト |
