@@ -8,7 +8,9 @@
 #include "codegen/llvm/native/codegen.hpp"
 #endif
 
+// JavaScript codegen
 #include "codegen/interpreter/interpreter.hpp"
+#include "codegen/js/codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
 #include "frontend/lexer/lexer.hpp"
@@ -56,7 +58,8 @@ struct Options {
     bool show_mir = false;
     bool show_mir_opt = false;
     bool emit_llvm = false;
-    std::string target = "";      // ターゲット (native, wasm)
+    bool emit_js = false;         // JavaScript生成
+    std::string target = "";      // ターゲット (native, wasm, js, web)
     bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 0;
     bool debug = false;
@@ -82,10 +85,13 @@ void print_help(const char* program_name) {
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n\n";
     std::cout << "コンパイル時オプション:\n";
-    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm)\n";
+    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
     std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
     std::cout << "                        wasm:   WebAssembly\n";
+    std::cout << "                        js:     JavaScript (Node.js向け)\n";
+    std::cout << "                        web:    JavaScript + HTML (ブラウザ向け)\n";
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
+    std::cout << "  --emit-js             JavaScriptを生成\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -155,6 +161,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.show_mir_opt = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
+        } else if (arg == "--emit-js") {
+            opts.emit_js = true;
         } else if (arg.substr(0, 9) == "--target=") {
             opts.target = arg.substr(9);
         } else if (arg == "--run") {
@@ -551,71 +559,117 @@ int main(int argc, char* argv[]) {
 
         // コンパイルコマンドの場合
         if (opts.command == Command::Compile) {
-#ifdef CM_LLVM_ENABLED
-            if (opts.verbose) {
-                std::cout << "=== LLVM Code Generation ===\n";
-            }
-
-            // LLVM バックエンドオプション設定
-            cm::codegen::llvm_backend::LLVMCodeGen::Options llvm_opts;
-
-            // ターゲット設定
-            if (opts.target == "wasm") {
-                llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
-                llvm_opts.format = cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
-            } else if (!opts.target.empty() && opts.target != "native") {
-                std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
-                std::cerr << "有効なターゲット: native, wasm\n";
-                return 1;
-            } else {
-                llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
-                llvm_opts.format = cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
-            }
-
-            // 出力ファイル設定
-            if (opts.output_file.empty()) {
-                if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
-                    llvm_opts.outputFile = "a.wasm";
-                } else {
-                    llvm_opts.outputFile = "a.out";
-                }
-            } else {
-                llvm_opts.outputFile = opts.output_file;
-            }
-
-            // 最適化レベル
-            llvm_opts.optimizationLevel = opts.optimization_level;
-            llvm_opts.debugInfo = opts.debug;
-            llvm_opts.verbose = opts.verbose || opts.debug;
-            llvm_opts.verifyIR = true;
-
-            // LLVM コード生成
-            try {
-                cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
-                codegen.compile(mir);
-
+            // JavaScript ターゲットの場合
+            if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
                 if (opts.verbose) {
-                    std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                    std::cout << "=== JavaScript Code Generation ===\n";
                 }
 
-                // --runオプションがある場合は実行
-                if (opts.run_after_emit &&
-                    llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
-                    if (opts.verbose) {
-                        std::cout << "実行中: " << llvm_opts.outputFile << "\n";
-                    }
-                    int exec_result = std::system(llvm_opts.outputFile.c_str());
-                    return WEXITSTATUS(exec_result);
+                // JavaScript バックエンドオプション設定
+                cm::codegen::js::JSCodeGenOptions js_opts;
+
+                // 出力ファイル設定
+                if (opts.output_file.empty()) {
+                    js_opts.outputFile = "output.js";
+                } else {
+                    js_opts.outputFile = opts.output_file;
                 }
-            } catch (const std::exception& e) {
-                std::cerr << "LLVM コード生成エラー: " << e.what() << "\n";
-                return 1;
-            }
+
+                js_opts.generateHTML = (opts.target == "web");
+                js_opts.verbose = opts.verbose || opts.debug;
+
+                // JavaScript コード生成
+                try {
+                    cm::codegen::js::JSCodeGen codegen(js_opts);
+                    codegen.compile(mir);
+
+                    if (opts.verbose) {
+                        std::cout << "✓ JavaScript コード生成完了: " << js_opts.outputFile << "\n";
+                    }
+
+                    // --runオプションがある場合は実行（Node.js）
+                    if (opts.run_after_emit && opts.target != "web") {
+                        if (opts.verbose) {
+                            std::cout << "実行中: node " << js_opts.outputFile << "\n";
+                        }
+                        std::string cmd = "node " + js_opts.outputFile;
+                        int exec_result = std::system(cmd.c_str());
+                        return WEXITSTATUS(exec_result);
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "JavaScript コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
+            } else {
+                // LLVM ターゲットの場合
+#ifdef CM_LLVM_ENABLED
+                if (opts.verbose) {
+                    std::cout << "=== LLVM Code Generation ===\n";
+                }
+
+                // LLVM バックエンドオプション設定
+                cm::codegen::llvm_backend::LLVMCodeGen::Options llvm_opts;
+
+                // ターゲット設定
+                if (opts.target == "wasm") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                } else if (!opts.target.empty() && opts.target != "native") {
+                    std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
+                    std::cerr << "有効なターゲット: native, wasm, js, web\n";
+                    return 1;
+                } else {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                }
+
+                // 出力ファイル設定
+                if (opts.output_file.empty()) {
+                    if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
+                        llvm_opts.outputFile = "a.wasm";
+                    } else {
+                        llvm_opts.outputFile = "a.out";
+                    }
+                } else {
+                    llvm_opts.outputFile = opts.output_file;
+                }
+
+                // 最適化レベル
+                llvm_opts.optimizationLevel = opts.optimization_level;
+                llvm_opts.debugInfo = opts.debug;
+                llvm_opts.verbose = opts.verbose || opts.debug;
+                llvm_opts.verifyIR = true;
+
+                // LLVM コード生成
+                try {
+                    cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
+                    codegen.compile(mir);
+
+                    if (opts.verbose) {
+                        std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                    }
+
+                    // --runオプションがある場合は実行
+                    if (opts.run_after_emit &&
+                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
+                        if (opts.verbose) {
+                            std::cout << "実行中: " << llvm_opts.outputFile << "\n";
+                        }
+                        int exec_result = std::system(llvm_opts.outputFile.c_str());
+                        return WEXITSTATUS(exec_result);
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "LLVM コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
 #else
-            std::cerr << "エラー: LLVM バックエンドが有効になっていません。\n";
-            std::cerr << "CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n";
-            return 1;
+                std::cerr << "エラー: LLVM バックエンドが有効になっていません。\n";
+                std::cerr << "CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n";
+                return 1;
 #endif
+            }
         }
 
     } catch (const std::exception& e) {

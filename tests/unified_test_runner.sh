@@ -75,7 +75,7 @@ fi
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm|llvm-wasm (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
@@ -120,9 +120,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm|llvm-wasm)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, typescript, rust, cpp, llvm, llvm-wasm"
+    echo "Valid backends: interpreter, typescript, rust, cpp, llvm, llvm-wasm, js"
     exit 1
 fi
 
@@ -466,6 +466,30 @@ EOJS
                     run_with_timeout wasmer run "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
                     echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No WASM runtime found (install wasmtime, node, or wasmer)"
+                    ((SKIPPED++))
+                    return
+                fi
+            fi
+            ;;
+
+        js)
+            # JavaScriptバックエンドでコンパイルして実行
+            local js_file="$TEMP_DIR/js_${test_name}.js"
+            rm -f "$js_file"
+
+            # テストファイルのディレクトリに移動してコンパイル
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # JavaScript生成（エラー時は出力ファイルにエラーメッセージを書き込む）
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
+                # Node.jsで実行
+                if command -v node >/dev/null 2>&1; then
+                    run_with_timeout node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                else
+                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Node.js not found"
                     ((SKIPPED++))
                     return
                 fi
@@ -821,6 +845,22 @@ run_parallel_test() {
                     return
                 fi
                 rm -f "$wasm_file"
+            fi
+            ;;
+        js)
+            local js_file="$TEMP_DIR/js_${test_name}_$$.js"
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
+                if command -v node >/dev/null 2>&1; then
+                    run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                else
+                    echo "SKIP:Node.js not found" > "$result_file"
+                    rm -f "$js_file"
+                    return
+                fi
+                rm -f "$js_file"
             fi
             ;;
         *)

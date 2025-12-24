@@ -331,7 +331,66 @@ ast::DeclPtr Parser::parse_use() {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwUse);
 
-    // パス解析
+    // パッケージインポート (use "pkg")
+    if (check(TokenKind::StringLiteral)) {
+        std::string pkg_name = std::string(current().get_string());
+        advance();
+
+        // エイリアス
+        std::optional<std::string> alias;
+        if (check(TokenKind::Ident) && current_text() == "as") {
+            advance();
+            alias = expect_ident();
+        }
+
+        // FFI宣言ブロック: use "pkg" { ... }
+        if (check(TokenKind::LBrace)) {
+            advance();  // consume '{'
+
+            std::vector<ast::FFIFunctionDecl> ffi_funcs;
+
+            while (!check(TokenKind::RBrace) && !is_at_end()) {
+                ast::FFIFunctionDecl ffi_func;
+                ffi_func.return_type = parse_extern_type();
+                ffi_func.name = expect_ident();
+                expect(TokenKind::LParen);
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        if (check(TokenKind::Ellipsis)) {
+                            advance();
+                            ffi_func.is_variadic = true;
+                            break;
+                        }
+                        auto param_type = parse_extern_type();
+                        std::string param_name;
+                        if (check(TokenKind::Ident)) {
+                            param_name = current_text();
+                            advance();
+                        }
+                        ffi_func.params.push_back({param_name, param_type});
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+                expect(TokenKind::Semicolon);
+                ffi_funcs.push_back(std::move(ffi_func));
+            }
+            expect(TokenKind::RBrace);
+
+            auto use_decl = std::make_unique<ast::UseDecl>(std::move(pkg_name),
+                                                           std::move(ffi_funcs), std::move(alias));
+            return std::make_unique<ast::Decl>(std::move(use_decl),
+                                               Span{start_pos, previous().end});
+        }
+
+        // 単なる外部モジュール参照 use "pkg";
+        // (実際にはFFI宣言がないとJSでは使いにくいが、requireだけするケースもありうる) あるいは use
+        // "pkg" as p;
+        expect(TokenKind::Semicolon);
+        auto use_decl = std::make_unique<ast::UseDecl>(std::move(pkg_name), std::move(alias));
+        return std::make_unique<ast::Decl>(std::move(use_decl), Span{start_pos, previous().end});
+    }
+
+    // パス解析 (従来の use std::io)
     ast::ModulePath path;
     path.segments.push_back(expect_ident());
     while (consume_if(TokenKind::ColonColon)) {

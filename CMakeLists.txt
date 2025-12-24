@@ -199,6 +199,11 @@ if(CM_USE_LLVM)
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp
+        # JavaScript backend
+        src/codegen/js/codegen.cpp
+        src/codegen/js/control_flow.cpp
+        src/codegen/js/emit_statements.cpp
+        src/codegen/js/emit_expressions.cpp
     )
 endif()
 

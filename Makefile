@@ -43,6 +43,8 @@ help:
 	@echo "  make tl  - test-llvm"
 	@echo "  make tlw - test-llvm-wasm"
 	@echo "  make tla - test-llvm-all"
+	@echo "  make tj  - test-js"
+	@echo "  make tjp - test-js-parallel"
 
 # ========================================
 # Build Commands
@@ -161,6 +163,24 @@ test-llvm-wasm-parallel:
 	@chmod +x tests/unified_test_runner.sh
 	@tests/unified_test_runner.sh -b llvm-wasm -p
 
+# ========================================
+# JavaScript Backend Test Commands
+# ========================================
+
+# JavaScript テスト
+.PHONY: test-js
+test-js:
+	@echo "Running JavaScript code generation tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b js
+
+# JavaScript テスト（並列）
+.PHONY: test-js-parallel
+test-js-parallel:
+	@echo "Running JavaScript code generation tests (parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@tests/unified_test_runner.sh -b js -p
+
 # すべてのLLVMテストを実行
 .PHONY: test-llvm-all
 test-llvm-all: test-llvm test-llvm-wasm
@@ -268,6 +288,12 @@ tlwp: test-llvm-wasm-parallel
 
 .PHONY: tla
 tla: test-llvm-all
+
+.PHONY: tj
+tj: test-js
+
+.PHONY: tjp
+tjp: test-js-parallel
 
 # デフォルトファイル設定
 FILE ?=

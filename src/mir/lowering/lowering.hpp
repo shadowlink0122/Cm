@@ -2029,6 +2029,7 @@ class MirLowering : public MirLoweringBase {
                 // extern "C" ブロック内の関数を処理
                 for (const auto& func : (*extern_block)->functions) {
                     if (auto mir_func = lower_function(*func)) {
+                        mir_func->package_name = (*extern_block)->package_name;
                         hir_functions[func->name] = func.get();
                         mir_program.functions.push_back(std::move(mir_func));
                     }

@@ -196,7 +196,8 @@ struct UseDecl {
     };
 
     Kind kind = ModuleUse;
-    ModulePath path;                         // ライブラリ/モジュールパス
+    ModulePath path;           // ライブラリ/モジュールパス
+    std::string package_name;  // 文字列ベースのパッケージ名 (e.g., "axios", "@scope/pkg")
     std::optional<std::string> alias;        // エイリアス（as句）
     bool is_pub = false;                     // pub use
     std::vector<FFIFunctionDecl> ffi_funcs;  // FFI関数宣言（FFIUseの場合）
@@ -211,10 +212,22 @@ struct UseDecl {
     UseDecl(ModulePath p, std::optional<std::string> a = std::nullopt)
         : kind(ModuleUse), path(std::move(p)), alias(std::move(a)) {}
 
-    // FFI useコンストラクタ
+    // パッケージuseコンストラクタ (文字列)
+    UseDecl(std::string pkg, std::optional<std::string> a = std::nullopt)
+        : kind(ModuleUse), package_name(std::move(pkg)), alias(std::move(a)) {}
+
+    // FFI useコンストラクタ (ModulePath)
     UseDecl(ModulePath p, std::vector<FFIFunctionDecl> funcs,
             std::optional<std::string> a = std::nullopt)
         : kind(FFIUse), path(std::move(p)), alias(std::move(a)), ffi_funcs(std::move(funcs)) {}
+
+    // FFI useコンストラクタ (文字列)
+    UseDecl(std::string pkg, std::vector<FFIFunctionDecl> funcs,
+            std::optional<std::string> a = std::nullopt)
+        : kind(FFIUse),
+          package_name(std::move(pkg)),
+          alias(std::move(a)),
+          ffi_funcs(std::move(funcs)) {}
 };
 
 }  // namespace cm::ast

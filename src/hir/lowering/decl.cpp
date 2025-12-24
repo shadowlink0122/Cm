@@ -310,7 +310,8 @@ HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
     // FFI useの場合はexternブロックとして処理
     if (use.kind == ast::UseDecl::FFIUse) {
         auto hir_extern = std::make_unique<HirExternBlock>();
-        hir_extern->language = "C";  // デフォルトはC ABI
+        hir_extern->language = "C";                   // デフォルトはC ABI
+        hir_extern->package_name = use.package_name;  // パッケージ名
 
         for (const auto& ffi_func : use.ffi_funcs) {
             auto hir_func = std::make_unique<HirFunction>();
@@ -338,6 +339,7 @@ HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
     // 通常のモジュールuseの場合
     auto hir_imp = std::make_unique<HirImport>();
     hir_imp->path = use.path.segments;
+    hir_imp->package_name = use.package_name;
     hir_imp->alias = use.alias.value_or("");
 
     return std::make_unique<HirDecl>(std::move(hir_imp));

@@ -2,6 +2,34 @@
 
 Cm言語コンパイラの変更履歴です。
 
+## [0.12.0] - 2025-12-24
+
+### 追加
+
+#### JavaScript Codegenバックエンド
+- **`--target=js`**: Node.js向けJavaScript生成
+- **`--target=web`**: ブラウザ向けJavaScript + HTML生成
+- **`make tj` / `make tjp`**: JSバックエンド用テストコマンド
+- **基本機能サポート**:
+  - 基本型（int, double, bool, string）のJS変換
+  - 関数定義とエクスポート
+  - 制御フロー（if, while, for）
+  - 構造体 → JSオブジェクト
+  - 配列 → JS Array
+  - フォーマット文字列対応（`println("{var}")`）
+  - 再帰関数サポート
+- **組み込み関数マッピング**:
+  - `println` → `console.log`
+  - `print` → `process.stdout.write`
+  - 文字列メソッド → JS String メソッド
+
+### テスト結果
+- JS Codegen: 259テスト中170パス (65.6%)
+- FFI/asm/memoryはJS非対応のためスキップ
+
+### ドキュメント
+- `docs/js/README.md`: JS Codegen設計文書と実装ガイド
+
 ## [0.10.1] - 2025-01-02
 
 ### 追加

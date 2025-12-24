@@ -509,6 +509,7 @@ struct LocalDecl {
 struct MirFunction {
     std::string name;
     std::string module_path;  // モジュールパス（例："std::io", ""は現在のモジュール）
+    std::string package_name;         // パッケージ名 (FFI用)
     bool is_export = false;           // エクスポートされているか
     bool is_extern = false;           // extern "C" 関数か
     bool is_variadic = false;         // 可変長引数（FFI用）
@@ -641,6 +642,7 @@ using VTablePtr = std::unique_ptr<VTable>;
 // ============================================================
 struct MirImport {
     std::vector<std::string> path;   // e.g., ["std", "io"]
+    std::string package_name;        // パッケージ名 (e.g. "axios")
     std::string alias;               // エイリアス（空の場合はなし）
     std::vector<std::string> items;  // 選択的インポート項目
     bool is_wildcard = false;        // ワイルドカードインポートか

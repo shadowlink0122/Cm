@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include <memory>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -426,6 +427,7 @@ struct HirImpl {
 // インポート
 struct HirImport {
     std::vector<std::string> path;  // e.g., {"std", "io"}
+    std::string package_name;       // パッケージ名 (e.g. "axios")
     std::string alias;
 };
 
@@ -460,7 +462,8 @@ struct HirGlobalVar {
 
 // extern "C" ブロック
 struct HirExternBlock {
-    std::string language;  // "C" など
+    std::string language;      // "C" など
+    std::string package_name;  // パッケージ名 (FFI用)
     std::vector<std::unique_ptr<HirFunction>> functions;
 };
 

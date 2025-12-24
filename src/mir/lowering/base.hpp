@@ -4,8 +4,10 @@
 #include "../nodes.hpp"
 #include "context.hpp"
 
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 
 namespace cm::mir {
 
@@ -99,6 +101,7 @@ class MirLoweringBase {
             if (auto* imp = std::get_if<std::unique_ptr<hir::HirImport>>(&decl->kind)) {
                 auto mir_import = std::make_unique<MirImport>();
                 mir_import->path = (*imp)->path;
+                mir_import->package_name = (*imp)->package_name;
                 mir_import->alias = (*imp)->alias;
 
                 // モジュール名を構築（例: ["std", "io"] -> "std::io"）
