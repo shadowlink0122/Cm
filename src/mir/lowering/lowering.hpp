@@ -52,7 +52,144 @@ class MirLowering : public MirLoweringBase {
         // Pass 6: 構造体比較演算子を関数呼び出しに変換
         rewrite_struct_comparison_operators();
 
+        // Pass 7: クロージャ情報を伝播（固定点まで繰り返し）
+        propagate_closure_info();
+
+        // Pass 8: 高階関数呼び出しをクロージャ版に書き換え
+        rewrite_hof_calls_for_closures();
+
         return std::move(mir_program);
+    }
+
+    // 高階関数呼び出し（map/filter）をクロージャ対応版に書き換え
+    void rewrite_hof_calls_for_closures() {
+        for (auto& func : mir_program.functions) {
+            if (!func)
+                continue;
+
+            for (auto& block : func->basic_blocks) {
+                if (!block || !block->terminator)
+                    continue;
+
+                auto& term = block->terminator;
+                if (term->kind != MirTerminator::Call)
+                    continue;
+
+                auto& call_data = std::get<MirTerminator::CallData>(term->data);
+                if (!call_data.func)
+                    continue;
+
+                // 関数名を取得
+                std::string func_name;
+                if (call_data.func->kind == MirOperand::FunctionRef) {
+                    func_name = std::get<std::string>(call_data.func->data);
+                } else {
+                    continue;
+                }
+
+                // 既に_closure版なら処理しない
+                if (func_name.find("_closure") != std::string::npos)
+                    continue;
+
+                // 対象の高階関数かチェック
+                bool is_map =
+                    (func_name == "__builtin_array_map" || func_name == "__builtin_array_map_i64");
+                bool is_filter = (func_name == "__builtin_array_filter" ||
+                                  func_name == "__builtin_array_filter_i64");
+
+                if (!is_map && !is_filter)
+                    continue;
+
+                // 最後の引数がクロージャかチェック
+                if (call_data.args.size() < 3)
+                    continue;
+
+                auto& last_arg = call_data.args.back();
+                if (last_arg->kind != MirOperand::Copy && last_arg->kind != MirOperand::Move)
+                    continue;
+
+                auto& place = std::get<MirPlace>(last_arg->data);
+                if (place.local >= func->locals.size())
+                    continue;
+
+                const auto& local_decl = func->locals[place.local];
+                if (!local_decl.is_closure || local_decl.captured_locals.empty())
+                    continue;
+
+                // クロージャ版に書き換え
+                call_data.func = MirOperand::function_ref(func_name + "_closure");
+
+                // コールバックを関数参照に置き換え
+                call_data.args.back() = MirOperand::function_ref(local_decl.closure_func_name);
+
+                // キャプチャ値を引数として追加
+                for (LocalId cap_local : local_decl.captured_locals) {
+                    call_data.args.push_back(MirOperand::copy(MirPlace{cap_local}));
+                }
+            }
+        }
+    }
+
+    // クロージャ情報を代入先変数に伝播（固定点まで繰り返し）
+    void propagate_closure_info() {
+        bool changed = true;
+        int max_iterations = 20;  // 無限ループ防止
+
+        while (changed && max_iterations > 0) {
+            changed = false;
+            max_iterations--;
+
+            for (auto& func : mir_program.functions) {
+                if (!func)
+                    continue;
+
+                // 各ブロックのステートメントを走査
+                for (auto& block : func->basic_blocks) {
+                    if (!block)
+                        continue;
+
+                    for (auto& stmt : block->statements) {
+                        if (!stmt || stmt->kind != MirStatement::Assign)
+                            continue;
+
+                        auto& data = std::get<MirStatement::AssignData>(stmt->data);
+                        if (!data.rvalue)
+                            continue;
+
+                        // Use(Copy/Move)の場合
+                        if (data.rvalue->kind == MirRvalue::Use) {
+                            auto& use_data = std::get<MirRvalue::UseData>(data.rvalue->data);
+                            if (!use_data.operand)
+                                continue;
+
+                            if (use_data.operand->kind == MirOperand::Copy ||
+                                use_data.operand->kind == MirOperand::Move) {
+                                auto& src_place = std::get<MirPlace>(use_data.operand->data);
+
+                                // ソース変数がクロージャかチェック
+                                if (src_place.local < func->locals.size()) {
+                                    const auto& src_decl = func->locals[src_place.local];
+                                    if (src_decl.is_closure && !src_decl.captured_locals.empty()) {
+                                        // 宛先変数にもクロージャ情報をコピー
+                                        if (data.place.projections.empty() &&
+                                            data.place.local < func->locals.size()) {
+                                            auto& dst_decl = func->locals[data.place.local];
+                                            if (!dst_decl.is_closure) {
+                                                dst_decl.is_closure = true;
+                                                dst_decl.closure_func_name =
+                                                    src_decl.closure_func_name;
+                                                dst_decl.captured_locals = src_decl.captured_locals;
+                                                changed = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
    private:
@@ -283,6 +420,14 @@ class MirLowering : public MirLoweringBase {
                         generate_builtin_hash_method(struct_decl);
                         continue;
                     }
+                    if (iface_name == "Debug") {
+                        generate_builtin_debug_method(struct_decl);
+                        continue;
+                    }
+                    if (iface_name == "Display") {
+                        generate_builtin_display_method(struct_decl);
+                        continue;
+                    }
 
                     // ユーザー定義インターフェースの場合
                     auto iface_it = interface_defs_.find(iface_name);
@@ -338,6 +483,10 @@ class MirLowering : public MirLoweringBase {
                     generate_builtin_clone_method_for_monomorphized(*mir_struct);
                 } else if (iface_name == "Hash") {
                     generate_builtin_hash_method_for_monomorphized(*mir_struct);
+                } else if (iface_name == "Debug") {
+                    generate_builtin_debug_method_for_monomorphized(*mir_struct);
+                } else if (iface_name == "Display") {
+                    generate_builtin_display_method_for_monomorphized(*mir_struct);
                 }
             }
         }
@@ -1202,6 +1351,652 @@ class MirLowering : public MirLoweringBase {
         impl_info[st.name]["Hash"] = func_name;
 
         // MIRプログラムに追加
+        mir_program.functions.push_back(std::move(mir_func));
+    }
+
+    // Debug自動実装: "StructName { field1: value1, field2: value2, ... }"
+    void generate_builtin_debug_method(const hir::HirStruct& st) {
+        std::string func_name = st.name + "__debug";
+
+        auto mir_func = std::make_unique<MirFunction>();
+        mir_func->name = func_name;
+
+        auto struct_type = hir::make_named(st.name);
+
+        // 戻り値: string (_0)
+        mir_func->return_local = mir_func->add_local("_0", hir::make_string(), true, false);
+
+        // 引数: self (値)
+        LocalId self_local = mir_func->add_local("self", struct_type, false, true);
+        mir_func->arg_locals.push_back(self_local);
+
+        // エントリブロック
+        BlockId entry_block = mir_func->add_block();
+        auto* block = mir_func->get_block(entry_block);
+
+        // 結果文字列を構築: "TypeName { f1: v1, f2: v2, ... }"
+        // 初期値: "TypeName { "
+        std::string initial_str = st.name + " { ";
+        LocalId result = mir_func->add_local("_result", hir::make_string(), true, false);
+
+        auto const_init = std::make_unique<MirOperand>();
+        const_init->kind = MirOperand::Constant;
+        MirConstant c_init;
+        c_init.value = initial_str;
+        c_init.type = hir::make_string();
+        const_init->data = c_init;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(result), MirRvalue::use(std::move(const_init))));
+
+        for (size_t i = 0; i < st.fields.size(); ++i) {
+            const auto& field = st.fields[i];
+
+            // "field_name: " を追加
+            std::string field_prefix = field.name + ": ";
+            LocalId prefix_str =
+                mir_func->add_local("_prefix" + std::to_string(i), hir::make_string(), true, false);
+
+            auto const_prefix = std::make_unique<MirOperand>();
+            const_prefix->kind = MirOperand::Constant;
+            MirConstant c_prefix;
+            c_prefix.value = field_prefix;
+            c_prefix.type = hir::make_string();
+            const_prefix->data = c_prefix;
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(prefix_str), MirRvalue::use(std::move(const_prefix))));
+
+            // result = result + field_prefix
+            LocalId concat1 = mir_func->add_local("_concat1_" + std::to_string(i),
+                                                  hir::make_string(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(concat1),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                  MirOperand::copy(MirPlace(prefix_str)))));
+            result = concat1;
+
+            // フィールド値を取得して文字列に変換
+            LocalId field_val =
+                mir_func->add_local("_field" + std::to_string(i), field.type, true, false);
+            auto field_place = MirPlace(self_local, {PlaceProjection::field(i)});
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
+
+            // フィールド値を文字列に変換（型に応じた組み込み関数を呼び出し）
+            LocalId field_str =
+                mir_func->add_local("_fstr" + std::to_string(i), hir::make_string(), true, false);
+
+            // 型に応じた変換関数を決定
+            std::string convert_func;
+            if (field.type->kind == hir::TypeKind::Int) {
+                convert_func = "cm_format_int";
+            } else if (field.type->kind == hir::TypeKind::UInt) {
+                convert_func = "cm_format_uint";
+            } else if (field.type->kind == hir::TypeKind::Bool) {
+                convert_func = "cm_format_bool";
+            } else if (field.type->kind == hir::TypeKind::Float ||
+                       field.type->kind == hir::TypeKind::Double) {
+                convert_func = "cm_format_double";
+            } else if (field.type->kind == hir::TypeKind::String) {
+                // 文字列はそのままコピー
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_str), MirRvalue::use(MirOperand::copy(MirPlace(field_val)))));
+                convert_func = "";  // 変換不要
+            } else if (field.type->kind == hir::TypeKind::Char) {
+                convert_func = "cm_format_char";
+            } else if (field.type->kind == hir::TypeKind::Struct) {
+                // ネストした構造体: 再帰的にdebug()を呼び出す
+                convert_func = field.type->name + "__debug";
+            } else {
+                // その他の型は整数として扱う
+                convert_func = "cm_format_int";
+            }
+
+            if (!convert_func.empty()) {
+                // 変換関数呼び出し
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(MirPlace(field_val)));
+
+                BlockId next_block = mir_func->add_block();
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(convert_func),
+                                                          std::move(args),
+                                                          MirPlace(field_str),
+                                                          next_block,
+                                                          std::nullopt,
+                                                          std::string(),
+                                                          std::string(),
+                                                          false};
+                block->terminator = std::move(call_term);
+                block = mir_func->get_block(next_block);
+            }
+
+            // result = result + field_str
+            LocalId concat2 = mir_func->add_local("_concat2_" + std::to_string(i),
+                                                  hir::make_string(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(concat2),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                  MirOperand::copy(MirPlace(field_str)))));
+            result = concat2;
+
+            // ", " を追加（最後以外）
+            if (i + 1 < st.fields.size()) {
+                std::string sep = ", ";
+                LocalId sep_str = mir_func->add_local("_sep" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+
+                auto const_sep = std::make_unique<MirOperand>();
+                const_sep->kind = MirOperand::Constant;
+                MirConstant c_sep;
+                c_sep.value = sep;
+                c_sep.type = hir::make_string();
+                const_sep->data = c_sep;
+                block->statements.push_back(
+                    MirStatement::assign(MirPlace(sep_str), MirRvalue::use(std::move(const_sep))));
+
+                LocalId concat3 = mir_func->add_local("_concat3_" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(concat3),
+                    MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                      MirOperand::copy(MirPlace(sep_str)))));
+                result = concat3;
+            }
+        }
+
+        // 末尾の " }" を追加
+        std::string closing = st.fields.empty() ? "}" : " }";
+        LocalId close_str = mir_func->add_local("_close", hir::make_string(), true, false);
+
+        auto const_close = std::make_unique<MirOperand>();
+        const_close->kind = MirOperand::Constant;
+        MirConstant c_close;
+        c_close.value = closing;
+        c_close.type = hir::make_string();
+        const_close->data = c_close;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(close_str), MirRvalue::use(std::move(const_close))));
+
+        LocalId final_result = mir_func->add_local("_final", hir::make_string(), true, false);
+        block->statements.push_back(MirStatement::assign(
+            MirPlace(final_result),
+            MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                              MirOperand::copy(MirPlace(close_str)))));
+
+        // 戻り値に設定
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(mir_func->return_local),
+                                 MirRvalue::use(MirOperand::copy(MirPlace(final_result)))));
+
+        block->terminator = MirTerminator::return_value();
+
+        impl_info[st.name]["Debug"] = func_name;
+        mir_program.functions.push_back(std::move(mir_func));
+    }
+
+    // Display自動実装: "(field1, field2, ...)" 形式
+    void generate_builtin_display_method(const hir::HirStruct& st) {
+        std::string func_name = st.name + "__toString";
+
+        auto mir_func = std::make_unique<MirFunction>();
+        mir_func->name = func_name;
+
+        auto struct_type = hir::make_named(st.name);
+
+        // 戻り値: string (_0)
+        mir_func->return_local = mir_func->add_local("_0", hir::make_string(), true, false);
+
+        // 引数: self (値)
+        LocalId self_local = mir_func->add_local("self", struct_type, false, true);
+        mir_func->arg_locals.push_back(self_local);
+
+        // エントリブロック
+        BlockId entry_block = mir_func->add_block();
+        auto* block = mir_func->get_block(entry_block);
+
+        // 結果文字列を構築: "(v1, v2, ...)"
+        std::string initial_str = "(";
+        LocalId result = mir_func->add_local("_result", hir::make_string(), true, false);
+
+        auto const_init = std::make_unique<MirOperand>();
+        const_init->kind = MirOperand::Constant;
+        MirConstant c_init;
+        c_init.value = initial_str;
+        c_init.type = hir::make_string();
+        const_init->data = c_init;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(result), MirRvalue::use(std::move(const_init))));
+
+        for (size_t i = 0; i < st.fields.size(); ++i) {
+            const auto& field = st.fields[i];
+
+            // フィールド値を取得して文字列に変換
+            LocalId field_val =
+                mir_func->add_local("_field" + std::to_string(i), field.type, true, false);
+            auto field_place = MirPlace(self_local, {PlaceProjection::field(i)});
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
+
+            // フィールド値を文字列に変換
+            LocalId field_str =
+                mir_func->add_local("_fstr" + std::to_string(i), hir::make_string(), true, false);
+
+            std::string convert_func;
+            if (field.type->kind == hir::TypeKind::Int) {
+                convert_func = "cm_format_int";
+            } else if (field.type->kind == hir::TypeKind::UInt) {
+                convert_func = "cm_format_uint";
+            } else if (field.type->kind == hir::TypeKind::Bool) {
+                convert_func = "cm_format_bool";
+            } else if (field.type->kind == hir::TypeKind::Float ||
+                       field.type->kind == hir::TypeKind::Double) {
+                convert_func = "cm_format_double";
+            } else if (field.type->kind == hir::TypeKind::String) {
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_str), MirRvalue::use(MirOperand::copy(MirPlace(field_val)))));
+                convert_func = "";
+            } else if (field.type->kind == hir::TypeKind::Char) {
+                convert_func = "cm_format_char";
+            } else if (field.type->kind == hir::TypeKind::Struct) {
+                convert_func = field.type->name + "__toString";
+            } else {
+                convert_func = "cm_format_int";
+            }
+
+            if (!convert_func.empty()) {
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(MirPlace(field_val)));
+
+                BlockId next_block = mir_func->add_block();
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(convert_func),
+                                                          std::move(args),
+                                                          MirPlace(field_str),
+                                                          next_block,
+                                                          std::nullopt,
+                                                          std::string(),
+                                                          std::string(),
+                                                          false};
+                block->terminator = std::move(call_term);
+                block = mir_func->get_block(next_block);
+            }
+
+            // result = result + field_str
+            LocalId concat =
+                mir_func->add_local("_concat" + std::to_string(i), hir::make_string(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(concat),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                  MirOperand::copy(MirPlace(field_str)))));
+            result = concat;
+
+            // ", " を追加（最後以外）
+            if (i + 1 < st.fields.size()) {
+                std::string sep = ", ";
+                LocalId sep_str = mir_func->add_local("_sep" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+
+                auto const_sep = std::make_unique<MirOperand>();
+                const_sep->kind = MirOperand::Constant;
+                MirConstant c_sep;
+                c_sep.value = sep;
+                c_sep.type = hir::make_string();
+                const_sep->data = c_sep;
+                block->statements.push_back(
+                    MirStatement::assign(MirPlace(sep_str), MirRvalue::use(std::move(const_sep))));
+
+                LocalId concat2 = mir_func->add_local("_concat2_" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(concat2),
+                    MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                      MirOperand::copy(MirPlace(sep_str)))));
+                result = concat2;
+            }
+        }
+
+        // 末尾の ")" を追加
+        std::string closing = ")";
+        LocalId close_str = mir_func->add_local("_close", hir::make_string(), true, false);
+
+        auto const_close = std::make_unique<MirOperand>();
+        const_close->kind = MirOperand::Constant;
+        MirConstant c_close;
+        c_close.value = closing;
+        c_close.type = hir::make_string();
+        const_close->data = c_close;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(close_str), MirRvalue::use(std::move(const_close))));
+
+        LocalId final_result = mir_func->add_local("_final", hir::make_string(), true, false);
+        block->statements.push_back(MirStatement::assign(
+            MirPlace(final_result),
+            MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                              MirOperand::copy(MirPlace(close_str)))));
+
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(mir_func->return_local),
+                                 MirRvalue::use(MirOperand::copy(MirPlace(final_result)))));
+
+        block->terminator = MirTerminator::return_value();
+
+        impl_info[st.name]["Display"] = func_name;
+        mir_program.functions.push_back(std::move(mir_func));
+    }
+
+    // モノモーフィゼーション版Debug自動実装
+    void generate_builtin_debug_method_for_monomorphized(const MirStruct& st) {
+        std::string func_name = st.name + "__debug";
+
+        // 既に生成されている場合はスキップ
+        for (const auto& func : mir_program.functions) {
+            if (func && func->name == func_name)
+                return;
+        }
+
+        auto mir_func = std::make_unique<MirFunction>();
+        mir_func->name = func_name;
+
+        auto struct_type = hir::make_named(st.name);
+
+        mir_func->return_local = mir_func->add_local("_0", hir::make_string(), true, false);
+        LocalId self_local = mir_func->add_local("self", struct_type, false, true);
+        mir_func->arg_locals.push_back(self_local);
+
+        BlockId entry_block = mir_func->add_block();
+        auto* block = mir_func->get_block(entry_block);
+
+        std::string initial_str = st.name + " { ";
+        LocalId result = mir_func->add_local("_result", hir::make_string(), true, false);
+
+        auto const_init = std::make_unique<MirOperand>();
+        const_init->kind = MirOperand::Constant;
+        MirConstant c_init;
+        c_init.value = initial_str;
+        c_init.type = hir::make_string();
+        const_init->data = c_init;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(result), MirRvalue::use(std::move(const_init))));
+
+        for (size_t i = 0; i < st.fields.size(); ++i) {
+            const auto& field = st.fields[i];
+
+            std::string field_prefix = field.name + ": ";
+            LocalId prefix_str =
+                mir_func->add_local("_prefix" + std::to_string(i), hir::make_string(), true, false);
+
+            auto const_prefix = std::make_unique<MirOperand>();
+            const_prefix->kind = MirOperand::Constant;
+            MirConstant c_prefix;
+            c_prefix.value = field_prefix;
+            c_prefix.type = hir::make_string();
+            const_prefix->data = c_prefix;
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(prefix_str), MirRvalue::use(std::move(const_prefix))));
+
+            LocalId concat1 = mir_func->add_local("_concat1_" + std::to_string(i),
+                                                  hir::make_string(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(concat1),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                  MirOperand::copy(MirPlace(prefix_str)))));
+            result = concat1;
+
+            LocalId field_val =
+                mir_func->add_local("_field" + std::to_string(i), field.type, true, false);
+            auto field_place = MirPlace(self_local, {PlaceProjection::field(i)});
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
+
+            LocalId field_str =
+                mir_func->add_local("_fstr" + std::to_string(i), hir::make_string(), true, false);
+
+            std::string convert_func;
+            if (field.type->kind == hir::TypeKind::Int) {
+                convert_func = "cm_format_int";
+            } else if (field.type->kind == hir::TypeKind::UInt) {
+                convert_func = "cm_format_uint";
+            } else if (field.type->kind == hir::TypeKind::Bool) {
+                convert_func = "cm_format_bool";
+            } else if (field.type->kind == hir::TypeKind::Float ||
+                       field.type->kind == hir::TypeKind::Double) {
+                convert_func = "cm_format_double";
+            } else if (field.type->kind == hir::TypeKind::String) {
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_str), MirRvalue::use(MirOperand::copy(MirPlace(field_val)))));
+                convert_func = "";
+            } else if (field.type->kind == hir::TypeKind::Char) {
+                convert_func = "cm_format_char";
+            } else if (field.type->kind == hir::TypeKind::Struct) {
+                convert_func = field.type->name + "__debug";
+            } else {
+                convert_func = "cm_format_int";
+            }
+
+            if (!convert_func.empty()) {
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(MirPlace(field_val)));
+
+                BlockId next_block = mir_func->add_block();
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(convert_func),
+                                                          std::move(args),
+                                                          MirPlace(field_str),
+                                                          next_block,
+                                                          std::nullopt,
+                                                          std::string(),
+                                                          std::string(),
+                                                          false};
+                block->terminator = std::move(call_term);
+                block = mir_func->get_block(next_block);
+            }
+
+            LocalId concat2 = mir_func->add_local("_concat2_" + std::to_string(i),
+                                                  hir::make_string(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(concat2),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                  MirOperand::copy(MirPlace(field_str)))));
+            result = concat2;
+
+            if (i + 1 < st.fields.size()) {
+                std::string sep = ", ";
+                LocalId sep_str = mir_func->add_local("_sep" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+
+                auto const_sep = std::make_unique<MirOperand>();
+                const_sep->kind = MirOperand::Constant;
+                MirConstant c_sep;
+                c_sep.value = sep;
+                c_sep.type = hir::make_string();
+                const_sep->data = c_sep;
+                block->statements.push_back(
+                    MirStatement::assign(MirPlace(sep_str), MirRvalue::use(std::move(const_sep))));
+
+                LocalId concat3 = mir_func->add_local("_concat3_" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(concat3),
+                    MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                      MirOperand::copy(MirPlace(sep_str)))));
+                result = concat3;
+            }
+        }
+
+        std::string closing = st.fields.empty() ? "}" : " }";
+        LocalId close_str = mir_func->add_local("_close", hir::make_string(), true, false);
+
+        auto const_close = std::make_unique<MirOperand>();
+        const_close->kind = MirOperand::Constant;
+        MirConstant c_close;
+        c_close.value = closing;
+        c_close.type = hir::make_string();
+        const_close->data = c_close;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(close_str), MirRvalue::use(std::move(const_close))));
+
+        LocalId final_result = mir_func->add_local("_final", hir::make_string(), true, false);
+        block->statements.push_back(MirStatement::assign(
+            MirPlace(final_result),
+            MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                              MirOperand::copy(MirPlace(close_str)))));
+
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(mir_func->return_local),
+                                 MirRvalue::use(MirOperand::copy(MirPlace(final_result)))));
+
+        block->terminator = MirTerminator::return_value();
+
+        impl_info[st.name]["Debug"] = func_name;
+        mir_program.functions.push_back(std::move(mir_func));
+    }
+
+    // モノモーフィゼーション版Display自動実装
+    void generate_builtin_display_method_for_monomorphized(const MirStruct& st) {
+        std::string func_name = st.name + "__toString";
+
+        for (const auto& func : mir_program.functions) {
+            if (func && func->name == func_name)
+                return;
+        }
+
+        auto mir_func = std::make_unique<MirFunction>();
+        mir_func->name = func_name;
+
+        auto struct_type = hir::make_named(st.name);
+
+        mir_func->return_local = mir_func->add_local("_0", hir::make_string(), true, false);
+        LocalId self_local = mir_func->add_local("self", struct_type, false, true);
+        mir_func->arg_locals.push_back(self_local);
+
+        BlockId entry_block = mir_func->add_block();
+        auto* block = mir_func->get_block(entry_block);
+
+        std::string initial_str = "(";
+        LocalId result = mir_func->add_local("_result", hir::make_string(), true, false);
+
+        auto const_init = std::make_unique<MirOperand>();
+        const_init->kind = MirOperand::Constant;
+        MirConstant c_init;
+        c_init.value = initial_str;
+        c_init.type = hir::make_string();
+        const_init->data = c_init;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(result), MirRvalue::use(std::move(const_init))));
+
+        for (size_t i = 0; i < st.fields.size(); ++i) {
+            const auto& field = st.fields[i];
+
+            LocalId field_val =
+                mir_func->add_local("_field" + std::to_string(i), field.type, true, false);
+            auto field_place = MirPlace(self_local, {PlaceProjection::field(i)});
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
+
+            LocalId field_str =
+                mir_func->add_local("_fstr" + std::to_string(i), hir::make_string(), true, false);
+
+            std::string convert_func;
+            if (field.type->kind == hir::TypeKind::Int) {
+                convert_func = "cm_format_int";
+            } else if (field.type->kind == hir::TypeKind::UInt) {
+                convert_func = "cm_format_uint";
+            } else if (field.type->kind == hir::TypeKind::Bool) {
+                convert_func = "cm_format_bool";
+            } else if (field.type->kind == hir::TypeKind::Float ||
+                       field.type->kind == hir::TypeKind::Double) {
+                convert_func = "cm_format_double";
+            } else if (field.type->kind == hir::TypeKind::String) {
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_str), MirRvalue::use(MirOperand::copy(MirPlace(field_val)))));
+                convert_func = "";
+            } else if (field.type->kind == hir::TypeKind::Char) {
+                convert_func = "cm_format_char";
+            } else if (field.type->kind == hir::TypeKind::Struct) {
+                convert_func = field.type->name + "__toString";
+            } else {
+                convert_func = "cm_format_int";
+            }
+
+            if (!convert_func.empty()) {
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(MirPlace(field_val)));
+
+                BlockId next_block = mir_func->add_block();
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(convert_func),
+                                                          std::move(args),
+                                                          MirPlace(field_str),
+                                                          next_block,
+                                                          std::nullopt,
+                                                          std::string(),
+                                                          std::string(),
+                                                          false};
+                block->terminator = std::move(call_term);
+                block = mir_func->get_block(next_block);
+            }
+
+            LocalId concat =
+                mir_func->add_local("_concat" + std::to_string(i), hir::make_string(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(concat),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                  MirOperand::copy(MirPlace(field_str)))));
+            result = concat;
+
+            if (i + 1 < st.fields.size()) {
+                std::string sep = ", ";
+                LocalId sep_str = mir_func->add_local("_sep" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+
+                auto const_sep = std::make_unique<MirOperand>();
+                const_sep->kind = MirOperand::Constant;
+                MirConstant c_sep;
+                c_sep.value = sep;
+                c_sep.type = hir::make_string();
+                const_sep->data = c_sep;
+                block->statements.push_back(
+                    MirStatement::assign(MirPlace(sep_str), MirRvalue::use(std::move(const_sep))));
+
+                LocalId concat2 = mir_func->add_local("_concat2_" + std::to_string(i),
+                                                      hir::make_string(), true, false);
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(concat2),
+                    MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                                      MirOperand::copy(MirPlace(sep_str)))));
+                result = concat2;
+            }
+        }
+
+        std::string closing = ")";
+        LocalId close_str = mir_func->add_local("_close", hir::make_string(), true, false);
+
+        auto const_close = std::make_unique<MirOperand>();
+        const_close->kind = MirOperand::Constant;
+        MirConstant c_close;
+        c_close.value = closing;
+        c_close.type = hir::make_string();
+        const_close->data = c_close;
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(close_str), MirRvalue::use(std::move(const_close))));
+
+        LocalId final_result = mir_func->add_local("_final", hir::make_string(), true, false);
+        block->statements.push_back(MirStatement::assign(
+            MirPlace(final_result),
+            MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(result)),
+                              MirOperand::copy(MirPlace(close_str)))));
+
+        block->statements.push_back(
+            MirStatement::assign(MirPlace(mir_func->return_local),
+                                 MirRvalue::use(MirOperand::copy(MirPlace(final_result)))));
+
+        block->terminator = MirTerminator::return_value();
+
+        impl_info[st.name]["Display"] = func_name;
         mir_program.functions.push_back(std::move(mir_func));
     }
 

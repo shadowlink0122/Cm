@@ -564,8 +564,8 @@ class Evaluator {
         // ポインタとnull（空のValue）の比較
         if (lhs.type() == typeid(PointerValue) && !rhs.has_value()) {
             const auto& ptr = std::any_cast<const PointerValue&>(lhs);
-            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
-                                              : (ptr.target_local == static_cast<LocalId>(-1));
+            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                             : (ptr.target_local == static_cast<LocalId>(-1));
             switch (op) {
                 case MirBinaryOp::Eq:
                     return Value(is_null);
@@ -579,8 +579,8 @@ class Evaluator {
         // null（空のValue）とポインタの比較
         if (!lhs.has_value() && rhs.type() == typeid(PointerValue)) {
             const auto& ptr = std::any_cast<const PointerValue&>(rhs);
-            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
-                                              : (ptr.target_local == static_cast<LocalId>(-1));
+            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                             : (ptr.target_local == static_cast<LocalId>(-1));
             switch (op) {
                 case MirBinaryOp::Eq:
                     return Value(is_null);
@@ -596,8 +596,8 @@ class Evaluator {
             int64_t rhs_val = std::any_cast<int64_t>(rhs);
             if (rhs_val == 0) {  // nullとの比較
                 const auto& ptr = std::any_cast<const PointerValue&>(lhs);
-                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
-                                                  : (ptr.target_local == static_cast<LocalId>(-1));
+                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                                 : (ptr.target_local == static_cast<LocalId>(-1));
                 switch (op) {
                     case MirBinaryOp::Eq:
                         return Value(is_null);
@@ -614,8 +614,8 @@ class Evaluator {
             int64_t lhs_val = std::any_cast<int64_t>(lhs);
             if (lhs_val == 0) {  // nullとの比較
                 const auto& ptr = std::any_cast<const PointerValue&>(rhs);
-                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr) 
-                                                  : (ptr.target_local == static_cast<LocalId>(-1));
+                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                                 : (ptr.target_local == static_cast<LocalId>(-1));
                 switch (op) {
                     case MirBinaryOp::Eq:
                         return Value(is_null);

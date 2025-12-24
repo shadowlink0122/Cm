@@ -82,6 +82,12 @@ struct PointerValue {
     bool is_external() const { return raw_ptr != nullptr; }
 };
 
+/// クロージャ（キャプチャ付きラムダ）の値を表現
+struct ClosureValue {
+    std::string func_name;               // 実際のラムダ関数名
+    std::vector<Value> captured_values;  // キャプチャされた変数の値
+};
+
 // ============================================================
 // 組み込み関数の型
 // ============================================================

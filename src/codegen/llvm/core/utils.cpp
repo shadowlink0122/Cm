@@ -77,6 +77,28 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // Debug/Display用フォーマット関数（型→文字列変換）
+    else if (name == "cm_format_int") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_format_uint") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_format_double") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getF64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_format_bool") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_format_char") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // 文字列操作関数
     else if (name == "cm_string_concat") {
         auto funcType =
@@ -494,10 +516,27 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // 配列 map (クロージャ版) - 戻り値はポインタ（新しい配列）
+    else if (name == "__builtin_array_map_closure" || name == "__builtin_array_map_i32_closure") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI32Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // 配列 filter (コールバック付き) - 戻り値はポインタ（新しい配列）
     else if (name == "__builtin_array_filter" || name == "__builtin_array_filter_i32") {
         auto funcType = llvm::FunctionType::get(
             ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 filter (クロージャ版) - 戻り値はポインタ（新しい配列）
+    else if (name == "__builtin_array_filter_closure" ||
+             name == "__builtin_array_filter_i32_closure") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI32Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }

@@ -78,6 +78,60 @@ inline void register_string_builtins(BuiltinRegistry& builtins) {
         return Value(std::string(""));
     };
 
+    // Debug/Display用のフォーマット関数
+    builtins["cm_format_int"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(std::string("0"));
+        if (args[0].type() == typeid(int64_t)) {
+            return Value(std::to_string(std::any_cast<int64_t>(args[0])));
+        }
+        return Value(std::string("0"));
+    };
+
+    builtins["cm_format_uint"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(std::string("0"));
+        if (args[0].type() == typeid(int64_t)) {
+            return Value(std::to_string(static_cast<uint64_t>(std::any_cast<int64_t>(args[0]))));
+        } else if (args[0].type() == typeid(uint64_t)) {
+            return Value(std::to_string(std::any_cast<uint64_t>(args[0])));
+        }
+        return Value(std::string("0"));
+    };
+
+    builtins["cm_format_double"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(std::string("0.0"));
+        if (args[0].type() == typeid(double)) {
+            double val = std::any_cast<double>(args[0]);
+            if (val == static_cast<int64_t>(val)) {
+                return Value(std::to_string(static_cast<int64_t>(val)));
+            }
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%g", val);
+            return Value(std::string(buf));
+        }
+        return Value(std::string("0.0"));
+    };
+
+    builtins["cm_format_bool"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(std::string("false"));
+        if (args[0].type() == typeid(bool)) {
+            return Value(std::string(std::any_cast<bool>(args[0]) ? "true" : "false"));
+        }
+        return Value(std::string("false"));
+    };
+
+    builtins["cm_format_char"] = [](std::vector<Value> args, const auto&) -> Value {
+        if (args.empty())
+            return Value(std::string(""));
+        if (args[0].type() == typeid(char)) {
+            return Value(std::string(1, std::any_cast<char>(args[0])));
+        }
+        return Value(std::string(""));
+    };
+
     // 文字列の長さを取得
     builtins["__builtin_string_len"] = [](std::vector<Value> args, const auto&) -> Value {
         if (args.empty())

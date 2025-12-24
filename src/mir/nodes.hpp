@@ -488,6 +488,11 @@ struct LocalDecl {
     bool is_user_variable;  // ユーザー定義の変数か、コンパイラ生成の一時変数か
     bool is_static = false;  // static変数（関数呼び出し間で値が保持される）
 
+    // クロージャ関数ポインタの場合のキャプチャ情報
+    bool is_closure = false;
+    std::string closure_func_name;         // 実際のクロージャ関数名
+    std::vector<LocalId> captured_locals;  // キャプチャされた変数のローカルID
+
     LocalDecl(LocalId i, std::string n, hir::TypePtr t, bool mut = true, bool user = true,
               bool is_static_ = false)
         : id(i),

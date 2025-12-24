@@ -309,6 +309,13 @@ typedef int64_t (*MapFnI64)(int64_t);
 typedef int8_t (*FilterFnI32)(int32_t);
 typedef int8_t (*FilterFnI64)(int64_t);
 
+// クロージャ用関数ポインタ型（キャプチャ値を第一引数として受け取る）
+// キャプチャ値はint32_tとして渡す（Cmのint型に対応）
+typedef int32_t (*MapFnI32Closure)(int32_t, int32_t);
+typedef int64_t (*MapFnI64Closure)(int32_t, int64_t);
+typedef int8_t (*FilterFnI32Closure)(int32_t, int32_t);
+typedef int8_t (*FilterFnI64Closure)(int32_t, int64_t);
+
 // map: i32配列に関数を適用し、新しいスライスを返す
 void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
     if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
@@ -330,6 +337,25 @@ void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
     return result;
 }
 
+// map (クロージャ版): キャプチャ値付きで関数を適用
+void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, int32_t capture) {
+    if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
+    
+    MapFnI32Closure fn = (MapFnI32Closure)fn_ptr;
+    int32_t* arr = (int32_t*)arr_ptr;
+    
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int32_t), size);
+    if (!result) return NULL;
+    
+    int32_t* result_data = (int32_t*)result->data;
+    for (int64_t i = 0; i < size; i++) {
+        result_data[i] = fn(capture, arr[i]);
+    }
+    result->len = size;
+    
+    return result;
+}
+
 // map: i64配列に関数を適用
 void* __builtin_array_map_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
     if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
@@ -343,6 +369,25 @@ void* __builtin_array_map_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
     int64_t* result_data = (int64_t*)result->data;
     for (int64_t i = 0; i < size; i++) {
         result_data[i] = fn(arr[i]);
+    }
+    result->len = size;
+    
+    return result;
+}
+
+// map_i64 (クロージャ版)
+void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, int32_t capture) {
+    if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
+    
+    MapFnI64Closure fn = (MapFnI64Closure)fn_ptr;
+    int64_t* arr = (int64_t*)arr_ptr;
+    
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int64_t), size);
+    if (!result) return NULL;
+    
+    int64_t* result_data = (int64_t*)result->data;
+    for (int64_t i = 0; i < size; i++) {
+        result_data[i] = fn(capture, arr[i]);
     }
     result->len = size;
     
@@ -373,6 +418,28 @@ void* __builtin_array_filter(void* arr_ptr, int64_t size, void* fn_ptr) {
     return result;
 }
 
+// filter (クロージャ版)
+void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, int32_t capture) {
+    if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
+    
+    FilterFnI32Closure fn = (FilterFnI32Closure)fn_ptr;
+    int32_t* arr = (int32_t*)arr_ptr;
+    
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int32_t), size);
+    if (!result) return NULL;
+    
+    int32_t* result_data = (int32_t*)result->data;
+    int64_t count = 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (fn(capture, arr[i])) {
+            result_data[count++] = arr[i];
+        }
+    }
+    result->len = count;
+    
+    return result;
+}
+
 // filter: i64配列から条件を満たす要素を抽出
 void* __builtin_array_filter_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
     if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
@@ -387,6 +454,28 @@ void* __builtin_array_filter_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
     int64_t count = 0;
     for (int64_t i = 0; i < size; i++) {
         if (fn(arr[i])) {
+            result_data[count++] = arr[i];
+        }
+    }
+    result->len = count;
+    
+    return result;
+}
+
+// filter_i64 (クロージャ版)
+void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, int32_t capture) {
+    if (!arr_ptr || !fn_ptr || size <= 0) return NULL;
+    
+    FilterFnI64Closure fn = (FilterFnI64Closure)fn_ptr;
+    int64_t* arr = (int64_t*)arr_ptr;
+    
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int64_t), size);
+    if (!result) return NULL;
+    
+    int64_t* result_data = (int64_t*)result->data;
+    int64_t count = 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (fn(capture, arr[i])) {
             result_data[count++] = arr[i];
         }
     }

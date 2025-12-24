@@ -312,8 +312,8 @@ struct AlignofExpr {
 // __typename__(型) または __typename__(式) の両方に対応
 // ============================================================
 struct TypenameOfExpr {
-    TypePtr target_type;      // 型指定の場合
-    ExprPtr target_expr;      // 式指定の場合
+    TypePtr target_type;  // 型指定の場合
+    ExprPtr target_expr;  // 式指定の場合
 
     explicit TypenameOfExpr(TypePtr t) : target_type(std::move(t)) {}
     explicit TypenameOfExpr(ExprPtr e) : target_expr(std::move(e)) {}
@@ -361,6 +361,14 @@ struct LambdaExpr {
     std::vector<Param> params;
     TypePtr return_type;  // nullならauto
     std::variant<ExprPtr, std::vector<StmtPtr>> body;
+
+    // キャプチャされる変数（TypeChecker が解析後に設定）
+    struct Capture {
+        std::string name;
+        TypePtr type;
+        bool by_ref;  // 参照キャプチャか値キャプチャか
+    };
+    std::vector<Capture> captures;
 
     bool is_expr_body() const { return std::holds_alternative<ExprPtr>(body); }
 };
@@ -434,8 +442,8 @@ struct MatchExpr {
 // キャスト式 - expr as Type
 // ============================================================
 struct CastExpr {
-    ExprPtr operand;     // キャスト対象の式
-    TypePtr target_type; // キャスト先の型
+    ExprPtr operand;      // キャスト対象の式
+    TypePtr target_type;  // キャスト先の型
 
     CastExpr(ExprPtr e, TypePtr t) : operand(std::move(e)), target_type(std::move(t)) {}
 };

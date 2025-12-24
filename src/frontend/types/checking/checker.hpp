@@ -112,6 +112,8 @@ class TypeChecker {
     void register_auto_ord_impl(const ast::StructDecl& st);
     void register_auto_clone_impl(const ast::StructDecl& st);
     void register_auto_hash_impl(const ast::StructDecl& st);
+    void register_auto_debug_impl(const ast::StructDecl& st);
+    void register_auto_display_impl(const ast::StructDecl& st);
     void register_builtin_interfaces();
 
     // ============================================================

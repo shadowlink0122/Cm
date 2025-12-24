@@ -136,14 +136,14 @@ class BuiltinManager {
                 } else if (args[0].type() == typeid(int64_t)) {
                     old_ptr = reinterpret_cast<void*>(std::any_cast<int64_t>(args[0]));
                 }
-                
+
                 size_t new_size = 0;
                 if (args[1].type() == typeid(int64_t)) {
                     new_size = static_cast<size_t>(std::any_cast<int64_t>(args[1]));
                 } else if (args[1].type() == typeid(uint64_t)) {
                     new_size = static_cast<size_t>(std::any_cast<uint64_t>(args[1]));
                 }
-                
+
                 void* new_ptr = std::realloc(old_ptr, new_size);
                 PointerValue pv;
                 pv.target_local = static_cast<LocalId>(-1);
@@ -167,7 +167,7 @@ class BuiltinManager {
                 if (args[1].type() == typeid(int64_t)) {
                     size = static_cast<size_t>(std::any_cast<int64_t>(args[1]));
                 }
-                
+
                 void* ptr = std::calloc(nmemb, size);
                 PointerValue pv;
                 pv.target_local = static_cast<LocalId>(-1);

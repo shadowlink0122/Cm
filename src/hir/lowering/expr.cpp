@@ -1707,7 +1707,8 @@ HirExprPtr HirLowering::lower_array_literal(ast::ArrayLiteralExpr& lit, TypePtr 
 // ラムダ式
 HirExprPtr HirLowering::lower_lambda(ast::LambdaExpr& lambda, TypePtr expected_type) {
     debug::hir::log(debug::hir::Id::ExprLower,
-                    "Lowering lambda with " + std::to_string(lambda.params.size()) + " params",
+                    "Lowering lambda with " + std::to_string(lambda.params.size()) + " params" +
+                        ", captures: " + std::to_string(lambda.captures.size()),
                     debug::Level::Debug);
 
     // パラメータを変換
@@ -1727,6 +1728,17 @@ HirExprPtr HirLowering::lower_lambda(ast::LambdaExpr& lambda, TypePtr expected_t
     // ラムダを関数として生成
     auto hir_func = std::make_unique<HirFunction>();
     hir_func->name = lambda_name;
+
+    // キャプチャされた変数を最初のパラメータとして追加
+    for (const auto& cap : lambda.captures) {
+        HirParam cap_param;
+        cap_param.name = cap.name;
+        cap_param.type = cap.type;
+        hir_func->params.push_back(std::move(cap_param));
+
+        debug::hir::log(debug::hir::Id::ExprLower, "Lambda capture param: " + cap.name,
+                        debug::Level::Debug);
+    }
 
     for (size_t i = 0; i < lambda.params.size(); ++i) {
         HirParam param;
@@ -1774,16 +1786,35 @@ HirExprPtr HirLowering::lower_lambda(ast::LambdaExpr& lambda, TypePtr expected_t
     // ラムダ関数をリストに追加（後でプログラムに追加される）
     lambda_functions_.push_back(std::move(hir_func));
 
-    // 関数ポインタ型を作成
+    // 関数ポインタ型を作成（キャプチャを含まない元の型）
     std::vector<TypePtr> hir_param_types;
-    for (const auto& p : lambda_functions_.back()->params) {
-        hir_param_types.push_back(p.type);
+    for (size_t i = lambda.captures.size(); i < lambda_functions_.back()->params.size(); ++i) {
+        hir_param_types.push_back(lambda_functions_.back()->params[i].type);
     }
     TypePtr lambda_type =
         hir::make_function_ptr(lambda_functions_.back()->return_type, hir_param_types);
 
     debug::hir::log(debug::hir::Id::ExprLower, "Lambda lowered as function: " + lambda_name,
                     debug::Level::Debug);
+
+    // キャプチャがある場合はクロージャ情報を持つ関数参照を生成
+    if (!lambda.captures.empty()) {
+        // クロージャ呼び出し用の特殊な参照を生成
+        auto var_ref = std::make_unique<HirVarRef>();
+        var_ref->name = lambda_name;
+        var_ref->is_function_ref = true;
+        var_ref->is_closure = true;
+
+        // キャプチャ変数をコピー
+        for (const auto& cap : lambda.captures) {
+            HirVarRef::CapturedVar cv;
+            cv.name = cap.name;
+            cv.type = cap.type;
+            var_ref->captured_vars.push_back(cv);
+        }
+
+        return std::make_unique<HirExpr>(std::move(var_ref), lambda_type);
+    }
 
     // 関数参照を返す
     auto var_ref = std::make_unique<HirVarRef>();

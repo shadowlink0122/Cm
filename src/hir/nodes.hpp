@@ -33,6 +33,14 @@ struct HirLiteral {
 struct HirVarRef {
     std::string name;
     bool is_function_ref = false;  // 関数名への参照（関数ポインタ用）
+    bool is_closure = false;       // クロージャ（キャプチャあり）か
+
+    // クロージャ用：キャプチャされた変数の情報
+    struct CapturedVar {
+        std::string name;
+        TypePtr type;
+    };
+    std::vector<CapturedVar> captured_vars;
 };
 
 // 二項演算
@@ -84,9 +92,12 @@ struct HirUnary {
 
 // 関数呼び出し
 struct HirCall {
-    std::string func_name;  // 完全修飾名（関数ポインタの場合は変数名）
+    std::string func_name;    // 完全修飾名（関数ポインタの場合は変数名）
+    std::string callee_name;  // クロージャ用：実際の関数名
     std::vector<HirExprPtr> args;
-    bool is_indirect = false;  // 関数ポインタ経由の呼び出し
+    std::vector<HirExprPtr> captured_args;  // キャプチャされた変数の値
+    bool is_indirect = false;               // 関数ポインタ経由の呼び出し
+    bool is_closure = false;                // クロージャ呼び出しか
 };
 
 // 配列アクセス

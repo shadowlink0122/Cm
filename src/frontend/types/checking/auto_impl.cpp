@@ -39,6 +39,14 @@ void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::strin
     else if (iface_name == "Hash") {
         register_auto_hash_impl(st);
     }
+    // Debug: debug() メソッド
+    else if (iface_name == "Debug") {
+        register_auto_debug_impl(st);
+    }
+    // Display: toString() メソッド
+    else if (iface_name == "Display") {
+        register_auto_display_impl(st);
+    }
 }
 
 void TypeChecker::register_auto_eq_impl(const ast::StructDecl& st) {
@@ -189,8 +197,70 @@ void TypeChecker::register_builtin_interfaces() {
         interface_methods_["Hash"]["hash"] = hash_method;
     }
 
+    // Debug - デバッグ出力
+    {
+        interface_names_.insert("Debug");
+
+        MethodInfo debug_method;
+        debug_method.name = "debug";
+        debug_method.return_type = ast::make_string();
+        interface_methods_["Debug"]["debug"] = debug_method;
+    }
+
+    // Display - 文字列化
+    {
+        interface_names_.insert("Display");
+
+        MethodInfo tostring_method;
+        tostring_method.name = "toString";
+        tostring_method.return_type = ast::make_string();
+        interface_methods_["Display"]["toString"] = tostring_method;
+    }
+
     debug::tc::log(debug::tc::Id::Resolved,
-                   "Registered builtin interfaces: Eq, Ord, Copy, Clone, Hash",
+                   "Registered builtin interfaces: Eq, Ord, Copy, Clone, Hash, Debug, Display",
+                   debug::Level::Debug);
+}
+
+void TypeChecker::register_auto_debug_impl(const ast::StructDecl& st) {
+    std::string struct_name = st.name;
+    auto struct_type = ast::make_named(struct_name);
+
+    MethodInfo debug_method;
+    debug_method.name = "debug";
+    debug_method.return_type = ast::make_string();
+    type_methods_[struct_name]["debug"] = debug_method;
+
+    // グローバル関数としても登録
+    std::string mangled_name = struct_name + "__debug";
+    std::vector<ast::TypePtr> param_types;
+    param_types.push_back(struct_type);  // self
+    scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_string());
+
+    auto_impl_info_[struct_name]["Debug"] = true;
+
+    debug::tc::log(debug::tc::Id::Resolved, "  Generated debug() for " + struct_name,
+                   debug::Level::Debug);
+}
+
+void TypeChecker::register_auto_display_impl(const ast::StructDecl& st) {
+    std::string struct_name = st.name;
+    auto struct_type = ast::make_named(struct_name);
+
+    MethodInfo tostring_method;
+    tostring_method.name = "toString";
+    tostring_method.return_type = ast::make_string();
+    type_methods_[struct_name]["toString"] = tostring_method;
+
+    // グローバル関数としても登録
+    std::string mangled_name = struct_name + "__toString";
+    std::vector<ast::TypePtr> param_types;
+    param_types.push_back(struct_type);  // self
+    scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_string());
+
+    auto_impl_info_[struct_name]["Display"] = true;
+
+    debug::tc::log(debug::tc::Id::Resolved, "  Generated toString() for " + struct_name,
                    debug::Level::Debug);
 }
 

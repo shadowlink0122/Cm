@@ -160,6 +160,32 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, LoweringContext&
 // 変数参照のlowering
 LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePtr& expr_type,
                                     LoweringContext& ctx) {
+    // クロージャ（キャプチャあり）の場合
+    if (var.is_closure && !var.captured_vars.empty()) {
+        hir::TypePtr func_ptr_type =
+            expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});
+        LocalId temp = ctx.new_temp(func_ptr_type);
+
+        // クロージャ関数への参照を格納
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{temp}, MirRvalue::use(MirOperand::function_ref(var.name))));
+
+        // キャプチャ情報をローカルに設定
+        auto& local_decl = ctx.func->locals[temp];
+        local_decl.is_closure = true;
+        local_decl.closure_func_name = var.name;
+
+        // キャプチャされた変数のローカルIDを解決して保存
+        for (const auto& cap : var.captured_vars) {
+            auto cap_local = ctx.resolve_variable(cap.name);
+            if (cap_local) {
+                local_decl.captured_locals.push_back(*cap_local);
+            }
+        }
+
+        return temp;
+    }
+
     // 関数参照の場合（関数ポインタ用）
     if (var.is_function_ref) {
         // 式の型（関数ポインタ型）を使用

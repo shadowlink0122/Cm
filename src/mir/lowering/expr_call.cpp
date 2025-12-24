@@ -526,7 +526,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 bool needs_deref = false;
 
                                                 if (next_arrow != std::string::npos &&
-                                                    (next_dot == std::string::npos || next_arrow < next_dot)) {
+                                                    (next_dot == std::string::npos ||
+                                                     next_arrow < next_dot)) {
                                                     field_part = remaining.substr(0, next_arrow);
                                                     remaining = remaining.substr(next_arrow + 2);
                                                     needs_deref = true;
@@ -539,38 +540,47 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 }
 
                                                 // ポインタ型の場合はDerefを追加
-                                                if (current_type && current_type->kind == hir::TypeKind::Pointer) {
-                                                    place.projections.push_back(PlaceProjection::deref());
+                                                if (current_type &&
+                                                    current_type->kind == hir::TypeKind::Pointer) {
+                                                    place.projections.push_back(
+                                                        PlaceProjection::deref());
                                                     current_type = current_type->element_type;
                                                 }
 
-                                                if (!current_type || current_type->kind != hir::TypeKind::Struct) {
+                                                if (!current_type ||
+                                                    current_type->kind != hir::TypeKind::Struct) {
                                                     valid = false;
                                                     break;
                                                 }
 
-                                                auto field_idx = ctx.get_field_index(current_type->name, field_part);
+                                                auto field_idx = ctx.get_field_index(
+                                                    current_type->name, field_part);
                                                 if (!field_idx) {
                                                     valid = false;
                                                     break;
                                                 }
 
-                                                place.projections.push_back(PlaceProjection::field(*field_idx));
+                                                place.projections.push_back(
+                                                    PlaceProjection::field(*field_idx));
 
                                                 // フィールド型を取得
                                                 hir::TypePtr field_type = hir::make_int();
-                                                if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
-                                                    const auto* struct_def = ctx.struct_defs->at(current_type->name);
+                                                if (ctx.struct_defs &&
+                                                    ctx.struct_defs->count(current_type->name)) {
+                                                    const auto* struct_def =
+                                                        ctx.struct_defs->at(current_type->name);
                                                     if (*field_idx < struct_def->fields.size()) {
-                                                        field_type = struct_def->fields[*field_idx].type;
+                                                        field_type =
+                                                            struct_def->fields[*field_idx].type;
                                                     }
                                                 }
                                                 current_type = field_type;
 
                                                 // アロー演算子の場合、次にDerefを追加
-                                                if (needs_deref && current_type && 
+                                                if (needs_deref && current_type &&
                                                     current_type->kind == hir::TypeKind::Pointer) {
-                                                    place.projections.push_back(PlaceProjection::deref());
+                                                    place.projections.push_back(
+                                                        PlaceProjection::deref());
                                                     current_type = current_type->element_type;
                                                 }
                                             }
@@ -642,23 +652,28 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             remaining.clear();
                                         }
 
-                                        if (!current_type || current_type->kind != hir::TypeKind::Struct) {
+                                        if (!current_type ||
+                                            current_type->kind != hir::TypeKind::Struct) {
                                             valid = false;
                                             break;
                                         }
 
-                                        auto field_idx = ctx.get_field_index(current_type->name, field_part);
+                                        auto field_idx =
+                                            ctx.get_field_index(current_type->name, field_part);
                                         if (!field_idx) {
                                             valid = false;
                                             break;
                                         }
 
-                                        place.projections.push_back(PlaceProjection::field(*field_idx));
+                                        place.projections.push_back(
+                                            PlaceProjection::field(*field_idx));
 
                                         // フィールド型を取得
                                         hir::TypePtr field_type = hir::make_int();
-                                        if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
-                                            const auto* struct_def = ctx.struct_defs->at(current_type->name);
+                                        if (ctx.struct_defs &&
+                                            ctx.struct_defs->count(current_type->name)) {
+                                            const auto* struct_def =
+                                                ctx.struct_defs->at(current_type->name);
                                             if (*field_idx < struct_def->fields.size()) {
                                                 field_type = struct_def->fields[*field_idx].type;
                                             }
@@ -666,7 +681,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                         current_type = field_type;
 
                                         // 次のアローアクセスのためにDerefを追加
-                                        if (needs_deref && current_type && 
+                                        if (needs_deref && current_type &&
                                             current_type->kind == hir::TypeKind::Pointer) {
                                             place.projections.push_back(PlaceProjection::deref());
                                             current_type = current_type->element_type;
@@ -1032,15 +1047,21 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             }
                                         } else {
                                             // 構造体のメソッド呼び出し
+                                            // 関数名の形式: StructName__MethodName
                                             std::string method_name_full =
-                                                obj_type->name + "::" + member_name;
+                                                obj_type->name + "__" + member_name;
 
                                             // メソッド呼び出しのための新しいブロックを作成
                                             BlockId call_block = ctx.new_block();
                                             BlockId after_call_block = ctx.new_block();
 
-                                            // 戻り値用の一時変数（とりあえずintとして扱う）
+                                            // 戻り値用の一時変数（メソッド名から型を推測）
                                             hir::TypePtr return_type = hir::make_int();
+                                            if (member_name == "debug" ||
+                                                member_name == "toString" ||
+                                                member_name == "to_string") {
+                                                return_type = hir::make_string();
+                                            }
                                             LocalId result = ctx.new_temp(return_type);
 
                                             // 引数リスト（selfパラメータ）
@@ -1049,7 +1070,6 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 MirOperand::copy(MirPlace{*obj_id}));
 
                                             // メソッド呼び出しのターミネータを作成
-                                            // インターフェースメソッドとして処理（仮想メソッド呼び出し）
                                             auto call_term = std::make_unique<MirTerminator>();
                                             call_term->kind = MirTerminator::Call;
                                             call_term->data = MirTerminator::CallData{
@@ -1058,9 +1078,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 std::make_optional(MirPlace{result}),
                                                 after_call_block,
                                                 std::nullopt,  // unwindブロックなし
-                                                "",  // interface_name（後でコード生成時に解決）
-                                                member_name,  // method_name
-                                                true  // is_virtual（インターフェースメソッドの可能性）
+                                                "",            // interface_name
+                                                member_name,   // method_name
+                                                false  // is_virtual（自動生成メソッドは非仮想）
                                             };
 
                                             // 現在のブロックから呼び出しブロックへジャンプ
@@ -1115,7 +1135,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     remaining = remaining.substr(close_bracket + 1);
                                                     if (!remaining.empty() && remaining[0] == '.') {
                                                         remaining = remaining.substr(1);
-                                                    } else if (remaining.size() >= 2 && remaining.substr(0, 2) == "->") {
+                                                    } else if (remaining.size() >= 2 &&
+                                                               remaining.substr(0, 2) == "->") {
                                                         remaining = remaining.substr(2);
                                                         is_arrow = true;
                                                     }
@@ -1126,7 +1147,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             } else if (arrow_pos != std::string::npos &&
                                                        (dot_pos == std::string::npos ||
                                                         arrow_pos < dot_pos)) {
-                                                // field->next のような形式（ポインタデリファレンス）
+                                                // field->next
+                                                // のような形式（ポインタデリファレンス）
                                                 field_part = remaining.substr(0, arrow_pos);
                                                 remaining = remaining.substr(arrow_pos + 2);
                                                 is_arrow = true;
@@ -1319,8 +1341,13 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 BlockId call_block = ctx.new_block();
                                                 BlockId after_call_block = ctx.new_block();
 
-                                                // 戻り値用の一時変数
+                                                // 戻り値用の一時変数（メソッド名から型を推測）
                                                 hir::TypePtr return_type = hir::make_int();
+                                                if (method_name == "debug" ||
+                                                    method_name == "toString" ||
+                                                    method_name == "to_string") {
+                                                    return_type = hir::make_string();
+                                                }
                                                 LocalId result = ctx.new_temp(return_type);
 
                                                 // 引数の準備（レシーバーが最初の引数）
@@ -1343,26 +1370,29 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 }
 
                                                 // インターフェースメソッド名を探す
-                                                // 形式: StructName::InterfaceName::MethodName
+                                                // 形式: StructName__MethodName
                                                 std::string full_method_name =
                                                     obj_type->name + "__" + method_name;
                                                 debug_msg("MIR",
                                                           "Full method name: " + full_method_name);
 
                                                 // 簡易実装：インターフェース名を仮定（実際は検索が必要）
-                                                // TODO:
-                                                // 実際のインターフェース名を検索する機能を実装
                                                 std::string interface_name = "";
                                                 bool is_virtual = false;
 
                                                 // 暫定的にインターフェース名を検索
-                                                // 実際にはimpl情報から検索する必要がある
                                                 if (method_name == "sum") {
                                                     interface_name = "Summable";
                                                     is_virtual = true;
                                                 } else if (method_name == "get_value") {
                                                     interface_name = "Valuable";
                                                     is_virtual = true;
+                                                } else if (method_name == "debug") {
+                                                    interface_name = "Debug";
+                                                    is_virtual = false;  // 自動生成された実装
+                                                } else if (method_name == "toString") {
+                                                    interface_name = "Display";
+                                                    is_virtual = false;  // 自動生成された実装
                                                 }
 
                                                 // メソッド呼び出しのターミネータを作成
@@ -2028,11 +2058,25 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     // 関数オペランドを作成
     MirOperandPtr func_operand;
+    std::vector<MirOperandPtr> capture_args;  // クロージャのキャプチャ引数
+
     if (call.is_indirect) {
         // 関数ポインタ経由の呼び出し: 変数から関数ポインタを取得
         auto var_id = ctx.resolve_variable(call.func_name);
         if (var_id) {
-            func_operand = MirOperand::copy(MirPlace{*var_id});
+            // クロージャかどうかチェック
+            auto& local_decl = ctx.func->locals[*var_id];
+            if (local_decl.is_closure && !local_decl.captured_locals.empty()) {
+                // クロージャ: 実際の関数名を使い、キャプチャ引数を追加
+                func_operand = MirOperand::function_ref(local_decl.closure_func_name);
+
+                // キャプチャされた変数を引数の先頭に追加
+                for (LocalId cap_local : local_decl.captured_locals) {
+                    capture_args.push_back(MirOperand::copy(MirPlace{cap_local}));
+                }
+            } else {
+                func_operand = MirOperand::copy(MirPlace{*var_id});
+            }
         } else {
             // 変数が見つからない場合は直接関数参照として処理
             // extern関数などは変数ではなく関数として登録されている
@@ -2041,6 +2085,18 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     } else {
         // 直接呼び出し: 関数参照を使用
         func_operand = MirOperand::function_ref(call.func_name);
+    }
+
+    // キャプチャ引数を通常の引数の前に挿入
+    if (!capture_args.empty()) {
+        std::vector<MirOperandPtr> all_args;
+        for (auto& cap_arg : capture_args) {
+            all_args.push_back(std::move(cap_arg));
+        }
+        for (auto& arg : args) {
+            all_args.push_back(std::move(arg));
+        }
+        args = std::move(all_args);
     }
 
     // Call終端命令を手動で作成

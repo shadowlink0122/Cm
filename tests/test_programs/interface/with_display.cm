@@ -1,0 +1,15 @@
+import std::io::println;
+
+// Display自動実装のテスト
+
+struct Point with Display {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p = {x: 30, y: 40};
+    string s = p.toString();
+    println("{s}");
+    return 0;
+}

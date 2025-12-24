@@ -249,6 +249,31 @@ class Interpreter {
                     }
                 }
 
+                // クロージャ変数への代入をチェック
+                if (data.place.projections.empty() && ctx.function) {
+                    const LocalId dest_local = data.place.local;
+                    if (dest_local < ctx.function->locals.size()) {
+                        const auto& local_decl = ctx.function->locals[dest_local];
+                        if (local_decl.is_closure && !local_decl.captured_locals.empty()) {
+                            // クロージャ: ClosureValueを作成
+                            ClosureValue cv;
+                            cv.func_name = local_decl.closure_func_name;
+                            for (LocalId cap_local : local_decl.captured_locals) {
+                                auto it = ctx.locals.find(cap_local);
+                                if (it != ctx.locals.end()) {
+                                    cv.captured_values.push_back(it->second);
+                                }
+                            }
+                            val = Value(cv);
+                            debug::interp::log(
+                                debug::interp::Id::Assign,
+                                "Created ClosureValue for " + cv.func_name + " with " +
+                                    std::to_string(cv.captured_values.size()) + " captures",
+                                debug::Level::Debug);
+                        }
+                    }
+                }
+
                 Evaluator::store_to_place(ctx, data.place, val);
                 break;
             }
@@ -323,13 +348,50 @@ class Interpreter {
             return;
         }
 
-        debug::interp::log(
-            debug::interp::Id::Call,
-            "Calling: " + func_name + " with " + std::to_string(data.args.size()) + " MIR args",
-            debug::Level::Debug);
+        // クロージャのキャプチャ引数を追加
+        std::vector<Value> captured_args;
+        if (data.func &&
+            (data.func->kind == MirOperand::Copy || data.func->kind == MirOperand::Move)) {
+            auto& place = std::get<MirPlace>(data.func->data);
+
+            // まず、値がClosureValueかどうかチェック
+            auto it = ctx.locals.find(place.local);
+            if (it != ctx.locals.end() && it->second.type() == typeid(ClosureValue)) {
+                const auto& cv = std::any_cast<ClosureValue>(it->second);
+                func_name = cv.func_name;
+                captured_args = cv.captured_values;
+            }
+            // 次に、LocalDeclのクロージャ情報をチェック（フォールバック）
+            else if (ctx.function && place.local < ctx.function->locals.size()) {
+                const auto& local_decl = ctx.function->locals[place.local];
+                if (local_decl.is_closure && !local_decl.captured_locals.empty()) {
+                    // クロージャ: 実際の関数名を使用
+                    func_name = local_decl.closure_func_name;
+                    // キャプチャされた変数を引数の先頭に追加
+                    for (LocalId cap_local : local_decl.captured_locals) {
+                        auto cap_it = ctx.locals.find(cap_local);
+                        if (cap_it != ctx.locals.end()) {
+                            captured_args.push_back(cap_it->second);
+                        }
+                    }
+                }
+            }
+        }
+
+        debug::interp::log(debug::interp::Id::Call,
+                           "Calling: " + func_name + " with " + std::to_string(data.args.size()) +
+                               " MIR args" +
+                               (captured_args.empty()
+                                    ? ""
+                                    : " + " + std::to_string(captured_args.size()) + " captured"),
+                           debug::Level::Debug);
 
         // 引数を評価
         std::vector<Value> args;
+        // キャプチャ引数を先頭に追加
+        for (const auto& cap_arg : captured_args) {
+            args.push_back(cap_arg);
+        }
         for (const auto& arg : data.args) {
             args.push_back(Evaluator::evaluate_operand(ctx, *arg));
         }
@@ -676,6 +738,11 @@ class Interpreter {
         // 関数ポインタ変数（Copy/Move）
         else if (data.func->kind == MirOperand::Copy || data.func->kind == MirOperand::Move) {
             Value val = Evaluator::evaluate_operand(ctx, *data.func);
+            // クロージャの場合
+            if (val.type() == typeid(ClosureValue)) {
+                const auto& cv = std::any_cast<ClosureValue>(val);
+                return cv.func_name;
+            }
             // 関数ポインタはstringとして保存されている
             if (val.type() == typeid(std::string)) {
                 return std::any_cast<std::string>(val);
@@ -837,14 +904,33 @@ class Interpreter {
 
         // 関数名を取得（コールバックが必要な関数のみ）
         std::string callback_name;
-        if (args.size() > 2 && args[2].type() == typeid(std::string)) {
-            callback_name = std::any_cast<std::string>(args[2]);
+        std::vector<Value> captured_values;  // クロージャのキャプチャ値
+
+        // _closure版の場合は4引数（配列, サイズ, 関数名, キャプチャ値）
+        bool is_closure_version = func_name.find("_closure") != std::string::npos;
+
+        if (args.size() > 2) {
+            if (args[2].type() == typeid(std::string)) {
+                callback_name = std::any_cast<std::string>(args[2]);
+                // _closure版の場合は4番目の引数がキャプチャ値
+                if (is_closure_version && args.size() > 3) {
+                    captured_values.push_back(args[3]);
+                }
+            } else if (args[2].type() == typeid(ClosureValue)) {
+                // クロージャの場合
+                const auto& cv = std::any_cast<ClosureValue>(args[2]);
+                callback_name = cv.func_name;
+                captured_values = cv.captured_values;
+            } else {
+                debug::interp::log(debug::interp::Id::Error,
+                                   "Callback is not a function name or closure: " +
+                                       std::string(args[2].type().name()),
+                                   debug::Level::Warn);
+                return Value(false);
+            }
         } else {
-            debug::interp::log(
-                debug::interp::Id::Error,
-                "Callback is not a function name: " +
-                    (args.size() > 2 ? std::string(args[2].type().name()) : "missing"),
-                debug::Level::Warn);
+            debug::interp::log(debug::interp::Id::Error, "Missing callback argument",
+                               debug::Level::Warn);
             return Value(false);
         }
 
@@ -856,11 +942,21 @@ class Interpreter {
             return Value(false);
         }
 
+        // クロージャ呼び出しヘルパー
+        auto call_callback = [&](const Value& elem) -> Value {
+            std::vector<Value> cb_args;
+            // キャプチャ値を先頭に追加
+            for (const auto& cap : captured_values) {
+                cb_args.push_back(cap);
+            }
+            cb_args.push_back(elem);
+            return execute_function(*callback, cb_args);
+        };
+
         // 関数の種類に応じて処理
         if (func_name.find("__builtin_array_some") == 0) {
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
                     return Value(true);
                 }
@@ -868,8 +964,7 @@ class Interpreter {
             return Value(false);
         } else if (func_name.find("__builtin_array_every") == 0) {
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && !std::any_cast<bool>(result)) {
                     return Value(false);
                 }
@@ -877,8 +972,7 @@ class Interpreter {
             return Value(true);
         } else if (func_name.find("__builtin_array_findIndex") == 0) {
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
                     return Value(i);
                 }
@@ -889,8 +983,7 @@ class Interpreter {
             std::vector<Value> result_arr;
             result_arr.reserve(static_cast<size_t>(size));
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 result_arr.push_back(result);
             }
             // SliceValueとして返す（動的配列）
@@ -901,8 +994,7 @@ class Interpreter {
             // filter: 条件を満たす要素のみを含む新しい配列を返す
             std::vector<Value> result_arr;
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
                     result_arr.push_back(arr[i]);
                 }

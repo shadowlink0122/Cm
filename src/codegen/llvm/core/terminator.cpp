@@ -511,6 +511,87 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             }
             // 間接呼び出し（関数ポインタ変数経由）
             else if (isIndirectCall && funcPtrValue) {
+                // クロージャかどうかをチェック
+                bool isClosure = false;
+                std::string closureFuncName;
+                std::vector<mir::LocalId> capturedLocals;
+
+                if (callData.func->kind == mir::MirOperand::Copy ||
+                    callData.func->kind == mir::MirOperand::Move) {
+                    auto& place = std::get<mir::MirPlace>(callData.func->data);
+                    if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                        const auto& localDecl = currentMIRFunction->locals[place.local];
+                        if (localDecl.is_closure && !localDecl.captured_locals.empty()) {
+                            isClosure = true;
+                            closureFuncName = localDecl.closure_func_name;
+                            capturedLocals = localDecl.captured_locals;
+                        }
+                    }
+                }
+
+                if (isClosure && !closureFuncName.empty()) {
+                    // クロージャ: 直接関数呼び出しに変換し、キャプチャ引数を追加
+                    llvm::Function* closureFunc = functions[closureFuncName];
+                    if (!closureFunc) {
+                        closureFunc = declareExternalFunction(closureFuncName);
+                    }
+
+                    if (closureFunc) {
+                        // キャプチャ引数を先頭に追加
+                        std::vector<llvm::Value*> closureArgs;
+                        for (mir::LocalId capLocal : capturedLocals) {
+                            llvm::Value* capVal = locals[capLocal];
+                            if (capVal) {
+                                // allocaの場合はload
+                                if (llvm::isa<llvm::AllocaInst>(capVal)) {
+                                    auto allocaInst = llvm::cast<llvm::AllocaInst>(capVal);
+                                    capVal = builder->CreateLoad(allocaInst->getAllocatedType(),
+                                                                 capVal, "cap_load");
+                                }
+                                closureArgs.push_back(capVal);
+                            }
+                        }
+                        // 通常の引数を追加
+                        for (auto& arg : args) {
+                            closureArgs.push_back(arg);
+                        }
+
+                        // 関数型を取得
+                        auto funcType = closureFunc->getFunctionType();
+
+                        // 引数の型変換
+                        for (size_t i = 0; i < closureArgs.size() && i < funcType->getNumParams();
+                             ++i) {
+                            auto expectedType = funcType->getParamType(i);
+                            auto actualType = closureArgs[i]->getType();
+                            if (expectedType != actualType) {
+                                if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
+                                    unsigned expectedBits = expectedType->getIntegerBitWidth();
+                                    unsigned actualBits = actualType->getIntegerBitWidth();
+                                    if (expectedBits > actualBits) {
+                                        closureArgs[i] = builder->CreateSExt(closureArgs[i],
+                                                                             expectedType, "sext");
+                                    } else if (expectedBits < actualBits) {
+                                        closureArgs[i] = builder->CreateTrunc(
+                                            closureArgs[i], expectedType, "trunc");
+                                    }
+                                }
+                            }
+                        }
+
+                        auto result = builder->CreateCall(closureFunc, closureArgs);
+                        if (callData.destination) {
+                            locals[callData.destination->local] = result;
+                        }
+
+                        if (callData.success != mir::INVALID_BLOCK) {
+                            builder->CreateBr(blocks[callData.success]);
+                        }
+                        break;
+                    }
+                }
+
+                // 通常の間接呼び出し
                 // 関数ポインタ変数の型情報から関数型を取得
                 hir::TypePtr funcPtrType = nullptr;
                 if (callData.func->kind == mir::MirOperand::Copy ||

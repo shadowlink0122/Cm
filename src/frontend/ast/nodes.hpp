@@ -57,16 +57,14 @@ struct MatchExpr;
 struct CastExpr;
 
 // 式の種類
-using ExprKind =
-    std::variant<std::unique_ptr<LiteralExpr>, std::unique_ptr<IdentExpr>,
-                 std::unique_ptr<BinaryExpr>, std::unique_ptr<UnaryExpr>, std::unique_ptr<CallExpr>,
-                 std::unique_ptr<IndexExpr>, std::unique_ptr<SliceExpr>,
-                 std::unique_ptr<MemberExpr>, std::unique_ptr<TernaryExpr>,
-                 std::unique_ptr<NewExpr>, std::unique_ptr<SizeofExpr>, std::unique_ptr<TypeofExpr>,
-                 std::unique_ptr<AlignofExpr>, std::unique_ptr<TypenameOfExpr>,
-                 std::unique_ptr<StructLiteralExpr>, std::unique_ptr<ArrayLiteralExpr>,
-                 std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>,
-                 std::unique_ptr<CastExpr>>;
+using ExprKind = std::variant<
+    std::unique_ptr<LiteralExpr>, std::unique_ptr<IdentExpr>, std::unique_ptr<BinaryExpr>,
+    std::unique_ptr<UnaryExpr>, std::unique_ptr<CallExpr>, std::unique_ptr<IndexExpr>,
+    std::unique_ptr<SliceExpr>, std::unique_ptr<MemberExpr>, std::unique_ptr<TernaryExpr>,
+    std::unique_ptr<NewExpr>, std::unique_ptr<SizeofExpr>, std::unique_ptr<TypeofExpr>,
+    std::unique_ptr<AlignofExpr>, std::unique_ptr<TypenameOfExpr>,
+    std::unique_ptr<StructLiteralExpr>, std::unique_ptr<ArrayLiteralExpr>,
+    std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>, std::unique_ptr<CastExpr>>;
 
 struct Expr : Node {
     ExprKind kind;

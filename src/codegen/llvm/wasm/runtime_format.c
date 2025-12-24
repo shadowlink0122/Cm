@@ -575,6 +575,23 @@ char* cm_format_double(double value) {
         value = -value;
     }
     
+    // 整数と同じ値の場合は整数として出力
+    long long int_val = (long long)value;
+    if (value == (double)int_val && value > -1e15 && value < 1e15) {
+        size_t len = 0;
+        if (is_negative) {
+            buffer[len++] = '-';
+        }
+        char int_buffer[32];
+        size_t int_len;
+        wasm_int_to_str((int)int_val, int_buffer, &int_len);
+        for (size_t i = 0; i < int_len; i++) {
+            buffer[len++] = int_buffer[i];
+        }
+        buffer[len] = '\0';
+        return buffer;
+    }
+    
     value += 0.000005;  // Rounding
     
     int int_part = (int)value;
@@ -1947,3 +1964,5 @@ void* __builtin_array_sort_i64(int64_t* arr, int64_t size) {
 void* __builtin_array_sort(int32_t* arr, int64_t size) {
     return __builtin_array_sort_i32(arr, size);
 }
+
+
