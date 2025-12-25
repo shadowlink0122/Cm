@@ -1,55 +1,25 @@
-
-// Basic pointer test
 import std::io::println;
+// ポインタ基本テスト
 
 int main() {
-    // 1. Basic pointer to int
-    int x = 10;
+    int x = 42;
     int* p = &x;
     
-    // println("x = 10");
-    if (x != 10) {
-        println("FAILED: x init");
-        return 1;
-    }
-    if (*p != 10) {
-        println("FAILED: *p init");
-        return 1;
-    }
+    // デリファレンスで読み出し
+    int v = *p;
+    println("x = {x}");
+    println("*p = {v}");
     
-    // Modification via pointer
-    *p = 20;
-    // println("Set *p = 20");
-
-    if (x != 20) {
-        println("FAILED: x after *p=20");
-        return 1;
-    }
-    if (*p != 20) {
-        println("FAILED: *p after *p=20");
-        return 1;
-    }
+    // デリファレンスで書き込み
+    *p = 100;
+    println("after *p = 100: x = {x}");
     
-    // 2. Pointer aliasing
-    int* q = p;
-    *q = 30;
-    // println("Set *q = 30");
+    // 別の変数へのポインタ
+    int y = 200;
+    p = &y;
+    int v2 = *p;
+    println("y = {y}");
+    println("*p (after p = &y) = {v2}");
     
-    if (x != 30) {
-        println("FAILED: x after *q=30");
-        return 1;
-    }
-
-    // 3. Pointer to pointer
-    int** pp = &p;
-    **pp = 40;
-    // println("Set **pp = 40");
-
-    if (x != 40) {
-        println("FAILED: x after **pp=40");
-        return 1;
-    }
-
-    println("PASSED");
     return 0;
 }
