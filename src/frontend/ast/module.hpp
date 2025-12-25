@@ -12,6 +12,18 @@ struct Expr;
 struct Stmt;
 struct Decl;
 struct Type;  // FFI関数宣言用
+
+// ============================================================
+// アトリビュート
+// ============================================================
+struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
+    std::string name;   // アトリビュート名
+    std::vector<std::string> args;  // 引数
+
+    AttributeNode(std::string n) : name(std::move(n)) {}
+    AttributeNode(std::string n, std::vector<std::string> a)
+        : name(std::move(n)), args(std::move(a)) {}
+};
 using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
 using DeclPtr = std::unique_ptr<Decl>;
@@ -55,6 +67,7 @@ struct ImportDecl {
     ModulePath path;                // モジュールパス
     std::vector<ImportItem> items;  // 選択的インポート項目
     bool is_wildcard = false;       // ワイルドカード（*）インポート
+    std::vector<AttributeNode> attributes;
 
     ImportDecl(ModulePath p) : path(std::move(p)) {}
 };
@@ -133,18 +146,6 @@ struct MacroCall {
 };
 
 // ============================================================
-// アトリビュート
-// ============================================================
-struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
-    std::string name;   // アトリビュート名
-    std::vector<std::string> args;  // 引数
-
-    AttributeNode(std::string n) : name(std::move(n)) {}
-    AttributeNode(std::string n, std::vector<std::string> a)
-        : name(std::move(n)), args(std::move(a)) {}
-};
-
-// ============================================================
 // マクロ定義
 // ============================================================
 struct MacroParam {
@@ -207,6 +208,7 @@ struct UseDecl {
     bool is_framework = false;                    // #[framework] (macOS)
     std::optional<std::string> os_condition;      // #[os(linux)] など
     std::optional<std::string> target_condition;  // #[target(wasm)] など
+    std::vector<AttributeNode> attributes;
 
     // モジュールuseコンストラクタ
     UseDecl(ModulePath p, std::optional<std::string> a = std::nullopt)

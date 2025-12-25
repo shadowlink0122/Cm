@@ -96,6 +96,12 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     hir_st->name = st.name;
     hir_st->is_export = st.visibility == ast::Visibility::Export;
     hir_st->auto_impls = st.auto_impls;
+    for (const auto& iface_name : st.auto_impls) {
+        if (iface_name == "Css") {
+            hir_st->is_css = true;
+            break;
+        }
+    }
 
     // ジェネリックパラメータを処理
     for (const auto& param_name : st.generic_params) {

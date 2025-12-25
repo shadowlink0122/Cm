@@ -83,7 +83,9 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                              i < data.operands.size() && i < it->second->fields.size(); ++i) {
                             if (i > 0)
                                 result += ", ";
-                            result += sanitizeIdentifier(it->second->fields[i].name) + ": " +
+                            result +=
+                                formatStructFieldKey(*it->second, it->second->fields[i].name) +
+                                ": " +
                                       emitOperand(*data.operands[i], func);
                         }
                         return result + " }";
@@ -247,8 +249,12 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                     if (it != struct_map_.end() && it->second) {
                         const auto* mirStruct = it->second;
                         if (proj.field_id < mirStruct->fields.size()) {
-                            result +=
-                                "." + sanitizeIdentifier(mirStruct->fields[proj.field_id].name);
+                            const auto& field_name = mirStruct->fields[proj.field_id].name;
+                            if (mirStruct->is_css) {
+                                result += "[" + formatStructFieldKey(*mirStruct, field_name) + "]";
+                            } else {
+                                result += "." + sanitizeIdentifier(field_name);
+                            }
                             // 次のプロジェクション用に型を更新
                             currentType = mirStruct->fields[proj.field_id].type;
                             continue;

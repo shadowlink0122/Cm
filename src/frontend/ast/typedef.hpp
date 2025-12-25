@@ -66,6 +66,7 @@ struct TypedefDecl {
     TypePtr type;                                 // 実際の型
     std::vector<std::string> type_params;         // ジェネリックパラメータ
     Visibility visibility = Visibility::Private;  // v4 module system
+    std::vector<AttributeNode> attributes;
 
     TypedefDecl(std::string n, TypePtr t) : name(std::move(n)), type(std::move(t)) {}
 

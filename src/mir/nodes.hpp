@@ -576,6 +576,7 @@ struct MirStruct {
     std::vector<MirStructField> fields;
     uint32_t size;   // 構造体全体のサイズ
     uint32_t align;  // アライメント要求
+    bool is_css = false;
 
     // インターフェース実装情報
     std::vector<std::string> implemented_interfaces;

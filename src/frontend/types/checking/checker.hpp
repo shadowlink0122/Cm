@@ -114,6 +114,7 @@ class TypeChecker {
     void register_auto_hash_impl(const ast::StructDecl& st);
     void register_auto_debug_impl(const ast::StructDecl& st);
     void register_auto_display_impl(const ast::StructDecl& st);
+    void register_auto_css_impl(const ast::StructDecl& st);
     void register_builtin_interfaces();
 
     // ============================================================

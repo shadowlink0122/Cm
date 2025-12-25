@@ -13,6 +13,7 @@
 #include "codegen/js/codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
+#include "frontend/ast/target_filtering_visitor.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
@@ -377,6 +378,23 @@ int main(int argc, char* argv[]) {
         }
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";
+
+        // ========== Target Filtering ==========
+        {
+            Target active_target = Target::Native;
+            if (opts.command == Command::Run) {
+                active_target = Target::Interpreter;
+            } else if (!opts.target.empty()) {
+                active_target = string_to_target(opts.target);
+            } else if (opts.emit_js) {
+                active_target = Target::JS;
+            }
+
+            debug::ast::log(debug::ast::Id::Validate,
+                            "target=" + target_to_string(active_target), debug::Level::Info);
+            ast::TargetFilteringVisitor target_filter(active_target);
+            target_filter.visit(program);
+        }
 
         // ASTを表示
         if (opts.show_ast) {

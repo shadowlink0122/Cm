@@ -147,6 +147,10 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             auto it_func = function_map_.find(funcName);
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
+                if (calleeFunc->is_extern &&
+                    (calleeFunc->package_name == "js" || calleeFunc->package_name.empty())) {
+                    funcName = mapExternJsName(calleeFunc->name);
+                }
             }
 
             for (size_t i = 0; i < data.args.size(); ++i) {
@@ -312,6 +316,10 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
             auto it_func = function_map_.find(funcName);
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
+                if (calleeFunc->is_extern &&
+                    (calleeFunc->package_name == "js" || calleeFunc->package_name.empty())) {
+                    funcName = mapExternJsName(calleeFunc->name);
+                }
             }
 
             for (size_t i = 0; i < data.args.size(); ++i) {

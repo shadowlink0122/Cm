@@ -350,6 +350,7 @@ struct HirStruct {
     std::vector<std::string> auto_impls;  // with キーワードで自動実装するinterface
     bool is_export = false;
     bool has_explicit_constructor = false;
+    bool is_css = false;
 };
 
 // メソッドシグネチャ

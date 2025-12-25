@@ -95,7 +95,18 @@ class StringInterpolationProcessor {
 
         if (vars.empty()) {
             // 埋め込みがない場合は全体を1つのリテラルとして返す
-            parts.push_back({StringPart::LITERAL, str, ""});
+            std::string literal = str;
+            size_t pos = 0;
+            while ((pos = literal.find("{{", pos)) != std::string::npos) {
+                literal.replace(pos, 2, "{");
+                pos++;
+            }
+            pos = 0;
+            while ((pos = literal.find("}}", pos)) != std::string::npos) {
+                literal.replace(pos, 2, "}");
+                pos++;
+            }
+            parts.push_back({StringPart::LITERAL, literal, ""});
             return parts;
         }
 

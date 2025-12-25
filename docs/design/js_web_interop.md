@@ -1,6 +1,6 @@
 # Cm JS/Web 相互運用性と最適化の設計詳細
 
-本文書は、`#[target]`、`css struct`、および文字列補間の実装に関する詳細な仕様を定義します。
+本文書は、`#[target]`、CSSインターフェース (`Css`)、および文字列補間の実装に関する詳細な仕様を定義します。
 
 ## 1. ビルドターゲットシステム (`#[target]`)
 
@@ -35,27 +35,104 @@ public void native_only_func() { ... }
 ファイル全体の制御のために、ファイルの最初の宣言として属性を許可するか、モジュール宣言に対する属性として扱います。現状のパーサーに合わせて、トップレベルの `Attribute` ノードとして解析し、後続の全ての宣言に適用する、あるいはファイル単位のフラグとして処理します。
 **決定**: ファイル単位の制御は実装が複雑になる（ファイルスコープという概念がASTに希薄）ため、まずは **宣言単位（関数、構造体、impl、import）** でのサポートを基本とします。
 
-## 2. CSS統合 (`css struct`)
+## 2. CSS統合 (`with Css`)
 
 型安全なCSS定義を提供し、JSオブジェクトとしての生成を最適化します。
 
-### 2.1. 構文と意味論
+## 2.x 言語デザインと実装案まとめ
 
-新しいキーワードではなく、既存の `struct` に `#[css]` 属性を付与する方式を採用します（言語拡張を最小限にするため）。
+### 2.x.1 言語デザイン（構文と意味論）
+- **構文**: `struct` に `with Css` を付与する（`#[css]` は不要）。
+- **意味論**:
+  - `with Css` 構造体のインスタンスは **JSのプレーンオブジェクト** として生成する。
+  - **プロパティ名変換**: `snake_case` -> `kebab-case`。
+  - **値の設定**: 構造体定義はフィールドのみを持ち、値はコンストラクタ等で設定する。
+  - **値のマッピング**:
+    - `string` -> JS string
+    - `int/float` -> **非推奨**（単位が必要なため `string` で保持する）
+    - `bool` -> `true` の場合は **キーだけ出力**、`false` の場合は **出力しない**
+    - `Option<T>` -> `null` の場合は **キーを出力しない**
+  - **disable規則**:
+    - `bool disable` が `true` の場合、`disable: true` と同等の意味を持つ。
+- **アクセス**:
+    - 通常構造体: `obj.field`
+    - CSS構造体: `obj["kebab-case"]`
+  - **出力順**:
+    - `css()` で生成する `key: value;` は **キー名でソート** して安定化する。
+
+### 2.x.2 CSSインターフェース（設計案）
+`with Css` 構造体が **CSSインターフェース** を自動実装し、文字列化と判別を統一します。
+
+- **インターフェース定義（案）**:
+  - `interface Css { string css(); bool isCss(); }`
+- **自動実装**:
+  - `with Css` 構造体は `Css` を自動実装する。
+  - `css()` はフィールドを **ケバブケース + セミコロン連結** に展開し、キー名でソートする。
+  - `isCss()` は常に `true` を返す。
+- **用途**:
+  - `Css` 型として関数引数に渡せる（CSS構造体の共通型）。
+  - テンプレート文字列内で `style.css()` を埋め込み可能。
 
 ```cm
-#[css]
-struct MyStyle {
-    string color = "red";
-    int margin_top = 10;
+interface Css {
+    string css();
+    bool isCss();
+}
+
+struct ButtonStyle with Css {
+    string background_color;
+    int margin_top;
+    bool disable;
+}
+
+void render(Css style) {
+    string s = `button { ${style.css()} }`;
+}
+```
+
+### 2.x.3 実装案（コンパイラ内部）
+1. **AST/HIR/MIRにCSSフラグを保持**
+   - AST: `StructDecl` の `with Css` を検出
+   - HIR: `HirStruct.is_css` を追加
+   - MIR: `MirStruct.is_css` を追加
+2. **JSコード生成**
+   - `emitStruct` / `emitAggregate` で CSS構造体の場合は `kebab-case` キーを出力
+   - フィールド参照は `obj["kebab-case"]` 形式に切り替え
+3. **型チェックと意味論の保証**
+   - `Option<T>` の `null` をキー省略へ落とす（JSオブジェクト生成時）
+   - `bool` は `true` の場合のみキーを出力（`false` は省略）
+4. **テスト追加**
+   - `tests/test_programs/js_specific/` に `css_struct_basic.cm`
+   - JS出力の `.expect` を追加
+
+### 2.x.4 デザイン上の注意点
+- `with Css` を付与した構造体にのみ影響を与える（互換性重視）。
+- 単位付与（`px` 等）は **コード生成側で行わず**、JS側に委ねる。
+- ネストCSS（`&:hover`等）は将来拡張（`#[key("...")]`）として扱う。
+- **optional/undefinedの扱い**:
+  - **前提**: optional/undefined は言語共通の仕組みとする。
+  - **採用**: `T?`（`Option<T>`）による明示的な任意指定を採用する。例: `bool? disable;`
+  - **理由**: Cmは堅牢な型システムを優先し、未初期化や曖昧な状態を避ける。CSSの「未指定」は `T?` の `null` で表現し、生成時にキー省略として落とす。
+  - **課題**: `T?` による optional は「一度宣言したら残る」ため、フィールドごとの可変性が限定される。CSS用途では **必要な箇所のみ optional を付与** する運用ルールを明記する。
+  - **補足**: 追加ルールがない限りは考慮対象外とする。
+
+### 2.1. 構文と意味論
+
+新しいキーワードではなく、既存の `struct` に `with Css` を付与する方式を採用します（言語拡張を最小限にするため）。
+
+```cm
+struct MyStyle with Css {
+    string color;
+    int margin_top;
     string? background_color;  // Optional
     
-    // ネストされたCSS（例: &:hover）
-    // フィールド名が文字列リテラルのように扱える必要があるが、
-    // Cmの識別子は厳格。
-    // 代替案: ネストはサポートせず、フラットなプロパティのみまずはサポート。
-    // または `#[key("&:hover")]` のような属性で対応。
+    // ネストされたCSSは、ネスト構造体にも `with Css` が必要。
+    // 例: hover は `with Css` を実装した構造体であることが求められる。
 }
+
+// 値の設定はユースケース次第（コンストラクタは既存実装）
+// 引数が膨大になりやすいため、リテラルのコピー代入を推奨
+// 例: MyStyle s = { color: "red", margin_top: 10, background_color: null };
 ```
 
 ### 2.2. 型と値のマッピング
@@ -64,12 +141,12 @@ CSSプロパティの値は柔軟ですが、型安全性とのバランスを�
 | Cm型 | CSS/JS値 | 処理 |
 |---|---|---|
 | `string` | 文字列 | そのまま出力 |
-| `int`, `float` | 数値 +単位? | **数値のまま出力** (JSライブラリ側で単位付与を委譲、または `px` をデフォルトとするかは要検討) -> **決定**: 数値のまま出力。React等は `px` を自動付与するが、素のDOMスタイル操作は付与しない。相互運用性を高めるため、数値は数値 (`number`) としてJSオブジェクトに入れる。 |
-| `bool` | - | CSSにboolはない。無視するかエラー。 |
+| `int`, `float` | 数値 +単位? | **非推奨**（単位が必要なため `string` で保持する） |
+| `bool` | - | `true` の場合のみキーを出力、`false` は省略 |
 | `Option<T>` | `T | undefined` | 値がない(`null`)場合、JSオブジェクトのキー自体を含めない（`undefined`）。 |
 
 ### 2.3. プロパティ名の変換
-`#[css]` 属性が付いた構造体に対してのみ、JSコード生成時にフィールド名の自動変換を行います。
+`with Css` 構造体に対してのみ、JSコード生成時にフィールド名の自動変換を行います。
 
 - **ルール**: スネークケース (`foo_bar`) -> ケバブケース (`foo-bar`)
 - **例外**: `_` で始まるフィールドなどはそのまま？ -> 基本全変換でOK。
@@ -77,7 +154,43 @@ CSSプロパティの値は柔軟ですが、型安全性とのバランスを�
 
 ### 2.4. インライン展開とヘルパー
 CSS構造体はインスタンス化されると、JSのオブジェクトリテラルとして表現されます。
-`MyStyle s = { ... };` -> `let s = { color: "red", "margin-top": 10 };`
+`MyStyle s = { ... };` -> `let s = { color: "red", "margin-top": "10px" };`
+
+### 2.5. HTML上での利用例
+`Css` は **スタイル文字列** として使う想定です。代表的な使い方は以下です。
+
+```cm
+struct ButtonStyle with Css {
+    string color;
+    string background_color;
+    int padding_top;
+    int padding_bottom;
+    bool? disabled;
+}
+
+void render() {
+    ButtonStyle s = {
+        color: "white",
+        background_color: "red",
+        padding_top: 8,
+        padding_bottom: 8,
+        disabled: null
+    };
+
+    string css = s.css();
+    // 例: `button { ${css} }` のようにHTML/テンプレートへ埋め込む
+}
+```
+
+想定されるJS側の利用:
+```js
+const style = { color: "white", "background-color": "red", "padding-top": 8, "padding-bottom": 8 };
+const css = "color: white; background-color: red; padding-top: 8; padding-bottom: 8;";
+document.querySelector("button").style.cssText = css;
+```
+
+HTMLにそのまま埋め込む用途も優先する。
+`style` 属性へ `style.css()` を文字列として埋め込めることを保証する。
 
 ## 3. 文字列補間と曖昧さ回避
 

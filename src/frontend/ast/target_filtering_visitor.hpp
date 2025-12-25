@@ -4,6 +4,7 @@
 #include "decl.hpp"
 #include "module.hpp"
 #include "nodes.hpp"
+#include "typedef.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -47,9 +48,15 @@ class TargetFilteringVisitor {
                     attrs = &arg->attributes;
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<EnumDecl>>) {
                     attrs = &arg->attributes;
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<TypedefDecl>>) {
+                    attrs = &arg->attributes;
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<GlobalVarDecl>>) {
+                    attrs = &arg->attributes;
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<UseDecl>>) {
                     attrs = &arg->attributes;
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<ImportDecl>>) {
+                    attrs = &arg->attributes;
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<ExternBlockDecl>>) {
                     attrs = &arg->attributes;
                 }
                 // その他の宣言は属性やターゲットフィルタリングをまだサポートしていない可能性があります
@@ -112,6 +119,10 @@ class TargetFilteringVisitor {
             t_str = t_str.substr(1);
         }
 
+        if (t_str == "active") {
+            return !negated;
+        }
+
         bool match = false;
         // ターゲット文字列を列挙型にパースするか、単純に文字列比較します
         // "js", "wasm", "native", "web"
@@ -168,6 +179,8 @@ class TargetFilteringVisitor {
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<ExternBlockDecl>>) {
                     // ExternBlockは...を持ちます
                     filter_c_decls(arg->declarations);
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<ModuleDecl>>) {
+                    filter_decls(arg->declarations);
                 }
             },
             d.kind);

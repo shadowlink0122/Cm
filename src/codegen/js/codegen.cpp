@@ -17,6 +17,35 @@ using ast::TypeKind;
 JSCodeGen::JSCodeGen(const JSCodeGenOptions& options)
     : options_(options), emitter_(options.indentSpaces) {}
 
+bool JSCodeGen::isCssStruct(const std::string& struct_name) const {
+    auto it = struct_map_.find(struct_name);
+    return it != struct_map_.end() && it->second && it->second->is_css;
+}
+
+std::string JSCodeGen::toKebabCase(const std::string& name) const {
+    std::string result;
+    result.reserve(name.size());
+    for (char c : name) {
+        result += (c == '_') ? '-' : c;
+    }
+    return result;
+}
+
+std::string JSCodeGen::formatStructFieldKey(const mir::MirStruct& st,
+                                            const std::string& field_name) const {
+    if (!st.is_css) {
+        return sanitizeIdentifier(field_name);
+    }
+    std::string kebab = toKebabCase(field_name);
+    return "\"" + escapeString(kebab) + "\"";
+}
+
+std::string JSCodeGen::mapExternJsName(const std::string& name) const {
+    std::string result = name;
+    std::replace(result.begin(), result.end(), '_', '.');
+    return result;
+}
+
 void JSCodeGen::compile(const mir::MirProgram& program) {
     // 出力クリア
     emitter_.clear();
@@ -213,7 +242,7 @@ void JSCodeGen::emitStruct(const mir::MirStruct& st) {
     for (size_t i = 0; i < st.fields.size(); ++i) {
         const auto& field = st.fields[i];
         std::string defaultVal = jsDefaultValue(*field.type);
-        std::string line = sanitizeIdentifier(field.name) + ": " + defaultVal;
+        std::string line = formatStructFieldKey(st, field.name) + ": " + defaultVal;
         if (i < st.fields.size() - 1) {
             line += ",";
         }

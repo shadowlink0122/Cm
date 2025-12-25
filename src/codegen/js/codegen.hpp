@@ -126,6 +126,12 @@ class JSCodeGen {
     // ヘルパー: static変数のグローバル名を取得
     std::string getStaticVarName(const mir::MirFunction& func, mir::LocalId localId);
 
+    // ヘルパー: CSS構造体判定とフィールド名変換
+    bool isCssStruct(const std::string& struct_name) const;
+    std::string toKebabCase(const std::string& name) const;
+    std::string formatStructFieldKey(const mir::MirStruct& st, const std::string& field_name) const;
+    std::string mapExternJsName(const std::string& name) const;
+
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;
 };

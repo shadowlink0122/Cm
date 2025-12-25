@@ -1059,8 +1059,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             hir::TypePtr return_type = hir::make_int();
                                             if (member_name == "debug" ||
                                                 member_name == "toString" ||
-                                                member_name == "to_string") {
+                                                member_name == "to_string" ||
+                                                member_name == "css") {
                                                 return_type = hir::make_string();
+                                            } else if (member_name == "isCss") {
+                                                return_type = hir::make_bool();
                                             }
                                             LocalId result = ctx.new_temp(return_type);
 
@@ -1345,8 +1348,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 hir::TypePtr return_type = hir::make_int();
                                                 if (method_name == "debug" ||
                                                     method_name == "toString" ||
-                                                    method_name == "to_string") {
+                                                    method_name == "to_string" ||
+                                                    method_name == "css") {
                                                     return_type = hir::make_string();
+                                                } else if (method_name == "isCss") {
+                                                    return_type = hir::make_bool();
                                                 }
                                                 LocalId result = ctx.new_temp(return_type);
 
@@ -1392,6 +1398,10 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     is_virtual = false;  // 自動生成された実装
                                                 } else if (method_name == "toString") {
                                                     interface_name = "Display";
+                                                    is_virtual = false;  // 自動生成された実装
+                                                } else if (method_name == "css" ||
+                                                           method_name == "isCss") {
+                                                    interface_name = "Css";
                                                     is_virtual = false;  // 自動生成された実装
                                                 }
 

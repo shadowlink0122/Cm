@@ -140,6 +140,7 @@ struct StructDecl {
     std::string name;
     std::vector<Field> fields;
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
 
     // with キーワードで自動実装するinterface
     std::vector<std::string> auto_impls;
@@ -212,6 +213,7 @@ struct InterfaceDecl {
     std::vector<MethodSig> methods;
     std::vector<OperatorSig> operators;  // 演算子シグネチャ
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
     std::vector<std::string> generic_params;      // 後方互換性のため維持
     std::vector<GenericParam> generic_params_v2;  // 型制約付き
 
@@ -253,6 +255,7 @@ struct ImplDecl {
     TypePtr target_type;
     std::vector<std::unique_ptr<FunctionDecl>> methods;
     std::vector<std::unique_ptr<OperatorImpl>> operators;  // 演算子実装
+    std::vector<AttributeNode> attributes;
     std::vector<std::string> generic_params;               // 後方互換性のため維持
     std::vector<GenericParam> generic_params_v2;           // 型制約付き
     std::vector<TypePtr>
@@ -293,6 +296,7 @@ struct EnumDecl {
     std::string name;
     std::vector<EnumMember> members;
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
 
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}
@@ -307,6 +311,7 @@ struct GlobalVarDecl {
     ExprPtr init_expr;
     bool is_const = false;
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
 
     GlobalVarDecl(std::string n, TypePtr t, ExprPtr init, bool c = false)
         : name(std::move(n)), type(std::move(t)), init_expr(std::move(init)), is_const(c) {}
@@ -318,6 +323,7 @@ struct GlobalVarDecl {
 struct ExternBlockDecl {
     std::string language;  // "C" など
     std::vector<std::unique_ptr<FunctionDecl>> declarations;
+    std::vector<AttributeNode> attributes;
 
     explicit ExternBlockDecl(std::string lang) : language(std::move(lang)) {}
 };

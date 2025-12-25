@@ -78,25 +78,17 @@ class Parser {
    private:
     // トップレベル宣言
     ast::DeclPtr parse_top_level() {
-        // アトリビュートチェック（マクロなど）
-        if (check(TokenKind::At)) {
-            auto saved_pos = pos_;
-            std::vector<ast::AttributeNode> attrs;
-            while (check(TokenKind::At)) {
-                attrs.push_back(parse_attribute());
-            }
+        // アトリビュート（#[...]) を収集
+        std::vector<ast::AttributeNode> attrs;
+        while (is_attribute_start()) {
+            attrs.push_back(parse_attribute());
+        }
 
-            // @[macro]の場合 (廃止予定 - #macroを使用してください)
-            for (const auto& attr : attrs) {
-                if (attr.name == "macro") {
-                    // このパスは廃止予定
-                    pos_ = saved_pos;  // 位置を戻す
-                    return nullptr;    // @[macro]はサポートしない
-                }
+        // @[macro]の場合 (廃止予定 - #macroを使用してください)
+        for (const auto& attr : attrs) {
+            if (attr.name == "macro") {
+                return nullptr;  // @[macro]はサポートしない
             }
-
-            // その他のアトリビュート付き宣言
-            pos_ = saved_pos;  // 位置を戻す
         }
 
         // module宣言
@@ -111,12 +103,12 @@ class Parser {
 
         // import
         if (check(TokenKind::KwImport)) {
-            return parse_import_stmt();
+            return parse_import_stmt(std::move(attrs));
         }
 
         // use
         if (check(TokenKind::KwUse)) {
-            return parse_use();
+            return parse_use(std::move(attrs));
         }
 
         // export (v4: 宣言時エクスポートと分離エクスポートの両方をサポート)
@@ -128,27 +120,27 @@ class Parser {
             // export struct, export interface, export enum, export typedef, export const
             if (check(TokenKind::KwStruct)) {
                 // 既に正しい位置にいる（'struct'トークンの位置）
-                return parse_struct(true);
+                return parse_struct(true, std::move(attrs));
             }
             if (check(TokenKind::KwInterface)) {
                 // 既に正しい位置にいる
-                return parse_interface(true);
+                return parse_interface(true, std::move(attrs));
             }
             if (check(TokenKind::KwEnum)) {
                 // 既に正しい位置にいる
-                return parse_enum_decl(true);
+                return parse_enum_decl(true, std::move(attrs));
             }
             if (check(TokenKind::KwTypedef)) {
                 // 既に正しい位置にいる
-                return parse_typedef_decl(true);
+                return parse_typedef_decl(true, std::move(attrs));
             }
             if (check(TokenKind::KwConst)) {
                 // 既に正しい位置にいる
-                return parse_const_decl(true);
+                return parse_const_decl(true, std::move(attrs));
             }
             if (check(TokenKind::KwImpl)) {
                 // 既に正しい位置にいる
-                return parse_impl_export();
+                return parse_impl_export(std::move(attrs));
             }
 
             // export function (型から始まる関数の場合)
@@ -158,17 +150,20 @@ class Parser {
                 bool is_inline = consume_if(TokenKind::KwInline);
                 bool is_async = consume_if(TokenKind::KwAsync);
 
-                return parse_function(true, is_static, is_inline, is_async);
+                return parse_function(true, is_static, is_inline, is_async, std::move(attrs));
             }
 
             // それ以外は分離エクスポート (export NAME1, NAME2;)
+            if (!attrs.empty()) {
+                error("Attributes are not supported on export lists");
+            }
             pos_ = saved_pos;
             return parse_export();
         }
 
         // extern
         if (check(TokenKind::KwExtern)) {
-            return parse_extern();
+            return parse_extern(std::move(attrs));
         }
 
         // 修飾子を収集
@@ -178,17 +173,17 @@ class Parser {
 
         // struct
         if (check(TokenKind::KwStruct)) {
-            return parse_struct(false);
+            return parse_struct(false, std::move(attrs));
         }
 
         // interface
         if (check(TokenKind::KwInterface)) {
-            return parse_interface(false);
+            return parse_interface(false, std::move(attrs));
         }
 
         // impl
         if (check(TokenKind::KwImpl)) {
-            return parse_impl();
+            return parse_impl(std::move(attrs));
         }
 
         // template
@@ -198,17 +193,17 @@ class Parser {
 
         // enum
         if (check(TokenKind::KwEnum)) {
-            return parse_enum_decl(false);
+            return parse_enum_decl(false, std::move(attrs));
         }
 
         // typedef
         if (check(TokenKind::KwTypedef)) {
-            return parse_typedef_decl(false);
+            return parse_typedef_decl(false, std::move(attrs));
         }
 
         // const (v4: トップレベルconst宣言のサポート)
         if (check(TokenKind::KwConst)) {
-            return parse_const_decl(false);
+            return parse_const_decl(false, std::move(attrs));
         }
 
         // #macro (新しいC++風マクロ構文)
@@ -313,12 +308,12 @@ class Parser {
         }
 
         // 関数 (型 名前 ...)
-        return parse_function(false, is_static, is_inline, is_async);
+        return parse_function(false, is_static, is_inline, is_async, std::move(attrs));
     }
 
     // 関数定義
     ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async,
-                                std::vector<ast::AttributeNode> directives = {}) {
+                                std::vector<ast::AttributeNode> attributes = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
 
@@ -361,7 +356,7 @@ class Parser {
         func->is_static = is_static;
         func->is_inline = is_inline;
         func->is_async = is_async;
-        func->attributes = std::move(directives);  // ディレクティブをアトリビュートとして保存
+        func->attributes = std::move(attributes);
 
         return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
     }
@@ -399,7 +394,7 @@ class Parser {
     }
 
     // 構造体
-    ast::DeclPtr parse_struct(bool is_export) {
+    ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
 
@@ -495,6 +490,7 @@ class Parser {
         auto decl = std::make_unique<ast::StructDecl>(std::move(name), std::move(fields));
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         decl->auto_impls = std::move(auto_impls);
+        decl->attributes = std::move(attributes);
 
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
@@ -590,7 +586,8 @@ class Parser {
     }
 
     // インターフェース
-    ast::DeclPtr parse_interface(bool is_export) {
+    ast::DeclPtr parse_interface(bool is_export,
+                                 std::vector<ast::AttributeNode> attributes = {}) {
         expect(TokenKind::KwInterface);
 
         // インターフェース名を取得
@@ -641,6 +638,7 @@ class Parser {
         auto decl = std::make_unique<ast::InterfaceDecl>(std::move(name), std::move(methods));
         decl->operators = std::move(operators);
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        decl->attributes = std::move(attributes);
 
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
@@ -657,7 +655,7 @@ class Parser {
     // impl<T> Type for InterfaceName<T> where T: SomeType { ... } - where句付き
     // impl<T> Type<T> { ... } - ジェネリックコンストラクタ/デストラクタ
     // impl Type<T> { ... } - コンストラクタ/デストラクタ専用
-    ast::DeclPtr parse_impl() {
+    ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {}) {
         expect(TokenKind::KwImpl);
 
         // impl<T>構文のチェック
@@ -724,6 +722,7 @@ class Parser {
             auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
             decl->interface_type_args = std::move(iface_type_args);
             decl->where_clauses = std::move(where_clauses);
+            decl->attributes = std::move(attributes);
 
             // ジェネリックパラメータを設定
             if (!generic_params.empty()) {
@@ -733,6 +732,11 @@ class Parser {
 
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 try {
+                    std::vector<ast::AttributeNode> method_attrs;
+                    while (is_attribute_start()) {
+                        method_attrs.push_back(parse_attribute());
+                    }
+
                     // operator キーワードをチェック
                     if (check(TokenKind::KwOperator)) {
                         advance();  // consume 'operator'
@@ -755,7 +759,8 @@ class Parser {
                         // private修飾子をチェック
                         bool is_private = consume_if(TokenKind::KwPrivate);
 
-                        auto func = parse_function(false, false, false, false);
+                        auto func = parse_function(false, false, false, false,
+                                                   std::move(method_attrs));
                         if (auto* f = func->as<ast::FunctionDecl>()) {
                             // privateメソッドの場合はvisibilityを設定
                             if (is_private) {
@@ -780,18 +785,20 @@ class Parser {
             return std::make_unique<ast::Decl>(std::move(decl));
         } else {
             // コンストラクタ/デストラクタ専用impl
-            return parse_impl_ctor(std::move(target), std::move(generic_params),
-                                   std::move(generic_params_v2));
+            return parse_impl_ctor(std::move(target), std::move(attributes),
+                                   std::move(generic_params), std::move(generic_params_v2));
         }
     }
 
     // コンストラクタ/デストラクタ専用implの解析
     // impl<T> Type<T> { self() { ... } ~self() { ... } }
-    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<std::string> generic_params = {},
+    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<ast::AttributeNode> attributes,
+                                 std::vector<std::string> generic_params = {},
                                  std::vector<ast::GenericParam> generic_params_v2 = {}) {
         expect(TokenKind::LBrace);
 
         auto decl = std::make_unique<ast::ImplDecl>(std::move(target));
+        decl->attributes = std::move(attributes);
 
         // ジェネリックパラメータを設定
         if (!generic_params.empty()) {
@@ -1299,23 +1306,26 @@ class Parser {
     // モジュール関連パーサ（parser_module.cppで実装）
     ast::DeclPtr parse_module();
     ast::DeclPtr parse_namespace();
-    ast::DeclPtr parse_import_stmt();
+    ast::DeclPtr parse_import_stmt(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_export();
-    ast::DeclPtr parse_use();
+    ast::DeclPtr parse_use(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_macro();
-    ast::DeclPtr parse_extern();
-    ast::DeclPtr parse_extern_decl();
+    ast::DeclPtr parse_extern(std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_extern_decl(std::vector<ast::AttributeNode> attributes = {});
     std::unique_ptr<ast::FunctionDecl> parse_extern_func_decl();
     ast::TypePtr parse_extern_type();
     std::vector<ast::Param> parse_extern_params();
     ast::AttributeNode parse_directive();
     ast::AttributeNode parse_attribute();
-    ast::DeclPtr parse_const_decl(bool is_export = false);
+    ast::DeclPtr parse_const_decl(bool is_export = false,
+                                  std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_constexpr();
     ast::DeclPtr parse_template_decl();
-    ast::DeclPtr parse_enum_decl(bool is_export = false);
-    ast::DeclPtr parse_typedef_decl(bool is_export = false);
-    ast::DeclPtr parse_impl_export();
+    ast::DeclPtr parse_enum_decl(bool is_export = false,
+                                 std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_typedef_decl(bool is_export = false,
+                                    std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_impl_export(std::vector<ast::AttributeNode> attributes = {});
 
     // ユーティリティ
     const Token& current() const { return tokens_[pos_]; }
@@ -1323,6 +1333,17 @@ class Parser {
     bool is_at_end() const { return current().kind == TokenKind::Eof; }
 
     bool check(TokenKind kind) const { return current().kind == kind; }
+    TokenKind peek_kind(size_t offset = 1) const {
+        size_t idx = pos_ + offset;
+        if (idx >= tokens_.size()) {
+            return TokenKind::Eof;
+        }
+        return tokens_[idx].kind;
+    }
+    bool is_attribute_start() const {
+        return check(TokenKind::At) ||
+               (check(TokenKind::Hash) && peek_kind() == TokenKind::LBracket);
+    }
 
     Token advance() {
         if (!is_at_end())

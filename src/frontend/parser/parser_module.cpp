@@ -62,7 +62,7 @@ ast::DeclPtr Parser::parse_namespace() {
 // ============================================================
 // Import文
 // ============================================================
-ast::DeclPtr Parser::parse_import_stmt() {
+ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwImport);
 
@@ -155,6 +155,8 @@ ast::DeclPtr Parser::parse_import_stmt() {
     }
 
     expect(TokenKind::Semicolon);
+
+    import_decl.attributes = std::move(attributes);
 
     return std::make_unique<ast::Decl>(std::make_unique<ast::ImportDecl>(std::move(import_decl)),
                                        Span{start_pos, previous().end});
@@ -306,13 +308,13 @@ ast::DeclPtr Parser::parse_export() {
 // ============================================================
 // Export impl (v4: impl全体のエクスポート)
 // ============================================================
-ast::DeclPtr Parser::parse_impl_export() {
+ast::DeclPtr Parser::parse_impl_export(std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwImpl);
 
     // impl Type または impl<T> Type<T> または impl Type for Interface
     // これらのメソッドを全てエクスポート対象としてマーク
-    auto impl_decl = parse_impl();
+    auto impl_decl = parse_impl(std::move(attributes));
 
     if (impl_decl && impl_decl->as<ast::ImplDecl>()) {
         impl_decl->as<ast::ImplDecl>()->is_export = true;
@@ -327,7 +329,7 @@ ast::DeclPtr Parser::parse_impl_export() {
 // use libc { ... };         -- FFI宣言
 // use libc as c { ... };    -- 名前空間付きFFI宣言
 // ============================================================
-ast::DeclPtr Parser::parse_use() {
+ast::DeclPtr Parser::parse_use(std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwUse);
 
@@ -378,6 +380,7 @@ ast::DeclPtr Parser::parse_use() {
 
             auto use_decl = std::make_unique<ast::UseDecl>(std::move(pkg_name),
                                                            std::move(ffi_funcs), std::move(alias));
+            use_decl->attributes = std::move(attributes);
             return std::make_unique<ast::Decl>(std::move(use_decl),
                                                Span{start_pos, previous().end});
         }
@@ -387,6 +390,7 @@ ast::DeclPtr Parser::parse_use() {
         // "pkg" as p;
         expect(TokenKind::Semicolon);
         auto use_decl = std::make_unique<ast::UseDecl>(std::move(pkg_name), std::move(alias));
+        use_decl->attributes = std::move(attributes);
         return std::make_unique<ast::Decl>(std::move(use_decl), Span{start_pos, previous().end});
     }
 
@@ -453,11 +457,13 @@ ast::DeclPtr Parser::parse_use() {
 
         auto use_decl =
             std::make_unique<ast::UseDecl>(std::move(path), std::move(ffi_funcs), std::move(alias));
+        use_decl->attributes = std::move(attributes);
         return std::make_unique<ast::Decl>(std::move(use_decl), Span{start_pos, previous().end});
     }
 
     // 通常のモジュールuse
     ast::UseDecl use_decl(std::move(path), std::move(alias));
+    use_decl.attributes = std::move(attributes);
     expect(TokenKind::Semicolon);
 
     return std::make_unique<ast::Decl>(std::make_unique<ast::UseDecl>(std::move(use_decl)),
@@ -487,8 +493,9 @@ ast::AttributeNode Parser::parse_directive() {
     // 引数がある場合
     if (consume_if(TokenKind::LParen)) {
         do {
-            // 文字列リテラルまたは識別子
-            if (check(TokenKind::StringLiteral)) {
+            if (consume_if(TokenKind::Bang)) {
+                args.push_back("!" + expect_ident());
+            } else if (check(TokenKind::StringLiteral)) {
                 args.push_back(std::string(current().get_string()));
                 advance();
             } else {
@@ -510,7 +517,13 @@ ast::AttributeNode Parser::parse_directive() {
 // アトリビュート
 // ============================================================
 ast::AttributeNode Parser::parse_attribute() {
-    expect(TokenKind::At);
+    if (consume_if(TokenKind::At)) {
+        // @[...] 形式
+    } else if (consume_if(TokenKind::Hash)) {
+        // #[...] 形式
+    } else {
+        error("Expected attribute start '@' or '#'");
+    }
     expect(TokenKind::LBracket);
 
     // アトリビュート名
@@ -520,8 +533,9 @@ ast::AttributeNode Parser::parse_attribute() {
     // 引数がある場合
     if (consume_if(TokenKind::LParen)) {
         do {
-            // 文字列リテラルまたは識別子
-            if (check(TokenKind::StringLiteral)) {
+            if (consume_if(TokenKind::Bang)) {
+                args.push_back("!" + expect_ident());
+            } else if (check(TokenKind::StringLiteral)) {
                 args.push_back(std::string(current().get_string()));
                 advance();
             } else {
@@ -568,7 +582,8 @@ ast::AttributeNode Parser::parse_attribute() {
 // ============================================================
 // 定数宣言（export const用）
 // ============================================================
-ast::DeclPtr Parser::parse_const_decl(bool is_export) {
+ast::DeclPtr Parser::parse_const_decl(bool is_export,
+                                      std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwConst);
 
@@ -589,6 +604,7 @@ ast::DeclPtr Parser::parse_const_decl(bool is_export) {
         std::move(name), std::move(type), std::move(init), true  // is_const = true
     );
     global_var->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+    global_var->attributes = std::move(attributes);
 
     return std::make_unique<ast::Decl>(std::move(global_var), Span{start_pos, previous().end});
 }
@@ -659,7 +675,8 @@ ast::DeclPtr Parser::parse_template_decl() {
 // ============================================================
 // Enum宣言
 // ============================================================
-ast::DeclPtr Parser::parse_enum_decl(bool is_export) {
+ast::DeclPtr Parser::parse_enum_decl(bool is_export,
+                                     std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
 
@@ -715,6 +732,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export) {
 
     auto enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+    enum_decl->attributes = std::move(attributes);
     return std::make_unique<ast::Decl>(std::move(enum_decl), Span{start_pos, previous().end});
 }
 
@@ -723,7 +741,8 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export) {
 // typedef T = Type1 | Type2 | ...;
 // typedef T = "literal1" | "literal2" | ...;
 // ============================================================
-ast::DeclPtr Parser::parse_typedef_decl(bool is_export) {
+ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
+                                        std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwTypedef);
 
@@ -763,6 +782,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export) {
         auto typedef_decl =
             std::make_unique<ast::TypedefDecl>(std::move(name), std::move(lit_union));
         typedef_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        typedef_decl->attributes = std::move(attributes);
         return std::make_unique<ast::Decl>(std::move(typedef_decl),
                                            Span{start_pos, previous().end});
     } else {
@@ -802,6 +822,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export) {
         auto typedef_decl =
             std::make_unique<ast::TypedefDecl>(std::move(name), std::move(result_type));
         typedef_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        typedef_decl->attributes = std::move(attributes);
         return std::make_unique<ast::Decl>(std::move(typedef_decl),
                                            Span{start_pos, previous().end});
     }
@@ -810,7 +831,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export) {
 // ============================================================
 // extern宣言
 // ============================================================
-ast::DeclPtr Parser::parse_extern() {
+ast::DeclPtr Parser::parse_extern(std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwExtern);
 
@@ -828,17 +849,18 @@ ast::DeclPtr Parser::parse_extern() {
                 }
             }
             expect(TokenKind::RBrace);
+            extern_block->attributes = std::move(attributes);
 
             return std::make_unique<ast::Decl>(std::move(extern_block),
                                                Span{start_pos, previous().end});
         } else {
             // 単一の extern "C" 宣言
-            return parse_extern_decl();
+            return parse_extern_decl(std::move(attributes));
         }
     }
 
     // extern だけの場合（C++スタイル）
-    return parse_extern_decl();
+    return parse_extern_decl(std::move(attributes));
 }
 
 // extern宣言の個別解析（FunctionDecl版）
@@ -911,8 +933,11 @@ std::vector<ast::Param> Parser::parse_extern_params() {
 }
 
 // extern宣言の個別解析（DeclPtr版）
-ast::DeclPtr Parser::parse_extern_decl() {
+ast::DeclPtr Parser::parse_extern_decl(std::vector<ast::AttributeNode> attributes) {
     auto func = parse_extern_func_decl();
+    if (func) {
+        func->attributes = std::move(attributes);
+    }
     return std::make_unique<ast::Decl>(std::move(func));
 }
 

@@ -871,6 +871,7 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
     // 特殊化構造体を生成
     auto mir_struct = std::make_unique<MirStruct>();
     mir_struct->name = spec_name;
+    mir_struct->is_css = base_struct->is_css;
 
     // フィールドとレイアウトを計算
     uint32_t current_offset = 0;

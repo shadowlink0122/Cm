@@ -4,6 +4,8 @@
 
 #include "../type_checker.hpp"
 
+#include <algorithm>
+
 namespace cm {
 
 TypeChecker::TypeChecker() {
@@ -249,6 +251,30 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
 
     if (auto* func = decl.as<ast::FunctionDecl>()) {
         check_function(*func);
+    } else if (auto* st = decl.as<ast::StructDecl>()) {
+        current_span_ = decl.span;
+        bool is_css_struct =
+            std::find(st->auto_impls.begin(), st->auto_impls.end(), "Css") != st->auto_impls.end();
+        if (is_css_struct) {
+            for (const auto& field : st->fields) {
+                if (!field.type) {
+                    continue;
+                }
+                auto resolved_type = resolve_typedef(field.type);
+                if (!resolved_type) {
+                    continue;
+                }
+                if (resolved_type->kind == ast::TypeKind::Struct) {
+                    const std::string& type_name = resolved_type->name;
+                    if (!type_implements_interface(type_name, "Css") &&
+                        !has_auto_impl(type_name, "Css")) {
+                        error(current_span_,
+                              "Nested css field '" + field.name +
+                                  "' requires type '" + type_name + "' to implement Css");
+                    }
+                }
+            }
+        }
     } else if (auto* import = decl.as<ast::ImportDecl>()) {
         check_import(*import);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {

@@ -222,6 +222,11 @@ bool TypeChecker::type_implements_interface(const std::string& type_name,
         }
     }
 
+    // with による自動実装をチェック
+    if (has_auto_impl(type_name, interface_name)) {
+        return true;
+    }
+
     return false;
 }
 

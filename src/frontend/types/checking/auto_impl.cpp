@@ -47,6 +47,10 @@ void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::strin
     else if (iface_name == "Display") {
         register_auto_display_impl(st);
     }
+    // Css: css()/isCss() メソッド
+    else if (iface_name == "Css") {
+        register_auto_css_impl(st);
+    }
 }
 
 void TypeChecker::register_auto_eq_impl(const ast::StructDecl& st) {
@@ -217,8 +221,23 @@ void TypeChecker::register_builtin_interfaces() {
         interface_methods_["Display"]["toString"] = tostring_method;
     }
 
+    // Css - CSS文字列化
+    {
+        interface_names_.insert("Css");
+
+        MethodInfo css_method;
+        css_method.name = "css";
+        css_method.return_type = ast::make_string();
+        interface_methods_["Css"]["css"] = css_method;
+
+        MethodInfo is_css_method;
+        is_css_method.name = "isCss";
+        is_css_method.return_type = ast::make_bool();
+        interface_methods_["Css"]["isCss"] = is_css_method;
+    }
+
     debug::tc::log(debug::tc::Id::Resolved,
-                   "Registered builtin interfaces: Eq, Ord, Copy, Clone, Hash, Debug, Display",
+                   "Registered builtin interfaces: Eq, Ord, Copy, Clone, Hash, Debug, Display, Css",
                    debug::Level::Debug);
 }
 
@@ -261,6 +280,39 @@ void TypeChecker::register_auto_display_impl(const ast::StructDecl& st) {
     auto_impl_info_[struct_name]["Display"] = true;
 
     debug::tc::log(debug::tc::Id::Resolved, "  Generated toString() for " + struct_name,
+                   debug::Level::Debug);
+}
+
+void TypeChecker::register_auto_css_impl(const ast::StructDecl& st) {
+    std::string struct_name = st.name;
+    auto struct_type = ast::make_named(struct_name);
+
+    MethodInfo css_method;
+    css_method.name = "css";
+    css_method.return_type = ast::make_string();
+    type_methods_[struct_name]["css"] = css_method;
+
+    MethodInfo is_css_method;
+    is_css_method.name = "isCss";
+    is_css_method.return_type = ast::make_bool();
+    type_methods_[struct_name]["isCss"] = is_css_method;
+
+    {
+        std::string mangled_name = struct_name + "__css";
+        std::vector<ast::TypePtr> param_types;
+        param_types.push_back(struct_type);  // self
+        scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_string());
+    }
+    {
+        std::string mangled_name = struct_name + "__isCss";
+        std::vector<ast::TypePtr> param_types;
+        param_types.push_back(struct_type);  // self
+        scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_bool());
+    }
+
+    auto_impl_info_[struct_name]["Css"] = true;
+
+    debug::tc::log(debug::tc::Id::Resolved, "  Generated css()/isCss() for " + struct_name,
                    debug::Level::Debug);
 }
 

@@ -215,6 +215,7 @@ class MirLoweringBase {
     MirStruct create_mir_struct(const hir::HirStruct& st) {
         MirStruct mir_struct;
         mir_struct.name = st.name;
+        mir_struct.is_css = st.is_css;
 
         // フィールドとレイアウトを計算
         uint32_t current_offset = 0;
