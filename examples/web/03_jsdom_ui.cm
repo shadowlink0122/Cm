@@ -1,0 +1,30 @@
+#[js]
+use "jsdom" {
+    void JSDOM(string html);
+}
+
+import std::web::{set_html, set_css, get_html};
+
+use "js" {
+    void console_log(string msg);
+}
+
+int main() {
+    JSDOM("<!doctype html><html><body></body></html>");
+    string css =
+        "body{margin:0;background:#f0f0f4;}" +
+        "#cm-root{padding:32px;font-family:'Georgia','Times New Roman',serif;}" +
+        ".panel{background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,0.15);}";
+
+    string html =
+        "<div class='panel'>" +
+        "<h1>Jsdom UI</h1>" +
+        "<p>Node.js上でDOMを構築しました。</p>" +
+        "</div>";
+
+    set_css(css);
+    set_html(html);
+
+    console_log(get_html());
+    return 0;
+}
