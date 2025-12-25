@@ -545,11 +545,15 @@ struct MirFunction {
     void build_cfg() {
         // まずすべてのpredecessorをクリア
         for (auto& block : basic_blocks) {
+            if (!block)
+                continue;
             block->predecessors.clear();
         }
 
         // successorからpredecessorを計算
         for (size_t i = 0; i < basic_blocks.size(); ++i) {
+            if (!basic_blocks[i])
+                continue;
             for (BlockId succ : basic_blocks[i]->successors) {
                 if (auto* succ_block = get_block(succ)) {
                     succ_block->predecessors.push_back(i);

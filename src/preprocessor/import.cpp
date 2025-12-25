@@ -170,18 +170,53 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             if (debug_mode) {
                 std::cout << "[PREPROCESSOR] Matched import regex: " << match[0] << "\n";
             }
-            // コメントを除去してからパース
-            std::string import_statement = line.substr(0, line.find("//"));
+            // コメントを除去してからパース（複数行対応）
+            auto strip_comment = [](const std::string& text) {
+                return text.substr(0, text.find("//"));
+            };
+            std::string import_statement = strip_comment(line);
+            std::string import_source_line = line;
+
+            auto count_braces = [](const std::string& text) {
+                int count = 0;
+                for (char c : text) {
+                    if (c == '{') {
+                        count++;
+                    } else if (c == '}') {
+                        count--;
+                    }
+                }
+                return count;
+            };
+
+            size_t import_line_number = line_number;
+            int brace_depth = count_braces(import_statement);
+            bool has_semicolon = import_statement.find(';') != std::string::npos;
+
+            while ((!has_semicolon || brace_depth > 0) && std::getline(input, line)) {
+                line_number++;
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Processing line: " << line << "\n";
+                }
+                import_source_line += "\n" + line;
+                std::string part = strip_comment(line);
+                import_statement += " " + part;
+                brace_depth += count_braces(part);
+                if (part.find(';') != std::string::npos) {
+                    has_semicolon = true;
+                }
+            }
+
             // 末尾の空白を除去
             import_statement.erase(import_statement.find_last_not_of(" \t\n\r;") + 1);
 
             // インポート文をパース
             auto import_info = parse_import_statement(import_statement);
-            import_info.line_number = line_number;
+            import_info.line_number = import_line_number;
             // ファイル名を相対パスに変換
             import_info.source_file =
                 std::filesystem::relative(current_file, std::filesystem::current_path()).string();
-            import_info.source_line = line;
+            import_info.source_line = import_source_line;
 
             // 階層的インポート（std::io）を処理
             // std::ioは3 に解決する必要がある

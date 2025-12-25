@@ -13,6 +13,15 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 
     size_t pos = 0;
     while (pos < format_str.length()) {
+        if (pos + 1 < format_str.length() && format_str[pos] == '$' &&
+            format_str[pos + 1] == '{') {
+            // ${...} は補間として扱う（閉じ波括弧がある場合のみ）
+            size_t close_pos = format_str.find('}', pos + 2);
+            if (close_pos != std::string::npos) {
+                pos++;
+                continue;
+            }
+        }
         if (pos + 1 < format_str.length() && format_str[pos] == '{' && format_str[pos + 1] == '{') {
             // エスケープされた {{ を処理
             converted_format += "{{";

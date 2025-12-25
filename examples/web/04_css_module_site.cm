@@ -31,10 +31,10 @@ int main() {
     string button_css = button.css();  // 展開される
 
     string css =`
-        body{body_css}
-        #cm-root{root_css}
-        .hero{hero_css}
-        .cta{button_css}`;
+        body{${body_css}}
+        #cm-root{${root_css}}
+        .hero{${hero_css}}
+        .cta{${button_css}}`;
 
     string html =
         `<div class='hero'>

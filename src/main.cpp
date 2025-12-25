@@ -523,6 +523,16 @@ int main(int argc, char* argv[]) {
                 std::cout << "最適化完了\n\n";
         }
 
+        // 関数レベルのDCE（コンパイル時のみ）
+        if (opts.command == Command::Compile) {
+            mir::opt::DeadCodeElimination dce;
+            for (auto& func : mir.functions) {
+                if (func) {
+                    dce.run(*func);
+                }
+            }
+        }
+
         // プログラムレベルのデッドコード削除
         // 未使用の自動生成関数を削除する
         // 注意: インタプリタではインターフェースメソッドの動的ディスパッチがあるため、

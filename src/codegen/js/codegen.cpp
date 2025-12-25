@@ -22,6 +22,37 @@ bool JSCodeGen::isCssStruct(const std::string& struct_name) const {
     return it != struct_map_.end() && it->second && it->second->is_css;
 }
 
+std::unordered_set<std::string> JSCodeGen::collectUsedRuntimeHelpers(
+    const std::string& code) const {
+    std::unordered_set<std::string> used;
+    const std::string prefix = "__cm_";
+
+    size_t pos = 0;
+    while (true) {
+        pos = code.find(prefix, pos);
+        if (pos == std::string::npos) {
+            break;
+        }
+        size_t start = pos;
+        size_t end = pos + prefix.size();
+        while (end < code.size()) {
+            char c = code[end];
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                c == '_') {
+                end++;
+            } else {
+                break;
+            }
+        }
+        if (end > start) {
+            used.insert(code.substr(start, end - start));
+        }
+        pos = end;
+    }
+
+    return used;
+}
+
 std::string JSCodeGen::toKebabCase(const std::string& name) const {
     std::string result;
     result.reserve(name.size());
@@ -52,6 +83,7 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
     generated_functions_.clear();
     static_vars_.clear();
     function_map_.clear();
+    used_runtime_helpers_.clear();
 
     // 構造体マップ構築
     for (const auto& st : program.structs) {
@@ -99,6 +131,10 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
             emitFunction(*func, program);
         }
     }
+
+    // 生成コードから必要なランタイムヘルパーを抽出
+    used_runtime_helpers_ = collectUsedRuntimeHelpers(emitter_.getCode());
+    emitRuntime(emitter_, used_runtime_helpers_);
 
     // ポストアンブル（main呼び出し等）
     emitPostamble(program);
@@ -152,16 +188,6 @@ void JSCodeGen::emitPreamble() {
         emitter_.emitLine("\"use strict\";");
         emitter_.emitLine();
     }
-
-    // ヘルパー関数: __cm_unwrap (ボックス化された値を展開)
-    emitter_.emitLine("function __cm_unwrap(val) {");
-    emitter_.emitLine("    if (val && val.__boxed) return val[0];");
-    emitter_.emitLine("    return val;");
-    emitter_.emitLine("}");
-    emitter_.emitLine("");
-
-    // ランタイムヘルパーを出力
-    emitRuntime(emitter_);
 }
 
 void JSCodeGen::emitPostamble(const mir::MirProgram& program) {

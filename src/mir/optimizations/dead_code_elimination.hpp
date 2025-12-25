@@ -33,6 +33,13 @@ class DeadCodeElimination : public OptimizationPass {
    private:
     // 到達不可能ブロックを除去
     bool remove_unreachable_blocks(MirFunction& func) {
+        // terminatorからsuccessorsを再構築
+        for (auto& block : func.basic_blocks) {
+            if (!block)
+                continue;
+            block->update_successors();
+        }
+
         // 到達可能なブロックを探索
         std::set<BlockId> reachable;
         std::queue<BlockId> worklist;

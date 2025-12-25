@@ -53,6 +53,9 @@ class JSCodeGen {
     // インターフェース名のセット（型のチェック用）
     std::unordered_set<std::string> interface_names_;
 
+    // 使用されたランタイムヘルパー
+    std::unordered_set<std::string> used_runtime_helpers_;
+
     // プリアンブル（ヘルパー関数など）
     void emitPreamble();
     void emitPostamble(const mir::MirProgram& program);
@@ -131,6 +134,7 @@ class JSCodeGen {
     std::string toKebabCase(const std::string& name) const;
     std::string formatStructFieldKey(const mir::MirStruct& st, const std::string& field_name) const;
     std::string mapExternJsName(const std::string& name) const;
+    std::unordered_set<std::string> collectUsedRuntimeHelpers(const std::string& code) const;
 
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;

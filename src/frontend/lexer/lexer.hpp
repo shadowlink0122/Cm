@@ -330,6 +330,26 @@ class Lexer {
     Token scan_raw_string(uint32_t start) {
         std::string value;
         while (!is_at_end() && peek() != '`') {
+            if (peek() == '$' && peek_next() == '{') {
+                // raw文字列でも ${...} は補間用として保持する
+                advance();
+                advance();
+                value += "${";
+                while (!is_at_end() && peek() != '}') {
+                    if (peek() == '\\') {
+                        advance();
+                        if (!is_at_end())
+                            value += scan_escape_char();
+                    } else {
+                        value += advance();
+                    }
+                }
+                if (!is_at_end()) {
+                    advance();
+                    value += "}";
+                }
+                continue;
+            }
             if (peek() == '\\') {
                 if (peek_next() == '{') {
                     advance();
