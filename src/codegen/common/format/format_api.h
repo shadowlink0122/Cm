@@ -23,6 +23,8 @@ char* cm_format_unescape_braces(const char* str);
 
 char* cm_format_int(int value);
 char* cm_format_uint(unsigned int value);
+char* cm_format_long(long long value);
+char* cm_format_ulong(unsigned long long value);
 char* cm_format_double(double value);
 char* cm_format_double_precision(double value, int precision);
 char* cm_format_bool(char value);
@@ -63,6 +65,8 @@ char* cm_double_to_string(double value);
 char* cm_format_replace(const char* format, const char* value);
 char* cm_format_replace_int(const char* format, int value);
 char* cm_format_replace_uint(const char* format, unsigned int value);
+char* cm_format_replace_long(const char* format, long long value);
+char* cm_format_replace_ulong(const char* format, unsigned long long value);
 char* cm_format_replace_double(const char* format, double value);
 char* cm_format_replace_string(const char* format, const char* value);
 

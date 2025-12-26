@@ -1,3 +1,4 @@
+import std::io::println;
 // 複数ジェネリクスパラメータを持つ構造体のwith自動実装テスト
 struct Pair<T, U> with Eq {
     T first;

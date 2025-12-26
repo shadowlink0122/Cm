@@ -1,3 +1,4 @@
+import std::io::println;
 // 複数の構造体での with Eq テスト
 
 interface Eq<T> {

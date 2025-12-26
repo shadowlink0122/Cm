@@ -1,3 +1,4 @@
+import std::io::println;
 // ユニオン型のテスト
 typedef Number = int | double;
 
@@ -6,7 +7,7 @@ int main() {
     // 現在は個別の型として扱われる
     int i = 42;
     double d = 3.14;
-    println("{}", i);
-    println("{}", d);
+    println("{i}");
+    println("{d}");
     return 0;
 }

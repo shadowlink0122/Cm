@@ -1,3 +1,4 @@
+import std::io::println;
 // オートインクリメントenum
 enum Priority {
     Low,        // 0
@@ -7,9 +8,9 @@ enum Priority {
 }
 
 int main() {
-    println("{}", Priority::Low);
-    println("{}", Priority::Medium);
-    println("{}", Priority::High);
-    println("{}", Priority::Critical);
+    println("{Priority::Low}");
+    println("{Priority::Medium}");
+    println("{Priority::High}");
+    println("{Priority::Critical}");
     return 0;
 }

@@ -1,0 +1,16 @@
+import std::io::println;
+
+// Debug自動実装のテスト
+
+struct Point with Debug {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p = {x: 10, y: 20};
+    println("{p.debug()}");
+    return 0;
+}
+// expected output:
+// Point { x: 10, y: 20 }

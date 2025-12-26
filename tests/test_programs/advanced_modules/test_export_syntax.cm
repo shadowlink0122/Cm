@@ -1,0 +1,35 @@
+// test_export_syntax.cm - 外部定義+名前列挙のテスト
+
+// 実装を先に定義
+int add(int a, int b) {
+    return a + b;
+}
+
+int multiply(int a, int b) {
+    return a * b;
+}
+
+int divide(int a, int b) {
+    if (b != 0) {
+        return a / b;
+    }
+    return 0;
+}
+
+// プライベート関数
+int internal_helper(int x) {
+    return x * x;
+}
+
+// 構造体定義
+struct Calculator {
+    int value;
+}
+
+// 公開APIを名前列挙で指定
+export {
+    add,
+    multiply,
+    Calculator
+    // divide と internal_helper は公開しない
+}

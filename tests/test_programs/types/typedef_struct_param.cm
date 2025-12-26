@@ -1,3 +1,4 @@
+import std::io::println;
 // typedefした構造体を引数に取る関数
 struct Point {
     int x;
@@ -15,6 +16,6 @@ int main() {
     p.x = 10;
     p.y = 20;
     int result = sum_coords(p);
-    println("{}", result);
+    println("{result}");
     return 0;
 }

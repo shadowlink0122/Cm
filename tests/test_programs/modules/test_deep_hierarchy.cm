@@ -1,0 +1,12 @@
+import std::io::println;
+// test_deep_hierarchy.cm - 深い階層の直接インポートテスト
+import ./deep_hierarchy/a/b/c::{deep_value};
+
+int main() {
+    // 最深部の関数を直接インポート
+    int d = deep_value(); // 42
+    
+    println("Deep: {d}");
+    
+    return 0;
+}

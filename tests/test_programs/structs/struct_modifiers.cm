@@ -1,0 +1,48 @@
+import std::io::println;
+// struct_modifiers.cm - 修飾子（private, default）の統合テスト
+
+// 1. private修飾子
+struct Person {
+    string name;
+    private int age;  // 外部アクセス不可（impl内のみ）
+}
+
+// 2. default修飾子
+struct Wrapper {
+    default int value;
+    string tag;
+}
+
+// 3. 複合修飾子
+struct Config {
+    private string secret;
+    default int timeout;
+    string name;
+}
+
+int main() {
+    // 1. private修飾子のテスト（publicのみアクセス）
+    Person p;
+    p.name = "Alice";
+    println("Person: {p.name}");
+    
+    // 2. default修飾子のテスト
+    Wrapper w;
+    w.value = 42;
+    w.tag = "test";
+    
+    // default修飾子: 暗黙的代入 w = 100 → w.value = 100
+    w = 100;
+    int x = w;  // 暗黙的取得
+    println("Wrapper: value={w.value}, x={x}");
+    
+    // 3. 複合修飾子のテスト
+    Config cfg;
+    cfg.name = "app";
+    cfg.timeout = 30;
+    println("Config: name={cfg.name}, timeout={cfg.timeout}");
+    
+    // 検証
+    bool ok = (w.value == 100 && x == 100 && cfg.timeout == 30);
+    return ok ? 0 : 1;
+}

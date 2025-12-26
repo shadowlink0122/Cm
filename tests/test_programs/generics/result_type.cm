@@ -1,3 +1,4 @@
+import std::io::println;
 // Result<T, E>型のテスト
 
 // Result型をstructで表現

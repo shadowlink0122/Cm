@@ -1,3 +1,4 @@
+import std::io::println;
 // typedef型のポインタテスト
 
 typedef MyInt = int;

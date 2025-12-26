@@ -1,0 +1,3 @@
+for-in (typed): sum = 60
+for-in (infer): sum = 60
+struct for-in: sum_x=4, sum_y=6

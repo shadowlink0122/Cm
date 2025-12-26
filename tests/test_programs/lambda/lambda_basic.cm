@@ -1,0 +1,17 @@
+// ラムダ式の基本テスト
+import std::io::println;
+
+int main() {
+    // ラムダ式を変数に代入: (params: Type) => { stmts }
+    int*(int) double_it = (int x) => {
+        return x * 2;
+    };
+    
+    int result = double_it(5);
+    println("double_it(5) = {result}");
+    
+    if (result == 10) {
+        return 0;
+    }
+    return 1;
+}

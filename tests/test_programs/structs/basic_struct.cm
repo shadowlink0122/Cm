@@ -11,8 +11,8 @@ int main() {
     p.x = 10;
     p.y = 20;
 
-    println("Point x: {}", p.x);
-    println("Point y: {}", p.y);
+    println("Point x: {p.x}");
+    println("Point y: {p.y}");
 
     return 0;
 }

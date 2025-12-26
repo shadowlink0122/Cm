@@ -1,0 +1,66 @@
+=== 基本型 ===
+sizeof(bool) = 1
+sizeof(char) = 1
+sizeof(tiny) = 1
+sizeof(utiny) = 1
+sizeof(short) = 2
+sizeof(ushort) = 2
+sizeof(int) = 4
+sizeof(uint) = 4
+sizeof(long) = 8
+sizeof(ulong) = 8
+sizeof(float) = 4
+sizeof(double) = 8
+
+=== ポインタ型 ===
+sizeof(int*) = 8
+sizeof(char*) = 8
+sizeof(Point*) = 8
+sizeof(int**) = 8
+
+=== 配列型 ===
+sizeof(int[1]) = 4
+sizeof(int[5]) = 20
+sizeof(int[10]) = 40
+sizeof(char[100]) = 100
+sizeof(long[3]) = 24
+sizeof(Point[2]) = 16
+
+=== 構造体型 ===
+sizeof(Point) = 8
+sizeof(Empty) = 1
+sizeof(Nested) = 12
+sizeof(AllTypes) = 40
+
+=== アラインメント ===
+sizeof(Aligned1) = 8
+sizeof(Aligned2) = 8
+sizeof(Aligned3) = 8
+sizeof(Aligned4) = 24
+
+=== typedef型 ===
+sizeof(MyInt) = 4
+sizeof(MyPoint) = 8
+sizeof(IntPtr) = 8
+sizeof(IntArray) = 20
+
+=== 変数 ===
+sizeof(vb) = 1
+sizeof(vc) = 1
+sizeof(vt) = 1
+sizeof(vs) = 2
+sizeof(vi) = 4
+sizeof(vl) = 8
+sizeof(vf) = 4
+sizeof(vd) = 8
+sizeof(pt) = 8
+sizeof(nested) = 12
+sizeof(arr) = 20
+sizeof(carr) = 10
+sizeof(pi) = 8
+
+=== リテラル ===
+sizeof(42) = 4
+sizeof(3.14) = 8
+sizeof('x') = 1
+sizeof(true) = 1

@@ -1,0 +1,8 @@
+sizeof(i) = 4
+sizeof(l) = 8
+sizeof(d) = 8
+sizeof(c) = 1
+sizeof(b) = 1
+sizeof(pt) = 8
+sizeof(arr) = 20
+sizeof(pi) = 8

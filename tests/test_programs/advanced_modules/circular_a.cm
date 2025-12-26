@@ -1,0 +1,15 @@
+// circular_a.cm - 循環依存テスト A
+module circular_a;
+
+// 循環依存を作る（エラーになるはず）
+import ./circular_b;
+
+export int func_a() {
+    return 42;
+}
+
+int main() {
+    int result = func_b();
+    println("Result from func_b: {result}");
+    return 0;
+}

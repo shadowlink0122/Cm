@@ -1,0 +1,24 @@
+// スライスのサブスライステスト
+import std::io::println;
+
+int main() {
+    // 動的スライスのサブスライス
+    int[] arr = [1, 2, 3, 4, 5];
+    int[] sub = arr[1:4];
+    println(sub.len());
+    
+    for (auto x in sub) {
+        println(x);
+    }
+    
+    // 固定配列からのサブスライス
+    int[5] fixed = [10, 20, 30, 40, 50];
+    int[] sub2 = fixed[2:5];
+    println(sub2.len());
+    
+    for (auto y in sub2) {
+        println(y);
+    }
+    
+    return 0;
+}

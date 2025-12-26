@@ -1,0 +1,24 @@
+// .some() メソッドのテスト
+import std::io::println;
+
+bool is_even(int x) {
+    return x % 2 == 0;
+}
+
+bool is_negative(int x) {
+    return x < 0;
+}
+
+int main() {
+    int[5] arr = [1, 2, 3, 4, 5];
+    
+    // 偶数が存在するか
+    bool has_even = arr.some(is_even);
+    println("has_even: {has_even}");
+    
+    // 負の数が存在するか
+    bool has_negative = arr.some(is_negative);
+    println("has_negative: {has_negative}");
+    
+    return 0;
+}

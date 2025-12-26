@@ -6,43 +6,50 @@ int main() {
     println("Hello, World!");
 
     // 2. 基本的な位置引数
-    println("The answer is: {}", 42);
+    int answer = 42;
+    println("The answer is: {answer}");
 
     // 3. 複数の位置引数
-    println("{} + {} = {}", 10, 20, 30);
+    int a = 10;
+    int b = 20;
+    int c = 30;
+    println("{a} + {b} = {c}");
 
     // 4. 異なる型の混在
     int age = 25;
     double height = 175.5;
-    println("Name: {}, Age: {}, Height: {}", "Alice", age, height);
+    string name = "Alice";
+    println("Name: {name}, Age: {age}, Height: {height}");
 
     // 5. ブール値のフォーマット
     bool is_ready = true;
-    println("System ready: {}", is_ready);
+    println("System ready: {is_ready}");
 
     // 6. 数値フォーマット指定子
     int n = 255;
-    println("Decimal: {}", n);
-    println("Hex: {:x}", n);
-    println("HEX: {:X}", n);
-    println("Binary: {:b}", n);
-    println("Octal: {:o}", n);
+    println("Decimal: {n}");
+    println("Hex: {n:x}");
+    println("HEX: {n:X}");
+    println("Binary: {n:b}");
+    println("Octal: {n:o}");
 
     // 7. 浮動小数点のフォーマット
     double pi = 3.14159265359;
-    println("Default: {}", pi);
-    println("2 decimal places: {:.2}", pi);
-    println("4 decimal places: {:.4}", pi);
-    println("Scientific: {:e}", pi);
-    println("SCIENTIFIC: {:E}", pi);
+    println("Default: {pi}");
+    println("2 decimal places: {pi:.2}");
+    println("4 decimal places: {pi:.4}");
+    println("Scientific: {pi:e}");
+    println("SCIENTIFIC: {pi:E}");
 
     // 8. 幅指定とアライメント
-    println("Left:   |{:<10}|", "test");
-    println("Right:  |{:>10}|", "test");
-    println("Center: |{:^10}|", "test");
+    string test = "test";
+    println("Left:   |{test:<10}|");
+    println("Right:  |{test:>10}|");
+    println("Center: |{test:^10}|");
 
     // 9. ゼロパディング
-    println("Zero padding: {:0>5}", 42);
+    int num = 42;
+    println("Zero padding: {num:0>5}");
 
     // 10. エスケープ
     println("Literal braces: {{ and }}");

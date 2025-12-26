@@ -245,8 +245,11 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 
 ## ドキュメント
 
-- [設計ドキュメント](docs/design/README.md)
-- [アーキテクチャ](docs/design/architecture.md)
+### 開発者向け
+- [テストガイド](docs/tests/TESTING_GUIDE.md) - テストの作成と実行方法
+- [テスト クイックリファレンス](docs/tests/TEST_QUICK_REFERENCE.md) - よく使うテストコマンド集
+- [設計ドキュメント](docs/design/README.md) - 未実装機能の設計書
+- [アーキテクチャ](docs/design/archive/architecture.md) - システム設計
 - [HIR設計](docs/design/hir.md)
 - [バックエンド](docs/design/backends.md)
 - [LLVMバックエンド実装](docs/llvm_backend_implementation.md)
@@ -264,3 +267,7 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 ## ライセンス
 
 検討中
+
+---
+
+© 2024-2025 Cm言語プロジェクト

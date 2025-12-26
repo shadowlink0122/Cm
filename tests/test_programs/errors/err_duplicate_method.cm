@@ -1,0 +1,32 @@
+import std::io::println;
+// err_duplicate_method.cm - メソッド名重複エラーテスト
+
+interface Printable {
+    void print();
+}
+
+interface Debuggable {
+    void print();
+}
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point for Printable {
+    void print() {
+        println("Printable");
+    }
+}
+
+// 異なるインターフェースでも同名メソッドは禁止
+impl Point for Debuggable {
+    void print() {
+        println("Debuggable");
+    }
+}
+
+int main() {
+    return 0;
+}

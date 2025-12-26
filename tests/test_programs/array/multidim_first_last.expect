@@ -1,0 +1,6 @@
+first row: [1, 2, 3]
+last row: [4, 5, 6]
+first plane [0][0]: 1, [1][0]: 4
+last plane [0][0]: 7, [1][0]: 10
+string first: H, last: o
+empty string first/last done

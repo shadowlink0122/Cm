@@ -1,3 +1,4 @@
+import std::io::println;
 // match式のテスト - 文字列結果
 
 int main() {

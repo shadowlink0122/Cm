@@ -1,0 +1,10 @@
+// io.cm - シンプルな IO モジュール
+module io;
+
+export int add(int a, int b) {
+    return a + b;
+}
+
+export int multiply(int x, int y) {
+    return x * y;
+}

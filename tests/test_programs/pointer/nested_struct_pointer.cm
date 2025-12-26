@@ -1,0 +1,49 @@
+import std::io::println;
+// ネストした構造体ポインタテスト
+
+struct Inner {
+    int value;
+}
+
+struct Outer {
+    Inner* inner;
+    int id;
+}
+
+int main() {
+    Inner i = {value: 42};
+    Inner* ip = &i;
+    
+    // 基本的なポインタアクセス
+    println("ip->value = {ip->value}");
+    
+    Outer o = {inner: &i, id: 1};
+    
+    // 構造体メンバ経由のポインタアクセス
+    println("o.inner->value = {o.inner->value}");
+    
+    Outer* ptr = &o;
+    
+    // ポインタ経由の直接メンバアクセス
+    println("ptr->id = {ptr->id}");
+    
+    // チェーンされたポインタアクセス
+    println("ptr->inner->value = {ptr->inner->value}");
+    
+    // (*ptr).member->member形式
+    println("(*ptr).inner->value = {(*ptr).inner->value}");
+    
+    // 変数経由でも動作確認
+    int v1 = ptr->inner->value;
+    int v2 = (*ptr).inner->value;
+    println("v1 = {v1}, v2 = {v2}");
+    
+    return 0;
+}
+// expected stdout:
+// ip->value = 42
+// o.inner->value = 42
+// ptr->id = 1
+// ptr->inner->value = 42
+// (*ptr).inner->value = 42
+// v1 = 42, v2 = 42

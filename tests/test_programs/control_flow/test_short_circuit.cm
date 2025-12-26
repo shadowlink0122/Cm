@@ -9,31 +9,31 @@ int main() {
     if (false && (x = x + 1) > 0) {
         println("Should not print 1");
     }
-    println("After false && ..., x = {}", x);  // 0のまま
+    println("After false && ..., x = {x}");  // 0のまま
 
     // trueの場合、右側も評価される
     if (true && (x = x + 1) > 0) {
         println("AND: right side evaluated");
     }
-    println("After true && ..., x = {}", x);  // 1になる
+    println("After true && ..., x = {x}");  // 1になる
 
     // OR演算の短絡評価
     // trueの場合、右側は評価されない
     if (true || (x = x + 1) > 0) {
         println("OR: left side was true");
     }
-    println("After true || ..., x = {}", x);  // 1のまま
+    println("After true || ..., x = {x}");  // 1のまま
 
     // falseの場合、右側も評価される
     if (false || (x = x + 1) > 0) {
         println("OR: right side evaluated");
     }
-    println("After false || ..., x = {}", x);  // 2になる
+    println("After false || ..., x = {x}");  // 2になる
 
     // 複雑な短絡評価
     int y = 0;
     bool result = (false && (y = y + 1) > 0) || (true && (y = y + 2) > 0);
-    println("Complex: y = {}, result = {}", y, result);  // y = 2, result = true
+    println("Complex: y = {y}, result = {result}");  // y = 2, result = true
 
     return 0;
 }

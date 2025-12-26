@@ -1,0 +1,89 @@
+// std.mem - メモリ管理モジュール
+// アロケータインターフェースとFFI宣言を提供
+// 
+// 使用例:
+//   import std::mem::{malloc, free, Allocator, DefaultAllocator};
+//   
+//   // 直接FFI使用（sizeof推奨）
+//   int* ptr = (int*)malloc(sizeof(int) * 10);  // int 10個分を確保
+//   free(ptr);
+//   
+//   // アロケータインターフェース使用
+//   DefaultAllocator alloc = DefaultAllocator{};
+//   MyStruct* obj = (MyStruct*)alloc.alloc(sizeof(MyStruct));
+//   alloc.dealloc(obj);
+//
+//   // 配列の確保
+//   int count = 100;
+//   double* array = (double*)malloc(sizeof(double) * count);
+//
+module mem;
+
+// ============================================================
+// libc FFI宣言
+// Note: インタプリタのFFI実装はint64_tを期待するため、
+//       usizeではなくintを使用
+// ============================================================
+use libc {
+    void* malloc(int size);
+    void* calloc(int nmemb, int size);
+    void* realloc(void* ptr, int size);
+    void free(void* ptr);
+}
+
+// ============================================================
+// Allocator Interface
+// ============================================================
+// メモリアロケータの抽象化インターフェース
+// カスタムアロケータを作成するには、このインターフェースを実装する
+//
+// 使用例:
+//   <A: Allocator> void* allocate_buffer(A* allocator, int size) {
+//       return allocator->alloc(size);
+//   }
+
+export interface Allocator {
+    void* alloc(int size);
+    void dealloc(void* ptr);
+    void* reallocate(void* ptr, int new_size);
+    void* alloc_zeroed(int size);
+}
+
+// ============================================================
+// DefaultAllocator - mallocベースの標準アロケータ
+// ============================================================
+export struct DefaultAllocator {}
+
+impl DefaultAllocator for Allocator {
+    void* alloc(int size) {
+        return malloc(size);
+    }
+    
+    void dealloc(void* ptr) {
+        free(ptr);
+    }
+    
+    void* reallocate(void* ptr, int new_size) {
+        return realloc(ptr, new_size);
+    }
+    
+    void* alloc_zeroed(int size) {
+        return calloc(1, size);
+    }
+}
+
+// ============================================================
+// 型安全なメモリ操作ヘルパー（参考実装）
+// ============================================================
+// 使用例:
+//   // 単一オブジェクトの確保
+//   MyStruct* obj = (MyStruct*)malloc(sizeof(MyStruct));
+//   
+//   // 配列の確保
+//   int* arr = (int*)malloc(sizeof(int) * count);
+//   
+//   // ゼロ初期化された配列
+//   int* zeroed = (int*)calloc(count, sizeof(int));
+//
+// Note: 常にsizeof(T)を使用してサイズを計算することを推奨
+//       これにより、プラットフォーム依存のサイズの違いを吸収できる

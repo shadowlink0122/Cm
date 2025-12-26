@@ -38,8 +38,9 @@ static MirRvaluePtr clone_rvalue(const MirRvaluePtr& rv) {
         }
         case MirRvalue::BinaryOp: {
             auto& bin_data = std::get<MirRvalue::BinaryOpData>(rv->data);
-            result->data = MirRvalue::BinaryOpData{bin_data.op, clone_operand(bin_data.lhs),
-                                                   clone_operand(bin_data.rhs)};
+            result->data =
+                MirRvalue::BinaryOpData{bin_data.op, clone_operand(bin_data.lhs),
+                                        clone_operand(bin_data.rhs), bin_data.result_type};
             break;
         }
         case MirRvalue::UnaryOp: {
@@ -870,6 +871,7 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
     // 特殊化構造体を生成
     auto mir_struct = std::make_unique<MirStruct>();
     mir_struct->name = spec_name;
+    mir_struct->is_css = base_struct->is_css;
 
     // フィールドとレイアウトを計算
     uint32_t current_offset = 0;

@@ -1,3 +1,4 @@
+import std::io::println;
 // シンプルなoperator実装テスト
 struct Point {
     int x;

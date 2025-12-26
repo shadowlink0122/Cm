@@ -1,3 +1,4 @@
+import std::io::println;
 // 明示的なoperator実装テスト
 struct Vector2 {
     float x;

@@ -1,0 +1,38 @@
+import std::io::println;
+// ポインタの配列テスト
+
+int main() {
+    int[3] vals = [100, 200, 300];
+    
+    // int*[3] - ポインタの配列
+    int*[3] ptrs;
+    ptrs[0] = &vals[0];
+    ptrs[1] = &vals[1];
+    ptrs[2] = &vals[2];
+    
+    // アドレスが一致することを確認
+    if (ptrs[0] == &vals[0]) {
+        println("addr0: match");
+    }
+    if (ptrs[1] == &vals[1]) {
+        println("addr1: match");
+    }
+    if (ptrs[2] == &vals[2]) {
+        println("addr2: match");
+    }
+    
+    // 直接デリファレンス
+    int v0 = *ptrs[0];
+    int v1 = *ptrs[1];
+    int v2 = *ptrs[2];
+    println("v0 = {v0}, v1 = {v1}, v2 = {v2}");
+    
+    // ループでの使用
+    int sum = 0;
+    for (int i = 0; i < 3; i = i + 1) {
+        sum = sum + *ptrs[i];
+    }
+    println("sum = {sum}");
+    
+    return 0;
+}

@@ -1,3 +1,4 @@
+import std::io::println;
 // Result<T, E>型とmatch式の複合テスト
 
 // Result型をstructで表現

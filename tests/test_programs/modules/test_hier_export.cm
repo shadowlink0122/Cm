@@ -1,0 +1,12 @@
+import std::io::println;
+// test_hier_export.cm - 直接インポートテスト
+import ./hier_export/io/file;
+import ./hier_export/io/stream;
+
+int main() {
+    int r1 = file::read_file(5);
+    int r2 = stream::open_stream(3);
+    println("read_file: {r1}");
+    println("open_stream: {r2}");
+    return 0;
+}

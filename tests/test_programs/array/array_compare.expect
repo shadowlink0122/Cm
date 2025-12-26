@@ -1,0 +1,5 @@
+a == b: true
+a != c: true
+s1 == s2: true
+s1 != s3: true
+s1 != s4: true (different length)

@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体配列の.size()メソッドのテスト
 
 struct Point {

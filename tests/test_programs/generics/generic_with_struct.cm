@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体を型引数として使用するジェネリクスのテスト
 
 struct Point {
@@ -26,7 +27,7 @@ int main() {
     Box<int> int_box;
     int_box.value = 42;
     int_box.is_set = true;
-    println("Int box: {}", int_box.value);
+    println("Int box: {int_box.value}");
 
     // 構造体のBox
     Point p;
@@ -38,7 +39,7 @@ int main() {
     point_box.is_set = true;
 
     Point extracted = point_box.value;
-    println("Point box: ({}, {})", extracted.x, extracted.y);
+    println("Point box: ({extracted.x}, {extracted.y})");
 
     // ジェネリック関数で取得
     int val = get_value(int_box);

@@ -4,7 +4,7 @@ int main() {
     println("Hello from WASM!");
     
     int x = 42;
-    println("x = {}", x);
+    println("x = {x}");
     
     return 0;
 }

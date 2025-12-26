@@ -10,34 +10,6 @@
 
 namespace cm::mir::opt {
 
-// 標準的な最適化パスを作成する関数
-inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
-    int optimization_level) {
-    std::vector<std::unique_ptr<OptimizationPass>> passes;
-
-    if (optimization_level >= 1) {
-        // -O1: 基本的な最適化
-        passes.push_back(std::make_unique<ConstantFolding>());
-        passes.push_back(std::make_unique<CopyPropagation>());
-        passes.push_back(std::make_unique<DeadCodeElimination>());
-    }
-
-    if (optimization_level >= 2) {
-        // -O2: より積極的な最適化
-        // 最適化パスを複数回実行
-        passes.push_back(std::make_unique<ConstantFolding>());
-        passes.push_back(std::make_unique<CopyPropagation>());
-        // TODO: インライン化、ループ最適化など
-    }
-
-    if (optimization_level >= 3) {
-        // -O3: 最大限の最適化
-        // TODO: ベクトル化、アンロールなど
-    }
-
-    return passes;
-}
-
 // ============================================================
 // 簡易的なブロック統合最適化
 // ============================================================
@@ -125,5 +97,36 @@ class SimplifyControlFlow : public OptimizationPass {
         return changed;
     }
 };
+
+// 標準的な最適化パスを作成する関数
+inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
+    int optimization_level) {
+    std::vector<std::unique_ptr<OptimizationPass>> passes;
+
+    if (optimization_level >= 1) {
+        // -O1: 基本的な最適化
+        passes.push_back(std::make_unique<ConstantFolding>());
+        passes.push_back(std::make_unique<CopyPropagation>());
+        passes.push_back(std::make_unique<DeadCodeElimination>());
+        passes.push_back(std::make_unique<SimplifyControlFlow>());
+    }
+
+    if (optimization_level >= 2) {
+        // -O2: より積極的な最適化
+        // 最適化パスを複数回実行
+        passes.push_back(std::make_unique<ConstantFolding>());
+        passes.push_back(std::make_unique<CopyPropagation>());
+        passes.push_back(std::make_unique<DeadCodeElimination>());
+        passes.push_back(std::make_unique<SimplifyControlFlow>());
+        // TODO: インライン化、ループ最適化など
+    }
+
+    if (optimization_level >= 3) {
+        // -O3: 最大限の最適化
+        // TODO: ベクトル化、アンロールなど
+    }
+
+    return passes;
+}
 
 }  // namespace cm::mir::opt

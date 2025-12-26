@@ -1,3 +1,4 @@
+import std::io::println;
 // impl<T>ジェネリクスのテスト
 
 // ジェネリック構造体

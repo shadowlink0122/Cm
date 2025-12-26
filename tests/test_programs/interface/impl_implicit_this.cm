@@ -1,0 +1,42 @@
+import std::io::println;
+// impl_implicit_this.cm - impl内での暗黙的thisアクセス
+interface Getter {
+    int get_x();
+    int get_y();
+    int get_sum();
+}
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point for Getter {
+    int get_x() {
+        return x;  // 暗黙的this
+    }
+    
+    int get_y() {
+        return y;  // 暗黙的this
+    }
+    
+    int get_sum() {
+        return x + y;  // 暗黙的this
+    }
+}
+
+int main() {
+    Point p;
+    p.x = 10;
+    p.y = 20;
+    
+    int vx = p.get_x();
+    int vy = p.get_y();
+    int vsum = p.get_sum();
+    
+    println("x: {vx}");
+    println("y: {vy}");
+    println("sum: {vsum}");
+    
+    return 0;
+}

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../mir_nodes.hpp"
+#include "../nodes.hpp"
 
 #include <algorithm>
 #include <queue>
@@ -44,7 +44,9 @@ class ProgramDeadCodeElimination {
 
         // 組み込み関数は常に使用される
         static const std::set<std::string> builtins = {"println",
+                                                       "__println__",
                                                        "print",
+                                                       "__print__",
                                                        "printf",
                                                        "sprintf",
                                                        "exit",
@@ -216,6 +218,13 @@ class ProgramDeadCodeElimination {
             for (const auto& local : func->locals) {
                 if (local.type && local.type->kind == ast::TypeKind::Struct) {
                     used.insert(local.type->name);
+                }
+                // 配列の要素型も検査
+                if (local.type && local.type->kind == ast::TypeKind::Array &&
+                    local.type->element_type) {
+                    if (local.type->element_type->kind == ast::TypeKind::Struct) {
+                        used.insert(local.type->element_type->name);
+                    }
                 }
             }
         }

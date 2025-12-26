@@ -1,9 +1,8 @@
 # CLAUDE.md - Cm言語プロジェクトAIガイド
 
 ## 重要：開発前に必ず確認
-1. `docs/design/CANONICAL_SPEC.md` - **正式言語仕様**（最優先）
-2. `docs/design/architecture.md` - システム設計
-3. `docs/PROJECT_STRUCTURE.md` - プロジェクト構造
+1. `ROADMAP.md` - ロードマップ(最優先)
+2. `docs/design/*.md` - **正式言語仕様**
 
 ## 言語仕様（必須）
 
@@ -19,11 +18,9 @@ fn add(a: int, b: int) -> int { }
 
 ### キーワード優先順位
 - `typedef` - 型エイリアス（`type`は使わない）
-- `#define` - 型付きコンパイル時定数
-- `#macro` - コードマクロ（`#define`マクロは使わない）
 - `overload` - 関数オーバーロード（明示的に必要）
-- `constexpr` - コンパイル時計算
 - `with` - 自動トレイト実装（`[[derive()]]`は使わない）
+- `T 宣言` - 変数・関数宣言(`fn 宣言() -> T`は使わない)
 
 ## プロジェクトルール（厳守）
 
@@ -49,9 +46,8 @@ fn add(a: int, b: int) -> int { }
 ## コンパイラパイプライン
 
 ```
-Lexer → Parser → AST → HIR → MIR → LIR → CodeGen
-                            ↑
-                        現在ここまで実装
+Lexer → Parser → AST → HIR → MIR → LLVM IR → Native/WASM
+                                 → インタプリタ
 ```
 
 ### 実装済み
@@ -59,28 +55,26 @@ Lexer → Parser → AST → HIR → MIR → LIR → CodeGen
 - ✓ HIR（高レベル中間表現）
 - ✓ MIR（SSA形式、CFGベース）
 - ✓ 基本的な型システム
-
-### 未実装
-- ✗ LIR（低レベル中間表現）
-- ✗ バックエンド（Rust/TS/WASM）
-- ✗ 完全なオーバーロード解決
-- ✗ ジェネリック特殊化
+- ✓ LLVMバックエンド（基本機能）
 
 ## ビルド・テスト
 
 ```bash
-# ビルド
-cmake -B build && cmake --build build
+# ビルド（LLVM有効）
+cmake -B build -DCM_USE_LLVM=ON && cmake --build build
 
 # テスト
 ctest --test-dir build               # C++テスト
 ./build/bin/cm tests/regression/*.cm # Cmテスト
+make tip                             # インタプリタテスト
+make tlp                             # LLVMテスト
+make tlwp                            # WASMテスト
 ```
 
 ## 開発時の注意
 
 1. **矛盾時は`CANONICAL_SPEC.md`が最優先**
-2. **C++20必須**（Clang 17+推奨）
+2. **C++20必須**（Clang 17+推奨） 
 3. **テストは必ず`tests/`に配置**
 4. **新機能は設計文書を先に作成**
 
@@ -91,3 +85,6 @@ ctest --test-dir build               # C++テスト
 - デバッグメッセージはdebug_msgで表示するためのIDとメッセージを正しく設定すること
 - 実装前に既存コードを確認
 - テスト駆動開発を推奨
+- 機能実装時に他の機能が壊れていないことを確認
+- ファイル構成はシンプルにする
+- 1ファイルは1000行が目安。それ以上になる場合は分割を検討

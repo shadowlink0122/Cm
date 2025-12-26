@@ -16,15 +16,15 @@ int square(int x) {
 int main() {
     // ネストされた呼び出し
     int result = double_val(add_one(5));
-    println("double(add_one(5)) = {}", result);
+    println("double(add_one(5)) = {result}");
 
     // さらにネスト
     int nested = square(double_val(3));
-    println("square(double(3)) = {}", nested);
+    println("square(double(3)) = {nested}");
 
     // 演算と組み合わせ
     int combined = add_one(square(2)) + double_val(3);
-    println("add_one(square(2)) + double(3) = {}", combined);
+    println("add_one(square(2)) + double(3) = {combined}");
 
     return 0;
 }

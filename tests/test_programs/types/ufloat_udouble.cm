@@ -1,3 +1,4 @@
+import std::io::println;
 // ufloat/udouble型のテスト
 int main() {
     // ufloat (32bit non-negative float)

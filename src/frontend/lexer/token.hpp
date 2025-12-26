@@ -21,6 +21,7 @@ enum class TokenKind {
     // キーワード
     KwAs,  // import alias
     KwAsync,
+    KwAuto,  // auto type inference
     KwAwait,
     KwBreak,
     KwCase,  // switch case
@@ -47,6 +48,7 @@ enum class TokenKind {
     KwMatch,
     KwModule,  // module declaration
     KwMutable,
+    KwNamespace,  // namespace declaration
     KwNew,
     KwNull,
     KwOperator,  // operator overloading in interface/impl
@@ -54,6 +56,7 @@ enum class TokenKind {
     KwPrivate,
     KwPub,  // public visibility
     KwReturn,
+    KwSizeof,  // sizeof operator
     KwStatic,
     KwStruct,
     KwSwitch,    // switch statement
@@ -62,12 +65,19 @@ enum class TokenKind {
     KwTrue,
     KwTypedef,   // type alias
     KwTypename,  // template typename
+    KwTypeof,    // typeof operator
     KwUse,       // use statement (similar to import)
     KwVoid,
     KwVolatile,
     KwWhere,  // where clause for type constraints
     KwWhile,
     KwWith,
+
+    // コンパイラ組み込み関数（真のインライン）
+    KwIntrinsicSizeof,    // __sizeof__
+    KwIntrinsicTypeof,    // __typeof__
+    KwIntrinsicTypename,  // __typename__
+    KwIntrinsicAlignof,   // __alignof__
 
     // 型キーワード
     KwInt,
@@ -78,6 +88,8 @@ enum class TokenKind {
     KwUshort,
     KwLong,
     KwUlong,
+    KwIsize,  // ポインタサイズ符号付き (FFI用)
+    KwUsize,  // ポインタサイズ符号なし (FFI用)
     KwFloat,
     KwDouble,
     KwUfloat,
@@ -85,6 +97,7 @@ enum class TokenKind {
     KwBool,
     KwChar,
     KwString,
+    KwCstring,  // NULL終端文字列 (FFI用)
 
     // 演算子
     Plus,
@@ -123,10 +136,11 @@ enum class TokenKind {
     Question,
     Colon,
     ColonColon,
-    Arrow,
-    At,        // @ for attributes
-    Ellipsis,  // ... for variadic
-    Hash,      // # for preprocessor directives
+    Arrow,      // =>
+    ThinArrow,  // -> for pointer member access
+    At,         // @ for attributes
+    Ellipsis,   // ... for variadic
+    Hash,       // # for preprocessor directives
 
     // 区切り
     LParen,

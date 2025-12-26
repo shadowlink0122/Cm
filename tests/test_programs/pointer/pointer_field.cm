@@ -1,0 +1,27 @@
+import std::io::println;
+// 構造体フィールドへのポインタテスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p = {x: 10, y: 20};
+    
+    // フィールドへのポインタ
+    int* px = &p.x;
+    int* py = &p.y;
+    
+    println("*px = {*px}");
+    println("*py = {*py}");
+    
+    // ポインタ経由で変更
+    *px = 100;
+    *py = 200;
+    
+    println("p.x = {p.x}");
+    println("p.y = {p.y}");
+    
+    return 0;
+}

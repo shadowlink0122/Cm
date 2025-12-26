@@ -1,0 +1,41 @@
+// tests/test_programs/asm/asm_data_movement.cm
+// データ移動命令のテスト
+
+import std::io::println;
+
+int main() {
+    int value = 42;
+    int dest = 0;
+
+    // 基本的なmov命令
+    asm("mov {value}, %rax");
+    println("asm: mov to register");
+
+    asm("mov %rax, {dest}");
+    println("asm: mov from register");
+
+    // 即値のmov
+    asm("mov $100, %rbx");
+    println("asm: mov immediate");
+
+    // 条件付きmov (cmov)
+    asm("cmovz %rcx, %rdx");
+    println("asm: conditional move");
+
+    // push/pop命令
+    asm("push %rax");
+    println("asm: push register");
+
+    asm("pop %rbx");
+    println("asm: pop register");
+
+    // xchg命令（交換）
+    asm("xchg %rax, %rbx");
+    println("asm: exchange registers");
+
+    // lea命令（実効アドレスのロード）
+    asm("lea ({value}), %rsi");
+    println("asm: load effective address");
+
+    return 0;
+}

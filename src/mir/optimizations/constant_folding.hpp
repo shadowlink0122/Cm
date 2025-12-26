@@ -4,6 +4,7 @@
 
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace cm::mir::opt {
 
@@ -17,19 +18,104 @@ class ConstantFolding : public OptimizationPass {
     bool run(MirFunction& func) override {
         bool changed = false;
 
+        // 複数回代入される変数を検出（ループ変数など）
+        std::unordered_set<LocalId> multiAssigned = detect_multi_assigned(func);
+
         // 各ローカル変数の定数値を追跡
         std::unordered_map<LocalId, MirConstant> constants;
 
         // 各基本ブロックを処理
         for (auto& block : func.basic_blocks) {
-            changed |= process_block(*block, constants);
+            changed |= process_block(func, *block, constants, multiAssigned);
         }
 
         return changed;
     }
 
    private:
-    bool process_block(BasicBlock& block, std::unordered_map<LocalId, MirConstant>& constants) {
+    // 型が同一かチェック（安全な定数伝播のため）
+    bool same_type(const hir::TypePtr& a, const hir::TypePtr& b) const {
+        if (a == b) {
+            return true;
+        }
+        if (!a || !b) {
+            return false;
+        }
+        if (a->kind != b->kind) {
+            return false;
+        }
+        switch (a->kind) {
+            case hir::TypeKind::Pointer:
+            case hir::TypeKind::Reference:
+                return same_type(a->element_type, b->element_type);
+            case hir::TypeKind::Array:
+                return a->array_size == b->array_size &&
+                       same_type(a->element_type, b->element_type);
+            case hir::TypeKind::Struct:
+            case hir::TypeKind::Interface:
+            case hir::TypeKind::TypeAlias:
+            case hir::TypeKind::Generic: {
+                if (a->name != b->name) {
+                    return false;
+                }
+                if (a->type_args.size() != b->type_args.size()) {
+                    return false;
+                }
+                for (size_t i = 0; i < a->type_args.size(); ++i) {
+                    if (!same_type(a->type_args[i], b->type_args[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            case hir::TypeKind::Function: {
+                if (!same_type(a->return_type, b->return_type)) {
+                    return false;
+                }
+                if (a->param_types.size() != b->param_types.size()) {
+                    return false;
+                }
+                for (size_t i = 0; i < a->param_types.size(); ++i) {
+                    if (!same_type(a->param_types[i], b->param_types[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            default:
+                return true;
+        }
+    }
+
+    // 関数内で複数回代入される変数を検出
+    std::unordered_set<LocalId> detect_multi_assigned(const MirFunction& func) {
+        std::unordered_set<LocalId> assigned;
+        std::unordered_set<LocalId> multiAssigned;
+
+        for (const auto& block : func.basic_blocks) {
+            if (!block)
+                continue;
+            for (const auto& stmt : block->statements) {
+                if (stmt->kind == MirStatement::Assign) {
+                    auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                    if (assign_data.place.projections.empty()) {
+                        LocalId target = assign_data.place.local;
+                        if (assigned.count(target) > 0) {
+                            multiAssigned.insert(target);
+                        } else {
+                            assigned.insert(target);
+                        }
+                    }
+                }
+            }
+        }
+
+        return multiAssigned;
+    }
+
+    bool process_block(const MirFunction& func, BasicBlock& block,
+                       std::unordered_map<LocalId, MirConstant>& constants,
+                       const std::unordered_set<LocalId>& multiAssigned) {
         bool changed = false;
 
         // 各文を処理
@@ -41,15 +127,31 @@ class ConstantFolding : public OptimizationPass {
                 if (assign_data.place.projections.empty()) {
                     LocalId target = assign_data.place.local;
 
+                    // 複数回代入される変数は定数追跡しない
+                    if (multiAssigned.count(target) > 0) {
+                        continue;
+                    }
+
                     // Rvalueを評価して定数化できるかチェック
                     if (auto constant = evaluate_rvalue(*assign_data.rvalue, constants)) {
-                        // 定数として記録
-                        constants[target] = *constant;
+                        // 型が一致する場合のみ定数伝播する
+                        if (target < func.locals.size()) {
+                            const auto& target_type = func.locals[target].type;
+                            if (same_type(target_type, constant->type)) {
+                                // 定数として記録
+                                constants[target] = *constant;
 
-                        // RvalueをUse(Constant)に置き換え
-                        auto new_operand = MirOperand::constant(*constant);
-                        assign_data.rvalue = MirRvalue::use(std::move(new_operand));
-                        changed = true;
+                                // RvalueをUse(Constant)に置き換え
+                                auto new_operand = MirOperand::constant(*constant);
+                                assign_data.rvalue = MirRvalue::use(std::move(new_operand));
+                                changed = true;
+                            } else {
+                                // 型不一致の場合は伝播しない
+                                constants.erase(target);
+                            }
+                        } else {
+                            constants.erase(target);
+                        }
                     } else {
                         // 定数でない場合は記録から削除
                         constants.erase(target);

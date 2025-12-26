@@ -1,0 +1,14 @@
+import std::io::println;
+
+int main() {
+    string s = `line1
+    line2`;
+    println(s);
+    string braces = `{b}`;
+    println(braces);
+    println("``");
+    println(`""`);
+    println("\"");
+    println(`\``);
+    return 0;
+}
