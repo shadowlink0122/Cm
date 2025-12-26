@@ -28,6 +28,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <filesystem>
 #include <set>
 #include <sstream>
 #include <string>
@@ -523,6 +524,18 @@ int main(int argc, char* argv[]) {
                 std::cout << "最適化完了\n\n";
         }
 
+        // コピー伝播・定数畳み込み（コンパイル時のみ）
+        if (opts.command == Command::Compile) {
+            mir::opt::CopyPropagation copy_prop;
+            mir::opt::ConstantFolding const_fold;
+            for (auto& func : mir.functions) {
+                if (func) {
+                    copy_prop.run(*func);
+                    const_fold.run(*func);
+                }
+            }
+        }
+
         // 関数レベルのDCE（コンパイル時のみ）
         if (opts.command == Command::Compile) {
             mir::opt::DeadCodeElimination dce;
@@ -598,7 +611,12 @@ int main(int argc, char* argv[]) {
 
                 // 出力ファイル設定
                 if (opts.output_file.empty()) {
-                    js_opts.outputFile = "output.js";
+                    if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+                        std::filesystem::create_directories("web");
+                        js_opts.outputFile = "web/index.js";
+                    } else {
+                        js_opts.outputFile = "output.js";
+                    }
                 } else {
                     js_opts.outputFile = opts.output_file;
                 }

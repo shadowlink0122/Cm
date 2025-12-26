@@ -55,6 +55,13 @@ class JSCodeGen {
 
     // 使用されたランタイムヘルパー
     std::unordered_set<std::string> used_runtime_helpers_;
+    std::unordered_set<mir::LocalId> current_used_locals_;
+    std::unordered_map<mir::LocalId, size_t> current_use_counts_;
+    std::unordered_set<mir::LocalId> current_noninline_locals_;
+    std::unordered_set<mir::LocalId> inline_candidates_;
+    std::unordered_map<mir::LocalId, std::string> inline_values_;
+    std::unordered_set<mir::LocalId> declare_on_assign_;
+    std::unordered_set<mir::LocalId> declared_locals_;
 
     // プリアンブル（ヘルパー関数など）
     void emitPreamble();
@@ -74,6 +81,27 @@ class JSCodeGen {
     void emitFunction(const mir::MirFunction& func, const mir::MirProgram& program);
     void emitFunctionSignature(const mir::MirFunction& func);
     void emitFunctionBody(const mir::MirFunction& func, const mir::MirProgram& program);
+    void expandRuntimeHelperDependencies(std::unordered_set<std::string>& used) const;
+    void collectUsedLocals(const mir::MirFunction& func,
+                           std::unordered_set<mir::LocalId>& used) const;
+    void collectUsedLocalsInOperand(const mir::MirOperand& operand,
+                                    std::unordered_set<mir::LocalId>& used) const;
+    void collectUsedLocalsInPlace(const mir::MirPlace& place,
+                                  std::unordered_set<mir::LocalId>& used) const;
+    void collectUsedLocalsInRvalue(const mir::MirRvalue& rvalue,
+                                   std::unordered_set<mir::LocalId>& used) const;
+    void collectUsedLocalsInTerminator(const mir::MirTerminator& term,
+                                       std::unordered_set<mir::LocalId>& used) const;
+    bool isLocalUsed(mir::LocalId local) const;
+    bool isVoidReturn(const mir::MirFunction& func) const;
+    bool hasReturnLocalWrite(const mir::MirFunction& func) const;
+    void collectUseCounts(const mir::MirFunction& func);
+    void collectDeclareOnAssign(const mir::MirFunction& func);
+    bool isInlineableRvalue(const mir::MirRvalue& rvalue) const;
+    void collectInlineCandidates(const mir::MirFunction& func);
+    void precomputeInlineValues(const mir::MirFunction& func);
+    bool tryEmitObjectLiteralReturn(const mir::MirFunction& func);
+    bool tryEmitCssReturn(const mir::MirFunction& func);
 
     // 基本ブロック
     void emitBasicBlock(const mir::BasicBlock& block, const mir::MirFunction& func,

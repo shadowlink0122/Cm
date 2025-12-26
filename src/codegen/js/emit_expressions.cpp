@@ -177,6 +177,12 @@ std::string JSCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
         case mir::MirOperand::Move:
         case mir::MirOperand::Copy: {
             const auto& place = std::get<mir::MirPlace>(operand.data);
+            if (place.projections.empty()) {
+                auto it = inline_values_.find(place.local);
+                if (it != inline_values_.end()) {
+                    return it->second;
+                }
+            }
             return emitPlace(place, func);
         }
         case mir::MirOperand::Constant: {
@@ -210,17 +216,31 @@ std::string JSCodeGen::emitLambdaRef(const std::string& funcName, const mir::Mir
 // 構造体Copyオペランド用のクローン付き出力
 std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
                                             const mir::MirFunction& func) {
-    if (operand.kind == mir::MirOperand::Copy) {
+    if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
         const auto& place = std::get<mir::MirPlace>(operand.data);
-        std::string result = emitPlace(place, func);
-        // 構造体の場合は深いコピーを作成
-        if (place.local < func.locals.size() && place.projections.empty()) {
-            const auto& local = func.locals[place.local];
-            if (local.type && local.type->kind == ast::TypeKind::Struct) {
-                return "__cm_clone(" + result + ")";
+        if (place.projections.empty()) {
+            auto it = inline_values_.find(place.local);
+            if (it != inline_values_.end()) {
+                if (operand.kind == mir::MirOperand::Copy && place.local < func.locals.size()) {
+                    const auto& local = func.locals[place.local];
+                    if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                        return "__cm_clone(" + it->second + ")";
+                    }
+                }
+                return it->second;
             }
         }
-        return result;
+        if (operand.kind == mir::MirOperand::Copy) {
+            std::string result = emitPlace(place, func);
+            // 構造体の場合は深いコピーを作成
+            if (place.local < func.locals.size() && place.projections.empty()) {
+                const auto& local = func.locals[place.local];
+                if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                    return "__cm_clone(" + result + ")";
+                }
+            }
+            return result;
+        }
     }
     return emitOperand(operand, func);
 }

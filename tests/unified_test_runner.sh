@@ -57,10 +57,19 @@ TIMEOUT=5
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
+TIMEOUT_MODE=""
 if command -v timeout >/dev/null 2>&1; then
     TIMEOUT_CMD="timeout"
 elif command -v gtimeout >/dev/null 2>&1; then
     TIMEOUT_CMD="gtimeout"
+elif command -v python3 >/dev/null 2>&1; then
+    TIMEOUT_CMD="python3"
+    TIMEOUT_MODE="python"
+fi
+
+if [ "${CM_TEST_FORCE_PY_TIMEOUT:-0}" -eq 1 ] && command -v python3 >/dev/null 2>&1; then
+    TIMEOUT_CMD="python3"
+    TIMEOUT_MODE="python"
 fi
 
 # タイムアウトコマンドがない場合の警告
@@ -246,13 +255,36 @@ run_single_test() {
 
     # タイムアウト付きコマンド実行のヘルパー関数
     run_with_timeout() {
-        local cmd="$@"
         if [ -n "$TIMEOUT_CMD" ]; then
-            # --kill-after: タイムアウト後さらに2秒待ってもプロセスが終了しなければSIGKILL
-            $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" $cmd
+            if [ "$TIMEOUT_MODE" = "python" ]; then
+                "$TIMEOUT_CMD" - "$TIMEOUT" "$@" <<'PY'
+import subprocess
+import sys
+
+timeout = int(sys.argv[1])
+cmd = sys.argv[2:]
+try:
+    proc = subprocess.Popen(cmd)
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        sys.exit(124)
+    sys.exit(proc.returncode if proc.returncode is not None else 1)
+except FileNotFoundError:
+    sys.exit(127)
+PY
+            else
+                # --kill-after: タイムアウト後さらに2秒待ってもプロセスが終了しなければSIGKILL
+                $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" "$@"
+            fi
         else
             # タイムアウトコマンドがない場合は直接実行
-            $cmd
+            "$@"
         fi
     }
 
@@ -576,6 +608,15 @@ main() {
     log "Backend: $BACKEND"
     log "Categories: $CATEGORIES"
     log "Parallel: $PARALLEL"
+    if [ -n "$TIMEOUT_CMD" ]; then
+        local timeout_mode="native"
+        if [ "$TIMEOUT_MODE" = "python" ]; then
+            timeout_mode="python"
+        fi
+        log "Timeout: $TIMEOUT_CMD ($timeout_mode), Seconds: $TIMEOUT"
+    else
+        log "Timeout: none, Seconds: $TIMEOUT"
+    fi
     log "=========================================="
     log ""
 
@@ -798,11 +839,34 @@ run_parallel_test() {
 
     # タイムアウト付き実行
     run_with_timeout_silent() {
-        local cmd="$@"
         if [ -n "$TIMEOUT_CMD" ]; then
-            $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" $cmd
+            if [ "$TIMEOUT_MODE" = "python" ]; then
+                "$TIMEOUT_CMD" - "$TIMEOUT" "$@" <<'PY'
+import subprocess
+import sys
+
+timeout = int(sys.argv[1])
+cmd = sys.argv[2:]
+try:
+    proc = subprocess.Popen(cmd)
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        sys.exit(124)
+    sys.exit(proc.returncode if proc.returncode is not None else 1)
+except FileNotFoundError:
+    sys.exit(127)
+PY
+            else
+                $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" "$@"
+            fi
         else
-            $cmd
+            "$@"
         fi
     }
 

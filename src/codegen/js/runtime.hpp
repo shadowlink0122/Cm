@@ -175,7 +175,6 @@ inline void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string
         emitter.emitLine("let idx = 0;");
         emitter.emitLine("// エスケープされた波括弧を一時的に置換");
         emitter.emitLine("result = result.replace(/\\{\\{/g, '\\x00LBRACE\\x00');");
-        emitter.emitLine("result = result.replace(/\\}\\}/g, '\\x00RBRACE\\x00');");
         emitter.emitLine("// フォーマット指定子付きプレースホルダを置換 {name:spec} or {:spec}");
         emitter.emitLine("result = result.replace(/\\{[^}]*\\}/g, (match) => {");
         emitter.increaseIndent();
@@ -186,6 +185,7 @@ inline void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string
         emitter.emitLine("return __cm_format(values[idx++], spec);");
         emitter.decreaseIndent();
         emitter.emitLine("});");
+        emitter.emitLine("result = result.replace(/\\}\\}/g, '\\x00RBRACE\\x00');");
         emitter.emitLine("// エスケープを復元");
         emitter.emitLine("result = result.replace(/\\x00LBRACE\\x00/g, '{');");
         emitter.emitLine("result = result.replace(/\\x00RBRACE\\x00/g, '}');");
@@ -204,6 +204,70 @@ inline void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string
         emitter.emitLine("}");
         emitter.emitLine();
     }
+}
+
+inline void emitWebRuntime(JSEmitter& emitter) {
+    emitter.emitLine("// Cm Web Runtime");
+    emitter.emitLine("(function() {");
+    emitter.increaseIndent();
+    emitter.emitLine("if (typeof globalThis === \"undefined\") return;");
+    emitter.emitLine("const root = globalThis.cm || (globalThis.cm = {});");
+    emitter.emitLine("const web = root.web || (root.web = {});");
+    emitter.emitLine("const set = web.set || (web.set = {});");
+    emitter.emitLine("const append = web.append || (web.append = {});");
+    emitter.emitLine("const get = web.get || (web.get = {});");
+    emitter.emitLine("function ensureRoot() {");
+    emitter.increaseIndent();
+    emitter.emitLine("if (typeof document === \"undefined\") return null;");
+    emitter.emitLine("let el = document.getElementById(\"cm-root\");");
+    emitter.emitLine("if (!el) el = document.body || document.documentElement;");
+    emitter.emitLine("return el;");
+    emitter.decreaseIndent();
+    emitter.emitLine("}");
+    emitter.emitLine("function ensureStyle() {");
+    emitter.increaseIndent();
+    emitter.emitLine("if (typeof document === \"undefined\") return null;");
+    emitter.emitLine("let style = document.getElementById(\"cm-style\");");
+    emitter.emitLine("if (!style) {");
+    emitter.increaseIndent();
+    emitter.emitLine("style = document.createElement(\"style\");");
+    emitter.emitLine("style.id = \"cm-style\";");
+    emitter.emitLine("(document.head || document.documentElement).appendChild(style);");
+    emitter.decreaseIndent();
+    emitter.emitLine("}");
+    emitter.emitLine("return style;");
+    emitter.decreaseIndent();
+    emitter.emitLine("}");
+    emitter.emitLine("set.html = set.html || function(html) {");
+    emitter.increaseIndent();
+    emitter.emitLine("const el = ensureRoot();");
+    emitter.emitLine("if (!el) return;");
+    emitter.emitLine("el.innerHTML = html;");
+    emitter.decreaseIndent();
+    emitter.emitLine("};");
+    emitter.emitLine("append.html = append.html || function(html) {");
+    emitter.increaseIndent();
+    emitter.emitLine("const el = ensureRoot();");
+    emitter.emitLine("if (!el) return;");
+    emitter.emitLine("el.insertAdjacentHTML(\"beforeend\", html);");
+    emitter.decreaseIndent();
+    emitter.emitLine("};");
+    emitter.emitLine("set.css = set.css || function(css) {");
+    emitter.increaseIndent();
+    emitter.emitLine("const style = ensureStyle();");
+    emitter.emitLine("if (!style) return;");
+    emitter.emitLine("style.textContent = css;");
+    emitter.decreaseIndent();
+    emitter.emitLine("};");
+    emitter.emitLine("get.html = get.html || function() {");
+    emitter.increaseIndent();
+    emitter.emitLine("const el = ensureRoot();");
+    emitter.emitLine("return el ? el.innerHTML : \"\";");
+    emitter.decreaseIndent();
+    emitter.emitLine("};");
+    emitter.decreaseIndent();
+    emitter.emitLine("})();");
+    emitter.emitLine();
 }
 
 }  // namespace cm::codegen::js

@@ -120,7 +120,7 @@ inline std::string jsDefaultValue(const hir::Type& type) {
         case TypeKind::CString:
             return "\"\"";
         case TypeKind::Struct:
-            return sanitizeIdentifier(type.name) + "()";
+            return "{}";
         case TypeKind::Interface:
             // インターフェース型はfat object {data, vtable}としてnullで初期化
             return "{data: null, vtable: null}";

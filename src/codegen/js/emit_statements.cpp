@@ -39,16 +39,22 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
     switch (stmt.kind) {
         case mir::MirStatement::Assign: {
             const auto& data = std::get<mir::MirStatement::AssignData>(stmt.data);
+            mir::LocalId target_local = data.place.local;
+
+            if (data.place.projections.empty() && inline_values_.count(target_local) > 0) {
+                break;
+            }
+
             std::string place = emitPlace(data.place, func);
 
             // クロージャ変数への代入かチェック
-            if (data.place.local < func.locals.size() && data.place.projections.empty() &&
-                func.locals[data.place.local].is_closure &&
+            if (target_local < func.locals.size() && data.place.projections.empty() &&
+                func.locals[target_local].is_closure &&
                 data.rvalue->kind == mir::MirRvalue::Use) {
                 const auto& useData = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
                 if (useData.operand->kind == mir::MirOperand::FunctionRef) {
                     const auto& funcName = std::get<std::string>(useData.operand->data);
-                    const auto& local = func.locals[data.place.local];
+                    const auto& local = func.locals[target_local];
                     std::string rvalue = emitLambdaRef(funcName, func, local.captured_locals);
                     emitter_.emitLine(place + " = " + rvalue + ";");
                     break;
@@ -56,7 +62,13 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
             }
 
             std::string rvalue = emitRvalue(*data.rvalue, func);
-            emitter_.emitLine(place + " = " + rvalue + ";");
+            if (data.place.projections.empty() && declare_on_assign_.count(target_local) > 0 &&
+                declared_locals_.count(target_local) == 0) {
+                emitter_.emitLine("let " + place + " = " + rvalue + ";");
+                declared_locals_.insert(target_local);
+            } else {
+                emitter_.emitLine(place + " = " + rvalue + ";");
+            }
             break;
         }
         case mir::MirStatement::StorageLive:
@@ -73,8 +85,18 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
         case mir::MirTerminator::Return: {
             // 戻り値を返す
             if (func.return_local < func.locals.size()) {
-                std::string retVar = getLocalVarName(func, func.return_local);
-                emitter_.emitLine("return " + retVar + ";");
+                const auto& local = func.locals[func.return_local];
+                if (local.type && local.type->kind == ast::TypeKind::Void) {
+                    emitter_.emitLine("return;");
+                } else {
+                    auto it = inline_values_.find(func.return_local);
+                    if (it != inline_values_.end()) {
+                        emitter_.emitLine("return " + it->second + ";");
+                    } else {
+                        std::string retVar = getLocalVarName(func, func.return_local);
+                        emitter_.emitLine("return " + retVar + ";");
+                    }
+                }
             } else {
                 emitter_.emitLine("return;");
             }
@@ -239,7 +261,13 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             }
 
             // 戻り値の格納
-            if (data.destination) {
+            bool skip_dest = false;
+            if (data.destination && data.destination->projections.empty()) {
+                if (!isLocalUsed(data.destination->local)) {
+                    skip_dest = true;
+                }
+            }
+            if (data.destination && !skip_dest) {
                 std::string dest = emitPlace(*data.destination, func);
                 emitter_.emitLine(dest + " = " + callExpr + ";");
             } else {
@@ -283,8 +311,18 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
         case mir::MirTerminator::Return: {
             // 戻り値を返す
             if (func.return_local < func.locals.size()) {
-                std::string retVar = getLocalVarName(func, func.return_local);
-                emitter_.emitLine("return " + retVar + ";");
+                const auto& local = func.locals[func.return_local];
+                if (local.type && local.type->kind == ast::TypeKind::Void) {
+                    emitter_.emitLine("return;");
+                } else {
+                    auto it = inline_values_.find(func.return_local);
+                    if (it != inline_values_.end()) {
+                        emitter_.emitLine("return " + it->second + ";");
+                    } else {
+                        std::string retVar = getLocalVarName(func, func.return_local);
+                        emitter_.emitLine("return " + retVar + ";");
+                    }
+                }
             } else {
                 emitter_.emitLine("return;");
             }
@@ -412,7 +450,13 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
             }
 
             // 戻り値の格納
-            if (data.destination) {
+            bool skip_dest = false;
+            if (data.destination && data.destination->projections.empty()) {
+                if (!isLocalUsed(data.destination->local)) {
+                    skip_dest = true;
+                }
+            }
+            if (data.destination && !skip_dest) {
                 std::string dest = emitPlace(*data.destination, func);
                 emitter_.emitLine(dest + " = " + callExpr + ";");
             } else {

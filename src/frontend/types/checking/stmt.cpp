@@ -117,6 +117,12 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
         return;
 
     if (ret.value) {
+        if (auto* struct_lit = ret.value->as<ast::StructLiteralExpr>()) {
+            if (struct_lit->type_name.empty() && current_return_type_ &&
+                current_return_type_->kind == ast::TypeKind::Struct) {
+                struct_lit->type_name = current_return_type_->name;
+            }
+        }
         auto val_type = infer_type(*ret.value);
         if (!types_compatible(current_return_type_, val_type)) {
             error(stmt_span, "Return type mismatch: expected '" +
