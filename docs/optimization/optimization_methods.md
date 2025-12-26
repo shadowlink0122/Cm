@@ -7,10 +7,15 @@
 
 ## 現在の最適化（実装済み）
 ### MIRレベル
+- SparseConditionalConstantPropagation（CFG対応）
 - CopyPropagation（局所）
 - ConstantFolding（局所）
 - DeadCodeElimination（関数単位）
+- SimplifyControlFlow（単純なブロック統合）
 - ProgramDeadCodeElimination（プログラム単位 / compileのみ）
+
+補足:
+- MIR最適化はプラットフォーム共通で固定レベル（現在は2）。
 
 ### LLVMレベル
 - `PassBuilder` のデフォルトパイプライン（`-O1/-O2/-O3/-Oz`）
@@ -34,7 +39,7 @@
 **効果**: 定数伝播の拡張と重複計算削減。  
 **対象**: 分岐条件が定数化されるケース、`len()`/`cap()` の多重呼び出し。  
 **実装候補**:
-- MIRでSCCP（Sparse Conditional Constant Propagation）を導入。
+- MIRでSCCP（Sparse Conditional Constant Propagation）は導入済み。
 - GVN/CSEで同一式の再利用。
 
 ### 4) Bounds Check Elimination（配列/スライス）
@@ -89,9 +94,8 @@
 - `noalias`/`restrict` 相当の情報が付与できるとLLVMが最適化しやすい。
 
 ## 推奨ロードマップ（短期）
-1) MIR SCCP + GVN/CSE
+1) MIR GVN/CSE
 2) 簡易インライン化（小関数/組み込み）
 3) interface呼び出しの静的化
 4) bounds check elimination（配列/スライス）
 5) 文字列フォーマットの簡約
-

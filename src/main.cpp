@@ -25,7 +25,6 @@
 #include "preprocessor/import.hpp"
 
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -507,22 +506,30 @@ int main(int argc, char* argv[]) {
         }
 
         // ========== Optimization ==========
-        if (opts.command == Command::Compile) {
-            if (opts.debug) {
+        if (opts.optimization_level > 0 || opts.show_mir_opt) {
+            if (opts.debug)
                 std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n";
-            }
 
-            int mir_opt_level = opts.optimization_level > 0 ? opts.optimization_level : 1;
+            // Note: Function-level optimizations are temporarily disabled due to potential issues
             mir::opt::OptimizationPipeline pipeline;
-            pipeline.add_standard_passes(mir_opt_level);
-            if (mir_opt_level >= 2) {
+            pipeline.add_standard_passes(opts.optimization_level);
+            if (opts.optimization_level >= 2) {
                 pipeline.run_until_fixpoint(mir);
             } else {
                 pipeline.run(mir);
             }
 
-            if (opts.debug) {
+            if (opts.debug)
                 std::cout << "最適化完了\n\n";
+        }
+
+        // 関数レベルのDCE（コンパイル時のみ）
+        if (opts.command == Command::Compile) {
+            mir::opt::DeadCodeElimination dce;
+            for (auto& func : mir.functions) {
+                if (func) {
+                    dce.run(*func);
+                }
             }
         }
 
@@ -591,12 +598,7 @@ int main(int argc, char* argv[]) {
 
                 // 出力ファイル設定
                 if (opts.output_file.empty()) {
-                    if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
-                        std::filesystem::create_directories("web");
-                        js_opts.outputFile = "web/index.js";
-                    } else {
-                        js_opts.outputFile = "output.js";
-                    }
+                    js_opts.outputFile = "output.js";
                 } else {
                     js_opts.outputFile = opts.output_file;
                 }

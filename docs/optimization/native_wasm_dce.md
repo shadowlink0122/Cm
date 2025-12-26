@@ -6,24 +6,23 @@
 ## パイプラインの全体像（native/wasm）
 - HIR生成: `src/hir/lowering/*`
 - MIR生成: `src/mir/lowering/*`
-- MIR最適化（compileのみ）:
+- MIR最適化（全バックエンド共通）:
+  - SparseConditionalConstantPropagation（SCCP）: `src/mir/optimizations/sccp.hpp`
   - CopyPropagation: `src/mir/optimizations/copy_propagation.hpp`
   - ConstantFolding: `src/mir/optimizations/constant_folding.hpp`
   - DeadCodeElimination（関数単位）: `src/mir/optimizations/dead_code_elimination.hpp`
+  - SimplifyControlFlow: `src/mir/optimizations/all_passes.hpp`
   - ProgramDeadCodeElimination（プログラム単位 / compileのみ）:
     `src/mir/optimizations/program_dce.hpp`
 - LLVM IR生成（native/wasm共通）: `src/codegen/llvm/core/mir_to_llvm.cpp`
 - LLVM最適化（native/wasm共通）: `src/codegen/llvm/native/codegen.hpp`
 
 ## 実際にMIR最適化が走る条件
-- `cm compile` のみ実行される（`cm run` / `cm check` は対象外）。
+- `cm compile` / `cm run` のどちらでも実行される（`cm check` は対象外）。
   - 実行箇所: `src/main.cpp`
-- `cm compile` は `-O` 指定に従うが、最低でもレベル1が適用される。
-  - `-O0` でも `mir_opt_level = 1` として最適化が実行される。
-  - レベル2以上は fixpoint まで繰り返し適用。
-- 実行形態:
-  - `OptimizationPipeline` により標準パスを実行。
-  - パス構成は `src/mir/optimizations/all_passes.hpp` に定義。
+- MIR最適化はプラットフォーム共通で固定レベル（現在は2）。
+  - 最適化レベルは `-O` に依存しない。
+  - `OptimizationPipeline` を fixpoint まで実行。
 
 ## 関数単位DCEの仕様
 実装: `src/mir/optimizations/dead_code_elimination.hpp`
@@ -62,12 +61,13 @@
 - `optimizationLevel > 0` の場合にLLVMのデフォルトパイプラインを適用。
 - `-O0` の場合はLLVM最適化をスキップ。
 - `optimizationLevel` は `cm compile -O1/-O2/-O3` により設定される。
+  - MIR最適化とは独立。
 
 ※ wasm も同じ `LLVMCodeGen` を通るため最適化パイプラインは共通。
 
 ## 現状の注意点（DCE観点）
 1) MIR最適化は `-O` で強化されるが、最低レベルは常に有効
-- `-O0` でも `CopyPropagation / ConstantFolding / DCE` は走る。
+- `-O0` でも `SCCP / CopyPropagation / ConstantFolding / DCE` は走る。
 
 2) 関数単位DCEは単純なデータフローのみ
 - 代入先がフィールド/インデックスの場合は削除対象外。
@@ -82,7 +82,7 @@
 # MIR（最適化前）
 ./cm compile <file.cm> --mir
 
-# MIR（最適化後: CopyProp/ConstFold/DCE/ProgramDCE 後）
+# MIR（最適化後: SCCP/CopyProp/ConstFold/DCE/ProgramDCE 後）
 ./cm compile <file.cm> --mir-opt
 
 # LLVM最適化OFF

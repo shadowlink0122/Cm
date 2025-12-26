@@ -711,13 +711,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             }
                         }
 
-                        // アドレスを適切な型のポインタにbitcast
-                        if (targetType) {
+                        // Deref時: アドレスを適切な型のポインタにbitcast
+                        if (hasDeref && targetType) {
                             auto addrPtrType = llvm::PointerType::get(targetType, 0);
                             if (addr->getType() != addrPtrType) {
-                                addr = builder->CreateBitCast(
-                                    addr, addrPtrType,
-                                    hasDeref ? "deref_addr_cast" : "store_ptr_cast");
+                                addr = builder->CreateBitCast(addr, addrPtrType, "deref_addr_cast");
                             }
                         }
 
@@ -1052,13 +1050,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                             addr = builder->CreateBitCast(addr, addrPtrType, "deref_load_cast");
                         }
                     }
-                    // 非Derefでも型が合わない場合はbitcast
-                    if (fieldType) {
-                        auto addrPtrType = llvm::PointerType::get(fieldType, 0);
-                        if (addr->getType() != addrPtrType) {
-                            addr = builder->CreateBitCast(addr, addrPtrType, "field_load_cast");
-                        }
-                    }
 
                     return builder->CreateLoad(fieldType, addr, "field_load");
                 }
@@ -1073,9 +1064,9 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 auto allocaInst = llvm::cast<llvm::AllocaInst>(val);
                 auto allocatedType = allocaInst->getAllocatedType();
 
-                // 構造体型は値をロードして値渡しにする
+                // 構造体型の場合はポインタをそのまま返す（値渡しではなくポインタ渡し）
                 if (allocatedType->isStructTy()) {
-                    return builder->CreateLoad(allocatedType, val, "struct_load");
+                    return val;
                 }
 
                 // スカラー型の場合はロード
@@ -1119,13 +1110,6 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
     hir::TypePtr currentType = nullptr;
     if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
         currentType = currentMIRFunction->locals[place.local].type;
-    }
-
-    // SSAで値として保持されている場合は一時領域に退避してアドレス化
-    if (addr && !addr->getType()->isPointerTy()) {
-        auto tmpAlloca = builder->CreateAlloca(addr->getType(), nullptr, "addr_tmp");
-        builder->CreateStore(addr, tmpAlloca);
-        addr = tmpAlloca;
     }
 
     // 投影処理
@@ -1206,10 +1190,6 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(),
                                                          proj.field_id));  // フィールドインデックス
 
-                auto expectedPtrType = llvm::PointerType::get(structType, 0);
-                if (addr->getType() != expectedPtrType) {
-                    addr = builder->CreateBitCast(addr, expectedPtrType, "struct_ptr_cast");
-                }
                 addr = builder->CreateGEP(structType, addr, indices, "field_ptr");
 
                 // 次のプロジェクションのために型を更新
@@ -1298,10 +1278,6 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 indices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));  // 配列ベース
                 indices.push_back(indexVal);  // 要素インデックス
 
-                auto expectedPtrType = llvm::PointerType::get(arrayType, 0);
-                if (addr->getType() != expectedPtrType) {
-                    addr = builder->CreateBitCast(addr, expectedPtrType, "array_ptr_cast");
-                }
                 addr = builder->CreateGEP(arrayType, addr, indices, "elem_ptr");
 
                 // 次のプロジェクションのために型を更新
@@ -1313,39 +1289,22 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
             }
             case mir::ProjectionKind::Deref: {
                 // デリファレンス：ポインタ変数から実際のポインタ値をロード
-                // ただし、引数やSSA値（allocaでない値）の場合は既にポインタ値なのでロード不要
+                // LLVM 14では型付きポインタを使用するため、適切な型でロードする必要がある
+                llvm::Type* loadType = ctx.getPtrType();  // デフォルトはi8*/ptr
 
-                bool needsLoad = false;
-                if (llvm::isa<llvm::AllocaInst>(addr) || llvm::isa<llvm::GlobalVariable>(addr)) {
-                    // allocaやグローバル変数の場合、ロードが必要
-                    needsLoad = true;
-                } else if (llvm::isa<llvm::GetElementPtrInst>(addr)) {
-                    // GEPの結果の場合もロードが必要
-                    needsLoad = true;
-                } else if (llvm::isa<llvm::LoadInst>(addr)) {
-                    // 既にロード済みの値の場合、さらにロードが必要（ポインタのポインタなど）
-                    needsLoad = true;
-                }
-                // 引数やその他のSSA値の場合、既にポインタ値なのでロード不要
-
-                if (needsLoad) {
-                    // LLVM 14では型付きポインタを使用するため、適切な型でロードする必要がある
-                    llvm::Type* loadType = ctx.getPtrType();  // デフォルトはi8*/ptr
-
-                    // 次のプロジェクションがFieldの場合、構造体へのポインタとしてロード
-                    if (currentType && currentType->kind == hir::TypeKind::Pointer &&
-                        currentType->element_type) {
-                        auto elemType = currentType->element_type;
-                        if (elemType->kind == hir::TypeKind::Struct) {
-                            auto it = structTypes.find(elemType->name);
-                            if (it != structTypes.end()) {
-                                loadType = llvm::PointerType::getUnqual(it->second);
-                            }
+                // 次のプロジェクションがFieldの場合、構造体へのポインタとしてロード
+                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                    currentType->element_type) {
+                    auto elemType = currentType->element_type;
+                    if (elemType->kind == hir::TypeKind::Struct) {
+                        auto it = structTypes.find(elemType->name);
+                        if (it != structTypes.end()) {
+                            loadType = llvm::PointerType::getUnqual(it->second);
                         }
                     }
-
-                    addr = builder->CreateLoad(loadType, addr);
                 }
+
+                addr = builder->CreateLoad(loadType, addr);
 
                 // 次のプロジェクションのために型を更新
                 if (currentType && currentType->kind == hir::TypeKind::Pointer &&

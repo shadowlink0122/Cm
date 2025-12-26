@@ -33,11 +33,7 @@ llvm::Value* MIRToLLVM::generateValueToString(llvm::Value* value, const hir::Typ
         if (isBoolType) {
             auto boolVal = value;
             if (intType->getBitWidth() != 8) {
-                if (intType->getBitWidth() < 8) {
-                    boolVal = builder->CreateZExt(value, ctx.getI8Type());
-                } else {
-                    boolVal = builder->CreateTrunc(value, ctx.getI8Type());
-                }
+                boolVal = builder->CreateTrunc(value, ctx.getI8Type());
             }
             auto formatFunc = module->getOrInsertFunction(
                 "cm_format_bool",
@@ -144,11 +140,7 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
         if (isBoolType) {
             auto boolVal = value;
             if (intType->getBitWidth() != 8) {
-                if (intType->getBitWidth() < 8) {
-                    boolVal = builder->CreateZExt(value, ctx.getI8Type());
-                } else {
-                    boolVal = builder->CreateTrunc(value, ctx.getI8Type());
-                }
+                boolVal = builder->CreateTrunc(value, ctx.getI8Type());
             }
             auto formatFunc = module->getOrInsertFunction(
                 "cm_format_bool",
@@ -441,11 +433,7 @@ void MIRToLLVM::generatePrintCall(const mir::MirTerminator::CallData& callData, 
             if (isBoolType) {
                 auto boolArg = arg;
                 if (intType->getBitWidth() != 8) {
-                    if (intType->getBitWidth() < 8) {
-                        boolArg = builder->CreateZExt(arg, ctx.getI8Type());
-                    } else {
-                        boolArg = builder->CreateTrunc(arg, ctx.getI8Type());
-                    }
+                    boolArg = builder->CreateTrunc(arg, ctx.getI8Type());
                 }
                 auto printBoolFunc = module->getOrInsertFunction(
                     isNewline ? "cm_println_bool" : "cm_print_bool",

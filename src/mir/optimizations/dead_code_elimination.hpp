@@ -185,24 +185,23 @@ class DeadCodeElimination : public OptimizationPass {
 
             // 文から収集
             for (const auto& stmt : block->statements) {
-                collect_used_locals_in_statement(func, *stmt, used);
+                collect_used_locals_in_statement(*stmt, used);
             }
 
             // 終端命令から収集
             if (block->terminator) {
-                collect_used_locals_in_terminator(func, *block->terminator, used);
+                collect_used_locals_in_terminator(*block->terminator, used);
             }
         }
     }
 
-    void collect_used_locals_in_statement(const MirFunction& func, const MirStatement& stmt,
-                                          std::set<LocalId>& used) {
+    void collect_used_locals_in_statement(const MirStatement& stmt, std::set<LocalId>& used) {
         if (stmt.kind == MirStatement::Assign) {
             const auto& assign_data = std::get<MirStatement::AssignData>(stmt.data);
 
             // 右辺から使用を収集
             if (assign_data.rvalue) {
-                collect_used_locals_in_rvalue(func, *assign_data.rvalue, used);
+                collect_used_locals_in_rvalue(*assign_data.rvalue, used);
             }
 
             // 左辺のインデックスから使用を収集
@@ -214,13 +213,12 @@ class DeadCodeElimination : public OptimizationPass {
         }
     }
 
-    void collect_used_locals_in_rvalue(const MirFunction& func, const MirRvalue& rvalue,
-                                       std::set<LocalId>& used) {
+    void collect_used_locals_in_rvalue(const MirRvalue& rvalue, std::set<LocalId>& used) {
         switch (rvalue.kind) {
             case MirRvalue::Use: {
                 if (const auto* use_data = std::get_if<MirRvalue::UseData>(&rvalue.data)) {
                     if (use_data->operand) {
-                        collect_used_locals_in_operand(func, *use_data->operand, used);
+                        collect_used_locals_in_operand(*use_data->operand, used);
                     }
                 }
                 break;
@@ -228,15 +226,15 @@ class DeadCodeElimination : public OptimizationPass {
             case MirRvalue::BinaryOp: {
                 const auto& bin_data = std::get<MirRvalue::BinaryOpData>(rvalue.data);
                 if (bin_data.lhs)
-                    collect_used_locals_in_operand(func, *bin_data.lhs, used);
+                    collect_used_locals_in_operand(*bin_data.lhs, used);
                 if (bin_data.rhs)
-                    collect_used_locals_in_operand(func, *bin_data.rhs, used);
+                    collect_used_locals_in_operand(*bin_data.rhs, used);
                 break;
             }
             case MirRvalue::UnaryOp: {
                 const auto& unary_data = std::get<MirRvalue::UnaryOpData>(rvalue.data);
                 if (unary_data.operand) {
-                    collect_used_locals_in_operand(func, *unary_data.operand, used);
+                    collect_used_locals_in_operand(*unary_data.operand, used);
                 }
                 break;
             }
@@ -254,40 +252,31 @@ class DeadCodeElimination : public OptimizationPass {
                 const auto& agg_data = std::get<MirRvalue::AggregateData>(rvalue.data);
                 for (const auto& op : agg_data.operands) {
                     if (op)
-                        collect_used_locals_in_operand(func, *op, used);
+                        collect_used_locals_in_operand(*op, used);
                 }
                 break;
             }
             case MirRvalue::FormatConvert: {
                 const auto& fmt_data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
                 if (fmt_data.operand) {
-                    collect_used_locals_in_operand(func, *fmt_data.operand, used);
+                    collect_used_locals_in_operand(*fmt_data.operand, used);
                 }
                 break;
             }
             case MirRvalue::Cast: {
                 const auto& cast_data = std::get<MirRvalue::CastData>(rvalue.data);
                 if (cast_data.operand) {
-                    collect_used_locals_in_operand(func, *cast_data.operand, used);
+                    collect_used_locals_in_operand(*cast_data.operand, used);
                 }
                 break;
             }
         }
     }
 
-    void collect_used_locals_in_operand(const MirFunction& func, const MirOperand& op,
-                                        std::set<LocalId>& used) {
+    void collect_used_locals_in_operand(const MirOperand& op, std::set<LocalId>& used) {
         if (op.kind == MirOperand::Move || op.kind == MirOperand::Copy) {
             if (const auto* place = std::get_if<MirPlace>(&op.data)) {
                 used.insert(place->local);
-                if (place->local < func.locals.size()) {
-                    const auto& local = func.locals[place->local];
-                    if (local.is_closure) {
-                        for (auto captured : local.captured_locals) {
-                            used.insert(captured);
-                        }
-                    }
-                }
                 for (const auto& proj : place->projections) {
                     if (proj.kind == ProjectionKind::Index) {
                         used.insert(proj.index_local);
@@ -297,24 +286,21 @@ class DeadCodeElimination : public OptimizationPass {
         }
     }
 
-    void collect_used_locals_in_terminator(const MirFunction& func, const MirTerminator& term,
-                                           std::set<LocalId>& used) {
+    void collect_used_locals_in_terminator(const MirTerminator& term, std::set<LocalId>& used) {
         switch (term.kind) {
             case MirTerminator::SwitchInt: {
                 const auto& switch_data = std::get<MirTerminator::SwitchIntData>(term.data);
                 if (switch_data.discriminant) {
-                    collect_used_locals_in_operand(func, *switch_data.discriminant, used);
+                    collect_used_locals_in_operand(*switch_data.discriminant, used);
                 }
                 break;
             }
             case MirTerminator::Call: {
                 const auto& call_data = std::get<MirTerminator::CallData>(term.data);
-                if (call_data.func) {
-                    collect_used_locals_in_operand(func, *call_data.func, used);
-                }
+                // func_name は文字列なので収集対象外
                 for (const auto& arg : call_data.args) {
                     if (arg)
-                        collect_used_locals_in_operand(func, *arg, used);
+                        collect_used_locals_in_operand(*arg, used);
                 }
                 break;
             }

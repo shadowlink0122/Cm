@@ -541,6 +541,13 @@ struct MirFunction {
         return nullptr;
     }
 
+    const BasicBlock* get_block(BlockId id) const {
+        if (id < basic_blocks.size()) {
+            return basic_blocks[id].get();
+        }
+        return nullptr;
+    }
+
     // CFGの構築（predecessorの計算）
     void build_cfg() {
         // まずすべてのpredecessorをクリア

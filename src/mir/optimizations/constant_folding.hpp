@@ -19,79 +19,24 @@ class ConstantFolding : public OptimizationPass {
         bool changed = false;
 
         // 複数回代入される変数を検出（ループ変数など）
-        std::unordered_set<LocalId> multiAssigned = detect_multi_assigned(func);
+        auto multiAssigned = detect_multi_assigned(func);
 
         // 各ローカル変数の定数値を追跡
         std::unordered_map<LocalId, MirConstant> constants;
 
         // 各基本ブロックを処理
         for (auto& block : func.basic_blocks) {
-            changed |= process_block(func, *block, constants, multiAssigned);
+            changed |= process_block(*block, constants, multiAssigned);
         }
 
         return changed;
     }
 
    private:
-    // 型が同一かチェック（安全な定数伝播のため）
-    bool same_type(const hir::TypePtr& a, const hir::TypePtr& b) const {
-        if (a == b) {
-            return true;
-        }
-        if (!a || !b) {
-            return false;
-        }
-        if (a->kind != b->kind) {
-            return false;
-        }
-        switch (a->kind) {
-            case hir::TypeKind::Pointer:
-            case hir::TypeKind::Reference:
-                return same_type(a->element_type, b->element_type);
-            case hir::TypeKind::Array:
-                return a->array_size == b->array_size &&
-                       same_type(a->element_type, b->element_type);
-            case hir::TypeKind::Struct:
-            case hir::TypeKind::Interface:
-            case hir::TypeKind::TypeAlias:
-            case hir::TypeKind::Generic: {
-                if (a->name != b->name) {
-                    return false;
-                }
-                if (a->type_args.size() != b->type_args.size()) {
-                    return false;
-                }
-                for (size_t i = 0; i < a->type_args.size(); ++i) {
-                    if (!same_type(a->type_args[i], b->type_args[i])) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            case hir::TypeKind::Function: {
-                if (!same_type(a->return_type, b->return_type)) {
-                    return false;
-                }
-                if (a->param_types.size() != b->param_types.size()) {
-                    return false;
-                }
-                for (size_t i = 0; i < a->param_types.size(); ++i) {
-                    if (!same_type(a->param_types[i], b->param_types[i])) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            default:
-                return true;
-        }
-    }
-
-    // 関数内で複数回代入される変数を検出
+    // 複数回代入される変数を検出
     std::unordered_set<LocalId> detect_multi_assigned(const MirFunction& func) {
         std::unordered_set<LocalId> assigned;
         std::unordered_set<LocalId> multiAssigned;
-
         for (const auto& block : func.basic_blocks) {
             if (!block)
                 continue;
@@ -109,12 +54,10 @@ class ConstantFolding : public OptimizationPass {
                 }
             }
         }
-
         return multiAssigned;
     }
 
-    bool process_block(const MirFunction& func, BasicBlock& block,
-                       std::unordered_map<LocalId, MirConstant>& constants,
+    bool process_block(BasicBlock& block, std::unordered_map<LocalId, MirConstant>& constants,
                        const std::unordered_set<LocalId>& multiAssigned) {
         bool changed = false;
 
@@ -127,31 +70,21 @@ class ConstantFolding : public OptimizationPass {
                 if (assign_data.place.projections.empty()) {
                     LocalId target = assign_data.place.local;
 
-                    // 複数回代入される変数は定数追跡しない
+                    // 複数回代入される変数は定数追跡から除外
                     if (multiAssigned.count(target) > 0) {
+                        constants.erase(target);
                         continue;
                     }
 
                     // Rvalueを評価して定数化できるかチェック
                     if (auto constant = evaluate_rvalue(*assign_data.rvalue, constants)) {
-                        // 型が一致する場合のみ定数伝播する
-                        if (target < func.locals.size()) {
-                            const auto& target_type = func.locals[target].type;
-                            if (same_type(target_type, constant->type)) {
-                                // 定数として記録
-                                constants[target] = *constant;
+                        // 定数として記録
+                        constants[target] = *constant;
 
-                                // RvalueをUse(Constant)に置き換え
-                                auto new_operand = MirOperand::constant(*constant);
-                                assign_data.rvalue = MirRvalue::use(std::move(new_operand));
-                                changed = true;
-                            } else {
-                                // 型不一致の場合は伝播しない
-                                constants.erase(target);
-                            }
-                        } else {
-                            constants.erase(target);
-                        }
+                        // RvalueをUse(Constant)に置き換え
+                        auto new_operand = MirOperand::constant(*constant);
+                        assign_data.rvalue = MirRvalue::use(std::move(new_operand));
+                        changed = true;
                     } else {
                         // 定数でない場合は記録から削除
                         constants.erase(target);
@@ -227,6 +160,22 @@ class ConstantFolding : public OptimizationPass {
                     return eval_unary_op(unary_data.op, *operand);
                 }
                 break;
+            }
+
+            case MirRvalue::Cast: {
+                auto& cast_data = std::get<MirRvalue::CastData>(rvalue.data);
+                if (!cast_data.operand || !cast_data.target_type) {
+                    break;
+                }
+
+                // オペランドを評価
+                auto operand = evaluate_operand(*cast_data.operand, constants);
+                if (!operand) {
+                    break;
+                }
+
+                // 型変換を実行
+                return eval_cast(*operand, cast_data.target_type);
             }
 
             default:
@@ -378,6 +327,63 @@ class ConstantFolding : public OptimizationPass {
         if (auto* bool_val = std::get_if<bool>(&operand.value)) {
             if (op == MirUnaryOp::Not) {
                 result.value = !*bool_val;
+                return result;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    // 型変換を評価
+    std::optional<MirConstant> eval_cast(const MirConstant& operand,
+                                         const hir::TypePtr& target_type) {
+        MirConstant result;
+        result.type = target_type;
+
+        // Int -> Double
+        if (target_type->kind == hir::TypeKind::Float) {
+            if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
+                result.value = static_cast<double>(*int_val);
+                return result;
+            }
+        }
+
+        // Double -> Int
+        if (target_type->kind == hir::TypeKind::Int) {
+            if (auto* double_val = std::get_if<double>(&operand.value)) {
+                result.value = static_cast<int64_t>(*double_val);
+                return result;
+            }
+        }
+
+        // Int -> Char
+        if (target_type->kind == hir::TypeKind::Char) {
+            if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
+                result.value = static_cast<char>(*int_val);
+                return result;
+            }
+        }
+
+        // Char -> Int
+        if (target_type->kind == hir::TypeKind::Int) {
+            if (auto* char_val = std::get_if<char>(&operand.value)) {
+                result.value = static_cast<int64_t>(*char_val);
+                return result;
+            }
+        }
+
+        // Int -> Bool
+        if (target_type->kind == hir::TypeKind::Bool) {
+            if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
+                result.value = (*int_val != 0);
+                return result;
+            }
+        }
+
+        // Bool -> Int
+        if (target_type->kind == hir::TypeKind::Int) {
+            if (auto* bool_val = std::get_if<bool>(&operand.value)) {
+                result.value = static_cast<int64_t>(*bool_val ? 1 : 0);
                 return result;
             }
         }
