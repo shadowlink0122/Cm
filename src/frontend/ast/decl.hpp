@@ -256,8 +256,8 @@ struct ImplDecl {
     std::vector<std::unique_ptr<FunctionDecl>> methods;
     std::vector<std::unique_ptr<OperatorImpl>> operators;  // 演算子実装
     std::vector<AttributeNode> attributes;
-    std::vector<std::string> generic_params;               // 後方互換性のため維持
-    std::vector<GenericParam> generic_params_v2;           // 型制約付き
+    std::vector<std::string> generic_params;      // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
     std::vector<TypePtr>
         interface_type_args;  // インターフェースの型引数（例: ValueHolder<T> の T）
     std::vector<WhereClause> where_clauses;  // where句

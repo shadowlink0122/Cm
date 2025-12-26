@@ -582,8 +582,7 @@ ast::AttributeNode Parser::parse_attribute() {
 // ============================================================
 // 定数宣言（export const用）
 // ============================================================
-ast::DeclPtr Parser::parse_const_decl(bool is_export,
-                                      std::vector<ast::AttributeNode> attributes) {
+ast::DeclPtr Parser::parse_const_decl(bool is_export, std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwConst);
 
@@ -675,8 +674,7 @@ ast::DeclPtr Parser::parse_template_decl() {
 // ============================================================
 // Enum宣言
 // ============================================================
-ast::DeclPtr Parser::parse_enum_decl(bool is_export,
-                                     std::vector<ast::AttributeNode> attributes) {
+ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
 

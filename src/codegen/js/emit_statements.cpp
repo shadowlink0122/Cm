@@ -49,8 +49,7 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
 
             // クロージャ変数への代入かチェック
             if (target_local < func.locals.size() && data.place.projections.empty() &&
-                func.locals[target_local].is_closure &&
-                data.rvalue->kind == mir::MirRvalue::Use) {
+                func.locals[target_local].is_closure && data.rvalue->kind == mir::MirRvalue::Use) {
                 const auto& useData = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
                 if (useData.operand->kind == mir::MirOperand::FunctionRef) {
                     const auto& funcName = std::get<std::string>(useData.operand->data);

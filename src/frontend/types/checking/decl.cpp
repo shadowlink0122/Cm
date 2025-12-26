@@ -268,9 +268,9 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
                     const std::string& type_name = resolved_type->name;
                     if (!type_implements_interface(type_name, "Css") &&
                         !has_auto_impl(type_name, "Css")) {
-                        error(current_span_,
-                              "Nested css field '" + field.name +
-                                  "' requires type '" + type_name + "' to implement Css");
+                        error(current_span_, "Nested css field '" + field.name +
+                                                 "' requires type '" + type_name +
+                                                 "' to implement Css");
                     }
                 }
             }

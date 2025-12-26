@@ -1412,9 +1412,8 @@ class MirLowering : public MirLoweringBase {
         int append_index = 0;
         auto append_literal = [&](BasicBlock* current_block, LocalId& acc,
                                   const std::string& literal) {
-            LocalId literal_local =
-                mir_func->add_local("_css_lit" + std::to_string(append_index),
-                                    hir::make_string(), true, false);
+            LocalId literal_local = mir_func->add_local("_css_lit" + std::to_string(append_index),
+                                                        hir::make_string(), true, false);
             auto const_lit = std::make_unique<MirOperand>();
             const_lit->kind = MirOperand::Constant;
             MirConstant c_lit;
@@ -1424,9 +1423,8 @@ class MirLowering : public MirLoweringBase {
             current_block->statements.push_back(MirStatement::assign(
                 MirPlace(literal_local), MirRvalue::use(std::move(const_lit))));
 
-            LocalId concat_local =
-                mir_func->add_local("_css_concat" + std::to_string(append_index),
-                                    hir::make_string(), true, false);
+            LocalId concat_local = mir_func->add_local("_css_concat" + std::to_string(append_index),
+                                                       hir::make_string(), true, false);
             current_block->statements.push_back(MirStatement::assign(
                 MirPlace(concat_local),
                 MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
@@ -1436,9 +1434,8 @@ class MirLowering : public MirLoweringBase {
         };
 
         auto append_operand = [&](BasicBlock* current_block, LocalId& acc, LocalId value) {
-            LocalId concat_local =
-                mir_func->add_local("_css_val" + std::to_string(append_index),
-                                    hir::make_string(), true, false);
+            LocalId concat_local = mir_func->add_local("_css_val" + std::to_string(append_index),
+                                                       hir::make_string(), true, false);
             current_block->statements.push_back(MirStatement::assign(
                 MirPlace(concat_local),
                 MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
@@ -1452,8 +1449,9 @@ class MirLowering : public MirLoweringBase {
             const std::string key = to_kebab_case(field.name);
 
             LocalId field_val = mir_func->add_local("_field" + std::to_string(order_index),
-                                                   field.type, true, false);
-            auto field_place = MirPlace(self_local, {PlaceProjection::field(field_order[order_index])});
+                                                    field.type, true, false);
+            auto field_place =
+                MirPlace(self_local, {PlaceProjection::field(field_order[order_index])});
             block->statements.push_back(MirStatement::assign(
                 MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
 
@@ -1558,9 +1556,8 @@ class MirLowering : public MirLoweringBase {
         c_true.value = true;
         c_true.type = hir::make_bool();
         const_true->data = c_true;
-        block->statements.push_back(
-            MirStatement::assign(MirPlace(mir_func->return_local),
-                                 MirRvalue::use(std::move(const_true))));
+        block->statements.push_back(MirStatement::assign(MirPlace(mir_func->return_local),
+                                                         MirRvalue::use(std::move(const_true))));
 
         block->terminator = MirTerminator::return_value();
 
@@ -1609,9 +1606,8 @@ class MirLowering : public MirLoweringBase {
         int append_index = 0;
         auto append_literal = [&](BasicBlock* current_block, LocalId& acc,
                                   const std::string& literal) {
-            LocalId literal_local =
-                mir_func->add_local("_css_lit" + std::to_string(append_index),
-                                    hir::make_string(), true, false);
+            LocalId literal_local = mir_func->add_local("_css_lit" + std::to_string(append_index),
+                                                        hir::make_string(), true, false);
             auto const_lit = std::make_unique<MirOperand>();
             const_lit->kind = MirOperand::Constant;
             MirConstant c_lit;
@@ -1621,9 +1617,8 @@ class MirLowering : public MirLoweringBase {
             current_block->statements.push_back(MirStatement::assign(
                 MirPlace(literal_local), MirRvalue::use(std::move(const_lit))));
 
-            LocalId concat_local =
-                mir_func->add_local("_css_concat" + std::to_string(append_index),
-                                    hir::make_string(), true, false);
+            LocalId concat_local = mir_func->add_local("_css_concat" + std::to_string(append_index),
+                                                       hir::make_string(), true, false);
             current_block->statements.push_back(MirStatement::assign(
                 MirPlace(concat_local),
                 MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
@@ -1633,9 +1628,8 @@ class MirLowering : public MirLoweringBase {
         };
 
         auto append_operand = [&](BasicBlock* current_block, LocalId& acc, LocalId value) {
-            LocalId concat_local =
-                mir_func->add_local("_css_val" + std::to_string(append_index),
-                                    hir::make_string(), true, false);
+            LocalId concat_local = mir_func->add_local("_css_val" + std::to_string(append_index),
+                                                       hir::make_string(), true, false);
             current_block->statements.push_back(MirStatement::assign(
                 MirPlace(concat_local),
                 MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
@@ -1649,8 +1643,9 @@ class MirLowering : public MirLoweringBase {
             const std::string key = to_kebab_case(field.name);
 
             LocalId field_val = mir_func->add_local("_field" + std::to_string(order_index),
-                                                   field.type, true, false);
-            auto field_place = MirPlace(self_local, {PlaceProjection::field(field_order[order_index])});
+                                                    field.type, true, false);
+            auto field_place =
+                MirPlace(self_local, {PlaceProjection::field(field_order[order_index])});
             block->statements.push_back(MirStatement::assign(
                 MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
 
@@ -1760,9 +1755,8 @@ class MirLowering : public MirLoweringBase {
         c_true.value = true;
         c_true.type = hir::make_bool();
         const_true->data = c_true;
-        block->statements.push_back(
-            MirStatement::assign(MirPlace(mir_func->return_local),
-                                 MirRvalue::use(std::move(const_true))));
+        block->statements.push_back(MirStatement::assign(MirPlace(mir_func->return_local),
+                                                         MirRvalue::use(std::move(const_true))));
 
         block->terminator = MirTerminator::return_value();
 

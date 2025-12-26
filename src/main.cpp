@@ -25,10 +25,10 @@
 #include "preprocessor/import.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <filesystem>
 #include <set>
 #include <sstream>
 #include <string>
@@ -391,8 +391,8 @@ int main(int argc, char* argv[]) {
                 active_target = Target::JS;
             }
 
-            debug::ast::log(debug::ast::Id::Validate,
-                            "target=" + target_to_string(active_target), debug::Level::Info);
+            debug::ast::log(debug::ast::Id::Validate, "target=" + target_to_string(active_target),
+                            debug::Level::Info);
             ast::TargetFilteringVisitor target_filter(active_target);
             target_filter.visit(program);
         }
@@ -507,42 +507,22 @@ int main(int argc, char* argv[]) {
         }
 
         // ========== Optimization ==========
-        if (opts.optimization_level > 0 || opts.show_mir_opt) {
-            if (opts.debug)
+        if (opts.command == Command::Compile) {
+            if (opts.debug) {
                 std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n";
-
-            // Note: Function-level optimizations are temporarily disabled due to potential issues
-            // mir::opt::OptimizationPipeline pipeline;
-            // pipeline.add_standard_passes(opts.optimization_level);
-            // if (opts.optimization_level >= 2) {
-            //     pipeline.run_until_fixpoint(mir);
-            // } else {
-            //     pipeline.run(mir);
-            // }
-
-            if (opts.debug)
-                std::cout << "最適化完了\n\n";
-        }
-
-        // コピー伝播・定数畳み込み（コンパイル時のみ）
-        if (opts.command == Command::Compile) {
-            mir::opt::CopyPropagation copy_prop;
-            mir::opt::ConstantFolding const_fold;
-            for (auto& func : mir.functions) {
-                if (func) {
-                    copy_prop.run(*func);
-                    const_fold.run(*func);
-                }
             }
-        }
 
-        // 関数レベルのDCE（コンパイル時のみ）
-        if (opts.command == Command::Compile) {
-            mir::opt::DeadCodeElimination dce;
-            for (auto& func : mir.functions) {
-                if (func) {
-                    dce.run(*func);
-                }
+            int mir_opt_level = opts.optimization_level > 0 ? opts.optimization_level : 1;
+            mir::opt::OptimizationPipeline pipeline;
+            pipeline.add_standard_passes(mir_opt_level);
+            if (mir_opt_level >= 2) {
+                pipeline.run_until_fixpoint(mir);
+            } else {
+                pipeline.run(mir);
+            }
+
+            if (opts.debug) {
+                std::cout << "最適化完了\n\n";
             }
         }
 

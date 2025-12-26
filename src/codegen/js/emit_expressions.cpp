@@ -85,8 +85,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                                 result += ", ";
                             result +=
                                 formatStructFieldKey(*it->second, it->second->fields[i].name) +
-                                ": " +
-                                      emitOperand(*data.operands[i], func);
+                                ": " + emitOperand(*data.operands[i], func);
                         }
                         return result + " }";
                     }

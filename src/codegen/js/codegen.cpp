@@ -659,9 +659,8 @@ void JSCodeGen::collectDeclareOnAssign(const mir::MirFunction& func) {
     }
 
     for (const auto& local : func.locals) {
-        bool isArg =
-            std::find(func.arg_locals.begin(), func.arg_locals.end(), local.id) !=
-            func.arg_locals.end();
+        bool isArg = std::find(func.arg_locals.begin(), func.arg_locals.end(), local.id) !=
+                     func.arg_locals.end();
         if (isArg || local.is_static) {
             continue;
         }
@@ -895,18 +894,15 @@ bool JSCodeGen::tryEmitCssReturn(const mir::MirFunction& func) {
             }
         }
         if (block.terminator && block.terminator->kind == mir::MirTerminator::Call) {
-            const auto& call_data =
-                std::get<mir::MirTerminator::CallData>(block.terminator->data);
+            const auto& call_data = std::get<mir::MirTerminator::CallData>(block.terminator->data);
             if (call_data.destination) {
                 def_counts[call_data.destination->local]++;
                 if (def_counts[call_data.destination->local] == 1) {
                     std::string callee;
-                    if (call_data.func &&
-                        call_data.func->kind == mir::MirOperand::FunctionRef) {
+                    if (call_data.func && call_data.func->kind == mir::MirOperand::FunctionRef) {
                         callee = std::get<std::string>(call_data.func->data);
                     }
-                    if (callee.size() >= 5 &&
-                        callee.rfind("__css") == callee.size() - 5) {
+                    if (callee.size() >= 5 && callee.rfind("__css") == callee.size() - 5) {
                         call_defs[call_data.destination->local] = &call_data;
                     } else {
                         return false;
@@ -973,8 +969,7 @@ bool JSCodeGen::tryEmitCssReturn(const mir::MirFunction& func) {
                             break;
                         }
                         case mir::MirRvalue::BinaryOp: {
-                            const auto& bin_data =
-                                std::get<mir::MirRvalue::BinaryOpData>(rv->data);
+                            const auto& bin_data = std::get<mir::MirRvalue::BinaryOpData>(rv->data);
                             if (bin_data.lhs && bin_data.rhs) {
                                 expr = "(" + render_operand(*bin_data.lhs) + " " +
                                        emitBinaryOp(bin_data.op) + " " +
@@ -996,14 +991,13 @@ bool JSCodeGen::tryEmitCssReturn(const mir::MirFunction& func) {
                                 std::get<mir::MirRvalue::FormatConvertData>(rv->data);
                             if (fmt_data.operand) {
                                 std::string inner = render_operand(*fmt_data.operand);
-                                expr = "__cm_format(" + inner + ", \"" + fmt_data.format_spec +
-                                       "\")";
+                                expr =
+                                    "__cm_format(" + inner + ", \"" + fmt_data.format_spec + "\")";
                             }
                             break;
                         }
                         case mir::MirRvalue::Cast: {
-                            const auto& cast_data =
-                                std::get<mir::MirRvalue::CastData>(rv->data);
+                            const auto& cast_data = std::get<mir::MirRvalue::CastData>(rv->data);
                             if (cast_data.operand) {
                                 expr = render_operand(*cast_data.operand);
                             }
@@ -1087,8 +1081,7 @@ bool JSCodeGen::tryEmitCssReturn(const mir::MirFunction& func) {
                             break;
                         }
                         case mir::MirRvalue::BinaryOp: {
-                            const auto& bin_data =
-                                std::get<mir::MirRvalue::BinaryOpData>(rv->data);
+                            const auto& bin_data = std::get<mir::MirRvalue::BinaryOpData>(rv->data);
                             if (bin_data.op == mir::MirBinaryOp::Add && bin_data.lhs &&
                                 bin_data.rhs) {
                                 bool ok_left = collect_parts(*bin_data.lhs, parts);
@@ -1111,8 +1104,7 @@ bool JSCodeGen::tryEmitCssReturn(const mir::MirFunction& func) {
                             break;
                         }
                         case mir::MirRvalue::Cast: {
-                            const auto& cast_data =
-                                std::get<mir::MirRvalue::CastData>(rv->data);
+                            const auto& cast_data = std::get<mir::MirRvalue::CastData>(rv->data);
                             if (cast_data.operand) {
                                 parts.push_back(render_operand(*cast_data.operand));
                                 visiting.erase(place.local);
@@ -1302,9 +1294,8 @@ bool JSCodeGen::tryEmitObjectLiteralReturn(const mir::MirFunction& func) {
                     }
                     if (used_local < func.locals.size()) {
                         const auto& local_info = func.locals[used_local];
-                        bool isArg =
-                            std::find(func.arg_locals.begin(), func.arg_locals.end(),
-                                      used_local) != func.arg_locals.end();
+                        bool isArg = std::find(func.arg_locals.begin(), func.arg_locals.end(),
+                                               used_local) != func.arg_locals.end();
                         if (!isArg && !local_info.is_static) {
                             return false;
                         }

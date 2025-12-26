@@ -715,9 +715,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         if (targetType) {
                             auto addrPtrType = llvm::PointerType::get(targetType, 0);
                             if (addr->getType() != addrPtrType) {
-                                addr = builder->CreateBitCast(addr, addrPtrType, hasDeref
-                                                                                             ? "deref_addr_cast"
-                                                                                             : "store_ptr_cast");
+                                addr = builder->CreateBitCast(
+                                    addr, addrPtrType,
+                                    hasDeref ? "deref_addr_cast" : "store_ptr_cast");
                             }
                         }
 

@@ -248,8 +248,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             for (size_t argIndex = 0; argIndex < callData.args.size(); ++argIndex) {
                 const auto& arg = callData.args[argIndex];
                 if (arg && isCtorOrDtor && argIndex == 0 &&
-                    (arg->kind == mir::MirOperand::Copy ||
-                     arg->kind == mir::MirOperand::Move)) {
+                    (arg->kind == mir::MirOperand::Copy || arg->kind == mir::MirOperand::Move)) {
                     auto& place = std::get<mir::MirPlace>(arg->data);
                     if (auto addr = convertPlaceToAddress(place)) {
                         args.push_back(addr);
@@ -461,17 +460,16 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                             auto fatPtrAlloca =
                                 builder->CreateAlloca(fatPtrType, nullptr, "fat_ptr");
-                            auto dataFieldPtr = builder->CreateStructGEP(
-                                fatPtrType, fatPtrAlloca, 0, "data_field");
+                            auto dataFieldPtr =
+                                builder->CreateStructGEP(fatPtrType, fatPtrAlloca, 0, "data_field");
                             auto dataPtrCast =
                                 builder->CreateBitCast(dataPtr, ctx.getPtrType(), "data_ptr_cast");
                             builder->CreateStore(dataPtrCast, dataFieldPtr);
 
-                            auto vtableFieldPtr = builder->CreateStructGEP(
-                                fatPtrType, fatPtrAlloca, 1, "vtable_field");
-                            auto vtablePtrCast =
-                                builder->CreateBitCast(vtablePtr, ctx.getPtrType(),
-                                                       "vtable_ptr_cast");
+                            auto vtableFieldPtr = builder->CreateStructGEP(fatPtrType, fatPtrAlloca,
+                                                                           1, "vtable_field");
+                            auto vtablePtrCast = builder->CreateBitCast(vtablePtr, ctx.getPtrType(),
+                                                                        "vtable_ptr_cast");
                             builder->CreateStore(vtablePtrCast, vtableFieldPtr);
 
                             auto fatPtrValue =
@@ -487,8 +485,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             builder->CreateStore(args[i], tmpAlloca);
                             llvm::Value* ptrVal = tmpAlloca;
                             if (ptrVal->getType() != expectedType) {
-                                ptrVal =
-                                    builder->CreateBitCast(ptrVal, expectedType, "byref_cast");
+                                ptrVal = builder->CreateBitCast(ptrVal, expectedType, "byref_cast");
                             }
                             args[i] = ptrVal;
                             continue;
@@ -594,24 +591,23 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             auto expectedType = funcType->getParamType(i);
                             auto actualType = closureArgs[i]->getType();
                             if (expectedType != actualType) {
-                            if (expectedType->isPointerTy() && actualType->isStructTy()) {
-                                auto tmpAlloca =
-                                    builder->CreateAlloca(actualType, nullptr, "byref_arg");
-                                builder->CreateStore(closureArgs[i], tmpAlloca);
-                                llvm::Value* ptrVal = tmpAlloca;
-                                if (ptrVal->getType() != expectedType) {
-                                    ptrVal =
-                                        builder->CreateBitCast(ptrVal, expectedType, "byref_cast");
-                                }
-                                closureArgs[i] = ptrVal;
-                                continue;
-                            } else if (expectedType->isStructTy() &&
-                                       actualType->isPointerTy()) {
-                                auto actualElem = actualType->getPointerElementType();
-                                if (actualElem && actualElem->isStructTy()) {
-                                        closureArgs[i] = builder->CreateLoad(expectedType,
-                                                                             closureArgs[i],
-                                                                             "byval_load");
+                                if (expectedType->isPointerTy() && actualType->isStructTy()) {
+                                    auto tmpAlloca =
+                                        builder->CreateAlloca(actualType, nullptr, "byref_arg");
+                                    builder->CreateStore(closureArgs[i], tmpAlloca);
+                                    llvm::Value* ptrVal = tmpAlloca;
+                                    if (ptrVal->getType() != expectedType) {
+                                        ptrVal = builder->CreateBitCast(ptrVal, expectedType,
+                                                                        "byref_cast");
+                                    }
+                                    closureArgs[i] = ptrVal;
+                                    continue;
+                                } else if (expectedType->isStructTy() &&
+                                           actualType->isPointerTy()) {
+                                    auto actualElem = actualType->getPointerElementType();
+                                    if (actualElem && actualElem->isStructTy()) {
+                                        closureArgs[i] = builder->CreateLoad(
+                                            expectedType, closureArgs[i], "byval_load");
                                         continue;
                                     }
                                 }

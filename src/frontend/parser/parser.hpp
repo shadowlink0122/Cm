@@ -586,8 +586,7 @@ class Parser {
     }
 
     // インターフェース
-    ast::DeclPtr parse_interface(bool is_export,
-                                 std::vector<ast::AttributeNode> attributes = {}) {
+    ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {}) {
         expect(TokenKind::KwInterface);
 
         // インターフェース名を取得
@@ -759,8 +758,8 @@ class Parser {
                         // private修飾子をチェック
                         bool is_private = consume_if(TokenKind::KwPrivate);
 
-                        auto func = parse_function(false, false, false, false,
-                                                   std::move(method_attrs));
+                        auto func =
+                            parse_function(false, false, false, false, std::move(method_attrs));
                         if (auto* f = func->as<ast::FunctionDecl>()) {
                             // privateメソッドの場合はvisibilityを設定
                             if (is_private) {
