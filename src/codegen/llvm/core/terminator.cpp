@@ -670,6 +670,35 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
             if (callData.success != mir::INVALID_BLOCK) {
                 builder->CreateBr(blocks[callData.success]);
+            } else {
+                // success == INVALID_BLOCKの場合、ターミネータがないとLLVMがハングする
+                // 関数のreturn型に応じて適切なターミネータを生成
+                if (currentMIRFunction &&
+                    currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
+                    auto& returnLocal =
+                        currentMIRFunction->locals[currentMIRFunction->return_local];
+                    if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
+                        builder->CreateRetVoid();
+                    } else if (currentMIRFunction->name == "main") {
+                        // main関数はi32 0を返す
+                        builder->CreateRet(llvm::ConstantInt::get(ctx.getI32Type(), 0));
+                    } else {
+                        // 他の関数: ローカル変数から戻り値を取得
+                        auto retVal = locals[currentMIRFunction->return_local];
+                        if (retVal) {
+                            if (llvm::isa<llvm::AllocaInst>(retVal)) {
+                                auto allocaInst = llvm::cast<llvm::AllocaInst>(retVal);
+                                retVal = builder->CreateLoad(allocaInst->getAllocatedType(), retVal,
+                                                             "retval");
+                            }
+                            builder->CreateRet(retVal);
+                        } else {
+                            builder->CreateUnreachable();
+                        }
+                    }
+                } else {
+                    builder->CreateUnreachable();
+                }
             }
             break;
         }

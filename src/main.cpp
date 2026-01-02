@@ -526,18 +526,9 @@ int main(int argc, char* argv[]) {
                 std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n"
                           << std::flush;
 
-            // Note: Function-level optimizations are temporarily disabled due to potential issues
-            mir::opt::OptimizationPipeline pipeline;
-            // デバッグモードまたは詳細モードで出力を有効化
-            if (opts.debug || opts.verbose) {
-                pipeline.enable_debug_output(true);
-            }
-            pipeline.add_standard_passes(opts.optimization_level);
-            if (opts.optimization_level >= 2) {
-                pipeline.run_until_fixpoint(mir);
-            } else {
-                pipeline.run(mir);
-            }
+            // MIR最適化パスマネージャーv2を使用（収束管理と無限ループ防止機能付き）
+            mir::opt::run_optimization_passes(mir, opts.optimization_level,
+                                              opts.debug || opts.verbose);
 
             if (opts.debug)
                 std::cout << "最適化完了\n\n";

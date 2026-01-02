@@ -58,7 +58,10 @@ struct PlaceProjection {
         FieldId field_id;  // Field の場合
         LocalId index_local;  // Index の場合（インデックスを保持するローカル変数）
     };
+    hir::TypePtr result_type;   // 投影後の型
+    hir::TypePtr pointee_type;  // Derefの場合のpointee type
 
+    // 既存の互換性のためのファクトリメソッド
     static PlaceProjection field(FieldId id) {
         PlaceProjection p;
         p.kind = ProjectionKind::Field;
@@ -78,14 +81,58 @@ struct PlaceProjection {
         p.kind = ProjectionKind::Deref;
         return p;
     }
+
+    // 型情報を持つ新しいファクトリメソッド
+    static PlaceProjection field(FieldId id, hir::TypePtr result_type) {
+        PlaceProjection p;
+        p.kind = ProjectionKind::Field;
+        p.field_id = id;
+        p.result_type = result_type;
+        return p;
+    }
+
+    static PlaceProjection index(LocalId local, hir::TypePtr result_type) {
+        PlaceProjection p;
+        p.kind = ProjectionKind::Index;
+        p.index_local = local;
+        p.result_type = result_type;
+        return p;
+    }
+
+    static PlaceProjection deref(hir::TypePtr result_type, hir::TypePtr pointee_type) {
+        PlaceProjection p;
+        p.kind = ProjectionKind::Deref;
+        p.result_type = result_type;
+        p.pointee_type = pointee_type;
+        return p;
+    }
 };
 
 struct MirPlace {
     LocalId local;
     std::vector<PlaceProjection> projections;
+    hir::TypePtr type;          // このPlaceが示す値の型
+    hir::TypePtr pointee_type;  // ポインタの場合のpointee type
 
+    // 既存の互換性のためのコンストラクタ
     MirPlace(LocalId l) : local(l) {}
     MirPlace(LocalId l, std::vector<PlaceProjection> p) : local(l), projections(std::move(p)) {}
+
+    // 型情報を持つコンストラクタ
+    MirPlace(LocalId l, hir::TypePtr t) : local(l), type(t) {
+        // ポインタ型の場合、pointee_typeを設定
+        if (t && t->kind == hir::TypeKind::Pointer) {
+            pointee_type = t->element_type;
+        }
+    }
+
+    MirPlace(LocalId l, std::vector<PlaceProjection> p, hir::TypePtr t)
+        : local(l), projections(std::move(p)), type(t) {
+        // ポインタ型の場合、pointee_typeを設定
+        if (t && t->kind == hir::TypeKind::Pointer) {
+            pointee_type = t->element_type;
+        }
+    }
 };
 
 // ============================================================
@@ -108,10 +155,12 @@ struct MirOperand {
 
     Kind kind;
     std::variant<MirPlace, MirConstant, std::string> data;  // stringは関数名用
+    hir::TypePtr type;                                      // オペランドの型情報
 
     // デフォルトコンストラクタ
     MirOperand() : kind(Constant), data(MirConstant{}) {}
 
+    // 既存の互換性のためのファクトリメソッド（型なし）
     static MirOperandPtr move(MirPlace place) {
         auto op = std::make_unique<MirOperand>();
         op->kind = Move;
@@ -126,17 +175,37 @@ struct MirOperand {
         return op;
     }
 
+    // 型情報を持つ新しいファクトリメソッド
+    static MirOperandPtr move(MirPlace place, hir::TypePtr type) {
+        auto op = std::make_unique<MirOperand>();
+        op->kind = Move;
+        op->data = std::move(place);
+        op->type = type;
+        return op;
+    }
+
+    static MirOperandPtr copy(MirPlace place, hir::TypePtr type) {
+        auto op = std::make_unique<MirOperand>();
+        op->kind = Copy;
+        op->data = std::move(place);
+        op->type = type;
+        return op;
+    }
+
     static MirOperandPtr constant(MirConstant c) {
         auto op = std::make_unique<MirOperand>();
         op->kind = Constant;
         op->data = std::move(c);
+        // Constantの場合、MirConstant自体に型情報があるので、それを使用
+        op->type = c.type;
         return op;
     }
 
-    static MirOperandPtr function_ref(std::string func_name) {
+    static MirOperandPtr function_ref(std::string func_name, hir::TypePtr type = nullptr) {
         auto op = std::make_unique<MirOperand>();
         op->kind = FunctionRef;
         op->data = std::move(func_name);
+        op->type = type;
         return op;
     }
 };

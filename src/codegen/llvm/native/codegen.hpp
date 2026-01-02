@@ -80,10 +80,10 @@ class LLVMCodeGen {
         generateIR(program);
 
         // 3. 検証
-        // TODO: ポインタ型の不一致問題を修正後に有効化
-        // if (options.verifyIR) {
-        //     verifyModule();
-        // }
+        // 不正なLLVM IRを検出して無限ループを防止
+        if (options.verifyIR) {
+            verifyModule();
+        }
 
         // 4. 最適化
         optimize();
