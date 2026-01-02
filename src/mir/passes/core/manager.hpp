@@ -66,13 +66,13 @@ inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
 // 最適化レベルに応じた収束戦略で最適化を実行
 inline void run_optimization_passes(MirProgram& program, int optimization_level,
                                     bool debug = false) {
-    // 最適化レベル0は何もしない
-    if (optimization_level == 0) {
-        if (debug) {
-            std::cout << "[OPT] -O0: 最適化をスキップ\n";
-        }
-        return;
-    }
+    // ポインタ操作のMIR最適化問題を修正済み
+    // - Copy Propagation: キャスト（型変換）を含む代入はコピー伝播の対象外に
+    // - Constant Folding: ポインタ型への変換は定数畳み込みしない
+    //
+    // 以下の修正により、ポインタ代入チェーンの無限ループ問題を解決：
+    // 1. propagation.hpp: キャストを含む代入ではコピー情報を無効化
+    // 2. folding.hpp: ポインタ型への変換は定数畳み込みから除外
 
     // パスマネージャーv2を使用（収束管理付き）
     OptimizationPipelineV2 pass_mgr;

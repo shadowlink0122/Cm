@@ -192,7 +192,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 auto result = builder->CreateCall(sliceFunc, callArgs, "slice_result");
 
                 if (callData.destination) {
-                    locals[callData.destination->local] = result;
+                    auto destLocal = callData.destination->local;
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(result, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = result;
+                    }
                 }
 
                 if (callData.success != mir::INVALID_BLOCK) {
@@ -247,7 +252,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 auto result = builder->CreateCall(equalFunc, callArgs, "array_eq_result");
 
                 if (callData.destination) {
-                    locals[callData.destination->local] = result;
+                    auto destLocal = callData.destination->local;
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(result, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = result;
+                    }
                 }
 
                 if (callData.success != mir::INVALID_BLOCK) {
@@ -368,7 +378,13 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                                         auto result = builder->CreateCall(implFunc, args);
                                         if (callData.destination) {
-                                            locals[callData.destination->local] = result;
+                                            auto destLocal = callData.destination->local;
+                                            if (allocatedLocals.count(destLocal) > 0 &&
+                                                locals[destLocal]) {
+                                                builder->CreateStore(result, locals[destLocal]);
+                                            } else {
+                                                locals[destLocal] = result;
+                                            }
                                         }
                                     }
 
@@ -522,7 +538,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                 auto result = builder->CreateCall(callee, args);
                 if (callData.destination) {
-                    locals[callData.destination->local] = result;
+                    auto destLocal = callData.destination->local;
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(result, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = result;
+                    }
                 }
             }
             // 間接呼び出し（関数ポインタ変数経由）
@@ -597,7 +618,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                         auto result = builder->CreateCall(closureFunc, closureArgs);
                         if (callData.destination) {
-                            locals[callData.destination->local] = result;
+                            auto destLocal = callData.destination->local;
+                            if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                                builder->CreateStore(result, locals[destLocal]);
+                            } else {
+                                locals[destLocal] = result;
+                            }
                         }
 
                         if (callData.success != mir::INVALID_BLOCK) {
@@ -647,7 +673,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         result = builder->CreateCall(funcType, funcPtrValue, args, "indirect_call");
                     }
                     if (callData.destination && result && !retType->isVoidTy()) {
-                        locals[callData.destination->local] = result;
+                        auto destLocal = callData.destination->local;
+                        if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                            builder->CreateStore(result, locals[destLocal]);
+                        } else {
+                            locals[destLocal] = result;
+                        }
                     }
                 } else {
                     // 型情報が取得できない場合のフォールバック
@@ -663,16 +694,21 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                     auto result = builder->CreateCall(funcType, funcPtrCast, args, "indirect_call");
                     if (callData.destination) {
-                        locals[callData.destination->local] = result;
+                        auto destLocal = callData.destination->local;
+                        if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                            builder->CreateStore(result, locals[destLocal]);
+                        } else {
+                            locals[destLocal] = result;
+                        }
                     }
                 }
             }
 
-            if (callData.success != mir::INVALID_BLOCK) {
+            if (callData.success != mir::INVALID_BLOCK && blocks.count(callData.success) > 0) {
                 builder->CreateBr(blocks[callData.success]);
             } else {
-                // success == INVALID_BLOCKの場合、ターミネータがないとLLVMがハングする
-                // 関数のreturn型に応じて適切なターミネータを生成
+                // success == INVALID_BLOCK または ブロックがDCEで削除された場合
+                // ターミネータがないとLLVMがハングするため、適切なターミネータを生成
                 if (currentMIRFunction &&
                     currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
                     auto& returnLocal =

@@ -117,8 +117,26 @@ class CopyPropagation : public OptimizationPass {
                     }
                 } else {
                     // 複雑な代入の場合、コピー情報を無効化
+                    // 特にキャスト（型変換）を含む場合は、ポインタ型変換の可能性があるため
+                    // コピー伝播を行わない
                     if (assign_data.place.projections.empty()) {
                         copies.erase(assign_data.place.local);
+
+                        // キャストを含む場合は、ソースのコピー情報も無効化
+                        // これにより、ポインタ代入チェーンの誤った最適化を防ぐ
+                        if (assign_data.rvalue->kind == MirRvalue::Cast) {
+                            auto& cast_data =
+                                std::get<MirRvalue::CastData>(assign_data.rvalue->data);
+                            if (cast_data.operand && cast_data.operand->kind == MirOperand::Copy) {
+                                if (auto* src_place =
+                                        std::get_if<MirPlace>(&cast_data.operand->data)) {
+                                    if (src_place->projections.empty()) {
+                                        // キャスト元もコピー伝播対象から除外
+                                        copies.erase(src_place->local);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

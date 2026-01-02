@@ -649,11 +649,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
 // 基本ブロック変換
 void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
-    if (block.id < blocks.size()) {
+    // blocksはunordered_mapなので、countで存在確認
+    if (blocks.count(block.id) > 0) {
         builder->SetInsertPoint(blocks[block.id]);
-        // std::cout << "[CODEGEN] Processing BB " << block.id << "\n" << std::flush;
     } else {
-        // std::cout << "[CODEGEN] Error: BB id " << block.id << " out of range\n" << std::flush;
+        // ブロックがblocks mapに存在しない（DCEで削除された可能性）
+        std::cerr << "[CODEGEN] Warning: BB " << block.id << " not in blocks map, skipping\n"
+                  << std::flush;
         return;
     }
 
@@ -744,6 +746,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                         // Derefプロジェクションがある場合、MIRの型情報から要素型を取得
                         bool hasDeref = false;
+                        hir::TypePtr derefTargetType = nullptr;
                         for (const auto& proj : assign.place.projections) {
                             if (proj.kind == mir::ProjectionKind::Deref) {
                                 hasDeref = true;
@@ -751,11 +754,33 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             }
                         }
 
-                        if (hasDeref && !targetType && currentMIRFunction) {
+                        if (hasDeref && currentMIRFunction &&
+                            assign.place.local < currentMIRFunction->locals.size()) {
                             auto& local = currentMIRFunction->locals[assign.place.local];
-                            if (local.type && local.type->kind == hir::TypeKind::Pointer &&
-                                local.type->element_type) {
-                                targetType = convertType(local.type->element_type);
+                            // プロジェクションチェーンを辿って最終的なターゲット型を取得
+                            hir::TypePtr currentType = local.type;
+                            for (const auto& proj : assign.place.projections) {
+                                if (!currentType)
+                                    break;
+                                if (proj.kind == mir::ProjectionKind::Deref) {
+                                    if (currentType->kind == hir::TypeKind::Pointer &&
+                                        currentType->element_type) {
+                                        currentType = currentType->element_type;
+                                        derefTargetType = currentType;
+                                    }
+                                } else if (proj.kind == mir::ProjectionKind::Field) {
+                                    if (currentType->kind == hir::TypeKind::Struct) {
+                                        auto structIt = structDefs.find(currentType->name);
+                                        if (structIt != structDefs.end() &&
+                                            proj.field_id < structIt->second->fields.size()) {
+                                            currentType =
+                                                structIt->second->fields[proj.field_id].type;
+                                        }
+                                    }
+                                }
+                            }
+                            if (derefTargetType) {
+                                targetType = convertType(derefTargetType);
                             }
                         }
 
@@ -808,19 +833,24 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             }
                         }
 
-                        // LLVM 14+: opaque pointersではBitCast不要
-                        // すべてのポインタは単に ptr 型なので、そのまま使用可能
-                        if (hasDeref && targetType) {
-                            // opaque pointersでは何もしない
-                            // addrはそのまま使用可能
-                        }
-
                         // LLVM 14+対応: ポインタ型の場合は、すべてopaque pointerとして扱う
                         // 型検証を追加して安全にstore
                         if (addr && rvalue) {
+                            // Deref時: アドレスをターゲット型のポインタにbitcast
+                            // LLVM 14 typed pointers
+                            // modeでは、store先のポインタ型とrvalueの型が一致する必要がある
+                            if (hasDeref && targetType && !targetType->isPointerTy()) {
+                                auto targetPtrType = llvm::PointerType::get(targetType, 0);
+                                if (addr->getType() != targetPtrType) {
+                                    addr = builder->CreateBitCast(addr, targetPtrType, "typed_ptr");
+                                }
+                            }
                             // storeする前に、rvalueの型がaddrの要素型と一致することを確認
                             builder->CreateStore(rvalue, addr);
                         }
+                    } else {
+                        // addr取得失敗: フォールバックとしてlocalsに直接格納（SSA形式）
+                        locals[assign.place.local] = rvalue;
                     }
                 } else {
                     // SSA形式：allocaがない変数に直接値を格納

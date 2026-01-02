@@ -174,13 +174,20 @@ class ConstantFolding : public OptimizationPass {
                     break;
                 }
 
+                // ポインタ型への変換は定数畳み込みしない
+                // ポインタ型変換は実行時のアドレスに依存するため
+                if (cast_data.target_type &&
+                    cast_data.target_type->kind == hir::TypeKind::Pointer) {
+                    break;
+                }
+
                 // オペランドを評価
                 auto operand = evaluate_operand(*cast_data.operand, constants);
                 if (!operand) {
                     break;
                 }
 
-                // 型変換を実行
+                // 型変換を実行（ポインタ型以外）
                 return eval_cast(*operand, cast_data.target_type);
             }
 
