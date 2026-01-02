@@ -84,8 +84,12 @@ int main() {
         print("multiple allocs: FAILED\n");
     }
     
+    print("Starting dealloc(raw1)...\n");
     custom.dealloc(raw1);
+    print("Finished dealloc(raw1)\n");
+    print("Starting dealloc(raw2)...\n");
     custom.dealloc(raw2);
+    print("Finished dealloc(raw2)\n");
     
     // reallocateテスト
     print("\n--- Reallocate test ---\n");
@@ -94,18 +98,23 @@ int main() {
     int* p3 = raw3 as int*;
     *p3 = 123;
     
+    print("Check point A\n");
     void* raw4 = custom.reallocate(raw3, sizeof(int) * 2);
+    print("Check point B\n");
     int* p4 = raw4 as int*;
     *p4 = 456;
     
     int v4 = *p4;
+    print("Check point C\n");
     if (v4 == 456) {
         print("reallocate: ok\n");
     } else {
         print("reallocate: FAILED\n");
     }
     
+    print("Starting dealloc(raw4)...\n");
     custom.dealloc(raw4);
+    print("Finished dealloc(raw4)\n");
     
     print("\nCustom allocator test completed!\n");
     return 0;

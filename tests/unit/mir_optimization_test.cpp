@@ -3,7 +3,7 @@
 #include "../../src/hir/hir_lowering.hpp"
 #include "../../src/mir/mir_lowering.hpp"
 #include "../../src/mir/mir_printer.hpp"
-#include "../../src/mir/optimizations/all_passes.hpp"
+#include "../../src/mir/passes/core/manager.hpp"
 
 #include <gtest/gtest.h>
 #include <sstream>

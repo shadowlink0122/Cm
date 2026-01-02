@@ -50,6 +50,9 @@ target/
 
 # Test output
 *.out
+a.out
+custom
+custom_*
 *.actual
 
 # LLVM specific

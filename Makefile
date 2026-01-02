@@ -30,6 +30,12 @@ help:
 	@echo "  make test-llvm-wasm   - LLVM WebAssemblyテスト"
 	@echo "  make test-llvm-all    - すべてのLLVMテスト"
 	@echo ""
+	@echo "Test Commands (Optimization Levels):"
+	@echo "  make test-opt-levels       - 全最適化レベル(O0-O3)テスト"
+	@echo "  make test-opt-quick        - 各カテゴリ1ファイルで最適化テスト（高速）"
+	@echo "  make test-opt-llvm         - LLVMネイティブで全最適化レベルテスト"
+	@echo "  make test-opt-wasm         - WebAssemblyで全最適化レベルテスト"
+	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
 	@echo ""
 	@echo "Run Commands:"
@@ -45,6 +51,8 @@ help:
 	@echo "  make tla - test-llvm-all"
 	@echo "  make tj  - test-js"
 	@echo "  make tjp - test-js-parallel"
+	@echo "  make tol - test-opt-levels"
+	@echo "  make toq - test-opt-quick"
 
 # ========================================
 # Build Commands
@@ -189,6 +197,38 @@ test-llvm-all: test-llvm test-llvm-wasm
 	@echo "✅ All LLVM tests completed!"
 	@echo "=========================================="
 
+# ========================================
+# Optimization Level Test Commands
+# ========================================
+
+# 全最適化レベルテスト（全テストファイル）
+.PHONY: test-opt-levels
+test-opt-levels:
+	@echo "Running optimization level tests (O0-O3) for all test files..."
+	@chmod +x tests/optimization_test_runner.sh
+	@tests/optimization_test_runner.sh -b llvm
+
+# 全最適化レベルテスト（クイックモード - 各カテゴリ1ファイルのみ）
+.PHONY: test-opt-quick
+test-opt-quick:
+	@echo "Running quick optimization level tests (O0-O3)..."
+	@chmod +x tests/optimization_test_runner.sh
+	@tests/optimization_test_runner.sh -b llvm -q
+
+# LLVMネイティブで全最適化レベルテスト
+.PHONY: test-opt-llvm
+test-opt-llvm:
+	@echo "Running LLVM native optimization level tests (O0-O3)..."
+	@chmod +x tests/optimization_test_runner.sh
+	@tests/optimization_test_runner.sh -b llvm -c "basic,control_flow,functions"
+
+# WebAssemblyで全最適化レベルテスト
+.PHONY: test-opt-wasm
+test-opt-wasm:
+	@echo "Running WebAssembly optimization level tests (O0-O3)..."
+	@chmod +x tests/optimization_test_runner.sh
+	@tests/optimization_test_runner.sh -b llvm-wasm -c "basic,control_flow,functions"
+
 # すべてのテストを実行（並列）
 .PHONY: test-all-parallel
 test-all-parallel:
@@ -294,6 +334,12 @@ tj: test-js
 
 .PHONY: tjp
 tjp: test-js-parallel
+
+.PHONY: tol
+tol: test-opt-levels
+
+.PHONY: toq
+toq: test-opt-quick
 
 # デフォルトファイル設定
 FILE ?=

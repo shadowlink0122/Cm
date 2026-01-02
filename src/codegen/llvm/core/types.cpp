@@ -107,8 +107,10 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             for (const auto& paramType : type->param_types) {
                 paramTypes.push_back(convertType(paramType));
             }
-            auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
-            return llvm::PointerType::get(funcType, 0);
+            // 関数型は作成するが、LLVM 14+のopaque pointerでは使用しない
+            llvm::FunctionType::get(retType, paramTypes, false);
+            // LLVM 14+: opaque pointerを使用（関数ポインタも単なるptr）
+            return ctx.getPtrType();
         }
         default:
             return ctx.getI32Type();
@@ -181,7 +183,9 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
                 constant.type->kind == hir::TypeKind::CString ||
                 (constant.type->kind == hir::TypeKind::Array &&
                  !constant.type->array_size.has_value())) {
-                return llvm::ConstantPointerNull::get(llvm::PointerType::get(ctx.getContext(), 0));
+                // LLVM 14+: opaque pointerを使用
+                return llvm::ConstantPointerNull::get(
+                    llvm::cast<llvm::PointerType>(ctx.getPtrType()));
             }
         }
         return llvm::Constant::getNullValue(ctx.getI32Type());

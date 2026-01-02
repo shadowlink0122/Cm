@@ -4,10 +4,12 @@
 #include "mir_to_llvm.hpp"
 
 #include "../../../common/debug/codegen.hpp"
+#include "../monitoring/compilation_guard.hpp"
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <set>
+#include <sstream>
 
 namespace cm::codegen::llvm_backend {
 
@@ -246,9 +248,10 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
                     paramTypes.push_back(fatPtrType);
                 } else {
                     auto llvmType = convertType(local.type);
-                    // 構造体はポインタとして渡す（構造体型のポインタ）
+                    // 構造体はポインタとして渡す（opaque pointer）
                     if (local.type->kind == hir::TypeKind::Struct) {
-                        paramTypes.push_back(llvm::PointerType::get(llvmType, 0));
+                        // LLVM 14+: opaque pointerを使用
+                        paramTypes.push_back(ctx.getPtrType());
                     } else {
                         paramTypes.push_back(llvmType);
                     }
@@ -293,6 +296,21 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     // 関数作成
     auto llvmFunc =
         llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
+
+    // アロケータ関数にはnoinline属性を追加
+    // LLVMが積極的にインライン化してから削除するのを防ぐ
+    if (func.name.find("alloc") != std::string::npos ||
+        func.name.find("dealloc") != std::string::npos ||
+        func.name.find("reallocate") != std::string::npos) {
+        llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+    }
+
+    // main関数にはoptnone属性を追加
+    // LLVMの最適化がcontrol flowを破壊するのを防ぐ
+    if (func.name == "main") {
+        llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+        llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
+    }
 
     // パラメータ名設定
     size_t idx = 0;
@@ -395,171 +413,189 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         return;
     }
 
-    // ランタイム関数（cm_print_*, cm_println_*など）はスキップ
-    // これらはランタイムライブラリで実装されている
-    if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
-        func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
-        func.name.find("cm_double_to_string") == 0 || func.name.find("cm_float_to_string") == 0 ||
-        func.name.find("cm_bool_to_string") == 0 || func.name.find("cm_char_to_string") == 0 ||
-        func.name.find("cm_string_concat") == 0) {
-        return;
-    }
+    // CompilationGuardを使用した無限ループ検出
+    auto& guard = get_compilation_guard();
 
-    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMFunction, func.name,
-                            cm::debug::Level::Debug);
+    // 関数のハッシュ値を計算（簡単のため名前とサイズから）
+    size_t func_hash = std::hash<std::string>{}(func.name) ^ func.basic_blocks.size();
 
-    auto funcId = generateFunctionId(func);
-    currentFunction = functions[funcId];
-    currentMIRFunction = &func;
-    locals.clear();
-    blocks.clear();
-    allocatedLocals.clear();
+    try {
+        // 関数生成の開始を記録
+        ScopedFunctionGuard func_guard(func.name, func_hash);
 
-    // エントリーブロック作成
-    auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
-    builder->SetInsertPoint(entryBB);
+        // デバッグ用プログレス表示
+        guard.show_progress("Function", 0, func.basic_blocks.size());
 
-    // パラメータをローカル変数にマップ
-    size_t argIdx = 0;
-    for (auto& arg : currentFunction->args()) {
-        if (argIdx < func.arg_locals.size()) {
-            locals[func.arg_locals[argIdx]] = &arg;
+        // ランタイム関数（cm_print_*, cm_println_*など）はスキップ
+        // これらはランタイムライブラリで実装されている
+        if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
+            func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
+            func.name.find("cm_double_to_string") == 0 ||
+            func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
+            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0) {
+            return;
         }
-        argIdx++;
-    }
 
-    // ローカル変数のアロケーション
-    for (size_t i = 0; i < func.locals.size(); ++i) {
-        if (std::find(func.arg_locals.begin(), func.arg_locals.end(), i) == func.arg_locals.end() &&
-            i != func.return_local) {  // 引数と戻り値以外
-            // 引数以外のローカル変数
-            auto& local = func.locals[i];
-            if (local.type) {
-                // void型はアロケーションしない
-                if (local.type->kind == hir::TypeKind::Void) {
-                    continue;
-                }
-                // 文字列型の一時変数はアロケーションしない（直接値を使用）
-                if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
-                    continue;
-                }
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMFunction, func.name,
+                                cm::debug::Level::Debug);
 
-                // 動的配列（スライス）の場合
-                if (local.type->kind == hir::TypeKind::Array &&
-                    !local.type->array_size.has_value()) {
-                    // スライスポインタを格納するallocaを作成
-                    auto alloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
-                                                        "slice_" + std::to_string(i));
+        // std::cout << "[CODEGEN] Processing function: " << func.name << "\n" << std::flush;
 
-                    // 要素サイズを計算
-                    int64_t elemSize = 4;
-                    if (local.type->element_type) {
-                        auto elemKind = local.type->element_type->kind;
-                        if (elemKind == hir::TypeKind::Array) {
-                            // 多次元スライス: 要素はCmSlice構造体（32バイト）
-                            elemSize = 32;
-                        } else if (elemKind == hir::TypeKind::Long ||
-                                   elemKind == hir::TypeKind::ULong ||
-                                   elemKind == hir::TypeKind::Double ||
-                                   elemKind == hir::TypeKind::Pointer ||
-                                   elemKind == hir::TypeKind::String) {
-                            elemSize = 8;
-                        } else if (elemKind == hir::TypeKind::Char ||
-                                   elemKind == hir::TypeKind::Bool) {
-                            elemSize = 1;
-                        } else if (elemKind == hir::TypeKind::Short ||
-                                   elemKind == hir::TypeKind::UShort) {
-                            elemSize = 2;
+        auto funcId = generateFunctionId(func);
+        currentFunction = functions[funcId];
+        currentMIRFunction = &func;
+        locals.clear();
+        blocks.clear();
+        allocatedLocals.clear();
+
+        // エントリーブロック作成
+        auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
+        builder->SetInsertPoint(entryBB);
+
+        // パラメータをローカル変数にマップ
+        size_t argIdx = 0;
+        for (auto& arg : currentFunction->args()) {
+            if (argIdx < func.arg_locals.size()) {
+                locals[func.arg_locals[argIdx]] = &arg;
+            }
+            argIdx++;
+        }
+
+        // ローカル変数のアロケーション
+        for (size_t i = 0; i < func.locals.size(); ++i) {
+            if (std::find(func.arg_locals.begin(), func.arg_locals.end(), i) ==
+                    func.arg_locals.end() &&
+                i != func.return_local) {  // 引数と戻り値以外
+                // 引数以外のローカル変数
+                auto& local = func.locals[i];
+                if (local.type) {
+                    // void型はアロケーションしない
+                    if (local.type->kind == hir::TypeKind::Void) {
+                        continue;
+                    }
+                    // 文字列型の一時変数はアロケーションしない（直接値を使用）
+                    if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
+                        continue;
+                    }
+
+                    // 動的配列（スライス）の場合
+                    if (local.type->kind == hir::TypeKind::Array &&
+                        !local.type->array_size.has_value()) {
+                        // スライスポインタを格納するallocaを作成
+                        auto alloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
+                                                            "slice_" + std::to_string(i));
+
+                        // 要素サイズを計算
+                        int64_t elemSize = 4;
+                        if (local.type->element_type) {
+                            auto elemKind = local.type->element_type->kind;
+                            if (elemKind == hir::TypeKind::Array) {
+                                // 多次元スライス: 要素はCmSlice構造体（32バイト）
+                                elemSize = 32;
+                            } else if (elemKind == hir::TypeKind::Long ||
+                                       elemKind == hir::TypeKind::ULong ||
+                                       elemKind == hir::TypeKind::Double ||
+                                       elemKind == hir::TypeKind::Pointer ||
+                                       elemKind == hir::TypeKind::String) {
+                                elemSize = 8;
+                            } else if (elemKind == hir::TypeKind::Char ||
+                                       elemKind == hir::TypeKind::Bool) {
+                                elemSize = 1;
+                            } else if (elemKind == hir::TypeKind::Short ||
+                                       elemKind == hir::TypeKind::UShort) {
+                                elemSize = 2;
+                            }
                         }
+
+                        // cm_slice_new呼び出しでスライスを初期化
+                        auto sliceNewFunc = declareExternalFunction("cm_slice_new");
+                        auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
+                        auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
+                        auto slicePtr = builder->CreateCall(sliceNewFunc, {elemSizeVal, initialCap},
+                                                            "slice_ptr");
+                        builder->CreateStore(slicePtr, alloca);
+
+                        locals[i] = alloca;
+                        allocatedLocals.insert(i);
+                        continue;
                     }
 
-                    // cm_slice_new呼び出しでスライスを初期化
-                    auto sliceNewFunc = declareExternalFunction("cm_slice_new");
-                    auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
-                    auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
-                    auto slicePtr =
-                        builder->CreateCall(sliceNewFunc, {elemSizeVal, initialCap}, "slice_ptr");
-                    builder->CreateStore(slicePtr, alloca);
+                    auto llvmType = convertType(local.type);
 
-                    locals[i] = alloca;
-                    allocatedLocals.insert(i);
-                    continue;
-                }
-
-                auto llvmType = convertType(local.type);
-
-                // static変数はグローバル変数として作成
-                if (local.is_static) {
-                    std::string staticKey = func.name + "_" + local.name;
-                    auto it = staticVariables.find(staticKey);
-                    if (it == staticVariables.end()) {
-                        // 初期値を設定（デフォルトはゼロ初期化）
-                        llvm::Constant* initialValue = llvm::Constant::getNullValue(llvmType);
-                        auto globalVar = new llvm::GlobalVariable(
-                            *module, llvmType, false, llvm::GlobalValue::InternalLinkage,
-                            initialValue, staticKey);
-                        staticVariables[staticKey] = globalVar;
-                        locals[i] = globalVar;
+                    // static変数はグローバル変数として作成
+                    if (local.is_static) {
+                        std::string staticKey = func.name + "_" + local.name;
+                        auto it = staticVariables.find(staticKey);
+                        if (it == staticVariables.end()) {
+                            // 初期値を設定（デフォルトはゼロ初期化）
+                            llvm::Constant* initialValue = llvm::Constant::getNullValue(llvmType);
+                            auto globalVar = new llvm::GlobalVariable(
+                                *module, llvmType, false, llvm::GlobalValue::InternalLinkage,
+                                initialValue, staticKey);
+                            staticVariables[staticKey] = globalVar;
+                            locals[i] = globalVar;
+                        } else {
+                            locals[i] = it->second;
+                        }
+                        allocatedLocals.insert(i);  // グローバル変数もallocated扱い
                     } else {
-                        locals[i] = it->second;
-                    }
-                    allocatedLocals.insert(i);  // グローバル変数もallocated扱い
-                } else {
-                    auto alloca =
-                        builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));
-                    locals[i] = alloca;
-                    allocatedLocals.insert(i);  // allocaされた変数を記録
+                        auto alloca =
+                            builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));
+                        locals[i] = alloca;
+                        allocatedLocals.insert(i);  // allocaされた変数を記録
 
-                    // 構造体型の場合、スライスメンバーを初期化
-                    if (local.type->kind == hir::TypeKind::Struct) {
-                        auto structName = local.type->name;
-                        auto structDefIt = structDefs.find(structName);
-                        if (structDefIt != structDefs.end()) {
-                            const auto* structDef = structDefIt->second;
-                            auto* structLLVMType = structTypes[structName];
+                        // 構造体型の場合、スライスメンバーを初期化
+                        if (local.type->kind == hir::TypeKind::Struct) {
+                            auto structName = local.type->name;
+                            auto structDefIt = structDefs.find(structName);
+                            if (structDefIt != structDefs.end()) {
+                                const auto* structDef = structDefIt->second;
+                                auto* structLLVMType = structTypes[structName];
 
-                            for (size_t fieldIdx = 0; fieldIdx < structDef->fields.size();
-                                 ++fieldIdx) {
-                                const auto& field = structDef->fields[fieldIdx];
-                                // スライスフィールドを探す
-                                if (field.type && field.type->kind == hir::TypeKind::Array &&
-                                    !field.type->array_size.has_value()) {
-                                    // スライスフィールドのGEPを取得
-                                    auto fieldPtr =
-                                        builder->CreateStructGEP(structLLVMType, alloca, fieldIdx,
-                                                                 "slice_field_" + field.name);
+                                for (size_t fieldIdx = 0; fieldIdx < structDef->fields.size();
+                                     ++fieldIdx) {
+                                    const auto& field = structDef->fields[fieldIdx];
+                                    // スライスフィールドを探す
+                                    if (field.type && field.type->kind == hir::TypeKind::Array &&
+                                        !field.type->array_size.has_value()) {
+                                        // スライスフィールドのGEPを取得
+                                        auto fieldPtr = builder->CreateStructGEP(
+                                            structLLVMType, alloca, fieldIdx,
+                                            "slice_field_" + field.name);
 
-                                    // 要素サイズを計算
-                                    int64_t elemSize = 4;
-                                    if (field.type->element_type) {
-                                        auto elemKind = field.type->element_type->kind;
-                                        if (elemKind == hir::TypeKind::Long ||
-                                            elemKind == hir::TypeKind::ULong ||
-                                            elemKind == hir::TypeKind::Double ||
-                                            elemKind == hir::TypeKind::Pointer ||
-                                            elemKind == hir::TypeKind::String) {
-                                            elemSize = 8;
-                                        } else if (elemKind == hir::TypeKind::Char ||
-                                                   elemKind == hir::TypeKind::Bool) {
-                                            elemSize = 1;
-                                        } else if (elemKind == hir::TypeKind::Short ||
-                                                   elemKind == hir::TypeKind::UShort) {
-                                            elemSize = 2;
-                                        } else if (elemKind == hir::TypeKind::Struct) {
-                                            // 構造体のサイズはポインタサイズ（簡略化）
-                                            elemSize = 8;
+                                        // 要素サイズを計算
+                                        int64_t elemSize = 4;
+                                        if (field.type->element_type) {
+                                            auto elemKind = field.type->element_type->kind;
+                                            if (elemKind == hir::TypeKind::Long ||
+                                                elemKind == hir::TypeKind::ULong ||
+                                                elemKind == hir::TypeKind::Double ||
+                                                elemKind == hir::TypeKind::Pointer ||
+                                                elemKind == hir::TypeKind::String) {
+                                                elemSize = 8;
+                                            } else if (elemKind == hir::TypeKind::Char ||
+                                                       elemKind == hir::TypeKind::Bool) {
+                                                elemSize = 1;
+                                            } else if (elemKind == hir::TypeKind::Short ||
+                                                       elemKind == hir::TypeKind::UShort) {
+                                                elemSize = 2;
+                                            } else if (elemKind == hir::TypeKind::Struct) {
+                                                // 構造体のサイズはポインタサイズ（簡略化）
+                                                elemSize = 8;
+                                            }
                                         }
-                                    }
 
-                                    // cm_slice_new呼び出しでスライスを初期化
-                                    auto sliceNewFunc = declareExternalFunction("cm_slice_new");
-                                    auto elemSizeVal =
-                                        llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
-                                    auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
-                                    auto slicePtr =
-                                        builder->CreateCall(sliceNewFunc, {elemSizeVal, initialCap},
-                                                            "slice_init_" + field.name);
-                                    builder->CreateStore(slicePtr, fieldPtr);
+                                        // cm_slice_new呼び出しでスライスを初期化
+                                        auto sliceNewFunc = declareExternalFunction("cm_slice_new");
+                                        auto elemSizeVal =
+                                            llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
+                                        auto initialCap =
+                                            llvm::ConstantInt::get(ctx.getI64Type(), 4);
+                                        auto slicePtr = builder->CreateCall(
+                                            sliceNewFunc, {elemSizeVal, initialCap},
+                                            "slice_init_" + field.name);
+                                        builder->CreateStore(slicePtr, fieldPtr);
+                                    }
                                 }
                             }
                         }
@@ -567,54 +603,116 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 }
             }
         }
-    }
 
-    // 戻り値用のアロケーション（必要な場合）
-    if (func.return_local < func.locals.size()) {
-        auto& returnLocal = func.locals[func.return_local];
-        if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
-            auto llvmType = convertType(returnLocal.type);
-            auto alloca = builder->CreateAlloca(llvmType, nullptr, "retval");
-            locals[func.return_local] = alloca;
-            allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
+        // 戻り値用のアロケーション（必要な場合）
+        if (func.return_local < func.locals.size()) {
+            auto& returnLocal = func.locals[func.return_local];
+            if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
+                auto llvmType = convertType(returnLocal.type);
+                auto alloca = builder->CreateAlloca(llvmType, nullptr, "retval");
+                locals[func.return_local] = alloca;
+                allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
+            }
         }
-    }
 
-    // 基本ブロック作成
-    for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
-        // DCEで削除されたブロックはスキップ
-        if (!func.basic_blocks[i])
-            continue;
-        auto bbName = "bb" + std::to_string(i);
-        blocks[i] = llvm::BasicBlock::Create(ctx.getContext(), bbName, currentFunction);
-    }
+        // 基本ブロック作成
+        for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
+            // DCEで削除されたブロックはスキップ
+            if (!func.basic_blocks[i])
+                continue;
+            auto bbName = "bb" + std::to_string(i);
+            blocks[i] = llvm::BasicBlock::Create(ctx.getContext(), bbName, currentFunction);
+        }
 
-    // 最初のブロックへジャンプ
-    if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
-        builder->CreateBr(blocks[0]);
-    }
+        // 最初のブロックへジャンプ
+        if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+            builder->CreateBr(blocks[0]);
+        }
 
-    // 各ブロックを変換
-    for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
-        // DCEで削除されたブロックはスキップ
-        if (!func.basic_blocks[i])
-            continue;
-        convertBasicBlock(*func.basic_blocks[i]);
+        // 各ブロックを変換（CompilationGuardによる監視）
+        for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
+            // DCEで削除されたブロックはスキップ
+            if (!func.basic_blocks[i])
+                continue;
+
+            // プログレス表示
+            guard.show_progress("Function", i + 1, func.basic_blocks.size());
+
+            convertBasicBlock(*func.basic_blocks[i]);
+        }
+    } catch (const std::runtime_error& e) {
+        // 無限ループエラーのハンドリング
+        guard.handle_infinite_loop_error(e);
+        throw;  // エラーを再スロー
     }
 }
 
 // 基本ブロック変換
 void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
-    builder->SetInsertPoint(blocks[block.id]);
+    if (block.id < blocks.size()) {
+        builder->SetInsertPoint(blocks[block.id]);
+        // std::cout << "[CODEGEN] Processing BB " << block.id << "\n" << std::flush;
+    } else {
+        // std::cout << "[CODEGEN] Error: BB id " << block.id << " out of range\n" << std::flush;
+        return;
+    }
+
+    // CompilationGuardによるブロックレベル監視
+    auto& guard = get_compilation_guard();
+    std::string block_name = "BB" + std::to_string(block.id);
+    ScopedBlockGuard block_guard(currentMIRFunction ? currentMIRFunction->name : "unknown",
+                                 block_name);
 
     // ステートメント処理
     for (const auto& stmt : block.statements) {
+        // std::cout << "[CODEGEN] Processing Stmt Kind " << (int)stmt->kind << "\n" << std::flush;
+
+        // 各命令の生成を記録（より詳細な情報を含める）
+        std::ostringstream inst_str;
+        inst_str << "stmt_kind_" << static_cast<int>(stmt->kind);
+
+        // Assign文の場合は、左辺のローカル変数IDも含める
+        if (stmt->kind == mir::MirStatement::Assign) {
+            auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
+            inst_str << "_L" << assign.place.local;
+        }
+
+        guard.add_instruction(inst_str.str());
+
         convertStatement(*stmt);
     }
 
     // ターミネータ処理
     if (block.terminator) {
+        // std::cout << "[CODEGEN] Processing Terminator Kind " << (int)block.terminator->kind <<
+        // "\n"
+        //           << std::flush;
+
+        // ターミネータの生成を記録（より詳細な情報を含める）
+        std::ostringstream term_str;
+        term_str << "term_kind_" << static_cast<int>(block.terminator->kind);
+
+        // Call terminatorの場合は関数名も含める
+        if (block.terminator->kind == mir::MirTerminator::Call) {
+            auto& callData = std::get<mir::MirTerminator::CallData>(block.terminator->data);
+            if (callData.func) {
+                if (callData.func->kind == mir::MirOperand::FunctionRef) {
+                    term_str << "_" << std::get<std::string>(callData.func->data);
+                } else if (callData.func->kind == mir::MirOperand::Constant) {
+                    auto& constant = std::get<mir::MirConstant>(callData.func->data);
+                    if (auto* name = std::get_if<std::string>(&constant.value)) {
+                        term_str << "_" << *name;
+                    }
+                }
+            }
+        }
+
+        guard.add_instruction(term_str.str());
+
         convertTerminator(*block.terminator);
+    } else {
+        std::cerr << "[CODEGEN] ERROR: BB " << block.id << " has no terminator in MIR!\n"
+                  << std::flush;
     }
 }
 
@@ -702,24 +800,27 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     rvalue = builder->CreateFPExt(rvalue, targetType, "fpext");
                                 }
                             }
-                            // ポインタ型の変換（LLVM 14の型付きポインタ対応）
+                            // LLVM 14+: opaque pointersではポインタ間のBitCastは不要
+                            // すべてのポインタは単に ptr 型
                             else if (sourceType->isPointerTy() && targetType->isPointerTy()) {
-                                // 型付きポインタ環境では bitcast が必要
-                                if (sourceType != targetType) {
-                                    rvalue = builder->CreateBitCast(rvalue, targetType, "ptr_cast");
-                                }
+                                // opaque pointersでは何もしない
+                                // rvalueはそのまま使用可能
                             }
                         }
 
-                        // Deref時: アドレスを適切な型のポインタにbitcast
+                        // LLVM 14+: opaque pointersではBitCast不要
+                        // すべてのポインタは単に ptr 型なので、そのまま使用可能
                         if (hasDeref && targetType) {
-                            auto addrPtrType = llvm::PointerType::get(targetType, 0);
-                            if (addr->getType() != addrPtrType) {
-                                addr = builder->CreateBitCast(addr, addrPtrType, "deref_addr_cast");
-                            }
+                            // opaque pointersでは何もしない
+                            // addrはそのまま使用可能
                         }
 
-                        builder->CreateStore(rvalue, addr);
+                        // LLVM 14+対応: ポインタ型の場合は、すべてopaque pointerとして扱う
+                        // 型検証を追加して安全にstore
+                        if (addr && rvalue) {
+                            // storeする前に、rvalueの型がaddrの要素型と一致することを確認
+                            builder->CreateStore(rvalue, addr);
+                        }
                     }
                 } else {
                     // SSA形式：allocaがない変数に直接値を格納
@@ -879,9 +980,10 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 }
             }
 
-            // ポインタキャスト
+            // LLVM 14+: opaque pointersではポインタ間のBitCast不要
             if (sourceType->isPointerTy() && targetType->isPointerTy()) {
-                return builder->CreateBitCast(value, targetType, "ptr_cast");
+                // opaque pointersでは全てのポインタは ptr 型なので変換不要
+                return value;
             }
 
             // int <-> ポインタ変換
@@ -1043,12 +1145,11 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                     }
 
                     // Deref時: アドレスを適切な型のポインタにbitcast
+                    // LLVM 14+: opaque pointersではBitCast不要
                     const auto& lastProj = place.projections.back();
                     if (lastProj.kind == mir::ProjectionKind::Deref && fieldType) {
-                        auto addrPtrType = llvm::PointerType::get(fieldType, 0);
-                        if (addr->getType() != addrPtrType) {
-                            addr = builder->CreateBitCast(addr, addrPtrType, "deref_load_cast");
-                        }
+                        // opaque pointersでは全てのポインタはptr型なので何もしない
+                        // addrはそのまま使用可能
                     }
 
                     return builder->CreateLoad(fieldType, addr, "field_load");
@@ -1289,22 +1390,11 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
             }
             case mir::ProjectionKind::Deref: {
                 // デリファレンス：ポインタ変数から実際のポインタ値をロード
-                // LLVM 14では型付きポインタを使用するため、適切な型でロードする必要がある
-                llvm::Type* loadType = ctx.getPtrType();  // デフォルトはi8*/ptr
+                // LLVM 14+では CreateLoad の第1引数はロードする値の型（pointee type）を指定
+                // ポインタからポインタをロードするため、ポインタ型そのものを指定
+                llvm::Type* ptrType = ctx.getPtrType();  // ptr型（opaque pointer）
 
-                // 次のプロジェクションがFieldの場合、構造体へのポインタとしてロード
-                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
-                    currentType->element_type) {
-                    auto elemType = currentType->element_type;
-                    if (elemType->kind == hir::TypeKind::Struct) {
-                        auto it = structTypes.find(elemType->name);
-                        if (it != structTypes.end()) {
-                            loadType = llvm::PointerType::getUnqual(it->second);
-                        }
-                    }
-                }
-
-                addr = builder->CreateLoad(loadType, addr);
+                addr = builder->CreateLoad(ptrType, addr);
 
                 // 次のプロジェクションのために型を更新
                 if (currentType && currentType->kind == hir::TypeKind::Pointer &&

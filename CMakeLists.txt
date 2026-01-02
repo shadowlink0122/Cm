@@ -196,6 +196,12 @@ if(CM_USE_LLVM)
         src/codegen/llvm/core/operators.cpp
         src/codegen/llvm/core/utils.cpp
         src/codegen/llvm/core/intrinsics.cpp
+        # LLVM optimizations
+        src/codegen/llvm/optimizations/optimization_manager.cpp
+        src/codegen/llvm/optimizations/peephole/peephole_optimizer.cpp
+        src/codegen/llvm/optimizations/inst_combine/inst_combiner.cpp
+        src/codegen/llvm/optimizations/vectorization/vectorizer.cpp
+        src/codegen/llvm/optimizations/loop_unrolling/loop_unroller.cpp
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp

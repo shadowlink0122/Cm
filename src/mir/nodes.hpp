@@ -555,6 +555,8 @@ struct MirFunction {
             if (!block)
                 continue;
             block->predecessors.clear();
+            // terminatorの変更を反映させるためにsuccessorsも更新
+            block->update_successors();
         }
 
         // successorからpredecessorを計算

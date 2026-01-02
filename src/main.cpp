@@ -5,6 +5,7 @@
 
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
+#include "codegen/llvm/monitoring/compilation_guard.hpp"
 #include "codegen/llvm/native/codegen.hpp"
 #endif
 
@@ -19,7 +20,7 @@
 #include "frontend/types/type_checker.hpp"
 #include "hir/lowering/lowering.hpp"
 #include "mir/lowering/lowering.hpp"
-#include "mir/optimizations/all_passes.hpp"
+#include "mir/passes/core/manager.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
 #include "preprocessor/import.hpp"
@@ -62,11 +63,12 @@ struct Options {
     bool emit_js = false;         // JavaScript生成
     std::string target = "";      // ターゲット (native, wasm, js, web)
     bool run_after_emit = false;  // 生成後に実行
-    int optimization_level = 0;
+    int optimization_level = 0;  // TODO: O1-O3でインポート時に無限ループ問題があるため一時的にO0
     bool debug = false;
     std::string debug_level = "info";
-    bool verbose = false;     // デフォルトは静かなモード
-    std::string output_file;  // -o オプション
+    bool verbose = false;         // デフォルトは静かなモード
+    std::string output_file;      // -o オプション
+    size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
 };
 
 // ヘルプメッセージを表示
@@ -84,7 +86,8 @@ void print_help(const char* program_name) {
     std::cout << "  -O<n>                 最適化レベル（0-3）\n";
     std::cout << "  --verbose, -v         詳細な出力を表示\n";
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
-    std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n\n";
+    std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
+    std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n\n";
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
     std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
@@ -186,6 +189,19 @@ Options parse_options(int argc, char* argv[]) {
         } else if (arg == "--debug" || arg == "-d") {
             opts.debug = true;
             debug::set_debug_mode(true);
+        } else if (arg.substr(0, 17) == "--max-output-size") {
+            if (arg.length() > 18 && arg[17] == '=') {
+                try {
+                    opts.max_output_size = std::stoul(arg.substr(18));
+                    if (opts.max_output_size < 1 || opts.max_output_size > 1024) {
+                        std::cerr << "最大出力サイズは1-1024GBの範囲で指定してください\n";
+                        std::exit(1);
+                    }
+                } catch (...) {
+                    std::cerr << "無効な最大出力サイズ: " << arg.substr(18) << "\n";
+                    std::exit(1);
+                }
+            }
         } else if (arg.substr(0, 3) == "-d=") {
             opts.debug = true;
             opts.debug_level = arg.substr(3);
@@ -494,9 +510,8 @@ int main(int argc, char* argv[]) {
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
-
         if (opts.debug)
-            std::cout << "MIR関数数: " << mir.functions.size() << "\n\n";
+            std::cout << "MIR関数数: " << mir.functions.size() << "\n\n" << std::flush;
 
         // MIRを表示（最適化前）
         if (opts.show_mir && !opts.show_mir_opt) {
@@ -508,10 +523,15 @@ int main(int argc, char* argv[]) {
         // ========== Optimization ==========
         if (opts.optimization_level > 0 || opts.show_mir_opt) {
             if (opts.debug)
-                std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n";
+                std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n"
+                          << std::flush;
 
             // Note: Function-level optimizations are temporarily disabled due to potential issues
             mir::opt::OptimizationPipeline pipeline;
+            // デバッグモードまたは詳細モードで出力を有効化
+            if (opts.debug || opts.verbose) {
+                pipeline.enable_debug_output(true);
+            }
             pipeline.add_standard_passes(opts.optimization_level);
             if (opts.optimization_level >= 2) {
                 pipeline.run_until_fixpoint(mir);
@@ -672,6 +692,16 @@ int main(int argc, char* argv[]) {
 
                 // LLVM コード生成
                 try {
+                    // CompilationGuardの設定
+                    {
+                        auto& guard = cm::codegen::get_compilation_guard();
+                        guard.configure(opts.max_output_size);  // 最大出力サイズの設定
+                        if (opts.debug) {
+                            guard.set_debug_mode(true);
+                            guard.set_collect_statistics(true);
+                        }
+                    }
+
                     cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
                     codegen.compile(mir);
 
@@ -699,7 +729,6 @@ int main(int argc, char* argv[]) {
 #endif
             }
         }
-
     } catch (const std::exception& e) {
         std::cerr << "エラー: " << e.what() << "\n";
         return 1;

@@ -376,7 +376,7 @@ PY
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # 実行
-                "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                run_with_timeout "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then

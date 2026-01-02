@@ -265,11 +265,8 @@ SECTIONS
         builder.SetInsertPoint(bb);
 
         // スタックポインタ設定
-#if LLVM_VERSION_MAJOR >= 15
-        auto spType = llvm::PointerType::get(llvm::Type::getInt32Ty(ctx), 0);
-#else
+        // LLVM 14+: opaque pointers を使用
         auto spType = llvm::PointerType::get(ctx, 0);
-#endif
         auto sp = module.getOrInsertGlobal("_estack", spType);
         // ARM: MSPレジスタに設定（インラインアセンブリ）
         auto asmType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), {spType}, false);
@@ -303,20 +300,22 @@ SECTIONS
         auto& ctx = module.getContext();
 
         // extern symbols
-        auto i8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0);
-        auto sdata = module.getOrInsertGlobal("_sdata", i8PtrTy);
-        auto edata = module.getOrInsertGlobal("_edata", i8PtrTy);
-        auto sidata = module.getOrInsertGlobal("_sidata", i8PtrTy);
+        // LLVM 14+: opaque pointers を使用
+        auto ptrTy = llvm::PointerType::get(ctx, 0);
+        auto sdata = module.getOrInsertGlobal("_sdata", ptrTy);
+        auto edata = module.getOrInsertGlobal("_edata", ptrTy);
+        auto sidata = module.getOrInsertGlobal("_sidata", ptrTy);
 
         // memcpy(_sdata, _sidata, _edata - _sdata)
-        auto memcpy = module.getOrInsertFunction("memcpy", i8PtrTy, i8PtrTy, i8PtrTy,
-                                                 llvm::Type::getInt32Ty(ctx));
+        auto memcpy =
+            module.getOrInsertFunction("memcpy", ptrTy, ptrTy, ptrTy, llvm::Type::getInt32Ty(ctx));
 
-        auto sdataPtr = builder.CreateLoad(i8PtrTy, sdata);
-        auto edataPtr = builder.CreateLoad(i8PtrTy, edata);
-        auto sidataPtr = builder.CreateLoad(i8PtrTy, sidata);
+        // グローバル変数（ポインタへのポインタ）からポインタをロード
+        auto sdataPtr = builder.CreateLoad(ptrTy, sdata, "sdata_ptr");
+        auto edataPtr = builder.CreateLoad(ptrTy, edata, "edata_ptr");
+        auto sidataPtr = builder.CreateLoad(ptrTy, sidata, "sidata_ptr");
 
-        auto size = builder.CreatePtrDiff(i8PtrTy, edataPtr, sdataPtr);
+        auto size = builder.CreatePtrDiff(ptrTy, edataPtr, sdataPtr);
         builder.CreateCall(memcpy, {sdataPtr, sidataPtr, size});
     }
 
@@ -325,18 +324,19 @@ SECTIONS
         auto& ctx = module.getContext();
 
         // extern symbols
-        auto i8PtrTy = llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0);
-        auto sbss = module.getOrInsertGlobal("_sbss", i8PtrTy);
-        auto ebss = module.getOrInsertGlobal("_ebss", i8PtrTy);
+        // LLVM 14+: opaque pointers を使用
+        auto ptrTy = llvm::PointerType::get(ctx, 0);
+        auto sbss = module.getOrInsertGlobal("_sbss", ptrTy);
+        auto ebss = module.getOrInsertGlobal("_ebss", ptrTy);
 
         // memset(_sbss, 0, _ebss - _sbss)
-        auto memset = module.getOrInsertFunction(
-            "memset", i8PtrTy, i8PtrTy, llvm::Type::getInt8Ty(ctx), llvm::Type::getInt32Ty(ctx));
+        auto memset = module.getOrInsertFunction("memset", ptrTy, ptrTy, llvm::Type::getInt8Ty(ctx),
+                                                 llvm::Type::getInt32Ty(ctx));
 
-        auto sbssPtr = builder.CreateLoad(i8PtrTy, sbss);
-        auto ebssPtr = builder.CreateLoad(i8PtrTy, ebss);
+        auto sbssPtr = builder.CreateLoad(ptrTy, sbss);
+        auto ebssPtr = builder.CreateLoad(ptrTy, ebss);
 
-        auto size = builder.CreatePtrDiff(i8PtrTy, ebssPtr, sbssPtr);
+        auto size = builder.CreatePtrDiff(ptrTy, ebssPtr, sbssPtr);
         auto zero = llvm::ConstantInt::get(llvm::Type::getInt8Ty(ctx), 0);
         builder.CreateCall(memset, {sbssPtr, zero, size});
     }
