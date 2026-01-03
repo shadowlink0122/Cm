@@ -475,9 +475,14 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     }
                     // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
                     if (local.type->kind == hir::TypeKind::Function ||
-                        (local.type->kind == hir::TypeKind::Pointer &&
-                         local.type->element_type &&
+                        (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
                          local.type->element_type->kind == hir::TypeKind::Function)) {
+                        continue;
+                    }
+                    // 配列へのポインタ型の一時変数はアロケーションしない（SSA形式で扱う）
+                    if (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
+                        local.type->element_type->kind == hir::TypeKind::Array &&
+                        !local.is_user_variable) {
                         continue;
                     }
                     // 文字列型の一時変数はアロケーションしない（直接値を使用）
@@ -661,8 +666,10 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         builder->SetInsertPoint(blocks[block.id]);
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
-        std::cerr << "[CODEGEN] Warning: BB " << block.id << " not in blocks map, skipping\n"
-                  << std::flush;
+        if (cm::debug::g_debug_mode) {
+            debug_msg("CODEGEN", "Warning: BB " + std::to_string(block.id) +
+                      " not in blocks map, skipping");
+        }
         return;
     }
 
@@ -674,13 +681,13 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
     // ステートメント処理
     // デバッグ: main::bb0のステートメントを確認
-    if (currentMIRFunction && currentMIRFunction->name == "main" && block.id == 0) {
-        std::cerr << "[DEBUG] main::bb0 has " << block.statements.size() << " statements\n";
+    if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main" && block.id == 0) {
+        debug_msg("MIR", "main::bb0 has " + std::to_string(block.statements.size()) + " statements");
         for (size_t j = 0; j < block.statements.size(); j++) {
             if (block.statements[j]->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(block.statements[j]->data);
-                std::cerr << "[DEBUG]   Statement " << j << ": assign to local "
-                          << assign.place.local << "\n";
+                debug_msg("MIR", "  Statement " + std::to_string(j) + ": assign to local " +
+                          std::to_string(assign.place.local));
             }
         }
     }
@@ -731,38 +738,41 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         convertTerminator(*block.terminator);
     } else {
-        std::cerr << "[CODEGEN] ERROR: BB " << block.id << " has no terminator in MIR!\n"
-                  << std::flush;
+        if (cm::debug::g_debug_mode) {
+            debug_msg("CODEGEN", "ERROR: BB " + std::to_string(block.id) +
+                      " has no terminator in MIR!");
+        }
     }
 }
 
 // ステートメント変換
 void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
-    if (currentMIRFunction && currentMIRFunction->name == "main") {
-        std::cerr << "[DEBUG] Processing statement kind: " << static_cast<int>(stmt.kind) << "\n";
+    if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main") {
+        debug_msg("MIR", "Processing statement kind: " + std::to_string(static_cast<int>(stmt.kind)));
     }
     switch (stmt.kind) {
         case mir::MirStatement::Assign: {
             auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
             // デバッグ: main関数での代入を詳しく見る
-            if (currentMIRFunction && currentMIRFunction->name == "main") {
-                std::cerr << "[DEBUG] Assignment to local " << assign.place.local << ", rvalue kind: ";
+            if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main") {
+                std::string msg = "Assignment to local " + std::to_string(assign.place.local) + ", rvalue kind: ";
                 if (assign.rvalue->kind == mir::MirRvalue::Use) {
                     auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
                     if (useData.operand) {
                         if (useData.operand->kind == mir::MirOperand::Copy) {
                             auto& place = std::get<mir::MirPlace>(useData.operand->data);
-                            std::cerr << "Copy from local " << place.local << "\n";
+                            msg += "Copy from local " + std::to_string(place.local);
                         } else if (useData.operand->kind == mir::MirOperand::FunctionRef) {
                             auto& funcName = std::get<std::string>(useData.operand->data);
-                            std::cerr << "FunctionRef '" << funcName << "'\n";
+                            msg += "FunctionRef '" + funcName + "'";
                         } else {
-                            std::cerr << "Other operand type\n";
+                            msg += "Other operand type";
                         }
                     }
                 } else {
-                    std::cerr << "Not Use\n";
+                    msg += "Not Use";
                 }
+                debug_msg("MIR", msg);
             }
             auto rvalue = convertRvalue(*assign.rvalue);
             if (rvalue) {
@@ -772,15 +782,15 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     // Function*の場合、直接localsに格納（allocaせずにSSA形式で扱う）
                     locals[assign.place.local] = rvalue;
                     // 確認: 実際に格納されたか
-                    if (currentMIRFunction && currentMIRFunction->name == "main") {
+                    if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main") {
                         auto func = llvm::cast<llvm::Function>(rvalue);
-                        std::cerr << "[DEBUG] Stored function '" << func->getName().str()
-                                  << "' to local " << assign.place.local
-                                  << " (locals.size=" << locals.size() << ")\n";
+                        debug_msg("MIR", "Stored function '" + func->getName().str() +
+                                  "' to local " + std::to_string(assign.place.local) +
+                                  " (locals.size=" + std::to_string(locals.size()) + ")");
                         // local 2の状態を確認
                         if (locals.size() > 2 && locals[2]) {
-                            std::cerr << "[DEBUG] Local 2 is now: "
-                                      << (llvm::isa<llvm::Function>(locals[2]) ? "Function" : "Other") << "\n";
+                            debug_msg("MIR", "Local 2 is now: " +
+                                std::string(llvm::isa<llvm::Function>(locals[2]) ? "Function" : "Other"));
                         }
                     }
                     break;
@@ -913,19 +923,59 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     addr = builder->CreateBitCast(addr, targetPtrType, "typed_ptr");
                                 }
                             }
-                            // rvalueがポインタで、addrの要素型がi8*の場合、rvalueをi8*にbitcast
-                            if (rvalue->getType()->isPointerTy() &&
-                                addr->getType()->isPointerTy()) {
-                                auto addrPtrType = llvm::cast<llvm::PointerType>(addr->getType());
-                                auto addrElemType = addrPtrType->getPointerElementType();
-                                if (addrElemType->isPointerTy() &&
-                                    addrElemType != rvalue->getType()) {
-                                    // i32* -> i8* などの変換
-                                    rvalue =
-                                        builder->CreateBitCast(rvalue, addrElemType, "ptr_cast");
+                            // LLVM 14+: opaque pointerでは型情報をMIRから取得する必要がある
+                            // 正しい型でストアするため、必要に応じてキャストを行う
+
+                            // MIRの型情報からstore先の型を取得
+                            hir::TypePtr targetType = nullptr;
+
+                            // Placeから型情報を取得
+                            if (assign.place.local < currentMIRFunction->locals.size()) {
+                                auto& local = currentMIRFunction->locals[assign.place.local];
+                                targetType = local.type;
+
+                                // プロジェクションがある場合、最終的な型を取得
+                                for (const auto& proj : assign.place.projections) {
+                                    if (!targetType)
+                                        break;
+
+                                    switch (proj.kind) {
+                                        case mir::ProjectionKind::Field:
+                                            if (targetType->kind == hir::TypeKind::Struct) {
+                                                auto structDefIt =
+                                                    structDefs.find(targetType->name);
+                                                if (structDefIt != structDefs.end() &&
+                                                    proj.field_id <
+                                                        structDefIt->second->fields.size()) {
+                                                    targetType =
+                                                        structDefIt->second->fields[proj.field_id]
+                                                            .type;
+                                                }
+                                            }
+                                            break;
+                                        case mir::ProjectionKind::Deref:
+                                            targetType = targetType->element_type;
+                                            break;
+                                        case mir::ProjectionKind::Index:
+                                            targetType = targetType->element_type;
+                                            break;
+                                    }
                                 }
                             }
-                            // storeする前に、rvalueの型がaddrの要素型と一致することを確認
+
+                            // ポインタ型同士の場合、型が異なればキャストを行う
+                            if (targetType && targetType->kind == hir::TypeKind::Pointer &&
+                                rvalue->getType()->isPointerTy()) {
+                                // allocaされたポインタ変数にポインタ値を格納する場合
+                                // addrは i8** 型、rvalueは具体的なポインタ型（例：i32*）
+                                // rvalueを i8* にビットキャストしてから格納
+                                if (rvalue->getType() != ctx.getPtrType()) {
+                                    rvalue = builder->CreateBitCast(rvalue, ctx.getPtrType(),
+                                                                    "ptr_cast");
+                                }
+                            }
+
+                            // Store操作を実行
                             builder->CreateStore(rvalue, addr);
                         }
                     } else {
@@ -1279,18 +1329,18 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             auto local = place.local;
             auto val = locals[local];
             // デバッグ: main関数でのコピー操作を確認
-            if (currentMIRFunction && currentMIRFunction->name == "main" && local <= 2) {
+            if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main" && local <= 2) {
                 if (val) {
                     if (llvm::isa<llvm::Function>(val)) {
                         auto func = llvm::cast<llvm::Function>(val);
-                        std::cerr << "[DEBUG] Copying function '" << func->getName().str()
-                                  << "' from local " << local << "\n";
+                        debug_msg("MIR", "Copying function '" + func->getName().str() +
+                                  "' from local " + std::to_string(local));
                     } else {
-                        std::cerr << "[DEBUG] Copying non-function from local " << local
-                                  << " (type: " << val->getType()->getTypeID() << ")\n";
+                        debug_msg("MIR", "Copying non-function from local " + std::to_string(local) +
+                                  " (type: " + std::to_string(val->getType()->getTypeID()) + ")");
                     }
                 } else {
-                    std::cerr << "[DEBUG] Local " << local << " is null when trying to copy!\n";
+                    debug_msg("MIR", "Local " + std::to_string(local) + " is null when trying to copy!");
                 }
             }
             if (val && llvm::isa<llvm::AllocaInst>(val)) {

@@ -547,7 +547,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     if (destType && result->getType() != destType) {
                         // bool戻り値（i1）をメモリ格納用（i8）に変換
                         if (result->getType()->isIntegerTy(1) && destType->isIntegerTy(8)) {
-                            resultToStore = builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
+                            resultToStore =
+                                builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
                         }
                         // 整数型間の変換
                         else if (result->getType()->isIntegerTy() && destType->isIntegerTy()) {
@@ -681,7 +682,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     llvm::Value* funcPtr = funcPtrValue;
                     if (funcPtrValue->getType()->isIntegerTy()) {
                         // 整数値を関数ポインタ型に変換
-                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(), "func_ptr_cast");
+                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(),
+                                                          "func_ptr_cast");
                     }
 
                     // 間接呼び出し（void戻り値の場合は名前を付けない）
@@ -707,7 +709,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     llvm::Value* funcPtr = funcPtrValue;
                     if (funcPtrValue->getType()->isIntegerTy()) {
                         // 整数値を関数ポインタ型に変換
-                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(), "func_ptr_cast");
+                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(),
+                                                          "func_ptr_cast");
                     }
 
                     auto result = builder->CreateCall(funcType, funcPtr, args, "indirect_call");

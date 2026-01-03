@@ -124,6 +124,9 @@ class MIRToLLVM {
     /// MIRオペランドからHIR型情報を取得
     hir::TypePtr getOperandType(const mir::MirOperand& operand);
 
+    /// ポインタ型から指す先の型（pointee type）を取得
+    llvm::Type* getPointeeType(const hir::TypePtr& ptrType);
+
     /// インターフェース型かどうかをチェック
     bool isInterfaceType(const std::string& typeName) const {
         return interfaceNames.count(typeName) > 0;

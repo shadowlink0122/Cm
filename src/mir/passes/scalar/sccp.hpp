@@ -30,6 +30,16 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                                                           std::vector<LatticeValue>(local_count));
         std::vector<bool> reachable(block_count, false);
 
+        // 関数引数はOverdefinedに初期化（呼び出し元から任意の値が渡される可能性がある）
+        for (LocalId arg : func.arg_locals) {
+            if (arg < local_count) {
+                for (size_t b = 0; b < block_count; ++b) {
+                    in_states[b][arg] = {LatticeKind::Overdefined, {}};
+                    out_states[b][arg] = {LatticeKind::Overdefined, {}};
+                }
+            }
+        }
+
         analyze(func, in_states, out_states, reachable);
 
         bool changed = false;
@@ -175,6 +185,16 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             }
 
             auto merged_in = merge_predecessors(func, block_id, out_states, reachable);
+            
+            // エントリブロックの場合、関数引数はOverdefinedを維持
+            if (block_id == entry) {
+                for (LocalId arg : func.arg_locals) {
+                    if (arg < merged_in.size()) {
+                        merged_in[arg] = {LatticeKind::Overdefined, {}};
+                    }
+                }
+            }
+            
             bool in_changed = !states_equal(merged_in, in_states[block_id]);
             if (in_changed) {
                 in_states[block_id] = std::move(merged_in);
@@ -250,7 +270,25 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 continue;
             }
             if (!assign_data.place.projections.empty()) {
-                state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                // プロジェクションがある場合（フィールドアクセス、インデックス、デリファレンス）
+                // デリファレンス書き込みはエイリアスの可能性があるため、
+                // 全てのローカル変数をOverdefinedにする（保守的）
+                bool has_deref = false;
+                for (const auto& proj : assign_data.place.projections) {
+                    if (proj.kind == ProjectionKind::Deref) {
+                        has_deref = true;
+                        break;
+                    }
+                }
+                if (has_deref) {
+                    // ポインタ経由の書き込みは任意のローカル変数に影響する可能性がある
+                    for (size_t i = 0; i < state.size(); ++i) {
+                        state[i] = {LatticeKind::Overdefined, {}};
+                    }
+                } else {
+                    // フィールドやインデックスアクセスの場合は対象変数のみOverdefined
+                    state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                }
                 continue;
             }
             LatticeValue value = eval_rvalue(func, *assign_data.rvalue, state);
@@ -554,7 +592,22 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 }
 
                 if (!assign_data.place.projections.empty()) {
-                    state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                    // プロジェクションがある場合
+                    bool has_deref = false;
+                    for (const auto& proj : assign_data.place.projections) {
+                        if (proj.kind == ProjectionKind::Deref) {
+                            has_deref = true;
+                            break;
+                        }
+                    }
+                    if (has_deref) {
+                        // デリファレンス書き込みは全てのローカル変数に影響する可能性がある
+                        for (size_t i = 0; i < state.size(); ++i) {
+                            state[i] = {LatticeKind::Overdefined, {}};
+                        }
+                    } else {
+                        state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                    }
                     continue;
                 }
 

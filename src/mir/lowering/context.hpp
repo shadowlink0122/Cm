@@ -1,8 +1,8 @@
 #pragma once
 
+#include "../../common/debug.hpp"
 #include "../../hir/nodes.hpp"
 #include "../nodes.hpp"
-#include "../../common/debug.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -86,7 +86,7 @@ class LoweringContext {
         BlockId id = func->add_block();
         if (func->name == "main") {
             debug_msg("mir_new_block",
-                     "[MIR] Created new block " + std::to_string(id) + " in main");
+                      "[MIR] Created new block " + std::to_string(id) + " in main");
         }
         return id;
     }
@@ -119,9 +119,10 @@ class LoweringContext {
             if (current_block == 0 && stmt->kind == MirStatement::Assign) {
                 auto& assign = std::get<MirStatement::AssignData>(stmt->data);
                 debug_msg("mir_bb0_stmt",
-                         "[MIR] Adding to bb0: assign to local " + std::to_string(assign.place.local) +
-                         ", bb0 currently has " + std::to_string(block->statements.size()) + " statements" +
-                         ", block ptr: " + std::to_string(reinterpret_cast<uintptr_t>(block)));
+                          "[MIR] Adding to bb0: assign to local " +
+                              std::to_string(assign.place.local) + ", bb0 currently has " +
+                              std::to_string(block->statements.size()) + " statements" +
+                              ", block ptr: " + std::to_string(reinterpret_cast<uintptr_t>(block)));
             }
             block->add_statement(std::move(stmt));
         }

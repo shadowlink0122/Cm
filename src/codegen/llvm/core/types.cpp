@@ -43,10 +43,13 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
         case hir::TypeKind::CString:
             return ctx.getPtrType();
         case hir::TypeKind::Pointer:
-        case hir::TypeKind::Reference:
-            // LLVM 14: すべてのポインタはi8*として統一
-            // （typed pointers互換性のため、store/load時にbitcastを使用）
+        case hir::TypeKind::Reference: {
+            // LLVM 14+: opaque pointersを使用するが、元の型情報は保持する
+            // ポインタ型はctx.getPtrType()を返すが、
+            // 内部的には元の型情報（type->element_type）を保持している
+            // store/load時に適切な型でキャストする
             return ctx.getPtrType();
+        }
         case hir::TypeKind::Array: {
             // 動的配列（スライス）の場合はポインタ型を返す
             if (!type->array_size.has_value()) {
@@ -117,6 +120,45 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
         default:
             return ctx.getI32Type();
     }
+}
+
+// ポインタ型から指す先の型を取得
+llvm::Type* MIRToLLVM::getPointeeType(const hir::TypePtr& ptrType) {
+    if (!ptrType) {
+        return ctx.getI32Type();
+    }
+
+    // ポインタ型または参照型の場合
+    if (ptrType->kind == hir::TypeKind::Pointer || ptrType->kind == hir::TypeKind::Reference) {
+        if (ptrType->element_type) {
+            return convertType(ptrType->element_type);
+        }
+        // 要素型が不明な場合はi8として扱う
+        return ctx.getI8Type();
+    }
+
+    // 関数型の場合（関数ポインタ）
+    if (ptrType->kind == hir::TypeKind::Function) {
+        // 関数型自体を返す（呼び出し時に使用）
+        llvm::Type* retType =
+            ptrType->return_type ? convertType(ptrType->return_type) : ctx.getVoidType();
+        std::vector<llvm::Type*> paramTypes;
+        for (const auto& paramType : ptrType->param_types) {
+            paramTypes.push_back(convertType(paramType));
+        }
+        return llvm::FunctionType::get(retType, paramTypes, false);
+    }
+
+    // 配列型（動的配列/スライス）
+    if (ptrType->kind == hir::TypeKind::Array && !ptrType->array_size.has_value()) {
+        if (ptrType->element_type) {
+            return convertType(ptrType->element_type);
+        }
+        return ctx.getI8Type();
+    }
+
+    // その他の型はそのまま変換
+    return convertType(ptrType);
 }
 
 // 定数変換

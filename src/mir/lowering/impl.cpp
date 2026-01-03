@@ -218,14 +218,14 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     if (mir_func->name == "main" && !mir_func->basic_blocks.empty()) {
         auto* bb0 = mir_func->basic_blocks[0].get();
         if (bb0) {
-            debug_msg("mir_final_bb0",
-                     "[MIR] Final bb0 for main has " + std::to_string(bb0->statements.size()) + " statements");
+            debug_msg("mir_final_bb0", "[MIR] Final bb0 for main has " +
+                                           std::to_string(bb0->statements.size()) + " statements");
             for (size_t i = 0; i < bb0->statements.size(); i++) {
                 if (bb0->statements[i] && bb0->statements[i]->kind == MirStatement::Assign) {
                     auto& assign = std::get<MirStatement::AssignData>(bb0->statements[i]->data);
-                    debug_msg("mir_final_bb0",
-                             "[MIR]   Statement " + std::to_string(i) + ": assign to local " +
-                             std::to_string(assign.place.local));
+                    debug_msg("mir_final_bb0", "[MIR]   Statement " + std::to_string(i) +
+                                                   ": assign to local " +
+                                                   std::to_string(assign.place.local));
                 }
             }
         }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/base.hpp"
+#include "../../../common/debug.hpp"
 
 #include <algorithm>
 #include <queue>
@@ -204,11 +205,18 @@ class DeadCodeElimination : public OptimizationPass {
                 collect_used_locals_in_rvalue(*assign_data.rvalue, used);
             }
 
-            // 左辺のインデックスから使用を収集
+            // 左辺のプロジェクションから使用を収集
             for (const auto& proj : assign_data.place.projections) {
                 if (proj.kind == ProjectionKind::Index) {
                     used.insert(proj.index_local);
+                } else if (proj.kind == ProjectionKind::Deref) {
+                    // Derefプロジェクションがある場合、ポインタ変数自体が使用される
+                    used.insert(assign_data.place.local);
                 }
+            }
+            // フィールドプロジェクションがある場合も、ベース変数が使用される
+            if (!assign_data.place.projections.empty()) {
+                used.insert(assign_data.place.local);
             }
         }
     }

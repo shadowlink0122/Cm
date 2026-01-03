@@ -16,24 +16,26 @@ class ConstantFolding : public OptimizationPass {
     std::string name() const override { return "Constant Folding"; }
 
     bool run(MirFunction& func) override {
-        // std::cout << "DEBUG: ConstantFolding::run " << func.name << "\n" << std::flush;
         bool changed = false;
 
         // 複数回代入される変数を検出（ループ変数など）
-        // std::cout << "DEBUG: detect_multi_assigned\n" << std::flush;
         auto multiAssigned = detect_multi_assigned(func);
-
-        // 各ローカル変数の定数値を追跡
-        std::unordered_map<LocalId, MirConstant> constants;
+        
+        // 関数引数は定数追跡から除外（呼び出し元から任意の値が渡される）
+        for (LocalId arg : func.arg_locals) {
+            multiAssigned.insert(arg);
+        }
 
         // 各基本ブロックを処理
-        // std::cout << "DEBUG: process_blocks\n" << std::flush;
+        // 注意: 定数情報はブロック単位で管理（ブロック間の伝播は行わない）
+        // これは保守的だが安全なアプローチ（SCCPがグローバルな定数伝播を担当）
         for (auto& block : func.basic_blocks) {
-            if (block) {  // blockがnullの場合のチェックを追加すべき
+            if (block) {
+                // 各ブロックの開始時に定数情報をクリア
+                std::unordered_map<LocalId, MirConstant> constants;
                 changed |= process_block(*block, constants, multiAssigned);
             }
         }
-        // std::cout << "DEBUG: ConstantFolding::run finished\n" << std::flush;
 
         return changed;
     }
@@ -72,29 +74,50 @@ class ConstantFolding : public OptimizationPass {
             if (stmt->kind == MirStatement::Assign) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
 
+                // デリファレンス書き込みチェック（_p.* = ... の形式）
+                // エイリアスの可能性があるため、全ての定数情報をクリアする
+                bool has_deref = false;
+                for (const auto& proj : assign_data.place.projections) {
+                    if (proj.kind == ProjectionKind::Deref) {
+                        has_deref = true;
+                        break;
+                    }
+                }
+                if (has_deref) {
+                    // ポインタ経由の書き込みは任意のローカル変数に影響する可能性がある
+                    // 保守的にすべての定数情報をクリア
+                    constants.clear();
+                    continue;
+                }
+                
+                // フィールドやインデックスへの代入の場合
+                // ベース変数に関する定数情報を無効化
+                if (!assign_data.place.projections.empty()) {
+                    constants.erase(assign_data.place.local);
+                    continue;
+                }
+
                 // 単純な代入（_x = _y）の場合
-                if (assign_data.place.projections.empty()) {
-                    LocalId target = assign_data.place.local;
+                LocalId target = assign_data.place.local;
 
-                    // 複数回代入される変数は定数追跡から除外
-                    if (multiAssigned.count(target) > 0) {
-                        constants.erase(target);
-                        continue;
-                    }
+                // 複数回代入される変数は定数追跡から除外
+                if (multiAssigned.count(target) > 0) {
+                    constants.erase(target);
+                    continue;
+                }
 
-                    // Rvalueを評価して定数化できるかチェック
-                    if (auto constant = evaluate_rvalue(*assign_data.rvalue, constants)) {
-                        // 定数として記録
-                        constants[target] = *constant;
+                // Rvalueを評価して定数化できるかチェック
+                if (auto constant = evaluate_rvalue(*assign_data.rvalue, constants)) {
+                    // 定数として記録
+                    constants[target] = *constant;
 
-                        // RvalueをUse(Constant)に置き換え
-                        auto new_operand = MirOperand::constant(*constant);
-                        assign_data.rvalue = MirRvalue::use(std::move(new_operand));
-                        changed = true;
-                    } else {
-                        // 定数でない場合は記録から削除
-                        constants.erase(target);
-                    }
+                    // RvalueをUse(Constant)に置き換え
+                    auto new_operand = MirOperand::constant(*constant);
+                    assign_data.rvalue = MirRvalue::use(std::move(new_operand));
+                    changed = true;
+                } else {
+                    // 定数でない場合は記録から削除
+                    constants.erase(target);
                 }
             }
         }

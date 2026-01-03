@@ -19,15 +19,20 @@ class CopyPropagation : public OptimizationPass {
 
         // 複数回代入される変数を検出（ループ変数など）
         auto multiAssigned = detect_multi_assigned(func);
-
-        // 各ローカル変数のコピー元を追跡
-        // copies[x] = y は _x = _y を意味する
-        std::unordered_map<LocalId, LocalId> copies;
+        
+        // 関数引数はコピー伝播から除外（呼び出し元から任意の値が渡される）
+        for (LocalId arg : func.arg_locals) {
+            multiAssigned.insert(arg);
+        }
 
         // 各基本ブロックを処理
+        // 注意: コピー情報はブロック単位で管理（ブロック間の伝播は行わない）
+        // これは保守的だが安全なアプローチ
         for (auto& block : func.basic_blocks) {
             if (!block)
                 continue;
+            // 各ブロックの開始時にコピー情報をクリア
+            std::unordered_map<LocalId, LocalId> copies;
             changed |= process_block(*block, copies, func, multiAssigned);
         }
 
@@ -76,6 +81,22 @@ class CopyPropagation : public OptimizationPass {
         for (auto& stmt : block.statements) {
             if (stmt->kind == MirStatement::Assign) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+
+                // デリファレンス書き込みチェック（_p.* = ... の形式）
+                // エイリアスの可能性があるため、全てのコピー情報をクリアする
+                bool has_deref = false;
+                for (const auto& proj : assign_data.place.projections) {
+                    if (proj.kind == ProjectionKind::Deref) {
+                        has_deref = true;
+                        break;
+                    }
+                }
+                if (has_deref) {
+                    // ポインタ経由の書き込みは任意のローカル変数に影響する可能性がある
+                    // 保守的にすべてのコピー情報をクリア
+                    copies.clear();
+                    continue;
+                }
 
                 // まず右辺のコピー伝播を実行
                 changed |= propagate_in_rvalue(*assign_data.rvalue, copies);
@@ -137,6 +158,25 @@ class CopyPropagation : public OptimizationPass {
                                 }
                             }
                         }
+                    } else {
+                        // フィールドやインデックスへの代入の場合
+                        // ベース変数に関するコピー情報を無効化
+                        // _a = _b の後に _b.field = ... があると、_a の情報が古くなる
+                        LocalId modified_base = assign_data.place.local;
+                        
+                        // copies[X] = modified_base となっている X を全て削除
+                        std::vector<LocalId> to_remove;
+                        for (const auto& [target, source] : copies) {
+                            if (source == modified_base) {
+                                to_remove.push_back(target);
+                            }
+                        }
+                        for (LocalId id : to_remove) {
+                            copies.erase(id);
+                        }
+                        
+                        // modified_base 自体のコピー情報も削除
+                        copies.erase(modified_base);
                     }
                 }
             }

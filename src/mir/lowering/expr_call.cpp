@@ -2082,10 +2082,15 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         // 関数ポインタ経由の呼び出し: 変数から関数ポインタを取得
         auto var_id = ctx.resolve_variable(call.func_name);
         if (var_id) {
-            debug_msg("mir_func_ptr_call",
-                     "[MIR] Resolved variable '" + call.func_name + "' to local " + std::to_string(*var_id));
+            debug_msg("mir_func_ptr_call", "[MIR] Resolved variable '" + call.func_name +
+                                               "' to local " + std::to_string(*var_id));
             // クロージャかどうかチェック
             auto& local_decl = ctx.func->locals[*var_id];
+            debug_msg("mir_closure_check",
+                      "[MIR] Local " + std::to_string(*var_id) +
+                          " is_closure=" + std::to_string(local_decl.is_closure) +
+                          " captured_locals=" + std::to_string(local_decl.captured_locals.size()) +
+                          " closure_func_name=" + local_decl.closure_func_name);
             if (local_decl.is_closure && !local_decl.captured_locals.empty()) {
                 // クロージャ: 実際の関数名を使い、キャプチャ引数を追加
                 func_operand = MirOperand::function_ref(local_decl.closure_func_name);
