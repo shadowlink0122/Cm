@@ -66,7 +66,8 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
         for (const auto& func : program.functions) {
             if (func && complexity_limiter.is_too_complex(*func)) {
                 if (debug_output) {
-                    std::cout << "[OPT] 関数 '" << func->name << "' は複雑すぎるため最適化をスキップします\n";
+                    std::cout << "[OPT] 関数 '" << func->name
+                              << "' は複雑すぎるため最適化をスキップします\n";
                 }
             }
         }
@@ -111,8 +112,8 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
                 // このパスの実行回数をチェック
                 if (pass_run_counts[pass_name] >= max_pass_runs_total) {
                     if (debug_output) {
-                        std::cout << "[OPT]   " << pass_name << " スキップ（実行回数上限: "
-                                  << max_pass_runs_total << "回）\n";
+                        std::cout << "[OPT]   " << pass_name
+                                  << " スキップ（実行回数上限: " << max_pass_runs_total << "回）\n";
                     }
                     continue;
                 }
@@ -135,8 +136,9 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
                 if (pass_changed) {
                     pass_run_counts[pass_name]++;
                     if (debug_output) {
-                        std::cout << "[OPT]   " << pass_name << " 変更実行 (回数: "
-                                  << pass_run_counts[pass_name] << "/" << max_pass_runs_total << ")\n";
+                        std::cout << "[OPT]   " << pass_name
+                                  << " 変更実行 (回数: " << pass_run_counts[pass_name] << "/"
+                                  << max_pass_runs_total << ")\n";
                     }
                 }
             }

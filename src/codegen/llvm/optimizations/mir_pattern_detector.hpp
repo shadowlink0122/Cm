@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../mir/nodes.hpp"
+
 #include <iostream>
 #include <string>
 
@@ -25,8 +26,7 @@ class MIRPatternDetector {
         for (const auto& func : program.functions) {
             std::string name = func->name;
 
-            if (name.find("closure") != std::string::npos ||
-                name.find("$_") != std::string::npos) {
+            if (name.find("closure") != std::string::npos || name.find("$_") != std::string::npos) {
                 closure_count++;
             }
 
@@ -41,8 +41,7 @@ class MIRPatternDetector {
                 lambda_count++;
             }
 
-            if (name.find("map") != std::string::npos ||
-                name.find("filter") != std::string::npos ||
+            if (name.find("map") != std::string::npos || name.find("filter") != std::string::npos ||
                 name.find("fold") != std::string::npos ||
                 name.find("reduce") != std::string::npos) {
                 map_filter_count++;
@@ -73,8 +72,10 @@ class MIRPatternDetector {
         // iter_closureパターンが検出された場合
         if (has_iter_closure_pattern) {
             if (requested_level >= 2) {
-                std::cerr << "[MIR_PATTERN] 警告: iter_closureパターンにより最適化問題が発生する可能性があります\n";
-                std::cerr << "[MIR_PATTERN] 最適化レベルをO" << requested_level << "からO0に変更します\n";
+                std::cerr << "[MIR_PATTERN] 警告: "
+                             "iter_closureパターンにより最適化問題が発生する可能性があります\n";
+                std::cerr << "[MIR_PATTERN] 最適化レベルをO" << requested_level
+                          << "からO0に変更します\n";
                 return 0;  // 最適化を完全に無効化
             }
         }
@@ -87,7 +88,7 @@ class MIRPatternDetector {
                 // main関数の最初のブロックが大きすぎる場合
                 if (first_block.statements.size() > 100) {
                     std::cerr << "[MIR_PATTERN] main関数の最初のブロックが大きすぎます（"
-                             << first_block.statements.size() << " statements）\n";
+                              << first_block.statements.size() << " statements）\n";
                     if (requested_level >= 3) {
                         std::cerr << "[MIR_PATTERN] O3からO2に最適化レベルを下げます\n";
                         return 2;

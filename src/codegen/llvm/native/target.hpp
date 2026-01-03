@@ -187,7 +187,7 @@ class TargetManager {
         // タイムアウト付きで安全にコード生成
         try {
             SafeCodeGenerator::emitAssemblySafe(module, targetMachine, filename,
-                                               std::chrono::seconds(30));
+                                                std::chrono::seconds(30));
         } catch (const std::exception& e) {
             // エラーメッセージを改善
             std::string error_msg = "Failed to generate assembly: ";

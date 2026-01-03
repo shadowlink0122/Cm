@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../nodes.hpp"  // MirFunction定義のため
+
 #include <atomic>
 #include <chrono>
 #include <functional>
@@ -15,8 +16,8 @@ class TimeoutGuard {
     std::atomic<bool> timeout_flag{false};
     std::atomic<bool> should_stop{false};
     std::thread monitor_thread;
-    std::chrono::steady_clock::time_point start_time;
     std::chrono::seconds timeout_duration;
+    std::chrono::steady_clock::time_point start_time;
 
    public:
     // タイムアウト時間を指定してガードを作成

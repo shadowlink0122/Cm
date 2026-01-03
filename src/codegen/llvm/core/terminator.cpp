@@ -471,16 +471,18 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         auto funcPtrPtr = builder->CreateGEP(
                                             ctx.getI8Type(), vtablePtr, byteOffset, "func_ptr_ptr");
                                         // funcPtrPtrから関数ポインタをロード
-                                        llvm::Value* funcPtr = builder->CreateLoad(ctx.getPtrType(),
-                                                                           funcPtrPtr, "func_ptr");
+                                        llvm::Value* funcPtr = builder->CreateLoad(
+                                            ctx.getPtrType(), funcPtrPtr, "func_ptr");
 
                                         std::vector<llvm::Type*> paramTypes = {ctx.getPtrType()};
                                         auto funcType = llvm::FunctionType::get(ctx.getVoidType(),
                                                                                 paramTypes, false);
 #if LLVM_VERSION_MAJOR < 15
-                                        // LLVM 14: typed pointerが必要なので関数ポインタ型にキャスト
+                                        // LLVM 14: typed
+                                        // pointerが必要なので関数ポインタ型にキャスト
                                         auto funcPtrType = llvm::PointerType::get(funcType, 0);
-                                        funcPtr = builder->CreateBitCast(funcPtr, funcPtrType, "func_ptr_cast");
+                                        funcPtr = builder->CreateBitCast(funcPtr, funcPtrType,
+                                                                         "func_ptr_cast");
 #endif
 
                                         std::vector<llvm::Value*> callArgs = {dataPtr};

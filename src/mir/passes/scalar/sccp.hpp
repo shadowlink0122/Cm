@@ -185,7 +185,7 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             }
 
             auto merged_in = merge_predecessors(func, block_id, out_states, reachable);
-            
+
             // エントリブロックの場合、関数引数はOverdefinedを維持
             if (block_id == entry) {
                 for (LocalId arg : func.arg_locals) {
@@ -194,7 +194,7 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                     }
                 }
             }
-            
+
             bool in_changed = !states_equal(merged_in, in_states[block_id]);
             if (in_changed) {
                 in_states[block_id] = std::move(merged_in);

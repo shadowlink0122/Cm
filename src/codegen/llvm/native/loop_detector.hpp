@@ -1,14 +1,14 @@
 #pragma once
 
-#include <llvm/Config/llvm-config.h>
+#include <iostream>
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/Analysis/LoopPass.h>
+#include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
-#include <iostream>
 #include <map>
 #include <set>
 #include <string>
@@ -20,25 +20,28 @@ class InfiniteLoopDetector {
    private:
     // ループの複雑度を評価
     struct LoopComplexity {
-        size_t depth;           // ネストの深さ
-        size_t block_count;     // ループ内のブロック数
-        size_t instruction_count; // ループ内の命令数
-        bool has_exit_condition; // 終了条件があるか
-        bool has_side_effects;  // 副作用があるか
+        size_t depth;              // ネストの深さ
+        size_t block_count;        // ループ内のブロック数
+        size_t instruction_count;  // ループ内の命令数
+        bool has_exit_condition;   // 終了条件があるか
+        bool has_side_effects;     // 副作用があるか
 
         size_t complexity_score() const {
             // 複雑度スコアを計算
             size_t score = block_count * instruction_count;
-            if (depth > 1) score *= depth; // ネストループは複雑度を増大
-            if (!has_exit_condition) score *= 10; // 終了条件なしは危険
-            if (!has_side_effects) score *= 5; // 副作用なしも危険（最適化で無限ループ化しやすい）
+            if (depth > 1)
+                score *= depth;  // ネストループは複雑度を増大
+            if (!has_exit_condition)
+                score *= 10;  // 終了条件なしは危険
+            if (!has_side_effects)
+                score *= 5;  // 副作用なしも危険（最適化で無限ループ化しやすい）
             return score;
         }
 
         bool is_likely_infinite() const {
             // 明らかな無限ループパターンを検出
             if (!has_exit_condition && !has_side_effects) {
-                return true; // while(true) {} のようなパターン
+                return true;  // while(true) {} のようなパターン
             }
 
             // 複雑度が異常に高い
@@ -57,7 +60,8 @@ class InfiniteLoopDetector {
         size_t total_complexity = 0;
 
         for (auto& F : module) {
-            if (F.isDeclaration()) continue;
+            if (F.isDeclaration())
+                continue;
 
             auto complexity = analyzeFunction(F);
             total_complexity += complexity;
@@ -66,13 +70,13 @@ class InfiniteLoopDetector {
             if (complexity > 10000) {
                 risky_functions.push_back(F.getName().str());
                 std::cerr << "[LOOP_DETECT] 警告: 関数 '" << F.getName().str()
-                         << "' は複雑度が高い（" << complexity << "）\n";
+                          << "' は複雑度が高い（" << complexity << "）\n";
             }
 
             // 明らかな無限ループパターンを検出
             if (hasObviousInfiniteLoop(F)) {
                 std::cerr << "[LOOP_DETECT] エラー: 関数 '" << F.getName().str()
-                         << "' に無限ループの可能性があります\n";
+                          << "' に無限ループの可能性があります\n";
                 return true;
             }
         }
@@ -80,13 +84,13 @@ class InfiniteLoopDetector {
         // 全体の複雑度が異常に高い
         if (total_complexity > 100000) {
             std::cerr << "[LOOP_DETECT] エラー: モジュール全体の複雑度が異常に高い（"
-                     << total_complexity << "）\n";
+                      << total_complexity << "）\n";
             return true;
         }
 
         if (!risky_functions.empty()) {
             std::cerr << "[LOOP_DETECT] 警告: " << risky_functions.size()
-                     << " 個の関数が高複雑度です\n";
+                      << " 個の関数が高複雑度です\n";
         }
 
         return false;
@@ -100,12 +104,12 @@ class InfiniteLoopDetector {
 
         // 各基本ブロックの複雑度を計算
         for (auto& BB : F) {
-            size_t bb_complexity = BB.size(); // 命令数
+            size_t bb_complexity = BB.size();  // 命令数
 
             // 分岐命令の複雑度を追加
             if (auto* br = llvm::dyn_cast<llvm::BranchInst>(BB.getTerminator())) {
                 if (br->isConditional()) {
-                    bb_complexity *= 2; // 条件分岐は複雑度を増加
+                    bb_complexity *= 2;  // 条件分岐は複雑度を増加
                 }
             }
 
@@ -130,6 +134,8 @@ class InfiniteLoopDetector {
     }
 
     // 明らかな無限ループパターンを検出
+    // 注: LLVM最適化後のIRでは、forループなどが誤検出される可能性があるため、
+    //     最も明らかなケース（無条件の自己ループ）のみを検出する
     static bool hasObviousInfiniteLoop(llvm::Function& F) {
         for (auto& BB : F) {
             // 自己ループをチェック
@@ -146,10 +152,11 @@ class InfiniteLoopDetector {
                 }
             }
 
-            // 強連結成分（SCC）による無限ループチェック
-            if (isPartOfInfiniteSCC(&BB)) {
-                return true;
-            }
+            // 強連結成分（SCC）による無限ループチェックは誤検出が多いため無効化
+            // LLVM最適化後のIRでは正常なループも複雑な形に変換されることがある
+            // if (isPartOfInfiniteSCC(&BB)) {
+            //     return true;
+            // }
         }
 
         return false;
@@ -164,9 +171,8 @@ class InfiniteLoopDetector {
     }
 
     // サイクル検出（DFS）
-    static bool hasCycle(llvm::BasicBlock* BB,
-                        std::set<llvm::BasicBlock*>& visited,
-                        std::set<llvm::BasicBlock*>& in_path) {
+    static bool hasCycle(llvm::BasicBlock* BB, std::set<llvm::BasicBlock*>& visited,
+                         std::set<llvm::BasicBlock*>& in_path) {
         visited.insert(BB);
         in_path.insert(BB);
 
@@ -175,7 +181,7 @@ class InfiniteLoopDetector {
                 // バックエッジが見つかった（サイクル検出）
                 // 脱出可能かチェック
                 if (!hasExitFromCycle(BB, succ)) {
-                    return true; // 脱出不可能な無限ループ
+                    return true;  // 脱出不可能な無限ループ
                 }
             }
 
@@ -211,7 +217,7 @@ class InfiniteLoopDetector {
 
     // サイクル内のブロックを収集
     static void collectCycleBlocks(llvm::BasicBlock* start, llvm::BasicBlock* end,
-                                  std::set<llvm::BasicBlock*>& blocks) {
+                                   std::set<llvm::BasicBlock*>& blocks) {
         if (start == end) {
             blocks.insert(start);
             return;
@@ -270,7 +276,8 @@ class PreCodeGenValidator {
         // 3. 関数の複雑度チェック
         size_t huge_functions = 0;
         for (auto& F : module) {
-            if (F.isDeclaration()) continue;
+            if (F.isDeclaration())
+                continue;
 
             size_t inst_count = 0;
             for (auto& BB : F) {
@@ -279,14 +286,14 @@ class PreCodeGenValidator {
 
             if (inst_count > 10000) {
                 huge_functions++;
-                std::cerr << "[VALIDATOR] 警告: 関数 '" << F.getName().str()
-                         << "' は " << inst_count << " 個の命令を含んでいます\n";
+                std::cerr << "[VALIDATOR] 警告: 関数 '" << F.getName().str() << "' は "
+                          << inst_count << " 個の命令を含んでいます\n";
             }
         }
 
         if (huge_functions > 5) {
-            std::cerr << "[VALIDATOR] エラー: 巨大な関数が多すぎます（"
-                     << huge_functions << " 個）\n";
+            std::cerr << "[VALIDATOR] エラー: 巨大な関数が多すぎます（" << huge_functions
+                      << " 個）\n";
             return false;
         }
 

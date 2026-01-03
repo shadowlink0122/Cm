@@ -50,7 +50,7 @@ class FunctionInlining : public OptimizationPass {
     }
 
    private:
-    const size_t INLINE_THRESHOLD = 10;  // より小さい関数のみインライン化
+    const size_t INLINE_THRESHOLD = 10;        // より小さい関数のみインライン化
     const size_t MAX_INLINE_PER_FUNCTION = 2;  // 同じ関数の最大インライン化回数を削減
     const size_t MAX_TOTAL_INLINES = 20;  // プログラム全体でのインライン化回数制限
     std::unordered_map<std::string, size_t> inline_counts;

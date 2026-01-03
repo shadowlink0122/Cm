@@ -271,21 +271,23 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // 通常の関数呼び出し
             // ============================================================
             std::cerr << "[MIR2LLVM]         Processing normal function call: " << funcName << "\n";
-            std::cerr << "[MIR2LLVM]         About to convert " << callData.args.size() << " arguments\n";
+            std::cerr << "[MIR2LLVM]         About to convert " << callData.args.size()
+                      << " arguments\n";
 
             // 引数変換時の無限ループ検出
             static int argConversionDepth = 0;
             const int MAX_ARG_DEPTH = 50;
             if (argConversionDepth >= MAX_ARG_DEPTH) {
                 std::cerr << "[MIR2LLVM]         ERROR: Maximum arg conversion depth exceeded!\n";
-                throw std::runtime_error("Maximum arg conversion depth exceeded in Call terminator");
+                throw std::runtime_error(
+                    "Maximum arg conversion depth exceeded in Call terminator");
             }
             argConversionDepth++;
 
             std::vector<llvm::Value*> args;
             for (size_t i = 0; i < callData.args.size(); ++i) {
-                std::cerr << "[MIR2LLVM]         Converting arg " << i << "/" << callData.args.size()
-                          << " (depth=" << argConversionDepth << ")\n";
+                std::cerr << "[MIR2LLVM]         Converting arg " << i << "/"
+                          << callData.args.size() << " (depth=" << argConversionDepth << ")\n";
 
                 // 各引数変換の前後にチェック
                 if (i >= 100) {
@@ -299,13 +301,23 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             argConversionDepth--;
 
             std::cerr << "[MIR2LLVM]         All args converted, total: " << args.size() << "\n";
-            std::cerr << "[MIR2LLVM]         Checking interface dispatch: is_virtual="
-                      << callData.is_virtual << ", interface_name='"
-                      << callData.interface_name << "', args.empty()="
-                      << args.empty() << "\n";
+            std::cerr << "[MIR2LLVM]         funcName at interface dispatch check: '" << funcName
+                      << "'\n";
+
+            // __builtin_関数の場合はインターフェースディスパッチをスキップ
+            bool skipInterfaceDispatch = (funcName.find("__builtin_") == 0);
+            if (skipInterfaceDispatch) {
+                std::cerr << "[MIR2LLVM]         Skipping interface dispatch for builtin function: "
+                          << funcName << "\n";
+            } else {
+                std::cerr << "[MIR2LLVM]         Checking interface dispatch: is_virtual="
+                          << callData.is_virtual << ", interface_name='" << callData.interface_name
+                          << "', args.empty()=" << args.empty() << "\n";
+            }
 
             // インターフェースメソッド呼び出しの場合（動的ディスパッチ）
-            if (callData.is_virtual && !callData.interface_name.empty() && !args.empty()) {
+            if (!skipInterfaceDispatch && callData.is_virtual && !callData.interface_name.empty() &&
+                !args.empty()) {
                 std::cerr << "[MIR2LLVM]         ENTERING interface dispatch block\n";
                 if (callData.args.size() > 0) {
                     auto& firstArg = callData.args[0];
@@ -429,16 +441,20 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // 間接呼び出しの場合は直接呼び出しの処理をスキップ
             llvm::Function* callee = nullptr;
             if (!isIndirectCall && !funcName.empty()) {
-                std::cerr << "[MIR2LLVM]           Before generateCallFunctionId: " << funcName << "\n";
+                std::cerr << "[MIR2LLVM]           Before generateCallFunctionId: " << funcName
+                          << "\n";
                 // オーバーロード対応：引数の型から関数IDを生成
                 auto funcId = generateCallFunctionId(funcName, callData.args);
-                std::cerr << "[MIR2LLVM]           After generateCallFunctionId: funcId=" << funcId << "\n";
+                std::cerr << "[MIR2LLVM]           After generateCallFunctionId: funcId=" << funcId
+                          << "\n";
                 callee = functions[funcId];
                 if (!callee) {
-                    std::cerr << "[MIR2LLVM]           Function not found, declaring external: " << funcName << "\n";
+                    std::cerr << "[MIR2LLVM]           Function not found, declaring external: "
+                              << funcName << "\n";
                     callee = declareExternalFunction(funcName);
                 }
-                std::cerr << "[MIR2LLVM]           Callee " << (callee ? "found" : "not found") << "\n";
+                std::cerr << "[MIR2LLVM]           Callee " << (callee ? "found" : "not found")
+                          << "\n";
             }
 
             if (callee) {
@@ -759,7 +775,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             }
 
             if (callData.success != mir::INVALID_BLOCK) {
-                std::cerr << "[MIR2LLVM]         About to CreateBr to block " << callData.success << "\n";
+                std::cerr << "[MIR2LLVM]         About to CreateBr to block " << callData.success
+                          << "\n";
 
                 // blocksマップにsuccessブロックが存在するか確認
                 auto blockIt = blocks.find(callData.success);

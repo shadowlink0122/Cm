@@ -20,7 +20,7 @@ class ConstantFolding : public OptimizationPass {
 
         // 複数回代入される変数を検出（ループ変数など）
         auto multiAssigned = detect_multi_assigned(func);
-        
+
         // 関数引数は定数追跡から除外（呼び出し元から任意の値が渡される）
         for (LocalId arg : func.arg_locals) {
             multiAssigned.insert(arg);
@@ -89,7 +89,7 @@ class ConstantFolding : public OptimizationPass {
                     constants.clear();
                     continue;
                 }
-                
+
                 // フィールドやインデックスへの代入の場合
                 // ベース変数に関する定数情報を無効化
                 if (!assign_data.place.projections.empty()) {

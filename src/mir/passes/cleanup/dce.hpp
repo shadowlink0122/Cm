@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../core/base.hpp"
 #include "../../../common/debug.hpp"
+#include "../core/base.hpp"
 
 #include <algorithm>
 #include <queue>

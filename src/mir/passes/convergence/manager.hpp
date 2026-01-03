@@ -113,7 +113,6 @@ class ConvergenceManager {
         // 変更量の振動をチェック（最適化が互いに打ち消しあっている）
         if (metrics_history.size() >= 4) {
             // 最近4回の変更量を確認
-            bool oscillating = true;
             int prev_change = metrics_history[metrics_history.size() - 4].total_changes();
             int curr_change = metrics_history[metrics_history.size() - 3].total_changes();
 

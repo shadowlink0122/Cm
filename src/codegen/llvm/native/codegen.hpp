@@ -5,8 +5,8 @@
 #include "../core/context.hpp"
 #include "../core/intrinsics.hpp"
 #include "../core/mir_to_llvm.hpp"
-#include "../optimizations/optimization_manager.hpp"
 #include "../optimizations/mir_pattern_detector.hpp"
+#include "../optimizations/optimization_manager.hpp"
 #include "../optimizations/pass_limiter.hpp"
 #include "../optimizations/recursion_limiter.hpp"
 #include "loop_detector.hpp"
@@ -79,10 +79,11 @@ class LLVMCodeGen {
 
         // 0. MIRレベルでのパターン検出と最適化レベル調整
         std::cerr << "[DEBUG] Step 0: MIR pattern detection...\n";
-        int adjusted_level = MIRPatternDetector::adjustOptimizationLevel(program, options.optimizationLevel);
+        int adjusted_level =
+            MIRPatternDetector::adjustOptimizationLevel(program, options.optimizationLevel);
         if (adjusted_level != options.optimizationLevel) {
-            std::cerr << "[MIR] 最適化レベルを O" << options.optimizationLevel
-                     << " から O" << adjusted_level << " に変更しました（MIRパターン検出による）\n";
+            std::cerr << "[MIR] 最適化レベルを O" << options.optimizationLevel << " から O"
+                      << adjusted_level << " に変更しました（MIRパターン検出による）\n";
             options.optimizationLevel = adjusted_level;
         }
         std::cerr << "[DEBUG] Step 0: Pattern detection completed\n";
@@ -112,15 +113,16 @@ class LLVMCodeGen {
                 context->getModule(), options.optimizationLevel);
 
             if (adjusted_level != options.optimizationLevel) {
-                std::cerr << "[LLVM] 最適化レベルを O" << options.optimizationLevel
-                         << " から O" << adjusted_level << " に変更しました\n";
+                std::cerr << "[LLVM] 最適化レベルを O" << options.optimizationLevel << " から O"
+                          << adjusted_level << " に変更しました\n";
                 options.optimizationLevel = adjusted_level;
             }
             std::cerr << "[DEBUG] Step 3.5: Pattern detection completed\n";
         }
 
         // 4. 最適化
-        std::cerr << "[DEBUG] Step 4: Starting optimization (level " << options.optimizationLevel << ")...\n";
+        std::cerr << "[DEBUG] Step 4: Starting optimization (level " << options.optimizationLevel
+                  << ")...\n";
         optimize();
         std::cerr << "[DEBUG] Step 4: Optimization completed\n";
 
@@ -236,16 +238,15 @@ class LLVMCodeGen {
         int adjustedLevel = OptimizationPassLimiter::adjustOptimizationLevel(
             context->getModule(), options.optimizationLevel);
         if (adjustedLevel != options.optimizationLevel) {
-            cm::debug::codegen::log(
-                cm::debug::codegen::Id::LLVMOptimize,
-                "Optimization level adjusted from O" + std::to_string(options.optimizationLevel) +
-                " to O" + std::to_string(adjustedLevel));
+            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                    "Optimization level adjusted from O" +
+                                        std::to_string(options.optimizationLevel) + " to O" +
+                                        std::to_string(adjustedLevel));
             options.optimizationLevel = adjustedLevel;
 
             if (adjustedLevel == 0) {
-                cm::debug::codegen::log(
-                    cm::debug::codegen::Id::LLVMOptimize,
-                    "Skipping optimization due to complexity patterns");
+                cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                        "Skipping optimization due to complexity patterns");
                 return;  // 最適化を完全にスキップ
             }
         }

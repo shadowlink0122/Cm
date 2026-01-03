@@ -1,12 +1,12 @@
 #pragma once
 
-#include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR
-
 #include "loop_detector.hpp"
+
 #include <atomic>
 #include <chrono>
 #include <future>
 #include <iostream>
+#include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/FileSystem.h>
@@ -36,16 +36,16 @@ class SafeCodeGenerator {
     };
 
     // メモリバッファへの安全なコード生成
-    static GenerationResult generateToMemory(
-        llvm::Module& module, llvm::TargetMachine* targetMachine,
+    static GenerationResult generateToMemory(llvm::Module& module,
+                                             llvm::TargetMachine* targetMachine,
 #if LLVM_VERSION_MAJOR >= 18
-        llvm::CodeGenFileType fileType,
+                                             llvm::CodeGenFileType fileType,
 #elif LLVM_VERSION_MAJOR >= 10
-        llvm::CodeGenFileType fileType,
+                                             llvm::CodeGenFileType fileType,
 #else
-        llvm::TargetMachine::CodeGenFileType fileType,
+                                             llvm::TargetMachine::CodeGenFileType fileType,
 #endif
-        std::chrono::seconds timeout = DEFAULT_TIMEOUT) {
+                                             std::chrono::seconds timeout = DEFAULT_TIMEOUT) {
         GenerationResult result;
         result.success = false;
 
@@ -98,8 +98,8 @@ class SafeCodeGenerator {
         while (!generation_done.load()) {
             if (std::chrono::steady_clock::now() > timeout_time) {
                 should_stop.store(true);
-                result.error_message = "Code generation timeout after " +
-                                      std::to_string(timeout.count()) + " seconds";
+                result.error_message =
+                    "Code generation timeout after " + std::to_string(timeout.count()) + " seconds";
 
                 // スレッドを強制終了（危険だが必要）
                 // 注: これは理想的ではないが、LLVMの内部ループから
@@ -116,7 +116,7 @@ class SafeCodeGenerator {
             if (buffer.size() > MAX_OUTPUT_SIZE) {
                 should_stop.store(true);
                 result.error_message = "Output size exceeded " +
-                                      std::to_string(MAX_OUTPUT_SIZE / (1024 * 1024)) + "MB limit";
+                                       std::to_string(MAX_OUTPUT_SIZE / (1024 * 1024)) + "MB limit";
                 if (generation_thread.joinable()) {
                     generation_thread.detach();
                 }

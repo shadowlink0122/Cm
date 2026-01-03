@@ -1,7 +1,0 @@
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/intrinsics_gen.dir
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/omp_gen.dir
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/acc_gen.dir
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/cm.dir
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/cm_runtime.dir
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/edit_cache.dir
-/Users/shadowlink/Documents/git/Cm/CMakeFiles/rebuild_cache.dir

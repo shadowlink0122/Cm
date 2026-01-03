@@ -19,7 +19,7 @@ class CopyPropagation : public OptimizationPass {
 
         // 複数回代入される変数を検出（ループ変数など）
         auto multiAssigned = detect_multi_assigned(func);
-        
+
         // 関数引数はコピー伝播から除外（呼び出し元から任意の値が渡される）
         for (LocalId arg : func.arg_locals) {
             multiAssigned.insert(arg);
@@ -163,7 +163,7 @@ class CopyPropagation : public OptimizationPass {
                         // ベース変数に関するコピー情報を無効化
                         // _a = _b の後に _b.field = ... があると、_a の情報が古くなる
                         LocalId modified_base = assign_data.place.local;
-                        
+
                         // copies[X] = modified_base となっている X を全て削除
                         std::vector<LocalId> to_remove;
                         for (const auto& [target, source] : copies) {
@@ -174,7 +174,7 @@ class CopyPropagation : public OptimizationPass {
                         for (LocalId id : to_remove) {
                             copies.erase(id);
                         }
-                        
+
                         // modified_base 自体のコピー情報も削除
                         copies.erase(modified_base);
                     }

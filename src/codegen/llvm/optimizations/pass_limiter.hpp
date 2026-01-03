@@ -1,12 +1,12 @@
 #pragma once
 
+#include <chrono>
+#include <iostream>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/PassManager.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <chrono>
-#include <iostream>
 #include <map>
 #include <string>
 
@@ -29,7 +29,8 @@ class OptimizationPassLimiter {
         size_t max_block_count = 0;
 
         for (auto& F : module) {
-            if (F.isDeclaration()) continue;
+            if (F.isDeclaration())
+                continue;
 
             total_functions++;
             std::string name = F.getName().str();
@@ -42,8 +43,7 @@ class OptimizationPassLimiter {
             }
 
             // イテレータパターンの検出
-            if (name.find("iter") != std::string::npos ||
-                name.find("next") != std::string::npos ||
+            if (name.find("iter") != std::string::npos || name.find("next") != std::string::npos ||
                 name.find("Iterator") != std::string::npos) {
                 iterator_count++;
             }
@@ -73,7 +73,7 @@ class OptimizationPassLimiter {
         if (requested_level >= 3) {
             if (complexity_score > 100) {
                 std::cerr << "[OPT_LIMITER] 警告: モジュールの複雑度が高い (スコア: "
-                         << complexity_score << ")\n";
+                          << complexity_score << ")\n";
                 std::cerr << "  - クロージャ: " << closure_count << "\n";
                 std::cerr << "  - イテレータ: " << iterator_count << "\n";
                 std::cerr << "  - 最大ブロック数: " << max_block_count << "\n";
@@ -83,7 +83,7 @@ class OptimizationPassLimiter {
 
             if (complexity_score > 50) {
                 std::cerr << "[OPT_LIMITER] 注意: モジュールがやや複雑 (スコア: "
-                         << complexity_score << ")\n";
+                          << complexity_score << ")\n";
                 std::cerr << "[OPT_LIMITER] 最適化レベルを O3 から O2 に下げます\n";
                 return 2;  // O2に下げる
             }
@@ -92,7 +92,8 @@ class OptimizationPassLimiter {
         // iter_closure特有のパターンを検出
         bool has_iter_closure_pattern = false;
         for (auto& F : module) {
-            if (F.isDeclaration()) continue;
+            if (F.isDeclaration())
+                continue;
 
             std::string name = F.getName().str();
             // iter_closureテストの特徴的なパターン
@@ -100,8 +101,7 @@ class OptimizationPassLimiter {
                  name.find("closure") != std::string::npos) ||
                 (name.find("map") != std::string::npos &&
                  name.find("filter") != std::string::npos) ||
-                (name.find("Iterator") != std::string::npos &&
-                 closure_count > 5)) {
+                (name.find("Iterator") != std::string::npos && closure_count > 5)) {
                 has_iter_closure_pattern = true;
                 break;
             }
@@ -131,22 +131,20 @@ class OptimizationPassLimiter {
     }
 
     // 最適化の実行時間を監視
-    static bool shouldAbortOptimization(
-        const std::chrono::steady_clock::time_point& start_time,
-        const std::string& phase_name) {
-
+    static bool shouldAbortOptimization(const std::chrono::steady_clock::time_point& start_time,
+                                        const std::string& phase_name) {
         auto elapsed = std::chrono::steady_clock::now() - start_time;
         auto seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
 
         if (seconds > 10) {
-            std::cerr << "[OPT_LIMITER] エラー: " << phase_name
-                     << " が " << seconds << " 秒を超えています\n";
+            std::cerr << "[OPT_LIMITER] エラー: " << phase_name << " が " << seconds
+                      << " 秒を超えています\n";
             return true;
         }
 
         if (seconds > 5) {
-            std::cerr << "[OPT_LIMITER] 警告: " << phase_name
-                     << " が " << seconds << " 秒かかっています\n";
+            std::cerr << "[OPT_LIMITER] 警告: " << phase_name << " が " << seconds
+                      << " 秒かかっています\n";
         }
 
         return false;

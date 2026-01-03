@@ -88,7 +88,7 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
     int max_iterations = 5;  // デフォルト
     switch (optimization_level) {
         case 1:
-            max_iterations = 3;  // -O1: 軽量（最大3回）
+            max_iterations = 2;  // -O1: 軽量（最大2回）
             if (debug) {
                 std::cout << "[OPT] -O1: バランス型最適化（最大" << max_iterations << "回反復）\n";
             }
@@ -116,7 +116,7 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
             break;
     }
 
-    // 最適化を実行（収束管理付き）
+    // 最適化を実行（v2を使用 - 収束判定とタイムアウト機能付き）
     pass_mgr.run_until_fixpoint_v2(program, max_iterations);
 
     if (debug) {
