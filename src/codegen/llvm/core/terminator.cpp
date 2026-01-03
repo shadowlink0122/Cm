@@ -253,10 +253,15 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                 if (callData.destination) {
                     auto destLocal = callData.destination->local;
+                    // bool戻り値（i1）をメモリ格納用（i8）に変換
+                    llvm::Value* resultToStore = result;
+                    if (result->getType()->isIntegerTy(1)) {
+                        resultToStore = builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
+                    }
                     if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
-                        builder->CreateStore(result, locals[destLocal]);
+                        builder->CreateStore(resultToStore, locals[destLocal]);
                     } else {
-                        locals[destLocal] = result;
+                        locals[destLocal] = resultToStore;
                     }
                 }
 
@@ -539,10 +544,15 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 auto result = builder->CreateCall(callee, args);
                 if (callData.destination) {
                     auto destLocal = callData.destination->local;
+                    // bool戻り値（i1）をメモリ格納用（i8）に変換
+                    llvm::Value* resultToStore = result;
+                    if (result->getType()->isIntegerTy(1)) {
+                        resultToStore = builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
+                    }
                     if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
-                        builder->CreateStore(result, locals[destLocal]);
+                        builder->CreateStore(resultToStore, locals[destLocal]);
                     } else {
-                        locals[destLocal] = result;
+                        locals[destLocal] = resultToStore;
                     }
                 }
             }

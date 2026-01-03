@@ -845,6 +845,18 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     addr = builder->CreateBitCast(addr, targetPtrType, "typed_ptr");
                                 }
                             }
+                            // rvalueがポインタで、addrの要素型がi8*の場合、rvalueをi8*にbitcast
+                            if (rvalue->getType()->isPointerTy() &&
+                                addr->getType()->isPointerTy()) {
+                                auto addrPtrType = llvm::cast<llvm::PointerType>(addr->getType());
+                                auto addrElemType = addrPtrType->getPointerElementType();
+                                if (addrElemType->isPointerTy() &&
+                                    addrElemType != rvalue->getType()) {
+                                    // i32* -> i8* などの変換
+                                    rvalue =
+                                        builder->CreateBitCast(rvalue, addrElemType, "ptr_cast");
+                                }
+                            }
                             // storeする前に、rvalueの型がaddrの要素型と一致することを確認
                             builder->CreateStore(rvalue, addr);
                         }
@@ -945,6 +957,14 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         if (structType && structType->kind == hir::TypeKind::Struct) {
                             auto it = structTypes.find(structType->name);
                             if (it != structTypes.end()) {
+                                // LLVM 14: typed pointers require bitcast
+#if LLVM_VERSION_MAJOR < 15
+                                auto structPtrType = llvm::PointerType::get(it->second, 0);
+                                if (basePtr->getType() != structPtrType) {
+                                    basePtr = builder->CreateBitCast(basePtr, structPtrType,
+                                                                     "struct_ptr_cast");
+                                }
+#endif
                                 std::vector<llvm::Value*> indices;
                                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));
                                 indices.push_back(
@@ -1315,6 +1335,15 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                             cm::debug::Level::Error);
                     return nullptr;
                 }
+
+                // LLVM 14: typed pointers require matching pointer types for GEP
+                // If addr is i8* but we need StructType*, bitcast first
+#if LLVM_VERSION_MAJOR < 15
+                auto structPtrType = llvm::PointerType::get(structType, 0);
+                if (addr->getType() != structPtrType) {
+                    addr = builder->CreateBitCast(addr, structPtrType, "struct_ptr_cast");
+                }
+#endif
 
                 std::vector<llvm::Value*> indices;
                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));  // 構造体ベース

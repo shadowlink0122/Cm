@@ -44,6 +44,8 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             return ctx.getPtrType();
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference:
+            // LLVM 14: すべてのポインタはi8*として統一
+            // （typed pointers互換性のため、store/load時にbitcastを使用）
             return ctx.getPtrType();
         case hir::TypeKind::Array: {
             // 動的配列（スライス）の場合はポインタ型を返す
