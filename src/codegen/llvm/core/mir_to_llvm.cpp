@@ -473,6 +473,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     if (local.type->kind == hir::TypeKind::Void) {
                         continue;
                     }
+                    // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
+                    if (local.type->kind == hir::TypeKind::Function ||
+                        (local.type->kind == hir::TypeKind::Pointer &&
+                         local.type->element_type &&
+                         local.type->element_type->kind == hir::TypeKind::Function)) {
+                        continue;
+                    }
                     // 文字列型の一時変数はアロケーションしない（直接値を使用）
                     if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
                         continue;
@@ -666,6 +673,17 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
                                  block_name);
 
     // ステートメント処理
+    // デバッグ: main::bb0のステートメントを確認
+    if (currentMIRFunction && currentMIRFunction->name == "main" && block.id == 0) {
+        std::cerr << "[DEBUG] main::bb0 has " << block.statements.size() << " statements\n";
+        for (size_t j = 0; j < block.statements.size(); j++) {
+            if (block.statements[j]->kind == mir::MirStatement::Assign) {
+                auto& assign = std::get<mir::MirStatement::AssignData>(block.statements[j]->data);
+                std::cerr << "[DEBUG]   Statement " << j << ": assign to local "
+                          << assign.place.local << "\n";
+            }
+        }
+    }
     for (const auto& stmt : block.statements) {
         // std::cout << "[CODEGEN] Processing Stmt Kind " << (int)stmt->kind << "\n" << std::flush;
 
@@ -720,16 +738,66 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
 // ステートメント変換
 void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
+    if (currentMIRFunction && currentMIRFunction->name == "main") {
+        std::cerr << "[DEBUG] Processing statement kind: " << static_cast<int>(stmt.kind) << "\n";
+    }
     switch (stmt.kind) {
         case mir::MirStatement::Assign: {
             auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
+            // デバッグ: main関数での代入を詳しく見る
+            if (currentMIRFunction && currentMIRFunction->name == "main") {
+                std::cerr << "[DEBUG] Assignment to local " << assign.place.local << ", rvalue kind: ";
+                if (assign.rvalue->kind == mir::MirRvalue::Use) {
+                    auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                    if (useData.operand) {
+                        if (useData.operand->kind == mir::MirOperand::Copy) {
+                            auto& place = std::get<mir::MirPlace>(useData.operand->data);
+                            std::cerr << "Copy from local " << place.local << "\n";
+                        } else if (useData.operand->kind == mir::MirOperand::FunctionRef) {
+                            auto& funcName = std::get<std::string>(useData.operand->data);
+                            std::cerr << "FunctionRef '" << funcName << "'\n";
+                        } else {
+                            std::cerr << "Other operand type\n";
+                        }
+                    }
+                } else {
+                    std::cerr << "Not Use\n";
+                }
+            }
             auto rvalue = convertRvalue(*assign.rvalue);
             if (rvalue) {
+                // 関数参照の特別処理
+                bool isFunctionValue = false;
+                if (llvm::isa<llvm::Function>(rvalue)) {
+                    // Function*の場合、直接localsに格納（allocaせずにSSA形式で扱う）
+                    locals[assign.place.local] = rvalue;
+                    // 確認: 実際に格納されたか
+                    if (currentMIRFunction && currentMIRFunction->name == "main") {
+                        auto func = llvm::cast<llvm::Function>(rvalue);
+                        std::cerr << "[DEBUG] Stored function '" << func->getName().str()
+                                  << "' to local " << assign.place.local
+                                  << " (locals.size=" << locals.size() << ")\n";
+                        // local 2の状態を確認
+                        if (locals.size() > 2 && locals[2]) {
+                            std::cerr << "[DEBUG] Local 2 is now: "
+                                      << (llvm::isa<llvm::Function>(locals[2]) ? "Function" : "Other") << "\n";
+                        }
+                    }
+                    break;
+                }
+
                 // projectionsがある場合（構造体フィールドなど）は常にstoreが必要
                 bool hasProjections = !assign.place.projections.empty();
 
                 // allocaされた変数かどうかをチェック
                 bool isAllocated = allocatedLocals.count(assign.place.local) > 0;
+
+                // 関数ポインタのSSA形式での代入も処理
+                if (!hasProjections && !isAllocated) {
+                    // SSA形式の変数への代入（関数ポインタ等）
+                    locals[assign.place.local] = rvalue;
+                    break;
+                }
 
                 if (hasProjections || isAllocated) {
                     // Placeに値を格納
@@ -766,7 +834,6 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     if (currentType->kind == hir::TypeKind::Pointer &&
                                         currentType->element_type) {
                                         currentType = currentType->element_type;
-                                        derefTargetType = currentType;
                                     }
                                 } else if (proj.kind == mir::ProjectionKind::Field) {
                                     if (currentType->kind == hir::TypeKind::Struct) {
@@ -779,8 +846,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     }
                                 }
                             }
-                            if (derefTargetType) {
-                                targetType = convertType(derefTargetType);
+                            // 最終的な型（フィールドの型など）を使用
+                            if (currentType) {
+                                targetType = convertType(currentType);
                             }
                         }
 
@@ -1210,6 +1278,21 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             // 通常のローカル変数
             auto local = place.local;
             auto val = locals[local];
+            // デバッグ: main関数でのコピー操作を確認
+            if (currentMIRFunction && currentMIRFunction->name == "main" && local <= 2) {
+                if (val) {
+                    if (llvm::isa<llvm::Function>(val)) {
+                        auto func = llvm::cast<llvm::Function>(val);
+                        std::cerr << "[DEBUG] Copying function '" << func->getName().str()
+                                  << "' from local " << local << "\n";
+                    } else {
+                        std::cerr << "[DEBUG] Copying non-function from local " << local
+                                  << " (type: " << val->getType()->getTypeID() << ")\n";
+                    }
+                } else {
+                    std::cerr << "[DEBUG] Local " << local << " is null when trying to copy!\n";
+                }
+            }
             if (val && llvm::isa<llvm::AllocaInst>(val)) {
                 // アロケーションの場合
                 auto allocaInst = llvm::cast<llvm::AllocaInst>(val);
@@ -1236,10 +1319,12 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             return convertConstant(constant);
         }
         case mir::MirOperand::FunctionRef: {
-            // 関数参照: LLVMの関数ポインタを返す
+            // 関数参照: 関数ポインタとして使える値を返す
             const std::string& funcName = std::get<std::string>(operand.data);
             auto func = module->getFunction(funcName);
             if (func) {
+                // 関数を値として使うために、関数のアドレスをポインタとして返す
+                // LLVM 14+では、Function*自体が値として使える
                 return func;
             }
             // 関数が見つからない場合はnull
@@ -1293,15 +1378,13 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         structType = allocaInst->getAllocatedType();
                     } else if (auto loadInst = llvm::dyn_cast<llvm::LoadInst>(addr)) {
-                        // LoadInst（デリファレンス後）の場合、ロードされた型から構造体型を取得
-                        auto loadedType = loadInst->getType();
-                        if (loadedType->isPointerTy()) {
-#if LLVM_VERSION_MAJOR >= 15
-                            // opaque pointer: currentTypeから取得済み
-#else
-                            // typed pointer: ポインタの要素型を取得
-                            structType = loadedType->getPointerElementType();
-#endif
+                        // LoadInst（デリファレンス後）の場合
+                        // Deref後は currentType が構造体型になっているはず
+                        if (currentType && currentType->kind == hir::TypeKind::Struct) {
+                            auto it = structTypes.find(currentType->name);
+                            if (it != structTypes.end()) {
+                                structType = it->second;
+                            }
                         }
                     } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
                         // GEPの結果型から構造体型を取得

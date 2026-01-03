@@ -63,7 +63,7 @@ struct Options {
     bool emit_js = false;         // JavaScript生成
     std::string target = "";      // ターゲット (native, wasm, js, web)
     bool run_after_emit = false;  // 生成後に実行
-    int optimization_level = 0;  // TODO: O1-O3でインポート時に無限ループ問題があるため一時的にO0
+    int optimization_level = 3;  // デフォルト最適化レベル3
     bool debug = false;
     std::string debug_level = "info";
     bool verbose = false;         // デフォルトは静かなモード

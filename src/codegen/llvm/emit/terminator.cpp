@@ -103,6 +103,15 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 // std::cout << "[CODEGEN] Call Indirect Checking\n" << std::flush;
                 isIndirectCall = true;
                 funcPtrValue = convertOperand(*callData.func);
+
+                // convertOperandがFunction*を返した場合、それを関数ポインタとして扱う
+                if (funcPtrValue && llvm::isa<llvm::Function>(funcPtrValue)) {
+                    // Function*が直接返された場合は、直接呼び出しとして扱う
+                    auto func = llvm::cast<llvm::Function>(funcPtrValue);
+                    funcName = func->getName().str();
+                    isIndirectCall = false;
+                    funcPtrValue = nullptr;
+                }
                 // std::cout << "[CODEGEN] Call Indirect Op Converted\n" << std::flush;
             }
 
@@ -522,7 +531,39 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                 auto result = builder->CreateCall(callee, args);
                 if (callData.destination) {
-                    locals[callData.destination->local] = result;
+                    auto destLocal = callData.destination->local;
+                    llvm::Value* resultToStore = result;
+
+                    // 格納先の型を取得
+                    llvm::Type* destType = nullptr;
+                    if (currentMIRFunction && destLocal < currentMIRFunction->locals.size()) {
+                        auto& local = currentMIRFunction->locals[destLocal];
+                        if (local.type) {
+                            destType = convertType(local.type);
+                        }
+                    }
+
+                    // 型変換が必要な場合
+                    if (destType && result->getType() != destType) {
+                        // bool戻り値（i1）をメモリ格納用（i8）に変換
+                        if (result->getType()->isIntegerTy(1) && destType->isIntegerTy(8)) {
+                            resultToStore = builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
+                        }
+                        // 整数型間の変換
+                        else if (result->getType()->isIntegerTy() && destType->isIntegerTy()) {
+                            unsigned resultBits = result->getType()->getIntegerBitWidth();
+                            unsigned destBits = destType->getIntegerBitWidth();
+                            if (resultBits > destBits) {
+                                // 縮小変換 (例: i64 -> i32)
+                                resultToStore = builder->CreateTrunc(result, destType, "trunc");
+                            } else if (resultBits < destBits) {
+                                // 拡大変換 (例: i32 -> i64)
+                                resultToStore = builder->CreateZExt(result, destType, "zext");
+                            }
+                        }
+                    }
+
+                    locals[destLocal] = resultToStore;
                 }
             }
             // 間接呼び出し（関数ポインタ変数経由）
@@ -636,15 +677,19 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                     auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
 
-                    // LLVM 14+: opaque pointersではBitCast不要
-                    // funcPtrValueはすでにptr型なのでそのまま使用
+                    // funcPtrValueが整数型の場合、関数ポインタ型にキャストする
+                    llvm::Value* funcPtr = funcPtrValue;
+                    if (funcPtrValue->getType()->isIntegerTy()) {
+                        // 整数値を関数ポインタ型に変換
+                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(), "func_ptr_cast");
+                    }
 
                     // 間接呼び出し（void戻り値の場合は名前を付けない）
                     llvm::Value* result = nullptr;
                     if (retType->isVoidTy()) {
-                        result = builder->CreateCall(funcType, funcPtrValue, args);
+                        result = builder->CreateCall(funcType, funcPtr, args);
                     } else {
-                        result = builder->CreateCall(funcType, funcPtrValue, args, "indirect_call");
+                        result = builder->CreateCall(funcType, funcPtr, args, "indirect_call");
                     }
                     if (callData.destination && result && !retType->isVoidTy()) {
                         locals[callData.destination->local] = result;
@@ -657,11 +702,15 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         paramTypes.push_back(arg->getType());
                     }
                     auto funcType = llvm::FunctionType::get(ctx.getI32Type(), paramTypes, false);
-                    auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
-                    auto funcPtrCast =
-                        builder->CreateBitCast(funcPtrValue, funcPtrTypePtr, "func_ptr_cast");
 
-                    auto result = builder->CreateCall(funcType, funcPtrCast, args, "indirect_call");
+                    // funcPtrValueが整数型の場合、関数ポインタ型にキャストする
+                    llvm::Value* funcPtr = funcPtrValue;
+                    if (funcPtrValue->getType()->isIntegerTy()) {
+                        // 整数値を関数ポインタ型に変換
+                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(), "func_ptr_cast");
+                    }
+
+                    auto result = builder->CreateCall(funcType, funcPtr, args, "indirect_call");
                     if (callData.destination) {
                         locals[callData.destination->local] = result;
                     }

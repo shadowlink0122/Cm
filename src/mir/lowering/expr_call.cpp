@@ -2082,6 +2082,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         // 関数ポインタ経由の呼び出し: 変数から関数ポインタを取得
         auto var_id = ctx.resolve_variable(call.func_name);
         if (var_id) {
+            debug_msg("mir_func_ptr_call",
+                     "[MIR] Resolved variable '" + call.func_name + "' to local " + std::to_string(*var_id));
             // クロージャかどうかチェック
             auto& local_decl = ctx.func->locals[*var_id];
             if (local_decl.is_closure && !local_decl.captured_locals.empty()) {

@@ -587,6 +587,20 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
     if (unary.op == hir::HirUnaryOp::AddrOf) {
         // 変数参照の場合、そのアドレスを取得
         if (auto var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&unary.operand->kind)) {
+            // 関数参照の場合、関数ポインタとして処理
+            if ((*var_ref)->is_function_ref) {
+                // 関数ポインタ型を設定 - operandの型を使用
+                hir::TypePtr func_ptr_type = unary.operand->type;
+                if (!func_ptr_type) {
+                    func_ptr_type = hir::make_function_ptr(hir::make_int(), {});
+                }
+
+                LocalId result = ctx.new_temp(func_ptr_type);
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{result}, MirRvalue::use(MirOperand::function_ref((*var_ref)->name))));
+                return result;
+            }
+
             auto local_opt = ctx.resolve_variable((*var_ref)->name);
             if (local_opt) {
                 LocalId var_id = *local_opt;

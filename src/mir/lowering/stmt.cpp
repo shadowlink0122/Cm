@@ -14,6 +14,12 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // 変数をスコープに登録
     ctx.register_variable(let.name, local);
 
+    // デバッグ: 登録した変数を確認
+    if (let.type && let.type->kind == hir::TypeKind::Function) {
+        debug_msg("mir_let_func_ptr",
+                 "[MIR] Registered variable '" + let.name + "' as local " + std::to_string(local));
+    }
+
     // const変数の場合、初期値が定数リテラルならその値を保存
     // これにより文字列補間でconst変数の値を直接使用できる
     if (let.is_const && let.init) {
@@ -291,8 +297,57 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             } else {
                 // 通常の初期化
                 LocalId init_value = expr_lowering->lower_expression(*let.init, ctx);
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+
+                // デバッグ: 型を確認
+                if (let.type) {
+                    debug_msg("mir_let_type",
+                             "[MIR] Let variable '" + let.name + "' has type kind: " + std::to_string(static_cast<int>(let.type->kind)));
+                }
+
+                // デバッグ: 関数ポインタ型の初期化を確認
+                if (let.type && let.type->kind == hir::TypeKind::Function) {
+                    debug_msg("mir_let_func_ptr",
+                             "[MIR] Function pointer initialization: local "
+                             + std::to_string(local) + " = copy(local "
+                             + std::to_string(init_value) + ")");
+
+                    // 実際にステートメントを生成
+                    auto stmt = MirStatement::assign(
+                        MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value})));
+                    debug_msg("mir_let_func_ptr",
+                             "[MIR] Created assign statement for local " + std::to_string(local));
+                    ctx.push_statement(std::move(stmt));
+                    debug_msg("mir_let_func_ptr",
+                             "[MIR] Pushed statement to context");
+
+                    // 現在のブロックを確認
+                    auto* block = ctx.get_current_block();
+                    if (block) {
+                        debug_msg("mir_let_func_ptr",
+                                 "[MIR] Current block has " + std::to_string(block->statements.size()) + " statements");
+                    } else {
+                        debug_msg("mir_let_func_ptr",
+                                 "[MIR] ERROR: No current block!");
+                    }
+                } else {
+                    // デバッグ: 通常の初期化
+                    if (let.name == "result") {
+                        auto* block = ctx.get_current_block();
+                        if (block) {
+                            debug_msg("mir_result_init",
+                                     "[MIR] Before 'result' init, block has " + std::to_string(block->statements.size()) + " statements");
+                        }
+                    }
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+                    if (let.name == "result") {
+                        auto* block = ctx.get_current_block();
+                        if (block) {
+                            debug_msg("mir_result_init",
+                                     "[MIR] After 'result' init, block has " + std::to_string(block->statements.size()) + " statements");
+                        }
+                    }
+                }
             }
         }
     }

@@ -2,6 +2,7 @@
 
 #include "../../hir/nodes.hpp"
 #include "../nodes.hpp"
+#include "../../common/debug.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -81,7 +82,14 @@ class LoweringContext {
     }
 
     // 新しいブロックを作成
-    BlockId new_block() { return func->add_block(); }
+    BlockId new_block() {
+        BlockId id = func->add_block();
+        if (func->name == "main") {
+            debug_msg("mir_new_block",
+                     "[MIR] Created new block " + std::to_string(id) + " in main");
+        }
+        return id;
+    }
 
     // 現在のブロックを切り替え
     void switch_to_block(BlockId block) { current_block = block; }
@@ -107,6 +115,14 @@ class LoweringContext {
     void push_statement(MirStatementPtr stmt) {
         auto* block = get_current_block();
         if (block) {
+            // デバッグ: ステートメント追加前の状態
+            if (current_block == 0 && stmt->kind == MirStatement::Assign) {
+                auto& assign = std::get<MirStatement::AssignData>(stmt->data);
+                debug_msg("mir_bb0_stmt",
+                         "[MIR] Adding to bb0: assign to local " + std::to_string(assign.place.local) +
+                         ", bb0 currently has " + std::to_string(block->statements.size()) + " statements" +
+                         ", block ptr: " + std::to_string(reinterpret_cast<uintptr_t>(block)));
+            }
             block->add_statement(std::move(stmt));
         }
     }

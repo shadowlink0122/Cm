@@ -297,7 +297,11 @@ class DeadCodeElimination : public OptimizationPass {
             }
             case MirTerminator::Call: {
                 const auto& call_data = std::get<MirTerminator::CallData>(term.data);
-                // func_name は文字列なので収集対象外
+                // func オペランドから使用を収集（関数ポインタ経由の呼び出しの場合）
+                if (call_data.func) {
+                    collect_used_locals_in_operand(*call_data.func, used);
+                }
+                // 引数から使用を収集
                 for (const auto& arg : call_data.args) {
                     if (arg)
                         collect_used_locals_in_operand(*arg, used);
