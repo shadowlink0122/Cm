@@ -50,8 +50,9 @@ class FunctionInlining : public OptimizationPass {
     }
 
    private:
-    const size_t INLINE_THRESHOLD = 15;
-    const size_t MAX_INLINE_PER_FUNCTION = 3;  // 同じ関数の最大インライン化回数
+    const size_t INLINE_THRESHOLD = 10;  // より小さい関数のみインライン化
+    const size_t MAX_INLINE_PER_FUNCTION = 2;  // 同じ関数の最大インライン化回数を削減
+    const size_t MAX_TOTAL_INLINES = 20;  // プログラム全体でのインライン化回数制限
     std::unordered_map<std::string, size_t> inline_counts;
     bool max_inlines_reached = false;
 
@@ -95,6 +96,16 @@ class FunctionInlining : public OptimizationPass {
             return false;
         if (callee_name == caller.name)
             return false;  // 自己再帰を防ぐ
+
+        // プログラム全体のインライン化回数制限チェック
+        size_t total_inlines = 0;
+        for (const auto& [key, count] : inline_counts) {
+            total_inlines += count;
+        }
+        if (total_inlines >= MAX_TOTAL_INLINES) {
+            max_inlines_reached = true;
+            return false;  // プログラム全体のインライン化上限に達した
+        }
 
         // インライン化回数制限チェック
         auto inline_key = caller.name + "->" + callee_name;

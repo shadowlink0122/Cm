@@ -4,6 +4,7 @@
 #include "base.hpp"
 
 #include <iostream>
+#include <unordered_map>
 
 namespace cm::mir::opt {
 
@@ -51,6 +52,9 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
 
         ConvergenceManager convergence_mgr;
 
+        // 個々の最適化パスの実行回数を追跡
+        std::unordered_map<std::string, int> pass_run_counts;
+
         for (int i = 0; i < max_iterations; ++i) {
             ConvergenceManager::ChangeMetrics metrics;
 
@@ -64,7 +68,33 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
 
             // 一時的に変更検出用の仕組みを用意
             int before_count = count_instructions(program);
-            OptimizationPipeline::run(program);
+
+            // 個々のパスごとの実行回数制限（同じパスが過度に実行されるのを防ぐ）
+            const int max_pass_runs_total = 30;  // 全反復を通じて同じパスの最大実行回数
+
+            // 各パスを実行（回数制限付き）
+            for (auto& pass : passes) {
+                std::string pass_name = pass->name();
+
+                // このパスの実行回数をチェック
+                if (pass_run_counts[pass_name] >= max_pass_runs_total) {
+                    if (debug_output) {
+                        std::cout << "[OPT]   " << pass_name << " スキップ（実行回数上限: "
+                                  << max_pass_runs_total << "回）\n";
+                    }
+                    continue;
+                }
+
+                bool pass_changed = pass->run_on_program(program);
+                if (pass_changed) {
+                    pass_run_counts[pass_name]++;
+                    if (debug_output) {
+                        std::cout << "[OPT]   " << pass_name << " 変更実行 (回数: "
+                                  << pass_run_counts[pass_name] << "/" << max_pass_runs_total << ")\n";
+                    }
+                }
+            }
+
             int after_count = count_instructions(program);
 
             bool any_changed = (before_count != after_count);

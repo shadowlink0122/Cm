@@ -56,7 +56,7 @@ class OptimizationPass {
 // 最適化パイプライン
 // ============================================================
 class OptimizationPipeline {
-   private:
+   protected:  // pipeline_v2からアクセスできるようにprotectedに変更
     std::vector<std::unique_ptr<OptimizationPass>> passes;
     bool debug_output = false;
 
