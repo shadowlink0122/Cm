@@ -8,6 +8,7 @@
 #endif
 
 #include "../core/context.hpp"
+#include "safe_codegen.hpp"
 
 #include <fstream>
 #include <llvm/IR/InlineAsm.h>
@@ -154,48 +155,48 @@ class TargetManager {
         module.setDataLayout(targetMachine->createDataLayout());
     }
 
-    /// オブジェクトファイル生成
+    /// オブジェクトファイル生成（安全版）
     void emitObjectFile(llvm::Module& module, const std::string& filename) {
-        std::error_code EC;
-        llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
-        if (EC) {
-            throw std::runtime_error("Cannot open file: " + filename);
+        // 複雑度チェック
+        if (!SafeCodeGenerator::checkComplexity(module)) {
+            std::cerr << "[CODEGEN] Warning: Module complexity is high, proceeding with caution\n";
         }
 
-        llvm::legacy::PassManager pass;
-#if LLVM_VERSION_MAJOR >= 18
-        auto fileType = llvm::CodeGenFileType::ObjectFile;
-#else
-        auto fileType = llvm::CGFT_ObjectFile;
-#endif
-        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
-            throw std::runtime_error("Target doesn't support object emission");
+        // タイムアウト付きで安全にコード生成
+        try {
+            SafeCodeGenerator::emitObjectFileSafe(module, targetMachine, filename,
+                                                  std::chrono::seconds(30));
+        } catch (const std::exception& e) {
+            // エラーメッセージを改善
+            std::string error_msg = "Failed to generate object file: ";
+            error_msg += e.what();
+            if (error_msg.find("timeout") != std::string::npos) {
+                error_msg += "\nHint: Try reducing optimization level (use -O1 or -O0)";
+            }
+            throw std::runtime_error(error_msg);
         }
-
-        pass.run(module);
-        dest.flush();
     }
 
-    /// アセンブリ出力
+    /// アセンブリ出力（安全版）
     void emitAssembly(llvm::Module& module, const std::string& filename) {
-        std::error_code EC;
-        llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
-        if (EC) {
-            throw std::runtime_error("Cannot open file: " + filename);
+        // 複雑度チェック
+        if (!SafeCodeGenerator::checkComplexity(module)) {
+            std::cerr << "[CODEGEN] Warning: Module complexity is high, proceeding with caution\n";
         }
 
-        llvm::legacy::PassManager pass;
-#if LLVM_VERSION_MAJOR >= 18
-        auto fileType = llvm::CodeGenFileType::AssemblyFile;
-#else
-        auto fileType = llvm::CGFT_AssemblyFile;
-#endif
-        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
-            throw std::runtime_error("Target doesn't support assembly emission");
+        // タイムアウト付きで安全にコード生成
+        try {
+            SafeCodeGenerator::emitAssemblySafe(module, targetMachine, filename,
+                                               std::chrono::seconds(30));
+        } catch (const std::exception& e) {
+            // エラーメッセージを改善
+            std::string error_msg = "Failed to generate assembly: ";
+            error_msg += e.what();
+            if (error_msg.find("timeout") != std::string::npos) {
+                error_msg += "\nHint: Try reducing optimization level (use -O1 or -O0)";
+            }
+            throw std::runtime_error(error_msg);
         }
-
-        pass.run(module);
-        dest.flush();
     }
 
     /// リンカスクリプト生成（ベアメタル用）

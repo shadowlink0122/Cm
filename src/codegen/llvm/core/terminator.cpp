@@ -9,6 +9,8 @@
 namespace cm::codegen::llvm_backend {
 
 void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
+    std::cerr << "[MIR2LLVM]         Entering convertTerminator, kind="
+              << static_cast<int>(term.kind) << "\n";
     switch (term.kind) {
         case mir::MirTerminator::Goto: {
             auto& gotoData = std::get<mir::MirTerminator::GotoData>(term.data);
@@ -77,7 +79,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             break;
         }
         case mir::MirTerminator::Call: {
-            // std::cout << "[CODEGEN] Call Terminator Start\n" << std::flush;
+            std::cerr << "[MIR2LLVM]           Call terminator processing...\n";
             auto& callData = std::get<mir::MirTerminator::CallData>(term.data);
 
             // 関数名を取得
@@ -100,9 +102,10 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             } else if (callData.func->kind == mir::MirOperand::Copy ||
                        callData.func->kind == mir::MirOperand::Move) {
                 // 関数ポインタ変数からの呼び出し
-                // std::cout << "[CODEGEN] Call Indirect Checking\n" << std::flush;
+                std::cerr << "[MIR2LLVM]           Call: Indirect call, converting operand...\n";
                 isIndirectCall = true;
                 funcPtrValue = convertOperand(*callData.func);
+                std::cerr << "[MIR2LLVM]           Call: Operand converted\n";
 
                 // convertOperandがFunction*を返した場合、それを関数ポインタとして扱う
                 if (funcPtrValue && llvm::isa<llvm::Function>(funcPtrValue)) {

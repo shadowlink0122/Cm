@@ -130,6 +130,14 @@ class FunctionInlining : public OptimizationPass {
     }
 
     bool should_inline(const MirFunction& callee) {
+        // ラムダ関数やクロージャ関数はインライン化しない
+        // （O3最適化で無限ループの原因となる可能性があるため）
+        if (callee.name.find("__lambda_") != std::string::npos ||
+            callee.name.find("$_") != std::string::npos ||
+            callee.name.find("closure") != std::string::npos) {
+            return false;
+        }
+
         size_t stmt_count = 0;
         for (const auto& b : callee.basic_blocks) {
             if (b)

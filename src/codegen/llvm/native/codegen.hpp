@@ -6,6 +6,10 @@
 #include "../core/intrinsics.hpp"
 #include "../core/mir_to_llvm.hpp"
 #include "../optimizations/optimization_manager.hpp"
+#include "../optimizations/mir_pattern_detector.hpp"
+#include "../optimizations/pass_limiter.hpp"
+#include "../optimizations/recursion_limiter.hpp"
+#include "loop_detector.hpp"
 #include "target.hpp"
 
 #include <filesystem>
@@ -73,23 +77,57 @@ class LLVMCodeGen {
                                     "Program has imports - optimization will be limited");
         }
 
+        // 0. MIRレベルでのパターン検出と最適化レベル調整
+        std::cerr << "[DEBUG] Step 0: MIR pattern detection...\n";
+        int adjusted_level = MIRPatternDetector::adjustOptimizationLevel(program, options.optimizationLevel);
+        if (adjusted_level != options.optimizationLevel) {
+            std::cerr << "[MIR] 最適化レベルを O" << options.optimizationLevel
+                     << " から O" << adjusted_level << " に変更しました（MIRパターン検出による）\n";
+            options.optimizationLevel = adjusted_level;
+        }
+        std::cerr << "[DEBUG] Step 0: Pattern detection completed\n";
+
         // 1. 初期化
+        std::cerr << "[DEBUG] Step 1: Initializing...\n";
         initialize(program.filename);
 
         // 2. MIR → LLVM IR 変換
+        std::cerr << "[DEBUG] Step 2: Generating IR from MIR...\n";
         generateIR(program);
+        std::cerr << "[DEBUG] Step 2: IR generation completed\n";
 
         // 3. 検証
         // 不正なLLVM IRを検出して無限ループを防止
         if (options.verifyIR) {
+            std::cerr << "[DEBUG] Step 3: Verifying module...\n";
             verifyModule();
+            std::cerr << "[DEBUG] Step 3: Verification completed\n";
+        }
+
+        // 3.5. 最適化前のパターン検出と調整
+        if (options.optimizationLevel > 0) {
+            std::cerr << "[DEBUG] Step 3.5: Pattern detection and adjustment...\n";
+            // 問題のあるパターンを検出して最適化レベルを調整
+            int adjusted_level = OptimizationPassLimiter::adjustOptimizationLevel(
+                context->getModule(), options.optimizationLevel);
+
+            if (adjusted_level != options.optimizationLevel) {
+                std::cerr << "[LLVM] 最適化レベルを O" << options.optimizationLevel
+                         << " から O" << adjusted_level << " に変更しました\n";
+                options.optimizationLevel = adjusted_level;
+            }
+            std::cerr << "[DEBUG] Step 3.5: Pattern detection completed\n";
         }
 
         // 4. 最適化
+        std::cerr << "[DEBUG] Step 4: Starting optimization (level " << options.optimizationLevel << ")...\n";
         optimize();
+        std::cerr << "[DEBUG] Step 4: Optimization completed\n";
 
         // 5. 出力
+        std::cerr << "[DEBUG] Step 5: Emitting output...\n";
         emit();
+        std::cerr << "[DEBUG] Step 5: Output completed\n";
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEnd);
     }
@@ -153,9 +191,12 @@ class LLVMCodeGen {
     /// IR生成
     void generateIR(const mir::MirProgram& program) {
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMIRGen, "Generating LLVM IR from MIR");
+        std::cerr << "[DEBUG] generateIR: Starting converter->convert()...\n";
 
         // MIR → LLVM IR
         converter->convert(program);
+
+        std::cerr << "[DEBUG] generateIR: converter->convert() completed\n";
 
         if (options.verbose) {
             llvm::errs() << "=== Generated LLVM IR ===\n";
@@ -187,13 +228,36 @@ class LLVMCodeGen {
             return;  // 最適化なし
         }
 
-        // インポートがある場合の無限ループ回避（一時的な対処）
+        // インポートがある場合でも、まず再帰とパターンを検証
+        // 再帰とループの事前検証を実行
+        RecursionLimiter::preprocessModule(context->getModule(), options.optimizationLevel);
+
+        // パターンベースの最適化レベル調整
+        int adjustedLevel = OptimizationPassLimiter::adjustOptimizationLevel(
+            context->getModule(), options.optimizationLevel);
+        if (adjustedLevel != options.optimizationLevel) {
+            cm::debug::codegen::log(
+                cm::debug::codegen::Id::LLVMOptimize,
+                "Optimization level adjusted from O" + std::to_string(options.optimizationLevel) +
+                " to O" + std::to_string(adjustedLevel));
+            options.optimizationLevel = adjustedLevel;
+
+            if (adjustedLevel == 0) {
+                cm::debug::codegen::log(
+                    cm::debug::codegen::Id::LLVMOptimize,
+                    "Skipping optimization due to complexity patterns");
+                return;  // 最適化を完全にスキップ
+            }
+        }
+
+        // インポートがある場合の無限ループ回避（調整後のレベルも考慮）
         // TODO: 根本的な修正 - インポート処理のLLVM最適化対応
         if (hasImports && options.optimizationLevel > 0) {
+            // iter_closureパターンは検出済みでO0に調整されているはず
+            // その場合はすでにリターンしているので、ここには到達しない
             cm::debug::codegen::log(
                 cm::debug::codegen::Id::LLVMOptimize,
                 "WARNING: Skipping O1-O3 optimization due to import infinite loop bug");
-            // インポートがある場合は最適化をスキップ
             return;
         }
 

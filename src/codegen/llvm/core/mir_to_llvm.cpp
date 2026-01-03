@@ -126,6 +126,11 @@ std::string MIRToLLVM::generateCallFunctionId(const std::string& baseName,
         return baseName;
     }
 
+    // ビルトイン関数（__builtin_で始まる）はそのまま（無限ループ回避）
+    if (baseName.find("__builtin_") == 0) {
+        return baseName;
+    }
+
     // 引数がない場合はそのまま
     if (args.empty()) {
         return baseName;
@@ -328,14 +333,25 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
 void MIRToLLVM::convert(const mir::MirProgram& program) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert, "Starting MIR to LLVM conversion");
 
+    std::cerr << "[MIR2LLVM] Starting conversion with " << program.functions.size() << " functions\n";
+
     currentProgram = &program;
 
     // インターフェース名を収集
+    std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
+    size_t iface_count = 0;
+    const size_t MAX_INTERFACES = 10000;  // 無限ループ防止
     for (const auto& iface : program.interfaces) {
+        if (++iface_count > MAX_INTERFACES) {
+            std::cerr << "[MIR2LLVM] ERROR: Too many interfaces, possible infinite loop\n";
+            throw std::runtime_error("Too many interfaces in MIR program");
+        }
         if (iface) {
+            std::cerr << "[MIR2LLVM]   Interface: " << iface->name << "\n";
             interfaceNames.insert(iface->name);
         }
     }
+    std::cerr << "[MIR2LLVM] Interfaces collected\n";
 
     // 構造体型を先に定義（2パスアプローチ）
     // パス1: 全ての構造体をopaque型として作成
@@ -393,13 +409,18 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     // 関数実装
     // 重複した関数はスキップ
     declaredFunctions.clear();
-    for (const auto& func : program.functions) {
+    std::cerr << "[MIR2LLVM] Converting " << program.functions.size() << " functions...\n";
+    for (size_t i = 0; i < program.functions.size(); ++i) {
+        const auto& func = program.functions[i];
         auto funcId = generateFunctionId(*func);
+        std::cerr << "[MIR2LLVM] [" << (i+1) << "/" << program.functions.size() << "] Converting function: " << funcId << "\n";
         if (declaredFunctions.count(funcId) > 0) {
+            std::cerr << "[MIR2LLVM]   -> Skipping duplicate\n";
             continue;
         }
         declaredFunctions.insert(funcId);
         convertFunction(*func);
+        std::cerr << "[MIR2LLVM]   -> Done converting " << funcId << "\n";
     }
 
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
@@ -642,15 +663,22 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 各ブロックを変換（CompilationGuardによる監視）
+        std::cerr << "[MIR2LLVM] Function " << func.name << " has " << func.basic_blocks.size() << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロックはスキップ
-            if (!func.basic_blocks[i])
+            if (!func.basic_blocks[i]) {
+                std::cerr << "[MIR2LLVM]   Block " << i << " is null (DCE removed), skipping\n";
                 continue;
+            }
+
+            std::cerr << "[MIR2LLVM]   Converting block " << i << "/" << func.basic_blocks.size() << "\n";
 
             // プログレス表示
             guard.show_progress("Function", i + 1, func.basic_blocks.size());
 
             convertBasicBlock(*func.basic_blocks[i]);
+
+            std::cerr << "[MIR2LLVM]   Block " << i << " converted successfully\n";
         }
     } catch (const std::runtime_error& e) {
         // 無限ループエラーのハンドリング
@@ -661,11 +689,23 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
 // 基本ブロック変換
 void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
+    std::cerr << "[MIR2LLVM]     Entering convertBasicBlock for block " << block.id << "\n";
+    std::cerr << "[MIR2LLVM]       Block has " << block.statements.size() << " statements\n";
+    if (block.terminator) {
+        std::cerr << "[MIR2LLVM]       Block has terminator type " << static_cast<int>(block.terminator->kind) << "\n";
+    } else {
+        std::cerr << "[MIR2LLVM]       Block has no terminator\n";
+    }
+
     // blocksはunordered_mapなので、countで存在確認
+    std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks map...\n";
     if (blocks.count(block.id) > 0) {
+        std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
+        std::cerr << "[MIR2LLVM]       Insert point set\n";
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
+        std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
         if (cm::debug::g_debug_mode) {
             debug_msg("CODEGEN", "Warning: BB " + std::to_string(block.id) +
                       " not in blocks map, skipping");
@@ -691,8 +731,28 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
             }
         }
     }
-    for (const auto& stmt : block.statements) {
-        // std::cout << "[CODEGEN] Processing Stmt Kind " << (int)stmt->kind << "\n" << std::flush;
+
+    std::cerr << "[MIR2LLVM]       Starting statement loop, total statements: "
+              << block.statements.size() << "\n";
+
+    for (size_t stmt_idx = 0; stmt_idx < block.statements.size(); ++stmt_idx) {
+        const auto& stmt = block.statements[stmt_idx];
+
+        // ステートメント処理開始のログ
+        std::cerr << "[MIR2LLVM]       Processing statement " << stmt_idx << "/"
+                  << block.statements.size() << " (kind=" << static_cast<int>(stmt->kind) << ")\n";
+
+        // 問題のある12個目のステートメントの詳細ログ
+        if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
+            std::cerr << "[MIR2LLVM]       WARNING: This is statement 11 that causes infinite loop\n";
+            if (stmt->kind == mir::MirStatement::Assign) {
+                auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
+                std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local << "\n";
+                if (assign.rvalue) {
+                    std::cerr << "[MIR2LLVM]       Rvalue kind: " << static_cast<int>(assign.rvalue->kind) << "\n";
+                }
+            }
+        }
 
         // 各命令の生成を記録（より詳細な情報を含める）
         std::ostringstream inst_str;
@@ -707,13 +767,23 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         guard.add_instruction(inst_str.str());
 
         convertStatement(*stmt);
+
+        std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed successfully\n";
+        std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " << stmt_idx << " to " << (stmt_idx + 1) << "\n";
+        // ループの最後の反復かチェック
+        if (stmt_idx == block.statements.size() - 1) {
+            std::cerr << "[MIR2LLVM]       This was the LAST statement, about to exit loop\n";
+            std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
+        }
+        std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx << "\n";
     }
+
+    std::cerr << "[MIR2LLVM]       FOR LOOP EXITED - All statements processed, checking terminator...\n";
 
     // ターミネータ処理
     if (block.terminator) {
-        // std::cout << "[CODEGEN] Processing Terminator Kind " << (int)block.terminator->kind <<
-        // "\n"
-        //           << std::flush;
+        std::cerr << "[MIR2LLVM]       Terminator exists, processing terminator (kind="
+                  << static_cast<int>(block.terminator->kind) << ")\n";
 
         // ターミネータの生成を記録（より詳細な情報を含める）
         std::ostringstream term_str;
@@ -747,6 +817,28 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
 // ステートメント変換
 void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
+    // 無限ループ検出用のカウンタ
+    static thread_local std::unordered_map<const mir::MirStatement*, int> statementProcessCount;
+    static thread_local const mir::MirFunction* lastFunction = nullptr;
+
+    // 新しい関数に入った場合はカウンタをリセット
+    if (currentMIRFunction != lastFunction) {
+        statementProcessCount.clear();
+        lastFunction = currentMIRFunction;
+    }
+
+    // 同じステートメントが過度に処理されている場合はエラー
+    auto& count = statementProcessCount[&stmt];
+    count++;
+    if (count > 100) {
+        std::cerr << "[MIR2LLVM] ERROR: Infinite loop detected! Statement at address "
+                  << &stmt << " processed " << count << " times\n";
+        if (currentMIRFunction) {
+            std::cerr << "[MIR2LLVM] Function: " << currentMIRFunction->name << "\n";
+        }
+        throw std::runtime_error("Infinite loop detected in convertStatement");
+    }
+
     if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main") {
         debug_msg("MIR", "Processing statement kind: " + std::to_string(static_cast<int>(stmt.kind)));
     }
@@ -995,6 +1087,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             // これらは無視
             break;
     }
+
+    // 関数終了のデバッグ
+    count--;
+    std::cerr << "[MIR2LLVM]         convertStatement EXITING (depth=" << count
+              << ", kind=" << static_cast<int>(stmt.kind) << ")\n";
 }
 
 llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
@@ -1008,9 +1105,28 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
         }
         case mir::MirRvalue::BinaryOp: {
             auto& binop = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
+            std::cerr << "[MIR2LLVM]         Converting BinaryOp, op=" << static_cast<int>(binop.op) << "\n";
+
+            std::cerr << "[MIR2LLVM]         Converting LHS operand...\n";
             auto lhs = convertOperand(*binop.lhs);
+            if (!lhs) {
+                std::cerr << "[MIR2LLVM]         ERROR: Failed to convert LHS operand\n";
+                return nullptr;
+            }
+            std::cerr << "[MIR2LLVM]         LHS operand converted successfully\n";
+
+            std::cerr << "[MIR2LLVM]         Converting RHS operand...\n";
             auto rhs = convertOperand(*binop.rhs);
-            return convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
+            if (!rhs) {
+                std::cerr << "[MIR2LLVM]         ERROR: Failed to convert RHS operand\n";
+                return nullptr;
+            }
+            std::cerr << "[MIR2LLVM]         RHS operand converted successfully\n";
+
+            std::cerr << "[MIR2LLVM]         Calling convertBinaryOp...\n";
+            auto result = convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
+            std::cerr << "[MIR2LLVM]         BinaryOp converted successfully\n";
+            return result;
         }
         case mir::MirRvalue::UnaryOp: {
             auto& unop = std::get<mir::MirRvalue::UnaryOpData>(rvalue.data);
@@ -1260,10 +1376,58 @@ llvm::Value* MIRToLLVM::convertFormatConvert(llvm::Value* value, const std::stri
 
 // オペランド変換
 llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
+    // 再帰深度の追跡と制限
+    static thread_local int recursion_depth = 0;
+    static thread_local std::unordered_set<const mir::MirOperand*> processing;
+
+    // 最大再帰深度の制限
+    const int MAX_RECURSION_DEPTH = 100;
+
+    // 循環参照の検出
+    if (processing.count(&operand) > 0) {
+        std::cerr << "[MIR2LLVM] ERROR: Circular reference detected in convertOperand\n";
+        std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) << "\n";
+        if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
+            auto& place = std::get<mir::MirPlace>(operand.data);
+            std::cerr << "[MIR2LLVM]        Place local: " << place.local << "\n";
+        }
+        return llvm::UndefValue::get(ctx.getI64Type());
+    }
+
+    if (recursion_depth >= MAX_RECURSION_DEPTH) {
+        std::cerr << "[MIR2LLVM] ERROR: Maximum recursion depth exceeded in convertOperand\n";
+        std::cerr << "[MIR2LLVM]        Current depth: " << recursion_depth << "\n";
+        std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) << "\n";
+        return llvm::UndefValue::get(ctx.getI64Type());
+    }
+
+    // RAII for tracking recursion depth and processing set
+    struct RecursionGuard {
+        int& depth;
+        std::unordered_set<const mir::MirOperand*>& set;
+        const mir::MirOperand* op;
+        RecursionGuard(int& d, std::unordered_set<const mir::MirOperand*>& s, const mir::MirOperand* o)
+            : depth(d), set(s), op(o) {
+            depth++;
+            set.insert(op);
+        }
+        ~RecursionGuard() {
+            depth--;
+            set.erase(op);
+        }
+    };
+
+    RecursionGuard guard(recursion_depth, processing, &operand);
+
+    std::cerr << "[MIR2LLVM]           convertOperand called, kind=" << static_cast<int>(operand.kind)
+              << ", depth=" << recursion_depth << "\n";
+
     switch (operand.kind) {
         case mir::MirOperand::Copy:
         case mir::MirOperand::Move: {
             auto& place = std::get<mir::MirPlace>(operand.data);
+            std::cerr << "[MIR2LLVM]           Place: local=" << place.local
+                      << ", projections=" << place.projections.size() << "\n";
 
             // プロジェクションがある場合（フィールドアクセスなど）
             if (!place.projections.empty()) {

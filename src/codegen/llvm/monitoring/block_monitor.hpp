@@ -28,9 +28,9 @@ class BlockMonitor {
     std::string current_block;
 
     // 設定値
-    size_t max_block_visits = 10000;  // ブロックの最大訪問回数（スライスなど複雑な構造のため増加）
+    size_t max_block_visits = 10000;  // ブロックの最大訪問回数（O3最適化では複数回訪問が正常）
     size_t max_instructions_per_block =
-        100000;  // ブロックごとの最大命令数（大規模なスライス操作のため増加）
+        100000;  // ブロックごとの最大命令数（大規模なスライス操作のため）
     size_t max_duplicate_instructions = 1000;  // 同じ命令の最大連続生成数（配列初期化などで必要）
 
     // 連続する同一命令のカウント
