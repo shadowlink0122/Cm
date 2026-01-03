@@ -1371,6 +1371,12 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
         case mir::MirOperand::FunctionRef: {
             // 関数参照: 関数ポインタとして使える値を返す
             const std::string& funcName = std::get<std::string>(operand.data);
+            // まずfunctionsマップから検索
+            auto it = functions.find(funcName);
+            if (it != functions.end() && it->second) {
+                return it->second;
+            }
+            // 見つからない場合はモジュールから検索
             auto func = module->getFunction(funcName);
             if (func) {
                 // 関数を値として使うために、関数のアドレスをポインタとして返す

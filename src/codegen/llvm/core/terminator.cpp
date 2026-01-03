@@ -467,16 +467,18 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                             ctx.getI64Type(), methodIndex * ptrSize);
                                         auto funcPtrPtr = builder->CreateGEP(
                                             ctx.getI8Type(), vtablePtr, byteOffset, "func_ptr_ptr");
-                                        // LLVM 14+: opaque pointersではBitCast不要
-                                        // funcPtrPtrはすでにptr型なのでそのまま使用
-                                        auto funcPtr = builder->CreateLoad(ctx.getPtrType(),
+                                        // funcPtrPtrから関数ポインタをロード
+                                        llvm::Value* funcPtr = builder->CreateLoad(ctx.getPtrType(),
                                                                            funcPtrPtr, "func_ptr");
 
                                         std::vector<llvm::Type*> paramTypes = {ctx.getPtrType()};
                                         auto funcType = llvm::FunctionType::get(ctx.getVoidType(),
                                                                                 paramTypes, false);
-                                        // LLVM 14+: opaque pointersではBitCast不要
-                                        // funcPtrはすでにptr型なのでそのまま使用
+#if LLVM_VERSION_MAJOR < 15
+                                        // LLVM 14: typed pointerが必要なので関数ポインタ型にキャスト
+                                        auto funcPtrType = llvm::PointerType::get(funcType, 0);
+                                        funcPtr = builder->CreateBitCast(funcPtr, funcPtrType, "func_ptr_cast");
+#endif
 
                                         std::vector<llvm::Value*> callArgs = {dataPtr};
                                         builder->CreateCall(funcType, funcPtr, callArgs);
@@ -706,6 +708,11 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                 // 拡大変換 (例: i32 -> i64)
                                 resultToStore = builder->CreateZExt(result, destType, "zext");
                             }
+                        }
+                        // ポインタから構造体への変換（スライスget等）
+                        else if (result->getType()->isPointerTy() && destType->isStructTy()) {
+                            // ポインタから構造体をロード
+                            resultToStore = builder->CreateLoad(destType, result, "struct_load");
                         }
                     }
 

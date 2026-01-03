@@ -112,10 +112,14 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             for (const auto& paramType : type->param_types) {
                 paramTypes.push_back(convertType(paramType));
             }
-            // 関数型は作成するが、LLVM 14+のopaque pointerでは使用しない
-            llvm::FunctionType::get(retType, paramTypes, false);
-            // LLVM 14+: opaque pointerを使用（関数ポインタも単なるptr）
+            auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
+#if LLVM_VERSION_MAJOR >= 15
+            // LLVM 15+: opaque pointerを使用（関数ポインタも単なるptr）
             return ctx.getPtrType();
+#else
+            // LLVM 14: typed pointer（関数ポインタ型）を返す
+            return llvm::PointerType::get(funcType, 0);
+#endif
         }
         default:
             return ctx.getI32Type();

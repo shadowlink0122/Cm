@@ -395,7 +395,7 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     // 配列 findIndex (コールバック付き)
     else if (name == "__builtin_array_findIndex_i32" || name == "__builtin_array_findIndex") {
         auto funcType = llvm::FunctionType::get(
-            ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
+            ctx.getI32Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }

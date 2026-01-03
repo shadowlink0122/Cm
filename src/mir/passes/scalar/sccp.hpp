@@ -300,6 +300,18 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             state[assign_data.place.local] = value;
         }
 
+        // Call終端子のdestinationを処理
+        // 関数呼び出しの戻り値は実行時に決まるため、Overdefinedにする
+        if (block.terminator && block.terminator->kind == MirTerminator::Call) {
+            const auto& call_data = std::get<MirTerminator::CallData>(block.terminator->data);
+            if (call_data.destination) {
+                LocalId dest = call_data.destination->local;
+                if (dest < state.size()) {
+                    state[dest] = {LatticeKind::Overdefined, {}};
+                }
+            }
+        }
+
         return state;
     }
 
@@ -622,6 +634,17 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 }
 
                 state[assign_data.place.local] = value;
+            }
+
+            // Call終端子のdestinationを処理
+            if (block->terminator && block->terminator->kind == MirTerminator::Call) {
+                const auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+                if (call_data.destination) {
+                    LocalId dest = call_data.destination->local;
+                    if (dest < state.size()) {
+                        state[dest] = {LatticeKind::Overdefined, {}};
+                    }
+                }
             }
 
             if (block->terminator) {

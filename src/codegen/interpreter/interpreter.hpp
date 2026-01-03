@@ -25,7 +25,8 @@ class Interpreter {
         }
 
         try {
-            Value result = execute_function(*main_func, {});
+            std::vector<Value> args;
+            Value result = execute_function(*main_func, args);
             return ExecutionResult::ok(result);
         } catch (const std::exception& e) {
             return ExecutionResult::error(e.what());
@@ -54,7 +55,7 @@ class Interpreter {
     }
 
     /// 関数を実行
-    Value execute_function(const MirFunction& func, std::vector<Value> args) {
+    Value execute_function(const MirFunction& func, std::vector<Value>& args) {
         debug::interp::log(debug::interp::Id::ExecuteStart, "Executing: " + func.name,
                            debug::Level::Debug);
 
@@ -89,6 +90,14 @@ class Interpreter {
 
         // static変数の保存
         save_static_locals(ctx, func);
+
+        // 引数の変更をコピーバック（selfなどの参照渡しパラメータのため）
+        for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); ++i) {
+            auto it = ctx.locals.find(func.arg_locals[i]);
+            if (it != ctx.locals.end()) {
+                args[i] = it->second;
+            }
+        }
 
         // 戻り値を取得
         auto it = ctx.locals.find(func.return_local);
@@ -681,7 +690,24 @@ class Interpreter {
                 }
             } else {
                 // 通常の関数呼び出し
+                // インターフェースメソッドやジェネリックメソッドの場合、selfを変更する可能性がある
+                constexpr LocalId invalid_local = static_cast<LocalId>(-1);
+                LocalId self_local = invalid_local;
+
+                // メソッド呼び出しかどうかを判定（関数名に__が含まれる）
+                bool is_method = func_name.find("__") != std::string::npos;
+                if (is_method && !data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+                    auto& place = std::get<MirPlace>(data.args[0]->data);
+                    self_local = place.local;
+                }
+
                 Value result = execute_function(*callee, args);
+
+                // メソッド呼び出しの場合、selfをコピーバック
+                if (self_local != invalid_local && !args.empty()) {
+                    ctx.locals[self_local] = args[0];
+                }
+
                 if (data.destination) {
                     Evaluator::store_to_place(ctx, *data.destination, result);
                 }
@@ -810,7 +836,21 @@ class Interpreter {
                            "Dynamic dispatch: " + func_name + " -> " + actual_func_name,
                            debug::Level::Debug);
 
+        // selfのローカル変数IDを保存（後でコピーバック用）
+        constexpr LocalId invalid_local = static_cast<LocalId>(-1);
+        LocalId self_local = invalid_local;
+        if (!data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+            auto& place = std::get<MirPlace>(data.args[0]->data);
+            self_local = place.local;
+        }
+
         Value result = execute_function(*actual_func, args);
+
+        // selfをコピーバック（メソッドがselfを変更した可能性があるため）
+        if (self_local != invalid_local && !args.empty()) {
+            ctx.locals[self_local] = args[0];
+        }
+
         if (data.destination) {
             Evaluator::store_to_place(ctx, *data.destination, result);
         }

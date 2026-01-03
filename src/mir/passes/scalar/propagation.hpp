@@ -237,8 +237,9 @@ class CopyPropagation : public OptimizationPass {
                 break;
             }
             case MirRvalue::Ref: {
-                auto& ref_data = std::get<MirRvalue::RefData>(rvalue.data);
-                changed |= propagate_in_place(ref_data.place, copies);
+                // 参照取得の場合、コピー伝播は行わない
+                // _1 と _2 は異なるメモリ位置を持つ可能性があるため
+                // &_1 と &_2 は異なるアドレスを生成する
                 break;
             }
             case MirRvalue::Aggregate: {

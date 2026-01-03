@@ -38,7 +38,7 @@ class ConvergenceManager {
    private:
     // 最近の状態のハッシュ（循環検出用）
     std::deque<size_t> recent_state_hashes;
-    static constexpr size_t MAX_HISTORY = 3;
+    static constexpr size_t MAX_HISTORY = 8;  // より長い循環も検出可能に
 
     // 変更メトリクスの履歴
     std::vector<ChangeMetrics> metrics_history;
@@ -110,13 +110,28 @@ class ConvergenceManager {
             consecutive_minor_changes = 0;
         }
 
-        // 変更量の減少傾向をチェック（オプション）
-        if (metrics_history.size() >= 3) {
+        // 変更量の振動をチェック（最適化が互いに打ち消しあっている）
+        if (metrics_history.size() >= 4) {
+            // 最近4回の変更量を確認
+            bool oscillating = true;
+            int prev_change = metrics_history[metrics_history.size() - 4].total_changes();
+            int curr_change = metrics_history[metrics_history.size() - 3].total_changes();
+
+            // 変更量が交互に同じパターンを繰り返している場合
+            if (metrics_history.size() >= 6) {
+                int pattern1 = metrics_history[metrics_history.size() - 2].total_changes();
+                int pattern2 = metrics_history[metrics_history.size() - 1].total_changes();
+                if (prev_change == pattern1 && curr_change == pattern2) {
+                    // 振動を検出
+                    return ConvergenceState::CYCLE_DETECTED;
+                }
+            }
+
+            // 変更量が単調減少している場合
             int recent_total = 0;
             for (size_t i = metrics_history.size() - 3; i < metrics_history.size(); ++i) {
                 recent_total += metrics_history[i].total_changes();
             }
-            // 変更量が単調減少している場合は継続
             if (recent_total < 20) {
                 return ConvergenceState::PRACTICALLY_CONVERGED;
             }

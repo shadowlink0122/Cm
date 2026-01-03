@@ -3,6 +3,7 @@
 /// Print/Format処理はprint_codegen.cppに分離
 
 #include "mir_to_llvm.hpp"
+#include "util/debug.hpp"
 
 #include <iostream>
 
