@@ -79,6 +79,7 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
     } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
         // typeof(expr) - 式の型を返すが、値としては0を返す（型コンテキストで使用）
         // 式として評価される場合はエラーとして扱う
+        (void)typeof_expr;  // 未使用警告を抑制
         debug::hir::log(debug::hir::Id::Warning, "typeof expression used in value context",
                         debug::Level::Warn);
         auto lit = std::make_unique<HirLiteral>();

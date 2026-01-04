@@ -344,6 +344,10 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/hir/lowering/impl.cpp
+            src/hir/lowering/stmt.cpp
+            src/hir/lowering/expr.cpp
+            src/hir/lowering/decl.cpp
             src/mir/lowering/impl.cpp
             src/mir/lowering/stmt.cpp
             src/mir/lowering/expr_basic.cpp
@@ -362,6 +366,10 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/hir/lowering/impl.cpp
+            src/hir/lowering/stmt.cpp
+            src/hir/lowering/expr.cpp
+            src/hir/lowering/decl.cpp
             src/mir/lowering/impl.cpp
             src/mir/lowering/stmt.cpp
             src/mir/lowering/expr_basic.cpp
