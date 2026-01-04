@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../mir/mir_nodes.hpp"
+#include "../../../mir/nodes.hpp"
 #include "context.hpp"
 
 #include <llvm/IR/BasicBlock.h>
@@ -62,6 +62,13 @@ class MIRToLLVM {
     llvm::Type* convertType(const hir::TypePtr& type);
 
    private:
+    /// 関数のユニークIDを生成（オーバーロード対応）
+    std::string generateFunctionId(const mir::MirFunction& func);
+
+    /// 呼び出し時の引数型から関数IDを生成
+    std::string generateCallFunctionId(const std::string& baseName,
+                                       const std::vector<mir::MirOperandPtr>& args);
+
     /// 関数シグネチャ変換
     llvm::Function* convertFunctionSignature(const mir::MirFunction& func);
 
@@ -90,7 +97,8 @@ class MIRToLLVM {
     llvm::Constant* convertConstant(const mir::MirConstant& value);
 
     /// 二項演算変換
-    llvm::Value* convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs);
+    llvm::Value* convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs,
+                                 const hir::TypePtr& result_type = nullptr);
 
     /// 単項演算変換
     llvm::Value* convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand);
@@ -115,6 +123,9 @@ class MIRToLLVM {
 
     /// MIRオペランドからHIR型情報を取得
     hir::TypePtr getOperandType(const mir::MirOperand& operand);
+
+    /// ポインタ型から指す先の型（pointee type）を取得
+    llvm::Type* getPointeeType(const hir::TypePtr& ptrType);
 
     /// インターフェース型かどうかをチェック
     bool isInterfaceType(const std::string& typeName) const {

@@ -4,6 +4,8 @@
 #include "eval.hpp"
 #include "types.hpp"
 
+#include <algorithm>
+
 namespace cm::mir::interp {
 
 /// MIRインタープリタのメインクラス
@@ -25,7 +27,8 @@ class Interpreter {
         }
 
         try {
-            Value result = execute_function(*main_func, {});
+            std::vector<Value> args;
+            Value result = execute_function(*main_func, args);
             return ExecutionResult::ok(result);
         } catch (const std::exception& e) {
             return ExecutionResult::error(e.what());
@@ -54,7 +57,7 @@ class Interpreter {
     }
 
     /// 関数を実行
-    Value execute_function(const MirFunction& func, std::vector<Value> args) {
+    Value execute_function(const MirFunction& func, std::vector<Value>& args) {
         debug::interp::log(debug::interp::Id::ExecuteStart, "Executing: " + func.name,
                            debug::Level::Debug);
 
@@ -89,6 +92,14 @@ class Interpreter {
 
         // static変数の保存
         save_static_locals(ctx, func);
+
+        // 引数の変更をコピーバック（selfなどの参照渡しパラメータのため）
+        for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); ++i) {
+            auto it = ctx.locals.find(func.arg_locals[i]);
+            if (it != ctx.locals.end()) {
+                args[i] = it->second;
+            }
+        }
 
         // 戻り値を取得
         auto it = ctx.locals.find(func.return_local);
@@ -234,6 +245,46 @@ class Interpreter {
                 }
 
                 Value val = Evaluator::evaluate_rvalue(ctx, *data.rvalue);
+
+                // PointerValueの場合、ターゲット変数の型情報でelement_typeを設定
+                if (val.type() == typeid(PointerValue) && data.place.projections.empty()) {
+                    // ローカル変数の型を取得
+                    for (const auto& local : ctx.function->locals) {
+                        if (local.id == data.place.local && local.type) {
+                            if (local.type->kind == hir::TypeKind::Pointer) {
+                                auto& pv = std::any_cast<PointerValue&>(val);
+                                pv.element_type = local.type->element_type;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // クロージャ変数への代入をチェック
+                if (data.place.projections.empty() && ctx.function) {
+                    const LocalId dest_local = data.place.local;
+                    if (dest_local < ctx.function->locals.size()) {
+                        const auto& local_decl = ctx.function->locals[dest_local];
+                        if (local_decl.is_closure && !local_decl.captured_locals.empty()) {
+                            // クロージャ: ClosureValueを作成
+                            ClosureValue cv;
+                            cv.func_name = local_decl.closure_func_name;
+                            for (LocalId cap_local : local_decl.captured_locals) {
+                                auto it = ctx.locals.find(cap_local);
+                                if (it != ctx.locals.end()) {
+                                    cv.captured_values.push_back(it->second);
+                                }
+                            }
+                            val = Value(cv);
+                            debug::interp::log(
+                                debug::interp::Id::Assign,
+                                "Created ClosureValue for " + cv.func_name + " with " +
+                                    std::to_string(cv.captured_values.size()) + " captures",
+                                debug::Level::Debug);
+                        }
+                    }
+                }
+
                 Evaluator::store_to_place(ctx, data.place, val);
                 break;
             }
@@ -308,21 +359,283 @@ class Interpreter {
             return;
         }
 
-        debug::interp::log(
-            debug::interp::Id::Call,
-            "Calling: " + func_name + " with " + std::to_string(data.args.size()) + " MIR args",
-            debug::Level::Debug);
+        // クロージャのキャプチャ引数を追加
+        std::vector<Value> captured_args;
+        if (data.func &&
+            (data.func->kind == MirOperand::Copy || data.func->kind == MirOperand::Move)) {
+            auto& place = std::get<MirPlace>(data.func->data);
+
+            // まず、値がClosureValueかどうかチェック
+            auto it = ctx.locals.find(place.local);
+            if (it != ctx.locals.end() && it->second.type() == typeid(ClosureValue)) {
+                const auto& cv = std::any_cast<ClosureValue>(it->second);
+                func_name = cv.func_name;
+                captured_args = cv.captured_values;
+            }
+            // 次に、LocalDeclのクロージャ情報をチェック（フォールバック）
+            else if (ctx.function && place.local < ctx.function->locals.size()) {
+                const auto& local_decl = ctx.function->locals[place.local];
+                if (local_decl.is_closure && !local_decl.captured_locals.empty()) {
+                    // クロージャ: 実際の関数名を使用
+                    func_name = local_decl.closure_func_name;
+                    // キャプチャされた変数を引数の先頭に追加
+                    for (LocalId cap_local : local_decl.captured_locals) {
+                        auto cap_it = ctx.locals.find(cap_local);
+                        if (cap_it != ctx.locals.end()) {
+                            captured_args.push_back(cap_it->second);
+                        }
+                    }
+                }
+            }
+        }
+
+        debug::interp::log(debug::interp::Id::Call,
+                           "Calling: " + func_name + " with " + std::to_string(data.args.size()) +
+                               " MIR args" +
+                               (captured_args.empty()
+                                    ? ""
+                                    : " + " + std::to_string(captured_args.size()) + " captured"),
+                           debug::Level::Debug);
 
         // 引数を評価
         std::vector<Value> args;
+        // キャプチャ引数を先頭に追加
+        for (const auto& cap_arg : captured_args) {
+            args.push_back(cap_arg);
+        }
         for (const auto& arg : data.args) {
             args.push_back(Evaluator::evaluate_operand(ctx, *arg));
         }
 
-        // 配列高級関数（some, every, findIndex）の特別処理
+        // スライス操作の特別処理（スライスを直接変更する必要があるため）
+        if (func_name.find("cm_slice_push") == 0 || func_name == "cm_slice_pop_i32" ||
+            func_name == "cm_slice_pop_i64" || func_name == "cm_slice_pop_f64" ||
+            func_name == "cm_slice_pop_ptr" || func_name == "cm_slice_delete" ||
+            func_name == "cm_slice_clear") {
+            // 第1引数からスライスのローカル変数IDを取得
+            if (!data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+                auto& place = std::get<MirPlace>(data.args[0]->data);
+
+                // プロジェクションがある場合（構造体フィールドアクセス）
+                if (!place.projections.empty()) {
+                    // 構造体からスライスフィールドを取得
+                    auto it = ctx.locals.find(place.local);
+                    if (it != ctx.locals.end() && it->second.type() == typeid(StructValue)) {
+                        auto& struct_val = std::any_cast<StructValue&>(it->second);
+                        // フィールドインデックスを取得
+                        for (const auto& proj : place.projections) {
+                            if (proj.kind == ProjectionKind::Field) {
+                                size_t field_idx = proj.field_id;
+                                auto field_it = struct_val.fields.find(field_idx);
+                                // フィールドが存在しない場合はスライスとして初期化
+                                if (field_it == struct_val.fields.end()) {
+                                    SliceValue sv;
+                                    sv.capacity = 4;
+                                    struct_val.fields[field_idx] = Value(sv);
+                                    field_it = struct_val.fields.find(field_idx);
+                                }
+                                if (field_it != struct_val.fields.end()) {
+                                    auto& field_val = field_it->second;
+                                    // フィールドがまだSliceValueでない場合は変換
+                                    if (field_val.type() != typeid(SliceValue)) {
+                                        SliceValue sv;
+                                        sv.capacity = 4;
+                                        field_val = Value(sv);
+                                    }
+                                    auto& slice = std::any_cast<SliceValue&>(field_val);
+
+                                    if (func_name.find("cm_slice_push") == 0 && args.size() >= 2) {
+                                        slice.push(args[1]);
+                                    } else if (func_name.find("cm_slice_pop") == 0) {
+                                        Value result = slice.pop();
+                                        if (data.destination) {
+                                            Evaluator::store_to_place(ctx, *data.destination,
+                                                                      result);
+                                        }
+                                        return;
+                                    } else if (func_name == "cm_slice_delete" && args.size() >= 2) {
+                                        int64_t idx = 0;
+                                        if (args[1].type() == typeid(int64_t)) {
+                                            idx = std::any_cast<int64_t>(args[1]);
+                                        } else if (args[1].type() == typeid(int)) {
+                                            idx = std::any_cast<int>(args[1]);
+                                        }
+                                        slice.remove(static_cast<size_t>(idx));
+                                    } else if (func_name == "cm_slice_clear") {
+                                        slice.clear();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // プロジェクションがない場合（直接スライス変数）
+                LocalId slice_local = place.local;
+
+                auto it = ctx.locals.find(slice_local);
+                if (it != ctx.locals.end() && it->second.type() == typeid(SliceValue)) {
+                    auto& slice = std::any_cast<SliceValue&>(it->second);
+
+                    if (func_name.find("cm_slice_push") == 0 && args.size() >= 2) {
+                        slice.push(args[1]);
+                    } else if (func_name.find("cm_slice_pop") == 0) {
+                        Value result = slice.pop();
+                        if (data.destination) {
+                            Evaluator::store_to_place(ctx, *data.destination, result);
+                        }
+                        return;
+                    } else if (func_name == "cm_slice_delete" && args.size() >= 2) {
+                        int64_t idx = 0;
+                        if (args[1].type() == typeid(int64_t)) {
+                            idx = std::any_cast<int64_t>(args[1]);
+                        } else if (args[1].type() == typeid(int)) {
+                            idx = std::any_cast<int>(args[1]);
+                        }
+                        slice.remove(static_cast<size_t>(idx));
+                    } else if (func_name == "cm_slice_clear") {
+                        slice.clear();
+                    }
+                }
+            }
+            return;
+        }
+
+        // スライスlen/cap操作（読み取り専用）
+        if (func_name == "cm_slice_len" || func_name == "cm_slice_cap") {
+            if (!data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+                auto& place = std::get<MirPlace>(data.args[0]->data);
+
+                // プロジェクションがある場合（構造体フィールドアクセス）
+                if (!place.projections.empty()) {
+                    auto it = ctx.locals.find(place.local);
+                    if (it != ctx.locals.end() && it->second.type() == typeid(StructValue)) {
+                        auto& struct_val = std::any_cast<StructValue&>(it->second);
+                        for (const auto& proj : place.projections) {
+                            if (proj.kind == ProjectionKind::Field) {
+                                size_t field_idx = proj.field_id;
+                                auto field_it = struct_val.fields.find(field_idx);
+                                // フィールドが存在しない場合はスライスとして初期化
+                                if (field_it == struct_val.fields.end()) {
+                                    SliceValue sv;
+                                    sv.capacity = 4;
+                                    struct_val.fields[field_idx] = Value(sv);
+                                    field_it = struct_val.fields.find(field_idx);
+                                }
+                                if (field_it != struct_val.fields.end()) {
+                                    const auto& field_val = field_it->second;
+                                    if (field_val.type() == typeid(SliceValue)) {
+                                        const auto& slice = std::any_cast<SliceValue>(field_val);
+                                        Value result;
+                                        if (func_name == "cm_slice_len") {
+                                            result = Value(static_cast<int64_t>(slice.len()));
+                                        } else {
+                                            result = Value(static_cast<int64_t>(slice.cap()));
+                                        }
+                                        if (data.destination) {
+                                            Evaluator::store_to_place(ctx, *data.destination,
+                                                                      result);
+                                        }
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                LocalId slice_local = place.local;
+
+                auto it = ctx.locals.find(slice_local);
+                if (it != ctx.locals.end() && it->second.type() == typeid(SliceValue)) {
+                    const auto& slice = std::any_cast<SliceValue>(it->second);
+                    Value result;
+                    if (func_name == "cm_slice_len") {
+                        result = Value(static_cast<int64_t>(slice.len()));
+                    } else {
+                        result = Value(static_cast<int64_t>(slice.cap()));
+                    }
+                    if (data.destination) {
+                        Evaluator::store_to_place(ctx, *data.destination, result);
+                    }
+                    return;
+                }
+            }
+        }
+
+        // スライスget操作
+        if (func_name.find("cm_slice_get") == 0) {
+            bool handled = false;
+            if (data.args.size() >= 2 && data.args[0]->kind == MirOperand::Copy) {
+                auto& place = std::get<MirPlace>(data.args[0]->data);
+
+                // プロジェクションがある場合（構造体フィールドアクセス）
+                if (!place.projections.empty()) {
+                    auto it = ctx.locals.find(place.local);
+                    if (it != ctx.locals.end() && it->second.type() == typeid(StructValue)) {
+                        const auto& struct_val = std::any_cast<StructValue>(it->second);
+                        for (const auto& proj : place.projections) {
+                            if (proj.kind == ProjectionKind::Field) {
+                                size_t field_idx = proj.field_id;
+                                auto field_it = struct_val.fields.find(field_idx);
+                                if (field_it != struct_val.fields.end()) {
+                                    const auto& field_val = field_it->second;
+                                    if (field_val.type() == typeid(SliceValue)) {
+                                        const auto& slice = std::any_cast<SliceValue>(field_val);
+                                        int64_t idx = 0;
+                                        if (args[1].type() == typeid(int64_t)) {
+                                            idx = std::any_cast<int64_t>(args[1]);
+                                        } else if (args[1].type() == typeid(int)) {
+                                            idx = std::any_cast<int>(args[1]);
+                                        }
+                                        Value result = slice.get(static_cast<size_t>(idx));
+                                        if (data.destination) {
+                                            Evaluator::store_to_place(ctx, *data.destination,
+                                                                      result);
+                                        }
+                                        handled = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    LocalId slice_local = place.local;
+
+                    auto it = ctx.locals.find(slice_local);
+                    if (it != ctx.locals.end() && it->second.type() == typeid(SliceValue)) {
+                        const auto& slice = std::any_cast<SliceValue>(it->second);
+                        int64_t idx = 0;
+                        if (args[1].type() == typeid(int64_t)) {
+                            idx = std::any_cast<int64_t>(args[1]);
+                        } else if (args[1].type() == typeid(int)) {
+                            idx = std::any_cast<int>(args[1]);
+                        }
+                        Value result = slice.get(static_cast<size_t>(idx));
+                        if (data.destination) {
+                            Evaluator::store_to_place(ctx, *data.destination, result);
+                        }
+                        handled = true;
+                    }
+                }
+            }
+            if (handled)
+                return;
+            // 特別処理で処理できなかった場合、ビルトイン関数にフォールスルー
+        }
+
+        // 配列高級関数（some, every, findIndex, map, filter, sort, sortBy, find, reduce）の特別処理
         if (func_name.find("__builtin_array_some") == 0 ||
             func_name.find("__builtin_array_every") == 0 ||
-            func_name.find("__builtin_array_findIndex") == 0) {
+            func_name.find("__builtin_array_findIndex") == 0 ||
+            func_name.find("__builtin_array_map") == 0 ||
+            func_name.find("__builtin_array_filter") == 0 ||
+            func_name.find("__builtin_array_sort") == 0 ||
+            func_name.find("__builtin_array_sortBy") == 0 ||
+            func_name.find("__builtin_array_find") == 0 ||
+            func_name.find("__builtin_array_reduce") == 0) {
             Value result = execute_array_higher_order(ctx, func_name, args);
             if (data.destination) {
                 Evaluator::store_to_place(ctx, *data.destination, result);
@@ -379,7 +692,24 @@ class Interpreter {
                 }
             } else {
                 // 通常の関数呼び出し
+                // インターフェースメソッドやジェネリックメソッドの場合、selfを変更する可能性がある
+                constexpr LocalId invalid_local = static_cast<LocalId>(-1);
+                LocalId self_local = invalid_local;
+
+                // メソッド呼び出しかどうかを判定（関数名に__が含まれる）
+                bool is_method = func_name.find("__") != std::string::npos;
+                if (is_method && !data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+                    auto& place = std::get<MirPlace>(data.args[0]->data);
+                    self_local = place.local;
+                }
+
                 Value result = execute_function(*callee, args);
+
+                // メソッド呼び出しの場合、selfをコピーバック
+                if (self_local != invalid_local && !args.empty()) {
+                    ctx.locals[self_local] = args[0];
+                }
+
                 if (data.destination) {
                     Evaluator::store_to_place(ctx, *data.destination, result);
                 }
@@ -436,6 +766,11 @@ class Interpreter {
         // 関数ポインタ変数（Copy/Move）
         else if (data.func->kind == MirOperand::Copy || data.func->kind == MirOperand::Move) {
             Value val = Evaluator::evaluate_operand(ctx, *data.func);
+            // クロージャの場合
+            if (val.type() == typeid(ClosureValue)) {
+                const auto& cv = std::any_cast<ClosureValue>(val);
+                return cv.func_name;
+            }
             // 関数ポインタはstringとして保存されている
             if (val.type() == typeid(std::string)) {
                 return std::any_cast<std::string>(val);
@@ -503,20 +838,47 @@ class Interpreter {
                            "Dynamic dispatch: " + func_name + " -> " + actual_func_name,
                            debug::Level::Debug);
 
+        // selfのローカル変数IDを保存（後でコピーバック用）
+        constexpr LocalId invalid_local = static_cast<LocalId>(-1);
+        LocalId self_local = invalid_local;
+        if (!data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
+            auto& place = std::get<MirPlace>(data.args[0]->data);
+            self_local = place.local;
+        }
+
         Value result = execute_function(*actual_func, args);
+
+        // selfをコピーバック（メソッドがselfを変更した可能性があるため）
+        if (self_local != invalid_local && !args.empty()) {
+            ctx.locals[self_local] = args[0];
+        }
+
         if (data.destination) {
             Evaluator::store_to_place(ctx, *data.destination, result);
         }
         return true;
     }
 
-    /// 配列高級関数を実行（some, every, findIndex）
+    /// 配列高級関数を実行（some, every, findIndex, map, filter, sort, sortBy, find）
     Value execute_array_higher_order(ExecutionContext& ctx, const std::string& func_name,
                                      std::vector<Value>& args) {
-        if (args.size() < 3) {
-            debug::interp::log(debug::interp::Id::Error,
-                               "Array higher-order function requires 3 args", debug::Level::Warn);
-            return Value(false);
+        // sortは2引数、他は3引数以上
+        bool is_sort_only = func_name.find("__builtin_array_sort") == 0 &&
+                            func_name.find("__builtin_array_sortBy") == std::string::npos;
+
+        if (is_sort_only) {
+            if (args.size() < 2) {
+                debug::interp::log(debug::interp::Id::Error, "Array sort requires 2 args",
+                                   debug::Level::Warn);
+                return Value(false);
+            }
+        } else {
+            if (args.size() < 3) {
+                debug::interp::log(debug::interp::Id::Error,
+                                   "Array higher-order function requires 3 args",
+                                   debug::Level::Warn);
+                return Value(false);
+            }
         }
 
         // 配列を取得
@@ -544,15 +906,73 @@ class Interpreter {
             size = std::any_cast<int64_t>(args[1]);
         }
 
-        // 関数名を取得
+        // sortはコールバック不要
+        if (func_name.find("__builtin_array_sort") == 0 &&
+            func_name.find("__builtin_array_sortBy") == std::string::npos) {
+            // sort: デフォルトの昇順ソート（コールバック不要）
+            std::vector<Value> result_arr;
+            result_arr.reserve(static_cast<size_t>(size));
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                result_arr.push_back(arr[i]);
+            }
+            // 値をソート
+            std::sort(result_arr.begin(), result_arr.end(), [](const Value& a, const Value& b) {
+                if (a.type() == typeid(int64_t) && b.type() == typeid(int64_t)) {
+                    return std::any_cast<int64_t>(a) < std::any_cast<int64_t>(b);
+                }
+                if (a.type() == typeid(double) && b.type() == typeid(double)) {
+                    return std::any_cast<double>(a) < std::any_cast<double>(b);
+                }
+                // 構造体の場合: 最初のフィールドで比較
+                if (a.type() == typeid(StructValue) && b.type() == typeid(StructValue)) {
+                    const auto& sa = std::any_cast<const StructValue&>(a);
+                    const auto& sb = std::any_cast<const StructValue&>(b);
+                    if (!sa.fields.empty() && !sb.fields.empty()) {
+                        auto it_a = sa.fields.begin();
+                        auto it_b = sb.fields.begin();
+                        if (it_a->second.type() == typeid(int64_t) &&
+                            it_b->second.type() == typeid(int64_t)) {
+                            return std::any_cast<int64_t>(it_a->second) <
+                                   std::any_cast<int64_t>(it_b->second);
+                        }
+                    }
+                }
+                return false;
+            });
+            SliceValue sv;
+            sv.elements = std::move(result_arr);
+            return Value(sv);
+        }
+
+        // 関数名を取得（コールバックが必要な関数のみ）
         std::string callback_name;
-        if (args[2].type() == typeid(std::string)) {
-            callback_name = std::any_cast<std::string>(args[2]);
+        std::vector<Value> captured_values;  // クロージャのキャプチャ値
+
+        // _closure版の場合は4引数（配列, サイズ, 関数名, キャプチャ値）
+        bool is_closure_version = func_name.find("_closure") != std::string::npos;
+
+        if (args.size() > 2) {
+            if (args[2].type() == typeid(std::string)) {
+                callback_name = std::any_cast<std::string>(args[2]);
+                // _closure版の場合は4番目の引数がキャプチャ値
+                if (is_closure_version && args.size() > 3) {
+                    captured_values.push_back(args[3]);
+                }
+            } else if (args[2].type() == typeid(ClosureValue)) {
+                // クロージャの場合
+                const auto& cv = std::any_cast<ClosureValue>(args[2]);
+                callback_name = cv.func_name;
+                captured_values = cv.captured_values;
+            } else {
+                debug::interp::log(debug::interp::Id::Error,
+                                   "Callback is not a function name or closure: " +
+                                       std::string(args[2].type().name()),
+                                   debug::Level::Warn);
+                return Value(false);
+            }
         } else {
-            debug::interp::log(
-                debug::interp::Id::Error,
-                "Callback is not a function name: " + std::string(args[2].type().name()),
-                debug::Level::Warn);
+            debug::interp::log(debug::interp::Id::Error, "Missing callback argument",
+                               debug::Level::Warn);
             return Value(false);
         }
 
@@ -564,11 +984,21 @@ class Interpreter {
             return Value(false);
         }
 
+        // クロージャ呼び出しヘルパー
+        auto call_callback = [&](const Value& elem) -> Value {
+            std::vector<Value> cb_args;
+            // キャプチャ値を先頭に追加
+            for (const auto& cap : captured_values) {
+                cb_args.push_back(cap);
+            }
+            cb_args.push_back(elem);
+            return execute_function(*callback, cb_args);
+        };
+
         // 関数の種類に応じて処理
         if (func_name.find("__builtin_array_some") == 0) {
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
                     return Value(true);
                 }
@@ -576,8 +1006,7 @@ class Interpreter {
             return Value(false);
         } else if (func_name.find("__builtin_array_every") == 0) {
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && !std::any_cast<bool>(result)) {
                     return Value(false);
                 }
@@ -585,13 +1014,84 @@ class Interpreter {
             return Value(true);
         } else if (func_name.find("__builtin_array_findIndex") == 0) {
             for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
-                std::vector<Value> cb_args = {arr[i]};
-                Value result = execute_function(*callback, cb_args);
+                Value result = call_callback(arr[i]);
                 if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
                     return Value(i);
                 }
             }
             return Value(int64_t{-1});
+        } else if (func_name.find("__builtin_array_map") == 0) {
+            // map: 各要素に関数を適用し、新しい配列を返す
+            std::vector<Value> result_arr;
+            result_arr.reserve(static_cast<size_t>(size));
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                Value result = call_callback(arr[i]);
+                result_arr.push_back(result);
+            }
+            // SliceValueとして返す（動的配列）
+            SliceValue sv;
+            sv.elements = std::move(result_arr);
+            return Value(sv);
+        } else if (func_name.find("__builtin_array_filter") == 0) {
+            // filter: 条件を満たす要素のみを含む新しい配列を返す
+            std::vector<Value> result_arr;
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                Value result = call_callback(arr[i]);
+                if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
+                    result_arr.push_back(arr[i]);
+                }
+            }
+            // SliceValueとして返す（動的配列）
+            SliceValue sv;
+            sv.elements = std::move(result_arr);
+            return Value(sv);
+        } else if (func_name.find("__builtin_array_sortBy") == 0) {
+            // sortBy: コンパレータ関数を使用
+            std::vector<Value> result_arr;
+            result_arr.reserve(static_cast<size_t>(size));
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                result_arr.push_back(arr[i]);
+            }
+            // コンパレータ関数を使ってソート
+            auto* self = this;
+            std::sort(result_arr.begin(), result_arr.end(),
+                      [callback, self](const Value& a, const Value& b) {
+                          std::vector<Value> cb_args = {a, b};
+                          Value result = self->execute_function(*callback, cb_args);
+                          if (result.type() == typeid(int64_t)) {
+                              return std::any_cast<int64_t>(result) < 0;
+                          }
+                          if (result.type() == typeid(bool)) {
+                              return std::any_cast<bool>(result);
+                          }
+                          return false;
+                      });
+            SliceValue sv;
+            sv.elements = std::move(result_arr);
+            return Value(sv);
+        } else if (func_name.find("__builtin_array_find") == 0) {
+            // find: 条件を満たす最初の要素を返す
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                std::vector<Value> cb_args = {arr[i]};
+                Value result = execute_function(*callback, cb_args);
+                if (result.type() == typeid(bool) && std::any_cast<bool>(result)) {
+                    return arr[i];
+                }
+            }
+            // 見つからない場合はデフォルト値
+            return Value(int64_t{0});
+        } else if (func_name.find("__builtin_array_reduce") == 0) {
+            // reduce: 畳み込み関数
+            // args[3]が初期値
+            if (args.size() < 4) {
+                return Value(int64_t{0});
+            }
+            Value accumulator = args[3];
+            for (int64_t i = 0; i < size && i < static_cast<int64_t>(arr.size()); i++) {
+                std::vector<Value> cb_args = {accumulator, arr[i]};
+                accumulator = execute_function(*callback, cb_args);
+            }
+            return accumulator;
         }
 
         return Value(false);

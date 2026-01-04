@@ -1,0 +1,41 @@
+import std::web::{set_html, set_css};
+
+int main() {
+    string css = `
+    body{margin:0;background:linear-gradient(135deg,#f7f4ef,#d7e6f2);color:#111;}
+    #cm-root{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+    .page{width:min(900px,92vw);background:#fff;box-shadow:0 24px 60px rgba(0,0,0,0.18);border-radius:28px;padding:40px 48px;font-family:'Georgia','Times New Roman',serif;}
+    .eyebrow{letter-spacing:0.2em;text-transform:uppercase;font-size:12px;color:#556;}
+    h1{margin:8px 0 12px;font-size:40px;}
+    .lead{font-size:18px;line-height:1.6;color:#333;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:24px;}
+    .card{background:#f4f7fb;border-radius:16px;padding:16px 18px;}
+    .card-title{font-weight:bold;margin-bottom:6px;}
+    .chip{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:6px 12px;font-size:12px;margin-top:18px;}`;
+
+    string html = `
+    <div class='page'>
+        <div class='eyebrow'>Cm Web</div>
+        <h1>Graphical Output with CSS</h1>
+        <div class='lead'>Cmから生成されたJavaScriptで、HTMLとCSSを直接描画します。</div>
+        <div class='grid'>
+            <div class='card'>
+                <div class='card-title'>Layout</div>
+                <div>Grid cards</div>
+            </div>
+            <div class='card'>
+                <div class='card-title'>Style</div>
+                <div>Gradient + shadow</div>
+            </div>
+            <div class='card'>
+                <div class='card-title'>Speed</div>
+                <div>Direct DOM</div>
+            </div>
+        </div>
+        <div class='chip'>cm --target=web</div>
+    </div>`;
+
+    set_css(css);
+    set_html(html);
+    return 0;
+}

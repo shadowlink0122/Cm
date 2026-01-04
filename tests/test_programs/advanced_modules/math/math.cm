@@ -1,0 +1,20 @@
+// math.cm - モジュールのエントリーポイント
+module math;
+
+// 内部実装ファイルをインポート
+import ./vector;
+import ./constants;
+
+// 公開APIを定義
+export {
+    // constants.cmから
+    PI,
+    E,
+
+    // vector.cmから選択的に再エクスポート
+    Vector3,
+    dot,
+    cross,
+    normalize
+    // magnitude は公開しない（内部使用のみ）
+}

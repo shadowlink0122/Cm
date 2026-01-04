@@ -1,0 +1,46 @@
+// 構造体配列のフィールドアクセステスト
+import std::io::println;
+
+struct Item {
+    int id;
+    int value;
+}
+
+int main() {
+    // 構造体配列を作成
+    Item[3] items = [
+        Item{id: 1, value: 100},
+        Item{id: 2, value: 200},
+        Item{id: 3, value: 300}
+    ];
+    
+    // サイズ確認
+    int s = items.size();
+    println("Items size: {s}");
+    
+    // 各要素のフィールドにアクセス
+    int id0 = items[0].id;
+    int val0 = items[0].value;
+    println("items[0]: id={id0}, value={val0}");
+    
+    int id2 = items[2].id;
+    int val2 = items[2].value;
+    println("items[2]: id={id2}, value={val2}");
+    
+    // 合計を計算
+    int total = 0;
+    for (int i = 0; i < items.size(); i++) {
+        total = total + items[i].value;
+    }
+    println("Total value: {total}");
+    
+    if (s == 3 && id0 == 1 && val2 == 300 && total == 600) {
+        return 0;
+    }
+    return 1;
+}
+// EXPECT: 0
+// EXPECT_OUTPUT: Items size: 3
+// EXPECT_OUTPUT: items[0]: id=1, value=100
+// EXPECT_OUTPUT: items[2]: id=3, value=300
+// EXPECT_OUTPUT: Total value: 600

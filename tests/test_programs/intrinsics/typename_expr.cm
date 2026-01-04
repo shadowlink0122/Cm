@@ -1,0 +1,57 @@
+// typeof(expr) - 変数から型名を文字列で取得するテスト
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Pair<T> {
+    T first;
+    T second;
+}
+
+int main() {
+    // 基本型
+    int i = 42;
+    double d = 3.14;
+    bool b = true;
+    char c = 'A';
+    
+    string ti = typeof(i);
+    string td = typeof(d);
+    string tb = typeof(b);
+    string tc = typeof(c);
+    
+    println("int: {ti}");
+    println("double: {td}");
+    println("bool: {tb}");
+    println("char: {tc}");
+    
+    // 構造体
+    Point pt = Point{x: 10, y: 20};
+    string tpt = typeof(pt);
+    println("struct: {tpt}");
+    
+    // ポインタ
+    int* pi = &i;
+    int** ppi = &pi;
+    string tpi = typeof(pi);
+    string tppi = typeof(ppi);
+    println("pointer: {tpi}");
+    println("pointer to pointer: {tppi}");
+    
+    // 配列
+    int[5] arr;
+    string tarr = typeof(arr);
+    println("array: {tarr}");
+    
+    // ジェネリクス構造体
+    Pair<int> pair_int;
+    pair_int.first = 1;
+    pair_int.second = 2;
+    string tpair = typeof(pair_int);
+    println("generic: {tpair}");
+    
+    return 0;
+}

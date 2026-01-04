@@ -3,6 +3,7 @@
 #include "mir/mir_nodes.hpp"
 
 #include <gtest/gtest.h>
+#include <memory>
 
 using namespace cm::mir;
 

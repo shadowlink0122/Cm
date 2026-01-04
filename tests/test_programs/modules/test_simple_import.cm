@@ -1,0 +1,18 @@
+import std::io::println;
+// test_simple_import.cm - シンプルなインポートテスト
+
+import ./simple_math/math::{add_int, add_double, multiply_int};
+
+int main() {
+    // インポートした関数を使用
+    int sum = add_int(10, 20);
+    println("10 + 20 = {sum}");
+
+    double dsum = add_double(1.5, 2.5);
+    println("1.5 + 2.5 = {dsum}");
+
+    int product = multiply_int(6, 7);
+    println("6 * 7 = {product}");
+
+    return 0;
+}

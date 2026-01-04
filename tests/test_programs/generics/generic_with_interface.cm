@@ -1,3 +1,4 @@
+import std::io::println;
 // interface を型引数として使用するテスト
 
 interface Printable {
@@ -18,7 +19,7 @@ impl Message {
 
 impl Message for Printable {
     void print() {
-        println("Message: {}", self.text);
+        println("Message: {self.text}");
     }
 }
 

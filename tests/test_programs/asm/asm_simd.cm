@@ -1,0 +1,55 @@
+// tests/test_programs/asm/asm_simd.cm
+// SIMD (SSE/AVX) 命令のテスト
+
+import std::io::println;
+
+int main() {
+    // SSE命令
+    asm("movaps %xmm0, %xmm1");
+    println("asm: movaps (aligned packed single)");
+
+    asm("movups %xmm2, %xmm3");
+    println("asm: movups (unaligned packed single)");
+
+    asm("addps %xmm0, %xmm1");
+    println("asm: addps (add packed single)");
+
+    asm("subps %xmm2, %xmm3");
+    println("asm: subps (sub packed single)");
+
+    asm("mulps %xmm4, %xmm5");
+    println("asm: mulps (multiply packed single)");
+
+    asm("divps %xmm6, %xmm7");
+    println("asm: divps (divide packed single)");
+
+    // SSE2命令
+    asm("movapd %xmm0, %xmm1");
+    println("asm: movapd (aligned packed double)");
+
+    asm("addpd %xmm2, %xmm3");
+    println("asm: addpd (add packed double)");
+
+    // AVX命令
+    asm("vmovaps %ymm0, %ymm1");
+    println("asm: vmovaps (AVX move aligned packed single)");
+
+    asm("vaddps %ymm2, %ymm3, %ymm4");
+    println("asm: vaddps (AVX add packed single)");
+
+    asm("vmulps %ymm5, %ymm6, %ymm7");
+    println("asm: vmulps (AVX multiply packed single)");
+
+    // ベクトル比較
+    asm("pcmpeqb %xmm0, %xmm1");
+    println("asm: pcmpeqb (packed compare equal bytes)");
+
+    asm("pcmpgtw %xmm2, %xmm3");
+    println("asm: pcmpgtw (packed compare greater than words)");
+
+    // シャッフル命令
+    asm("pshufd $0x1B, %xmm0, %xmm1");
+    println("asm: pshufd (packed shuffle dword)");
+
+    return 0;
+}

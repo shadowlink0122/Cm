@@ -1,246 +1,96 @@
-# インタプリタ設計
+# MIRインタプリタ設計
 
-## 概要
+## 目的
+- Cmのインタプリタ（MIR実行系）の構造と責務を整理する。
+- MIR最適化との境界を明確化する。
 
-Cmインタプリタは、HIRを直接解釈実行します。将来的にはJITコンパイラへの移行を想定しています。
-
-## アーキテクチャ
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Interpreter                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │    HIR      │ →  │   Eval      │ →  │   Value     │     │
-│  │  (入力)     │    │   Engine    │    │  (結果)     │     │
-│  └─────────────┘    └─────────────┘    └─────────────┘     │
-│                           │                                 │
-│                           ▼                                 │
-│                    ┌─────────────┐                          │
-│                    │ Environment │                          │
-│                    │ (変数束縛)  │                          │
-│                    └─────────────┘                          │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 実装
-
-### 値の表現
-
-```cpp
-// src/backend/interpreter/value.hpp
-struct Value {
-    enum class Type {
-        Null,
-        Int,
-        Float,
-        Bool,
-        Char,
-        String,
-        Array,
-        Struct,
-        Function,
-        Reference,
-    };
-    
-    Type type;
-    std::variant<
-        std::monostate,           // Null
-        int64_t,                  // Int
-        double,                   // Float
-        bool,                     // Bool
-        char,                     // Char
-        std::string,              // String
-        std::vector<Value>,       // Array
-        std::map<std::string, Value>, // Struct
-        FunctionRef,              // Function
-        std::shared_ptr<Value>    // Reference
-    > data;
-};
-```
-
-### 環境（スコープ）
-
-```cpp
-// src/backend/interpreter/environment.hpp
-class Environment {
-public:
-    void define(const std::string& name, Value value);
-    Value get(const std::string& name) const;
-    void set(const std::string& name, Value value);
-    
-    std::shared_ptr<Environment> push_scope();
-    void pop_scope();
-    
-private:
-    std::map<std::string, Value> variables_;
-    std::shared_ptr<Environment> parent_;
-};
-```
-
-### 評価エンジン
-
-```cpp
-// src/backend/interpreter/interpreter.hpp
-class Interpreter {
-public:
-    Interpreter();
-    
-    Value eval(const HirModule& module);
-    Value eval(const HirExpr& expr);
-    Value eval(const HirStmt& stmt);
-    
-private:
-    Value eval_literal(const HirLiteral& lit);
-    Value eval_binary(const HirBinaryExpr& bin);
-    Value eval_call(const HirCall& call);
-    Value eval_match(const HirMatch& match);
-    Value eval_if(const HirIf& if_stmt);
-    Value eval_loop(const HirLoop& loop);
-    
-    std::shared_ptr<Environment> env_;
-    std::map<std::string, HirFunction> functions_;
-};
-```
-
----
+## 構成
+- エントリ: `src/codegen/interpreter/interpreter.hpp`
+- 値表現: `src/codegen/interpreter/types.hpp`
+- 評価器: `src/codegen/interpreter/eval.hpp`
+- 組み込み関数: `src/codegen/interpreter/builtins.hpp`
 
 ## 実行フロー
+1) HIR → MIR 生成（共通）
+2) MIR最適化（共通固定レベルを実行）
+3) `Interpreter::execute()` が `main` などのエントリポイントを起動
+4) `execute_function` → `execute_block` → `execute_statement/terminator` の順に実行
 
-### 関数呼び出し
+## 実行コンテキスト
+`ExecutionContext` は関数単位のローカル状態を保持する。
 
-```cpp
-// Cm
-int factorial(int n) {
-    if (n <= 1) {
-        return 1;
-    }
-    return n * factorial(n - 1);
-}
+- `function`: 対象関数（MIR）
+- `locals`: `LocalId -> Value` マップ
+- `builtins`: 組み込み関数レジストリ
+- `skip_static_init`: static初期化スキップ対象
 
-int main() {
-    return factorial(5);
-}
-```
+初期化時に、ローカル変数の型に応じてデフォルトの `Value` を生成する。
+- Struct: `StructValue`
+- Array: `ArrayValue`
+- Slice: `SliceValue`（容量は初期値4）
 
-```
-1. main() 呼び出し
-2. factorial(5) 呼び出し
-   - 新しいスコープ作成
-   - n = 5 を束縛
-   - if (5 <= 1) → false
-   - factorial(4) 再帰呼び出し
-   - ...
-   - 5 * 4 * 3 * 2 * 1 = 120
-3. 結果: 120
-```
+実装: `src/codegen/interpreter/types.hpp`
 
----
+## 値表現
+`Value` は `std::any` で保持し、必要に応じて以下の構造体にキャストする。
 
-## デバッグモード対応
+- `StructValue`: 構造体名 + `field_id -> Value`
+- `ArrayValue`: 固定配列の要素列 + 要素型
+- `SliceValue`: 動的配列の要素列 + 容量
+- `PointerValue`: ローカル参照/外部ポインタ（FFI）
+- `ClosureValue`: ラムダ関数名 + キャプチャ済み値
 
-```cpp
-class Interpreter {
-    void eval_with_debug(const HirStmt& stmt) {
-        LOG_TRACE("Eval: {}", stmt.to_string());
-        
-        auto result = eval(stmt);
-        
-        LOG_TRACE("Result: {}", result.to_string());
-    }
-};
-```
+実装: `src/codegen/interpreter/types.hpp`
 
-出力例:
-```
-[TRACE] Eval: LetStmt { name: "x", init: Literal(5) }
-[TRACE] Result: ()
-[TRACE] Eval: BinaryExpr { op: Add, lhs: VarRef("x"), rhs: Literal(3) }
-[TRACE] Result: Int(8)
-```
+## 式評価とメモリアクセス
+`Evaluator` が `MirOperand` と `MirRvalue` を評価する。
 
----
+- `load_from_place`: `MirPlace` と projection（Field/Index/Deref）を評価
+- `store_to_place`: projection 付き代入を反映
+- 定数変換: `MirConstant` → `Value`
 
-## 将来: JITコンパイラ
+実装: `src/codegen/interpreter/eval.hpp`
 
-### Phase 1: トレーシングJIT
+## 関数呼び出し
+### 通常呼び出し
+`execute_call` が `CallData` を解析し、引数評価 → 関数実行を行う。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Tracing JIT                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐   ホットパス検出   ┌─────────────┐        │
-│  │ Interpreter │ ───────────────→  │  Compiler   │        │
-│  └─────────────┘                    └─────────────┘        │
-│        ↓                                  ↓                │
-│   通常実行                           ネイティブコード        │
-│   (遅い)                             (速い)                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+- 直接呼び出し: `FunctionRef` / 定数関数名
+- 関数ポインタ: `MirOperand::Copy/Move` から関数名取得
 
-### 検出ルール
+### クロージャ
+- `LocalDecl::is_closure` と `captured_locals` から `ClosureValue` を作成。
+- 呼び出し時はキャプチャ値を引数先頭に追加して実行。
 
-```cpp
-struct HotSpotDetector {
-    static constexpr int THRESHOLD = 1000;  // 実行回数閾値
-    
-    std::map<FunctionId, int> call_counts_;
-    
-    bool is_hot(FunctionId id) {
-        return ++call_counts_[id] >= THRESHOLD;
-    }
-};
-```
+### コンストラクタ
+- `__ctor` 関数は特別扱い。
+- `execute_constructor` で `self` を更新し、呼び出し元にコピーバックする。
 
-### Phase 2: MethodJIT
+### 動的ディスパッチ
+- `Interface__method` 形式で呼び出された場合、
+  `StructValue.type_name` を用いて `Type__method` を探索する。
 
-```
-HIR → MIR → 最適化 → Cranelift → ネイティブコード
-```
+実装: `src/codegen/interpreter/interpreter.hpp`
 
----
+## 組み込み関数
+`BuiltinManager` が `std::unordered_map<string, BuiltinFn>` を構築し、
+I/O、文字列操作、slice/array操作、FFI呼び出しなどを提供する。
 
-## 非同期サポート
+実装: `src/codegen/interpreter/builtins.hpp`
 
-### async/await実装
+## static変数の扱い
+- 関数名 + 変数名をキーに `static_variables_` に保存。
+- 初回はデフォルト値で初期化、2回目以降は保存値を復元。
 
-```cpp
-// Cm
-async String fetchData(String url) {
-    Response res = await http::get(url);
-    return res.body;
-}
-```
+実装: `src/codegen/interpreter/interpreter.hpp`
 
-インタプリタ内部:
-```cpp
-struct AsyncState {
-    enum class Status { Pending, Ready, Error };
-    Status status;
-    std::optional<Value> result;
-    std::function<void()> continuation;
-};
+## スライスと配列
+`cm_slice_*` 系は特別処理で `SliceValue` を直接更新する。
+- 構造体フィールドとしての slice も取り扱う。
 
-class AsyncRuntime {
-    std::queue<AsyncState> pending_tasks_;
-    
-    void run_until_complete();
-    void spawn(AsyncState task);
-};
-```
+実装: `src/codegen/interpreter/interpreter.hpp`
 
----
-
-## 制限事項
-
-| 項目 | 状態 |
-|------|------|
-| 基本実行 | ✅ Phase 1で実装 |
-| 再帰 | ✅ スタックベース |
-| クロージャ | ✅ 環境キャプチャ |
-| async/await | ⚠️ 簡易実装 |
-| JIT | 📋 Phase 2以降 |
+## 制限・注意点
+- JITは未実装（MIRを逐次実行）。
+- 高度な最適化は行わず、MIR最適化に依存する。
+- 外部ポインタの読み書きは型情報に依存するため、型不一致は未定義動作になり得る。

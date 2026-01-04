@@ -1,3 +1,4 @@
+import std::io::println;
 // 複数メソッドのimplテスト
 
 interface Geometry {
@@ -25,8 +26,10 @@ int main() {
     r.width = 10;
     r.height = 5;
     
-    println("Area: {}", r.area());
-    println("Perimeter: {}", r.perimeter());
+    int a = r.area();
+    int p = r.perimeter();
+    println("Area: {a}");
+    println("Perimeter: {p}");
     
     return 0;
 }

@@ -1,0 +1,51 @@
+import std::io::println;
+// Test: alignof intrinsic
+// Expected: All alignof tests passed!
+
+struct AlignChar {
+    char a;
+}
+
+struct AlignInt {
+    int x;
+}
+
+struct AlignDouble {
+    double d;
+}
+
+struct AlignMixed {
+    char a;
+    double d;
+}
+
+int main() {
+    // 基本型のアラインメント
+    int a_char = __alignof__(char);
+    int a_short = __alignof__(short);
+    int a_int = __alignof__(int);
+    int a_long = __alignof__(long);
+    int a_float = __alignof__(float);
+    int a_double = __alignof__(double);
+    
+    if (a_char != 1) { println("FAIL: alignof(char) = {a_char}"); return 1; }
+    if (a_short != 2) { println("FAIL: alignof(short) = {a_short}"); return 1; }
+    if (a_int != 4) { println("FAIL: alignof(int) = {a_int}"); return 1; }
+    if (a_long != 8) { println("FAIL: alignof(long) = {a_long}"); return 1; }
+    if (a_float != 4) { println("FAIL: alignof(float) = {a_float}"); return 1; }
+    if (a_double != 8) { println("FAIL: alignof(double) = {a_double}"); return 1; }
+    
+    // 構造体のアラインメント（最大メンバーに従う）
+    int a_s_char = __alignof__(AlignChar);
+    int a_s_int = __alignof__(AlignInt);
+    int a_s_double = __alignof__(AlignDouble);
+    int a_s_mixed = __alignof__(AlignMixed);
+    
+    if (a_s_char != 1) { println("FAIL: alignof(AlignChar) = {a_s_char}"); return 1; }
+    if (a_s_int != 4) { println("FAIL: alignof(AlignInt) = {a_s_int}"); return 1; }
+    if (a_s_double != 8) { println("FAIL: alignof(AlignDouble) = {a_s_double}"); return 1; }
+    if (a_s_mixed != 8) { println("FAIL: alignof(AlignMixed) = {a_s_mixed}"); return 1; }
+    
+    println("All alignof tests passed!");
+    return 0;
+}

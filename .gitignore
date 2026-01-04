@@ -7,6 +7,7 @@ build/
 build-*/
 cmake-build-*/
 target/
+web/
 *.o
 *.a
 *.so
@@ -49,6 +50,9 @@ target/
 
 # Test output
 *.out
+a.out
+custom
+custom_*
 *.actual
 
 # LLVM specific

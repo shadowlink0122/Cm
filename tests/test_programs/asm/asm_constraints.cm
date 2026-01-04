@@ -1,0 +1,98 @@
+// tests/test_programs/asm/asm_constraints.cm
+// インラインアセンブリの制約とクロバーのテスト
+
+import std::io::println;
+
+// 入出力制約を使った加算
+int addWithConstraints(int a, int b) {
+    int result = 0;
+
+    // GCC形式のインラインアセンブリ（将来的な実装用）
+    // asm("add %1, %0" : "=r"(result) : "r"(a), "0"(b));
+
+    // 現在の実装用
+    asm("mov {&a:x}, %eax");
+    asm("add {&b:x}, %eax");
+    asm("mov %eax, {&result:x}");
+
+    // インタプリタ用フォールバック
+    // result = a + b;
+
+    return result;
+}
+
+// メモリバリア
+void memoryBarrier() {
+    // メモリバリア命令
+    asm("mfence");
+    println("Memory fence executed");
+
+    // コンパイラバリア（簡略版）
+    asm("");
+    println("Compiler barrier");
+}
+
+// CPUID命令の実行
+void getCPUInfo() {
+    int eax_val = 1;
+    int ebx_val = 0;
+    int ecx_val = 0;
+    int edx_val = 0;
+
+    // CPUID命令（レジスタを破壊する）
+    asm("mov {eax_val}, %eax");
+    asm("cpuid");
+    asm("mov %eax, {eax_val}");
+    asm("mov %ebx, {ebx_val}");
+    asm("mov %ecx, {ecx_val}");
+    asm("mov %edx, {edx_val}");
+
+    println("CPUID instruction executed");
+    println("(Values not available in interpreter)");
+}
+
+// アトミック操作
+int atomicIncrement(int value) {
+    int result = value;
+
+    // lock prefix付きインクリメント
+    asm("lock incl {&result:x}");
+
+    return result;
+}
+
+// 条件コード（フラグ）の使用
+bool compareValues(int a, int b) {
+    bool result = true;
+
+    // 比較してフラグを設定
+    asm("cmp {&b}, {&a}");
+    asm("sete %al");  // equal フラグをalレジスタに設定
+    asm("movzbl %al, {&result:x}");  // ゼロ拡張してresultに格納
+
+    return result;
+}
+
+int main() {
+    // 制約を使った加算
+    int sum = addWithConstraints(15, 25);
+    println("15 + 25 = {sum}");
+
+    // メモリバリア
+    memoryBarrier();
+
+    // CPU情報取得
+    getCPUInfo();
+
+    // アトミック操作
+    int atomic_val = atomicIncrement(41);
+    println("Atomic increment of 41 = {atomic_val}");
+
+    // 条件コードの使用
+    bool eq1 = compareValues(10, 10);
+    bool eq2 = compareValues(10, 20);
+    println("10 == 10: {eq1}");
+    println("10 == 20: {eq2}");
+
+    return 0;
+}

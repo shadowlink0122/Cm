@@ -1,3 +1,4 @@
+import std::io::println;
 // 関数ポインタの基本テスト
 
 int add(int a, int b) {
@@ -14,12 +15,12 @@ int main() {
     
     // 関数ポインタ経由での呼び出し
     int result1 = op(3, 2);
-    println("add(3, 2) = {}", result1);
+    println("add(3, 2) = {result1}");
     
     // 別の関数を代入
     op = &sub;
     int result2 = op(3, 2);
-    println("sub(3, 2) = {}", result2);
+    println("sub(3, 2) = {result2}");
     
     return 0;
 }

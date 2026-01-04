@@ -1,0 +1,7 @@
+// io.cm
+module io;
+
+import ./file;
+import ./stream;
+
+export { file, stream };

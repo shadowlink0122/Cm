@@ -1,3 +1,4 @@
+import std::io::println;
 // for-in（範囲for）構文の型推論テスト
 
 struct Point {

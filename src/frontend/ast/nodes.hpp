@@ -46,16 +46,25 @@ struct SliceExpr;
 struct MemberExpr;
 struct TernaryExpr;
 struct NewExpr;
+struct SizeofExpr;
+struct TypeofExpr;
+struct AlignofExpr;
+struct TypenameOfExpr;
+struct StructLiteralExpr;
+struct ArrayLiteralExpr;
 struct LambdaExpr;
 struct MatchExpr;
+struct CastExpr;
 
 // 式の種類
-using ExprKind =
-    std::variant<std::unique_ptr<LiteralExpr>, std::unique_ptr<IdentExpr>,
-                 std::unique_ptr<BinaryExpr>, std::unique_ptr<UnaryExpr>, std::unique_ptr<CallExpr>,
-                 std::unique_ptr<IndexExpr>, std::unique_ptr<SliceExpr>,
-                 std::unique_ptr<MemberExpr>, std::unique_ptr<TernaryExpr>,
-                 std::unique_ptr<NewExpr>, std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>>;
+using ExprKind = std::variant<
+    std::unique_ptr<LiteralExpr>, std::unique_ptr<IdentExpr>, std::unique_ptr<BinaryExpr>,
+    std::unique_ptr<UnaryExpr>, std::unique_ptr<CallExpr>, std::unique_ptr<IndexExpr>,
+    std::unique_ptr<SliceExpr>, std::unique_ptr<MemberExpr>, std::unique_ptr<TernaryExpr>,
+    std::unique_ptr<NewExpr>, std::unique_ptr<SizeofExpr>, std::unique_ptr<TypeofExpr>,
+    std::unique_ptr<AlignofExpr>, std::unique_ptr<TypenameOfExpr>,
+    std::unique_ptr<StructLiteralExpr>, std::unique_ptr<ArrayLiteralExpr>,
+    std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>, std::unique_ptr<CastExpr>>;
 
 struct Expr : Node {
     ExprKind kind;
@@ -135,13 +144,16 @@ struct MacroDecl;
 struct UseDecl;
 struct EnumDecl;
 struct TypedefDecl;
+struct GlobalVarDecl;
+struct ExternBlockDecl;
 
 using DeclKind =
     std::variant<std::unique_ptr<FunctionDecl>, std::unique_ptr<StructDecl>,
                  std::unique_ptr<InterfaceDecl>, std::unique_ptr<ImplDecl>,
                  std::unique_ptr<ImportDecl>, std::unique_ptr<ExportDecl>,
                  std::unique_ptr<ModuleDecl>, std::unique_ptr<MacroDecl>, std::unique_ptr<UseDecl>,
-                 std::unique_ptr<EnumDecl>, std::unique_ptr<TypedefDecl>>;
+                 std::unique_ptr<EnumDecl>, std::unique_ptr<TypedefDecl>,
+                 std::unique_ptr<GlobalVarDecl>, std::unique_ptr<ExternBlockDecl>>;
 
 struct Decl : Node {
     DeclKind kind;

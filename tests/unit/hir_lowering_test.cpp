@@ -1,9 +1,9 @@
-#include "../../src/hir/hir_lowering.hpp"
-
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
+#include "../../src/hir/lowering/lowering.hpp"
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <sstream>
 
 using namespace cm;

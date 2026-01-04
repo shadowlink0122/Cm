@@ -1,0 +1,23 @@
+// tests/test_programs/asm_basic.cm
+// インラインアセンブリの基本テスト
+
+import std::io::println;
+
+int main() {
+    // 基本的なインラインアセンブリ
+    int value = 10;
+
+    // NOP命令（何もしない）
+    asm("nop");
+    println("asm: nop");
+
+    // 値を使った補間（正しい構文は{}）
+    asm("mov {value}, %ebx");
+    println("asm: mov with interpolation");
+
+    // メモリフェンス
+    asm("mfence");
+    println("asm: mfence");
+
+    return 0;  // 成功
+}

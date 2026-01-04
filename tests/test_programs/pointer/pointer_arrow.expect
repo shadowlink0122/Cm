@@ -1,0 +1,4 @@
+ptr->x = 10
+ptr->y = 20
+after modify: p.x = 100
+after modify: p.y = 200

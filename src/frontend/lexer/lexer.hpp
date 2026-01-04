@@ -63,6 +63,8 @@ class Lexer {
             return scan_number(start);
         if (c == '"')
             return scan_string(start);
+        if (c == '`')
+            return scan_raw_string(start);
         if (c == '\'')
             return scan_char(start);
 
@@ -73,6 +75,7 @@ class Lexer {
         keywords_ = {
             {"as", TokenKind::KwAs},
             {"async", TokenKind::KwAsync},
+            {"auto", TokenKind::KwAuto},
             {"await", TokenKind::KwAwait},
             {"break", TokenKind::KwBreak},
             {"case", TokenKind::KwCase},
@@ -99,6 +102,7 @@ class Lexer {
             {"match", TokenKind::KwMatch},
             {"module", TokenKind::KwModule},
             {"mutable", TokenKind::KwMutable},
+            {"namespace", TokenKind::KwNamespace},
             {"new", TokenKind::KwNew},
             {"null", TokenKind::KwNull},
             {"operator", TokenKind::KwOperator},
@@ -106,6 +110,7 @@ class Lexer {
             {"private", TokenKind::KwPrivate},
             {"pub", TokenKind::KwPub},
             {"return", TokenKind::KwReturn},
+            {"sizeof", TokenKind::KwSizeof},
             {"static", TokenKind::KwStatic},
             {"struct", TokenKind::KwStruct},
             {"switch", TokenKind::KwSwitch},
@@ -114,12 +119,18 @@ class Lexer {
             {"true", TokenKind::KwTrue},
             {"typedef", TokenKind::KwTypedef},
             {"typename", TokenKind::KwTypename},
+            {"typeof", TokenKind::KwTypeof},
             {"use", TokenKind::KwUse},
             {"void", TokenKind::KwVoid},
             {"volatile", TokenKind::KwVolatile},
             {"where", TokenKind::KwWhere},
             {"while", TokenKind::KwWhile},
             {"with", TokenKind::KwWith},
+            // コンパイラ組み込み関数
+            {"__sizeof__", TokenKind::KwIntrinsicSizeof},
+            {"__typeof__", TokenKind::KwIntrinsicTypeof},
+            {"__typename__", TokenKind::KwIntrinsicTypename},
+            {"__alignof__", TokenKind::KwIntrinsicAlignof},
             {"int", TokenKind::KwInt},
             {"uint", TokenKind::KwUint},
             {"tiny", TokenKind::KwTiny},
@@ -128,6 +139,8 @@ class Lexer {
             {"ushort", TokenKind::KwUshort},
             {"long", TokenKind::KwLong},
             {"ulong", TokenKind::KwUlong},
+            {"isize", TokenKind::KwIsize},
+            {"usize", TokenKind::KwUsize},
             {"float", TokenKind::KwFloat},
             {"double", TokenKind::KwDouble},
             {"ufloat", TokenKind::KwUfloat},
@@ -135,6 +148,7 @@ class Lexer {
             {"bool", TokenKind::KwBool},
             {"char", TokenKind::KwChar},
             {"string", TokenKind::KwString},
+            {"cstring", TokenKind::KwCstring},
         };
     }
 
@@ -288,6 +302,18 @@ class Lexer {
                 break;
             }
             if (peek() == '\\') {
+                if (peek_next() == '{') {
+                    advance();
+                    advance();
+                    value += "{{";
+                    continue;
+                }
+                if (peek_next() == '}') {
+                    advance();
+                    advance();
+                    value += "}}";
+                    continue;
+                }
                 advance();
                 if (!is_at_end())
                     value += scan_escape_char();
@@ -298,6 +324,62 @@ class Lexer {
         if (!is_at_end())
             advance();
         debug::lex::log(debug::lex::Id::String, "\"...\"", debug::Level::Trace);
+        return Token(TokenKind::StringLiteral, start, pos_, std::move(value));
+    }
+
+    Token scan_raw_string(uint32_t start) {
+        std::string value;
+        while (!is_at_end() && peek() != '`') {
+            if (peek() == '$' && peek_next() == '{') {
+                // raw文字列でも ${...} は補間用として保持する
+                advance();
+                advance();
+                value += "${";
+                while (!is_at_end() && peek() != '}') {
+                    if (peek() == '\\') {
+                        advance();
+                        if (!is_at_end())
+                            value += scan_escape_char();
+                    } else {
+                        value += advance();
+                    }
+                }
+                if (!is_at_end()) {
+                    advance();
+                    value += "}";
+                }
+                continue;
+            }
+            if (peek() == '\\') {
+                if (peek_next() == '{') {
+                    advance();
+                    advance();
+                    value += "{{";
+                    continue;
+                }
+                if (peek_next() == '}') {
+                    advance();
+                    advance();
+                    value += "}}";
+                    continue;
+                }
+                advance();
+                if (!is_at_end())
+                    value += scan_escape_char();
+            } else if (peek() == '{') {
+                advance();
+                value += "{{";
+            } else if (peek() == '}') {
+                advance();
+                value += "}}";
+            } else {
+                value += advance();
+            }
+        }
+        if (!is_at_end())
+            advance();
+        value = normalize_raw_indent(std::move(value));
+        debug::lex::log(debug::lex::Id::String, "`...`", debug::Level::Trace);
         return Token(TokenKind::StringLiteral, start, pos_, std::move(value));
     }
 
@@ -380,7 +462,8 @@ class Lexer {
                        : match('=') ? make(TokenKind::PlusEq)
                                     : make(TokenKind::Plus);
             case '-':
-                return match('-')   ? make(TokenKind::MinusMinus)
+                return match('>')   ? make(TokenKind::ThinArrow)
+                       : match('-') ? make(TokenKind::MinusMinus)
                        : match('=') ? make(TokenKind::MinusEq)
                                     : make(TokenKind::Minus);
             case '*':
@@ -461,6 +544,63 @@ class Lexer {
         return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
     static bool is_alnum(char c) { return is_alpha(c) || is_digit(c); }
+
+    std::string normalize_raw_indent(std::string value) {
+        size_t first_newline = value.find('\n');
+        if (first_newline == std::string::npos) {
+            return value;
+        }
+
+        size_t min_indent = std::string::npos;
+        size_t pos = first_newline + 1;
+        while (pos < value.size()) {
+            size_t line_end = value.find('\n', pos);
+            size_t line_start = pos;
+            size_t idx = line_start;
+            while (idx < value.size() && (value[idx] == ' ' || value[idx] == '\t')) {
+                idx++;
+            }
+            if (idx < value.size() && value[idx] != '\n' && value[idx] != '\r') {
+                size_t indent = idx - line_start;
+                if (min_indent == std::string::npos || indent < min_indent) {
+                    min_indent = indent;
+                }
+            }
+            if (line_end == std::string::npos) {
+                break;
+            }
+            pos = line_end + 1;
+        }
+
+        if (min_indent == std::string::npos || min_indent == 0) {
+            return value;
+        }
+
+        std::string result;
+        result.reserve(value.size());
+        result.append(value.substr(0, first_newline + 1));
+
+        pos = first_newline + 1;
+        while (pos < value.size()) {
+            size_t line_end = value.find('\n', pos);
+            size_t line_start = pos;
+            size_t idx = line_start;
+            size_t drop = min_indent;
+            while (drop > 0 && idx < value.size() && (value[idx] == ' ' || value[idx] == '\t')) {
+                idx++;
+                drop--;
+            }
+            size_t slice_end = (line_end == std::string::npos) ? value.size() : line_end;
+            result.append(value.substr(idx, slice_end - idx));
+            if (line_end == std::string::npos) {
+                break;
+            }
+            result.push_back('\n');
+            pos = line_end + 1;
+        }
+
+        return result;
+    }
 
     std::string_view source_;
     uint32_t pos_;

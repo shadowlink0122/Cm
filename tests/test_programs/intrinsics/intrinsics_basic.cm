@@ -1,0 +1,73 @@
+import std::io::println;
+// Test: コンパイラ組み込み関数のテスト
+// Expected: 動的テスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Aligned {
+    char a;
+    int b;
+}
+
+int main() {
+    // __sizeof__ テスト
+    int s1 = __sizeof__(int);
+    int s2 = __sizeof__(double);
+    int s3 = __sizeof__(Point);
+    int s4 = __sizeof__(Aligned);
+    
+    if (s1 != 4) {
+        println("FAIL: __sizeof__(int) expected 4, got {s1}");
+        return 1;
+    }
+    if (s2 != 8) {
+        println("FAIL: __sizeof__(double) expected 8, got {s2}");
+        return 1;
+    }
+    if (s3 != 8) {
+        println("FAIL: __sizeof__(Point) expected 8, got {s3}");
+        return 1;
+    }
+    // Aligned: char(1) + padding(3) + int(4) = 8
+    if (s4 != 8) {
+        println("FAIL: __sizeof__(Aligned) expected 8, got {s4}");
+        return 1;
+    }
+    
+    // __alignof__ テスト
+    int a1 = __alignof__(int);
+    int a2 = __alignof__(double);
+    int a3 = __alignof__(Aligned);
+    
+    if (a1 != 4) {
+        println("FAIL: __alignof__(int) expected 4, got {a1}");
+        return 1;
+    }
+    if (a2 != 8) {
+        println("FAIL: __alignof__(double) expected 8, got {a2}");
+        return 1;
+    }
+    if (a3 != 4) {
+        println("FAIL: __alignof__(Aligned) expected 4, got {a3}");
+        return 1;
+    }
+    
+    // __typename__ テスト
+    string t1 = __typename__(int);
+    string t2 = __typename__(Point);
+    
+    if (t1 != "int") {
+        println("FAIL: __typename__(int) expected 'int', got '{t1}'");
+        return 1;
+    }
+    if (t2 != "Point") {
+        println("FAIL: __typename__(Point) expected 'Point', got '{t2}'");
+        return 1;
+    }
+    
+    println("All intrinsic tests passed!");
+    return 0;
+}

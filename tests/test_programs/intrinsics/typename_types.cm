@@ -1,0 +1,42 @@
+import std::io::println;
+// Test: typename intrinsic
+// Expected: All typename tests passed!
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct MyStruct {
+    string name;
+    int value;
+}
+
+int main() {
+    // 基本型の型名
+    string t_int = __typename__(int);
+    string t_uint = __typename__(uint);
+    string t_char = __typename__(char);
+    string t_bool = __typename__(bool);
+    string t_float = __typename__(float);
+    string t_double = __typename__(double);
+    string t_string = __typename__(string);
+    
+    if (t_int != "int") { println("FAIL: typename(int) = '{t_int}'"); return 1; }
+    if (t_uint != "uint") { println("FAIL: typename(uint) = '{t_uint}'"); return 1; }
+    if (t_char != "char") { println("FAIL: typename(char) = '{t_char}'"); return 1; }
+    if (t_bool != "bool") { println("FAIL: typename(bool) = '{t_bool}'"); return 1; }
+    if (t_float != "float") { println("FAIL: typename(float) = '{t_float}'"); return 1; }
+    if (t_double != "double") { println("FAIL: typename(double) = '{t_double}'"); return 1; }
+    if (t_string != "string") { println("FAIL: typename(string) = '{t_string}'"); return 1; }
+    
+    // 構造体の型名
+    string t_point = __typename__(Point);
+    string t_mystruct = __typename__(MyStruct);
+    
+    if (t_point != "Point") { println("FAIL: typename(Point) = '{t_point}'"); return 1; }
+    if (t_mystruct != "MyStruct") { println("FAIL: typename(MyStruct) = '{t_mystruct}'"); return 1; }
+    
+    println("All typename tests passed!");
+    return 0;
+}

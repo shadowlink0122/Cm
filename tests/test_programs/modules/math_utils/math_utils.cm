@@ -1,0 +1,21 @@
+// math_utils.cm - 数学ユーティリティモジュール
+module math_utils;
+
+// 定数をエクスポート
+export const double PI = 3.14159265359;
+export const double E = 2.71828182846;
+
+// 構造体をエクスポート
+export struct Vector2D {
+    double x;
+    double y;
+}
+
+// 関数をエクスポート
+export double add(double a, double b) {
+    return a + b;
+}
+
+export double multiply(double a, double b) {
+    return a * b;
+}

@@ -154,12 +154,30 @@ set(CM_SOURCES
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
+    # Type checking (分割済み)
+    src/frontend/types/checking/decl.cpp
+    src/frontend/types/checking/stmt.cpp
+    src/frontend/types/checking/expr.cpp
+    src/frontend/types/checking/call.cpp
+    src/frontend/types/checking/generic.cpp
+    src/frontend/types/checking/auto_impl.cpp
+    src/frontend/types/checking/utils.cpp
+    src/preprocessor/import.cpp
+    src/module/resolver.cpp
+    # HIR lowering (AST -> HIR)
+    src/hir/lowering/impl.cpp
+    src/hir/lowering/decl.cpp
+    src/hir/lowering/stmt.cpp
+    src/hir/lowering/expr.cpp
+    # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
-    src/mir/lowering/mir_lowering_impl.cpp
+    src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
-    src/mir/lowering/stmt_lowering_impl.cpp
-    src/mir/lowering/expr_lowering_impl.cpp
+    src/mir/lowering/stmt.cpp
+    src/mir/lowering/expr_basic.cpp
+    src/mir/lowering/expr_ops.cpp
+    src/mir/lowering/expr_call.cpp
 )
 
 # Add LLVM sources if enabled
@@ -178,9 +196,20 @@ if(CM_USE_LLVM)
         src/codegen/llvm/core/operators.cpp
         src/codegen/llvm/core/utils.cpp
         src/codegen/llvm/core/intrinsics.cpp
+        # LLVM optimizations
+        src/codegen/llvm/optimizations/optimization_manager.cpp
+        src/codegen/llvm/optimizations/peephole/peephole_optimizer.cpp
+        src/codegen/llvm/optimizations/inst_combine/inst_combiner.cpp
+        src/codegen/llvm/optimizations/vectorization/vectorizer.cpp
+        src/codegen/llvm/optimizations/loop_unrolling/loop_unroller.cpp
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp
+        # JavaScript backend
+        src/codegen/js/codegen.cpp
+        src/codegen/js/control_flow.cpp
+        src/codegen/js/emit_statements.cpp
+        src/codegen/js/emit_expressions.cpp
     )
 endif()
 
@@ -228,13 +257,14 @@ if(CM_USE_LLVM)
         
         # Build LLVM runtime library
         # Cランタイムをコンパイルしてbuild/lib/に配置
+        # -ffunction-sections: 関数ごとにセクションを分離（デッドコード削除を有効化）
         set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
         set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
         add_custom_command(
             OUTPUT ${CM_RUNTIME_OUTPUT}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 ${CM_RUNTIME_ARCH_FLAG}
+            COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
             COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
         )
@@ -298,6 +328,10 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/hir/lowering/impl.cpp
+            src/hir/lowering/stmt.cpp
+            src/hir/lowering/expr.cpp
+            src/hir/lowering/decl.cpp
         )
         set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
@@ -310,9 +344,15 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
-            src/mir/lowering/mir_lowering_impl.cpp
-            src/mir/lowering/stmt_lowering_impl.cpp
-            src/mir/lowering/expr_lowering_impl.cpp
+            src/hir/lowering/impl.cpp
+            src/hir/lowering/stmt.cpp
+            src/hir/lowering/expr.cpp
+            src/hir/lowering/decl.cpp
+            src/mir/lowering/impl.cpp
+            src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr_basic.cpp
+            src/mir/lowering/expr_ops.cpp
+            src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
@@ -326,9 +366,15 @@ if(BUILD_TESTING)
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
-            src/mir/lowering/mir_lowering_impl.cpp
-            src/mir/lowering/stmt_lowering_impl.cpp
-            src/mir/lowering/expr_lowering_impl.cpp
+            src/hir/lowering/impl.cpp
+            src/hir/lowering/stmt.cpp
+            src/hir/lowering/expr.cpp
+            src/hir/lowering/decl.cpp
+            src/mir/lowering/impl.cpp
+            src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr_basic.cpp
+            src/mir/lowering/expr_ops.cpp
+            src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
             src/mir/optimizations/optimization_pipeline.cpp
         )

@@ -1,96 +1,112 @@
-# 開発環境
+# 開発環境ガイド
 
-## Docker（推奨）
+*最終更新: 2025年1月*
 
-ローカルとCI環境の一致を保証するため、Docker使用を推奨します。
-
-### 必要なもの
-
-- Docker Engine 24+
-- Docker Compose v2+
-
-### クイックスタート
-
-```bash
-# 開発環境に入る
-docker compose run --rm dev
-
-# 内部でビルド
-cmake -B build -G Ninja
-cmake --build build
-```
-
-### コマンド一覧
-
-| コマンド | 説明 |
-|---------|------|
-| `docker compose run --rm dev` | 開発シェル |
-| `docker compose run --rm build-clang` | Clangビルド |
-| `docker compose run --rm build-gcc` | GCCビルド |
-| `docker compose run --rm lint` | コードフォーマット確認 |
-| `docker compose run --rm test` | テスト実行 |
-| `docker compose run --rm coverage` | カバレッジ生成 |
-
-### イメージビルド
-
-```bash
-docker compose build
-```
-
----
-
-## ローカル環境（Dockerなし）
-
-### 必要なツール
+## 必要環境
 
 | ツール | バージョン | 備考 |
 |--------|-----------|------|
-| GCC | 13+ | または Clang 17+ |
-| Clang | 17+ | 推奨（高速、良いエラー） |
+| C++コンパイラ | C++20対応 | Clang 17+ 推奨 |
 | CMake | 3.16+ | |
-| Ninja | 1.10+ | 推奨（高速） |
-| clang-format | 17+ | コードフォーマット |
+| LLVM | 17+ | ネイティブ/WASMコンパイル用（オプション） |
+| Ninja | 1.10+ | 高速ビルド（オプション） |
+
+## クイックスタート
 
 ### macOS
 
 ```bash
-brew install gcc llvm cmake ninja
+# Homebrew
+brew install llvm cmake ninja
+
+# ビルド
+cmake -B build -DCM_USE_LLVM=ON
+cmake --build build -j4
 ```
 
-### Ubuntu
+### Ubuntu/Debian
 
 ```bash
-sudo apt install gcc-13 g++-13 clang-17 clang-format-17 cmake ninja-build
+# 依存関係
+sudo apt install clang-17 llvm-17-dev cmake ninja-build
+
+# ビルド
+cmake -B build -DCM_USE_LLVM=ON
+cmake --build build -j4
 ```
 
-### ビルド
+## ビルドオプション
+
+| オプション | デフォルト | 説明 |
+|-----------|----------|------|
+| `CM_USE_LLVM` | OFF | LLVMバックエンド有効化 |
+| `CMAKE_BUILD_TYPE` | Debug | Release でリリースビルド |
 
 ```bash
-# Clang（推奨）
-CC=clang CXX=clang++ cmake -B build -G Ninja
-cmake --build build
+# 開発ビルド（デフォルト）
+cmake -B build -DCM_USE_LLVM=ON
 
-# GCC
-CC=gcc CXX=g++ cmake -B build-gcc -G Ninja
-cmake --build build-gcc
+# リリースビルド
+cmake -B build -DCM_USE_LLVM=ON -DCMAKE_BUILD_TYPE=Release
 ```
 
----
+## テスト実行
 
-## コンパイラ選択
+```bash
+# C++ユニットテスト
+ctest --test-dir build
 
-| 用途 | 推奨 | 理由 |
-|------|------|------|
-| 開発時 | **Clang** | 高速コンパイル、分かりやすいエラー |
-| リリース | GCC または Clang | 最適化は同等 |
-| 静的解析 | Clang (clang-tidy) | 充実したチェック |
+# インタプリタテスト（全203テスト）
+make tip
 
----
+# LLVMテスト
+make tlp
+
+# WASMテスト
+make tlwp
+
+# 全テスト
+make tall
+```
+
+## Docker（CI環境）
+
+```bash
+# 開発シェル
+docker compose run --rm dev
+
+# テスト実行
+docker compose run --rm test
+```
 
 ## ディレクトリ構成
 
 ```
-build/          # Clangビルド出力
-build-gcc/      # GCCビルド出力
-build-release/  # リリースビルド
+src/                # コンパイラソースコード
+├── frontend/       # Lexer, Parser, TypeChecker
+├── hir/            # 高レベル中間表現
+├── mir/            # 中間表現（SSA形式）
+├── codegen/        # コード生成（インタプリタ、LLVM）
+└── preprocessor/   # import処理
+
+tests/              # テストファイル
+├── test_programs/  # Cmテストプログラム
+└── *.cpp          # C++ユニットテスト
+
+docs/               # ドキュメント
+├── design/        # 設計文書
+├── guides/        # ガイド
+└── spec/          # 言語仕様
+
+std/                # 標準ライブラリ
+examples/           # サンプルコード
 ```
+
+## コーディング規約
+
+- C++20を使用
+- clang-formatでフォーマット
+- 1ファイル1000行目安
+- デバッグ出力は `[STAGE]` 形式
+
+詳細: [CONTRIBUTING.md](../CONTRIBUTING.md)

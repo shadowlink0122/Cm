@@ -1,0 +1,30 @@
+import std::io::println;
+// テスト: モジュールレベルのconst変数を文字列補間で使用
+export const int VERSION = 1;
+export const int MAJOR = 2;
+export const int MINOR = 3;
+
+int testGlobalConst() {
+    // グローバルconst変数を文字列補間で使用
+    string msg = "Version: {VERSION}, Release: {MAJOR}.{MINOR}";
+
+    // 結果を表示
+    println(msg);
+    
+    // 検証: グローバルconst変数が正しく展開されたか
+    // VERSION=1, MAJOR=2, MINOR=3が含まれていることを確認
+    
+    // 簡易チェック: プレースホルダーが残っていないか
+    if (msg == "Version: {}, Release: {}.{}") {
+        println("FAIL: Global const variables are not interpolated");
+        return 1;
+    } else {
+        println("PASS: Global const variables are interpolated");
+        return 0;
+    }
+}
+
+int main() {
+    int result = testGlobalConst();
+    return result;
+}

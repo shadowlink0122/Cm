@@ -1,0 +1,9 @@
+=== Malloc Cast Test ===
+Test: int allocation
+  int value: PASS (42)
+Test: double allocation
+  double value: PASS (3.14159)
+Test: multiple int allocations
+  multiple values: PASS (100, 200, 300)
+
+Malloc cast tests passed!

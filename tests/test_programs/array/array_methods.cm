@@ -1,3 +1,4 @@
+import std::io::println;
 // 配列メソッドのテスト
 
 bool is_positive(int x) { return x > 0; }
@@ -8,30 +9,42 @@ bool is_greater_than_3(int x) { return x > 3; }
 int main() {
     int[5] arr;
     arr[0] = 1; arr[1] = 2; arr[2] = 3; arr[3] = 4; arr[4] = 5;
-    
+
     // size/len
-    println("size = {}", arr.size());
-    println("len = {}", arr.len());
-    
+    int size_val = arr.size();
+    int len_val = arr.len();
+    println("size = {size_val}");
+    println("len = {len_val}");
+
     // indexOf
-    println("indexOf(3) = {}", arr.indexOf(3));
-    println("indexOf(99) = {}", arr.indexOf(99));
-    
+    int idx_3 = arr.indexOf(3);
+    int idx_99 = arr.indexOf(99);
+    println("indexOf(3) = {idx_3}");
+    println("indexOf(99) = {idx_99}");
+
     // includes
-    println("includes(4) = {}", arr.includes(4));
-    println("includes(99) = {}", arr.includes(99));
-    
+    bool incl_4 = arr.includes(4);
+    bool incl_99 = arr.includes(99);
+    println("includes(4) = {incl_4}");
+    println("includes(99) = {incl_99}");
+
     // some
-    println("some(is_even) = {}", arr.some(is_even));
-    println("some(is_negative) = {}", arr.some(is_negative));
-    
+    bool some_even = arr.some(is_even);
+    bool some_neg = arr.some(is_negative);
+    println("some(is_even) = {some_even}");
+    println("some(is_negative) = {some_neg}");
+
     // every
-    println("every(is_positive) = {}", arr.every(is_positive));
-    println("every(is_even) = {}", arr.every(is_even));
-    
+    bool every_pos = arr.every(is_positive);
+    bool every_even = arr.every(is_even);
+    println("every(is_positive) = {every_pos}");
+    println("every(is_even) = {every_even}");
+
     // findIndex
-    println("findIndex(is_even) = {}", arr.findIndex(is_even));
-    println("findIndex(is_greater_than_3) = {}", arr.findIndex(is_greater_than_3));
-    
+    int find_even = arr.findIndex(is_even);
+    int find_gt3 = arr.findIndex(is_greater_than_3);
+    println("findIndex(is_even) = {find_even}");
+    println("findIndex(is_greater_than_3) = {find_gt3}");
+
     return 0;
 }

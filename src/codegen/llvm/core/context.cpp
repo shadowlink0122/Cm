@@ -51,8 +51,9 @@ LLVMContext::LLVMContext(const std::string& moduleName, const TargetConfig& conf
       targetConfig(config) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit, "Module: " + moduleName);
 
-#if LLVM_VERSION_MAJOR >= 15
-    // LLVM 15+でopaque pointerを有効化
+#if LLVM_VERSION_MAJOR >= 15 && LLVM_VERSION_MAJOR < 17
+    // LLVM 15-16でopaque pointerを有効化
+    // LLVM 17+では常に有効なため不要
     context->setOpaquePointers(true);
 #endif
 

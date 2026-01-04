@@ -1,3 +1,4 @@
+import std::io::println;
 // 文字列の.len()メソッドテスト
 
 int main() {

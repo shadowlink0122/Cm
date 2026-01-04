@@ -1,4 +1,4 @@
 Container holds a value
-c.get() = 42
+c.get() = 100
 Container holds a value
-cs.get() = Hello
+cs.get() = World

@@ -8,16 +8,15 @@ int main() {
     double height = 175.5;
 
     // 位置引数は動作する
-    println("Name: {}, Age: {}, Height: {}", name, age, height);
+    println("Name: {name}, Age: {age}, Height: {height}");
 
     // 文字列変数の中での補間（変数を使う場合）
-    string format1 = "User: {}, Years: {}";
-    // この形式なら動作する（引数を明示的に渡す）
-    println(format1, name, age);
+    // 新形式では単一の文字列リテラルのみ
+    println("User: {name}, Years: {age}");
 
     // フォーマット指定子付き
     int value = 255;
-    println("Hex: {:x}, Binary: {:b}", value, value);
+    println("Hex: {value:x}, Binary: {value:b}");
 
     // エスケープ
     println("Literal braces: {{ and }}");

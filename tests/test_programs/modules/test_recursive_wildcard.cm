@@ -1,0 +1,19 @@
+import std::io::println;
+// test_recursive_wildcard.cm - ワイルドカードインポートテスト
+// lib ディレクトリ以下のすべてのモジュールをインポート
+import ./recursive_wildcard/lib/*;
+
+int main() {
+    // lib/a/a.cm の func_a
+    int result_a = a::func_a(10);  // 110
+    
+    // lib/b/b.cm の func_b
+    int result_b = b::func_b(25);  // 50
+    
+    int total = result_a + result_b;  // 160
+    
+    println("Result A: {result_a}");
+    println("Result B: {result_b}");
+    println("Total: {total}");
+    return 0;
+}

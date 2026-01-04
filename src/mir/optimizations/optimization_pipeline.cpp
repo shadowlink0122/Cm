@@ -1,5 +1,5 @@
-#include "all_passes.hpp"
-#include "optimization_pass.hpp"
+#include "../passes/core/base.hpp"
+#include "../passes/core/manager.hpp"
 
 namespace cm::mir::opt {
 
