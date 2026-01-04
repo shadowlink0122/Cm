@@ -47,7 +47,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         !let.type->array_size.has_value()) {
         // 動的配列（スライス）の初期化
         hir::TypePtr elem_type = let.type->element_type ? let.type->element_type : hir::make_int();
-        
+
         // 要素サイズを取得
         int64_t elem_size = 4;  // デフォルトはint
         auto elem_kind = elem_type->kind;
@@ -66,44 +66,39 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             elem_size = 8;
         } else if (elem_kind == hir::TypeKind::Array) {
             // 多次元配列の場合、内側の配列サイズを計算
-            elem_size = sizeof(void*) * 3;  // CmSlice構造体のサイズ
+            // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
+            elem_size = sizeof(void*) * 4;  // CmSlice構造体のサイズ
         }
-        
+
         // cm_slice_new(elem_size, initial_capacity) を呼び出し
         LocalId elem_size_local = ctx.new_temp(hir::make_long());
         MirConstant elem_size_const;
         elem_size_const.value = static_cast<int64_t>(elem_size);
         elem_size_const.type = hir::make_long();
         ctx.push_statement(MirStatement::assign(
-            MirPlace{elem_size_local},
-            MirRvalue::use(MirOperand::constant(elem_size_const))));
-        
+            MirPlace{elem_size_local}, MirRvalue::use(MirOperand::constant(elem_size_const))));
+
         LocalId init_cap_local = ctx.new_temp(hir::make_long());
         MirConstant init_cap_const;
         init_cap_const.value = int64_t(0);  // 初期容量0
         init_cap_const.type = hir::make_long();
         ctx.push_statement(MirStatement::assign(
-            MirPlace{init_cap_local},
-            MirRvalue::use(MirOperand::constant(init_cap_const))));
-        
+            MirPlace{init_cap_local}, MirRvalue::use(MirOperand::constant(init_cap_const))));
+
         // cm_slice_new呼び出し
         BlockId new_block = ctx.new_block();
         std::vector<MirOperandPtr> new_args;
         new_args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
         new_args.push_back(MirOperand::copy(MirPlace{init_cap_local}));
-        
+
         auto new_term = std::make_unique<MirTerminator>();
         new_term->kind = MirTerminator::Call;
-        new_term->data = MirTerminator::CallData{
-            MirOperand::function_ref("cm_slice_new"),
-            std::move(new_args),
-            MirPlace{local},
-            new_block,
-            std::nullopt
-        };
+        new_term->data =
+            MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"), std::move(new_args),
+                                    MirPlace{local}, new_block, std::nullopt};
         ctx.set_terminator(std::move(new_term));
         ctx.switch_to_block(new_block);
-        
+
         return;
     }
 
@@ -177,17 +172,21 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
                         elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
                         elem_size = 1;
-                    } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
+                    } else if (elem_kind == hir::TypeKind::Short ||
+                               elem_kind == hir::TypeKind::UShort) {
                         elem_size = 2;
-                    } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
+                    } else if (elem_kind == hir::TypeKind::Long ||
+                               elem_kind == hir::TypeKind::ULong ||
                                elem_kind == hir::TypeKind::Double) {
                         elem_size = 8;
-                    } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
+                    } else if (elem_kind == hir::TypeKind::Pointer ||
+                               elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {
                         elem_size = 8;
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 多次元配列の場合、内側の配列サイズを計算
-                        elem_size = sizeof(void*) * 3;  // CmSlice構造体のサイズ
+                        // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
+                        elem_size = sizeof(void*) * 4;  // CmSlice構造体のサイズ
                     }
 
                     // cm_slice_new(elem_size, initial_capacity) を呼び出し
@@ -203,9 +202,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     MirConstant init_cap_const;
                     init_cap_const.value = static_cast<int64_t>(elements.size());  // 要素数で初期化
                     init_cap_const.type = hir::make_long();
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{init_cap_local},
-                        MirRvalue::use(MirOperand::constant(init_cap_const))));
+                    ctx.push_statement(
+                        MirStatement::assign(MirPlace{init_cap_local},
+                                             MirRvalue::use(MirOperand::constant(init_cap_const))));
 
                     // cm_slice_new呼び出し
                     BlockId new_block = ctx.new_block();
@@ -216,12 +215,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     auto new_term = std::make_unique<MirTerminator>();
                     new_term->kind = MirTerminator::Call;
                     new_term->data = MirTerminator::CallData{
-                        MirOperand::function_ref("cm_slice_new"),
-                        std::move(new_args),
-                        MirPlace{local},
-                        new_block,
-                        std::nullopt
-                    };
+                        MirOperand::function_ref("cm_slice_new"), std::move(new_args),
+                        MirPlace{local}, new_block, std::nullopt};
                     ctx.set_terminator(std::move(new_term));
                     ctx.switch_to_block(new_block);
 

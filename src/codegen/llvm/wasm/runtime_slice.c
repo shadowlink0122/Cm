@@ -544,8 +544,10 @@ void* cm_slice_get_subslice(void* slice_ptr, int64_t index) {
     if (index < 0 || index >= slice->len || !slice->data) return NULL;
     
     // 要素へのポインタを取得
-    // 多次元スライスでは、要素はCmSlice構造体として格納されている
-    CmSlice* elem_ptr = (CmSlice*)((char*)slice->data + (index * slice->elem_size));
+    // 多次元スライスでは、要素はCmSlice構造体（値）として格納されている
+    // elem_size は sizeof(CmSlice) であり、data は CmSlice の配列へのポインタ
+    CmSlice* slice_array = (CmSlice*)slice->data;
+    CmSlice* elem_ptr = &slice_array[index];
     
     // 内側のスライスのコピーを作成
     // これにより、元のスライスが破壊されても安全

@@ -2,8 +2,8 @@
 
 #include "../convergence/manager.hpp"
 #include "base.hpp"
-#include "timeout_guard.hpp"
 #include "common/debug.hpp"
+#include "timeout_guard.hpp"
 
 #include <iostream>
 #include <unordered_map>
@@ -198,7 +198,8 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
             }
         }
 
-        debug_msg("MIR_OPT", "[OPT] ⚠ 警告: 最大反復回数（" + std::to_string(max_iterations) + "）に達しました");
+        debug_msg("MIR_OPT", "[OPT] ⚠ 警告: 最大反復回数（" + std::to_string(max_iterations) +
+                                 "）に達しました");
         if (debug_output) {
             std::cerr << convergence_mgr.get_statistics();
         }
