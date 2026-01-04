@@ -56,7 +56,6 @@ class InfiniteLoopDetector {
    public:
     // モジュール全体の無限ループリスクを評価
     static bool detectInfiniteLoopRisk(llvm::Module& module) {
-        std::vector<std::string> risky_functions;
         size_t total_complexity = 0;
 
         for (auto& F : module) {
@@ -66,31 +65,15 @@ class InfiniteLoopDetector {
             auto complexity = analyzeFunction(F);
             total_complexity += complexity;
 
-            // 関数ごとの複雑度チェック
-            if (complexity > 10000) {
-                risky_functions.push_back(F.getName().str());
-                std::cerr << "[LOOP_DETECT] 警告: 関数 '" << F.getName().str()
-                          << "' は複雑度が高い（" << complexity << "）\n";
-            }
-
             // 明らかな無限ループパターンを検出
             if (hasObviousInfiniteLoop(F)) {
-                std::cerr << "[LOOP_DETECT] エラー: 関数 '" << F.getName().str()
-                          << "' に無限ループの可能性があります\n";
                 return true;
             }
         }
 
         // 全体の複雑度が異常に高い
         if (total_complexity > 100000) {
-            std::cerr << "[LOOP_DETECT] エラー: モジュール全体の複雑度が異常に高い（"
-                      << total_complexity << "）\n";
             return true;
-        }
-
-        if (!risky_functions.empty()) {
-            std::cerr << "[LOOP_DETECT] 警告: " << risky_functions.size()
-                      << " 個の関数が高複雑度です\n";
         }
 
         return false;
@@ -258,18 +241,16 @@ class InfiniteLoopDetector {
 class PreCodeGenValidator {
    public:
     static bool validate(llvm::Module& module) {
-        std::cerr << "[VALIDATOR] コード生成前の検証を開始...\n";
-
         // 1. 基本的な検証
         if (module.empty()) {
-            std::cerr << "[VALIDATOR] エラー: モジュールが空です\n";
+            std::cerr << "Error: Empty module\n";
             return false;
         }
 
         // 2. 無限ループリスクの検出
         if (InfiniteLoopDetector::detectInfiniteLoopRisk(module)) {
-            std::cerr << "[VALIDATOR] エラー: 無限ループのリスクが検出されました\n";
-            std::cerr << "[VALIDATOR] ヒント: -O1 または -O0 オプションを試してください\n";
+            std::cerr << "Error: Infinite loop risk detected\n";
+            std::cerr << "Hint: Try -O1 or -O0 option\n";
             return false;
         }
 
@@ -286,18 +267,14 @@ class PreCodeGenValidator {
 
             if (inst_count > 10000) {
                 huge_functions++;
-                std::cerr << "[VALIDATOR] 警告: 関数 '" << F.getName().str() << "' は "
-                          << inst_count << " 個の命令を含んでいます\n";
             }
         }
 
         if (huge_functions > 5) {
-            std::cerr << "[VALIDATOR] エラー: 巨大な関数が多すぎます（" << huge_functions
-                      << " 個）\n";
+            std::cerr << "Error: Too many huge functions (" << huge_functions << ")\n";
             return false;
         }
 
-        std::cerr << "[VALIDATOR] 検証完了: 問題なし\n";
         return true;
     }
 };

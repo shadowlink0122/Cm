@@ -164,6 +164,21 @@ class ProgramDeadCodeElimination {
                             worklist.push(callee);
                         }
                     }
+
+                    // 呼び出しの引数から関数参照を収集（クロージャサポート）
+                    // __builtin_array_map_closure などでラムダ関数が引数として渡される
+                    for (const auto& arg : call_data.args) {
+                        if (!arg)
+                            continue;
+                        if (arg->kind == MirOperand::FunctionRef) {
+                            if (const auto* name = std::get_if<std::string>(&arg->data)) {
+                                if (used.find(*name) == used.end()) {
+                                    used.insert(*name);
+                                    worklist.push(*name);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

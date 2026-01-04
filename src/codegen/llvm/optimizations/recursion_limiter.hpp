@@ -83,14 +83,10 @@ class RecursionLimiter {
 
             if (graph.hasRecursion(&F)) {
                 recursive_functions.insert(&F);
-                std::cerr << "[RECURSION] 警告: 関数 '" << F.getName().str() << "' は再帰的です\n";
 
                 // インライン化を禁止
                 F.addFnAttr(llvm::Attribute::NoInline);
                 F.addFnAttr(llvm::Attribute::OptimizeNone);
-
-                std::cerr << "[RECURSION] " << F.getName().str()
-                          << " のインライン化と最適化を無効化しました\n";
             }
         }
 
@@ -111,8 +107,6 @@ class RecursionLimiter {
                 // 大きな関数はインライン化を制限
                 if (F.size() > 10) {  // 10ブロック以上
                     F.addFnAttr(llvm::Attribute::NoInline);
-                    std::cerr << "[RECURSION] 大きなクロージャ/イテレータ関数 '" << name
-                              << "' のインライン化を無効化\n";
                 }
             }
         }
@@ -133,8 +127,6 @@ class RecursionLimiter {
         if (call_count > max_depth) {
             F->addFnAttr(llvm::Attribute::NoInline);
             F->addFnAttr(llvm::Attribute::OptimizeForSize);
-            std::cerr << "[RECURSION] 関数 '" << F->getName().str() << "' の呼び出し数が多い（"
-                      << call_count << "）ため、最適化を制限\n";
         }
     }
 
@@ -150,18 +142,14 @@ class RecursionLimiter {
                 size += BB.size();
             }
 
-            if (size > threshold) {
+            if (size > static_cast<size_t>(threshold)) {
                 F.addFnAttr(llvm::Attribute::NoInline);
-                std::cerr << "[RECURSION] 関数 '" << F.getName().str() << "' のサイズが大きい（"
-                          << size << " 命令）ため、インライン化を無効化\n";
             }
         }
     }
 
     // 最適化前にモジュールを分析して問題を防ぐ
     static void preprocessModule(llvm::Module& module, int opt_level) {
-        std::cerr << "[RECURSION] モジュールの前処理を開始（最適化レベル: O" << opt_level << "）\n";
-
         // 再帰を制限
         limitRecursionInModule(module);
 
@@ -171,21 +159,6 @@ class RecursionLimiter {
         } else if (opt_level >= 2) {
             setInlineThreshold(module, 100);  // O2では100命令以上はインライン化しない
         }
-
-        // 統計情報
-        int noinline_count = 0;
-        int total_functions = 0;
-        for (auto& F : module) {
-            if (F.isDeclaration())
-                continue;
-            total_functions++;
-            if (F.hasFnAttribute(llvm::Attribute::NoInline)) {
-                noinline_count++;
-            }
-        }
-
-        std::cerr << "[RECURSION] " << noinline_count << "/" << total_functions
-                  << " 個の関数でインライン化を無効化しました\n";
     }
 };
 

@@ -169,21 +169,21 @@ llvm::Type* MIRToLLVM::getPointeeType(const hir::TypePtr& ptrType) {
 
 // 定数変換
 llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
-    std::cerr << "[MIR2LLVM]             Entering convertConstant\n";
+    // debug_msg("MIR2LLVM", "Entering convertConstant");
 
     // std::variant を処理
     if (std::holds_alternative<bool>(constant.value)) {
-        std::cerr << "[MIR2LLVM]             convertConstant: bool type\n";
+        // debug_msg("MIR2LLVM", "convertConstant: bool type");
         // bool定数はi8として生成（メモリ格納用）
         return llvm::ConstantInt::get(ctx.getI8Type(), std::get<bool>(constant.value));
     } else if (std::holds_alternative<char>(constant.value)) {
-        std::cerr << "[MIR2LLVM]             convertConstant: char type\n";
+        // debug_msg("MIR2LLVM", "convertConstant: char type");
         // 文字リテラルはi8として生成
         return llvm::ConstantInt::get(ctx.getI8Type(), std::get<char>(constant.value));
     } else if (std::holds_alternative<int64_t>(constant.value)) {
-        std::cerr << "[MIR2LLVM]             convertConstant: int64_t type\n";
+        // debug_msg("MIR2LLVM", "convertConstant: int64_t type");
         int64_t val = std::get<int64_t>(constant.value);
-        std::cerr << "[MIR2LLVM]             convertConstant: val=" << val << "\n";
+        // std::cerr << "[MIR2LLVM]             convertConstant: val=" << val << "\n";
 
         // 型情報がある場合、適切な型で生成
         if (constant.type) {
@@ -218,10 +218,10 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
                     break;
             }
         }
-        std::cerr << "[MIR2LLVM]             convertConstant: returning i32 constant\n";
+        // debug_msg("MIR2LLVM", "convertConstant: returning i32 constant");
         return llvm::ConstantInt::get(ctx.getI32Type(), val);
     } else if (std::holds_alternative<double>(constant.value)) {
-        std::cerr << "[MIR2LLVM]             convertConstant: double type\n";
+        // debug_msg("MIR2LLVM", "convertConstant: double type");
         // 型情報がある場合、適切な浮動小数点型で生成
         if (constant.type && (constant.type->kind == hir::TypeKind::Float ||
                               constant.type->kind == hir::TypeKind::UFloat)) {
