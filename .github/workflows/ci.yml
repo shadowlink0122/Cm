@@ -150,13 +150,41 @@ jobs:
         run: ./build/bin/${{ matrix.test }}_test --gtest_output=xml:test-results-${{ matrix.test }}.xml
 
   # ========================================
-  # Integration Tests - 並列実行 (Platform × OptLevel)
+  # Integration Tests - 完全並列実行
+  # Matrix: 2 OS × 3 platforms × 4 opt levels = 24 parallel jobs
+  # 
+  # 実行例:
+  # - ubuntu-latest + interpreter + O0 (job 1)  ┐
+  # - ubuntu-latest + interpreter + O1 (job 2)  │
+  # - ubuntu-latest + interpreter + O2 (job 3)  │
+  # - ubuntu-latest + interpreter + O3 (job 4)  │
+  # - ubuntu-latest + llvm + O0 (job 5)         │
+  # - ubuntu-latest + llvm + O1 (job 6)         │ すべて同時実行
+  # - ubuntu-latest + llvm + O2 (job 7)         │ (GitHub Actionsの
+  # - ubuntu-latest + llvm + O3 (job 8)         │  リソース制限内)
+  # - ubuntu-latest + llvm-wasm + O0 (job 9)    │
+  # - ubuntu-latest + llvm-wasm + O1 (job 10)   │
+  # - ubuntu-latest + llvm-wasm + O2 (job 11)   │
+  # - ubuntu-latest + llvm-wasm + O3 (job 12)   │
+  # - macos-latest + interpreter + O0 (job 13)  │
+  # - macos-latest + interpreter + O1 (job 14)  │
+  # - macos-latest + interpreter + O2 (job 15)  │
+  # - macos-latest + interpreter + O3 (job 16)  │
+  # - macos-latest + llvm + O0 (job 17)         │
+  # - macos-latest + llvm + O1 (job 18)         │
+  # - macos-latest + llvm + O2 (job 19)         │
+  # - macos-latest + llvm + O3 (job 20)         │
+  # - macos-latest + llvm-wasm + O0 (job 21)    │
+  # - macos-latest + llvm-wasm + O1 (job 22)    │
+  # - macos-latest + llvm-wasm + O2 (job 23)    │
+  # - macos-latest + llvm-wasm + O3 (job 24)    ┘
   # ========================================
   integration-tests:
     name: ${{ matrix.platform }} O${{ matrix.opt_level }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
+      max-parallel: 24  # 最大24ジョブを同時実行（デフォルトでも並列だが明示）
       matrix:
         os: [ubuntu-latest, macos-latest]
         platform: [interpreter, llvm, llvm-wasm]
@@ -171,7 +199,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # ビルド成果物をダウンロード
+      # ビルド成果物をダウンロード（OSごとに異なるアーティファクト）
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -180,7 +208,7 @@ jobs:
       - name: Set executable permissions
         run: chmod +x build/bin/* cm 2>/dev/null || true
       
-      # LLVM インストール
+      # LLVM インストール（ランタイムライブラリ用）
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
@@ -198,7 +226,7 @@ jobs:
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
-      # wasmtime インストール
+      # wasmtime インストール（WASMテストのみ）
       - name: Install wasmtime (Ubuntu)
         if: runner.os == 'Linux' && matrix.platform == 'llvm-wasm'
         run: |
@@ -209,16 +237,17 @@ jobs:
         if: runner.os == 'macOS' && matrix.platform == 'llvm-wasm'
         run: brew install wasmtime coreutils
       
-      # テスト実行（並列）- プラットフォームごとに分岐
-      - name: Run interpreter tests (O${{ matrix.opt_level }})
+      # テスト実行（並列フラグ -p 付き）
+      # 各ジョブ内でもテストファイルが並列実行される
+      - name: Run interpreter tests (O${{ matrix.opt_level }}, parallel)
         if: matrix.platform == 'interpreter'
         run: make tip${{ matrix.opt_level }}
       
-      - name: Run LLVM native tests (O${{ matrix.opt_level }})
+      - name: Run LLVM native tests (O${{ matrix.opt_level }}, parallel)
         if: matrix.platform == 'llvm'
         run: make tlp${{ matrix.opt_level }}
       
-      - name: Run LLVM WASM tests (O${{ matrix.opt_level }})
+      - name: Run LLVM WASM tests (O${{ matrix.opt_level }}, parallel)
         if: matrix.platform == 'llvm-wasm'
         run: make tlwp${{ matrix.opt_level }}
 
@@ -258,17 +287,43 @@ jobs:
           
           echo "✅ All CI checks passed!"
           echo ""
-          echo "Test Matrix Coverage:"
-          echo "  - 2 Operating Systems: Ubuntu (LLVM 18), macOS (LLVM 14)"
-          echo "  - 4 Unit Tests: Lexer, HIR, MIR, Optimization"
-          echo "  - 3 Platforms: Interpreter, LLVM Native, LLVM WASM"
-          echo "  - 4 Optimization Levels: O0, O1, O2, O3"
-          echo "  - Total: 8 unit tests + 24 integration tests = 32 parallel jobs"
+          echo "==================================================="
+          echo "📊 Test Matrix Coverage"
+          echo "==================================================="
+          echo "  Operating Systems: 2"
+          echo "    - Ubuntu (LLVM 18)"
+          echo "    - macOS (LLVM 14)"
           echo ""
-          echo "Pipeline Structure:"
-          echo "  1. Lint (parallel with build setup)"
-          echo "  2. Build (2 OS, artifacts shared)"
-          echo "  3. Unit Tests (8 parallel jobs)"
-          echo "  4. Integration Tests (24 parallel jobs)"
-          echo "  - All tests run with -p (parallel) flag for maximum speed"
+          echo "  Unit Tests: 8 parallel jobs"
+          echo "    - 2 OS × 4 tests (Lexer, HIR, MIR, Optimization)"
+          echo ""
+          echo "  Integration Tests: 24 parallel jobs"
+          echo "    - 2 OS × 3 platforms × 4 opt levels"
+          echo "    - Platforms: Interpreter, LLVM Native, LLVM WASM"
+          echo "    - Optimization: O0, O1, O2, O3"
+          echo ""
+          echo "==================================================="
+          echo "⚡ Pipeline Execution Model"
+          echo "==================================================="
+          echo "  Phase 1: Lint (parallel)"
+          echo "    └─> 1 job"
+          echo ""
+          echo "  Phase 2: Build (parallel)"
+          echo "    ├─> Ubuntu build → artifact: cm-build-ubuntu-latest"
+          echo "    └─> macOS build  → artifact: cm-build-macos-latest"
+          echo ""
+          echo "  Phase 3: Unit Tests (8 parallel jobs)"
+          echo "    ├─> Ubuntu: Lexer, HIR, MIR, Opt (uses ubuntu artifact)"
+          echo "    └─> macOS: Lexer, HIR, MIR, Opt (uses macos artifact)"
+          echo ""
+          echo "  Phase 4: Integration Tests (24 parallel jobs)"
+          echo "    All 24 combinations run simultaneously:"
+          echo "    ├─> Ubuntu: 12 jobs (3 platforms × 4 opt levels)"
+          echo "    │   Each job downloads cm-build-ubuntu-latest"
+          echo "    └─> macOS: 12 jobs (3 platforms × 4 opt levels)"
+          echo "        Each job downloads cm-build-macos-latest"
+          echo ""
+          echo "  Total: 35 parallel jobs (1 + 2 + 8 + 24)"
+          echo "  All tests use -p (parallel) flag for max speed"
+          echo "==================================================="
 
