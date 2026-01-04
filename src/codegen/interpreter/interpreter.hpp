@@ -4,6 +4,8 @@
 #include "eval.hpp"
 #include "types.hpp"
 
+#include <algorithm>
+
 namespace cm::mir::interp {
 
 /// MIRインタープリタのメインクラス

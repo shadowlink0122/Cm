@@ -4,6 +4,7 @@
 
 #include "../type_checker.hpp"
 
+#include <algorithm>
 #include <regex>
 
 namespace cm {

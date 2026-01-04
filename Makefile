@@ -52,6 +52,11 @@ help:
 	@echo "  make run FILE=<file>       - Cmファイルを実行"
 	@echo "  make run-debug FILE=<file> - デバッグモードで実行"
 	@echo ""
+	@echo "Development Commands:"
+	@echo "  make format       - C++コードを自動フォーマット"
+	@echo "  make format-check - フォーマットをチェック"
+	@echo "  make lint         - C++コードを静的解析(clang-tidy)"
+	@echo ""
 	@echo "Quick Shortcuts:"
 	@echo "  make b   - build"
 	@echo "  make t   - test"
@@ -515,6 +520,9 @@ format-check:
 		-exec clang-format -style=file -dry-run -Werror {} \; 2>&1 && \
 		echo "✅ Format check passed!" || \
 		(echo "❌ Format check failed! Run 'make format' to fix." && exit 1)
+
+.PHONY: lint
+lint: format-check
 
 # ========================================
 # Quick Development Shortcuts

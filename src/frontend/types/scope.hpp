@@ -2,6 +2,7 @@
 
 #include "../ast/types.hpp"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>

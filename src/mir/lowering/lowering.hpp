@@ -6,6 +6,7 @@
 #include "stmt.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <numeric>
 
 namespace cm::mir {

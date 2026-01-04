@@ -5,6 +5,7 @@
 #include "../type_checker.hpp"
 
 #include <functional>
+#include <memory>
 #include <unordered_set>
 
 namespace cm {
