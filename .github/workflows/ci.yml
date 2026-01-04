@@ -28,149 +28,17 @@ jobs:
             xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
 
   # ========================================
-  # Build and Test - ビルドとテスト統合 (全プラットフォーム)
+  # Build - ビルドのみ (全プラットフォーム)
   # ========================================
-  build-and-test:
-    name: Build & Test (${{ matrix.os }})
+  build:
+    name: Build (${{ matrix.os }})
     needs: lint
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            llvm_version: "18"  # Ubuntu 24.04では18以降が利用可能
-          - os: macos-latest
-            llvm_version: "14"  # macOSでは14を使用（ローカル環境と一致）
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      # LLVM インストール (Ubuntu)
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }} gdb
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
-      
-      # LLVM インストール (macOS)
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }}
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
-          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
-      
-      # Google Test インストール (Ubuntu)
-      - name: Install Google Test (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get install -y libgtest-dev
-          # Install wasmtime
-          curl https://wasmtime.dev/install.sh -sSf | bash
-          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
-      
-      # Google Test インストール (macOS)
-      - name: Install Google Test (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install googletest
-          brew install coreutils wasmtime  # gtimeout と wasmtime のため
-      
-      # Google Test インストール (Windows) - vcpkg経由
-      - name: Install Google Test (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          vcpkg install gtest:x64-windows
-          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
-      
-      # ビルド (Unix)
-      - name: Configure CMake (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DCM_USE_LLVM=ON \
-            -DBUILD_TESTING=ON
-      
-      # ビルド (Windows)
-      - name: Configure CMake (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cmake -B build `
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
-            -DCM_USE_LLVM=ON `
-            -DBUILD_TESTING=ON `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-      
-      - name: Build (Unix)
-        if: runner.os != 'Windows'
-        run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-      
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $env:NUMBER_OF_PROCESSORS
-      
-      # ========================================
-      # Unit Tests (C++ Google Test)
-      # ========================================
-      - name: Run Unit tests (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          ./build/bin/lexer_test --gtest_output=xml:test-results-lexer.xml || true
-          ./build/bin/hir_lowering_test --gtest_output=xml:test-results-hir.xml || true
-          ./build/bin/mir_lowering_test --gtest_output=xml:test-results-mir.xml || true
-          ./build/bin/mir_optimization_test --gtest_output=xml:test-results-opt.xml || true
-      
-      # ========================================
-      # Integration Tests
-      # ========================================
-      - name: Install tools (macOS)
-        if: runner.os == 'macOS'
-        run: brew install coreutils wasmtime
-      
-      - name: Install wasmtime (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          curl https://wasmtime.dev/install.sh -sSf | bash
-          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
-      
-      - name: Run interpreter tests (O3)
-        if: runner.os != 'Windows'
-        run: OPT_LEVEL=3 make test-interpreter  # シリアル実行（メモリ効率優先）
-      
-      - name: Run LLVM native tests (O3)
-        if: runner.os != 'Windows'
-        run: OPT_LEVEL=3 make test-llvm  # シリアル実行（メモリ効率優先）
-      
-      - name: Run LLVM WASM tests (O3)
-        if: runner.os != 'Windows'
-        run: OPT_LEVEL=3 make test-llvm-wasm  # シリアル実行（メモリ効率優先）
-
-  # ========================================
-  # Optimization Level Matrix Tests - 最適化レベル全テスト
-  # OS(2) × Platform(3) × OptLevel(4) = 24 tests
-  # ========================================
-  optimization-level-tests:
-    name: O${{ matrix.opt_level }} - ${{ matrix.platform }} (${{ matrix.os }})
-    needs: build-and-test
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        platform: [interpreter, llvm, llvm-wasm]  # jsは除外（まだ不要）
-        opt_level: [0, 1, 2, 3]
-        include:
-          # Ubuntu用のLLVMバージョン
-          - os: ubuntu-latest
             llvm_version: "18"
-          # macOS用のLLVMバージョン
           - os: macos-latest
             llvm_version: "14"
     runs-on: ${{ matrix.os }}
@@ -199,28 +67,147 @@ jobs:
           echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
-      # wasmtime インストール (Ubuntu)
-      - name: Install wasmtime (Ubuntu)
+      # Google Test インストール (Ubuntu)
+      - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
+        run: sudo apt-get install -y libgtest-dev
+      
+      # Google Test インストール (macOS)
+      - name: Install Google Test (macOS)
+        if: runner.os == 'macOS'
+        run: brew install googletest
+      
+      # ビルド
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCM_USE_LLVM=ON \
+            -DBUILD_TESTING=ON
+      
+      - name: Build
+        run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+      
+      # ビルド成果物をアップロード
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+          path: |
+            build/bin/
+            build/lib/
+            cm
+          retention-days: 1
+
+  # ========================================
+  # Unit Tests - C++ Google Test (並列実行)
+  # ========================================
+  unit-tests:
+    name: Unit Test - ${{ matrix.test }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        test: [lexer, hir_lowering, mir_lowering, mir_optimization]
+        include:
+          - os: ubuntu-latest
+            llvm_version: "18"
+          - os: macos-latest
+            llvm_version: "14"
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # ビルド成果物をダウンロード
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+      
+      - name: Set executable permissions
+        run: chmod +x build/bin/* cm 2>/dev/null || true
+      
+      # LLVM インストール (実行時に必要)
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh ${{ matrix.llvm_version }}
+          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev
+          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
+      
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ matrix.llvm_version }}
+          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+      
+      # テスト実行
+      - name: Run ${{ matrix.test }} test
+        run: ./build/bin/${{ matrix.test }}_test --gtest_output=xml:test-results-${{ matrix.test }}.xml
+
+  # ========================================
+  # Integration Tests - 並列実行 (Platform × OptLevel)
+  # ========================================
+  integration-tests:
+    name: ${{ matrix.platform }} O${{ matrix.opt_level }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        platform: [interpreter, llvm, llvm-wasm]
+        opt_level: [0, 1, 2, 3]
+        include:
+          - os: ubuntu-latest
+            llvm_version: "18"
+          - os: macos-latest
+            llvm_version: "14"
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # ビルド成果物をダウンロード
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+      
+      - name: Set executable permissions
+        run: chmod +x build/bin/* cm 2>/dev/null || true
+      
+      # LLVM インストール
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh ${{ matrix.llvm_version }}
+          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }}
+          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
+      
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ matrix.llvm_version }}
+          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+      
+      # wasmtime インストール
+      - name: Install wasmtime (Ubuntu)
+        if: runner.os == 'Linux' && matrix.platform == 'llvm-wasm'
         run: |
           curl https://wasmtime.dev/install.sh -sSf | bash
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
       
-      # wasmtime インストール (macOS)
       - name: Install wasmtime (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install wasmtime coreutils
-      
-      # ビルド
-      - name: Build
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON -DBUILD_TESTING=OFF
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            cmake --build build -j$(nproc)
-          else
-            cmake --build build -j$(sysctl -n hw.ncpu)
-          fi
+        if: runner.os == 'macOS' && matrix.platform == 'llvm-wasm'
+        run: brew install wasmtime coreutils
       
       # テスト実行（並列）- プラットフォームごとに分岐
       - name: Run interpreter tests (O${{ matrix.opt_level }})
@@ -240,27 +227,32 @@ jobs:
   # ========================================
   ci-success:
     name: CI Success
-    needs: [lint, build-and-test, optimization-level-tests]
+    needs: [lint, build, unit-tests, integration-tests]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check all job results
         run: |
           echo "Lint: ${{ needs.lint.result }}"
-          echo "Build & Test: ${{ needs.build-and-test.result }}"
-          echo "Optimization Tests: ${{ needs.optimization-level-tests.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Unit Tests: ${{ needs.unit-tests.result }}"
+          echo "Integration Tests: ${{ needs.integration-tests.result }}"
           
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "❌ Lint failed"
             exit 1
           fi
-          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
-            echo "❌ Build & Test failed"
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "❌ Build failed"
             exit 1
           fi
-          if [ "${{ needs.optimization-level-tests.result }}" != "success" ] && \
-             [ "${{ needs.optimization-level-tests.result }}" != "skipped" ]; then
-            echo "❌ Optimization Tests failed"
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "❌ Unit Tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.integration-tests.result }}" != "success" ] && \
+             [ "${{ needs.integration-tests.result }}" != "skipped" ]; then
+            echo "❌ Integration Tests failed"
             exit 1
           fi
           
@@ -268,12 +260,15 @@ jobs:
           echo ""
           echo "Test Matrix Coverage:"
           echo "  - 2 Operating Systems: Ubuntu (LLVM 18), macOS (LLVM 14)"
+          echo "  - 4 Unit Tests: Lexer, HIR, MIR, Optimization"
           echo "  - 3 Platforms: Interpreter, LLVM Native, LLVM WASM"
           echo "  - 4 Optimization Levels: O0, O1, O2, O3"
-          echo "  - Total: 2×3×4 = 24 test configurations (parallel execution)"
+          echo "  - Total: 8 unit tests + 24 integration tests = 32 parallel jobs"
           echo ""
-          echo "Test Details:"
-          echo "  - Unit Tests: Lexer, HIR, MIR, Optimization passes"
-          echo "  - Integration Tests: Full compilation pipeline for each platform"
-          echo "  - All tests run in parallel for maximum efficiency"
+          echo "Pipeline Structure:"
+          echo "  1. Lint (parallel with build setup)"
+          echo "  2. Build (2 OS, artifacts shared)"
+          echo "  3. Unit Tests (8 parallel jobs)"
+          echo "  4. Integration Tests (24 parallel jobs)"
+          echo "  - All tests run with -p (parallel) flag for maximum speed"
 
