@@ -1620,6 +1620,7 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         structType = allocaInst->getAllocatedType();
                     } else if (auto loadInst = llvm::dyn_cast<llvm::LoadInst>(addr)) {
+                        (void)loadInst;  // 未使用警告を抑制
                         // LoadInst（デリファレンス後）の場合
                         // Deref後は currentType が構造体型になっているはず
                         if (currentType && currentType->kind == hir::TypeKind::Struct) {

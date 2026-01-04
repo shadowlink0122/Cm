@@ -308,6 +308,7 @@ bool Vectorizer::checkConsecutiveAccess(llvm::Instruction* inst) {
     if (auto* load = llvm::dyn_cast<llvm::LoadInst>(inst)) {
         // GEP命令を通じたアクセスパターンを確認
         if (auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>(load->getPointerOperand())) {
+            (void)gep;  // 未使用警告を抑制
             // インデックスが連続しているかチェック
             return true;  // 簡易実装
         }

@@ -95,9 +95,14 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
 
         auto new_term = std::make_unique<MirTerminator>();
         new_term->kind = MirTerminator::Call;
-        new_term->data =
-            MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"), std::move(new_args),
-                                    MirPlace{local}, new_block, std::nullopt, "", "", false};
+        new_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
+                                                 std::move(new_args),
+                                                 MirPlace{local},
+                                                 new_block,
+                                                 std::nullopt,
+                                                 "",
+                                                 "",
+                                                 false};
         ctx.set_terminator(std::move(new_term));
         ctx.switch_to_block(new_block);
 
@@ -216,9 +221,15 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
 
                     auto new_term = std::make_unique<MirTerminator>();
                     new_term->kind = MirTerminator::Call;
-                    new_term->data = MirTerminator::CallData{
-                        MirOperand::function_ref("cm_slice_new"), std::move(new_args),
-                        MirPlace{local}, new_block, std::nullopt, "", "", false};
+                    new_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
+                                                std::move(new_args),
+                                                MirPlace{local},
+                                                new_block,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
                     ctx.set_terminator(std::move(new_term));
                     ctx.switch_to_block(new_block);
 

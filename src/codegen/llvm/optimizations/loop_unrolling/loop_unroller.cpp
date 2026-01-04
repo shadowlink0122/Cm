@@ -238,7 +238,8 @@ bool LoopUnroller::performCompleteUnroll(llvm::Loop* loop, unsigned tripCount,
         // ループ本体の各ブロックを複製
         for (auto* BB : loop->blocks()) {
             auto* newBB = llvm::CloneBasicBlock(BB, VMap, ".unroll" + std::to_string(i));
-            header->getParent()->getBasicBlockList().push_back(newBB);
+            // 関数に追加（LLVM 17+互換）
+            newBB->insertInto(header->getParent());
             newBlocks.push_back(newBB);
 
             // PHIノードの更新
@@ -298,7 +299,8 @@ bool LoopUnroller::performPartialUnroll(llvm::Loop* loop, unsigned unrollFactor,
         // ループ本体の各ブロックを複製
         for (auto* BB : loop->blocks()) {
             auto* newBB = llvm::CloneBasicBlock(BB, VMap, ".unroll" + std::to_string(i));
-            header->getParent()->getBasicBlockList().insert(header->getIterator(), newBB);
+            // 関数に追加（LLVM 17+互換）
+            newBB->insertInto(header->getParent());
             unrolledBlocks.push_back(newBB);
 
             // 前の反復の最後を新しい反復の最初に接続
@@ -388,7 +390,8 @@ bool LoopUnroller::performPeeling(llvm::Loop* loop, unsigned peelCount, llvm::Do
     for (unsigned i = 0; i < peelCount; ++i) {
         for (auto* BB : loop->blocks()) {
             auto* peeledBB = llvm::CloneBasicBlock(BB, VMap, ".peel" + std::to_string(i));
-            header->getParent()->getBasicBlockList().insert(header->getIterator(), peeledBB);
+            // 関数に追加（LLVM 17+互換）
+            peeledBB->insertInto(header->getParent());
         }
     }
 
