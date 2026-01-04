@@ -2,6 +2,7 @@
 
 #include "../../nodes.hpp"
 #include "../../printer.hpp"
+#include "common/debug.hpp"
 
 #include <iostream>
 #include <memory>
@@ -133,9 +134,7 @@ class OptimizationPipeline {
             }
 
             if (i == max_iterations - 1) {
-                if (debug_output) {
-                    std::cerr << "[OPT] 警告: 最大反復回数に達しました（収束せず）\n";
-                }
+                debug_msg("MIR_OPT", "[OPT] 警告: 最大反復回数に達しました（収束せず）");
             }
         }
     }

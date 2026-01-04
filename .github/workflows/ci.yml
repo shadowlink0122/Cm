@@ -141,24 +141,106 @@ jobs:
           curl https://wasmtime.dev/install.sh -sSf | bash
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
       
-      - name: Run interpreter tests
+      - name: Run interpreter tests (O3)
         if: runner.os != 'Windows'
-        run: make test-interpreter  # シリアル実行（メモリ効率優先）
+        run: OPT_LEVEL=3 make test-interpreter  # シリアル実行（メモリ効率優先）
       
-      - name: Run LLVM native tests
+      - name: Run LLVM native tests (O3)
         if: runner.os != 'Windows'
-        run: make test-llvm  # シリアル実行（メモリ効率優先）
+        run: OPT_LEVEL=3 make test-llvm  # シリアル実行（メモリ効率優先）
       
-      - name: Run LLVM WASM tests
+      - name: Run LLVM WASM tests (O3)
         if: runner.os != 'Windows'
-        run: make test-llvm-wasm  # シリアル実行（メモリ効率優先）
+        run: OPT_LEVEL=3 make test-llvm-wasm  # シリアル実行（メモリ効率優先）
+
+  # ========================================
+  # Optimization Level Matrix Tests - 最適化レベル全テスト
+  # OS(2) × Platform(3) × OptLevel(4) = 24 tests
+  # ========================================
+  optimization-level-tests:
+    name: O${{ matrix.opt_level }} - ${{ matrix.platform }} (${{ matrix.os }})
+    needs: build-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        platform: [interpreter, llvm, llvm-wasm]  # jsは除外（まだ不要）
+        opt_level: [0, 1, 2, 3]
+        include:
+          # Ubuntu用のLLVMバージョン
+          - os: ubuntu-latest
+            llvm_version: "18"
+          # macOS用のLLVMバージョン
+          - os: macos-latest
+            llvm_version: "14"
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # LLVM インストール (Ubuntu)
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh ${{ matrix.llvm_version }}
+          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }}
+          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
+      
+      # LLVM インストール (macOS)
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ matrix.llvm_version }}
+          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
+          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+      
+      # wasmtime インストール (Ubuntu)
+      - name: Install wasmtime (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+      
+      # wasmtime インストール (macOS)
+      - name: Install wasmtime (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install wasmtime coreutils
+      
+      # ビルド
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON -DBUILD_TESTING=OFF
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            cmake --build build -j$(nproc)
+          else
+            cmake --build build -j$(sysctl -n hw.ncpu)
+          fi
+      
+      # テスト実行（並列）- プラットフォームごとに分岐
+      - name: Run interpreter tests (O${{ matrix.opt_level }})
+        if: matrix.platform == 'interpreter'
+        run: make tip${{ matrix.opt_level }}
+      
+      - name: Run LLVM native tests (O${{ matrix.opt_level }})
+        if: matrix.platform == 'llvm'
+        run: make tlp${{ matrix.opt_level }}
+      
+      - name: Run LLVM WASM tests (O${{ matrix.opt_level }})
+        if: matrix.platform == 'llvm-wasm'
+        run: make tlwp${{ matrix.opt_level }}
 
   # ========================================
   # CI Success - 全ジョブ成功確認
   # ========================================
   ci-success:
     name: CI Success
-    needs: [lint, build-and-test]
+    needs: [lint, build-and-test, optimization-level-tests]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -166,6 +248,7 @@ jobs:
         run: |
           echo "Lint: ${{ needs.lint.result }}"
           echo "Build & Test: ${{ needs.build-and-test.result }}"
+          echo "Optimization Tests: ${{ needs.optimization-level-tests.result }}"
           
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "❌ Lint failed"
@@ -175,11 +258,22 @@ jobs:
             echo "❌ Build & Test failed"
             exit 1
           fi
+          if [ "${{ needs.optimization-level-tests.result }}" != "success" ] && \
+             [ "${{ needs.optimization-level-tests.result }}" != "skipped" ]; then
+            echo "❌ Optimization Tests failed"
+            exit 1
+          fi
           
           echo "✅ All CI checks passed!"
           echo ""
           echo "Test Matrix Coverage:"
-          echo "  - 2 Operating Systems: Ubuntu (LLVM 14), macOS (LLVM 14)"
-          echo "  - 4 Test Suites: Unit Tests, Interpreter, LLVM Native, LLVM WASM"
-          echo "  - Total: Unified build-test pipeline executed successfully"
+          echo "  - 2 Operating Systems: Ubuntu (LLVM 18), macOS (LLVM 14)"
+          echo "  - 3 Platforms: Interpreter, LLVM Native, LLVM WASM"
+          echo "  - 4 Optimization Levels: O0, O1, O2, O3"
+          echo "  - Total: 2×3×4 = 24 test configurations (parallel execution)"
+          echo ""
+          echo "Test Details:"
+          echo "  - Unit Tests: Lexer, HIR, MIR, Optimization passes"
+          echo "  - Integration Tests: Full compilation pipeline for each platform"
+          echo "  - All tests run in parallel for maximum efficiency"
 

@@ -46,7 +46,8 @@ uint64_t __builtin_string_len(const char* str) {
 static char memory_pool[65536];  // 64KB
 static size_t pool_offset = 0;
 
-static void* wasm_alloc(size_t size) {
+// Non-static for use in runtime_slice.c
+void* wasm_alloc(size_t size) {
     if (pool_offset + size > sizeof(memory_pool)) {
         pool_offset = 0;  // Simple GC: reset pool
     }

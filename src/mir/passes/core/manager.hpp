@@ -88,7 +88,7 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
     int max_iterations = 5;  // デフォルト
     switch (optimization_level) {
         case 1:
-            max_iterations = 2;  // -O1: 軽量（最大2回）
+            max_iterations = 3;  // -O1: 軽量（最大3回）
             if (debug) {
                 std::cout << "[OPT] -O1: バランス型最適化（最大" << max_iterations << "回反復）\n";
             }
@@ -100,14 +100,14 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
             }
             break;
         case 3:
-            max_iterations = 10;  // -O3: 最大（最大10回）- 個々のパスに制限を設ける
+            max_iterations = 20;  // -O3: 最大（最大20回）- 積極的な最適化
             if (debug) {
                 std::cout << "[OPT] -O3: 最大最適化（最大" << max_iterations << "回反復）\n";
             }
             break;
         default:
             if (optimization_level > 3) {
-                max_iterations = 30;  // -O4以上: 実験的
+                max_iterations = 100;  // -O4以上: 実験的（非推奨）
                 if (debug) {
                     std::cout << "[OPT] -O" << optimization_level << ": 実験的最適化（最大"
                               << max_iterations << "回反復）\n";

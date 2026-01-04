@@ -52,6 +52,7 @@ trap cleanup SIGINT SIGTERM
 BACKEND="interpreter"
 CATEGORIES=""
 VERBOSE=false
+OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
 TIMEOUT=5
 
@@ -295,7 +296,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         typescript)
@@ -372,7 +373,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # LLVM経由でネイティブ実行ファイル生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # 実行
@@ -395,7 +396,7 @@ PY
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 # WASMランタイムで実行
@@ -514,7 +515,7 @@ EOJS
             local test_basename="$(basename "$test_file")"
 
             # JavaScript生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 # Node.jsで実行
@@ -875,14 +876,14 @@ PY
             # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
         llvm)
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
                 
@@ -899,7 +900,7 @@ PY
             local wasm_file="$TEMP_DIR/wasm_${test_name}_$$.wasm"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 if command -v wasmtime >/dev/null 2>&1; then
                     run_with_timeout_silent wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
@@ -915,7 +916,7 @@ PY
             local js_file="$TEMP_DIR/js_${test_name}_$$.js"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?

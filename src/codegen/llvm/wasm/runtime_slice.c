@@ -546,7 +546,20 @@ void* cm_slice_get_subslice(void* slice_ptr, int64_t index) {
     // 要素へのポインタを取得
     // 多次元スライスでは、要素はCmSlice構造体として格納されている
     CmSlice* elem_ptr = (CmSlice*)((char*)slice->data + (index * slice->elem_size));
-    return elem_ptr;
+    
+    // 内側のスライスのコピーを作成
+    // これにより、元のスライスが破壊されても安全
+    // WASM環境ではバンプアロケータを使用
+    extern void* wasm_alloc(size_t size);
+    CmSlice* new_slice = (CmSlice*)wasm_alloc(sizeof(CmSlice));
+    if (!new_slice) return NULL;
+    
+    new_slice->data = elem_ptr->data;
+    new_slice->len = elem_ptr->len;
+    new_slice->cap = elem_ptr->cap;
+    new_slice->elem_size = elem_ptr->elem_size;
+    
+    return new_slice;
 }
 
 // 汎用的な最初の要素へのポインタを取得
