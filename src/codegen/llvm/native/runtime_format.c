@@ -1012,10 +1012,10 @@ int64_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, bool (*predica
     return -1;
 }
 
-int64_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, bool (*predicate)(int32_t)) {
+int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, bool (*predicate)(int32_t)) {
     if (!arr || !predicate) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (predicate(arr[i])) return i;
+        if (predicate(arr[i])) return (int32_t)i;
     }
     return -1;
 }
@@ -1289,18 +1289,18 @@ void* __builtin_array_sort(int32_t* arr, int64_t size) {
 }
 
 // indexOf: 要素の位置を検索
-int64_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
+int32_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
     if (!arr) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (arr[i] == value) return i;
+        if (arr[i] == value) return (int32_t)i;
     }
     return -1;
 }
 
-int64_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
+int32_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
     if (!arr) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (arr[i] == value) return i;
+        if (arr[i] == value) return (int32_t)i;
     }
     return -1;
 }

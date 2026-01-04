@@ -353,14 +353,14 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     // 配列 indexOf (i32版)
     else if (name == "__builtin_array_indexOf_i32" || name == "__builtin_array_indexOf") {
         auto funcType = llvm::FunctionType::get(
-            ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI32Type()}, false);
+            ctx.getI32Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI32Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 配列 indexOf (i64版)
     else if (name == "__builtin_array_indexOf_i64") {
         auto funcType = llvm::FunctionType::get(
-            ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
+            ctx.getI32Type(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }

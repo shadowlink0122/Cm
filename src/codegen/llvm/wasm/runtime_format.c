@@ -1576,18 +1576,18 @@ int strcmp(const char* s1, const char* s2) {
 // ============================================================
 
 // indexOf: 要素の位置を検索
-int64_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
+int32_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
     if (!arr) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (arr[i] == value) return i;
+        if (arr[i] == value) return (int32_t)i;
     }
     return -1;
 }
 
-int64_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
+int32_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
     if (!arr) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (arr[i] == value) return i;
+        if (arr[i] == value) return (int32_t)i;
     }
     return -1;
 }
@@ -1636,18 +1636,18 @@ _Bool __builtin_array_every_i32(int32_t* arr, int64_t size, _Bool (*predicate)(i
 }
 
 // findIndex: 条件を満たす最初の要素のインデックス
-int64_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, _Bool (*predicate)(int64_t)) {
+int32_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, _Bool (*predicate)(int64_t)) {
     if (!arr || !predicate) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (predicate(arr[i])) return i;
+        if (predicate(arr[i])) return (int32_t)i;
     }
     return -1;
 }
 
-int64_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, _Bool (*predicate)(int32_t)) {
+int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, _Bool (*predicate)(int32_t)) {
     if (!arr || !predicate) return -1;
     for (int64_t i = 0; i < size; i++) {
-        if (predicate(arr[i])) return i;
+        if (predicate(arr[i])) return (int32_t)i;
     }
     return -1;
 }
