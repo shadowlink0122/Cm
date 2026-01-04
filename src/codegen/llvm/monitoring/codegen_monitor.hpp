@@ -51,7 +51,7 @@ class CodeGenMonitor {
     }
 
     // 関数の生成終了を記録
-    void end_function(const std::string& func_name) {
+    void end_function(const std::string& /* func_name */) {
         // 必要に応じて終了処理
     }
 

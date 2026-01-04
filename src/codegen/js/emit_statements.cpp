@@ -9,7 +9,7 @@ namespace cm::codegen::js {
 using ast::TypeKind;
 
 void JSCodeGen::emitBasicBlock(const mir::BasicBlock& block, const mir::MirFunction& func,
-                               const mir::MirProgram& program) {
+                               [[maybe_unused]] const mir::MirProgram& program) {
     bool needLabels = func.basic_blocks.size() > 1;
 
     if (needLabels) {
@@ -79,7 +79,7 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
 }
 
 void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFunction& func,
-                               const mir::MirProgram& program) {
+                               [[maybe_unused]] const mir::MirProgram& program) {
     switch (term.kind) {
         case mir::MirTerminator::Return: {
             // 戻り値を返す
@@ -289,7 +289,7 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 
 // 線形フロー用の基本ブロック出力（switch/dispatchなし）
 void JSCodeGen::emitLinearBlock(const mir::BasicBlock& block, const mir::MirFunction& func,
-                                const mir::MirProgram& program) {
+                                [[maybe_unused]] const mir::MirProgram& program) {
     // 文を直接出力
     for (const auto& stmt : block.statements) {
         if (stmt) {
@@ -305,7 +305,7 @@ void JSCodeGen::emitLinearBlock(const mir::BasicBlock& block, const mir::MirFunc
 
 // 線形フロー用の終端命令出力
 void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::MirFunction& func,
-                                     const mir::MirProgram& program) {
+                                     [[maybe_unused]] const mir::MirProgram& program) {
     switch (term.kind) {
         case mir::MirTerminator::Return: {
             // 戻り値を返す

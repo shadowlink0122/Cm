@@ -309,7 +309,6 @@ ast::DeclPtr Parser::parse_export() {
 // Export impl (v4: impl全体のエクスポート)
 // ============================================================
 ast::DeclPtr Parser::parse_impl_export(std::vector<ast::AttributeNode> attributes) {
-    uint32_t start_pos = current().start;
     expect(TokenKind::KwImpl);
 
     // impl Type または impl<T> Type<T> または impl Type for Interface

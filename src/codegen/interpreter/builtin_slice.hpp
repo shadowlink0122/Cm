@@ -70,7 +70,8 @@ inline void register_slice_builtins(BuiltinRegistry& builtins) {
     };
 
     // スライスに要素を追加（push）
-    builtins["__builtin_slice_push"] = [](std::vector<Value> args, const auto& locals) -> Value {
+    builtins["__builtin_slice_push"] = [](std::vector<Value> args,
+                                          const auto& /* locals */) -> Value {
         if (args.size() < 2)
             return Value{};
 
@@ -129,7 +130,7 @@ inline void register_slice_builtins(BuiltinRegistry& builtins) {
     builtins["cm_slice_pop_ptr"] = slice_pop_impl;
 
     // スライスの指定位置の要素を削除
-    builtins["__builtin_slice_delete"] = [](std::vector<Value> args, const auto&) -> Value {
+    builtins["__builtin_slice_delete"] = [](std::vector<Value> /* args */, const auto&) -> Value {
         return Value{};
     };
 
@@ -154,12 +155,12 @@ inline void register_slice_builtins(BuiltinRegistry& builtins) {
     };
 
     // スライスの指定位置に要素を挿入
-    builtins["__builtin_slice_insert"] = [](std::vector<Value> args, const auto&) -> Value {
+    builtins["__builtin_slice_insert"] = [](std::vector<Value> /* args */, const auto&) -> Value {
         return Value{};
     };
 
     // スライスの全要素を削除
-    builtins["__builtin_slice_clear"] = [](std::vector<Value> args, const auto&) -> Value {
+    builtins["__builtin_slice_clear"] = [](std::vector<Value> /* args */, const auto&) -> Value {
         return Value{};
     };
 

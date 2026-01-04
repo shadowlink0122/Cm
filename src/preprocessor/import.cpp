@@ -122,7 +122,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                                                 SourceMap& source_map,
                                                 std::vector<ModuleRange>& module_ranges,
                                                 const std::string& import_chain,
-                                                size_t import_line_in_parent) {
+                                                size_t /* import_line_in_parent */) {
     std::stringstream result;
     std::stringstream input(source);
     std::string line;
@@ -1983,7 +1983,7 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
     input.str(source);
     in_target_ns = false;
     brace_depth = 0;
-    bool parent_ns_opened = false;
+    // bool parent_ns_opened = false;
     bool items_inserted = false;
 
     while (std::getline(input, line)) {

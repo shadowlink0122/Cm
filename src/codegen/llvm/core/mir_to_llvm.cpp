@@ -881,7 +881,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             auto rvalue = convertRvalue(*assign.rvalue);
             if (rvalue) {
                 // 関数参照の特別処理
-                bool isFunctionValue = false;
+                // bool isFunctionValue = false;
                 if (llvm::isa<llvm::Function>(rvalue)) {
                     // Function*の場合、直接localsに格納（allocaせずにSSA形式で扱う）
                     locals[assign.place.local] = rvalue;
@@ -1407,7 +1407,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";
         if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
-            auto& place = std::get<mir::MirPlace>(operand.data);
+            // auto& place = std::get<mir::MirPlace>(operand.data);
             // std::cerr << "[MIR2LLVM]        Place local: " << place.local << "\n";
         }
         return llvm::UndefValue::get(ctx.getI64Type());

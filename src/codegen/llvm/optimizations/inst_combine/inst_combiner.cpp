@@ -1,6 +1,10 @@
 /// @file inst_combiner.cpp
 /// @brief 命令結合最適化の実装
 
+// LLVM列挙型の網羅性警告を抑制（処理しない値が多数あるため）
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
+
 #include "inst_combiner.hpp"
 
 #include <algorithm>
@@ -898,3 +902,4 @@ void InstCombiner::printStatistics() const {
 }
 
 }  // namespace cm::codegen::llvm_backend::optimizations
+#pragma GCC diagnostic pop

@@ -1,6 +1,10 @@
 /// @file peephole_optimizer.cpp
 /// @brief Peephole最適化の実装 - 小規模な命令パターンの最適化
 
+// LLVM列挙型の網羅性警告を抑制（処理しない値が多数あるため）
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
+
 #include "peephole_optimizer.hpp"
 
 #include <llvm/IR/Constants.h>
@@ -213,6 +217,8 @@ bool PeepholeOptimizer::eliminateIdentity(llvm::Instruction* inst) {
                     stats.constantFolds++;
                     return true;
                 }
+                break;
+            default:
                 break;
 
             case llvm::Instruction::Xor:

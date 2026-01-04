@@ -117,6 +117,24 @@ const char* token_kind_to_string(TokenKind kind) {
         case TokenKind::KwWith:
             return "with";
 
+        // 型・演算子キーワード
+        case TokenKind::KwAuto:
+            return "auto";
+        case TokenKind::KwSizeof:
+            return "sizeof";
+        case TokenKind::KwTypeof:
+            return "typeof";
+
+        // Intrinsicキーワード
+        case TokenKind::KwIntrinsicSizeof:
+            return "__sizeof__";
+        case TokenKind::KwIntrinsicTypeof:
+            return "__typeof__";
+        case TokenKind::KwIntrinsicTypename:
+            return "__typename__";
+        case TokenKind::KwIntrinsicAlignof:
+            return "__alignof__";
+
         // 型キーワード
         case TokenKind::KwInt:
             return "int";
@@ -148,6 +166,12 @@ const char* token_kind_to_string(TokenKind kind) {
             return "char";
         case TokenKind::KwString:
             return "string";
+        case TokenKind::KwIsize:
+            return "isize";
+        case TokenKind::KwUsize:
+            return "usize";
+        case TokenKind::KwCstring:
+            return "cstring";
 
         // 演算子
         case TokenKind::Plus:

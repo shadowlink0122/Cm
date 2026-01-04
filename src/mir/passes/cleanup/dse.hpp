@@ -255,7 +255,7 @@ class DeadStoreElimination : public OptimizationPass {
         }
     }
 
-    bool has_side_effects(const MirRvalue& rvalue) const { return false; }
+    bool has_side_effects(const MirRvalue& /* rvalue */) const { return false; }
 };
 
 }  // namespace cm::mir::opt

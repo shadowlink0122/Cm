@@ -80,6 +80,7 @@ Vectorizer::VectorizationInfo Vectorizer::analyzeLoopSimple(llvm::Loop* loop) {
     bool hasSimplePattern = false;
     bool hasReduction = false;
     bool hasVectorizableMemAccess = false;
+    (void)hasVectorizableMemAccess;
 
     for (auto* BB : loop->blocks()) {
         for (auto& I : *BB) {
@@ -192,8 +193,9 @@ void Vectorizer::generateVectorBody(llvm::Loop* loop, const VectorizationInfo& i
     //     vec_store result[i:i+VF]
     // }
 
-    // ベクトルロードの例
-    llvm::Value* vectorValue = nullptr;
+    // ベクトル化の主ループ
+    // TODO: ベクトル化された値を適切に処理する実装が必要
+    // llvm::Value* vectorValue = nullptr;
 
     // 元のループから命令を収集してベクトル化
     for (auto* BB : loop->blocks()) {
@@ -211,7 +213,9 @@ void Vectorizer::generateVectorBody(llvm::Loop* loop, const VectorizationInfo& i
                         auto* vec1 = llvm::ConstantVector::get(elems);
                         auto* vec2 = llvm::ConstantVector::get(elems);
 
-                        vectorValue = builder.CreateAdd(vec1, vec2, "vec.add");
+                        // TODO: ベクトル化された値を使用する処理を追加
+                        [[maybe_unused]] auto* vectorValue =
+                            builder.CreateAdd(vec1, vec2, "vec.add");
                     }
                 }
             }
@@ -240,9 +244,13 @@ void Vectorizer::generateVectorBody(llvm::Loop* loop, const VectorizationInfo& i
     builder.CreateBr(loop->getExitBlock());
 }
 
-void Vectorizer::generateEpilogue(llvm::Loop* loop, llvm::BasicBlock* vectorExit,
-                                  llvm::BasicBlock* originalExit, unsigned vectorFactor,
-                                  llvm::IRBuilder<>& builder) {
+// エピローグループの生成（ベクトル化の後処理）
+// TODO: 将来的に完全な実装が必要
+void Vectorizer::generateEpilogue([[maybe_unused]] llvm::Loop* loop,
+                                  [[maybe_unused]] llvm::BasicBlock* vectorExit,
+                                  [[maybe_unused]] llvm::BasicBlock* originalExit,
+                                  [[maybe_unused]] unsigned vectorFactor,
+                                  [[maybe_unused]] llvm::IRBuilder<>& builder) {
     // エピローグループの生成（残りの要素を処理）
     // 簡易実装のため、元のスカラーループを残す
 }

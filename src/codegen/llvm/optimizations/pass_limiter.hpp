@@ -25,14 +25,12 @@ class OptimizationPassLimiter {
         size_t closure_count = 0;
         size_t iterator_count = 0;
         size_t lambda_count = 0;
-        size_t total_functions = 0;
         size_t max_block_count = 0;
 
         for (auto& F : module) {
             if (F.isDeclaration())
                 continue;
 
-            total_functions++;
             std::string name = F.getName().str();
 
             // クロージャパターンの検出
@@ -57,6 +55,7 @@ class OptimizationPassLimiter {
             // 基本ブロック数を確認
             size_t block_count = 0;
             for (auto& BB : F) {
+                (void)BB;  // 未使用警告を抑制
                 block_count++;
             }
             max_block_count = std::max(max_block_count, block_count);
@@ -118,16 +117,8 @@ class OptimizationPassLimiter {
     }
 
     // 問題のある最適化パスを無効化
-    static void disableProblematicPasses(llvm::PassBuilder& PB, int opt_level) {
-        if (opt_level >= 3) {
-            // O3で問題を起こしやすいパスを特定
-            // これらは仮の例で、実際の問題のあるパスは調査が必要
-            std::cerr << "[OPT_LIMITER] O3最適化で一部のパスを制限します\n";
-
-            // カスタムパイプラインを構築する必要がある
-            // LLVMのPassBuilderでは個別のパスを無効化する直接的な方法がないため、
-            // カスタムパイプラインを構築する必要がある
-        }
+    static void disableProblematicPasses(llvm::PassBuilder& /* PB */, int /* opt_level */) {
+        // 将来的に必要に応じて実装
     }
 
     // 最適化の実行時間を監視

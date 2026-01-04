@@ -325,7 +325,7 @@ void OptimizationManager::collectMetrics(const llvm::Function& func, bool before
 }
 
 // 最適化効果の測定
-void OptimizationManager::measureOptimizationEffect(const llvm::Function& func) {
+void OptimizationManager::measureOptimizationEffect(const llvm::Function& /* func */) {
     // 簡単な推定：削減された命令数から高速化率を計算
     // 実際の効果はアーキテクチャとワークロードに依存
 

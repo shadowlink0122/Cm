@@ -213,7 +213,8 @@ ast::TypePtr TypeChecker::substitute_generic_type(ast::TypePtr type,
     return type;
 }
 
-bool TypeChecker::check_constraint(const std::string& type_param, const ast::TypePtr& arg_type,
+bool TypeChecker::check_constraint(const std::string& /* type_param */,
+                                   const ast::TypePtr& arg_type,
                                    const ast::GenericParam& constraint) {
     if (constraint.constraints.empty()) {
         return true;

@@ -222,7 +222,6 @@ class FunctionInlining : public OptimizationPass {
             }
         }
 
-        BlockId return_target = call_data.success;
         auto& call_block = caller.basic_blocks[call_block_id];
 
         BlockId entry_id = block_map[callee.entry_block];
