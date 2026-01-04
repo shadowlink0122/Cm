@@ -2,6 +2,8 @@
 
 #include "../../common/debug.hpp"
 
+#include <functional>
+
 namespace cm::mir {
 
 // let文のlowering
@@ -95,7 +97,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         new_term->kind = MirTerminator::Call;
         new_term->data =
             MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"), std::move(new_args),
-                                    MirPlace{local}, new_block, std::nullopt};
+                                    MirPlace{local}, new_block, std::nullopt, "", "", false};
         ctx.set_terminator(std::move(new_term));
         ctx.switch_to_block(new_block);
 
@@ -216,7 +218,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     new_term->kind = MirTerminator::Call;
                     new_term->data = MirTerminator::CallData{
                         MirOperand::function_ref("cm_slice_new"), std::move(new_args),
-                        MirPlace{local}, new_block, std::nullopt};
+                        MirPlace{local}, new_block, std::nullopt, "", "", false};
                     ctx.set_terminator(std::move(new_term));
                     ctx.switch_to_block(new_block);
 

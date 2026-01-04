@@ -4,6 +4,8 @@
 #include "../../common/debug.hpp"
 #include "expr.hpp"
 
+#include <functional>
+
 namespace cm::mir {
 
 LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& ctx) {
