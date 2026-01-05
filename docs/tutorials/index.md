@@ -5,10 +5,10 @@ nav_order: 2
 has_children: true
 ---
 
-# Cm言語チュートリアル v0.9.0
+# Cm言語チュートリアル v0.10.0
 
-**対象バージョン:** v0.9.0  
-**最終更新:** 2024-12-16
+**対象バージョン:** v0.10.0  
+**最終更新:** 2026-01-06
 
 Cm言語の全機能を段階的に学べる包括的なチュートリアル集です。
 
@@ -30,6 +30,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [関数](basics/functions.md) - 定義・オーバーロード・デフォルト引数
    - [配列](basics/arrays.md) - 宣言・メソッド・for-in
    - [ポインタ](basics/pointers.md) - アドレス・デリファレンス・Array Decay
+   - [モジュール](basics/modules.md) - import/export・エイリアス
 
 ### パス2: 型システムを学ぶ（中級者向け）
 
@@ -53,6 +54,9 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [演算子オーバーロード](advanced/operators.md) - カスタム演算子
    - [関数ポインタ](advanced/function-pointers.md) - 高階関数
    - [文字列操作](advanced/strings.md) - メソッド・スライス
+   - [FFI](advanced/ffi.md) - 外部関数インターフェース
+   - [ラムダ式](advanced/lambda.md) - 無名関数
+   - [スライス型](advanced/slices.md) - 動的スライス・高階関数
 
 ### パス4: コンパイルを学ぶ
 
@@ -62,6 +66,14 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [コンパイラの使い方](compiler/usage.md) - コマンド・オプション
    - [LLVMバックエンド](compiler/llvm.md) - ネイティブコンパイル
    - [WASMバックエンド](compiler/wasm.md) - WebAssembly出力
+   - [最適化](compiler/optimization.md) - MIR最適化パス
+
+### パス5: 内部構造を学ぶ（上級者向け）
+
+推定時間: 1時間
+
+5. **[内部構造編](internals/)** - コンパイラ内部
+   - [アルゴリズム](internals/algorithms.md) - SSA・支配木・Work-list
 
 ---
 
@@ -274,9 +286,9 @@ tutorials/
 
 ---
 
-**チュートリアル総数:** 22ファイル  
-**推定学習時間:** 14-17時間  
-**対象バージョン:** v0.9.0
+**チュートリアル総数:** 28ファイル  
+**推定学習時間:** 18-22時間  
+**対象バージョン:** v0.10.0
 
 ---
 
