@@ -943,6 +943,66 @@ void Monomorphization::generate_generic_specializations(
                                 if (current_func_name == func_name) {
                                     // 関数名を特殊化された名前に変更
                                     call_data.func = MirOperand::function_ref(specialized_name);
+
+                                    // self引数の参照化（呼び出し側）
+                                    // 構造体メソッドの第1引数がCopyの場合、Refに変更
+                                    debug_msg("MONO",
+                                              "Checking self-ref fixup for " + specialized_name);
+                                    if (!call_data.args.empty() && call_data.args[0]) {
+                                        debug_msg("MONO", "  args[0] kind=" +
+                                                              std::to_string(static_cast<int>(
+                                                                  call_data.args[0]->kind)));
+                                    }
+                                    if (!call_data.args.empty() && call_data.args[0] &&
+                                        call_data.args[0]->kind == MirOperand::Copy) {
+                                        auto& place = std::get<MirPlace>(call_data.args[0]->data);
+                                        debug_msg("MONO",
+                                                  "  place.local=" + std::to_string(place.local) +
+                                                      " func->locals.size()=" +
+                                                      std::to_string(func->locals.size()));
+                                        if (place.local < func->locals.size()) {
+                                            auto& local_type = func->locals[place.local].type;
+                                            debug_msg("MONO",
+                                                      "  local_type kind=" +
+                                                          std::to_string(local_type
+                                                                             ? static_cast<int>(
+                                                                                   local_type->kind)
+                                                                             : -1) +
+                                                          " name=" +
+                                                          (local_type ? local_type->name : "null"));
+                                            // 構造体型で非ポインタの場合
+                                            if (local_type &&
+                                                local_type->kind != hir::TypeKind::Pointer &&
+                                                (local_type->kind == hir::TypeKind::Struct ||
+                                                 local_type->kind == hir::TypeKind::Generic ||
+                                                 local_type->kind == hir::TypeKind::TypeAlias ||
+                                                 (local_type->name.find(specialized_name.substr(
+                                                      0, specialized_name.find("__"))) == 0))) {
+                                                // 新しいローカル変数を追加（ポインタ型）
+                                                LocalId ref_id =
+                                                    static_cast<LocalId>(func->locals.size());
+                                                std::string ref_name =
+                                                    "_caller_ref_" + std::to_string(ref_id);
+                                                auto ref_type = hir::make_pointer(local_type);
+                                                func->locals.emplace_back(ref_id, ref_name,
+                                                                          ref_type, false, false);
+
+                                                // Ref文を追加（呼び出し前に）
+                                                auto ref_stmt = MirStatement::assign(
+                                                    MirPlace{ref_id}, MirRvalue::ref(place, false));
+                                                block->statements.push_back(std::move(ref_stmt));
+
+                                                // 呼び出しの第1引数を参照に変更
+                                                call_data.args[0] =
+                                                    MirOperand::copy(MirPlace{ref_id});
+
+                                                debug_msg("MONO",
+                                                          "Added caller-side self-ref fixup for " +
+                                                              specialized_name + " in " +
+                                                              caller_name);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1489,6 +1549,122 @@ void Monomorphization::rewrite_generic_calls(
                                           std::get<std::string>(call_data.func->data) + " -> " +
                                           func_name);
                 }
+            }
+        }
+    }
+}
+
+// 構造体メソッドのself引数を参照に修正
+// 呼び出し側で構造体のコピーではなくアドレスを渡すように変更
+void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
+    for (auto& func : program.functions) {
+        if (!func)
+            continue;
+
+        // まず、全ブロックのCopy代入をスキャンしてコピー元マップを構築
+        // copy_sources[dest_local] = source_local
+        std::unordered_map<LocalId, LocalId> copy_sources;
+
+        for (auto& block : func->basic_blocks) {
+            if (!block)
+                continue;
+            for (auto& stmt : block->statements) {
+                if (!stmt || stmt->kind != MirStatement::Assign)
+                    continue;
+
+                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                if (!assign_data.rvalue || assign_data.rvalue->kind != MirRvalue::Use)
+                    continue;
+
+                auto& use_data = std::get<MirRvalue::UseData>(assign_data.rvalue->data);
+                if (!use_data.operand || use_data.operand->kind != MirOperand::Copy)
+                    continue;
+
+                // dest = copy source の形式
+                auto& source_place = std::get<MirPlace>(use_data.operand->data);
+                if (assign_data.place.projections.empty() && source_place.projections.empty()) {
+                    // 単純なlocal-to-localコピー
+                    copy_sources[assign_data.place.local] = source_place.local;
+                }
+            }
+        }
+
+        // 次に、構造体メソッド呼び出しを処理
+        for (auto& block : func->basic_blocks) {
+            if (!block || !block->terminator)
+                continue;
+
+            if (block->terminator->kind != MirTerminator::Call)
+                continue;
+
+            auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+                continue;
+
+            const auto& func_name_ref = std::get<std::string>(call_data.func->data);
+
+            // 構造体メソッド呼び出し（TypeName__method 形式）をチェック
+            auto dunder_pos = func_name_ref.find("__");
+            if (dunder_pos == std::string::npos || call_data.args.empty())
+                continue;
+
+            // 型名を抽出
+            std::string type_name = func_name_ref.substr(0, dunder_pos);
+
+            // この型名に対応する構造体が存在するか確認
+            if (!hir_struct_defs || hir_struct_defs->find(type_name) == hir_struct_defs->end())
+                continue;
+
+            // 第1引数が値型（Copy）かチェック
+            auto& first_arg = call_data.args[0];
+            if (!first_arg || first_arg->kind != MirOperand::Copy)
+                continue;
+
+            auto& place = std::get<MirPlace>(first_arg->data);
+            if (place.local >= func->locals.size())
+                continue;
+
+            // コピー元を追跡してオリジナルを見つける
+            LocalId original_local = place.local;
+            int chain_depth = 0;
+            while (copy_sources.count(original_local) > 0 && chain_depth < 10) {
+                original_local = copy_sources[original_local];
+                chain_depth++;
+            }
+
+            if (original_local >= func->locals.size())
+                continue;
+
+            auto& local_type = func->locals[original_local].type;
+            if (!local_type)
+                continue;
+
+            // 既にポインタ型ならスキップ
+            if (local_type->kind == hir::TypeKind::Pointer)
+                continue;
+
+            // 構造体型であれば参照を取る
+            if (local_type->kind == hir::TypeKind::Struct ||
+                local_type->kind == hir::TypeKind::Generic ||
+                local_type->kind == hir::TypeKind::TypeAlias || local_type->name == type_name ||
+                local_type->name.find(type_name + "__") == 0) {
+                // 新しいローカル変数を追加（ポインタ型）
+                LocalId ref_id = static_cast<LocalId>(func->locals.size());
+                std::string ref_name = "_self_ref_" + std::to_string(ref_id);
+                auto ref_type = hir::make_pointer(local_type);
+                func->locals.emplace_back(ref_id, ref_name, ref_type, false, false);
+
+                // **オリジナル**への参照を作成
+                auto ref_stmt = MirStatement::assign(
+                    MirPlace{ref_id}, MirRvalue::ref(MirPlace{original_local}, false));
+                block->statements.push_back(std::move(ref_stmt));
+
+                // 呼び出しの第1引数を参照に変更
+                call_data.args[0] = MirOperand::copy(MirPlace{ref_id});
+
+                debug_msg("MONO", "Fixed self-ref for " + func_name_ref + " in " + func->name +
+                                      " (traced " + std::to_string(place.local) + " -> " +
+                                      std::to_string(original_local) + ")");
             }
         }
     }
