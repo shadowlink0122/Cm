@@ -8,7 +8,46 @@
 #include <set>
 #include <sstream>
 
+#ifdef __APPLE__
+#include <limits.h>
+#include <mach-o/dyld.h>
+#endif
+
+#ifdef __linux__
+#include <limits.h>
+#include <unistd.h>
+#endif
+
 namespace cm::preprocessor {
+
+// 実行ファイルのディレクトリを取得するヘルパー関数
+static std::filesystem::path get_executable_directory() {
+#ifdef __APPLE__
+    char path[PATH_MAX];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        return std::filesystem::path(path).parent_path();
+    }
+#endif
+
+#ifdef __linux__
+    char path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (len != -1) {
+        path[len] = '\0';
+        return std::filesystem::path(path).parent_path();
+    }
+#endif
+
+#ifdef _WIN32
+    char path[MAX_PATH];
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) != 0) {
+        return std::filesystem::path(path).parent_path();
+    }
+#endif
+
+    return {};  // フォールバック: 空のパス
+}
 
 ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
     // プロジェクトルートを検出
@@ -32,10 +71,16 @@ ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
         }
     }
 
-    // 4. プロジェクトルート内の標準ライブラリ
-    auto std_path = project_root / "std";
-    if (std::filesystem::exists(std_path)) {
-        search_paths.push_back(std_path);
+    // 4. 実行ファイルの場所を基準（異なるディレクトリから実行される場合に重要）
+    // 注: std::io は std/io に変換されるため、exe_dir 自体を追加
+    auto exe_dir = get_executable_directory();
+    if (!exe_dir.empty() && std::filesystem::exists(exe_dir / "std")) {
+        search_paths.push_back(exe_dir);
+    }
+
+    // 5. プロジェクトルート（project_root/std/io を探すため）
+    if (std::filesystem::exists(project_root / "std")) {
+        search_paths.push_back(project_root);
     }
 
     // 5. システムインストールパス（プラットフォーム依存）
@@ -252,6 +297,9 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     throw std::runtime_error(error.str());
                 }
 
+                // パスを正規化（相対パス計算のため）
+                base_dir = std::filesystem::canonical(base_dir);
+
                 // すべてのモジュールを再帰的に検出
                 auto all_modules = find_all_modules_recursive(base_dir);
 
@@ -260,8 +308,13 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                               << base_dir << "\n";
                 }
 
-                // 基準パスからの相対パスを計算
+                // 基準パスからの相対パスを計算（正規化する）
                 auto parent_dir = current_file.parent_path();
+                if (parent_dir.empty()) {
+                    parent_dir = std::filesystem::current_path();
+                } else {
+                    parent_dir = std::filesystem::canonical(parent_dir);
+                }
 
                 // 各モジュールをインポート
                 for (const auto& mod_path : all_modules) {

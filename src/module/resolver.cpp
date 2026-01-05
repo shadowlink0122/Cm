@@ -9,7 +9,45 @@
 #include <iostream>
 #include <sstream>
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
+#ifdef __linux__
+#include <limits.h>
+#include <unistd.h>
+#endif
+
 namespace cm::module {
+
+// 実行ファイルのディレクトリを取得するヘルパー関数
+static std::filesystem::path get_executable_directory() {
+#ifdef __APPLE__
+    char path[PATH_MAX];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        return std::filesystem::path(path).parent_path();
+    }
+#endif
+
+#ifdef __linux__
+    char path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (len != -1) {
+        path[len] = '\0';
+        return std::filesystem::path(path).parent_path();
+    }
+#endif
+
+#ifdef _WIN32
+    char path[MAX_PATH];
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) != 0) {
+        return std::filesystem::path(path).parent_path();
+    }
+#endif
+
+    return {};  // フォールバック: 空のパス
+}
 
 // グローバルインスタンス
 std::unique_ptr<ModuleResolver> g_module_resolver;
@@ -27,13 +65,23 @@ ModuleResolver::ModuleResolver() {
     // 1. カレントディレクトリ
     search_paths.push_back(current_dir);
 
-    // 2. 標準ライブラリパス（プロジェクトルート/std）
+    // 2. 標準ライブラリパス（実行ファイルの場所/std）
+    // 実行ファイルのパスを取得してstdディレクトリを探す
+    auto exe_dir = get_executable_directory();
+    if (!exe_dir.empty()) {
+        auto std_path = exe_dir / "std";
+        if (std::filesystem::exists(std_path)) {
+            search_paths.push_back(std_path);
+        }
+    }
+
+    // 3. カレントディレクトリ/std（フォールバック）
     auto std_path = current_dir / "std";
     if (std::filesystem::exists(std_path)) {
         search_paths.push_back(std_path);
     }
 
-    // 3. 環境変数 CM_MODULE_PATH
+    // 4. 環境変数 CM_MODULE_PATH
     if (const char* env_path = std::getenv("CM_MODULE_PATH")) {
         std::stringstream ss(env_path);
         std::string path;
