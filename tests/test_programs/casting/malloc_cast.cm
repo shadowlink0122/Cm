@@ -1,0 +1,63 @@
+// malloc と as T* キャストのテスト
+import std::mem::{malloc, free};
+
+int main() {
+    print("=== Malloc Cast Test ===\n");
+    
+    // int型のメモリ確保とキャスト
+    print("Test: int allocation\n");
+    void* raw1 = malloc(sizeof(int));
+    int* p1 = raw1 as int*;
+    *p1 = 42;
+    int v1 = *p1;
+    if (v1 == 42) {
+        print("  int value: PASS (42)\n");
+    } else {
+        print("  int value: FAIL\n");
+    }
+    free(raw1);
+    
+    // double型のメモリ確保とキャスト
+    print("Test: double allocation\n");
+    void* raw2 = malloc(sizeof(double));
+    double* p2 = raw2 as double*;
+    *p2 = 3.14159;
+    double v2 = *p2;
+    if (v2 > 3.14 && v2 < 3.15) {
+        print("  double value: PASS (3.14159)\n");
+    } else {
+        print("  double value: FAIL\n");
+    }
+    free(raw2);
+    
+    // 複数のint確保
+    print("Test: multiple int allocations\n");
+    void* a = malloc(sizeof(int));
+    void* b = malloc(sizeof(int));
+    void* c = malloc(sizeof(int));
+    
+    int* pa = a as int*;
+    int* pb = b as int*;
+    int* pc = c as int*;
+    
+    *pa = 100;
+    *pb = 200;
+    *pc = 300;
+    
+    int va = *pa;
+    int vb = *pb;
+    int vc = *pc;
+    
+    if (va == 100 && vb == 200 && vc == 300) {
+        print("  multiple values: PASS (100, 200, 300)\n");
+    } else {
+        print("  multiple values: FAIL\n");
+    }
+    
+    free(a);
+    free(b);
+    free(c);
+    
+    print("\nMalloc cast tests passed!\n");
+    return 0;
+}

@@ -1,0 +1,20 @@
+// std::mem モジュールのテスト
+// import std::mem でFFI関数 (malloc, free) が直接アクセス可能
+// NOTE: mallocで確保したメモリへの読み書きはインタプリタでは未サポート
+
+import std::mem::malloc;
+import std::mem::free;
+import std::io::println;
+
+int main() {
+    // メモリ確保（FFI経由）
+    int size = 8;
+    void* ptr = malloc(size);
+    
+    // メモリ解放
+    free(ptr);
+    
+    println("malloc/free test passed");
+    
+    return 0;
+}

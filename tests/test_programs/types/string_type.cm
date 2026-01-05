@@ -4,15 +4,15 @@ import std::io::println;
 int main() {
     // string (文字列)
     string s = "Hello, World!";
-    println("string: {}", s);
+    println("string: {s}");
 
     // 空文字列
     string empty = "";
-    println("empty: '{}'", empty);
+    println("empty: '{empty}'");
 
     // 日本語
     string jp = "こんにちは";
-    println("japanese: {}", jp);
+    println("japanese: {jp}");
 
     return 0;
 }

@@ -1,0 +1,52 @@
+// 動的配列（スライス）の基本テスト
+int main() {
+    int[] arr;
+    int len = arr.len();
+    int cap = arr.cap();
+    println("{len}, {cap}");  // 初期状態の長さ
+    
+    // push: 要素追加
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
+    
+    // len: 要素数
+    len = arr.len();
+    cap = arr.cap();
+    println("{len}, {cap}");
+    
+    // インデックスアクセス
+    int v0 = arr[0];
+    int v1 = arr[1];
+    int v2 = arr[2];
+    println("arr[0] = {v0}");
+    println("arr[1] = {v1}");
+    println("arr[2] = {v2}");
+    
+    // pop: 末尾から削除
+    int last = arr.pop();
+    println("popped = {last}");
+    
+    len = arr.len();
+    cap = arr.cap();
+    println("{len}, {cap}");
+    
+    // remove: 指定位置削除
+    arr.remove(0);
+    len = arr.len();
+    cap = arr.cap();
+    println("{len}, {cap}");
+    v0 = arr[0];
+    println("arr[0] = {v0}");
+    
+    // clear: 全削除
+    arr.push(100);
+    arr.push(200);
+    arr.clear();
+    len = arr.len();
+    cap = arr.cap();
+    println("{len}, {cap}");
+    
+    println("Done!");
+    return 0;
+}

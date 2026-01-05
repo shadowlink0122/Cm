@@ -1,0 +1,121 @@
+// カスタムアロケータ差し替えテスト
+// 独自のアロケータを実装してDefaultAllocatorの代わりに使用
+
+import std::mem::{malloc, free, Allocator};
+
+// カスタムアロケータ - 確保サイズを固定倍にするアロケータ
+struct DoubleAllocator {
+    int multiplier;
+}
+
+impl DoubleAllocator for Allocator {
+    void* alloc(int size) {
+        // サイズを multiplier 倍にして確保
+        int actual_size = size * multiplier;
+        return malloc(actual_size);
+    }
+    
+    void dealloc(void* ptr) {
+        free(ptr);
+    }
+    
+    void* reallocate(void* ptr, int new_size) {
+        int actual_size = new_size * multiplier;
+        void* new_ptr = malloc(actual_size);
+        free(ptr);
+        return new_ptr;
+    }
+    
+    void* alloc_zeroed(int size) {
+        int actual_size = size * multiplier;
+        return malloc(actual_size);
+    }
+}
+
+// アロケータを使う関数（どのAllocator実装でも動作）
+void use_allocator(DoubleAllocator* alloc, int test_value) {
+    void* raw = alloc->alloc(sizeof(int));
+    int* p = raw as int*;
+    
+    *p = test_value;
+    int v = *p;
+    
+    if (v == test_value) {
+        print("value ");
+        print(test_value);
+        print(": ok\n");
+    } else {
+        print("value ");
+        print(test_value);
+        print(": FAILED\n");
+    }
+    
+    alloc->dealloc(raw);
+}
+
+int main() {
+    print("=== Custom Allocator Swap Test ===\n");
+    
+    // カスタムアロケータを作成（2倍のサイズで確保）
+    DoubleAllocator custom = DoubleAllocator{multiplier: 2};
+    
+    // 異なる値でテスト
+    use_allocator(&custom, 42);
+    use_allocator(&custom, 100);
+    use_allocator(&custom, -7);
+    
+    // 直接使用テスト
+    print("\n--- Direct usage test ---\n");
+    
+    void* raw1 = custom.alloc(sizeof(int));
+    int* p1 = raw1 as int*;
+    *p1 = 999;
+    
+    void* raw2 = custom.alloc(sizeof(int));
+    int* p2 = raw2 as int*;
+    *p2 = 888;
+    
+    int v1 = *p1;
+    int v2 = *p2;
+    
+    if (v1 == 999 && v2 == 888) {
+        print("multiple allocs: ok\n");
+    } else {
+        print("multiple allocs: FAILED\n");
+    }
+    
+    print("Starting dealloc(raw1)...\n");
+    custom.dealloc(raw1);
+    print("Finished dealloc(raw1)\n");
+    print("Starting dealloc(raw2)...\n");
+    custom.dealloc(raw2);
+    print("Finished dealloc(raw2)\n");
+    
+    // reallocateテスト
+    print("\n--- Reallocate test ---\n");
+    
+    void* raw3 = custom.alloc(sizeof(int));
+    int* p3 = raw3 as int*;
+    *p3 = 123;
+    
+    print("Check point A\n");
+    void* raw4 = custom.reallocate(raw3, sizeof(int) * 2);
+    print("Check point B\n");
+    int* p4 = raw4 as int*;
+    *p4 = 456;
+    
+    int v4 = *p4;
+    print("Check point C\n");
+    if (v4 == 456) {
+        print("reallocate: ok\n");
+    } else {
+        print("reallocate: FAILED\n");
+    }
+    
+    print("Starting dealloc(raw4)...\n");
+    custom.dealloc(raw4);
+    print("Finished dealloc(raw4)\n");
+    
+    print("\nCustom allocator test completed!\n");
+    return 0;
+}

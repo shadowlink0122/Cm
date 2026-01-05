@@ -1,0 +1,10 @@
+// file.cm
+module file;
+
+export int read_file(int fd) {
+    return fd * 10;
+}
+
+export int write_file(int fd, int data) {
+    return fd + data;
+}

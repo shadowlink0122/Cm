@@ -1,0 +1,13 @@
+=== Pointer Cast Test ===
+Test 1: void* -> int*
+  int cast: PASS
+Test 2: void* -> double*
+  double cast: PASS
+Test 3: void* -> bool*
+  bool cast: PASS
+Test 4: void* -> char*
+  char cast: PASS
+Test 5: Multiple allocations
+  multiple: PASS
+
+All pointer cast tests completed!

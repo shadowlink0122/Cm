@@ -1,3 +1,4 @@
+import std::io::println;
 // enumをstructフィールドとして使用
 enum Status {
     Ok = 0,
@@ -15,7 +16,7 @@ int main() {
     r.value = 42;
     
     if (r.tag == Status::Ok) {
-        println("{}", r.value);
+        println("{r.value}");
     }
     return 0;
 }

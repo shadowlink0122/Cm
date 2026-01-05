@@ -1,0 +1,6 @@
+// very_long_module_name.cm
+module very_long_module_name;
+
+export int calculate(int x) {
+    return x * 2;
+}

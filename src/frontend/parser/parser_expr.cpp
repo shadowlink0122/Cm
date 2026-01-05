@@ -347,6 +347,57 @@ ast::ExprPtr Parser::parse_postfix() {
     auto expr = parse_primary();
 
     while (true) {
+        // 構造体リテラル: TypeName{field1: val1, ...}
+        // 名前付き初期化のみ対応（位置ベースは禁止）
+        // 識別子の後に { が来た場合
+        if (check(TokenKind::LBrace)) {
+            // 式が識別子の場合のみ構造体リテラルとして解析
+            if (auto* ident = expr->as<ast::IdentExpr>()) {
+                std::string type_name = ident->name;
+                uint32_t start_pos = expr->span.start;
+                advance();  // {
+
+                debug::par::log(debug::par::Id::PrimaryExpr, "Parsing struct literal: " + type_name,
+                                debug::Level::Debug);
+
+                std::vector<ast::StructLiteralField> fields;
+
+                if (!check(TokenKind::RBrace)) {
+                    do {
+                        // フィールド名:値 形式のみ（名前付き初期化必須）
+                        if (!check(TokenKind::Ident)) {
+                            error(
+                                "Expected field name in struct literal (named initialization "
+                                "required)");
+                        }
+
+                        std::string field_name(current().get_string());
+                        advance();  // フィールド名を消費
+
+                        if (!check(TokenKind::Colon)) {
+                            error("Expected ':' after field name '" + field_name +
+                                  "' in struct literal");
+                        }
+                        advance();  // : を消費
+
+                        auto value = parse_expr();
+                        fields.emplace_back(std::move(field_name), std::move(value));
+                    } while (consume_if(TokenKind::Comma));
+                }
+
+                expect(TokenKind::RBrace);
+
+                debug::par::log(
+                    debug::par::Id::PrimaryExpr,
+                    "Created struct literal with " + std::to_string(fields.size()) + " fields",
+                    debug::Level::Debug);
+
+                expr = ast::make_struct_literal(std::move(type_name), std::move(fields),
+                                                Span{start_pos, previous().end});
+                continue;
+            }
+        }
+
         // 関数呼び出し
         if (consume_if(TokenKind::LParen)) {
             debug::par::log(debug::par::Id::FunctionCall, "Detected function call",
@@ -424,11 +475,23 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
-        // メンバアクセス
-        if (consume_if(TokenKind::Dot)) {
+        // メンバアクセス (. または ->)
+        if (check(TokenKind::Dot) || check(TokenKind::ThinArrow)) {
+            bool is_arrow = consume_if(TokenKind::ThinArrow);
+            if (!is_arrow) {
+                consume_if(TokenKind::Dot);
+            }
+
             std::string member = expect_ident();
-            debug::par::log(debug::par::Id::MemberAccess, "Accessing member: " + member,
-                            debug::Level::Debug);
+            debug::par::log(
+                debug::par::Id::MemberAccess,
+                std::string(is_arrow ? "Arrow" : "Dot") + " accessing member: " + member,
+                debug::Level::Debug);
+
+            // -> の場合は暗黙のデリファレンスを追加
+            if (is_arrow) {
+                expr = ast::make_unary(ast::UnaryOp::Deref, std::move(expr));
+            }
 
             // メソッド呼び出し
             if (consume_if(TokenKind::LParen)) {
@@ -473,6 +536,15 @@ ast::ExprPtr Parser::parse_postfix() {
             debug::par::log(debug::par::Id::PostDecrement, "Detected post-decrement",
                             debug::Level::Debug);
             expr = ast::make_unary(ast::UnaryOp::PostDec, std::move(expr));
+            continue;
+        }
+
+        // キャスト式: expr as Type
+        if (consume_if(TokenKind::KwAs)) {
+            debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
+                            debug::Level::Debug);
+            auto target_type = parse_type();
+            expr = ast::make_cast(std::move(expr), std::move(target_type));
             continue;
         }
 
@@ -543,6 +615,12 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_null_literal(Span{start_pos, previous().end});
     }
 
+    // this（impl内でのself参照）
+    if (consume_if(TokenKind::KwThis)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'this' reference", debug::Level::Debug);
+        return ast::make_ident("self", Span{start_pos, previous().end});
+    }
+
     // new式
     if (consume_if(TokenKind::KwNew)) {
         debug::par::log(debug::par::Id::NewExpr, "Found 'new' expression", debug::Level::Debug);
@@ -565,6 +643,170 @@ ast::ExprPtr Parser::parse_primary() {
         return std::make_unique<ast::Expr>(std::move(new_expr), Span{start_pos, previous().end});
     }
 
+    // sizeof式 - sizeof(型) または sizeof(式)
+    if (consume_if(TokenKind::KwSizeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'sizeof' expression",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+
+        // sizeof内では、型として解析できるものは全て型として解析
+        // キーワード型、識別子（ユーザー定義型）、ポインタ(*)、参照(&)、配列([)
+        bool could_be_type = false;
+        switch (current().kind) {
+            case TokenKind::KwAuto:
+            case TokenKind::KwVoid:
+            case TokenKind::KwBool:
+            case TokenKind::KwTiny:
+            case TokenKind::KwShort:
+            case TokenKind::KwInt:
+            case TokenKind::KwLong:
+            case TokenKind::KwUtiny:
+            case TokenKind::KwUshort:
+            case TokenKind::KwUint:
+            case TokenKind::KwUlong:
+            case TokenKind::KwIsize:
+            case TokenKind::KwUsize:
+            case TokenKind::KwFloat:
+            case TokenKind::KwDouble:
+            case TokenKind::KwUfloat:
+            case TokenKind::KwUdouble:
+            case TokenKind::KwChar:
+            case TokenKind::KwString:
+            case TokenKind::KwCstring:
+            case TokenKind::Star:
+            case TokenKind::Amp:
+            case TokenKind::LBracket:
+            case TokenKind::Ident:
+                could_be_type = true;
+                break;
+            default:
+                break;
+        }
+
+        if (could_be_type) {
+            auto type = parse_type();
+            type = check_array_suffix(std::move(type));  // T*, T[N] などをサポート
+            expect(TokenKind::RParen);
+            return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
+        } else {
+            // 式として解析
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // typeof式 - typeof(式) で型名を文字列として取得
+    if (consume_if(TokenKind::KwTypeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'typeof' expression",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        // 型か式かを判定
+        if (is_type_start()) {
+            auto type = parse_type();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // コンパイラ組み込み関数 __sizeof__(T) または __sizeof__(expr)
+    if (consume_if(TokenKind::KwIntrinsicSizeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__sizeof__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+
+        // sizeof と同じロジックで型または式を解析
+        bool could_be_type = false;
+        switch (current().kind) {
+            case TokenKind::KwAuto:
+            case TokenKind::KwVoid:
+            case TokenKind::KwBool:
+            case TokenKind::KwTiny:
+            case TokenKind::KwShort:
+            case TokenKind::KwInt:
+            case TokenKind::KwLong:
+            case TokenKind::KwUtiny:
+            case TokenKind::KwUshort:
+            case TokenKind::KwUint:
+            case TokenKind::KwUlong:
+            case TokenKind::KwIsize:
+            case TokenKind::KwUsize:
+            case TokenKind::KwFloat:
+            case TokenKind::KwDouble:
+            case TokenKind::KwUfloat:
+            case TokenKind::KwUdouble:
+            case TokenKind::KwChar:
+            case TokenKind::KwString:
+            case TokenKind::KwCstring:
+            case TokenKind::Star:
+            case TokenKind::Amp:
+            case TokenKind::LBracket:
+            case TokenKind::Ident:
+                could_be_type = true;
+                break;
+            default:
+                break;
+        }
+
+        if (could_be_type) {
+            auto type = parse_type();
+            type = check_array_suffix(std::move(type));
+            expect(TokenKind::RParen);
+            return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // コンパイラ組み込み関数 __typeof__(expr)
+    // コンパイラ組み込み関数 __typeof__(expr) - typeofと同じ動作
+    if (consume_if(TokenKind::KwIntrinsicTypeof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__typeof__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        if (is_type_start()) {
+            auto type = parse_type();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // コンパイラ組み込み関数 __typename__(T) - typeofと同じ動作（後方互換性）
+    if (consume_if(TokenKind::KwIntrinsicTypename)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__typename__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        if (is_type_start()) {
+            auto type = parse_type();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of(std::move(type), Span{start_pos, previous().end});
+        } else {
+            auto expr = parse_expr();
+            expect(TokenKind::RParen);
+            return ast::make_typename_of_expr(std::move(expr), Span{start_pos, previous().end});
+        }
+    }
+
+    // コンパイラ組み込み関数 __alignof__(T)
+    if (consume_if(TokenKind::KwIntrinsicAlignof)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found '__alignof__' intrinsic",
+                        debug::Level::Debug);
+        expect(TokenKind::LParen);
+        auto type = parse_type();
+        expect(TokenKind::RParen);
+        return ast::make_alignof(std::move(type), Span{start_pos, previous().end});
+    }
+
     // match式
     if (consume_if(TokenKind::KwMatch)) {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found match expression", debug::Level::Debug);
@@ -578,14 +820,20 @@ ast::ExprPtr Parser::parse_primary() {
                         debug::Level::Debug);
         advance();
 
-        // enum値アクセス: EnumName::MemberName
+        // 名前空間またはenum値アクセス: A::B または A::B::C::...
+        // 複数レベルの::をサポート
         if (consume_if(TokenKind::ColonColon)) {
-            std::string member = expect_ident();
+            std::string qualified_name = name;
+            do {
+                std::string member = expect_ident();
+                qualified_name += "::" + member;
+                debug::par::log(debug::par::Id::IdentifierRef,
+                                "Building qualified name: " + qualified_name, debug::Level::Debug);
+            } while (consume_if(TokenKind::ColonColon));
+
             debug::par::log(debug::par::Id::IdentifierRef,
-                            "Found enum access: " + name + "::" + member, debug::Level::Debug);
-            // EnumName::Memberを "EnumName::Member" という識別子として扱う
-            std::string enum_access = name + "::" + member;
-            return ast::make_ident(std::move(enum_access), Span{start_pos, previous().end});
+                            "Final qualified name: " + qualified_name, debug::Level::Debug);
+            return ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
         }
 
         debug::par::log(debug::par::Id::VariableDetected, "Variable/Function reference: " + name,
@@ -593,10 +841,167 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_ident(std::move(name), Span{start_pos, previous().end});
     }
 
-    // 括弧式
+    // 配列リテラル: [elem1, elem2, ...]
+    if (consume_if(TokenKind::LBracket)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found array literal", debug::Level::Debug);
+        std::vector<ast::ExprPtr> elements;
+
+        if (!check(TokenKind::RBracket)) {
+            do {
+                elements.push_back(parse_expr());
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        expect(TokenKind::RBracket);
+        debug::par::log(
+            debug::par::Id::PrimaryExpr,
+            "Created array literal with " + std::to_string(elements.size()) + " elements",
+            debug::Level::Debug);
+        return ast::make_array_literal(std::move(elements), Span{start_pos, previous().end});
+    }
+
+    // 暗黙的構造体リテラル: {field1: val1, field2: val2, ...}
+    // 型は文脈から推論される
+    if (consume_if(TokenKind::LBrace)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found implicit struct literal",
+                        debug::Level::Debug);
+        std::vector<ast::StructLiteralField> fields;
+
+        if (!check(TokenKind::RBrace)) {
+            do {
+                // フィールド名:値 形式のみ（名前付き初期化必須）
+                if (!check(TokenKind::Ident)) {
+                    error("Expected field name in struct literal (named initialization required)");
+                }
+
+                std::string field_name(current().get_string());
+                advance();  // フィールド名を消費
+
+                if (!check(TokenKind::Colon)) {
+                    error("Expected ':' after field name '" + field_name + "' in struct literal");
+                }
+                advance();  // : を消費
+
+                auto value = parse_expr();
+                fields.emplace_back(std::move(field_name), std::move(value));
+            } while (consume_if(TokenKind::Comma));
+        }
+
+        expect(TokenKind::RBrace);
+        debug::par::log(
+            debug::par::Id::PrimaryExpr,
+            "Created implicit struct literal with " + std::to_string(fields.size()) + " fields",
+            debug::Level::Debug);
+        // 型名は空文字列（型推論で解決）
+        return ast::make_struct_literal("", std::move(fields), Span{start_pos, previous().end});
+    }
+
+    // 括弧式またはラムダ式
     if (consume_if(TokenKind::LParen)) {
-        debug::par::log(debug::par::Id::ParenExpr, "Found parenthesized expression",
+        debug::par::log(debug::par::Id::ParenExpr, "Found parenthesized expression or lambda",
                         debug::Level::Trace);
+
+        // 空の括弧の場合、() => ... のラムダかもしれない
+        if (check(TokenKind::RParen)) {
+            advance();  // )を消費
+            if (check(TokenKind::Arrow)) {
+                // () => ... ラムダ式
+                advance();  // => を消費
+                return parse_lambda_body({}, start_pos);
+            }
+            // ()だけの場合はエラー
+            error("Empty parentheses without lambda body");
+            return ast::make_null_literal();
+        }
+
+        // ラムダ式のパラメータ: (int x) または (int x, int y)
+        // 通常の括弧式: (expr)
+
+        // 先読みのためにトークン位置を保存
+        size_t saved_pos = pos_;
+        size_t saved_diag_count = diagnostics_.size();
+        std::vector<ast::Param> potential_params;
+        bool could_be_lambda = true;
+
+        // ラムダの先読み: 最初のトークンが型キーワードかどうか
+        // 型キーワード: int, bool, float, etc. または識別子（ユーザー定義型）
+        // ただし、true/false/null などのリテラルキーワードは除外
+        auto is_type_start = [](TokenKind kind) {
+            switch (kind) {
+                case TokenKind::KwVoid:
+                case TokenKind::KwBool:
+                case TokenKind::KwTiny:
+                case TokenKind::KwShort:
+                case TokenKind::KwInt:
+                case TokenKind::KwLong:
+                case TokenKind::KwUtiny:
+                case TokenKind::KwUshort:
+                case TokenKind::KwUint:
+                case TokenKind::KwUlong:
+                case TokenKind::KwFloat:
+                case TokenKind::KwDouble:
+                case TokenKind::KwChar:
+                case TokenKind::KwString:
+                case TokenKind::Ident:
+                case TokenKind::Star:      // *Type (ポインタ)
+                case TokenKind::Amp:       // &Type (参照)
+                case TokenKind::LBracket:  // [Type] (配列)
+                    return true;
+                default:
+                    return false;
+            }
+        };
+
+        // 最初のトークンが型の開始でなければ通常の括弧式
+        if (!is_type_start(current().kind)) {
+            could_be_lambda = false;
+        }
+
+        // パラメータリストとして解析を試みる
+        while (could_be_lambda) {
+            // 型をパース
+            auto param_type = parse_type();
+            if (!param_type || param_type->kind == ast::TypeKind::Error) {
+                could_be_lambda = false;
+                break;
+            }
+
+            // パラメータ名
+            if (!check(TokenKind::Ident)) {
+                could_be_lambda = false;
+                break;
+            }
+
+            ast::Param param;
+            param.type = param_type;
+            param.name = std::string(current().get_string());
+            advance();
+
+            potential_params.push_back(std::move(param));
+
+            if (check(TokenKind::RParen)) {
+                advance();  // )を消費
+                break;
+            }
+            if (!consume_if(TokenKind::Comma)) {
+                could_be_lambda = false;
+                break;
+            }
+        }
+
+        // => があればラムダ式
+        if (could_be_lambda && check(TokenKind::Arrow)) {
+            advance();  // => を消費
+
+            return parse_lambda_body(std::move(potential_params), start_pos);
+        }
+
+        // ラムダではないので、位置を戻して通常の括弧式として処理
+        // パース中に追加されたエラーも削除
+        pos_ = saved_pos;
+        while (diagnostics_.size() > saved_diag_count) {
+            diagnostics_.pop_back();
+        }
         auto expr = parse_expr();
         expect(TokenKind::RParen);
         debug::par::log(debug::par::Id::ParenClose, "Closed parenthesized expression",
@@ -609,6 +1014,29 @@ ast::ExprPtr Parser::parse_primary() {
     debug::par::log(debug::par::Id::ExprError, error_msg, debug::Level::Error);
     error("Expected expression");
     return ast::make_null_literal();
+}
+
+// ラムダ式本体の解析
+// (params) => expr または (params) => { stmts }
+ast::ExprPtr Parser::parse_lambda_body(std::vector<ast::Param> params, uint32_t start_pos) {
+    debug::par::log(debug::par::Id::PrimaryExpr, "Parsing lambda body", debug::Level::Debug);
+
+    auto lambda = std::make_unique<ast::LambdaExpr>();
+    lambda->params = std::move(params);
+    lambda->return_type = nullptr;  // 型は推論
+
+    if (check(TokenKind::LBrace)) {
+        // ブロック本体
+        auto block = parse_block();
+        lambda->body = std::move(block);
+    } else {
+        // 式本体
+        auto expr = parse_expr();
+        lambda->body = std::move(expr);
+    }
+
+    debug::par::log(debug::par::Id::PrimaryExpr, "Lambda expression parsed", debug::Level::Debug);
+    return std::make_unique<ast::Expr>(std::move(lambda), Span{start_pos, previous().end});
 }
 
 // match式の解析
@@ -681,14 +1109,18 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern() {
         std::string name(current().get_string());
         advance();
 
-        // enum値アクセス: EnumName::Member
+        // 名前空間またはenum値アクセス: A::B または A::B::C::...
         if (consume_if(TokenKind::ColonColon)) {
-            std::string member = expect_ident();
-            std::string enum_access = name + "::" + member;
+            std::string qualified_name = name;
+            do {
+                std::string member = expect_ident();
+                qualified_name += "::" + member;
+            } while (consume_if(TokenKind::ColonColon));
+
             auto enum_expr =
-                ast::make_ident(std::move(enum_access), Span{start_pos, previous().end});
+                ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
             debug::par::log(debug::par::Id::PrimaryExpr,
-                            "Match pattern: enum " + name + "::" + member, debug::Level::Debug);
+                            "Match pattern: qualified name " + qualified_name, debug::Level::Debug);
             return ast::MatchPattern::make_enum_variant(std::move(enum_expr));
         }
 

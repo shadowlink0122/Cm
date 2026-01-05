@@ -1,3 +1,4 @@
+import std::io::println;
 // 非網羅的matchのテスト - コンパイルエラーが期待される
 
 int main() {

@@ -100,6 +100,16 @@ void cm_println_double(double value) {
     cm_println_int(int_value);
 }
 
+void cm_print_float(float value) {
+    int int_value = (int)value;
+    cm_print_int(int_value);
+}
+
+void cm_println_float(float value) {
+    int int_value = (int)value;
+    cm_println_int(int_value);
+}
+
 // ============================================================
 // Boolean Output
 // ============================================================

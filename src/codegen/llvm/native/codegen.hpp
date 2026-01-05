@@ -1,10 +1,15 @@
 #pragma once
 
 #include "../../../common/debug/codegen.hpp"
-#include "../../../mir/mir_nodes.hpp"
+#include "../../../mir/nodes.hpp"
 #include "../core/context.hpp"
 #include "../core/intrinsics.hpp"
 #include "../core/mir_to_llvm.hpp"
+#include "../optimizations/mir_pattern_detector.hpp"
+#include "../optimizations/optimization_manager.hpp"
+#include "../optimizations/pass_limiter.hpp"
+#include "../optimizations/recursion_limiter.hpp"
+#include "loop_detector.hpp"
 #include "target.hpp"
 
 #include <filesystem>
@@ -37,10 +42,11 @@ class LLVMCodeGen {
         BuildTarget target = BuildTarget::Native;
         OutputFormat format = OutputFormat::ObjectFile;
         std::string outputFile = "output.o";
-        int optimizationLevel = 2;  // 0-3, -1=size
+        int optimizationLevel = 3;  // デフォルトO3（最大最適化）- ポインタ型修正済み
         bool debugInfo = false;
         bool verbose = false;
         bool verifyIR = true;
+        bool useCustomOptimizations = false;  // カスタム最適化を一時的に無効（デバッグ中）
         std::string customTriple = "";  // カスタムターゲット
         std::string linkerScript = "";  // ベアメタル用
     };
@@ -51,6 +57,7 @@ class LLVMCodeGen {
     std::unique_ptr<TargetManager> targetManager;
     std::unique_ptr<IntrinsicsManager> intrinsicsManager;
     std::unique_ptr<MIRToLLVM> converter;
+    bool hasImports = false;  // インポートがあるかどうか（最適化制限用）
 
    public:
     /// コンストラクタ
@@ -61,26 +68,71 @@ class LLVMCodeGen {
 
     /// MIRプログラムをコンパイル
     void compile(const mir::MirProgram& program) {
+        // std::cerr << "[LLVM-CG] compile() start" << std::endl;
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMStart);
 
+        // インポートの有無を記録（最適化時に使用）
+        hasImports = !program.imports.empty();
+        // std::cerr << "[LLVM-CG] hasImports=" << hasImports
+        //           << " (imports.size=" << program.imports.size() << ")" << std::endl;
+        if (hasImports) {
+            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit,
+                                    "Program has imports - optimization will be limited");
+        }
+
+        // 0. MIRレベルでのパターン検出と最適化レベル調整
+        // std::cerr << "[LLVM-CG] step 0: MIR pattern detection" << std::endl;
+        int adjusted_level =
+            MIRPatternDetector::adjustOptimizationLevel(program, options.optimizationLevel);
+        if (adjusted_level != options.optimizationLevel) {
+            if (cm::debug::g_debug_mode) {
+                std::cerr << "[MIR] 最適化レベルを O" << options.optimizationLevel << " から O"
+                          << adjusted_level << " に変更しました（MIRパターン検出による）\n";
+            }
+            options.optimizationLevel = adjusted_level;
+        }
+
         // 1. 初期化
+        // std::cerr << "[LLVM-CG] step 1: initialize" << std::endl;
         initialize(program.filename);
 
         // 2. MIR → LLVM IR 変換
+        // std::cerr << "[LLVM-CG] step 2: generateIR" << std::endl;
         generateIR(program);
 
         // 3. 検証
+        // 不正なLLVM IRを検出して無限ループを防止
+        // std::cerr << "[LLVM-CG] step 3: verifyModule" << std::endl;
         if (options.verifyIR) {
             verifyModule();
         }
 
+        // 3.5. 最適化前のパターン検出と調整
+        // std::cerr << "[LLVM-CG] step 3.5: pattern detection" << std::endl;
+        if (options.optimizationLevel > 0) {
+            // 問題のあるパターンを検出して最適化レベルを調整
+            int adjusted_level = OptimizationPassLimiter::adjustOptimizationLevel(
+                context->getModule(), options.optimizationLevel);
+
+            if (adjusted_level != options.optimizationLevel) {
+                if (cm::debug::g_debug_mode) {
+                    std::cerr << "[LLVM] 最適化レベルを O" << options.optimizationLevel << " から O"
+                              << adjusted_level << " に変更しました\n";
+                }
+                options.optimizationLevel = adjusted_level;
+            }
+        }
+
         // 4. 最適化
+        // std::cerr << "[LLVM-CG] step 4: optimize" << std::endl;
         optimize();
 
         // 5. 出力
+        // std::cerr << "[LLVM-CG] step 5: emit" << std::endl;
         emit();
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEnd);
+        // std::cerr << "[LLVM-CG] compile() complete" << std::endl;
     }
 
     /// LLVM IR を文字列として取得（デバッグ用）
@@ -176,8 +228,85 @@ class LLVMCodeGen {
             return;  // 最適化なし
         }
 
+        // インポートがある場合でも、まず再帰とパターンを検証
+        // 再帰とループの事前検証を実行
+        RecursionLimiter::preprocessModule(context->getModule(), options.optimizationLevel);
+
+        // パターンベースの最適化レベル調整
+        int adjustedLevel = OptimizationPassLimiter::adjustOptimizationLevel(
+            context->getModule(), options.optimizationLevel);
+        if (adjustedLevel != options.optimizationLevel) {
+            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                    "Optimization level adjusted from O" +
+                                        std::to_string(options.optimizationLevel) + " to O" +
+                                        std::to_string(adjustedLevel));
+            options.optimizationLevel = adjustedLevel;
+
+            if (adjustedLevel == 0) {
+                cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                        "Skipping optimization due to complexity patterns");
+                return;  // 最適化を完全にスキップ
+            }
+        }
+
+        // インポートがある場合の無限ループ回避（調整後のレベルも考慮）
+        // TODO: 根本的な修正 - インポート処理のLLVM最適化対応
+        if (hasImports && options.optimizationLevel > 0) {
+            // iter_closureパターンは検出済みでO0に調整されているはず
+            // その場合はすでにリターンしているので、ここには到達しない
+            cm::debug::codegen::log(
+                cm::debug::codegen::Id::LLVMOptimize,
+                "WARNING: Skipping O1-O3 optimization due to import infinite loop bug");
+            return;
+        }
+
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
                                 "Level " + std::to_string(options.optimizationLevel));
+
+        // カスタム最適化を使用する場合
+        if (options.useCustomOptimizations) {
+            using namespace cm::codegen::llvm_backend::optimizations;
+
+            // 最適化レベルをマップ
+            OptimizationManager::OptLevel customLevel;
+            switch (options.optimizationLevel) {
+                case 1:
+                    customLevel = OptimizationManager::OptLevel::O1;
+                    break;
+                case 2:
+                    customLevel = OptimizationManager::OptLevel::O2;
+                    break;
+                case 3:
+                    customLevel = OptimizationManager::OptLevel::O3;
+                    break;
+                case -1:
+                    customLevel = OptimizationManager::OptLevel::Oz;
+                    break;
+                default:
+                    customLevel = OptimizationManager::OptLevel::O2;
+            }
+
+            // カスタム最適化マネージャーの設定
+            auto config = createConfigFromLevel(customLevel);
+
+            // ターゲット固有の調整
+            if (context->getTargetConfig().target == BuildTarget::Wasm) {
+                config = createConfigForTarget("wasm32");
+            } else if (context->getTargetConfig().target == BuildTarget::Baremetal) {
+                config.level = OptimizationManager::OptLevel::Os;
+                config.enableVectorization = false;  // ベアメタルではベクトル化を無効
+            }
+
+            config.printStatistics = options.verbose;
+
+            // 最適化実行
+            OptimizationManager optManager(config);
+            optManager.optimizeModule(context->getModule());
+
+            if (options.verbose) {
+                llvm::errs() << "\n[Custom Optimizations Complete]\n";
+            }
+        }
 
         // PassBuilder設定
         llvm::PassBuilder passBuilder;
@@ -330,8 +459,9 @@ class LLVMCodeGen {
             // WASMランタイムライブラリのパスを検索
             std::string runtimePath = findRuntimeLibrary();
             // WASI用：_startはランタイムから提供される
-            linkCmd = "wasm-ld --entry=_start " + objFile + " " + runtimePath + " -o " +
-                      options.outputFile;
+            // --allow-undefined: FFI関数（JavaScript等）を未定義のままリンク可能に
+            linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath +
+                      " -o " + options.outputFile;
         } else {
             // ネイティブ：システムリンカ使用
 
@@ -340,14 +470,16 @@ class LLVMCodeGen {
 
 #ifdef __APPLE__
             // macOSではclangを使用してリンク
-            linkCmd = "clang ";
+            // -dead_strip: 未使用関数を削除
+            linkCmd = "clang -Wl,-dead_strip ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
             linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
 #else
             // Linuxでもclangを使用（crt0.oなどが自動的にリンクされる）
-            linkCmd = "clang ";
+            // --gc-sections: 未使用セクションを削除
+            linkCmd = "clang -Wl,--gc-sections ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
@@ -449,6 +581,28 @@ class LLVMCodeGen {
         }
 
         return outputPath;
+    }
+
+    /// インポートされた外部関数があるかチェック
+    bool checkForImports() const {
+        // モジュール内の全関数をチェック
+        for (const auto& func : context->getModule()) {
+            // 宣言のみ（ボディがない）関数は外部関数
+            if (func.isDeclaration()) {
+                // システム関数（printf, malloc等）以外は外部インポート
+                std::string name = func.getName().str();
+                if (name != "printf" && name != "puts" && name != "malloc" && name != "free" &&
+                    name != "memcpy" && name != "memset" && name != "__cm_panic" &&
+                    name != "__cm_alloc" && name != "__cm_dealloc" &&
+                    name.find("llvm.") != 0) {  // llvm組み込み関数を除外
+                    // インポートされた外部関数を発見
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "Found imported function: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 };
 

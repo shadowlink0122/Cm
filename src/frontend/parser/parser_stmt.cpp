@@ -126,10 +126,12 @@ ast::StmtPtr Parser::parse_stmt() {
                 kind == TokenKind::KwTiny || kind == TokenKind::KwUtiny ||
                 kind == TokenKind::KwShort || kind == TokenKind::KwUshort ||
                 kind == TokenKind::KwLong || kind == TokenKind::KwUlong ||
+                kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
                 kind == TokenKind::KwFloat || kind == TokenKind::KwDouble ||
                 kind == TokenKind::KwUfloat || kind == TokenKind::KwUdouble ||
                 kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
-                kind == TokenKind::KwString || kind == TokenKind::KwVoid) {
+                kind == TokenKind::KwString || kind == TokenKind::KwCstring ||
+                kind == TokenKind::KwVoid || kind == TokenKind::KwAuto) {
                 lookahead++;  // 型キーワードをスキップ
             } else if (kind == TokenKind::Ident) {
                 lookahead++;  // カスタム型名をスキップ
@@ -147,8 +149,8 @@ ast::StmtPtr Parser::parse_stmt() {
                 }
             }
 
-            // 配列 [N] をスキップ
-            if (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::LBracket) {
+            // 配列 [N] をスキップ（多次元配列対応）
+            while (lookahead < tokens_.size() && tokens_[lookahead].kind == TokenKind::LBracket) {
                 lookahead++;
                 if (lookahead < tokens_.size() &&
                     tokens_[lookahead].kind == TokenKind::IntLiteral) {
@@ -182,6 +184,8 @@ ast::StmtPtr Parser::parse_stmt() {
                                        tokens_[pos_ + 1].kind == TokenKind::KwIn);
             if (has_explicit_type) {
                 var_type = parse_type();
+                // C++スタイルの配列サフィックスをチェック (int[3] など)
+                var_type = check_array_suffix(std::move(var_type));
             }
             std::string var_name = expect_ident();
             expect(TokenKind::KwIn);
@@ -261,11 +265,12 @@ ast::StmtPtr Parser::parse_stmt() {
             is_static_var = (next_kind == TokenKind::KwInt || next_kind == TokenKind::KwFloat ||
                              next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwChar ||
                              next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
-                             next_kind == TokenKind::KwVoid || next_kind == TokenKind::KwTiny ||
-                             next_kind == TokenKind::KwShort || next_kind == TokenKind::KwLong ||
-                             next_kind == TokenKind::KwUint || next_kind == TokenKind::KwUtiny ||
-                             next_kind == TokenKind::KwUshort || next_kind == TokenKind::KwUlong ||
-                             next_kind == TokenKind::KwUfloat ||
+                             next_kind == TokenKind::KwCstring || next_kind == TokenKind::KwVoid ||
+                             next_kind == TokenKind::KwTiny || next_kind == TokenKind::KwShort ||
+                             next_kind == TokenKind::KwLong || next_kind == TokenKind::KwUint ||
+                             next_kind == TokenKind::KwUtiny || next_kind == TokenKind::KwUshort ||
+                             next_kind == TokenKind::KwUlong || next_kind == TokenKind::KwIsize ||
+                             next_kind == TokenKind::KwUsize || next_kind == TokenKind::KwUfloat ||
                              next_kind == TokenKind::KwUdouble || next_kind == TokenKind::Ident);
         }
     }
@@ -354,6 +359,7 @@ ast::StmtPtr Parser::parse_stmt() {
 // 型の開始かどうか
 bool Parser::is_type_start() {
     switch (current().kind) {
+        case TokenKind::KwAuto:
         case TokenKind::KwVoid:
         case TokenKind::KwBool:
         case TokenKind::KwTiny:
@@ -364,12 +370,15 @@ bool Parser::is_type_start() {
         case TokenKind::KwUshort:
         case TokenKind::KwUint:
         case TokenKind::KwUlong:
+        case TokenKind::KwIsize:
+        case TokenKind::KwUsize:
         case TokenKind::KwFloat:
         case TokenKind::KwDouble:
         case TokenKind::KwUfloat:
         case TokenKind::KwUdouble:
         case TokenKind::KwChar:
         case TokenKind::KwString:
+        case TokenKind::KwCstring:
             return true;
         case TokenKind::Star:
             // *type name の形式かチェック（*p = x のような式と区別）
@@ -381,7 +390,9 @@ bool Parser::is_type_start() {
                     next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwUfloat ||
                     next_kind == TokenKind::KwUdouble || next_kind == TokenKind::KwChar ||
                     next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
-                    next_kind == TokenKind::KwVoid || next_kind == TokenKind::Ident) {
+                    next_kind == TokenKind::KwCstring || next_kind == TokenKind::KwIsize ||
+                    next_kind == TokenKind::KwUsize || next_kind == TokenKind::KwVoid ||
+                    next_kind == TokenKind::Ident) {
                     // *int name or *Type name の形式
                     if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].kind == TokenKind::Ident) {
                         return true;
@@ -394,6 +405,7 @@ bool Parser::is_type_start() {
             return true;
         case TokenKind::Ident:
             // 識別子の後に識別子が来たら変数宣言 (Type name)
+            // 識別子の後に::が来たら名前空間修飾型の可能性 (ns::Type name)
             // 識別子の後に<が来たらジェネリック型の可能性 (Type<T> name)
             // 識別子の後に[が来たら配列型の可能性 (Type[N] name)
             // 識別子の後に*が来たらポインタ型の可能性 (Type* name)
@@ -401,6 +413,41 @@ bool Parser::is_type_start() {
                 auto next_kind = tokens_[pos_ + 1].kind;
                 if (next_kind == TokenKind::Ident) {
                     return true;
+                }
+                // 名前空間修飾型: ns::Type name
+                if (next_kind == TokenKind::ColonColon) {
+                    // :: の後をスキップして変数名があるかチェック
+                    size_t i = pos_ + 2;
+                    // ns::ns2::...::Type パターンをスキップ
+                    while (i + 1 < tokens_.size() && tokens_[i].kind == TokenKind::Ident &&
+                           tokens_[i + 1].kind == TokenKind::ColonColon) {
+                        i += 2;  // Ident:: をスキップ
+                    }
+                    // 最後の型名をチェック
+                    if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                        i++;
+                        // 型名の後に変数名があるかチェック
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                            return true;
+                        }
+                        // ジェネリック型: ns::Type<T> name
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Lt) {
+                            // <...> をスキップ
+                            i++;
+                            int depth = 1;
+                            while (i < tokens_.size() && depth > 0) {
+                                if (tokens_[i].kind == TokenKind::Lt)
+                                    depth++;
+                                else if (tokens_[i].kind == TokenKind::Gt)
+                                    depth--;
+                                i++;
+                            }
+                            if (depth == 0 && i < tokens_.size() &&
+                                tokens_[i].kind == TokenKind::Ident) {
+                                return true;
+                            }
+                        }
+                    }
                 }
                 // ポインタ型: Type* name
                 if (next_kind == TokenKind::Star) {

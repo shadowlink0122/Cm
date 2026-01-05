@@ -1,0 +1,6 @@
+// b.cm - テスト用モジュール
+module b;
+
+export int func_b(int x) {
+    return x * 2;
+}

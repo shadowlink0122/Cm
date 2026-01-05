@@ -23,12 +23,15 @@ enum class TypeKind {
     UShort,
     UInt,
     ULong,  // 符号なし整数
+    ISize,  // ポインタサイズ符号付き (FFI用)
+    USize,  // ポインタサイズ符号なし (FFI用)
     Float,
     Double,  // 浮動小数点
     UFloat,
     UDouble,  // 符号なし浮動小数点（非負制約）
     Char,
-    String,  // 文字/文字列
+    String,   // 文字/文字列
+    CString,  // NULL終端文字列 (FFI用)
 
     // 派生型
     Pointer,    // *T
@@ -81,9 +84,12 @@ inline TypeInfo get_primitive_info(TypeKind kind) {
         case TypeKind::Double:
         case TypeKind::UDouble:
             return {8, 8};
+        case TypeKind::ISize:
+        case TypeKind::USize:
         case TypeKind::Pointer:
         case TypeKind::Reference:
         case TypeKind::String:
+        case TypeKind::CString:
             return {8, 8};  // ポインタサイズ
         default:
             return {0, 1};
@@ -132,11 +138,16 @@ struct Type {
     explicit Type(TypeKind k) : kind(k) {}
 
     // ヘルパー
-    bool is_primitive() const { return kind >= TypeKind::Void && kind <= TypeKind::String; }
+    bool is_primitive() const { return kind >= TypeKind::Void && kind <= TypeKind::CString; }
 
-    bool is_integer() const { return (kind >= TypeKind::Tiny && kind <= TypeKind::ULong); }
+    bool is_integer() const {
+        return (kind >= TypeKind::Tiny && kind <= TypeKind::ULong) || kind == TypeKind::ISize ||
+               kind == TypeKind::USize;
+    }
 
-    bool is_signed() const { return (kind >= TypeKind::Tiny && kind <= TypeKind::Long); }
+    bool is_signed() const {
+        return (kind >= TypeKind::Tiny && kind <= TypeKind::Long) || kind == TypeKind::ISize;
+    }
 
     bool is_floating() const {
         return kind == TypeKind::Float || kind == TypeKind::Double || kind == TypeKind::UFloat ||
@@ -195,6 +206,12 @@ inline TypePtr make_long() {
 inline TypePtr make_ulong() {
     return std::make_shared<Type>(TypeKind::ULong);
 }
+inline TypePtr make_isize() {
+    return std::make_shared<Type>(TypeKind::ISize);
+}
+inline TypePtr make_usize() {
+    return std::make_shared<Type>(TypeKind::USize);
+}
 inline TypePtr make_float() {
     return std::make_shared<Type>(TypeKind::Float);
 }
@@ -212,6 +229,9 @@ inline TypePtr make_char() {
 }
 inline TypePtr make_string() {
     return std::make_shared<Type>(TypeKind::String);
+}
+inline TypePtr make_cstring() {
+    return std::make_shared<Type>(TypeKind::CString);
 }
 inline TypePtr make_error() {
     return std::make_shared<Type>(TypeKind::Error);
@@ -282,6 +302,10 @@ inline std::string type_to_string(const Type& t) {
             return "uint";
         case TypeKind::ULong:
             return "ulong";
+        case TypeKind::ISize:
+            return "isize";
+        case TypeKind::USize:
+            return "usize";
         case TypeKind::Float:
             return "float";
         case TypeKind::Double:
@@ -294,16 +318,18 @@ inline std::string type_to_string(const Type& t) {
             return "char";
         case TypeKind::String:
             return "string";
+        case TypeKind::CString:
+            return "cstring";
         case TypeKind::Pointer:
             return "*" + (t.element_type ? type_to_string(*t.element_type) : "?");
         case TypeKind::Reference:
             return "&" + (t.element_type ? type_to_string(*t.element_type) : "?");
         case TypeKind::Array:
             if (t.array_size) {
-                return "[" + (t.element_type ? type_to_string(*t.element_type) : "?") + "; " +
+                return (t.element_type ? type_to_string(*t.element_type) : "?") + "[" +
                        std::to_string(*t.array_size) + "]";
             }
-            return "[" + (t.element_type ? type_to_string(*t.element_type) : "?") + "]";
+            return (t.element_type ? type_to_string(*t.element_type) : "?") + "[]";
         case TypeKind::Struct:
         case TypeKind::Interface: {
             std::string result = t.name;

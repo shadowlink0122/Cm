@@ -1,3 +1,4 @@
+import std::io::println;
 // ネストしたジェネリクスと型引数のテスト
 
 // ジェネリックなOptionタイプ
@@ -14,7 +15,7 @@ struct Pair<T, U> {
 
 // 複数の型パラメータを持つ関数
 <T, U> void print_pair(T first, U second) {
-    println("Pair: ({}, {})", first, second);
+    println("Pair: ({first}, {second})");
 }
 
 // ジェネリック関数の複数呼び出し
@@ -33,7 +34,7 @@ int main() {
     no_value.value = 0;
 
     if (some_value.has_value) {
-        println("Value: {}", some_value.value);
+        println("Value: {some_value.value}");
     }
 
     if (!no_value.has_value) {
@@ -44,13 +45,13 @@ int main() {
     Pair<int, string> p1;
     p1.first = 100;
     p1.second = "hello";
-    println("Pair<int, string>: ({}, {})", p1.first, p1.second);
+    println("Pair<int, string>: ({p1.first}, {p1.second})");
 
     // Pair型のテスト (double, bool)
     Pair<double, bool> p2;
     p2.first = 3.14;
     p2.second = true;
-    println("Pair<double, bool>: ({}, {})", p2.first, p2.second);
+    println("Pair<double, bool>: ({p2.first}, {p2.second})");
 
     // 複数型パラメータのテスト
     print_pair(123, "test");

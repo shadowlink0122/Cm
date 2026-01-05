@@ -1,0 +1,21 @@
+import std::io::println;
+// array_literal.cm - 配列リテラルテスト
+int main() {
+    // 基本的な配列リテラル
+    int[3] arr = [1, 2, 3];
+    int a = arr[0];
+    int b = arr[1];
+    int c = arr[2];
+    println("arr = [{a}, {b}, {c}]");
+    
+    // 浮動小数点配列
+    float[2] farr = [1.5, 2.5];
+    
+    // 空でない配列の代入
+    int[2] arr2 = [10, 20];
+    int x = arr2[0];
+    int y = arr2[1];
+    println("arr2 = [{x}, {y}]");
+    
+    return 0;
+}

@@ -1,0 +1,52 @@
+// Test: Memory Management Functions
+// Tests the std::mem module functions with actual value verification
+
+import std::mem::{malloc, free};
+
+int main() {
+    // 単一int確保テスト
+    print("int allocation test:\n");
+    
+    void* raw = malloc(sizeof(int));
+    int* p = raw as int*;
+    
+    *p = 42;
+    int v = *p;
+    
+    if (v == 42) {
+        print("int value verified\n");
+    } else {
+        print("ERROR: int value incorrect\n");
+    }
+    
+    free(raw);
+    print("int freed\n");
+    
+    // 複数確保テスト
+    print("multiple allocation test:\n");
+    
+    void* raw1 = malloc(sizeof(int));
+    void* raw2 = malloc(sizeof(int));
+    
+    int* p1 = raw1 as int*;
+    int* p2 = raw2 as int*;
+    
+    *p1 = 100;
+    *p2 = 200;
+    
+    int v1 = *p1;
+    int v2 = *p2;
+    
+    if (v1 == 100 && v2 == 200) {
+        print("multiple values verified\n");
+    } else {
+        print("ERROR: multiple values incorrect\n");
+    }
+    
+    free(raw1);
+    free(raw2);
+    print("multiple freed\n");
+    
+    print("All memory tests passed!\n");
+    return 0;
+}

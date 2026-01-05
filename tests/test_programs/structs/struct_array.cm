@@ -1,0 +1,38 @@
+import std::io::println;
+// struct_array.cm - 構造体と配列の統合テスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Container {
+    int[3] values;
+    int count;
+}
+
+int main() {
+    // 1. 構造体内の配列（要素ごと代入）
+    Container c;
+    c.values[0] = 10;
+    c.values[1] = 20;
+    c.values[2] = 30;
+    c.count = 3;
+    println("Container: [{c.values[0]}, {c.values[1]}, {c.values[2]}], count={c.count}");
+    
+    // 2. 構造体の配列（要素ごと初期化）
+    Point[2] points;
+    points[0].x = 1;
+    points[0].y = 2;
+    points[1].x = 3;
+    points[1].y = 4;
+    println("points[0]: ({points[0].x}, {points[0].y})");
+    println("points[1]: ({points[1].x}, {points[1].y})");
+    
+    // 3. 構造体配列の要素への代入
+    points[0].x = 100;
+    points[0].y = 200;
+    println("points[0] after: ({points[0].x}, {points[0].y})");
+    
+    return 0;
+}

@@ -1,11 +1,12 @@
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
-#include "../../src/hir/hir_lowering.hpp"
-#include "../../src/mir/mir_lowering.hpp"
-#include "../../src/mir/mir_printer.hpp"
-#include "../../src/mir/optimizations/all_passes.hpp"
+#include "../../src/hir/lowering/lowering.hpp"
+#include "../../src/mir/lowering/lowering.hpp"
+#include "../../src/mir/passes/core/manager.hpp"
+#include "../../src/mir/printer.hpp"
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <sstream>
 
 using namespace cm;

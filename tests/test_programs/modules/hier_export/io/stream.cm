@@ -1,0 +1,6 @@
+// stream.cm
+module stream;
+
+export int open_stream(int id) {
+    return id * 20;
+}

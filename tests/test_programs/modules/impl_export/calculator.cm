@@ -1,0 +1,18 @@
+// calculator.cm - impl エクスポートテスト用モジュール  
+module calculator;
+
+export struct Doubler {
+    int factor;
+}
+
+export int double_it(int x) {
+    return x * 2;
+}
+
+export struct Tripler {
+    int factor;
+}
+
+export int triple_it(int x) {
+    return x * 3;
+}

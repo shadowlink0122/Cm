@@ -1,0 +1,21 @@
+import std::io::println;
+// テスト: 関数戻り値の型不一致を検出
+string getString() {
+    return "hello";
+}
+
+int getInt() {
+    return 42;
+}
+
+int main() {
+    // これはエラーになるべき: string型をint変数に代入
+    int result = getString();
+    println("result = {result}");
+    
+    // これもエラーになるべき: int型をstring変数に代入
+    string text = getInt();
+    println("text = {text}");
+    
+    return 0;
+}

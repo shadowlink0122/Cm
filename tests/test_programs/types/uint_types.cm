@@ -4,7 +4,7 @@ import std::io::println;
 int main() {
     // uint (32bit unsigned)
     uint ui = 3000000;
-    println("uint: {}", ui);
+    println("uint: {ui}");
 
     return 0;
 }

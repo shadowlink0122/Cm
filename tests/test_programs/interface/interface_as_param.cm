@@ -1,3 +1,4 @@
+import std::io::println;
 // インターフェース型を引数に取る関数
 interface Printable {
     void print();
@@ -10,7 +11,7 @@ struct Point {
 
 impl Point for Printable {
     void print() {
-        println("{} {}", self.x, self.y);
+        println("{self.x} {self.y}");
     }
 }
 

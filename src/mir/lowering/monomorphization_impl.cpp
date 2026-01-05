@@ -38,8 +38,9 @@ static MirRvaluePtr clone_rvalue(const MirRvaluePtr& rv) {
         }
         case MirRvalue::BinaryOp: {
             auto& bin_data = std::get<MirRvalue::BinaryOpData>(rv->data);
-            result->data = MirRvalue::BinaryOpData{bin_data.op, clone_operand(bin_data.lhs),
-                                                   clone_operand(bin_data.rhs)};
+            result->data =
+                MirRvalue::BinaryOpData{bin_data.op, clone_operand(bin_data.lhs),
+                                        clone_operand(bin_data.rhs), bin_data.result_type};
             break;
         }
         case MirRvalue::UnaryOp: {
@@ -464,9 +465,26 @@ static hir::TypePtr substitute_type_in_type(
         return it->second;
     }
 
-    // 2. ポインタ型の場合（Container<T>* → Container<int>*）
+    // 2. ポインタ型の場合（Container<T>* → Container__int*）
     if (type->kind == hir::TypeKind::Pointer) {
-        // ポインタの指す型を取得（名前から推測）
+        // まずelement_typeをチェック（より信頼性が高い）
+        if (type->element_type) {
+            auto substituted_elem = substitute_type_in_type(type->element_type, type_subst, mono);
+            if (substituted_elem && (substituted_elem != type->element_type ||
+                                     substituted_elem->name != type->element_type->name)) {
+                auto new_ptr_type = std::make_shared<hir::Type>(hir::TypeKind::Pointer);
+                new_ptr_type->element_type = substituted_elem;
+                new_ptr_type->name =
+                    substituted_elem->name.empty() ? "" : (substituted_elem->name + "*");
+                debug_msg("MONO", "Substituted pointer element_type: " +
+                                      (type->element_type ? type->element_type->name : "null") +
+                                      " -> " +
+                                      (substituted_elem ? substituted_elem->name : "null"));
+                return new_ptr_type;
+            }
+        }
+
+        // フォールバック: 名前から推測（旧ロジック）
         std::string pointed_name = type->name;
         if (!pointed_name.empty() && pointed_name.back() == '*') {
             pointed_name.pop_back();  // '*'を削除
@@ -535,6 +553,92 @@ static hir::TypePtr substitute_type_in_type(
         }
     }
 
+    // 4. 構造体名に型パラメータが<>で括られている場合（Container<T> → Container__int）
+    // または Generic 型で型名にジェネリクス情報が含まれる場合
+    if (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias ||
+        type->kind == hir::TypeKind::Pointer || type->kind == hir::TypeKind::Generic) {
+        std::string type_name = type->name;
+        size_t angle_pos = type_name.find("<");
+
+        if (angle_pos != std::string::npos) {
+            std::string base_name = type_name.substr(0, angle_pos);  // "Container"
+            size_t end_angle = type_name.rfind(">");
+            if (end_angle != std::string::npos && end_angle > angle_pos) {
+                std::string params_str =
+                    type_name.substr(angle_pos + 1, end_angle - angle_pos - 1);  // "T"
+
+                // 複数の型パラメータを処理（カンマ区切り）
+                std::vector<std::string> new_params;
+                bool any_substituted = false;
+                size_t start = 0;
+
+                while (true) {
+                    size_t comma_pos = params_str.find(",", start);
+                    std::string param;
+                    if (comma_pos != std::string::npos) {
+                        param = params_str.substr(start, comma_pos - start);
+                    } else {
+                        param = params_str.substr(start);
+                    }
+
+                    // 空白をトリム
+                    while (!param.empty() && param.front() == ' ')
+                        param.erase(0, 1);
+                    while (!param.empty() && param.back() == ' ')
+                        param.pop_back();
+
+                    // この型パラメータを置換できるか
+                    auto subst_it = type_subst.find(param);
+                    if (subst_it != type_subst.end()) {
+                        new_params.push_back(get_type_name(subst_it->second));
+                        any_substituted = true;
+                    } else {
+                        new_params.push_back(param);
+                    }
+
+                    if (comma_pos == std::string::npos)
+                        break;
+                    start = comma_pos + 1;
+                }
+
+                if (any_substituted) {
+                    // 新しい構造体名を生成（Container__int 形式）
+                    std::string new_name = base_name;
+                    for (const auto& p : new_params) {
+                        new_name += "__" + p;
+                    }
+
+                    // 重要: モノモーフィック化後の型はStructになる
+                    auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                    new_type->name = new_name;
+                    debug_msg("MONO", "Substituted angle-bracket type: " + type_name + " -> " +
+                                          new_name + " (kind: Generic->Struct)");
+                    return new_type;
+                }
+            }
+        }
+
+        // 5. Generic型で名前のみ（Container）の場合、type_argsから推論
+        if (type->kind == hir::TypeKind::Generic && !type->name.empty() &&
+            type->name.find("<") == std::string::npos) {
+            // ジェネリック構造体名（Container）で、型引数がある場合
+            // type_substからすべての型引数を適用
+            std::string new_name = type->name;
+            bool applied = false;
+            for (const auto& [param_name, param_type] : type_subst) {
+                (void)param_name;  // 使用しない
+                new_name += "__" + get_type_name(param_type);
+                applied = true;
+            }
+            if (applied) {
+                auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                new_type->name = new_name;
+                debug_msg("MONO", "Substituted generic type: " + type->name + " -> " + new_name);
+                return new_type;
+            }
+        }
+    }
+
     // 変更なしの場合は元の型を返す
     return type;
 }
@@ -598,10 +702,37 @@ void Monomorphization::generate_generic_specializations(
         specialized->arg_locals = original_mir->arg_locals;
 
         // ローカル変数をコピーして型を置換
+        // ジェネリックimplメソッドの場合、self型を関数名から推測
+        std::string inferred_self_type;
+        auto angle_pos = func_name.find("<");
+        auto dunder_pos = func_name.find(">__");
+        if (angle_pos != std::string::npos && dunder_pos != std::string::npos) {
+            // func_name = "Container<T>__get" -> base = "Container"
+            std::string base_struct = func_name.substr(0, angle_pos);
+            // 置換後の構造体名を生成: Container__int
+            inferred_self_type = base_struct;
+            for (const auto& arg : type_args) {
+                inferred_self_type += "__" + arg;
+            }
+        }
+
         for (const auto& local : original_mir->locals) {
             LocalDecl new_local = local;
             if (new_local.type) {
-                new_local.type = substitute_type_in_type(new_local.type, type_subst, this);
+                // selfパラメータで型名が空のPointer型の場合、推論した型を使用
+                if (local.name == "self" && new_local.type->kind == hir::TypeKind::Pointer &&
+                    new_local.type->name.empty() && !inferred_self_type.empty()) {
+                    // Container__intへのポインタ型を作成
+                    auto struct_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                    struct_type->name = inferred_self_type;
+                    auto new_ptr_type = std::make_shared<hir::Type>(hir::TypeKind::Pointer);
+                    new_ptr_type->element_type = struct_type;
+                    new_ptr_type->name = inferred_self_type + "*";
+                    new_local.type = new_ptr_type;
+
+                } else {
+                    new_local.type = substitute_type_in_type(new_local.type, type_subst, this);
+                }
             }
             specialized->locals.push_back(new_local);
         }
@@ -627,6 +758,170 @@ void Monomorphization::generate_generic_specializations(
             }
 
             specialized->basic_blocks.push_back(std::move(new_block));
+        }
+
+        // プロジェクション内の型を置換
+        auto substitute_place_types = [&](MirPlace& place) {
+            for (auto& proj : place.projections) {
+                if (proj.result_type) {
+                    proj.result_type = substitute_type_in_type(proj.result_type, type_subst, this);
+                }
+                if (proj.pointee_type) {
+                    proj.pointee_type =
+                        substitute_type_in_type(proj.pointee_type, type_subst, this);
+                }
+            }
+            if (place.type) {
+                place.type = substitute_type_in_type(place.type, type_subst, this);
+            }
+            if (place.pointee_type) {
+                place.pointee_type = substitute_type_in_type(place.pointee_type, type_subst, this);
+            }
+        };
+
+        auto substitute_operand_types = [&](MirOperandPtr& op) {
+            if (!op)
+                return;
+            if (op->kind == MirOperand::Copy || op->kind == MirOperand::Move) {
+                auto* place = std::get_if<MirPlace>(&op->data);
+                if (place) {
+                    substitute_place_types(*place);
+                }
+            }
+            if (op->type) {
+                op->type = substitute_type_in_type(op->type, type_subst, this);
+            }
+        };
+
+        for (auto& block : specialized->basic_blocks) {
+            if (!block)
+                continue;
+            for (auto& stmt : block->statements) {
+                if (!stmt || stmt->kind != MirStatement::Assign)
+                    continue;
+                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                // place側のプロジェクション
+                substitute_place_types(assign_data.place);
+
+                // rvalue側のオペランド
+                if (assign_data.rvalue) {
+                    switch (assign_data.rvalue->kind) {
+                        case MirRvalue::Use: {
+                            auto& use_data = std::get<MirRvalue::UseData>(assign_data.rvalue->data);
+                            substitute_operand_types(use_data.operand);
+                            break;
+                        }
+                        case MirRvalue::BinaryOp: {
+                            auto& bin_data =
+                                std::get<MirRvalue::BinaryOpData>(assign_data.rvalue->data);
+                            substitute_operand_types(bin_data.lhs);
+                            substitute_operand_types(bin_data.rhs);
+                            if (bin_data.result_type) {
+                                bin_data.result_type =
+                                    substitute_type_in_type(bin_data.result_type, type_subst, this);
+                            }
+                            break;
+                        }
+                        case MirRvalue::UnaryOp: {
+                            auto& unary_data =
+                                std::get<MirRvalue::UnaryOpData>(assign_data.rvalue->data);
+                            substitute_operand_types(unary_data.operand);
+                            break;
+                        }
+                        case MirRvalue::Ref: {
+                            auto& ref_data = std::get<MirRvalue::RefData>(assign_data.rvalue->data);
+                            substitute_place_types(ref_data.place);
+                            break;
+                        }
+                        case MirRvalue::Cast: {
+                            auto& cast_data =
+                                std::get<MirRvalue::CastData>(assign_data.rvalue->data);
+                            substitute_operand_types(cast_data.operand);
+                            if (cast_data.target_type) {
+                                cast_data.target_type = substitute_type_in_type(
+                                    cast_data.target_type, type_subst, this);
+                            }
+                            break;
+                        }
+                        case MirRvalue::Aggregate: {
+                            auto& agg_data =
+                                std::get<MirRvalue::AggregateData>(assign_data.rvalue->data);
+                            for (auto& operand : agg_data.operands) {
+                                substitute_operand_types(operand);
+                            }
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+
+        // メソッド呼び出しの self 引数に対する参照修正
+        // 構造体メソッド呼び出しで、第1引数が値型の場合に &ref を追加
+        for (auto& block : specialized->basic_blocks) {
+            if (!block || !block->terminator)
+                continue;
+            if (block->terminator->kind != MirTerminator::Call)
+                continue;
+
+            auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+                continue;
+
+            const auto& func_name_ref = std::get<std::string>(call_data.func->data);
+
+            // 関数名が TypeName__method の形式かチェック
+            auto dunder_pos = func_name_ref.find("__");
+            if (dunder_pos == std::string::npos || call_data.args.empty())
+                continue;
+
+            // 型名を抽出
+            std::string type_name = func_name_ref.substr(0, dunder_pos);
+
+            // この型名に対応する構造体が存在するか確認（hir_struct_defsから）
+            if (!hir_struct_defs || hir_struct_defs->find(type_name) == hir_struct_defs->end())
+                continue;
+
+            // 第1引数が値型（非ポインタ）かチェック
+            auto& first_arg = call_data.args[0];
+            if (!first_arg || first_arg->kind != MirOperand::Copy)
+                continue;
+
+            auto& place = std::get<MirPlace>(first_arg->data);
+            if (place.local >= specialized->locals.size())
+                continue;
+
+            auto& local_type = specialized->locals[place.local].type;
+            if (!local_type)
+                continue;
+
+            // 既にポインタ型ならスキップ
+            if (local_type->kind == hir::TypeKind::Pointer)
+                continue;
+
+            // 構造体型またはエイリアス型であれば、参照を取る必要がある
+            if (local_type->kind == hir::TypeKind::Struct ||
+                local_type->kind == hir::TypeKind::TypeAlias || local_type->name == type_name ||
+                local_type->name.find(type_name + "__") == 0) {
+                // 新しいローカル変数を追加（ポインタ型）
+                LocalId ref_id = static_cast<LocalId>(specialized->locals.size());
+                std::string ref_name = "_ref_" + std::to_string(ref_id);
+                auto ref_type = hir::make_pointer(local_type);
+                specialized->locals.emplace_back(ref_id, ref_name, ref_type, false, false);
+
+                // Ref文を追加
+                auto ref_stmt = MirStatement::assign(MirPlace{ref_id},
+                                                     MirRvalue::ref(place, false));  // 不変参照
+                block->statements.push_back(std::move(ref_stmt));
+
+                // 呼び出しの第1引数を参照に変更
+                call_data.args[0] = MirOperand::copy(MirPlace{ref_id});
+
+                debug_msg("MONO", "Added self-ref fixup for " + func_name_ref +
+                                      " in specialized function " + specialized_name);
+            }
         }
 
         program.functions.push_back(std::move(specialized));
@@ -870,6 +1165,7 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
     // 特殊化構造体を生成
     auto mir_struct = std::make_unique<MirStruct>();
     mir_struct->name = spec_name;
+    mir_struct->is_css = base_struct->is_css;
 
     // フィールドとレイアウトを計算
     uint32_t current_offset = 0;
@@ -1193,6 +1489,122 @@ void Monomorphization::rewrite_generic_calls(
                                           std::get<std::string>(call_data.func->data) + " -> " +
                                           func_name);
                 }
+            }
+        }
+    }
+}
+
+// 構造体メソッドのself引数を参照に修正
+// 呼び出し側で構造体のコピーではなくアドレスを渡すように変更
+void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
+    for (auto& func : program.functions) {
+        if (!func)
+            continue;
+
+        // まず、全ブロックのCopy代入をスキャンしてコピー元マップを構築
+        // copy_sources[dest_local] = source_local
+        std::unordered_map<LocalId, LocalId> copy_sources;
+
+        for (auto& block : func->basic_blocks) {
+            if (!block)
+                continue;
+            for (auto& stmt : block->statements) {
+                if (!stmt || stmt->kind != MirStatement::Assign)
+                    continue;
+
+                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                if (!assign_data.rvalue || assign_data.rvalue->kind != MirRvalue::Use)
+                    continue;
+
+                auto& use_data = std::get<MirRvalue::UseData>(assign_data.rvalue->data);
+                if (!use_data.operand || use_data.operand->kind != MirOperand::Copy)
+                    continue;
+
+                // dest = copy source の形式
+                auto& source_place = std::get<MirPlace>(use_data.operand->data);
+                if (assign_data.place.projections.empty() && source_place.projections.empty()) {
+                    // 単純なlocal-to-localコピー
+                    copy_sources[assign_data.place.local] = source_place.local;
+                }
+            }
+        }
+
+        // 次に、構造体メソッド呼び出しを処理
+        for (auto& block : func->basic_blocks) {
+            if (!block || !block->terminator)
+                continue;
+
+            if (block->terminator->kind != MirTerminator::Call)
+                continue;
+
+            auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+                continue;
+
+            const auto& func_name_ref = std::get<std::string>(call_data.func->data);
+
+            // 構造体メソッド呼び出し（TypeName__method 形式）をチェック
+            auto dunder_pos = func_name_ref.find("__");
+            if (dunder_pos == std::string::npos || call_data.args.empty())
+                continue;
+
+            // 型名を抽出
+            std::string type_name = func_name_ref.substr(0, dunder_pos);
+
+            // この型名に対応する構造体が存在するか確認
+            if (!hir_struct_defs || hir_struct_defs->find(type_name) == hir_struct_defs->end())
+                continue;
+
+            // 第1引数が値型（Copy）かチェック
+            auto& first_arg = call_data.args[0];
+            if (!first_arg || first_arg->kind != MirOperand::Copy)
+                continue;
+
+            auto& place = std::get<MirPlace>(first_arg->data);
+            if (place.local >= func->locals.size())
+                continue;
+
+            // コピー元を追跡してオリジナルを見つける
+            LocalId original_local = place.local;
+            int chain_depth = 0;
+            while (copy_sources.count(original_local) > 0 && chain_depth < 10) {
+                original_local = copy_sources[original_local];
+                chain_depth++;
+            }
+
+            if (original_local >= func->locals.size())
+                continue;
+
+            auto& local_type = func->locals[original_local].type;
+            if (!local_type)
+                continue;
+
+            // 既にポインタ型ならスキップ
+            if (local_type->kind == hir::TypeKind::Pointer)
+                continue;
+
+            // 構造体型であれば参照を取る
+            if (local_type->kind == hir::TypeKind::Struct ||
+                local_type->kind == hir::TypeKind::Generic ||
+                local_type->kind == hir::TypeKind::TypeAlias || local_type->name == type_name ||
+                local_type->name.find(type_name + "__") == 0) {
+                // 新しいローカル変数を追加（ポインタ型）
+                LocalId ref_id = static_cast<LocalId>(func->locals.size());
+                std::string ref_name = "_self_ref_" + std::to_string(ref_id);
+                auto ref_type = hir::make_pointer(local_type);
+                func->locals.emplace_back(ref_id, ref_name, ref_type, false, false);
+
+                // **オリジナル**への参照を作成
+                auto ref_stmt = MirStatement::assign(
+                    MirPlace{ref_id}, MirRvalue::ref(MirPlace{original_local}, false));
+                block->statements.push_back(std::move(ref_stmt));
+
+                // 呼び出しの第1引数を参照に変更
+                call_data.args[0] = MirOperand::copy(MirPlace{ref_id});
+
+                debug_msg("MONO", "Fixed self-ref for " + func_name_ref + " in " + func->name +
+                                      " (traced " + std::to_string(place.local) + " -> " +
+                                      std::to_string(original_local) + ")");
             }
         }
     }

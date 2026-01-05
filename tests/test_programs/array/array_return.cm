@@ -1,0 +1,27 @@
+// スライスを返す関数のテスト
+import std::io::println;
+
+int[] make_slice() {
+    int[] result = [1, 2, 3];
+    return result;
+}
+
+int[] double_values(int[] input) {
+    int[] result = [];
+    for (auto x in input) {
+        result.push(x * 2);
+    }
+    return result;
+}
+
+int main() {
+    int[] s = make_slice();
+    println(s.len());
+    
+    int[] doubled = double_values(s);
+    for (auto x in doubled) {
+        println(x);
+    }
+    
+    return 0;
+}

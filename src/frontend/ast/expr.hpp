@@ -279,6 +279,75 @@ struct NewExpr {
 };
 
 // ============================================================
+// sizeof式 - コンパイル時に型/式のサイズを取得
+// ============================================================
+struct SizeofExpr {
+    TypePtr target_type;  // sizeof(型) の場合
+    ExprPtr target_expr;  // sizeof(式) の場合
+
+    explicit SizeofExpr(TypePtr t) : target_type(std::move(t)) {}
+    explicit SizeofExpr(ExprPtr e) : target_expr(std::move(e)) {}
+};
+
+// ============================================================
+// typeof式 - 式の型を取得（型コンテキストで使用）
+// ============================================================
+struct TypeofExpr {
+    ExprPtr target_expr;
+
+    explicit TypeofExpr(ExprPtr e) : target_expr(std::move(e)) {}
+};
+
+// ============================================================
+// alignof式 - 型のアラインメントを取得
+// ============================================================
+struct AlignofExpr {
+    TypePtr target_type;
+
+    explicit AlignofExpr(TypePtr t) : target_type(std::move(t)) {}
+};
+
+// ============================================================
+// typename_of式 - 型の名前を文字列で取得
+// __typename__(型) または __typename__(式) の両方に対応
+// ============================================================
+struct TypenameOfExpr {
+    TypePtr target_type;  // 型指定の場合
+    ExprPtr target_expr;  // 式指定の場合
+
+    explicit TypenameOfExpr(TypePtr t) : target_type(std::move(t)) {}
+    explicit TypenameOfExpr(ExprPtr e) : target_expr(std::move(e)) {}
+};
+
+// ============================================================
+// 構造体リテラル (StructName{field1: val1, field2: val2})
+// 名前付き初期化のみ対応
+// ============================================================
+struct StructLiteralField {
+    std::string name;  // フィールド名（必須）
+    ExprPtr value;
+
+    StructLiteralField(std::string n, ExprPtr v) : name(std::move(n)), value(std::move(v)) {}
+};
+
+struct StructLiteralExpr {
+    std::string type_name;
+    std::vector<StructLiteralField> fields;
+
+    StructLiteralExpr(std::string name, std::vector<StructLiteralField> f)
+        : type_name(std::move(name)), fields(std::move(f)) {}
+};
+
+// ============================================================
+// 配列リテラル [val1, val2, val3]
+// ============================================================
+struct ArrayLiteralExpr {
+    std::vector<ExprPtr> elements;
+
+    ArrayLiteralExpr(std::vector<ExprPtr> elems) : elements(std::move(elems)) {}
+};
+
+// ============================================================
 // ラムダ式
 // ============================================================
 struct Param {
@@ -292,6 +361,14 @@ struct LambdaExpr {
     std::vector<Param> params;
     TypePtr return_type;  // nullならauto
     std::variant<ExprPtr, std::vector<StmtPtr>> body;
+
+    // キャプチャされる変数（TypeChecker が解析後に設定）
+    struct Capture {
+        std::string name;
+        TypePtr type;
+        bool by_ref;  // 参照キャプチャか値キャプチャか
+    };
+    std::vector<Capture> captures;
 
     bool is_expr_body() const { return std::holds_alternative<ExprPtr>(body); }
 };
@@ -362,6 +439,16 @@ struct MatchExpr {
 };
 
 // ============================================================
+// キャスト式 - expr as Type
+// ============================================================
+struct CastExpr {
+    ExprPtr operand;      // キャスト対象の式
+    TypePtr target_type;  // キャスト先の型
+
+    CastExpr(ExprPtr e, TypePtr t) : operand(std::move(e)), target_type(std::move(t)) {}
+};
+
+// ============================================================
 // 式作成ヘルパー
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
@@ -400,6 +487,44 @@ inline ExprPtr make_unary(UnaryOp op, ExprPtr operand, Span s = {}) {
 inline ExprPtr make_call(ExprPtr callee, std::vector<ExprPtr> args, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<CallExpr>(std::move(callee), std::move(args)),
                                   s);
+}
+
+inline ExprPtr make_struct_literal(std::string type_name, std::vector<StructLiteralField> fields,
+                                   Span s = {}) {
+    return std::make_unique<Expr>(
+        std::make_unique<StructLiteralExpr>(std::move(type_name), std::move(fields)), s);
+}
+
+inline ExprPtr make_array_literal(std::vector<ExprPtr> elements, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<ArrayLiteralExpr>(std::move(elements)), s);
+}
+
+inline ExprPtr make_sizeof(TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<SizeofExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_sizeof_expr(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<SizeofExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_typeof(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TypeofExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_alignof(TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<AlignofExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_typename_of(TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TypenameOfExpr>(std::move(type)), s);
+}
+
+inline ExprPtr make_typename_of_expr(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TypenameOfExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<CastExpr>(std::move(expr), std::move(type)), s);
 }
 
 }  // namespace cm::ast

@@ -1,3 +1,4 @@
+import std::io::println;
 // 配列→ポインタ暗黙変換テスト
 
 int main() {

@@ -1,0 +1,8 @@
+// std.cm - 階層再構築エクスポートテスト
+module std;
+
+import ./io/file;
+import ./io/stream;
+
+// 階層再構築エクスポート: io名前空間内にfileとstreamを配置
+export { io::{file, stream} };

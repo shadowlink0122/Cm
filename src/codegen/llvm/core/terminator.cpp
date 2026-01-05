@@ -4,9 +4,12 @@
 
 #include "mir_to_llvm.hpp"
 
+#include <iostream>
+
 namespace cm::codegen::llvm_backend {
 
 void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
+    // // debug_msg("MIR2LLVM", "convertTerminator");
     switch (term.kind) {
         case mir::MirTerminator::Goto: {
             auto& gotoData = std::get<mir::MirTerminator::GotoData>(term.data);
@@ -75,6 +78,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             break;
         }
         case mir::MirTerminator::Call: {
+            // // debug_msg("MIR2LLVM", "Call terminator processing...");
             auto& callData = std::get<mir::MirTerminator::CallData>(term.data);
 
             // 関数名を取得
@@ -82,18 +86,35 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             bool isIndirectCall = false;          // 関数ポインタ変数からの呼び出し
             llvm::Value* funcPtrValue = nullptr;  // 関数ポインタ値
 
+            // std::cout << "[CODEGEN] Call Operand Kind: " << (int)callData.func->kind << "\n"
+            //           << std::flush;
+
             if (callData.func->kind == mir::MirOperand::Constant) {
                 auto& constant = std::get<mir::MirConstant>(callData.func->data);
                 if (auto* name = std::get_if<std::string>(&constant.value)) {
                     funcName = *name;
+                    // std::cout << "[CODEGEN] Call Direct: " << funcName << "\n" << std::flush;
                 }
             } else if (callData.func->kind == mir::MirOperand::FunctionRef) {
                 funcName = std::get<std::string>(callData.func->data);
+                // std::cout << "[CODEGEN] Call FuncRef: " << funcName << "\n" << std::flush;
             } else if (callData.func->kind == mir::MirOperand::Copy ||
                        callData.func->kind == mir::MirOperand::Move) {
                 // 関数ポインタ変数からの呼び出し
+                // // debug_msg("MIR2LLVM", "Call: Indirect call, converting operand...");
                 isIndirectCall = true;
                 funcPtrValue = convertOperand(*callData.func);
+                // // debug_msg("MIR2LLVM", "Call: Operand converted");
+
+                // convertOperandがFunction*を返した場合、それを関数ポインタとして扱う
+                if (funcPtrValue && llvm::isa<llvm::Function>(funcPtrValue)) {
+                    // Function*が直接返された場合は、直接呼び出しとして扱う
+                    auto func = llvm::cast<llvm::Function>(funcPtrValue);
+                    funcName = func->getName().str();
+                    isIndirectCall = false;
+                    funcPtrValue = nullptr;
+                }
+                // std::cout << "[CODEGEN] Call Indirect Op Converted\n" << std::flush;
             }
 
             // ============================================================
@@ -112,11 +133,271 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 break;
             }
 
-            if (funcName == "print" || funcName == "println" || funcName == "std::io::print" ||
-                funcName == "std::io::println") {
+            if (funcName == "__print__" || funcName == "__println__" ||
+                funcName == "std::io::print" || funcName == "std::io::println") {
                 bool isNewline = funcName.find("println") != std::string::npos;
                 generatePrintCall(callData, isNewline);
+                // std::cout << "[CODEGEN] Print Call Gen Done, Br to bb" << callData.success <<
+                // "\n"
+                //           << std::flush;
+                if (blocks.find(callData.success) == blocks.end()) {
+                    std::cerr << "[CODEGEN] CRITICAL: Success block bb" << callData.success
+                              << " not found! Creating unreachable.\n"
+                              << std::flush;
+                    builder->CreateUnreachable();
+                    break;
+                }
                 builder->CreateBr(blocks[callData.success]);
+                // std::cout << "[CODEGEN] Br Created\n" << std::flush;
+                break;
+            }
+
+            // ============================================================
+            // 配列スライス呼び出し
+            // ============================================================
+            if (funcName == "__builtin_array_slice") {
+                // 引数: arr, elem_size, arr_len, start, end
+                // ランタイム関数: void* __builtin_array_slice(void* arr, i64 elem_size, i64
+                // arr_len, i64 start, i64 end, i64* out_len)
+
+                std::vector<llvm::Value*> args;
+                for (const auto& arg : callData.args) {
+                    args.push_back(convertOperand(*arg));
+                }
+
+                // 最初の引数（配列）をポインタに変換
+                llvm::Value* arrPtr = args[0];
+                if (arrPtr->getType()->isArrayTy()) {
+                    // 配列をallocaに格納してポインタを取得
+                    auto arrAlloca = builder->CreateAlloca(arrPtr->getType(), nullptr, "arr_tmp");
+                    builder->CreateStore(arrPtr, arrAlloca);
+                    arrPtr = builder->CreateBitCast(arrAlloca, ctx.getPtrType(), "arr_ptr");
+                } else if (!arrPtr->getType()->isPointerTy()) {
+                    arrPtr = builder->CreateIntToPtr(arrPtr, ctx.getPtrType(), "arr_ptr");
+                }
+
+                // out_len用のallocaを作成
+                auto outLenAlloca = builder->CreateAlloca(ctx.getI64Type(), nullptr, "out_len");
+                builder->CreateStore(llvm::ConstantInt::get(ctx.getI64Type(), 0), outLenAlloca);
+
+                // ランタイム関数を取得
+                auto sliceFunc = declareExternalFunction("__builtin_array_slice");
+
+                // 引数を整数型に変換（必要な場合）
+                std::vector<llvm::Value*> callArgs;
+                callArgs.push_back(arrPtr);  // void* arr
+                for (size_t i = 1; i < args.size() && i <= 4; ++i) {
+                    auto arg = args[i];
+                    if (arg->getType() != ctx.getI64Type()) {
+                        if (arg->getType()->isIntegerTy()) {
+                            arg = builder->CreateSExt(arg, ctx.getI64Type(), "sext");
+                        }
+                    }
+                    callArgs.push_back(arg);
+                }
+                // out_lenポインタをi8*にキャスト（LLVM 14互換性のため）
+                auto outLenCast =
+                    builder->CreateBitCast(outLenAlloca, ctx.getPtrType(), "out_len_cast");
+                callArgs.push_back(outLenCast);  // i8* out_len
+
+                auto result = builder->CreateCall(sliceFunc, callArgs, "slice_result");
+
+                if (callData.destination) {
+                    auto destLocal = callData.destination->local;
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(result, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = result;
+                    }
+                }
+
+                if (callData.success != mir::INVALID_BLOCK) {
+                    builder->CreateBr(blocks[callData.success]);
+                }
+                break;
+            }
+
+            // ============================================================
+            // 配列 map/filter 呼び出し
+            // ============================================================
+            if (funcName.find("__builtin_array_") == 0 &&
+                (funcName.find("map") != std::string::npos ||
+                 funcName.find("filter") != std::string::npos ||
+                 funcName.find("some") != std::string::npos ||
+                 funcName.find("every") != std::string::npos ||
+                 funcName.find("findIndex") != std::string::npos ||
+                 funcName.find("reduce") != std::string::npos ||
+                 funcName.find("forEach") != std::string::npos)) {
+                std::vector<llvm::Value*> args;
+                for (const auto& arg : callData.args) {
+                    args.push_back(convertOperand(*arg));
+                }
+
+                // 引数の型を適切に変換
+                // 最初の引数（配列）をポインタに変換
+                if (!args.empty()) {
+                    llvm::Value* arrPtr = args[0];
+
+                    // LoadInstの場合、ロード元のポインタを使用
+                    if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(arrPtr)) {
+                        auto ptrOperand = loadInst->getPointerOperand();
+                        if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(ptrOperand)) {
+                            auto allocatedType = allocaInst->getAllocatedType();
+                            // 配列型のallocaの場合、最初の要素へのポインタを取得
+                            if (allocatedType->isArrayTy()) {
+                                arrPtr = builder->CreateGEP(
+                                    allocatedType, ptrOperand,
+                                    {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                     llvm::ConstantInt::get(ctx.getI32Type(), 0)},
+                                    "array_elem_ptr");
+                                // i8*にビットキャスト
+                                arrPtr =
+                                    builder->CreateBitCast(arrPtr, ctx.getPtrType(), "arr_cast");
+                            } else if (allocatedType->isPointerTy()) {
+                                // ポインタ型のallocaの場合、ロードした値（ポインタ）を使用
+                                // arrPtr = loadInst (既にロード済み)
+                            }
+                        }
+                    } else if (arrPtr->getType()->isPointerTy()) {
+                        // ポインタ型の場合、配列ポインタかチェック
+                        if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(arrPtr)) {
+                            auto allocatedType = allocaInst->getAllocatedType();
+                            if (allocatedType->isArrayTy()) {
+                                // 配列型のallocaの場合、最初の要素へのポインタを取得
+                                arrPtr = builder->CreateGEP(
+                                    allocatedType, arrPtr,
+                                    {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                     llvm::ConstantInt::get(ctx.getI32Type(), 0)},
+                                    "array_ptr");
+                            }
+                        }
+                        // i8*にキャスト
+                        if (arrPtr->getType() != ctx.getPtrType()) {
+                            arrPtr = builder->CreateBitCast(arrPtr, ctx.getPtrType(), "arr_cast");
+                        }
+                    } else if (arrPtr->getType()->isArrayTy()) {
+                        // 配列値の場合、allocaに格納してポインタを取得
+                        auto arrAlloca =
+                            builder->CreateAlloca(arrPtr->getType(), nullptr, "arr_tmp");
+                        builder->CreateStore(arrPtr, arrAlloca);
+                        // 最初の要素へのポインタを取得
+                        arrPtr = builder->CreateGEP(arrPtr->getType(), arrAlloca,
+                                                    {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                                     llvm::ConstantInt::get(ctx.getI32Type(), 0)},
+                                                    "array_ptr");
+                        arrPtr = builder->CreateBitCast(arrPtr, ctx.getPtrType(), "arr_cast");
+                    }
+                    args[0] = arrPtr;
+                }
+
+                // 2番目の引数（配列長）をi64に変換
+                if (args.size() >= 2) {
+                    auto lengthArg = args[1];
+                    if (lengthArg->getType() != ctx.getI64Type()) {
+                        if (lengthArg->getType()->isIntegerTy()) {
+                            // 整数型の場合、i64に拡張
+                            if (lengthArg->getType()->getIntegerBitWidth() < 64) {
+                                lengthArg =
+                                    builder->CreateSExt(lengthArg, ctx.getI64Type(), "length_i64");
+                            } else {
+                                lengthArg =
+                                    builder->CreateTrunc(lengthArg, ctx.getI64Type(), "length_i64");
+                            }
+                            args[1] = lengthArg;
+                        }
+                    }
+                }
+
+                // 関数ポインタ引数（3番目）も適切にキャスト
+                if (args.size() >= 3) {
+                    auto funcPtr = args[2];
+                    if (funcPtr->getType() != ctx.getPtrType()) {
+                        funcPtr = builder->CreateBitCast(funcPtr, ctx.getPtrType(), "func_cast");
+                        args[2] = funcPtr;
+                    }
+                }
+
+                // 関数を呼び出す
+                auto func = declareExternalFunction(funcName);
+                auto result = builder->CreateCall(func, args);
+
+                if (callData.destination) {
+                    auto destLocal = callData.destination->local;
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(result, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = result;
+                    }
+                }
+
+                if (callData.success != mir::INVALID_BLOCK) {
+                    builder->CreateBr(blocks[callData.success]);
+                }
+                break;
+            }
+
+            // ============================================================
+            // 固定配列比較呼び出し
+            // ============================================================
+            if (funcName == "cm_array_equal") {
+                // 引数: lhs, rhs, lhs_len, rhs_len, elem_size
+                // ランタイム関数: bool cm_array_equal(void* lhs, void* rhs, i64 lhs_len, i64
+                // rhs_len, i64 elem_size)
+
+                std::vector<llvm::Value*> args;
+                for (const auto& arg : callData.args) {
+                    args.push_back(convertOperand(*arg));
+                }
+
+                // lhsとrhsをポインタに変換
+                auto convertToPtr = [&](llvm::Value* val) -> llvm::Value* {
+                    if (val->getType()->isArrayTy()) {
+                        auto arrAlloca = builder->CreateAlloca(val->getType(), nullptr, "arr_tmp");
+                        builder->CreateStore(val, arrAlloca);
+                        return builder->CreateBitCast(arrAlloca, ctx.getPtrType(), "arr_ptr");
+                    } else if (!val->getType()->isPointerTy()) {
+                        return builder->CreateIntToPtr(val, ctx.getPtrType(), "arr_ptr");
+                    }
+                    return val;
+                };
+
+                llvm::Value* lhsPtr = convertToPtr(args[0]);
+                llvm::Value* rhsPtr = convertToPtr(args[1]);
+
+                // 残りの引数を整数型に変換
+                std::vector<llvm::Value*> callArgs;
+                callArgs.push_back(lhsPtr);
+                callArgs.push_back(rhsPtr);
+                for (size_t i = 2; i < args.size(); ++i) {
+                    auto arg = args[i];
+                    if (arg->getType() != ctx.getI64Type()) {
+                        if (arg->getType()->isIntegerTy()) {
+                            arg = builder->CreateSExt(arg, ctx.getI64Type(), "sext");
+                        }
+                    }
+                    callArgs.push_back(arg);
+                }
+
+                auto equalFunc = declareExternalFunction("cm_array_equal");
+                auto result = builder->CreateCall(equalFunc, callArgs, "array_eq_result");
+
+                if (callData.destination) {
+                    auto destLocal = callData.destination->local;
+                    // bool戻り値（i1）をメモリ格納用（i8）に変換
+                    llvm::Value* resultToStore = result;
+                    if (result->getType()->isIntegerTy(1)) {
+                        resultToStore = builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
+                    }
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(resultToStore, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = resultToStore;
+                    }
+                }
+
+                if (callData.success != mir::INVALID_BLOCK) {
+                    builder->CreateBr(blocks[callData.success]);
+                }
                 break;
             }
 
@@ -188,22 +469,23 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                             ctx.getI64Type(), methodIndex * ptrSize);
                                         auto funcPtrPtr = builder->CreateGEP(
                                             ctx.getI8Type(), vtablePtr, byteOffset, "func_ptr_ptr");
-                                        auto ptrPtrType =
-                                            llvm::PointerType::get(ctx.getPtrType(), 0);
-                                        auto funcPtrPtrCast = builder->CreateBitCast(
-                                            funcPtrPtr, ptrPtrType, "func_ptr_ptr_cast");
-                                        auto funcPtr = builder->CreateLoad(
-                                            ctx.getPtrType(), funcPtrPtrCast, "func_ptr");
+                                        // funcPtrPtrから関数ポインタをロード
+                                        llvm::Value* funcPtr = builder->CreateLoad(
+                                            ctx.getPtrType(), funcPtrPtr, "func_ptr");
 
                                         std::vector<llvm::Type*> paramTypes = {ctx.getPtrType()};
                                         auto funcType = llvm::FunctionType::get(ctx.getVoidType(),
                                                                                 paramTypes, false);
-                                        auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
-                                        auto funcPtrCast = builder->CreateBitCast(
-                                            funcPtr, funcPtrTypePtr, "func_ptr_cast");
+#if LLVM_VERSION_MAJOR < 15
+                                        // LLVM 14: typed
+                                        // pointerが必要なので関数ポインタ型にキャスト
+                                        auto funcPtrType = llvm::PointerType::get(funcType, 0);
+                                        funcPtr = builder->CreateBitCast(funcPtr, funcPtrType,
+                                                                         "func_ptr_cast");
+#endif
 
                                         std::vector<llvm::Value*> callArgs = {dataPtr};
-                                        builder->CreateCall(funcType, funcPtrCast, callArgs);
+                                        builder->CreateCall(funcType, funcPtr, callArgs);
                                     }
 
                                     if (callData.success != mir::INVALID_BLOCK) {
@@ -225,17 +507,136 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                              i < args.size() && i < funcType->getNumParams(); ++i) {
                                             auto expectedType = funcType->getParamType(i);
                                             auto actualType = args[i]->getType();
-                                            if (expectedType != actualType &&
-                                                expectedType->isPointerTy() &&
-                                                actualType->isPointerTy()) {
-                                                args[i] =
-                                                    builder->CreateBitCast(args[i], expectedType);
+                                            if (expectedType != actualType) {
+                                                if (expectedType->isPointerTy() &&
+                                                    actualType->isPointerTy()) {
+                                                    // ポインタ型同士: BitCast
+                                                    args[i] = builder->CreateBitCast(args[i],
+                                                                                     expectedType);
+                                                } else if (expectedType->isPointerTy() &&
+                                                           !actualType->isPointerTy()) {
+                                                    // プリミティブ型への借用self:
+                                                    // allocaを作成してポインタを渡す 例: int.get()
+                                                    // で int値をalloca経由でi8*として渡す
+                                                    auto alloca = builder->CreateAlloca(
+                                                        actualType, nullptr, "prim_self_tmp");
+                                                    builder->CreateStore(args[i], alloca);
+                                                    args[i] = alloca;
+                                                }
                                             }
                                         }
 
                                         auto result = builder->CreateCall(implFunc, args);
                                         if (callData.destination) {
-                                            locals[callData.destination->local] = result;
+                                            auto destLocal = callData.destination->local;
+                                            if (allocatedLocals.count(destLocal) > 0 &&
+                                                locals[destLocal]) {
+                                                builder->CreateStore(result, locals[destLocal]);
+                                            } else {
+                                                locals[destLocal] = result;
+                                            }
+                                        }
+                                    }
+
+                                    if (callData.success != mir::INVALID_BLOCK) {
+                                        builder->CreateBr(blocks[callData.success]);
+                                    }
+                                    break;
+                                }
+                            }
+                            // プリミティブ型への impl メソッド呼び出し (int.abs() 等)
+                            else if (local.type) {
+                                auto typeKind = local.type->kind;
+                                bool isPrimitive = (typeKind == hir::TypeKind::Int ||
+                                                    typeKind == hir::TypeKind::UInt ||
+                                                    typeKind == hir::TypeKind::Long ||
+                                                    typeKind == hir::TypeKind::ULong ||
+                                                    typeKind == hir::TypeKind::Short ||
+                                                    typeKind == hir::TypeKind::UShort ||
+                                                    typeKind == hir::TypeKind::Float ||
+                                                    typeKind == hir::TypeKind::Double ||
+                                                    typeKind == hir::TypeKind::Bool ||
+                                                    typeKind == hir::TypeKind::Char);
+
+                                if (isPrimitive) {
+                                    // プリミティブ型名を取得
+                                    std::string primTypeName;
+                                    switch (typeKind) {
+                                        case hir::TypeKind::Int:
+                                            primTypeName = "int";
+                                            break;
+                                        case hir::TypeKind::UInt:
+                                            primTypeName = "uint";
+                                            break;
+                                        case hir::TypeKind::Long:
+                                            primTypeName = "long";
+                                            break;
+                                        case hir::TypeKind::ULong:
+                                            primTypeName = "ulong";
+                                            break;
+                                        case hir::TypeKind::Short:
+                                            primTypeName = "short";
+                                            break;
+                                        case hir::TypeKind::UShort:
+                                            primTypeName = "ushort";
+                                            break;
+                                        case hir::TypeKind::Float:
+                                            primTypeName = "float";
+                                            break;
+                                        case hir::TypeKind::Double:
+                                            primTypeName = "double";
+                                            break;
+                                        case hir::TypeKind::Bool:
+                                            primTypeName = "bool";
+                                            break;
+                                        case hir::TypeKind::Char:
+                                            primTypeName = "char";
+                                            break;
+                                        default:
+                                            primTypeName = "int";
+                                            break;
+                                    }
+
+                                    // impl関数名を生成 (例: int__abs)
+                                    std::string implFuncName =
+                                        primTypeName + "__" + callData.method_name;
+                                    llvm::Function* implFunc = functions[implFuncName];
+                                    if (!implFunc) {
+                                        implFunc = declareExternalFunction(implFuncName);
+                                    }
+
+                                    if (implFunc) {
+                                        auto funcType = implFunc->getFunctionType();
+                                        // 引数の型変換
+                                        for (size_t i = 0;
+                                             i < args.size() && i < funcType->getNumParams(); ++i) {
+                                            auto expectedType = funcType->getParamType(i);
+                                            auto actualType = args[i]->getType();
+                                            if (expectedType != actualType) {
+                                                if (expectedType->isPointerTy() &&
+                                                    !actualType->isPointerTy()) {
+                                                    // プリミティブ値をポインタ化
+                                                    auto alloca = builder->CreateAlloca(
+                                                        actualType, nullptr, "prim_self_tmp");
+                                                    builder->CreateStore(args[i], alloca);
+                                                    args[i] = alloca;
+                                                } else if (expectedType->isPointerTy() &&
+                                                           actualType->isPointerTy()) {
+                                                    args[i] = builder->CreateBitCast(args[i],
+                                                                                     expectedType);
+                                                }
+                                            }
+                                        }
+
+                                        auto result = builder->CreateCall(implFunc, args);
+                                        if (callData.destination) {
+                                            auto destLocal = callData.destination->local;
+                                            if (allocatedLocals.count(destLocal) > 0 &&
+                                                locals[destLocal]) {
+                                                builder->CreateStore(result, locals[destLocal]);
+                                            } else {
+                                                locals[destLocal] = result;
+                                            }
                                         }
                                     }
 
@@ -253,7 +654,9 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // 間接呼び出しの場合は直接呼び出しの処理をスキップ
             llvm::Function* callee = nullptr;
             if (!isIndirectCall && !funcName.empty()) {
-                callee = functions[funcName];
+                // オーバーロード対応：引数の型から関数IDを生成
+                auto funcId = generateCallFunctionId(funcName, callData.args);
+                callee = functions[funcId];
                 if (!callee) {
                     callee = declareExternalFunction(funcName);
                 }
@@ -355,6 +758,14 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         if (expectedType->isPointerTy() && actualType->isPointerTy()) {
                             args[i] = builder->CreateBitCast(args[i], expectedType);
                         }
+                        // プリミティブ型への借用self: ポインタ化
+                        else if (expectedType->isPointerTy() && !actualType->isPointerTy()) {
+                            auto alloca =
+                                builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
+                            builder->CreateStore(args[i], alloca);
+                            // ポインタ型をexpectedType（ptr/i8*）に変換
+                            args[i] = builder->CreateBitCast(alloca, expectedType);
+                        }
                         // 整数型のサイズが異なる場合、変換
                         else if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
                             unsigned expectedBits = expectedType->getIntegerBitWidth();
@@ -387,11 +798,144 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                 auto result = builder->CreateCall(callee, args);
                 if (callData.destination) {
-                    locals[callData.destination->local] = result;
+                    auto destLocal = callData.destination->local;
+                    llvm::Value* resultToStore = result;
+
+                    // 格納先の型を取得
+                    llvm::Type* destType = nullptr;
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        if (auto alloca = llvm::dyn_cast<llvm::AllocaInst>(locals[destLocal])) {
+                            destType = alloca->getAllocatedType();
+                        }
+                    } else if (currentMIRFunction &&
+                               destLocal < currentMIRFunction->locals.size()) {
+                        auto& local = currentMIRFunction->locals[destLocal];
+                        if (local.type) {
+                            destType = convertType(local.type);
+                        }
+                    }
+
+                    // 型変換が必要な場合
+                    if (destType && result->getType() != destType) {
+                        // bool戻り値（i1）をメモリ格納用（i8）に変換
+                        if (result->getType()->isIntegerTy(1) && destType->isIntegerTy(8)) {
+                            resultToStore =
+                                builder->CreateZExt(result, ctx.getI8Type(), "bool_ext");
+                        }
+                        // 整数型間の変換
+                        else if (result->getType()->isIntegerTy() && destType->isIntegerTy()) {
+                            unsigned resultBits = result->getType()->getIntegerBitWidth();
+                            unsigned destBits = destType->getIntegerBitWidth();
+                            if (resultBits > destBits) {
+                                // 縮小変換 (例: i64 -> i32)
+                                resultToStore = builder->CreateTrunc(result, destType, "trunc");
+                            } else if (resultBits < destBits) {
+                                // 拡大変換 (例: i32 -> i64)
+                                resultToStore = builder->CreateZExt(result, destType, "zext");
+                            }
+                        }
+                        // ポインタから構造体への変換（スライスget等）
+                        else if (result->getType()->isPointerTy() && destType->isStructTy()) {
+                            // ポインタから構造体をロード
+                            resultToStore = builder->CreateLoad(destType, result, "struct_load");
+                        }
+                    }
+
+                    if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                        builder->CreateStore(resultToStore, locals[destLocal]);
+                    } else {
+                        locals[destLocal] = resultToStore;
+                    }
                 }
             }
             // 間接呼び出し（関数ポインタ変数経由）
             else if (isIndirectCall && funcPtrValue) {
+                // クロージャかどうかをチェック
+                bool isClosure = false;
+                std::string closureFuncName;
+                std::vector<mir::LocalId> capturedLocals;
+
+                if (callData.func->kind == mir::MirOperand::Copy ||
+                    callData.func->kind == mir::MirOperand::Move) {
+                    auto& place = std::get<mir::MirPlace>(callData.func->data);
+                    if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
+                        const auto& localDecl = currentMIRFunction->locals[place.local];
+                        if (localDecl.is_closure && !localDecl.captured_locals.empty()) {
+                            isClosure = true;
+                            closureFuncName = localDecl.closure_func_name;
+                            capturedLocals = localDecl.captured_locals;
+                        }
+                    }
+                }
+
+                if (isClosure && !closureFuncName.empty()) {
+                    // クロージャ: 直接関数呼び出しに変換し、キャプチャ引数を追加
+                    llvm::Function* closureFunc = functions[closureFuncName];
+                    if (!closureFunc) {
+                        closureFunc = declareExternalFunction(closureFuncName);
+                    }
+
+                    if (closureFunc) {
+                        // キャプチャ引数を先頭に追加
+                        std::vector<llvm::Value*> closureArgs;
+                        for (mir::LocalId capLocal : capturedLocals) {
+                            llvm::Value* capVal = locals[capLocal];
+                            if (capVal) {
+                                // allocaの場合はload
+                                if (llvm::isa<llvm::AllocaInst>(capVal)) {
+                                    auto allocaInst = llvm::cast<llvm::AllocaInst>(capVal);
+                                    capVal = builder->CreateLoad(allocaInst->getAllocatedType(),
+                                                                 capVal, "cap_load");
+                                }
+                                closureArgs.push_back(capVal);
+                            }
+                        }
+                        // 通常の引数を追加
+                        for (auto& arg : args) {
+                            closureArgs.push_back(arg);
+                        }
+
+                        // 関数型を取得
+                        auto funcType = closureFunc->getFunctionType();
+
+                        // 引数の型変換
+                        for (size_t i = 0; i < closureArgs.size() && i < funcType->getNumParams();
+                             ++i) {
+                            auto expectedType = funcType->getParamType(i);
+                            auto actualType = closureArgs[i]->getType();
+                            if (expectedType != actualType) {
+                                if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
+                                    unsigned expectedBits = expectedType->getIntegerBitWidth();
+                                    unsigned actualBits = actualType->getIntegerBitWidth();
+                                    if (expectedBits > actualBits) {
+                                        closureArgs[i] = builder->CreateSExt(closureArgs[i],
+                                                                             expectedType, "sext");
+                                    } else if (expectedBits < actualBits) {
+                                        closureArgs[i] = builder->CreateTrunc(
+                                            closureArgs[i], expectedType, "trunc");
+                                    }
+                                }
+                            }
+                        }
+
+                        auto result = builder->CreateCall(closureFunc, closureArgs);
+                        if (callData.destination) {
+                            auto destLocal = callData.destination->local;
+                            if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                                builder->CreateStore(result, locals[destLocal]);
+                            } else {
+                                locals[destLocal] = result;
+                            }
+                        }
+
+                        if (callData.success != mir::INVALID_BLOCK) {
+                            builder->CreateBr(blocks[callData.success]);
+                        }
+                        break;
+                    }
+                }
+
+                // 通常の間接呼び出し
                 // 関数ポインタ変数の型情報から関数型を取得
                 hir::TypePtr funcPtrType = nullptr;
                 if (callData.func->kind == mir::MirOperand::Copy ||
@@ -400,6 +944,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
                         funcPtrType = currentMIRFunction->locals[place.local].type;
                     }
+                }
+
+                if (funcPtrType && funcPtrType->kind == hir::TypeKind::Pointer &&
+                    funcPtrType->element_type &&
+                    funcPtrType->element_type->kind == hir::TypeKind::Function) {
+                    funcPtrType = funcPtrType->element_type;
                 }
 
                 if (funcPtrType && funcPtrType->kind == hir::TypeKind::Function) {
@@ -414,20 +964,38 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                     auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
 
-                    // 関数ポインタを適切な型にキャスト
-                    auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
-                    auto funcPtrCast =
-                        builder->CreateBitCast(funcPtrValue, funcPtrTypePtr, "func_ptr_cast");
+                    // funcPtrValueの型を確認して適切に変換
+                    llvm::Value* funcPtr = funcPtrValue;
+                    if (funcPtrValue) {
+                        // ポインタ型でない場合（整数値など）は変換が必要
+                        if (!funcPtrValue->getType()->isPointerTy()) {
+                            if (funcPtrValue->getType()->isIntegerTy()) {
+                                // 整数値を関数ポインタ型に変換
+                                funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(),
+                                                                  "func_ptr_from_int");
+                            } else {
+                                // その他の型の場合もポインタにキャスト
+                                funcPtr = builder->CreateBitCast(funcPtrValue, ctx.getPtrType(),
+                                                                 "func_ptr_cast");
+                            }
+                        }
+                        // すでにポインタ型の場合はそのまま使用
+                    }
 
                     // 間接呼び出し（void戻り値の場合は名前を付けない）
                     llvm::Value* result = nullptr;
                     if (retType->isVoidTy()) {
-                        result = builder->CreateCall(funcType, funcPtrCast, args);
+                        result = builder->CreateCall(funcType, funcPtr, args);
                     } else {
-                        result = builder->CreateCall(funcType, funcPtrCast, args, "indirect_call");
+                        result = builder->CreateCall(funcType, funcPtr, args, "indirect_call");
                     }
                     if (callData.destination && result && !retType->isVoidTy()) {
-                        locals[callData.destination->local] = result;
+                        auto destLocal = callData.destination->local;
+                        if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                            builder->CreateStore(result, locals[destLocal]);
+                        } else {
+                            locals[destLocal] = result;
+                        }
                     }
                 } else {
                     // 型情報が取得できない場合のフォールバック
@@ -437,19 +1005,58 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         paramTypes.push_back(arg->getType());
                     }
                     auto funcType = llvm::FunctionType::get(ctx.getI32Type(), paramTypes, false);
-                    auto funcPtrTypePtr = llvm::PointerType::get(funcType, 0);
-                    auto funcPtrCast =
-                        builder->CreateBitCast(funcPtrValue, funcPtrTypePtr, "func_ptr_cast");
 
-                    auto result = builder->CreateCall(funcType, funcPtrCast, args, "indirect_call");
+                    // funcPtrValueが整数型の場合、関数ポインタ型にキャストする
+                    llvm::Value* funcPtr = funcPtrValue;
+                    if (funcPtrValue->getType()->isIntegerTy()) {
+                        // 整数値を関数ポインタ型に変換
+                        funcPtr = builder->CreateIntToPtr(funcPtrValue, ctx.getPtrType(),
+                                                          "func_ptr_cast");
+                    }
+
+                    auto result = builder->CreateCall(funcType, funcPtr, args, "indirect_call");
                     if (callData.destination) {
-                        locals[callData.destination->local] = result;
+                        auto destLocal = callData.destination->local;
+                        if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                            builder->CreateStore(result, locals[destLocal]);
+                        } else {
+                            locals[destLocal] = result;
+                        }
                     }
                 }
             }
 
-            if (callData.success != mir::INVALID_BLOCK) {
+            if (callData.success != mir::INVALID_BLOCK && blocks.count(callData.success) > 0) {
                 builder->CreateBr(blocks[callData.success]);
+            } else {
+                // success == INVALID_BLOCK または ブロックがDCEで削除された場合
+                // ターミネータがないとLLVMがハングするため、適切なターミネータを生成
+                if (currentMIRFunction &&
+                    currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
+                    auto& returnLocal =
+                        currentMIRFunction->locals[currentMIRFunction->return_local];
+                    if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
+                        builder->CreateRetVoid();
+                    } else if (currentMIRFunction->name == "main") {
+                        // main関数はi32 0を返す
+                        builder->CreateRet(llvm::ConstantInt::get(ctx.getI32Type(), 0));
+                    } else {
+                        // 他の関数: ローカル変数から戻り値を取得
+                        auto retVal = locals[currentMIRFunction->return_local];
+                        if (retVal) {
+                            if (llvm::isa<llvm::AllocaInst>(retVal)) {
+                                auto allocaInst = llvm::cast<llvm::AllocaInst>(retVal);
+                                retVal = builder->CreateLoad(allocaInst->getAllocatedType(), retVal,
+                                                             "retval");
+                            }
+                            builder->CreateRet(retVal);
+                        } else {
+                            builder->CreateUnreachable();
+                        }
+                    }
+                } else {
+                    builder->CreateUnreachable();
+                }
             }
             break;
         }

@@ -1,0 +1,21 @@
+=== Custom Allocator Swap Test ===
+value 42: ok
+value 100: ok
+value -7: ok
+
+--- Direct usage test ---
+multiple allocs: ok
+Starting dealloc(raw1)...
+Finished dealloc(raw1)
+Starting dealloc(raw2)...
+Finished dealloc(raw2)
+
+--- Reallocate test ---
+Check point A
+Check point B
+Check point C
+reallocate: ok
+Starting dealloc(raw4)...
+Finished dealloc(raw4)
+
+Custom allocator test completed!

@@ -1,0 +1,40 @@
+import std::io::println;
+// ポインタ比較テスト
+
+int main() {
+    int x = 42;
+    int y = 100;
+    
+    // 同じアドレスを指すポインタ
+    int* p1 = &x;
+    int* p2 = &x;
+    
+    bool eq1 = (p1 == p2);
+    println("p1 == p2: {eq1}");
+    
+    bool ne1 = (p1 != p2);
+    println("p1 != p2: {ne1}");
+    
+    // 異なるアドレスを指すポインタ
+    int* p3 = &y;
+    
+    bool eq2 = (p1 == p3);
+    println("p1 == p3: {eq2}");
+    
+    bool ne2 = (p1 != p3);
+    println("p1 != p3: {ne2}");
+    
+    // 配列要素へのポインタ比較
+    int[3] arr = [10, 20, 30];
+    int* pa = &arr[0];
+    int* pb = &arr[0];
+    int* pc = &arr[1];
+    
+    bool eq3 = (pa == pb);
+    println("pa == pb: {eq3}");
+    
+    bool ne3 = (pa != pc);
+    println("pa != pc: {ne3}");
+    
+    return 0;
+}

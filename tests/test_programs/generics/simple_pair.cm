@@ -1,3 +1,4 @@
+import std::io::println;
 // シンプルな複数型パラメータテスト
 
 struct Pair<T, U> {
@@ -14,7 +15,7 @@ struct Pair<T, U> {
 
 int main() {
     Pair<int, int> p = make_pair(1, 2);
-    println("{}", p.first);
-    println("{}", p.second);
+    println("{p.first}");
+    println("{p.second}");
     return 0;
 }

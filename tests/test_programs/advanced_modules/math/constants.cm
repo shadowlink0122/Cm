@@ -1,0 +1,12 @@
+// constants.cm - 数学定数（内部ファイル）
+// module文なし = 内部実装ファイル
+
+const float PI = 3.14159265359;
+const float E = 2.71828182846;
+const float GOLDEN_RATIO = 1.61803398875;  // 公開しない
+
+export {
+    PI,
+    E
+    // GOLDEN_RATIO は公開しない
+}

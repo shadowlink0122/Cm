@@ -1,0 +1,30 @@
+import std::io::println;
+// test_import_namespace.cm - 名前空間アクセスの統合テスト
+
+// 1. モジュール全体インポート（名前空間アクセス用）
+import ./selective_import/math;
+
+// 2. エイリアスインポート
+import ./alias_import/very_long_module_name as m;
+
+// 3. 選択的インポート（直接呼び出し用）
+import ./nested_namespace/utils::{double_value, triple_value};
+
+int main() {
+    // 1. 名前空間アクセス（module::func形式）
+    int result1 = math::add(10, 20);
+    println("math::add(10,20) = {result1}");
+    
+    // 2. エイリアス経由のアクセス
+    int result2 = m::calculate(21);
+    println("m::calculate(21) = {result2}");
+    
+    // 3. 直接呼び出し
+    int x = 5;
+    int doubled = double_value(x);
+    int tripled = triple_value(x);
+    println("double_value(5) = {doubled}");
+    println("triple_value(5) = {tripled}");
+    
+    return 0;
+}

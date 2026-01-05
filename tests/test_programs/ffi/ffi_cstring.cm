@@ -1,0 +1,20 @@
+// FFI with cstring type test
+use libc {
+    int puts(cstring s);
+    usize strlen(cstring s);
+}
+
+int main() {
+    cstring msg = "Hello, FFI!";
+    puts(msg);
+    
+    usize len = strlen(msg);
+    
+    // "Hello, FFI!" is 11 characters
+    if (len == 11) {
+        return 0;
+    }
+    return 1;
+}
+// EXPECT: 0
+// EXPECT_OUTPUT: Hello, FFI!

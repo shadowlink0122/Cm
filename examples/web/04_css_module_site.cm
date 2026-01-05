@@ -1,0 +1,50 @@
+#[target(js)]
+import std::web::{set_html, set_css};
+
+import ./css_theme::{
+    BodyStyle,
+    RootStyle,
+    Palette,
+    BadgeStyle,
+    ButtonHover,
+    ButtonStyle,
+    HeroStyle,
+    make_body_style,
+    make_root_style,
+    make_palette,
+    make_badge_style,
+    make_button_style,
+    make_hero_style
+};
+
+int main() {
+    Palette pal = make_palette();
+    BodyStyle body = make_body_style(pal);
+    RootStyle root = make_root_style();
+    BadgeStyle badge = make_badge_style(pal);
+    ButtonStyle button = make_button_style(pal);
+    HeroStyle hero = make_hero_style(pal, badge);
+
+    string body_css = body.css();  // 展開される
+    string root_css = root.css();  // 展開される
+    string hero_css = hero.css();  // 展開される
+    string button_css = button.css();  // 展開される
+
+    string css =`
+        body{${body_css}}
+        #cm-root{${root_css}}
+        .hero{${hero_css}}
+        .cta{${button_css}}`;
+
+    string html =
+        `<div class='hero'>
+            <badge-tag>Cm CSS</badge-tag>
+            <h1>Module-based CSS</h1>
+            <p>CSS構造体を分割して、htmlへ文字列で埋め込みます。</p>
+            <button class='cta'>Launch</button>
+        </div>`;
+
+    set_css(css);
+    set_html(html);
+    return 0;
+}

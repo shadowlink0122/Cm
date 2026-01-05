@@ -1,0 +1,109 @@
+// 動的配列（スライス）の包括的テスト
+// 様々な型と使用パターンをテスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Container {
+    int[] values;
+    string name;
+}
+
+int main() {
+    println("=== Slice Comprehensive Test ===");
+    
+    // 1. プリミティブ型スライス
+    println("\n--- Primitive Types ---");
+    
+    int[] ints = [1, 2, 3, 4, 5];
+    println("int[]: {ints.len()} elements");
+    println("ints[0] = {ints[0]}, ints[4] = {ints[4]}");
+    
+    float[] floats = [1.5, 2.5, 3.5];
+    println("float[]: {floats.len()} elements");
+    
+    bool[] bools = [true, false, true];
+    println("bool[]: {bools.len()} elements");
+    
+    char[] chars = ['H', 'e', 'l', 'l', 'o'];
+    println("char[]: {chars.len()} elements");
+    
+    string[] strings = ["Hello", "World", "Test"];
+    println("string[]: {strings.len()} elements");
+    println("strings[0] = {strings[0]}");
+    
+    // 2. 構造体スライス
+    println("\n--- Struct Slice ---");
+    
+    Point[] points = [Point{x: 1, y: 2}, Point{x: 3, y: 4}];
+    println("Point[]: {points.len()} elements");
+    
+    Point p0 = points[0];
+    println("points[0].x = {p0.x}, points[0].y = {p0.y}");
+    
+    points.push(Point{x: 5, y: 6});
+    println("After push: {points.len()} elements");
+    
+    Point p2 = points[2];
+    println("points[2].x = {p2.x}");
+    
+    // 3. 構造体メンバとしてのスライス
+    println("\n--- Slice as Struct Member ---");
+    
+    Container c;
+    c.name = "container1";
+    // 構造体メンバーのスライスを初期化
+    c.values.push(100);
+    c.values.push(200);
+    c.values.push(300);
+    
+    println("c.name = {c.name}");
+    int c_len = c.values.len();
+    println("c.values.len() = {c_len}");
+    int c_v0 = c.values[0];
+    int c_v1 = c.values[1];
+    int c_v2 = c.values[2];
+    println("c.values[0] = {c_v0}");
+    println("c.values[1] = {c_v1}");
+    println("c.values[2] = {c_v2}");
+    
+    // 4. スライスメソッド
+    println("\n--- Slice Methods ---");
+    
+    int[] arr;
+    println("Empty: len={arr.len()}, cap={arr.cap()}");
+    
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
+    println("After push x3: len={arr.len()}");
+    
+    int popped = arr.pop();
+    println("Popped: {popped}, len={arr.len()}");
+    
+    arr.remove(0);
+    println("After remove(0): len={arr.len()}, arr[0]={arr[0]}");
+    
+    arr.push(40);
+    arr.push(50);
+    println("After push x2: len={arr.len()}");
+    
+    arr.clear();
+    println("After clear: len={arr.len()}");
+    
+    // 5. 配列リテラル初期化
+    println("\n--- Array Literal Init ---");
+    
+    int[] nums = [10, 20, 30, 40, 50];
+    println("nums initialized with 5 elements");
+    println("nums[0] = {nums[0]}");
+    println("nums[1] = {nums[1]}");
+    println("nums[2] = {nums[2]}");
+    println("nums[3] = {nums[3]}");
+    println("nums[4] = {nums[4]}");
+    
+    println("\n=== All Tests Passed ===");
+    return 0;
+}

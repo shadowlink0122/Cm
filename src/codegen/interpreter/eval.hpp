@@ -95,13 +95,71 @@ class Evaluator {
                 // ポインタのデリファレンス
                 if (result.type() == typeid(PointerValue)) {
                     auto& ptr = std::any_cast<PointerValue&>(result);
+
+                    // 外部メモリへのポインタの場合
+                    if (ptr.is_external()) {
+                        // 型に応じて外部メモリから値を読み取る
+                        if (ptr.element_type) {
+                            switch (ptr.element_type->kind) {
+                                case hir::TypeKind::Int:
+                                    result = Value(static_cast<int64_t>(
+                                        *reinterpret_cast<int32_t*>(ptr.raw_ptr)));
+                                    break;
+                                case hir::TypeKind::Long:
+                                    result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Float:
+                                    result = Value(static_cast<double>(
+                                        *reinterpret_cast<float*>(ptr.raw_ptr)));
+                                    break;
+                                case hir::TypeKind::Double:
+                                    result = Value(*reinterpret_cast<double*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    result = Value(*reinterpret_cast<bool*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Char:
+                                    result = Value(*reinterpret_cast<char*>(ptr.raw_ptr));
+                                    break;
+                                case hir::TypeKind::Struct: {
+                                    // 構造体の場合、PointerValueを保持して後続のフィールドアクセスで処理
+                                    // resultをPointerValueのまま保持
+                                    // 次のField projectionで処理される
+                                    break;
+                                }
+                                default:
+                                    // デフォルトはint64_t
+                                    result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
+                                    break;
+                            }
+                        } else {
+                            // 型情報がない場合はint64_tとして読む
+                            result = Value(*reinterpret_cast<int64_t*>(ptr.raw_ptr));
+                        }
+                        continue;
+                    }
+
                     // ターゲットローカル変数から値を取得
-                    auto target_it = ctx.locals.find(ptr.target_local);
-                    if (target_it != ctx.locals.end()) {
+                    // internal_val_ptrがあればそれを使用（コンテキスト跨ぎ対応）
+                    Value* target_value = nullptr;
+                    if (ptr.internal_val_ptr) {
+                        target_value = ptr.internal_val_ptr;
+                    } else {
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end()) {
+                            target_value = &target_it->second;
+                        } else if (ptr.is_external()) {
+                            // is_external() checks raw_ptr, handled above loop logic?
+                            // No, loop continues if is_external is true at start.
+                            // So here we only handle local lookup failure.
+                        }
+                    }
+
+                    if (target_value) {
                         // 配列要素への参照の場合
                         if (ptr.array_index.has_value()) {
-                            if (target_it->second.type() == typeid(ArrayValue)) {
-                                auto& arr = std::any_cast<ArrayValue&>(target_it->second);
+                            if (target_value->type() == typeid(ArrayValue)) {
+                                auto& arr = std::any_cast<ArrayValue&>(*target_value);
                                 int64_t idx = ptr.array_index.value();
                                 if (idx >= 0 && static_cast<size_t>(idx) < arr.elements.size()) {
                                     result = arr.elements[idx];
@@ -111,8 +169,23 @@ class Evaluator {
                             } else {
                                 return Value{};
                             }
+                        }
+                        // 構造体フィールドへの参照の場合
+                        else if (ptr.field_index.has_value()) {
+                            if (target_value->type() == typeid(StructValue)) {
+                                auto& sv = std::any_cast<StructValue&>(*target_value);
+                                auto field_it =
+                                    sv.fields.find(static_cast<FieldId>(ptr.field_index.value()));
+                                if (field_it != sv.fields.end()) {
+                                    result = field_it->second;
+                                } else {
+                                    return Value{};
+                                }
+                            } else {
+                                return Value{};
+                            }
                         } else {
-                            result = target_it->second;
+                            result = *target_value;
                         }
                     } else {
                         return Value{};
@@ -155,6 +228,19 @@ class Evaluator {
                 if (proj.kind == ProjectionKind::Field) {
                     if (current->type() == typeid(StructValue)) {
                         auto& sv = std::any_cast<StructValue&>(*current);
+                        // フィールドが存在しない場合は空のValueを作成
+                        if (sv.fields.find(proj.field_id) == sv.fields.end()) {
+                            // 次のプロジェクションの種類で初期値を決定
+                            if (i + 1 < place.projections.size()) {
+                                if (place.projections[i + 1].kind == ProjectionKind::Index) {
+                                    sv.fields[proj.field_id] = Value(ArrayValue{});
+                                } else {
+                                    sv.fields[proj.field_id] = Value(StructValue{});
+                                }
+                            } else {
+                                sv.fields[proj.field_id] = Value(StructValue{});
+                            }
+                        }
                         current = &sv.fields[proj.field_id];
                     }
                 } else if (proj.kind == ProjectionKind::Index) {
@@ -171,6 +257,18 @@ class Evaluator {
                             if (static_cast<size_t>(index) >= arr.elements.size()) {
                                 arr.elements.resize(index + 1);
                             }
+                            // 配列要素が空の場合、次のプロジェクションの種類で初期値を決定
+                            if (!arr.elements[index].has_value() ||
+                                arr.elements[index].type() == typeid(void)) {
+                                if (i + 1 < place.projections.size()) {
+                                    if (place.projections[i + 1].kind == ProjectionKind::Field) {
+                                        arr.elements[index] = Value(StructValue{});
+                                    } else if (place.projections[i + 1].kind ==
+                                               ProjectionKind::Index) {
+                                        arr.elements[index] = Value(ArrayValue{});
+                                    }
+                                }
+                            }
                             current = &arr.elements[index];
                         }
                     }
@@ -178,9 +276,14 @@ class Evaluator {
                     // ポインタのデリファレンス - 参照先に移動
                     if (current->type() == typeid(PointerValue)) {
                         auto& ptr = std::any_cast<PointerValue&>(*current);
-                        auto target_it = ctx.locals.find(ptr.target_local);
-                        if (target_it != ctx.locals.end()) {
-                            current = &target_it->second;
+
+                        if (ptr.internal_val_ptr) {
+                            current = ptr.internal_val_ptr;
+                        } else {
+                            auto target_it = ctx.locals.find(ptr.target_local);
+                            if (target_it != ctx.locals.end()) {
+                                current = &target_it->second;
+                            }
                         }
                     }
                 }
@@ -215,6 +318,64 @@ class Evaluator {
                 // ポインタのデリファレンスへの格納
                 if (current->type() == typeid(PointerValue)) {
                     auto& ptr = std::any_cast<PointerValue&>(*current);
+
+                    // 外部メモリへのポインタの場合
+                    if (ptr.is_external()) {
+                        // 型に応じて外部メモリに値を書き込む
+                        if (ptr.element_type) {
+                            switch (ptr.element_type->kind) {
+                                case hir::TypeKind::Int:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int32_t*>(ptr.raw_ptr) =
+                                            static_cast<int32_t>(std::any_cast<int64_t>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Long:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int64_t*>(ptr.raw_ptr) =
+                                            std::any_cast<int64_t>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Float:
+                                    if (value.type() == typeid(double)) {
+                                        *reinterpret_cast<float*>(ptr.raw_ptr) =
+                                            static_cast<float>(std::any_cast<double>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Double:
+                                    if (value.type() == typeid(double)) {
+                                        *reinterpret_cast<double*>(ptr.raw_ptr) =
+                                            std::any_cast<double>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    if (value.type() == typeid(bool)) {
+                                        *reinterpret_cast<bool*>(ptr.raw_ptr) =
+                                            std::any_cast<bool>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Char:
+                                    if (value.type() == typeid(char)) {
+                                        *reinterpret_cast<char*>(ptr.raw_ptr) =
+                                            std::any_cast<char>(value);
+                                    }
+                                    break;
+                                default:
+                                    // デフォルトはint64_t
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int64_t*>(ptr.raw_ptr) =
+                                            std::any_cast<int64_t>(value);
+                                    }
+                                    break;
+                            }
+                        } else if (value.type() == typeid(int64_t)) {
+                            // 型情報がない場合はint64_tとして書く
+                            *reinterpret_cast<int64_t*>(ptr.raw_ptr) =
+                                std::any_cast<int64_t>(value);
+                        }
+                        return;
+                    }
+
                     // 配列要素への参照の場合
                     if (ptr.array_index.has_value()) {
                         auto target_it = ctx.locals.find(ptr.target_local);
@@ -228,6 +389,15 @@ class Evaluator {
                                 }
                                 arr.elements[idx] = value;
                             }
+                        }
+                    }
+                    // 構造体フィールドへの参照の場合
+                    else if (ptr.field_index.has_value()) {
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end() &&
+                            target_it->second.type() == typeid(StructValue)) {
+                            auto& sv = std::any_cast<StructValue&>(target_it->second);
+                            sv.fields[static_cast<FieldId>(ptr.field_index.value())] = value;
                         }
                     } else {
                         ctx.locals[ptr.target_local] = value;
@@ -385,6 +555,135 @@ class Evaluator {
             }
         }
 
+        // ポインタ比較
+        if (lhs.type() == typeid(PointerValue) && rhs.type() == typeid(PointerValue)) {
+            const auto& l = std::any_cast<const PointerValue&>(lhs);
+            const auto& r = std::any_cast<const PointerValue&>(rhs);
+
+            // 外部ポインタの場合はraw_ptrも比較
+            bool equal;
+            if (l.is_external() || r.is_external()) {
+                equal = (l.raw_ptr == r.raw_ptr);
+            } else {
+                // 同じローカル変数を指し、配列インデックス/フィールドインデックスも同じ場合は等しい
+                equal = (l.target_local == r.target_local) && (l.array_index == r.array_index) &&
+                        (l.field_index == r.field_index);
+            }
+
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(equal);
+                case MirBinaryOp::Ne:
+                    return Value(!equal);
+                default:
+                    break;
+            }
+        }
+
+        // ポインタとnull（空のValue）の比較
+        if (lhs.type() == typeid(PointerValue) && !rhs.has_value()) {
+            const auto& ptr = std::any_cast<const PointerValue&>(lhs);
+            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                             : (ptr.target_local == static_cast<LocalId>(-1));
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(is_null);
+                case MirBinaryOp::Ne:
+                    return Value(!is_null);
+                default:
+                    break;
+            }
+        }
+
+        // null（空のValue）とポインタの比較
+        if (!lhs.has_value() && rhs.type() == typeid(PointerValue)) {
+            const auto& ptr = std::any_cast<const PointerValue&>(rhs);
+            bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                             : (ptr.target_local == static_cast<LocalId>(-1));
+            switch (op) {
+                case MirBinaryOp::Eq:
+                    return Value(is_null);
+                case MirBinaryOp::Ne:
+                    return Value(!is_null);
+                default:
+                    break;
+            }
+        }
+
+        // ポインタとnull（int64_t 0）の比較
+        if (lhs.type() == typeid(PointerValue) && rhs.type() == typeid(int64_t)) {
+            int64_t rhs_val = std::any_cast<int64_t>(rhs);
+            if (rhs_val == 0) {  // nullとの比較
+                const auto& ptr = std::any_cast<const PointerValue&>(lhs);
+                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                                 : (ptr.target_local == static_cast<LocalId>(-1));
+                switch (op) {
+                    case MirBinaryOp::Eq:
+                        return Value(is_null);
+                    case MirBinaryOp::Ne:
+                        return Value(!is_null);
+                    default:
+                        break;
+                }
+            }
+        }
+
+        // null（int64_t 0）とポインタの比較
+        if (lhs.type() == typeid(int64_t) && rhs.type() == typeid(PointerValue)) {
+            int64_t lhs_val = std::any_cast<int64_t>(lhs);
+            if (lhs_val == 0) {  // nullとの比較
+                const auto& ptr = std::any_cast<const PointerValue&>(rhs);
+                bool is_null = ptr.is_external() ? (ptr.raw_ptr == nullptr)
+                                                 : (ptr.target_local == static_cast<LocalId>(-1));
+                switch (op) {
+                    case MirBinaryOp::Eq:
+                        return Value(is_null);
+                    case MirBinaryOp::Ne:
+                        return Value(!is_null);
+                    default:
+                        break;
+                }
+            }
+        }
+
+        // ポインタ演算: pointer + int
+        if (lhs.type() == typeid(PointerValue) && rhs.type() == typeid(int64_t)) {
+            PointerValue ptr = std::any_cast<PointerValue>(lhs);
+            int64_t offset = std::any_cast<int64_t>(rhs);
+
+            if (op == MirBinaryOp::Add) {
+                if (ptr.array_index.has_value()) {
+                    ptr.array_index = ptr.array_index.value() + offset;
+                } else {
+                    ptr.array_index = offset;
+                }
+                return Value(ptr);
+            }
+            if (op == MirBinaryOp::Sub) {
+                if (ptr.array_index.has_value()) {
+                    ptr.array_index = ptr.array_index.value() - offset;
+                } else {
+                    ptr.array_index = -offset;
+                }
+                return Value(ptr);
+            }
+        }
+
+        // ポインタ演算: int + pointer
+        if (lhs.type() == typeid(int64_t) && rhs.type() == typeid(PointerValue)) {
+            int64_t offset = std::any_cast<int64_t>(lhs);
+            PointerValue ptr = std::any_cast<PointerValue>(rhs);
+
+            if (op == MirBinaryOp::Add) {
+                if (ptr.array_index.has_value()) {
+                    ptr.array_index = ptr.array_index.value() + offset;
+                } else {
+                    ptr.array_index = offset;
+                }
+                return Value(ptr);
+            }
+        }
+
         return Value{};
     }
 
@@ -449,7 +748,7 @@ class Evaluator {
                 PointerValue ptr;
                 ptr.target_local = data.place.local;
 
-                // プロジェクションがある場合（配列要素への参照など）
+                // プロジェクションがある場合（配列要素や構造体フィールドへの参照など）
                 if (!data.place.projections.empty()) {
                     for (const auto& proj : data.place.projections) {
                         if (proj.kind == ProjectionKind::Index) {
@@ -462,11 +761,106 @@ class Evaluator {
                                     ptr.array_index = std::any_cast<int>(idx_it->second);
                                 }
                             }
+                        } else if (proj.kind == ProjectionKind::Field) {
+                            // フィールドインデックスを設定
+                            ptr.field_index = proj.field_id;
                         }
                     }
                 }
 
+                // 内部参照用ポインタをセット
+                auto it = ctx.locals.find(data.place.local);
+                if (it != ctx.locals.end()) {
+                    ptr.internal_val_ptr = &it->second;
+                } else {
+                }
+
                 return Value(ptr);
+            }
+            case MirRvalue::Aggregate: {
+                // 集約型（配列・構造体）の構築
+                auto& data = std::get<MirRvalue::AggregateData>(rvalue.data);
+
+                if (data.kind.type == AggregateKind::Type::Array) {
+                    // 配列リテラル
+                    ArrayValue arr;
+                    arr.element_type = data.kind.ty ? data.kind.ty->element_type : nullptr;
+                    for (const auto& op : data.operands) {
+                        if (op) {
+                            arr.elements.push_back(evaluate_operand(ctx, *op));
+                        }
+                    }
+                    return Value(arr);
+                } else if (data.kind.type == AggregateKind::Type::Struct) {
+                    // 構造体リテラル
+                    StructValue sv;
+                    sv.type_name = data.kind.name;
+                    // 構造体フィールドはFieldIdで管理されている想定
+                    // operandsはフィールド順に並んでいる
+                    for (size_t i = 0; i < data.operands.size(); ++i) {
+                        if (data.operands[i]) {
+                            sv.fields[static_cast<FieldId>(i)] =
+                                evaluate_operand(ctx, *data.operands[i]);
+                        }
+                    }
+                    return Value(sv);
+                }
+                return Value{};
+            }
+            case MirRvalue::Cast: {
+                // 型キャスト
+                auto& data = std::get<MirRvalue::CastData>(rvalue.data);
+                Value operand = data.operand ? evaluate_operand(ctx, *data.operand) : Value{};
+                // キャスト処理
+                if (data.target_type) {
+                    if (data.target_type->kind == hir::TypeKind::Int ||
+                        data.target_type->kind == hir::TypeKind::Long) {
+                        if (operand.type() == typeid(double)) {
+                            return Value(static_cast<int64_t>(std::any_cast<double>(operand)));
+                        } else if (operand.type() == typeid(bool)) {
+                            return Value(
+                                static_cast<int64_t>(std::any_cast<bool>(operand) ? 1 : 0));
+                        } else if (operand.type() == typeid(char)) {
+                            return Value(static_cast<int64_t>(std::any_cast<char>(operand)));
+                        } else if (operand.type() == typeid(void*)) {
+                            // ポインタから整数へのキャスト
+                            return Value(reinterpret_cast<int64_t>(std::any_cast<void*>(operand)));
+                        }
+                    } else if (data.target_type->kind == hir::TypeKind::Double ||
+                               data.target_type->kind == hir::TypeKind::Float) {
+                        if (operand.type() == typeid(int64_t)) {
+                            return Value(static_cast<double>(std::any_cast<int64_t>(operand)));
+                        }
+                    } else if (data.target_type->kind == hir::TypeKind::Bool) {
+                        if (operand.type() == typeid(int64_t)) {
+                            return Value(std::any_cast<int64_t>(operand) != 0);
+                        }
+                    } else if (data.target_type->kind == hir::TypeKind::Pointer) {
+                        // 整数からポインタへのキャスト
+                        if (operand.type() == typeid(int64_t)) {
+                            return Value(reinterpret_cast<void*>(std::any_cast<int64_t>(operand)));
+                        }
+                        // PointerValueのキャスト（型情報を更新）
+                        if (operand.type() == typeid(PointerValue)) {
+                            PointerValue pv = std::any_cast<PointerValue>(operand);
+                            // ターゲット型のポイント先の型情報を設定
+                            if (data.target_type->element_type) {
+                                pv.element_type = data.target_type->element_type;
+                            }
+                            return Value(pv);
+                        }
+                        // ポインタ間のキャスト（型のみ変更）
+                        if (operand.type() == typeid(void*)) {
+                            return operand;  // 既にvoid*なのでそのまま
+                        }
+                    }
+                }
+                return operand;
+            }
+            case MirRvalue::FormatConvert: {
+                // フォーマット変換（文字列補間用）
+                auto& data = std::get<MirRvalue::FormatConvertData>(rvalue.data);
+                return data.operand ? evaluate_operand(ctx, *data.operand) : Value{};
             }
             default:
                 return Value{};

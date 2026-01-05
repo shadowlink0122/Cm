@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "../../hir/hir_nodes.hpp"
+#include "../../hir/nodes.hpp"
 
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/LLVMContext.h>

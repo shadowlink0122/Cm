@@ -1,0 +1,42 @@
+// vector.cm - ベクトル演算の実装（内部ファイル）
+// module文なし = 内部実装ファイル
+
+struct Vector3 {
+    float x;
+    float y;
+    float z;
+}
+
+float dot(Vector3 a, Vector3 b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+Vector3 cross(Vector3 a, Vector3 b) {
+    Vector3 result;
+    result.x = a.y * b.z - a.z * b.y;
+    result.y = a.z * b.x - a.x * b.z;
+    result.z = a.x * b.y - a.y * b.x;
+    return result;
+}
+
+float magnitude(Vector3 v) {
+    return sqrt(dot(v, v));
+}
+
+Vector3 normalize(Vector3 v) {
+    float m = magnitude(v);
+    Vector3 result;
+    result.x = v.x / m;
+    result.y = v.y / m;
+    result.z = v.z / m;
+    return result;
+}
+
+// mathモジュール内でのみ使用可能
+export {
+    Vector3,
+    dot,
+    cross,
+    magnitude,  // math.cmで再エクスポートされない
+    normalize
+}

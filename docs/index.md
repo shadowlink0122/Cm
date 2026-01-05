@@ -146,4 +146,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Last Updated:** v0.9.0 (December 2024)
+**Last Updated:** v0.10.1 (January 2025)
+
+© 2024-2025 Cm Language Project

@@ -20,14 +20,16 @@ int main() {
     age = 30;
     println("Updated: {name} is {age} years old");
 
-    // 複雑な式は位置引数で対応
+    // 複雑な式は一時変数で対応
     int x = 10;
     int y = 20;
-    println("Sum of {x} and {y} is {}", x + y);
+    int sum = x + y;
+    println("Sum of {x} and {y} is {sum}");
 
-    // 名前付きと位置の混在
+    // すべて名前付き補間に統一
     string city = "Tokyo";
-    println("User {name} from {city} says: {}", "Hello World");
+    string message = "Hello World";
+    println("User {name} from {city} says: {message}");
 
     return 0;
 }

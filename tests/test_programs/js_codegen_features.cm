@@ -1,0 +1,51 @@
+
+// Interface
+interface Printer {
+    func print(s: string) -> void;
+}
+
+struct ConsolePrinter {
+}
+
+impl Printer for ConsolePrinter {
+    func print(s: string) -> void {
+        println("Console: " + s);
+    }
+}
+
+// Generics
+func identity<T>(x: T) -> T {
+    return x;
+}
+
+struct Box<T> {
+    value: T;
+}
+
+func main() -> void {
+    // String
+    let s: string = "Hello";
+    println(s);
+
+    // Array
+    let arr: [int; 3] = [1, 2, 3];
+    println(arr[0]);
+
+    // Slice
+    let sl: []int = arr[0..2];
+    println(sl[0]);
+    println(sl[1]);
+
+    // Generics
+    let id_s = identity(s);
+    println(id_s);
+    let id_i = identity(123);
+    println(id_i);
+
+    let b: Box<int> = Box<int> { value: 456 };
+    println(b.value);
+
+    // Interface
+    let p: Printer = ConsolePrinter {};
+    p.print("Interface call");
+}

@@ -1,0 +1,40 @@
+import std::io::println;
+// array_iteration.cm - 配列のイテレーション統合テスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    int[3] arr = [10, 20, 30];
+    
+    // 1. for-in構文（型指定あり）
+    int sum1 = 0;
+    for (int val in arr) {
+        sum1 = sum1 + val;
+    }
+    println("for-in (typed): sum = {sum1}");
+    
+    // 2. for-in構文（型推論）
+    int sum2 = 0;
+    for (n in arr) {
+        sum2 = sum2 + n;
+    }
+    println("for-in (infer): sum = {sum2}");
+    
+    // 3. 構造体配列でfor-in
+    Point[2] points;
+    points[0] = {x: 1, y: 2};
+    points[1] = {x: 3, y: 4};
+    
+    int sum_x = 0;
+    int sum_y = 0;
+    for (Point p in points) {
+        sum_x = sum_x + p.x;
+        sum_y = sum_y + p.y;
+    }
+    println("struct for-in: sum_x={sum_x}, sum_y={sum_y}");
+    
+    return 0;
+}

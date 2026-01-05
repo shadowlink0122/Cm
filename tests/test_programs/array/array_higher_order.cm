@@ -1,0 +1,42 @@
+// 配列メソッドと関数ポインタのテスト
+import std::io::println;
+
+// コールバック関数
+int add_to_acc(int acc, int x) {
+    return acc + x;
+}
+
+bool is_even(int x) {
+    return x % 2 == 0;
+}
+
+bool is_positive(int x) {
+    return x > 0;
+}
+
+bool greater_than_3(int x) {
+    return x > 3;
+}
+
+int main() {
+    int[5] arr = [1, 2, 3, 4, 5];
+    
+    // size() メソッド
+    int s = arr.size();
+    println("Size: {s}");
+    
+    // forEach でイテレーション
+    int sum = 0;
+    for (int i = 0; i < arr.size(); i++) {
+        sum = sum + arr[i];
+    }
+    println("Sum: {sum}");
+    
+    if (s == 5 && sum == 15) {
+        return 0;
+    }
+    return 1;
+}
+// EXPECT: 0
+// EXPECT_OUTPUT: Size: 5
+// EXPECT_OUTPUT: Sum: 15

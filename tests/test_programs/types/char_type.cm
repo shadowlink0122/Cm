@@ -4,11 +4,11 @@ import std::io::println;
 int main() {
     // char (8bit character)
     char c = 'A';
-    println("char: {}", c);
+    println("char: {c}");
 
     // 別の文字
     char d = 'Z';
-    println("char: {}", d);
+    println("char: {d}");
 
     return 0;
 }

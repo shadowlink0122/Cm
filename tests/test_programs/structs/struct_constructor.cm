@@ -1,0 +1,43 @@
+import std::io::println;
+// struct_constructor.cm - コンストラクタの統合テスト
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point {
+    // デフォルトコンストラクタ
+    self() {
+        self.x = 100;
+        self.y = 200;
+    }
+    
+    // 引数付きコンストラクタ
+    overload self(int a, int b) {
+        self.x = a;
+        self.y = b;
+    }
+}
+
+int main() {
+    // 1. デフォルトコンストラクタ（明示的呼び出し）
+    Point p1();
+    println("p1: ({p1.x}, {p1.y})");
+    
+    // 2. 引数付きコンストラクタ
+    Point p2(10, 20);
+    println("p2: ({p2.x}, {p2.y})");
+    
+    // 3. 通常の初期化（コンストラクタなし）
+    Point p3;
+    p3.x = 30;
+    p3.y = 40;
+    println("p3: ({p3.x}, {p3.y})");
+    
+    // 検証
+    bool ok = (p1.x == 100 && p1.y == 200) &&
+              (p2.x == 10 && p2.y == 20) &&
+              (p3.x == 30 && p3.y == 40);
+    return ok ? 0 : 1;
+}

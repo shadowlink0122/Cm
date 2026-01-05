@@ -1,0 +1,45 @@
+// test_namespace_export.cm - サブ名前空間エクスポートのテスト
+
+// トップレベル関数
+int global_func() {
+    return 42;
+}
+
+// 2D関連をサブ名前空間にエクスポート
+export drawing2d {
+    struct Point2D {
+        int x;
+        int y;
+    }
+
+    int distance(Point2D a, Point2D b) {
+        int dx = b.x - a.x;
+        int dy = b.y - a.y;
+        return dx * dx + dy * dy;  // 距離の二乗
+    }
+}
+
+// 3D関連をサブ名前空間にエクスポート
+export drawing3d {
+    struct Point3D {
+        int x;
+        int y;
+        int z;
+    }
+
+    int manhattan_distance(Point3D a, Point3D b) {
+        int dx = b.x - a.x;
+        int dy = b.y - a.y;
+        int dz = b.z - a.z;
+        // 絶対値の計算（簡略化）
+        if (dx < 0) dx = -dx;
+        if (dy < 0) dy = -dy;
+        if (dz < 0) dz = -dz;
+        return dx + dy + dz;
+    }
+}
+
+// グローバル関数もエクスポート
+export {
+    global_func
+}

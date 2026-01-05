@@ -1,10 +1,10 @@
-#include "../../src/mir/mir_lowering.hpp"
-
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
-#include "../../src/hir/hir_lowering.hpp"
+#include "../../src/hir/lowering/lowering.hpp"
+#include "../../src/mir/lowering/lowering.hpp"
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <sstream>
 
 using namespace cm;
@@ -86,16 +86,16 @@ TEST_F(MirLoweringTest, VariableDeclaration) {
     // ローカル変数が作成されているか
     EXPECT_GE(func.locals.size(), 3u);  // _0(戻り値), x, y + 一時変数
 
-    // StorageLive文があるはず
+    // 代入文があるはず（変数への初期化）
     auto* entry_block = func.basic_blocks[0].get();
-    bool has_storage_live = false;
+    bool has_assign = false;
     for (const auto& stmt : entry_block->statements) {
-        if (stmt->kind == mir::MirStatement::StorageLive) {
-            has_storage_live = true;
+        if (stmt->kind == mir::MirStatement::Assign) {
+            has_assign = true;
             break;
         }
     }
-    EXPECT_TRUE(has_storage_live);
+    EXPECT_TRUE(has_assign);
 }
 
 // ============================================================

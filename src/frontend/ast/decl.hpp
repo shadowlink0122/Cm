@@ -108,6 +108,7 @@ struct FunctionDecl {
     bool is_constructor = false;  // self() コンストラクタ
     bool is_destructor = false;   // ~self() デストラクタ
     bool is_overload = false;     // overload修飾子
+    bool is_extern = false;       // extern "C" 関数
 
     // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
     std::vector<AttributeNode> attributes;
@@ -139,6 +140,7 @@ struct StructDecl {
     std::string name;
     std::vector<Field> fields;
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
 
     // with キーワードで自動実装するinterface
     std::vector<std::string> auto_impls;
@@ -211,6 +213,7 @@ struct InterfaceDecl {
     std::vector<MethodSig> methods;
     std::vector<OperatorSig> operators;  // 演算子シグネチャ
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
     std::vector<std::string> generic_params;      // 後方互換性のため維持
     std::vector<GenericParam> generic_params_v2;  // 型制約付き
 
@@ -252,8 +255,9 @@ struct ImplDecl {
     TypePtr target_type;
     std::vector<std::unique_ptr<FunctionDecl>> methods;
     std::vector<std::unique_ptr<OperatorImpl>> operators;  // 演算子実装
-    std::vector<std::string> generic_params;               // 後方互換性のため維持
-    std::vector<GenericParam> generic_params_v2;           // 型制約付き
+    std::vector<AttributeNode> attributes;
+    std::vector<std::string> generic_params;      // 後方互換性のため維持
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
     std::vector<TypePtr>
         interface_type_args;  // インターフェースの型引数（例: ValueHolder<T> の T）
     std::vector<WhereClause> where_clauses;  // where句
@@ -262,6 +266,9 @@ struct ImplDecl {
     bool is_ctor_impl = false;
     std::vector<std::unique_ptr<FunctionDecl>> constructors;  // self()
     std::unique_ptr<FunctionDecl> destructor;                 // ~self()
+
+    // v4 module system: export impl blocks
+    bool is_export = false;
 
     ImplDecl(std::string iface, TypePtr target)
         : interface_name(std::move(iface)), target_type(std::move(target)) {}
@@ -289,9 +296,36 @@ struct EnumDecl {
     std::string name;
     std::vector<EnumMember> members;
     Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
 
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}
+};
+
+// ============================================================
+// グローバル変数/定数宣言 (v4: const/global変数サポート)
+// ============================================================
+struct GlobalVarDecl {
+    std::string name;
+    TypePtr type;
+    ExprPtr init_expr;
+    bool is_const = false;
+    Visibility visibility = Visibility::Private;
+    std::vector<AttributeNode> attributes;
+
+    GlobalVarDecl(std::string n, TypePtr t, ExprPtr init, bool c = false)
+        : name(std::move(n)), type(std::move(t)), init_expr(std::move(init)), is_const(c) {}
+};
+
+// ============================================================
+// Extern "C" ブロック宣言
+// ============================================================
+struct ExternBlockDecl {
+    std::string language;  // "C" など
+    std::vector<std::unique_ptr<FunctionDecl>> declarations;
+    std::vector<AttributeNode> attributes;
+
+    explicit ExternBlockDecl(std::string lang) : language(std::move(lang)) {}
 };
 
 // ImportDeclはmodule.hppに移動

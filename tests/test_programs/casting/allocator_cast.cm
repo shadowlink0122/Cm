@@ -1,0 +1,54 @@
+// アロケータインターフェースと as T* キャストのテスト
+import std::mem::{Allocator, DefaultAllocator};
+
+int main() {
+    print("=== Allocator Cast Test ===\n");
+    
+    DefaultAllocator alloc = DefaultAllocator{};
+    
+    // int型の確保とキャスト
+    print("Test: int via allocator\n");
+    void* raw1 = alloc.alloc(sizeof(int));
+    int* p1 = raw1 as int*;
+    *p1 = 99;
+    int v1 = *p1;
+    if (v1 == 99) {
+        print("  int value: PASS (99)\n");
+    } else {
+        print("  int value: FAIL\n");
+    }
+    alloc.dealloc(raw1);
+    
+    // double型の確保とキャスト
+    print("Test: double via allocator\n");
+    void* raw2 = alloc.alloc(sizeof(double));
+    double* p2 = raw2 as double*;
+    *p2 = 2.71828;
+    double v2 = *p2;
+    if (v2 > 2.71 && v2 < 2.72) {
+        print("  double value: PASS (2.71828)\n");
+    } else {
+        print("  double value: FAIL\n");
+    }
+    alloc.dealloc(raw2);
+    
+    // reallocateのテスト
+    print("Test: reallocate\n");
+    void* raw3 = alloc.alloc(sizeof(int));
+    int* p3 = raw3 as int*;
+    *p3 = 123;
+    
+    void* raw4 = alloc.reallocate(raw3, sizeof(int) * 2);
+    int* p4 = raw4 as int*;
+    *p4 = 456;
+    int v4 = *p4;
+    if (v4 == 456) {
+        print("  reallocate: PASS (456)\n");
+    } else {
+        print("  reallocate: FAIL\n");
+    }
+    alloc.dealloc(raw4);
+    
+    print("\nAllocator cast tests passed!\n");
+    return 0;
+}

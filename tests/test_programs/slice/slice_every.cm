@@ -1,0 +1,28 @@
+// .every() メソッドのテスト
+import std::io::println;
+
+bool is_positive(int x) {
+    return x > 0;
+}
+
+bool is_less_than_10(int x) {
+    return x < 10;
+}
+
+int main() {
+    int[5] arr = [1, 2, 3, 4, 5];
+    
+    // 全て正の数か
+    bool all_positive = arr.every(is_positive);
+    println("all_positive: {all_positive}");
+    
+    // 全て10未満か
+    bool all_lt10 = arr.every(is_less_than_10);
+    println("all_lt10: {all_lt10}");
+    
+    int[3] arr2 = [5, 10, 15];
+    bool arr2_lt10 = arr2.every(is_less_than_10);
+    println("arr2_lt10: {arr2_lt10}");
+    
+    return 0;
+}

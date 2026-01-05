@@ -1,0 +1,12 @@
+// test_ns_export.cm - 名前空間エクスポートテスト
+
+// サブ名前空間にエクスポート
+export math {
+    int add(int a, int b) {
+        return a + b;
+    }
+
+    int sub(int a, int b) {
+        return a - b;
+    }
+}

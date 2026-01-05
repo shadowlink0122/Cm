@@ -1,3 +1,4 @@
+import std::io::println;
 // forループで配列をイテレート
 
 int main() {

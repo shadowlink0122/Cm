@@ -1,3 +1,4 @@
+import std::io::println;
 // 複数の型パラメータを持つジェネリクスのテスト
 
 // 2つの型パラメータを持つPair
@@ -25,18 +26,18 @@ struct Pair<T, U> {
 int main() {
     // int と string のペア
     Pair<int, string> p1 = make_pair(42, "hello");
-    println("p1.first = {}", p1.first);
-    println("p1.second = {}", p1.second);
+    println("p1.first = {p1.first}");
+    println("p1.second = {p1.second}");
     
     // double と bool のペア
     Pair<double, bool> p2 = make_pair(3.14, true);
-    println("p2.first = {}", p2.first);
-    println("p2.second = {}", p2.second);
+    println("p2.first = {p2.first}");
+    println("p2.second = {p2.second}");
     
     // 型パラメータを入れ替え
     Pair<string, int> p3 = swap_pair(p1);
-    println("p3.first = {}", p3.first);
-    println("p3.second = {}", p3.second);
+    println("p3.first = {p3.first}");
+    println("p3.second = {p3.second}");
     
     return 0;
 }

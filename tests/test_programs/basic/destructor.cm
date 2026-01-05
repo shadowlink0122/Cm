@@ -1,3 +1,4 @@
+import std::io::println;
 // デストラクタの基本テスト
 struct Resource {
     int id;

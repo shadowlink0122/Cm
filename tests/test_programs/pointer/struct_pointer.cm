@@ -1,0 +1,35 @@
+// 構造体へのポインタテスト
+import std::io::println;
+
+struct Data {
+    int x;
+    int y;
+}
+
+int main() {
+    // 構造体を作成
+    Data d = Data{x: 10, y: 20};
+    
+    // ポインタを取得
+    Data* p = &d;
+    
+    // ポインタ経由でフィールドアクセス
+    int x = p->x;
+    int y = p->y;
+    println("Via pointer: x={x}, y={y}");
+    
+    // ポインタ経由で値を変更
+    p->x = 100;
+    p->y = 200;
+    
+    // 元の構造体の値を確認
+    println("Modified: x={d.x}, y={d.y}");
+    
+    if (d.x == 100 && d.y == 200) {
+        return 0;
+    }
+    return 1;
+}
+// EXPECT: 0
+// EXPECT_OUTPUT: Via pointer: x=10, y=20
+// EXPECT_OUTPUT: Modified: x=100, y=200

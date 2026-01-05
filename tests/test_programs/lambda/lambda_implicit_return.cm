@@ -1,0 +1,25 @@
+// ラムダ式: return省略テスト
+import std::io::println;
+
+int main() {
+    // return省略: 最後の式が暗黙の戻り値
+    int*(int) triple = (int x) => {
+        return x * 3;
+    };
+    
+    int result = triple(4);
+    println("triple(4) = {result}");
+    
+    // 複数パラメータ
+    int*(int, int) add = (int a, int b) => {
+        return a + b;
+    };
+    
+    int sum = add(10, 20);
+    println("add(10, 20) = {sum}");
+    
+    if (result == 12 && sum == 30) {
+        return 0;
+    }
+    return 1;
+}

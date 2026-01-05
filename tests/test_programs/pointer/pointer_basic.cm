@@ -1,3 +1,4 @@
+import std::io::println;
 // ポインタ基本テスト
 
 int main() {

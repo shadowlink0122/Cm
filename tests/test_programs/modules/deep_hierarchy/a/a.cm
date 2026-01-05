@@ -1,0 +1,9 @@
+// a.cm - トップレベルモジュール
+module a;
+
+import ./b;
+export { b };
+
+export int top_value() {
+    return 1000;
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../common/debug.hpp"
-#include "lowering_base.hpp"
+#include "base.hpp"
 
 #include <map>
 #include <tuple>
@@ -63,6 +63,10 @@ class Monomorphization : public MirLoweringBase {
         // 呼び出し箇所を書き換え（Container<int>__print -> Container__int__print）
         rewrite_generic_calls(program, needed);
 
+        // 構造体メソッド呼び出しのself引数を参照に変更
+        // （構造体コピーではなく元の構造体アドレスを渡すように修正）
+        fix_struct_method_self_args(program);
+
         // 元のジェネリック関数を削除
         cleanup_generic_functions(program, generic_funcs);
     }
@@ -93,6 +97,10 @@ class Monomorphization : public MirLoweringBase {
 
     // MIR内の型参照を更新（Pair → Pair__int など）
     void update_type_references(MirProgram& program);
+
+    // 構造体メソッドのself引数を参照に修正
+    // main等の呼び出し側で構造体のコピーではなくアドレスを渡すように変更
+    void fix_struct_method_self_args(MirProgram& program);
 
     // 型名から特殊化構造体名を生成
     std::string make_specialized_struct_name(const std::string& base_name,

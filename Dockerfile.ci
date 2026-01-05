@@ -1,48 +1,51 @@
-# CI環境再現用Dockerfile (Ubuntu 24.04 + LLVM 18)
-# GitHub ActionsのUbuntu runnerと同じx86_64アーキテクチャを使用
-FROM --platform=linux/amd64 ubuntu:24.04
+# Cm Compiler CI Environment (Ubuntu + LLVM 18)
+# Based on GitHub Actions ubuntu-latest
+FROM ubuntu:24.04
 
-# タイムゾーン設定（インタラクティブプロンプト回避）
+# Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Tokyo
+ENV TZ=UTC
 
-# 基本ツールとビルド依存関係
+# Install base dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
     wget \
     curl \
-    software-properties-common \
     lsb-release \
+    software-properties-common \
     gnupg \
-    ca-certificates \
-    clang-format \
+    libgtest-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# LLVM 18インストール（CI環境と同じ手順）
+# Install LLVM 18 (same as CI)
 RUN wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
     ./llvm.sh 18 && \
     apt-get install -y llvm-18-dev clang-18 && \
-    rm llvm.sh && \
-    rm -rf /var/lib/apt/lists/*
+    rm llvm.sh
 
-# Google Test インストール
-RUN apt-get update && apt-get install -y \
-    libgtest-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Wasmtime インストール（WASM テスト用）
-RUN curl https://wasmtime.dev/install.sh -sSf | bash
-ENV PATH="/root/.wasmtime/bin:${PATH}"
-
-# 作業ディレクトリ
-WORKDIR /workspace
-
-# LLVM環境変数設定（CI環境と同じ）
+# Set LLVM paths
 ENV PATH="/usr/lib/llvm-18/bin:${PATH}"
 ENV LLVM_DIR="/usr/lib/llvm-18/lib/cmake/llvm"
 
-# デフォルトコマンド
-CMD ["/bin/bash"]
+# Install wasmtime for WASM tests
+RUN curl https://wasmtime.dev/install.sh -sSf | bash
+ENV PATH="/root/.wasmtime/bin:${PATH}"
+
+# Set working directory
+WORKDIR /app
+
+# Copy source
+COPY . .
+
+# Build
+RUN cmake -B build \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCM_USE_LLVM=ON \
+    -DBUILD_TESTING=ON && \
+    cmake --build build -j$(nproc)
+
+# Default command
+CMD ["bash"]

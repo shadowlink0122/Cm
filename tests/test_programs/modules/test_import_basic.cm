@@ -1,0 +1,33 @@
+import std::io::println;
+// test_import_basic.cm - 基本的なインポートの統合テスト
+
+// 1. 選択的インポート（関数）
+import ./selective_import/math::{add, multiply};
+
+// 2. 定数インポート
+import ./simple_math/math::{MAGIC_NUMBER, SIMPLE_PI};
+
+// 3. 関数オーバーロードインポート
+import ./simple_math/math::{add_int, add_double, multiply_int};
+
+int main() {
+    // 1. 選択的インポートのテスト
+    int sum = add(10, 20);
+    int prod = multiply(3, 4);
+    println("add(10,20) = {sum}");
+    println("multiply(3,4) = {prod}");
+    
+    // 2. 定数インポートのテスト
+    println("MAGIC_NUMBER = {MAGIC_NUMBER}");
+    println("SIMPLE_PI = {SIMPLE_PI}");
+    
+    // 3. オーバーロードインポートのテスト
+    int isum = add_int(100, 200);
+    double dsum = add_double(1.5, 2.5);
+    int iprod = multiply_int(6, 7);
+    println("add_int(100,200) = {isum}");
+    println("add_double(1.5,2.5) = {dsum}");
+    println("multiply_int(6,7) = {iprod}");
+    
+    return 0;
+}

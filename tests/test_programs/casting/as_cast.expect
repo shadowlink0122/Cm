@@ -1,0 +1,16 @@
+int to double: 42
+  typeof(i) = int
+  typeof(d) = double
+double to int: 3
+  typeof(pi) = double
+  typeof(pi_int) = int
+bool to int: 1
+  typeof(flag) = bool
+  typeof(b) = int
+char to int: 65
+  typeof(c) = char
+  typeof(c_int) = int
+chain cast: 10
+struct type: Point
+pointer type: *int
+All cast tests passed!

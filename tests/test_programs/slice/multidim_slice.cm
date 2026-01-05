@@ -1,0 +1,33 @@
+// 多次元スライスのテスト（Vec的な使い方）
+import std::io::println;
+
+int main() {
+    // 2次元配列から行を取得してスライスとして使用
+    int[][] matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+    
+    // 各行をスライスとして操作
+    int[] row0 = matrix[0];
+    int[] row1 = matrix[1];
+    int[] row2 = matrix[2];
+    
+    // 長さ取得
+    println("row0.len(): {row0.len()}");
+    println("row1.len(): {row1.len()}");
+    println("row2.len(): {row2.len()}");
+    
+    // 要素アクセス
+    println("row0: {row0[0]}, {row0[1]}, {row0[2]}");
+    println("row1: {row1[0]}, {row1[1]}, {row1[2]}");
+    println("row2: {row2[0]}, {row2[1]}, {row2[2]}");
+    
+    // スライスメソッド
+    int[] sorted_row = row2.sort();
+    println("sorted: {sorted_row[0]}, {sorted_row[1]}, {sorted_row[2]}");
+    
+    // first/last
+    int first = row1.first();
+    int last = row1.last();
+    println("first: {first}, last: {last}");
+    
+    return 0;
+}

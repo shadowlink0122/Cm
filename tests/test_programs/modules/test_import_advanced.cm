@@ -1,0 +1,15 @@
+import std::io::println;
+// test_import_advanced.cm - 高度なインポートの統合テスト
+
+// 1. ワイルドカードサブモジュールインポート
+import ./basic_reexport/std::io::*;
+
+int main() {
+    // 1. ワイルドカードでインポートした関数を直接呼び出し
+    int sum = add(10, 20);
+    int product = multiply(3, 4);
+    println("add(10,20) = {sum}");
+    println("multiply(3,4) = {product}");
+    
+    return 0;
+}

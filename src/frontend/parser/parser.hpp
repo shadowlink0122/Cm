@@ -5,6 +5,8 @@
 #include "../lexer/token.hpp"
 
 #include <functional>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -78,25 +80,17 @@ class Parser {
    private:
     // トップレベル宣言
     ast::DeclPtr parse_top_level() {
-        // アトリビュートチェック（マクロなど）
-        if (check(TokenKind::At)) {
-            auto saved_pos = pos_;
-            std::vector<ast::AttributeNode> attrs;
-            while (check(TokenKind::At)) {
-                attrs.push_back(parse_attribute());
-            }
+        // アトリビュート（#[...]) を収集
+        std::vector<ast::AttributeNode> attrs;
+        while (is_attribute_start()) {
+            attrs.push_back(parse_attribute());
+        }
 
-            // @[macro]の場合 (廃止予定 - #macroを使用してください)
-            for (const auto& attr : attrs) {
-                if (attr.name == "macro") {
-                    // このパスは廃止予定
-                    pos_ = saved_pos;  // 位置を戻す
-                    return nullptr;    // @[macro]はサポートしない
-                }
+        // @[macro]の場合 (廃止予定 - #macroを使用してください)
+        for (const auto& attr : attrs) {
+            if (attr.name == "macro") {
+                return nullptr;  // @[macro]はサポートしない
             }
-
-            // その他のアトリビュート付き宣言
-            pos_ = saved_pos;  // 位置を戻す
         }
 
         // module宣言
@@ -104,24 +98,74 @@ class Parser {
             return parse_module();
         }
 
+        // namespace宣言
+        if (check(TokenKind::KwNamespace)) {
+            return parse_namespace();
+        }
+
         // import
         if (check(TokenKind::KwImport)) {
-            return parse_import_stmt();
+            return parse_import_stmt(std::move(attrs));
         }
 
         // use
         if (check(TokenKind::KwUse)) {
-            return parse_use();
+            return parse_use(std::move(attrs));
         }
 
-        // export
+        // export (v4: 宣言時エクスポートと分離エクスポートの両方をサポート)
         if (check(TokenKind::KwExport)) {
+            // 次のトークンを先読み
+            auto saved_pos = pos_;
+            advance();  // consume 'export'
+
+            // export struct, export interface, export enum, export typedef, export const
+            if (check(TokenKind::KwStruct)) {
+                // 既に正しい位置にいる（'struct'トークンの位置）
+                return parse_struct(true, std::move(attrs));
+            }
+            if (check(TokenKind::KwInterface)) {
+                // 既に正しい位置にいる
+                return parse_interface(true, std::move(attrs));
+            }
+            if (check(TokenKind::KwEnum)) {
+                // 既に正しい位置にいる
+                return parse_enum_decl(true, std::move(attrs));
+            }
+            if (check(TokenKind::KwTypedef)) {
+                // 既に正しい位置にいる
+                return parse_typedef_decl(true, std::move(attrs));
+            }
+            if (check(TokenKind::KwConst)) {
+                // 既に正しい位置にいる
+                return parse_const_decl(true, std::move(attrs));
+            }
+            if (check(TokenKind::KwImpl)) {
+                // 既に正しい位置にいる
+                return parse_impl_export(std::move(attrs));
+            }
+
+            // export function (型から始まる関数の場合)
+            if (is_type_start()) {
+                // 修飾子を収集
+                bool is_static = consume_if(TokenKind::KwStatic);
+                bool is_inline = consume_if(TokenKind::KwInline);
+                bool is_async = consume_if(TokenKind::KwAsync);
+
+                return parse_function(true, is_static, is_inline, is_async, std::move(attrs));
+            }
+
+            // それ以外は分離エクスポート (export NAME1, NAME2;)
+            if (!attrs.empty()) {
+                error("Attributes are not supported on export lists");
+            }
+            pos_ = saved_pos;
             return parse_export();
         }
 
         // extern
         if (check(TokenKind::KwExtern)) {
-            return parse_extern();
+            return parse_extern(std::move(attrs));
         }
 
         // 修飾子を収集
@@ -131,17 +175,17 @@ class Parser {
 
         // struct
         if (check(TokenKind::KwStruct)) {
-            return parse_struct(false);
+            return parse_struct(false, std::move(attrs));
         }
 
         // interface
         if (check(TokenKind::KwInterface)) {
-            return parse_interface(false);
+            return parse_interface(false, std::move(attrs));
         }
 
         // impl
         if (check(TokenKind::KwImpl)) {
-            return parse_impl();
+            return parse_impl(std::move(attrs));
         }
 
         // template
@@ -151,12 +195,17 @@ class Parser {
 
         // enum
         if (check(TokenKind::KwEnum)) {
-            return parse_enum_decl();
+            return parse_enum_decl(false, std::move(attrs));
         }
 
         // typedef
         if (check(TokenKind::KwTypedef)) {
-            return parse_typedef_decl();
+            return parse_typedef_decl(false, std::move(attrs));
+        }
+
+        // const (v4: トップレベルconst宣言のサポート)
+        if (check(TokenKind::KwConst)) {
+            return parse_const_decl(false, std::move(attrs));
         }
 
         // #macro (新しいC++風マクロ構文)
@@ -261,12 +310,12 @@ class Parser {
         }
 
         // 関数 (型 名前 ...)
-        return parse_function(false, is_static, is_inline, is_async);
+        return parse_function(false, is_static, is_inline, is_async, std::move(attrs));
     }
 
     // 関数定義
     ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async,
-                                std::vector<ast::AttributeNode> directives = {}) {
+                                std::vector<ast::AttributeNode> attributes = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
 
@@ -274,7 +323,14 @@ class Parser {
         auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
         auto return_type = parse_type();
+        // C++スタイルの配列戻り値型: int[] func(), int[3] func()
+        return_type = check_array_suffix(std::move(return_type));
         std::string name = expect_ident();
+
+        // main関数はエクスポート不可
+        if (is_export && name == "main") {
+            error("main関数はエクスポートできません");
+        }
 
         expect(TokenKind::LParen);
         auto params = parse_params();
@@ -302,7 +358,7 @@ class Parser {
         func->is_static = is_static;
         func->is_inline = is_inline;
         func->is_async = is_async;
-        func->attributes = std::move(directives);  // ディレクティブをアトリビュートとして保存
+        func->attributes = std::move(attributes);
 
         return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
     }
@@ -340,7 +396,7 @@ class Parser {
     }
 
     // 構造体
-    ast::DeclPtr parse_struct(bool is_export) {
+    ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
 
@@ -415,6 +471,12 @@ class Parser {
             }
 
             field.qualifiers.is_const = consume_if(TokenKind::KwConst);
+
+            // 修飾子の後で再度RBraceをチェック（空の構造体や最後のフィールドの後）
+            if (check(TokenKind::RBrace)) {
+                break;
+            }
+
             field.type = parse_type();
 
             // C++スタイルの配列フィールド: int[10] data;
@@ -430,6 +492,7 @@ class Parser {
         auto decl = std::make_unique<ast::StructDecl>(std::move(name), std::move(fields));
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         decl->auto_impls = std::move(auto_impls);
+        decl->attributes = std::move(attributes);
 
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
@@ -525,7 +588,7 @@ class Parser {
     }
 
     // インターフェース
-    ast::DeclPtr parse_interface(bool is_export) {
+    ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {}) {
         expect(TokenKind::KwInterface);
 
         // インターフェース名を取得
@@ -576,6 +639,7 @@ class Parser {
         auto decl = std::make_unique<ast::InterfaceDecl>(std::move(name), std::move(methods));
         decl->operators = std::move(operators);
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        decl->attributes = std::move(attributes);
 
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
@@ -592,7 +656,7 @@ class Parser {
     // impl<T> Type for InterfaceName<T> where T: SomeType { ... } - where句付き
     // impl<T> Type<T> { ... } - ジェネリックコンストラクタ/デストラクタ
     // impl Type<T> { ... } - コンストラクタ/デストラクタ専用
-    ast::DeclPtr parse_impl() {
+    ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {}) {
         expect(TokenKind::KwImpl);
 
         // impl<T>構文のチェック
@@ -659,6 +723,7 @@ class Parser {
             auto decl = std::make_unique<ast::ImplDecl>(std::move(iface), std::move(target));
             decl->interface_type_args = std::move(iface_type_args);
             decl->where_clauses = std::move(where_clauses);
+            decl->attributes = std::move(attributes);
 
             // ジェネリックパラメータを設定
             if (!generic_params.empty()) {
@@ -668,6 +733,11 @@ class Parser {
 
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 try {
+                    std::vector<ast::AttributeNode> method_attrs;
+                    while (is_attribute_start()) {
+                        method_attrs.push_back(parse_attribute());
+                    }
+
                     // operator キーワードをチェック
                     if (check(TokenKind::KwOperator)) {
                         advance();  // consume 'operator'
@@ -690,7 +760,8 @@ class Parser {
                         // private修飾子をチェック
                         bool is_private = consume_if(TokenKind::KwPrivate);
 
-                        auto func = parse_function(false, false, false, false);
+                        auto func =
+                            parse_function(false, false, false, false, std::move(method_attrs));
                         if (auto* f = func->as<ast::FunctionDecl>()) {
                             // privateメソッドの場合はvisibilityを設定
                             if (is_private) {
@@ -715,18 +786,20 @@ class Parser {
             return std::make_unique<ast::Decl>(std::move(decl));
         } else {
             // コンストラクタ/デストラクタ専用impl
-            return parse_impl_ctor(std::move(target), std::move(generic_params),
-                                   std::move(generic_params_v2));
+            return parse_impl_ctor(std::move(target), std::move(attributes),
+                                   std::move(generic_params), std::move(generic_params_v2));
         }
     }
 
     // コンストラクタ/デストラクタ専用implの解析
     // impl<T> Type<T> { self() { ... } ~self() { ... } }
-    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<std::string> generic_params = {},
+    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<ast::AttributeNode> attributes,
+                                 std::vector<std::string> generic_params = {},
                                  std::vector<ast::GenericParam> generic_params_v2 = {}) {
         expect(TokenKind::LBrace);
 
         auto decl = std::make_unique<ast::ImplDecl>(std::move(target));
+        decl->attributes = std::move(attributes);
 
         // ジェネリックパラメータを設定
         if (!generic_params.empty()) {
@@ -867,6 +940,7 @@ class Parser {
     ast::ExprPtr parse_unary();
     ast::ExprPtr parse_postfix();
     ast::ExprPtr parse_primary();
+    ast::ExprPtr parse_lambda_body(std::vector<ast::Param> params, uint32_t start_pos);
     ast::ExprPtr parse_match_expr(uint32_t start_pos);
     std::unique_ptr<ast::MatchPattern> parse_match_pattern();
 
@@ -987,6 +1061,27 @@ class Parser {
         // プリミティブ型
         ast::TypePtr base_type;
         switch (current().kind) {
+            case TokenKind::KwAuto:
+                advance();
+                // autoは型推論を意味する
+                base_type = std::make_shared<ast::Type>(ast::TypeKind::Inferred);
+                break;
+            case TokenKind::KwTypeof: {
+                // typeof(式) - 式の型を取得
+                advance();
+                expect(TokenKind::LParen);
+                auto expr = parse_expr();
+                expect(TokenKind::RParen);
+                // 式の型をtype checkerで解決する必要があるため、
+                // ここではInferred型として扱い、後で解決する
+                // exprへの参照を保持するためにInferredWithExpr型が必要だが、
+                // 簡略化のため、TypeAliasを一時的に使用
+                auto type = std::make_shared<ast::Type>(ast::TypeKind::Inferred);
+                type->name = "__typeof__";
+                // 注: 完全な実装には、式への参照を型に保持する機能が必要
+                base_type = type;
+                break;
+            }
             case TokenKind::KwVoid:
                 advance();
                 base_type = ast::make_void();
@@ -1027,6 +1122,14 @@ class Parser {
                 advance();
                 base_type = std::make_shared<ast::Type>(ast::TypeKind::ULong);
                 break;
+            case TokenKind::KwIsize:
+                advance();
+                base_type = ast::make_isize();
+                break;
+            case TokenKind::KwUsize:
+                advance();
+                base_type = ast::make_usize();
+                break;
             case TokenKind::KwFloat:
                 advance();
                 base_type = ast::make_float();
@@ -1051,12 +1154,16 @@ class Parser {
                 advance();
                 base_type = ast::make_string();
                 break;
+            case TokenKind::KwCstring:
+                advance();
+                base_type = ast::make_cstring();
+                break;
             default:
                 break;
         }
 
-        // 関数ポインタ型: int*(int, int)
-        // base_typeがあり、次が *( の場合
+        // 関数ポインタ型: int*(int, int) または ポインタ型: void*
+        // base_typeがあり、次が * の場合
         if (base_type && check(TokenKind::Star)) {
             // *( パターンのチェック - 関数ポインタ
             if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
@@ -1072,6 +1179,10 @@ class Parser {
                 expect(TokenKind::RParen);
 
                 return ast::make_function_ptr(std::move(base_type), std::move(param_types));
+            } else {
+                // 単純なポインタ型: void*, int*, etc.
+                advance();  // consume *
+                return ast::make_pointer(std::move(base_type));
             }
         }
 
@@ -1083,6 +1194,17 @@ class Parser {
         if (check(TokenKind::Ident)) {
             std::string name = current_text();
             advance();
+
+            // namespace::Type 形式をサポート
+            while (check(TokenKind::ColonColon)) {
+                advance();  // :: を消費
+                if (!check(TokenKind::Ident)) {
+                    error("Expected identifier after '::'");
+                    return ast::make_error();
+                }
+                name += "::" + current_text();
+                advance();
+            }
 
             // ジェネリック型引数をチェック（例: Vec<int>, Map<K, V>）
             if (check(TokenKind::Lt)) {
@@ -1102,9 +1224,35 @@ class Parser {
                 auto type = ast::make_named(name);
                 type->type_args = std::move(type_args);
 
-                // 関数ポインタ型: MyStruct*(int, int)
-                if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
-                    tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                // 関数ポインタ型: Vec<T>*(int, int) または ポインタ型: Vec<T>*
+                if (check(TokenKind::Star)) {
+                    if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
+                        advance();  // consume *
+                        advance();  // consume (
+
+                        std::vector<ast::TypePtr> param_types;
+                        if (!check(TokenKind::RParen)) {
+                            do {
+                                param_types.push_back(parse_type());
+                            } while (consume_if(TokenKind::Comma));
+                        }
+                        expect(TokenKind::RParen);
+
+                        return ast::make_function_ptr(std::move(type), std::move(param_types));
+                    } else {
+                        // 単純なポインタ型: Vec<T>*
+                        advance();  // consume *
+                        return ast::make_pointer(std::move(type));
+                    }
+                }
+
+                return type;
+            }
+
+            // 関数ポインタ型: MyStruct*(int, int) または ポインタ型: MyStruct*
+            if (check(TokenKind::Star)) {
+                auto named_type = ast::make_named(name);
+                if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
                     advance();  // consume *
                     advance();  // consume (
 
@@ -1116,28 +1264,12 @@ class Parser {
                     }
                     expect(TokenKind::RParen);
 
-                    return ast::make_function_ptr(std::move(type), std::move(param_types));
+                    return ast::make_function_ptr(std::move(named_type), std::move(param_types));
+                } else {
+                    // 単純なポインタ型: MyStruct*
+                    advance();  // consume *
+                    return ast::make_pointer(std::move(named_type));
                 }
-
-                return type;
-            }
-
-            // 関数ポインタ型: MyStruct*(int, int)
-            if (check(TokenKind::Star) && pos_ + 1 < tokens_.size() &&
-                tokens_[pos_ + 1].kind == TokenKind::LParen) {
-                auto named_type = ast::make_named(name);
-                advance();  // consume *
-                advance();  // consume (
-
-                std::vector<ast::TypePtr> param_types;
-                if (!check(TokenKind::RParen)) {
-                    do {
-                        param_types.push_back(parse_type());
-                    } while (consume_if(TokenKind::Comma));
-                }
-                expect(TokenKind::RParen);
-
-                return ast::make_function_ptr(std::move(named_type), std::move(param_types));
             }
 
             return ast::make_named(name);
@@ -1147,8 +1279,9 @@ class Parser {
         return ast::make_error();
     }
 
-    // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*)
+    // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*, T*[N], T[N]*)
     // parse_type()の呼び出し後に使用
+    // 再帰的に処理して複合型をサポート
     ast::TypePtr check_array_suffix(ast::TypePtr base_type) {
         // T[N] 形式をチェック
         if (consume_if(TokenKind::LBracket)) {
@@ -1158,30 +1291,42 @@ class Parser {
                 advance();
             }
             expect(TokenKind::RBracket);
-            return ast::make_array(std::move(base_type), size);
+            auto arr_type = ast::make_array(std::move(base_type), size);
+            // 配列の後にさらにサフィックスがあるかチェック（例: int[2]*）
+            return check_array_suffix(std::move(arr_type));
         }
         // T* 形式をチェック（C++スタイルのポインタ）
         if (consume_if(TokenKind::Star)) {
-            return ast::make_pointer(std::move(base_type));
+            auto ptr_type = ast::make_pointer(std::move(base_type));
+            // ポインタの後にさらにサフィックスがあるかチェック（例: int*[2]）
+            return check_array_suffix(std::move(ptr_type));
         }
         return base_type;
     }
 
     // モジュール関連パーサ（parser_module.cppで実装）
     ast::DeclPtr parse_module();
-    ast::DeclPtr parse_import_stmt();
+    ast::DeclPtr parse_namespace();
+    ast::DeclPtr parse_import_stmt(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_export();
-    ast::DeclPtr parse_use();
+    ast::DeclPtr parse_use(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_macro();
-    ast::DeclPtr parse_extern();
-    ast::DeclPtr parse_extern_decl();
+    ast::DeclPtr parse_extern(std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_extern_decl(std::vector<ast::AttributeNode> attributes = {});
+    std::unique_ptr<ast::FunctionDecl> parse_extern_func_decl();
+    ast::TypePtr parse_extern_type();
+    std::vector<ast::Param> parse_extern_params();
     ast::AttributeNode parse_directive();
     ast::AttributeNode parse_attribute();
-    ast::DeclPtr parse_const_decl();
+    ast::DeclPtr parse_const_decl(bool is_export = false,
+                                  std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_constexpr();
     ast::DeclPtr parse_template_decl();
-    ast::DeclPtr parse_enum_decl();
-    ast::DeclPtr parse_typedef_decl();
+    ast::DeclPtr parse_enum_decl(bool is_export = false,
+                                 std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_typedef_decl(bool is_export = false,
+                                    std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_impl_export(std::vector<ast::AttributeNode> attributes = {});
 
     // ユーティリティ
     const Token& current() const { return tokens_[pos_]; }
@@ -1189,6 +1334,17 @@ class Parser {
     bool is_at_end() const { return current().kind == TokenKind::Eof; }
 
     bool check(TokenKind kind) const { return current().kind == kind; }
+    TokenKind peek_kind(size_t offset = 1) const {
+        size_t idx = pos_ + offset;
+        if (idx >= tokens_.size()) {
+            return TokenKind::Eof;
+        }
+        return tokens_[idx].kind;
+    }
+    bool is_attribute_start() const {
+        return check(TokenKind::At) ||
+               (check(TokenKind::Hash) && peek_kind() == TokenKind::LBracket);
+    }
 
     Token advance() {
         if (!is_at_end())

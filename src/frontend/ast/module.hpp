@@ -11,9 +11,23 @@ namespace cm::ast {
 struct Expr;
 struct Stmt;
 struct Decl;
+struct Type;  // FFI関数宣言用
+
+// ============================================================
+// アトリビュート
+// ============================================================
+struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
+    std::string name;   // アトリビュート名
+    std::vector<std::string> args;  // 引数
+
+    AttributeNode(std::string n) : name(std::move(n)) {}
+    AttributeNode(std::string n, std::vector<std::string> a)
+        : name(std::move(n)), args(std::move(a)) {}
+};
 using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
 using DeclPtr = std::unique_ptr<Decl>;
+using TypePtr = std::shared_ptr<Type>;  // FFI関数宣言用
 
 // ============================================================
 // モジュールパス (e.g., std.io.print)
@@ -53,6 +67,7 @@ struct ImportDecl {
     ModulePath path;                // モジュールパス
     std::vector<ImportItem> items;  // 選択的インポート項目
     bool is_wildcard = false;       // ワイルドカード（*）インポート
+    std::vector<AttributeNode> attributes;
 
     ImportDecl(ModulePath p) : path(std::move(p)) {}
 };
@@ -63,9 +78,14 @@ struct ImportDecl {
 struct ExportItem {
     std::string name;                       // エクスポート名
     std::optional<ModulePath> from_module;  // 再エクスポート元
+    std::optional<ModulePath> namespace_path;  // 階層的再エクスポート用パス (e.g., io::file)
 
     ExportItem(std::string n, std::optional<ModulePath> from = std::nullopt)
         : name(std::move(n)), from_module(std::move(from)) {}
+
+    // 階層的再エクスポート用コンストラクタ
+    ExportItem(std::string n, ModulePath ns_path, std::optional<ModulePath> from = std::nullopt)
+        : name(std::move(n)), from_module(std::move(from)), namespace_path(std::move(ns_path)) {}
 };
 
 // ============================================================
@@ -126,18 +146,6 @@ struct MacroCall {
 };
 
 // ============================================================
-// アトリビュート
-// ============================================================
-struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
-    std::string name;   // アトリビュート名
-    std::vector<std::string> args;  // 引数
-
-    AttributeNode(std::string n) : name(std::move(n)) {}
-    AttributeNode(std::string n, std::vector<std::string> a)
-        : name(std::move(n)), args(std::move(a)) {}
-};
-
-// ============================================================
 // マクロ定義
 // ============================================================
 struct MacroParam {
@@ -167,15 +175,61 @@ struct MacroDecl {
 };
 
 // ============================================================
-// Use文（Rustスタイルのインポート）
+// FFI関数宣言（use libc { ... }用）
+// ============================================================
+struct FFIFunctionDecl {
+    std::string name;                                     // 関数名
+    TypePtr return_type;                                  // 戻り値型
+    std::vector<std::pair<std::string, TypePtr>> params;  // パラメータ
+    bool is_variadic = false;                             // 可変引数（...）
+
+    FFIFunctionDecl() = default;
+    FFIFunctionDecl(std::string n) : name(std::move(n)) {}
+};
+
+// ============================================================
+// Use文（FFI/モジュールインポート）
 // ============================================================
 struct UseDecl {
-    ModulePath path;                   // モジュールパス
-    std::optional<std::string> alias;  // エイリアス
-    bool is_pub = false;               // pub use
+    enum Kind {
+        ModuleUse,  // use std::io; (モジュールエイリアス)
+        FFIUse      // use libc { ... }; (FFI宣言)
+    };
 
+    Kind kind = ModuleUse;
+    ModulePath path;           // ライブラリ/モジュールパス
+    std::string package_name;  // 文字列ベースのパッケージ名 (e.g., "axios", "@scope/pkg")
+    std::optional<std::string> alias;        // エイリアス（as句）
+    bool is_pub = false;                     // pub use
+    std::vector<FFIFunctionDecl> ffi_funcs;  // FFI関数宣言（FFIUseの場合）
+
+    // アトリビュート
+    bool is_static_link = false;                  // #[static]
+    bool is_framework = false;                    // #[framework] (macOS)
+    std::optional<std::string> os_condition;      // #[os(linux)] など
+    std::optional<std::string> target_condition;  // #[target(wasm)] など
+    std::vector<AttributeNode> attributes;
+
+    // モジュールuseコンストラクタ
     UseDecl(ModulePath p, std::optional<std::string> a = std::nullopt)
-        : path(std::move(p)), alias(std::move(a)) {}
+        : kind(ModuleUse), path(std::move(p)), alias(std::move(a)) {}
+
+    // パッケージuseコンストラクタ (文字列)
+    UseDecl(std::string pkg, std::optional<std::string> a = std::nullopt)
+        : kind(ModuleUse), package_name(std::move(pkg)), alias(std::move(a)) {}
+
+    // FFI useコンストラクタ (ModulePath)
+    UseDecl(ModulePath p, std::vector<FFIFunctionDecl> funcs,
+            std::optional<std::string> a = std::nullopt)
+        : kind(FFIUse), path(std::move(p)), alias(std::move(a)), ffi_funcs(std::move(funcs)) {}
+
+    // FFI useコンストラクタ (文字列)
+    UseDecl(std::string pkg, std::vector<FFIFunctionDecl> funcs,
+            std::optional<std::string> a = std::nullopt)
+        : kind(FFIUse),
+          package_name(std::move(pkg)),
+          alias(std::move(a)),
+          ffi_funcs(std::move(funcs)) {}
 };
 
 }  // namespace cm::ast

@@ -1,104 +1,111 @@
 # Cm言語 プロジェクト構造
 
+*最終更新: 2025年1月*
+
 ## ディレクトリ構成
 
 ```
 Cm/
-├── src/                    # ソースコード
-│   ├── main.cpp           # エントリポイント
-│   ├── common/            # 共通ユーティリティ
-│   │   ├── debug.hpp      # デバッグシステム
-│   │   ├── span.hpp       # ソース位置情報
-│   │   └── diagnostics.hpp # エラー報告
-│   ├── frontend/          # フロントエンド
-│   │   ├── lexer/         # 字句解析器
-│   │   ├── parser/        # 構文解析器
-│   │   └── ast/           # 抽象構文木
-│   ├── hir/               # 高レベル中間表現
-│   │   ├── hir_nodes.hpp
-│   │   └── hir_lowering.hpp
-│   ├── mir/               # 中レベル中間表現（SSA形式）
-│   │   ├── mir_nodes.hpp
-│   │   ├── mir_lowering.hpp
-│   │   └── optimizations/ # 最適化パス
-│   ├── codegen/           # コード生成（LLVMバックエンド）
-│   │   └── llvm/          # LLVM IR生成
-│   │       ├── context.hpp/cpp
-│   │       ├── mir_to_llvm.hpp/cpp
-│   │       ├── llvm_codegen.hpp/cpp
-│   │       └── runtime.c  # Cランタイムライブラリ
-│   └── backends/          # レガシーバックエンド（参考のため保持、非推奨）
-│       ├── rust/          # Rustトランスパイラ（廃止）
-│       ├── typescript/    # TypeScriptトランスパイラ（廃止）
-│       └── wasm/          # WebAssembly（LLVM経由で実装予定）
+├── src/                      # ソースコード
+│   ├── main.cpp             # エントリポイント
+│   ├── common/              # 共通ユーティリティ
+│   │   ├── debug_messages.hpp
+│   │   ├── span.hpp
+│   │   ├── source_location.hpp
+│   │   └── diagnostics.hpp
+│   ├── frontend/            # フロントエンド
+│   │   ├── lexer/           # 字句解析
+│   │   ├── parser/          # 構文解析
+│   │   ├── ast/             # 抽象構文木
+│   │   └── types/           # 型チェッカー
+│   │       └── checking/    # 型チェック実装（分割）
+│   ├── hir/                 # 高レベル中間表現
+│   │   └── lowering/        # HIR lowering（分割）
+│   ├── mir/                 # 中レベル中間表現（SSA形式）
+│   │   ├── lowering/        # MIR lowering（分割）
+│   │   └── optimizations/   # 最適化パス
+│   ├── codegen/             # コード生成
+│   │   ├── interpreter/     # MIRインタプリタ
+│   │   └── llvm/            # LLVMバックエンド
+│   │       ├── native/      # ネイティブコード生成
+│   │       └── wasm/        # WebAssemblyコード生成
+│   ├── preprocessor/        # プリプロセッサ
+│   │   └── import.*         # import処理、ソースマップ
+│   └── module/              # モジュール解決
 │
-├── tests/                 # テストファイル
-│   ├── unit/              # ユニットテスト（*.cpp）
-│   ├── integration/       # 統合テスト（*.cpp）
-│   ├── regression/        # リグレッションテスト（*.cm）
-│   ├── test_programs/     # LLVMバックエンドテスト
-│   │   ├── basic/         # 基本テスト
-│   │   ├── control_flow/  # 制御フローテスト
-│   │   ├── types/         # 型テスト
-│   │   ├── functions/     # 関数テスト
-│   │   └── formatting/    # フォーマット文字列テスト
-│   └── llvm/              # LLVMバックエンド固有テスト
-│
-├── docs/                  # ドキュメント
-│   ├── design/            # 設計文書
-│   │   ├── CANONICAL_SPEC.md  # 正式言語仕様
-│   │   ├── architecture.md    # アーキテクチャ
+├── tests/                   # テストファイル
+│   ├── test_programs/       # Cmテストプログラム
+│   │   ├── basic/           # 基本テスト
+│   │   ├── control_flow/    # 制御フロー
+│   │   ├── types/           # 型システム
+│   │   ├── generics/        # ジェネリクス
+│   │   ├── interface/       # インターフェース
+│   │   ├── modules/         # モジュールシステム
+│   │   ├── array/           # 配列
+│   │   ├── pointer/         # ポインタ
+│   │   ├── string/          # 文字列
 │   │   └── ...
-│   ├── spec/              # 言語仕様
-│   │   └── grammar.md     # 文法定義
-│   ├── progress/          # 進捗報告
-│   └── PROJECT_STRUCTURE.md # このファイル
+│   └── *.cpp                # C++ユニットテスト
 │
-├── examples/              # サンプルコード
-│   ├── basic/             # 基本的な例
-│   ├── advanced/          # 高度な例
-│   └── overload/          # オーバーロード例
+├── docs/                    # ドキュメント
+│   ├── design/              # 設計文書
+│   │   └── MODULE_SYSTEM_FINAL.md
+│   ├── spec/                # 言語仕様
+│   ├── guides/              # ガイド
+│   ├── tutorials/           # チュートリアル
+│   └── archive/             # アーカイブ済み文書
 │
-├── build/                 # ビルド出力（.gitignore）
-│   ├── bin/               # 実行ファイル
-│   └── test/              # テスト実行ファイル
+├── std/                     # 標準ライブラリ
 │
-├── .tmp/                  # 一時ファイル（.gitignore）
+├── examples/                # サンプルコード
 │
-├── CMakeLists.txt         # ビルド設定
-├── docker-compose.yml     # Docker設定
-├── .gitignore            # Git除外設定
-├── CLAUDE.md             # AI開発ガイド（100行以内）
-├── same-claude.md        # 共通AI設定（100行以内）
-├── README.md             # プロジェクト説明
-└── LICENSE               # ライセンス
+├── scripts/                 # ユーティリティスクリプト
+│   └── run_tests.sh         # テスト実行スクリプト
+│
+├── build/                   # ビルド出力（.gitignore）
+│
+├── CMakeLists.txt           # ビルド設定
+├── Makefile                 # テスト実行用
+├── ROADMAP.md               # 開発ロードマップ
+├── README.md                # プロジェクト説明
+├── CLAUDE.md                # AI開発ガイド
+├── CONTRIBUTING.md          # 貢献ガイド
+└── CHANGELOG.md             # 変更履歴
 ```
 
-## コード生成アーキテクチャ
-
-> **2024年12月より、LLVMバックエンドが唯一のコード生成方式です。**
+## アーキテクチャ
 
 ```
-MIR → LLVM IR → ネイティブコード / WebAssembly
-
-以前のバックエンド（廃止）:
-- Rust トランスパイラ: src/backends/rust/ （参考のため保持）
-- TypeScript トランスパイラ: src/backends/typescript/ （参考のため保持）
+ソースコード
+    ↓
+プリプロセッサ (import展開、ソースマップ生成)
+    ↓
+Lexer (トークン化)
+    ↓
+Parser (AST生成)
+    ↓
+TypeChecker (型検査)
+    ↓
+HIR Lowering (脱糖)
+    ↓
+MIR Lowering (CFG構築)
+    ↓
+最適化 (定数畳み込み、DCE等)
+    ↓
+┌─────────────────────────────────────┐
+│         コード生成                    │
+├─────────────────────────────────────┤
+│ インタプリタ │ LLVM Native │  WASM   │
+└─────────────────────────────────────┘
 ```
 
 ## ルールと規約
 
-### プロジェクトルート
-**禁止**：
-- ✗ ソースファイル（*.cpp, *.hpp, *.cm）
-- ✗ 実行ファイル
-- ✗ テストファイル
-- ✗ 個別のドキュメント
+### プロジェクトルート配置禁止
 
-**許可**：
-- ✓ 設定ファイル（CMakeLists.txt, docker-compose.yml）
-- ✓ メタ文書（README.md, LICENSE, CLAUDE.md）
-- ✓ Git関連（.gitignore）
+- ✗ ソースファイル (*.cpp, *.hpp, *.cm)
+- ✗ 実行ファイル
+- ✗ 個別の実装ドキュメント
 
 ### デバッグ出力形式
 
@@ -106,51 +113,39 @@ MIR → LLVM IR → ネイティブコード / WebAssembly
 [STAGE] メッセージ
 ```
 
-**正しい例**：
+例：
 ```
 [LEXER] Starting tokenization
 [PARSER] Parsing function: main
-[MIR] Lowering HIR to MIR
-[CODEGEN] LLVM生成を開始
+[MIR] Lowering to MIR
 ```
 
-**間違い**：
-```
-[LEXER] [DEBUG] Message  // ✗ 二重ブラケット
-[[PARSER]] Message        // ✗ 不正な形式
-```
+### ファイルサイズガイドライン
 
-### テスト配置
+- 1ファイル1000行目安
+- 大きくなった場合は分割を検討
 
-- `tests/unit/` - C++ユニットテスト（Google Test）
-- `tests/integration/` - C++統合テスト
-- `tests/regression/` - Cmファイルによるリグレッションテスト
-- `tests/test_programs/` - LLVMバックエンドテスト
-
-### ドキュメント
-
-重要度別：
-1. **CANONICAL_SPEC.md** - 最優先の正式仕様
-2. **architecture.md** - システム設計
-3. その他の設計文書
-
-## ビルドとテスト
+## テスト実行
 
 ```bash
-# ビルド（LLVM有効）
-cmake -B build -G Ninja -DCM_USE_LLVM=ON
-cmake --build build
-
-# または
-./build_and_test_llvm.sh
-
-# テスト実行
+# C++ユニットテスト
 ctest --test-dir build
-./build/bin/cm tests/regression/example.cm
+
+# インタプリタテスト (203テスト)
+make tip
 
 # LLVMテスト
-make test-llvm-all
+make tlp
 
-# クリーンアップ
-rm -rf build .tmp
+# WASMテスト
+make tlwp
+
+# 全テスト
+make tall
 ```
+
+## 関連ドキュメント
+
+- [開発環境](DEVELOPMENT.md)
+- [クイックスタート](QUICKSTART.md)
+- [機能一覧](FEATURES.md)

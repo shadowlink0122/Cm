@@ -1,3 +1,4 @@
+import std::io::println;
 // enum型の網羅的matchテスト
 
 enum Color {

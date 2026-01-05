@@ -1,3 +1,4 @@
+import std::io::println;
 // 構造体配列のテスト
 
 struct Point {
@@ -30,9 +31,9 @@ int main() {
     Point r1 = points[1];
     Point r2 = points[2];
     
-    println("points[0] = ({}, {})", r0.x, r0.y);
-    println("points[1] = ({}, {})", r1.x, r1.y);
-    println("points[2] = ({}, {})", r2.x, r2.y);
+    println("points[0] = ({r0.x}, {r0.y})");
+    println("points[1] = ({r1.x}, {r1.y})");
+    println("points[2] = ({r2.x}, {r2.y})");
     
     return 0;
 }

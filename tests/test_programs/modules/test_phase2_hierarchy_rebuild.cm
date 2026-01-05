@@ -1,0 +1,14 @@
+import std::io::println;
+// test_phase2_hierarchy_rebuild.cm - ファイル直接インポートテスト
+import ./phase2_hierarchy_rebuild/io/file::{read};
+import ./phase2_hierarchy_rebuild/io/stream::{open};
+
+int main() {
+    // 直接インポートした関数を使用
+    int r = read(5);
+    int s = open(50);
+    
+    println("Read: {r}");    // 50
+    println("Open: {s}");    // 150
+    return 0;
+}
