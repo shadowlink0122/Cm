@@ -1109,14 +1109,25 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             arg_locals.push_back(result);
                                         }
                                     } else if (obj_type &&
-                                               obj_type->kind == hir::TypeKind::Struct) {
+                                               (obj_type->kind == hir::TypeKind::Struct ||
+                                                (obj_type->kind == hir::TypeKind::Pointer &&
+                                                 obj_type->element_type &&
+                                                 obj_type->element_type->kind ==
+                                                     hir::TypeKind::Struct))) {
                                         // フィールドアクセスの処理（ネストしたアクセス、配列インデックスもサポート）
-                                        // member_name が "inner.x" や "arr[0]"
-                                        // のような場合、分割して処理
+                                        // ポインタ型の場合はデリファレンスが必要
+                                        bool needs_initial_deref =
+                                            (obj_type->kind == hir::TypeKind::Pointer);
 
                                         // プロジェクションを構築
                                         MirPlace place{*obj_id};
-                                        hir::TypePtr current_type = obj_type;
+                                        hir::TypePtr current_type =
+                                            needs_initial_deref ? obj_type->element_type : obj_type;
+
+                                        if (needs_initial_deref) {
+                                            place.projections.push_back(PlaceProjection::deref());
+                                        }
+
                                         bool valid = true;
                                         std::string remaining = member_name;
 
@@ -2062,9 +2073,38 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     // 通常の関数呼び出し
     std::vector<MirOperandPtr> args;
-    for (const auto& arg : call.args) {
+
+    // メソッド呼び出しかどうかを判定
+    // 関数名が "TypeName__MethodName" の形式の場合
+    bool is_method_call = false;
+    auto double_underscore_pos = call.func_name.find("__");
+    if (double_underscore_pos != std::string::npos && !call.args.empty()) {
+        std::string type_name = call.func_name.substr(0, double_underscore_pos);
+        // 構造体名として有効かチェック
+        if (ctx.struct_defs && ctx.struct_defs->count(type_name) > 0) {
+            is_method_call = true;
+        }
+    }
+
+    for (size_t i = 0; i < call.args.size(); ++i) {
+        const auto& arg = call.args[i];
         LocalId arg_local = lower_expression(*arg, ctx);
-        args.push_back(MirOperand::copy(MirPlace{arg_local}));
+
+        // メソッド呼び出しの第1引数（self）はアドレスを渡す
+        if (is_method_call && i == 0) {
+            hir::TypePtr arg_type = arg->type;
+            // 引数が構造体型の場合、アドレスを取得
+            if (arg_type && arg_type->kind == hir::TypeKind::Struct) {
+                LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{ref_temp}, MirRvalue::ref(MirPlace{arg_local}, false)));
+                args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+            } else {
+                args.push_back(MirOperand::copy(MirPlace{arg_local}));
+            }
+        } else {
+            args.push_back(MirOperand::copy(MirPlace{arg_local}));
+        }
     }
 
     // 結果用の一時変数（型チェッカーが推論した型を使用）

@@ -196,7 +196,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
             hir_func->return_type = ast::make_void();
             hir_func->is_constructor = true;
 
-            hir_func->params.push_back({"self", impl.target_type});
+            // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
+            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
             for (const auto& param : ctor->params) {
                 hir_func->params.push_back({param.name, param.type});
             }
@@ -217,7 +218,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
             hir_func->return_type = ast::make_void();
             hir_func->is_destructor = true;
 
-            hir_func->params.push_back({"self", impl.target_type});
+            // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
+            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
 
             for (auto& stmt : impl.destructor->body) {
                 if (auto hir_stmt = lower_stmt(*stmt)) {
@@ -242,7 +244,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         }
 
         if (impl.target_type) {
-            hir_func->params.push_back({"self", impl.target_type});
+            // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
+            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
         }
 
         for (const auto& param : method->params) {

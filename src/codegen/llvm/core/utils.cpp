@@ -3,6 +3,8 @@
 
 #include "mir_to_llvm.hpp"
 
+#include <iostream>
+
 namespace cm::codegen::llvm_backend {
 
 // 外部関数宣言
@@ -553,10 +555,11 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         return llvm::cast<llvm::Function>(func.getCallee());
     }
 
-    // currentProgramからFFI関数情報を取得
+    // currentProgramから関数情報を取得（extern関数だけでなく、全ての関数を検索）
+    // これにより、モノモーフィック化されたメソッド（Container__int__get等）も正しいシグネチャで宣言される
     if (currentProgram) {
         for (const auto& func : currentProgram->functions) {
-            if (func && func->name == name && func->is_extern) {
+            if (func && func->name == name) {
                 // 戻り値型
                 llvm::Type* returnType = ctx.getVoidType();
                 if (func->return_local < func->locals.size()) {
@@ -585,7 +588,9 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         }
     }
 
-    // その他の関数は void() として宣言
+    // 最終フォールバック: void() として宣言（本来ここには到達しないはず）
+    std::cerr << "[WARN] declareExternalFunction: unknown function '" << name
+              << "' - using void() signature\n";
     auto funcType = llvm::FunctionType::get(ctx.getVoidType(), false);
     auto func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name, module);
     return func;

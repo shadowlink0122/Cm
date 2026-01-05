@@ -79,6 +79,10 @@ struct PointerValue {
     std::optional<size_t> field_index;  // 構造体フィールドへの参照の場合のフィールドインデックス
     void* raw_ptr = nullptr;  // FFI経由の外部メモリへの生ポインタ
 
+    // 内部参照用ポインタ（コンテキスト内変数のアドレス）
+    // これによりコンテキストを跨いでも参照透過性を維持できます
+    Value* internal_val_ptr = nullptr;
+
     bool is_external() const { return raw_ptr != nullptr; }
 };
 

@@ -507,11 +507,124 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                              i < args.size() && i < funcType->getNumParams(); ++i) {
                                             auto expectedType = funcType->getParamType(i);
                                             auto actualType = args[i]->getType();
-                                            if (expectedType != actualType &&
-                                                expectedType->isPointerTy() &&
-                                                actualType->isPointerTy()) {
-                                                args[i] =
-                                                    builder->CreateBitCast(args[i], expectedType);
+                                            if (expectedType != actualType) {
+                                                if (expectedType->isPointerTy() &&
+                                                    actualType->isPointerTy()) {
+                                                    // ポインタ型同士: BitCast
+                                                    args[i] = builder->CreateBitCast(args[i],
+                                                                                     expectedType);
+                                                } else if (expectedType->isPointerTy() &&
+                                                           !actualType->isPointerTy()) {
+                                                    // プリミティブ型への借用self:
+                                                    // allocaを作成してポインタを渡す 例: int.get()
+                                                    // で int値をalloca経由でi8*として渡す
+                                                    auto alloca = builder->CreateAlloca(
+                                                        actualType, nullptr, "prim_self_tmp");
+                                                    builder->CreateStore(args[i], alloca);
+                                                    args[i] = alloca;
+                                                }
+                                            }
+                                        }
+
+                                        auto result = builder->CreateCall(implFunc, args);
+                                        if (callData.destination) {
+                                            auto destLocal = callData.destination->local;
+                                            if (allocatedLocals.count(destLocal) > 0 &&
+                                                locals[destLocal]) {
+                                                builder->CreateStore(result, locals[destLocal]);
+                                            } else {
+                                                locals[destLocal] = result;
+                                            }
+                                        }
+                                    }
+
+                                    if (callData.success != mir::INVALID_BLOCK) {
+                                        builder->CreateBr(blocks[callData.success]);
+                                    }
+                                    break;
+                                }
+                            }
+                            // プリミティブ型への impl メソッド呼び出し (int.abs() 等)
+                            else if (local.type) {
+                                auto typeKind = local.type->kind;
+                                bool isPrimitive = (typeKind == hir::TypeKind::Int ||
+                                                    typeKind == hir::TypeKind::UInt ||
+                                                    typeKind == hir::TypeKind::Long ||
+                                                    typeKind == hir::TypeKind::ULong ||
+                                                    typeKind == hir::TypeKind::Short ||
+                                                    typeKind == hir::TypeKind::UShort ||
+                                                    typeKind == hir::TypeKind::Float ||
+                                                    typeKind == hir::TypeKind::Double ||
+                                                    typeKind == hir::TypeKind::Bool ||
+                                                    typeKind == hir::TypeKind::Char);
+
+                                if (isPrimitive) {
+                                    // プリミティブ型名を取得
+                                    std::string primTypeName;
+                                    switch (typeKind) {
+                                        case hir::TypeKind::Int:
+                                            primTypeName = "int";
+                                            break;
+                                        case hir::TypeKind::UInt:
+                                            primTypeName = "uint";
+                                            break;
+                                        case hir::TypeKind::Long:
+                                            primTypeName = "long";
+                                            break;
+                                        case hir::TypeKind::ULong:
+                                            primTypeName = "ulong";
+                                            break;
+                                        case hir::TypeKind::Short:
+                                            primTypeName = "short";
+                                            break;
+                                        case hir::TypeKind::UShort:
+                                            primTypeName = "ushort";
+                                            break;
+                                        case hir::TypeKind::Float:
+                                            primTypeName = "float";
+                                            break;
+                                        case hir::TypeKind::Double:
+                                            primTypeName = "double";
+                                            break;
+                                        case hir::TypeKind::Bool:
+                                            primTypeName = "bool";
+                                            break;
+                                        case hir::TypeKind::Char:
+                                            primTypeName = "char";
+                                            break;
+                                        default:
+                                            primTypeName = "int";
+                                            break;
+                                    }
+
+                                    // impl関数名を生成 (例: int__abs)
+                                    std::string implFuncName =
+                                        primTypeName + "__" + callData.method_name;
+                                    llvm::Function* implFunc = functions[implFuncName];
+                                    if (!implFunc) {
+                                        implFunc = declareExternalFunction(implFuncName);
+                                    }
+
+                                    if (implFunc) {
+                                        auto funcType = implFunc->getFunctionType();
+                                        // 引数の型変換
+                                        for (size_t i = 0;
+                                             i < args.size() && i < funcType->getNumParams(); ++i) {
+                                            auto expectedType = funcType->getParamType(i);
+                                            auto actualType = args[i]->getType();
+                                            if (expectedType != actualType) {
+                                                if (expectedType->isPointerTy() &&
+                                                    !actualType->isPointerTy()) {
+                                                    // プリミティブ値をポインタ化
+                                                    auto alloca = builder->CreateAlloca(
+                                                        actualType, nullptr, "prim_self_tmp");
+                                                    builder->CreateStore(args[i], alloca);
+                                                    args[i] = alloca;
+                                                } else if (expectedType->isPointerTy() &&
+                                                           actualType->isPointerTy()) {
+                                                    args[i] = builder->CreateBitCast(args[i],
+                                                                                     expectedType);
+                                                }
                                             }
                                         }
 
@@ -644,6 +757,14 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                         if (expectedType->isPointerTy() && actualType->isPointerTy()) {
                             args[i] = builder->CreateBitCast(args[i], expectedType);
+                        }
+                        // プリミティブ型への借用self: ポインタ化
+                        else if (expectedType->isPointerTy() && !actualType->isPointerTy()) {
+                            auto alloca =
+                                builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
+                            builder->CreateStore(args[i], alloca);
+                            // ポインタ型をexpectedType（ptr/i8*）に変換
+                            args[i] = builder->CreateBitCast(alloca, expectedType);
                         }
                         // 整数型のサイズが異なる場合、変換
                         else if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {

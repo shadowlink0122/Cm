@@ -522,6 +522,9 @@ int main(int argc, char* argv[]) {
 
         // ========== Optimization ==========
         if (opts.optimization_level > 0 || opts.show_mir_opt) {
+            if (cm::debug::g_debug_mode)
+                std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
+                          << std::endl;
             if (opts.debug)
                 std::cout << "=== Optimization (Level " << opts.optimization_level << ") ===\n"
                           << std::flush;
@@ -529,6 +532,8 @@ int main(int argc, char* argv[]) {
             // MIR最適化パスマネージャーv2を使用（収束管理と無限ループ防止機能付き）
             mir::opt::run_optimization_passes(mir, opts.optimization_level,
                                               opts.debug || opts.verbose);
+            if (cm::debug::g_debug_mode)
+                std::cerr << "[OPT] Optimization complete" << std::endl;
 
             if (opts.debug)
                 std::cout << "最適化完了\n\n";
@@ -694,7 +699,11 @@ int main(int argc, char* argv[]) {
                     }
 
                     cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
+                    if (cm::debug::g_debug_mode)
+                        std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     codegen.compile(mir);
+                    if (cm::debug::g_debug_mode)
+                        std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
 
                     if (opts.verbose) {
                         std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";

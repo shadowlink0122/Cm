@@ -72,14 +72,116 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, LoweringContext&
                     ctx.push_statement(std::move(const_stmt));
                     arg_locals.push_back(temp);
                 } else {
-                    // 通常の変数を解決
-                    auto var_id = ctx.resolve_variable(var_name);
-                    if (var_id) {
-                        arg_locals.push_back(*var_id);
+                    // メンバーアクセスかどうかをチェック（例: c.get() または self.x）
+                    size_t dot_pos = var_name.find('.');
+                    size_t paren_pos = var_name.find('(');
+
+                    if (dot_pos != std::string::npos && paren_pos != std::string::npos &&
+                        paren_pos > dot_pos) {
+                        // メソッド呼び出し: obj.method()
+                        std::string obj_name = var_name.substr(0, dot_pos);
+                        std::string method_part = var_name.substr(dot_pos + 1);
+                        std::string method_name = method_part.substr(0, method_part.find('('));
+
+                        auto obj_id = ctx.resolve_variable(obj_name);
+                        if (obj_id) {
+                            LocalId obj_local = *obj_id;
+                            hir::TypePtr obj_type = ctx.func->locals[obj_local].type;
+
+                            // ポインタ型の場合、デリファレンスして構造体型を取得
+                            if (obj_type && obj_type->kind == hir::TypeKind::Pointer) {
+                                obj_type = obj_type->element_type;
+                            }
+
+                            if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
+                                std::string struct_name = obj_type->name;
+                                std::string full_method_name = struct_name + "__" + method_name;
+
+                                // selfポインタを作成
+                                LocalId ref_temp = ctx.new_temp(hir::make_pointer(obj_type));
+                                ctx.push_statement(MirStatement::assign(
+                                    MirPlace{ref_temp},
+                                    MirRvalue::ref(MirPlace{obj_local}, false)));
+
+                                // メソッド呼び出し
+                                hir::TypePtr return_type = hir::make_int();
+                                LocalId result = ctx.new_temp(return_type);
+                                BlockId success_block = ctx.new_block();
+
+                                std::vector<MirOperandPtr> method_args;
+                                method_args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+
+                                auto call_term = std::make_unique<MirTerminator>();
+                                call_term->kind = MirTerminator::Call;
+                                call_term->data = MirTerminator::CallData{
+                                    MirOperand::function_ref(full_method_name),
+                                    std::move(method_args),
+                                    MirPlace{result},
+                                    success_block,
+                                    std::nullopt,
+                                    "",
+                                    "",
+                                    false};
+                                ctx.set_terminator(std::move(call_term));
+                                ctx.switch_to_block(success_block);
+
+                                arg_locals.push_back(result);
+                            } else {
+                                arg_locals.push_back(ctx.new_temp(hir::make_error()));
+                            }
+                        } else {
+                            arg_locals.push_back(ctx.new_temp(hir::make_error()));
+                        }
+                    } else if (dot_pos != std::string::npos) {
+                        // フィールドアクセス: obj.field (例: self.x)
+                        std::string obj_name = var_name.substr(0, dot_pos);
+                        std::string field_name = var_name.substr(dot_pos + 1);
+
+                        auto obj_id = ctx.resolve_variable(obj_name);
+                        if (obj_id) {
+                            LocalId obj_local = *obj_id;
+                            hir::TypePtr obj_type = ctx.func->locals[obj_local].type;
+
+                            // ポインタ型の場合、デリファレンスして構造体型を取得
+                            bool needs_deref = false;
+                            if (obj_type && obj_type->kind == hir::TypeKind::Pointer) {
+                                needs_deref = true;
+                                obj_type = obj_type->element_type;
+                            }
+
+                            if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
+                                auto field_idx = ctx.get_field_index(obj_type->name, field_name);
+                                if (field_idx) {
+                                    MirPlace place{obj_local};
+                                    if (needs_deref) {
+                                        place.projections.push_back(PlaceProjection::deref());
+                                    }
+                                    place.projections.push_back(PlaceProjection::field(*field_idx));
+
+                                    hir::TypePtr field_type = hir::make_int();
+                                    LocalId temp = ctx.new_temp(field_type);
+                                    ctx.push_statement(MirStatement::assign(
+                                        MirPlace{temp}, MirRvalue::use(MirOperand::copy(place))));
+                                    arg_locals.push_back(temp);
+                                } else {
+                                    arg_locals.push_back(ctx.new_temp(hir::make_error()));
+                                }
+                            } else {
+                                arg_locals.push_back(ctx.new_temp(hir::make_error()));
+                            }
+                        } else {
+                            arg_locals.push_back(ctx.new_temp(hir::make_error()));
+                        }
                     } else {
-                        // 変数が見つからない場合、エラー用のダミー値
-                        auto err_type = hir::make_error();
-                        arg_locals.push_back(ctx.new_temp(err_type));
+                        // 通常の変数を解決
+                        auto var_id = ctx.resolve_variable(var_name);
+                        if (var_id) {
+                            arg_locals.push_back(*var_id);
+                        } else {
+                            // 変数が見つからない場合、エラー用のダミー値
+                            auto err_type = hir::make_error();
+                            arg_locals.push_back(ctx.new_temp(err_type));
+                        }
                     }
                 }
             }
@@ -211,6 +313,13 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
             LocalId self_local = *self_opt;
             hir::TypePtr self_type = ctx.func->locals[self_local].type;
 
+            // selfがポインタ型の場合、デリファレンスして構造体型を取得
+            bool self_is_pointer = false;
+            if (self_type && self_type->kind == hir::TypeKind::Pointer) {
+                self_is_pointer = true;
+                self_type = self_type->element_type;  // ポインタの先の型を使用
+            }
+
             // 構造体のフィールドインデックスを取得
             std::string struct_name;
             if (self_type && self_type->kind == hir::TypeKind::Struct) {
@@ -223,6 +332,10 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
             if (field_idx) {
                 // self.fieldとしてアクセス
                 MirPlace place{self_local};
+                // selfがポインタの場合、まずデリファレンス
+                if (self_is_pointer) {
+                    place.projections.push_back(PlaceProjection::deref());
+                }
                 place.projections.push_back(PlaceProjection::field(*field_idx));
 
                 // フィールドの値を一時変数にコピー
@@ -281,10 +394,22 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     LocalId object = lower_expression(*current, ctx);
     hir::TypePtr obj_type = current->type;
 
-    // 型が未設定の場合、ローカル変数から推論
-    if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
-        if (object < ctx.func->locals.size()) {
-            obj_type = ctx.func->locals[object].type;
+    // MIRのローカル変数の型を取得（selfの場合はポインタ型）
+    hir::TypePtr mir_type = nullptr;
+    if (object < ctx.func->locals.size()) {
+        mir_type = ctx.func->locals[object].type;
+    }
+
+    // ポインタ型の場合、デリファレンスが必要
+    // HIRの型ではなくMIRの型でポインタかどうかを判定（selfは暗黙的にポインタ）
+    bool needs_deref = false;
+    if (mir_type && mir_type->kind == hir::TypeKind::Pointer) {
+        needs_deref = true;
+        obj_type = mir_type->element_type;  // ポインタの先の型を使用
+    } else if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+        // HIRの型が未設定または構造体でない場合、MIRの型から推論
+        if (mir_type) {
+            obj_type = mir_type;
         }
     }
 
@@ -296,6 +421,12 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 
     // フィールドチェーンを逆順にしてプロジェクションを構築
     MirPlace place{object};
+
+    // ポインタの場合、最初にデリファレンス
+    if (needs_deref) {
+        place.projections.push_back(PlaceProjection::deref());
+    }
+
     hir::TypePtr current_type = obj_type;
 
     for (auto it = field_chain.rbegin(); it != field_chain.rend(); ++it) {

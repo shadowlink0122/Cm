@@ -505,12 +505,16 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             std::vector<MirOperandPtr> args;
 
             // HIRのctor_call.argsには既にthis（変数への参照）が含まれている
-            // 最初の引数は変数自身への参照なので、直接localを使う
+            // 最初の引数は変数自身への参照なので、アドレスを渡す（selfはポインタ型）
             bool first_arg = true;
             for (const auto& arg : hir_call.args) {
                 if (first_arg) {
-                    // 最初の引数（this）は変数自身を使う
-                    args.push_back(MirOperand::copy(MirPlace{local}));
+                    // 最初の引数（this/self）はアドレスを渡す
+                    hir::TypePtr local_type = let.type;
+                    LocalId ref_temp = ctx.new_temp(hir::make_pointer(local_type));
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{ref_temp}, MirRvalue::ref(MirPlace{local}, false)));
+                    args.push_back(MirOperand::copy(MirPlace{ref_temp}));
                     first_arg = false;
                 } else {
                     // 残りの引数を通常通りlowering
@@ -587,17 +591,26 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                     return false;
                 }
 
+                // ポインタ型の場合、デリファレンスを追加
+                if (inner_type && inner_type->kind == hir::TypeKind::Pointer) {
+                    projections.push_back([](MirPlace& p, LoweringContext&) {
+                        p.projections.push_back(PlaceProjection::deref());
+                    });
+                    inner_type = inner_type->element_type;
+                }
+
                 // フィールドプロジェクションを追加
                 std::string field_name = (*member)->member;
-                projections.push_back(
-                    [field_name, inner_type, &ctx](MirPlace& p, LoweringContext&) {
-                        if (inner_type && inner_type->kind == hir::TypeKind::Struct) {
-                            auto field_idx = ctx.get_field_index(inner_type->name, field_name);
-                            if (field_idx) {
-                                p.projections.push_back(PlaceProjection::field(*field_idx));
-                            }
+                hir::TypePtr captured_inner_type = inner_type;
+                projections.push_back([field_name, captured_inner_type, &ctx](MirPlace& p,
+                                                                              LoweringContext&) {
+                    if (captured_inner_type && captured_inner_type->kind == hir::TypeKind::Struct) {
+                        auto field_idx = ctx.get_field_index(captured_inner_type->name, field_name);
+                        if (field_idx) {
+                            p.projections.push_back(PlaceProjection::field(*field_idx));
                         }
-                    });
+                    }
+                });
 
                 // 次の型を取得
                 if (inner_type && inner_type->kind == hir::TypeKind::Struct) {
@@ -716,9 +729,16 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
     for (const auto& [local_id, type_name] : destructor_vars) {
         std::string dtor_name = type_name + "__dtor";
 
-        // デストラクタ呼び出しを生成
+        // デストラクタ呼び出しを生成（selfはポインタとして渡す）
+        // ローカル変数の型を取得
+        hir::TypePtr local_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+        local_type->name = type_name;
+        LocalId ref_temp = ctx.new_temp(hir::make_pointer(local_type));
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{ref_temp}, MirRvalue::ref(MirPlace{local_id}, false)));
+
         std::vector<MirOperandPtr> args;
-        args.push_back(MirOperand::copy(MirPlace{local_id}));
+        args.push_back(MirOperand::copy(MirPlace{ref_temp}));
 
         BlockId success_block = ctx.new_block();
 
@@ -1054,9 +1074,15 @@ void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
     for (const auto& [local_id, type_name] : destructor_vars) {
         std::string dtor_name = type_name + "__dtor";
 
-        // デストラクタ呼び出しを生成
+        // デストラクタ呼び出しを生成（selfはポインタとして渡す）
+        hir::TypePtr local_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+        local_type->name = type_name;
+        LocalId ref_temp = ctx.new_temp(hir::make_pointer(local_type));
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{ref_temp}, MirRvalue::ref(MirPlace{local_id}, false)));
+
         std::vector<MirOperandPtr> args;
-        args.push_back(MirOperand::copy(MirPlace{local_id}));
+        args.push_back(MirOperand::copy(MirPlace{ref_temp}));
 
         BlockId success_block = ctx.new_block();
 

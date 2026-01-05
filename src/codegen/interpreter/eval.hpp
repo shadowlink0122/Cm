@@ -140,12 +140,26 @@ class Evaluator {
                     }
 
                     // ターゲットローカル変数から値を取得
-                    auto target_it = ctx.locals.find(ptr.target_local);
-                    if (target_it != ctx.locals.end()) {
+                    // internal_val_ptrがあればそれを使用（コンテキスト跨ぎ対応）
+                    Value* target_value = nullptr;
+                    if (ptr.internal_val_ptr) {
+                        target_value = ptr.internal_val_ptr;
+                    } else {
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end()) {
+                            target_value = &target_it->second;
+                        } else if (ptr.is_external()) {
+                            // is_external() checks raw_ptr, handled above loop logic?
+                            // No, loop continues if is_external is true at start.
+                            // So here we only handle local lookup failure.
+                        }
+                    }
+
+                    if (target_value) {
                         // 配列要素への参照の場合
                         if (ptr.array_index.has_value()) {
-                            if (target_it->second.type() == typeid(ArrayValue)) {
-                                auto& arr = std::any_cast<ArrayValue&>(target_it->second);
+                            if (target_value->type() == typeid(ArrayValue)) {
+                                auto& arr = std::any_cast<ArrayValue&>(*target_value);
                                 int64_t idx = ptr.array_index.value();
                                 if (idx >= 0 && static_cast<size_t>(idx) < arr.elements.size()) {
                                     result = arr.elements[idx];
@@ -158,8 +172,8 @@ class Evaluator {
                         }
                         // 構造体フィールドへの参照の場合
                         else if (ptr.field_index.has_value()) {
-                            if (target_it->second.type() == typeid(StructValue)) {
-                                auto& sv = std::any_cast<StructValue&>(target_it->second);
+                            if (target_value->type() == typeid(StructValue)) {
+                                auto& sv = std::any_cast<StructValue&>(*target_value);
                                 auto field_it =
                                     sv.fields.find(static_cast<FieldId>(ptr.field_index.value()));
                                 if (field_it != sv.fields.end()) {
@@ -171,7 +185,7 @@ class Evaluator {
                                 return Value{};
                             }
                         } else {
-                            result = target_it->second;
+                            result = *target_value;
                         }
                     } else {
                         return Value{};
@@ -262,9 +276,14 @@ class Evaluator {
                     // ポインタのデリファレンス - 参照先に移動
                     if (current->type() == typeid(PointerValue)) {
                         auto& ptr = std::any_cast<PointerValue&>(*current);
-                        auto target_it = ctx.locals.find(ptr.target_local);
-                        if (target_it != ctx.locals.end()) {
-                            current = &target_it->second;
+
+                        if (ptr.internal_val_ptr) {
+                            current = ptr.internal_val_ptr;
+                        } else {
+                            auto target_it = ctx.locals.find(ptr.target_local);
+                            if (target_it != ctx.locals.end()) {
+                                current = &target_it->second;
+                            }
                         }
                     }
                 }
@@ -747,6 +766,13 @@ class Evaluator {
                             ptr.field_index = proj.field_id;
                         }
                     }
+                }
+
+                // 内部参照用ポインタをセット
+                auto it = ctx.locals.find(data.place.local);
+                if (it != ctx.locals.end()) {
+                    ptr.internal_val_ptr = &it->second;
+                } else {
                 }
 
                 return Value(ptr);

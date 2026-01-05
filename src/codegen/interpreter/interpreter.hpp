@@ -65,11 +65,45 @@ class Interpreter {
 
         // 引数を設定
         for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); ++i) {
-            ctx.locals[func.arg_locals[i]] = args[i];
+            Value arg_value = args[i];
+
+            // PointerValueが渡されたが、パラメータが非ポインタ型の場合は自動デリファレンス
+            if (arg_value.type() == typeid(PointerValue)) {
+                auto& ptr = std::any_cast<PointerValue&>(arg_value);
+                // パラメータの型情報を確認
+                bool param_is_pointer = false;
+                if (i < func.locals.size()) {
+                    const auto& local_decl = func.locals[func.arg_locals[i]];
+                    if (local_decl.type && local_decl.type->kind == hir::TypeKind::Pointer) {
+                        param_is_pointer = true;
+                    }
+                }
+
+                // パラメータがポインタ型でない場合、デリファレンスして値を取得
+                if (!param_is_pointer) {
+                    Value* target = nullptr;
+                    if (ptr.internal_val_ptr) {
+                        target = ptr.internal_val_ptr;
+                    } else {
+                        // 呼び出し元のコンテキストにはアクセスできないため、
+                        // internal_val_ptrがない場合は対応不可
+                    }
+                    if (target) {
+                        arg_value = *target;
+                        debug::interp::log(debug::interp::Id::LocalInit,
+                                           "Auto-deref arg " + std::to_string(i) +
+                                               " from PointerValue to " +
+                                               std::string(arg_value.type().name()),
+                                           debug::Level::Debug);
+                    }
+                }
+            }
+
+            ctx.locals[func.arg_locals[i]] = arg_value;
 
             // デバッグ: 引数の型を出力
-            if (args[i].type() == typeid(StructValue)) {
-                auto& sv = std::any_cast<StructValue&>(args[i]);
+            if (arg_value.type() == typeid(StructValue)) {
+                auto& sv = std::any_cast<StructValue&>(arg_value);
                 debug::interp::log(debug::interp::Id::LocalInit,
                                    "Set arg " + std::to_string(i) + " (local " +
                                        std::to_string(func.arg_locals[i]) +
@@ -79,7 +113,7 @@ class Interpreter {
                 debug::interp::log(debug::interp::Id::LocalInit,
                                    "Set arg " + std::to_string(i) + " (local " +
                                        std::to_string(func.arg_locals[i]) +
-                                       ") as type: " + std::string(args[i].type().name()),
+                                       ") as type: " + std::string(arg_value.type().name()),
                                    debug::Level::Debug);
             }
         }
@@ -703,11 +737,44 @@ class Interpreter {
                     self_local = place.local;
                 }
 
+                // ターゲット関数が*Type（ポインタ）を期待しているが、argsにStructValueがある場合
+                // PointerValueでラップする
+                bool did_pointer_wrap = false;
+                if (!callee->arg_locals.empty() && !args.empty()) {
+                    LocalId first_param = callee->arg_locals[0];
+                    if (first_param < callee->locals.size()) {
+                        const auto& param_decl = callee->locals[first_param];
+                        if (param_decl.type && param_decl.type->kind == hir::TypeKind::Pointer) {
+                            // パラメータがポインタ型だが、argsはStructValue
+                            if (args[0].type() == typeid(StructValue)) {
+                                // argsの末尾に元の構造体を追加し、そこを指すPointerValueを作成
+                                args.push_back(args[0]);
+
+                                PointerValue ptr;
+                                ptr.target_local = invalid_local;     // 外部参照
+                                ptr.internal_val_ptr = &args.back();  // 末尾要素を指す
+                                args[0] = Value(ptr);
+                                did_pointer_wrap = true;
+                                debug::interp::log(
+                                    debug::interp::Id::Call,
+                                    "Method call: wrapped StructValue in PointerValue for " +
+                                        func_name,
+                                    debug::Level::Debug);
+                            }
+                        }
+                    }
+                }
+
                 Value result = execute_function(*callee, args);
 
                 // メソッド呼び出しの場合、selfをコピーバック
+                // ポインタラップした場合はargs.back()から、そうでなければargs[0]から
                 if (self_local != invalid_local && !args.empty()) {
-                    ctx.locals[self_local] = args[0];
+                    if (did_pointer_wrap && args.size() > 1) {
+                        ctx.locals[self_local] = args.back();
+                    } else {
+                        ctx.locals[self_local] = args[0];
+                    }
                 }
 
                 if (data.destination) {
@@ -846,11 +913,45 @@ class Interpreter {
             self_local = place.local;
         }
 
+        // ターゲット関数が*Type（ポインタ）を期待しているが、argsにStructValueがある場合
+        // PointerValueでラップする
+        // 注意: args[0]を上書きする前に元の値を保存する必要がある
+        bool did_pointer_wrap = false;
+        if (!actual_func->arg_locals.empty() && !args.empty()) {
+            LocalId first_param = actual_func->arg_locals[0];
+            if (first_param < actual_func->locals.size()) {
+                const auto& param_decl = actual_func->locals[first_param];
+                if (param_decl.type && param_decl.type->kind == hir::TypeKind::Pointer) {
+                    // パラメータがポインタ型だが、argsはStructValue
+                    if (args[0].type() == typeid(StructValue)) {
+                        // argsの末尾に元の構造体を追加し、そこを指すPointerValueを作成
+                        args.push_back(args[0]);
+
+                        PointerValue ptr;
+                        ptr.target_local = invalid_local;     // 外部参照
+                        ptr.internal_val_ptr = &args.back();  // 末尾要素を指す
+                        args[0] = Value(ptr);
+                        did_pointer_wrap = true;
+                        debug::interp::log(
+                            debug::interp::Id::Call,
+                            "Dynamic dispatch: wrapped StructValue in PointerValue for " +
+                                actual_func_name,
+                            debug::Level::Debug);
+                    }
+                }
+            }
+        }
+
         Value result = execute_function(*actual_func, args);
 
         // selfをコピーバック（メソッドがselfを変更した可能性があるため）
+        // ポインタラップした場合はargs.back()から、そうでなければargs[0]から
         if (self_local != invalid_local && !args.empty()) {
-            ctx.locals[self_local] = args[0];
+            if (did_pointer_wrap && args.size() > 1) {
+                ctx.locals[self_local] = args.back();
+            } else {
+                ctx.locals[self_local] = args[0];
+            }
         }
 
         if (data.destination) {

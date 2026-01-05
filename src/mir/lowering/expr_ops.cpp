@@ -37,6 +37,12 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                     return false;
                 }
 
+                // ポインタ型の場合、デリファレンスを追加
+                if (inner_type && inner_type->kind == hir::TypeKind::Pointer) {
+                    place.projections.push_back(PlaceProjection::deref());
+                    inner_type = inner_type->element_type;
+                }
+
                 // フィールドプロジェクションを追加
                 std::string field_name = (*member)->member;
                 if (inner_type && inner_type->kind == hir::TypeKind::Struct) {
