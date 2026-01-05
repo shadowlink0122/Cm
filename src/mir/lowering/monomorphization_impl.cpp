@@ -943,66 +943,6 @@ void Monomorphization::generate_generic_specializations(
                                 if (current_func_name == func_name) {
                                     // 関数名を特殊化された名前に変更
                                     call_data.func = MirOperand::function_ref(specialized_name);
-
-                                    // self引数の参照化（呼び出し側）
-                                    // 構造体メソッドの第1引数がCopyの場合、Refに変更
-                                    debug_msg("MONO",
-                                              "Checking self-ref fixup for " + specialized_name);
-                                    if (!call_data.args.empty() && call_data.args[0]) {
-                                        debug_msg("MONO", "  args[0] kind=" +
-                                                              std::to_string(static_cast<int>(
-                                                                  call_data.args[0]->kind)));
-                                    }
-                                    if (!call_data.args.empty() && call_data.args[0] &&
-                                        call_data.args[0]->kind == MirOperand::Copy) {
-                                        auto& place = std::get<MirPlace>(call_data.args[0]->data);
-                                        debug_msg("MONO",
-                                                  "  place.local=" + std::to_string(place.local) +
-                                                      " func->locals.size()=" +
-                                                      std::to_string(func->locals.size()));
-                                        if (place.local < func->locals.size()) {
-                                            auto& local_type = func->locals[place.local].type;
-                                            debug_msg("MONO",
-                                                      "  local_type kind=" +
-                                                          std::to_string(local_type
-                                                                             ? static_cast<int>(
-                                                                                   local_type->kind)
-                                                                             : -1) +
-                                                          " name=" +
-                                                          (local_type ? local_type->name : "null"));
-                                            // 構造体型で非ポインタの場合
-                                            if (local_type &&
-                                                local_type->kind != hir::TypeKind::Pointer &&
-                                                (local_type->kind == hir::TypeKind::Struct ||
-                                                 local_type->kind == hir::TypeKind::Generic ||
-                                                 local_type->kind == hir::TypeKind::TypeAlias ||
-                                                 (local_type->name.find(specialized_name.substr(
-                                                      0, specialized_name.find("__"))) == 0))) {
-                                                // 新しいローカル変数を追加（ポインタ型）
-                                                LocalId ref_id =
-                                                    static_cast<LocalId>(func->locals.size());
-                                                std::string ref_name =
-                                                    "_caller_ref_" + std::to_string(ref_id);
-                                                auto ref_type = hir::make_pointer(local_type);
-                                                func->locals.emplace_back(ref_id, ref_name,
-                                                                          ref_type, false, false);
-
-                                                // Ref文を追加（呼び出し前に）
-                                                auto ref_stmt = MirStatement::assign(
-                                                    MirPlace{ref_id}, MirRvalue::ref(place, false));
-                                                block->statements.push_back(std::move(ref_stmt));
-
-                                                // 呼び出しの第1引数を参照に変更
-                                                call_data.args[0] =
-                                                    MirOperand::copy(MirPlace{ref_id});
-
-                                                debug_msg("MONO",
-                                                          "Added caller-side self-ref fixup for " +
-                                                              specialized_name + " in " +
-                                                              caller_name);
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }

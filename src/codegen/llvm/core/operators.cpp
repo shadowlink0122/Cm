@@ -189,6 +189,40 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFAdd(lhs, rhs, "fadd");
             }
+
+            // 配列型（文字列リテラル [n x i8]）の場合は文字列連結として処理
+            if (lhsType->isArrayTy() || rhsType->isArrayTy()) {
+                // 配列をポインタに変換
+                llvm::Value* lhsPtr = lhs;
+                llvm::Value* rhsPtr = rhs;
+
+                if (lhsType->isArrayTy()) {
+                    // 配列をallocaに格納してGEPでポインタ取得
+                    auto lhsAlloca = builder->CreateAlloca(lhsType, nullptr, "str_tmp");
+                    builder->CreateStore(lhs, lhsAlloca);
+                    lhsPtr = builder->CreateGEP(lhsType, lhsAlloca,
+                                                {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                                 llvm::ConstantInt::get(ctx.getI32Type(), 0)},
+                                                "str_ptr");
+                }
+
+                if (rhsType->isArrayTy()) {
+                    auto rhsAlloca = builder->CreateAlloca(rhsType, nullptr, "str_tmp");
+                    builder->CreateStore(rhs, rhsAlloca);
+                    rhsPtr = builder->CreateGEP(rhsType, rhsAlloca,
+                                                {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                                 llvm::ConstantInt::get(ctx.getI32Type(), 0)},
+                                                "str_ptr");
+                }
+
+                // 文字列連結関数を呼び出す
+                auto concatFunc = module->getOrInsertFunction(
+                    "cm_string_concat",
+                    llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                return builder->CreateCall(concatFunc, {lhsPtr, rhsPtr});
+            }
+
             return builder->CreateAdd(lhs, rhs, "add");
         }
         case mir::MirBinaryOp::Sub: {
