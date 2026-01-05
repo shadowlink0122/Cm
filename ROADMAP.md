@@ -5,6 +5,21 @@
 > **LLVMベースアーキテクチャ**: 2025年12月より、LLVM IRを唯一のコード生成バックエンドとして採用。
 > Rust/TypeScript/C++へのトランスパイルは今後行いません。
 
+> **📋 最新のバージョン計画**: [docs/VERSION_PLAN.md](docs/VERSION_PLAN.md) を参照
+> **📝 所有権・借用設計**: [docs/design/ownership_and_borrowing.md](docs/design/ownership_and_borrowing.md)
+
+### 現在のバージョン: v0.10.0 ✅
+
+実装済み機能（v0.10.0に統合）:
+- モジュールシステム、FFI、ラムダ式、クロージャ
+- 動的スライス、高階関数（map/filter/reduce等）
+- Debug/Display自動実装、MIR最適化安定化
+- no_std対応、文字列補間拡張
+
+次期バージョン（v0.11.0）計画:
+- イテレータ拡張、JS改善、所有権・借用システム
+- File I/O、std::io拡張、リファクタリング
+
 ## Version 0.1.0 ✅
 
 ### 完成済み機能
