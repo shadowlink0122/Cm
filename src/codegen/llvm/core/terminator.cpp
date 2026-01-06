@@ -766,6 +766,32 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             // ポインタ型をexpectedType（ptr/i8*）に変換
                             args[i] = builder->CreateBitCast(alloca, expectedType);
                         }
+                        // 構造体値渡し: ポインタから値型への変換（小さな構造体のC ABI対応）
+                        else if (!expectedType->isPointerTy() && actualType->isPointerTy() &&
+                                 (expectedType->isStructTy() || expectedType->isArrayTy())) {
+                            // ポインタから構造体値をロード
+                            auto ptrToStruct = args[i];
+                            // ポインタがAllocaInst（構造体ポインタ）の場合
+                            if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(ptrToStruct)) {
+                                auto allocatedType = allocaInst->getAllocatedType();
+                                if (allocatedType == expectedType) {
+                                    // 直接ロード
+                                    args[i] = builder->CreateLoad(expectedType, ptrToStruct,
+                                                                  "struct_load");
+                                } else {
+                                    // 型が異なる場合、ビットキャストしてロード
+                                    auto castPtr = builder->CreateBitCast(
+                                        ptrToStruct, llvm::PointerType::getUnqual(expectedType),
+                                        "struct_ptr_cast");
+                                    args[i] =
+                                        builder->CreateLoad(expectedType, castPtr, "struct_load");
+                                }
+                            } else {
+                                // その他のポインタ型からロード
+                                args[i] =
+                                    builder->CreateLoad(expectedType, ptrToStruct, "struct_load");
+                            }
+                        }
                         // 整数型のサイズが異なる場合、変換
                         else if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
                             unsigned expectedBits = expectedType->getIntegerBitWidth();

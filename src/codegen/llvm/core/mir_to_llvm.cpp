@@ -553,7 +553,18 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         size_t argIdx = 0;
         for (auto& arg : currentFunction->args()) {
             if (argIdx < func.arg_locals.size()) {
-                locals[func.arg_locals[argIdx]] = &arg;
+                auto localIdx = func.arg_locals[argIdx];
+                // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用
+                // （C ABIで16バイト以下の構造体はレジスタ渡しされる）
+                if (arg.getType()->isStructTy()) {
+                    auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                        "arg_" + std::to_string(argIdx) + "_stack");
+                    builder->CreateStore(&arg, alloca);
+                    locals[localIdx] = alloca;
+                    allocatedLocals.insert(localIdx);  // allocaを追跡
+                } else {
+                    locals[localIdx] = &arg;
+                }
             }
             argIdx++;
         }
