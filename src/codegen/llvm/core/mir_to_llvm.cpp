@@ -523,13 +523,19 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // デバッグ用プログレス表示
         guard.show_progress("Function", 0, func.basic_blocks.size());
 
-        // ランタイム関数（cm_print_*, cm_println_*など）はスキップ
+        // ランタイム関数（cm_*）はスキップ
         // これらはランタイムライブラリで実装されている
         if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
             func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
-            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0) {
+            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||
+            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0) {
+            return;
+        }
+
+        // 本体がない関数（extern関数）は宣言のみで本体を生成しない
+        if (func.basic_blocks.empty()) {
             return;
         }
 

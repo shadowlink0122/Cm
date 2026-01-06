@@ -39,4 +39,4 @@ export {
     cross,
     magnitude,  // math.cmで再エクスポートされない
     normalize
-}
+};

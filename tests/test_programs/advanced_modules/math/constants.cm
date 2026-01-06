@@ -9,4 +9,4 @@ export {
     PI,
     E
     // GOLDEN_RATIO は公開しない
-}
+};

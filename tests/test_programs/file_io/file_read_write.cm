@@ -1,0 +1,62 @@
+// File I/O テスト
+import std::io::println;
+import std::fs::{read_file, write_file, exists, remove, size};
+
+int main() {
+    // テストファイルパス
+    string path = "/tmp/cm_test_file.txt";
+    string content = "Hello from Cm!\nThis is a test file.";
+    
+    // 書き込みテスト
+    if (write_file(path, content)) {
+        println("write_file: OK");
+    } else {
+        println("write_file: FAILED");
+        return 1;
+    }
+    
+    // 存在確認テスト
+    if (exists(path)) {
+        println("exists: OK");
+    } else {
+        println("exists: FAILED");
+        return 1;
+    }
+    
+    // サイズテスト
+    long file_size = size(path);
+    if (file_size > 0) {
+        println("size: OK ({file_size} bytes)");
+    } else {
+        println("size: FAILED");
+        return 1;
+    }
+    
+    // 読み込みテスト
+    string read_content = read_file(path);
+    if (read_content == content) {
+        println("read_file: OK");
+    } else {
+        println("read_file: FAILED (content mismatch)");
+        return 1;
+    }
+    
+    // 削除テスト
+    if (remove(path)) {
+        println("remove: OK");
+    } else {
+        println("remove: FAILED");
+        return 1;
+    }
+    
+    // 削除後の存在確認
+    if (!exists(path)) {
+        println("exists after remove: OK");
+    } else {
+        println("exists after remove: FAILED");
+        return 1;
+    }
+    
+    println("All file I/O tests passed!");
+    return 0;
+}

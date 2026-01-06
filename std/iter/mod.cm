@@ -1,0 +1,80 @@
+// std::iter - イテレータモジュール
+module std.iter;
+
+// ============================================================
+// Range構造体（範囲イテレータ）
+// ============================================================
+
+/// 整数範囲を表す構造体
+export struct Range {
+    int start;
+    int end;
+    int step;
+}
+
+/// 範囲を作成（step=1）
+export Range range(int end) {
+    Range r;
+    r.start = 0;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+/// 範囲を作成（start, end, step=1）
+export Range range(int start, int end) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+/// 範囲を作成（start, end, step）
+export Range range(int start, int end, int step) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = step;
+    return r;
+}
+
+/// 範囲の長さを取得
+export int len(Range r) {
+    if (r.step == 0) {
+        return 0;
+    }
+    if (r.step > 0) {
+        if (r.end <= r.start) {
+            return 0;
+        }
+        return (r.end - r.start + r.step - 1) / r.step;
+    } else {
+        // step < 0: 降順
+        if (r.start <= r.end) {
+            return 0;
+        }
+        return (r.start - r.end - r.step - 1) / (-r.step);
+    }
+}
+
+/// 範囲が空かどうか
+export bool is_empty(Range r) {
+    return len(r) == 0;
+}
+
+/// 範囲のn番目の要素を取得
+export int at(Range r, int n) {
+    return r.start + n * r.step;
+}
+
+// ============================================================
+// ユーティリティ関数
+// ============================================================
+
+/// 2つの値をスワップ
+export <T> void swap(T* a, T* b) {
+    T tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
