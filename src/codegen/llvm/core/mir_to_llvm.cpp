@@ -2035,27 +2035,36 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
 
                     builder->CreateCondBr(inBounds, continueBlock, panicBlock);
 
-                    // パニックブロック: 境界外アクセスでabort
+                    // パニックブロック: 境界外アクセスでパニック
                     builder->SetInsertPoint(panicBlock);
-                    // cm_panic関数を呼び出し（ない場合はabortを使用）
-                    llvm::Function* panicFn = module->getFunction("cm_panic");
-                    if (!panicFn) {
-                        panicFn = module->getFunction("abort");
+
+                    // WASMターゲットの場合はabortを呼び出さずunreachableのみ
+                    // （abortはWASMランタイムで未定義のため）
+                    std::string triple = module->getTargetTriple();
+                    bool isWasm = triple.find("wasm") != std::string::npos;
+
+                    if (!isWasm) {
+                        // ネイティブターゲット: cm_panic関数を呼び出し（ない場合はabortを使用）
+                        llvm::Function* panicFn = module->getFunction("cm_panic");
                         if (!panicFn) {
-                            llvm::FunctionType* abortType = llvm::FunctionType::get(
-                                llvm::Type::getVoidTy(ctx.getModule().getContext()), false);
-                            panicFn = llvm::Function::Create(
-                                abortType, llvm::Function::ExternalLinkage, "abort", module);
+                            panicFn = module->getFunction("abort");
+                            if (!panicFn) {
+                                llvm::FunctionType* abortType = llvm::FunctionType::get(
+                                    llvm::Type::getVoidTy(ctx.getModule().getContext()), false);
+                                panicFn = llvm::Function::Create(
+                                    abortType, llvm::Function::ExternalLinkage, "abort", module);
+                            }
+                        }
+                        if (panicFn->getFunctionType()->getNumParams() > 0) {
+                            // cm_panicはメッセージを取る
+                            llvm::Value* msgPtr = builder->CreateGlobalStringPtr(
+                                "Array index out of bounds", "bounds_error_msg");
+                            builder->CreateCall(panicFn, {msgPtr});
+                        } else {
+                            builder->CreateCall(panicFn);
                         }
                     }
-                    if (panicFn->getFunctionType()->getNumParams() > 0) {
-                        // cm_panicはメッセージを取る
-                        llvm::Value* msgPtr = builder->CreateGlobalStringPtr(
-                            "Array index out of bounds", "bounds_error_msg");
-                        builder->CreateCall(panicFn, {msgPtr});
-                    } else {
-                        builder->CreateCall(panicFn);
-                    }
+                    // WASM/ネイティブ共通: unreachableで終了
                     builder->CreateUnreachable();
 
                     // 続行ブロックに移動
