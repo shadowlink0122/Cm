@@ -50,6 +50,9 @@ class MIRToLLVM {
         vtableGlobals;  // type_interface -> vtable
     const mir::MirProgram* currentProgram = nullptr;
 
+    // ターゲット情報キャッシュ
+    bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
+
    public:
     /// コンストラクタ
     explicit MIRToLLVM(LLVMContext& context)

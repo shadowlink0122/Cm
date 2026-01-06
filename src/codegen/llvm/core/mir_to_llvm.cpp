@@ -404,6 +404,10 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     currentProgram = &program;
 
+    // ターゲット判定をキャッシュ（境界チェックで使用）
+    std::string triple = module->getTargetTriple();
+    isWasmTarget = triple.find("wasm") != std::string::npos;
+
     // インターフェース名を収集
     // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
     size_t iface_count = 0;
@@ -2040,10 +2044,9 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
 
                     // WASMターゲットの場合はabortを呼び出さずunreachableのみ
                     // （abortはWASMランタイムで未定義のため）
-                    std::string triple = module->getTargetTriple();
-                    bool isWasm = triple.find("wasm") != std::string::npos;
+                    // 注: isWasmTargetはconvert()で一度だけ計算されたキャッシュ値
 
-                    if (!isWasm) {
+                    if (!isWasmTarget) {
                         // ネイティブターゲット: cm_panic関数を呼び出し（ない場合はabortを使用）
                         llvm::Function* panicFn = module->getFunction("cm_panic");
                         if (!panicFn) {
