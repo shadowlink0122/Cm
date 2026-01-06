@@ -13,6 +13,67 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
+// System V ABI: 16バイト以下の構造体はレジスタで値渡し
+bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
+    if (!type || type->kind != hir::TypeKind::Struct) {
+        return false;
+    }
+
+    // 構造体定義を取得
+    auto it = structDefs.find(type->name);
+    if (it == structDefs.end()) {
+        return false;  // 定義が見つからない場合は安全のためポインタ渡し
+    }
+
+    const mir::MirStruct* structDef = it->second;
+
+    // フィールドのサイズを合計
+    size_t totalSize = 0;
+    for (const auto& field : structDef->fields) {
+        if (!field.type)
+            continue;
+
+        switch (field.type->kind) {
+            case hir::TypeKind::Bool:
+            case hir::TypeKind::Char:
+            case hir::TypeKind::Tiny:
+            case hir::TypeKind::UTiny:
+                totalSize += 1;
+                break;
+            case hir::TypeKind::Short:
+            case hir::TypeKind::UShort:
+                totalSize += 2;
+                break;
+            case hir::TypeKind::Int:
+            case hir::TypeKind::UInt:
+            case hir::TypeKind::Float:
+                totalSize += 4;
+                break;
+            case hir::TypeKind::Long:
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::Double:
+            case hir::TypeKind::Pointer:
+            case hir::TypeKind::String:
+                totalSize += 8;
+                break;
+            case hir::TypeKind::Struct:
+                // ネストした構造体は安全のためポインタ渡し
+                return false;
+            default:
+                totalSize += 8;  // デフォルトはポインタサイズ
+                break;
+        }
+
+        // 16バイトを超えたら即座にfalse
+        if (totalSize > 16) {
+            return false;
+        }
+    }
+
+    return totalSize <= 16;
+}
+
 // 関数の一意なIDを生成（オーバーロードを区別するため）
 std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
     // main関数は特別扱い
@@ -253,10 +314,15 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
                     paramTypes.push_back(fatPtrType);
                 } else {
                     auto llvmType = convertType(local.type);
-                    // 構造体はポインタとして渡す（opaque pointer）
+                    // 構造体の場合、ABIに従って値渡しかポインタ渡しを決定
                     if (local.type->kind == hir::TypeKind::Struct) {
-                        // LLVM 14+: opaque pointerを使用
-                        paramTypes.push_back(ctx.getPtrType());
+                        if (isSmallStruct(local.type)) {
+                            // 16バイト以下: 値渡し（System V ABI準拠）
+                            paramTypes.push_back(llvmType);
+                        } else {
+                            // 16バイト超: ポインタ渡し
+                            paramTypes.push_back(ctx.getPtrType());
+                        }
                     } else {
                         paramTypes.push_back(llvmType);
                     }
@@ -1924,6 +1990,59 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                             "Cannot determine array type for index access",
                                             cm::debug::Level::Error);
                     return nullptr;
+                }
+
+                // 境界チェック: インデックスが配列サイズ未満かチェック
+                // 負のインデックスも符号なし比較で検出（負数は巨大な正数として扱われる）
+                uint64_t arraySize = arrayType->getArrayNumElements();
+                if (arraySize > 0) {
+                    // 配列サイズをi64で取得
+                    llvm::Value* sizeVal = llvm::ConstantInt::get(ctx.getI64Type(), arraySize);
+
+                    // インデックスをi64に変換（符号なし）
+                    llvm::Value* idxForCheck = indexVal;
+                    if (!indexVal->getType()->isIntegerTy(64)) {
+                        idxForCheck = builder->CreateZExt(indexVal, ctx.getI64Type(), "idx_zext");
+                    }
+
+                    // index < size のチェック（符号なし比較）
+                    llvm::Value* inBounds =
+                        builder->CreateICmpULT(idxForCheck, sizeVal, "bounds_check");
+
+                    // 条件分岐: 範囲内なら続行、範囲外ならパニック
+                    llvm::Function* func = builder->GetInsertBlock()->getParent();
+                    llvm::BasicBlock* continueBlock =
+                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_ok", func);
+                    llvm::BasicBlock* panicBlock =
+                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_fail", func);
+
+                    builder->CreateCondBr(inBounds, continueBlock, panicBlock);
+
+                    // パニックブロック: 境界外アクセスでabort
+                    builder->SetInsertPoint(panicBlock);
+                    // cm_panic関数を呼び出し（ない場合はabortを使用）
+                    llvm::Function* panicFn = module->getFunction("cm_panic");
+                    if (!panicFn) {
+                        panicFn = module->getFunction("abort");
+                        if (!panicFn) {
+                            llvm::FunctionType* abortType = llvm::FunctionType::get(
+                                llvm::Type::getVoidTy(ctx.getModule().getContext()), false);
+                            panicFn = llvm::Function::Create(
+                                abortType, llvm::Function::ExternalLinkage, "abort", module);
+                        }
+                    }
+                    if (panicFn->getFunctionType()->getNumParams() > 0) {
+                        // cm_panicはメッセージを取る
+                        llvm::Value* msgPtr = builder->CreateGlobalStringPtr(
+                            "Array index out of bounds", "bounds_error_msg");
+                        builder->CreateCall(panicFn, {msgPtr});
+                    } else {
+                        builder->CreateCall(panicFn);
+                    }
+                    builder->CreateUnreachable();
+
+                    // 続行ブロックに移動
+                    builder->SetInsertPoint(continueBlock);
                 }
 
                 // GEPで配列要素のアドレスを取得

@@ -32,12 +32,10 @@ void* __cm_default_realloc(void* ptr, size_t new_size) {
 // ============================================================
 
 // Default allocator instance
-static CmAllocator cm_default_alloc_instance = {
-    .alloc     = CM_DEFAULT_ALLOC,
-    .dealloc   = CM_DEFAULT_DEALLOC,
-    .realloc   = CM_DEFAULT_REALLOC,
-    .user_data = NULL
-};
+static CmAllocator cm_default_alloc_instance = {.alloc = CM_DEFAULT_ALLOC,
+                                                .dealloc = CM_DEFAULT_DEALLOC,
+                                                .realloc = CM_DEFAULT_REALLOC,
+                                                .user_data = NULL};
 
 // Current global allocator (starts as default)
 static CmAllocator* cm_current_allocator = &cm_default_alloc_instance;
@@ -60,6 +58,17 @@ CmAllocator* cm_set_allocator(CmAllocator* allocator) {
 
 void cm_reset_allocator(void) {
     cm_current_allocator = &cm_default_alloc_instance;
+}
+
+// ============================================================
+// Temporary String Pool
+// ============================================================
+
+// Global temporary string pool instance
+static CmTempStringPool cm_global_temp_pool = {{NULL}, 0};
+
+CmTempStringPool* cm_get_temp_pool(void) {
+    return &cm_global_temp_pool;
 }
 
 // ============================================================

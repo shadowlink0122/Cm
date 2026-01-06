@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../common/debug/par.hpp"
+#include "../../common/diagnostics.hpp"
 #include "../ast/decl.hpp"
 #include "../lexer/token.hpp"
 
@@ -13,17 +14,11 @@
 namespace cm {
 
 // ============================================================
-// 診断メッセージ
+// 診断メッセージ（共通定義への互換性エイリアス）
 // ============================================================
-enum class DiagKind { Error, Warning, Note };
-
-struct Diagnostic {
-    DiagKind kind;
-    Span span;
-    std::string message;
-
-    Diagnostic(DiagKind k, Span s, std::string m) : kind(k), span(s), message(std::move(m)) {}
-};
+// 注: 共通のdiagnostics.hppでSeverity、Diagnosticが定義されています
+// DiagKindはSeverityのエイリアスとして残します（後方互換性）
+using DiagKind = Severity;
 
 // ============================================================
 // パーサ
@@ -71,7 +66,7 @@ class Parser {
     const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
     bool has_errors() const {
         for (const auto& d : diagnostics_) {
-            if (d.kind == DiagKind::Error)
+            if (d.severity == DiagKind::Error)
                 return true;
         }
         return false;

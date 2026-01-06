@@ -181,6 +181,10 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
         error(current_span_, "Undefined variable '" + ident.name + "'");
         return ast::make_error();
     }
+
+    // 初期化前使用のチェック
+    check_uninitialized_use(ident.name, current_span_);
+
     debug::tc::log(debug::tc::Id::Resolved, ident.name + " : " + ast::type_to_string(*sym->type),
                    debug::Level::Trace);
     return sym->type;
@@ -221,6 +225,8 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                           "Cannot assign to const variable '" + ident->name + "'");
                     return ast::make_error();
                 }
+                // 変数が変更されたことをマーク（const推奨警告用）
+                mark_variable_modified(ident->name);
             }
             if (!types_compatible(ltype, rtype)) {
                 error(binary.left->span, "Assignment type mismatch");

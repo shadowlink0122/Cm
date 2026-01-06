@@ -151,6 +151,57 @@ static inline CmAllocator cm_create_allocator(CmAllocFn alloc_fn, CmDeallocFn de
     return alloc;
 }
 
+// ============================================================
+// Temporary String Pool (for reducing memory leaks)
+// ============================================================
+
+/// Maximum number of temporary strings per frame
+#define CM_TEMP_STRING_POOL_SIZE 64
+
+/// Temporary string pool structure
+typedef struct CmTempStringPool {
+    char* strings[CM_TEMP_STRING_POOL_SIZE];
+    size_t count;
+} CmTempStringPool;
+
+/// Get the global temporary string pool
+CmTempStringPool* cm_get_temp_pool(void);
+
+/// Allocate a temporary string (tracked for cleanup)
+static inline char* cm_temp_alloc(size_t size) {
+    CmTempStringPool* pool = cm_get_temp_pool();
+    char* str = (char*)cm_alloc(size);
+    if (str && pool->count < CM_TEMP_STRING_POOL_SIZE) {
+        pool->strings[pool->count++] = str;
+    }
+    return str;
+}
+
+/// Release all temporary strings (call at end of print statement)
+static inline void cm_temp_release(void) {
+    CmTempStringPool* pool = cm_get_temp_pool();
+    for (size_t i = 0; i < pool->count; i++) {
+        cm_dealloc(pool->strings[i]);
+        pool->strings[i] = NULL;
+    }
+    pool->count = 0;
+}
+
+/// Mark current pool position (for nested calls)
+static inline size_t cm_temp_mark(void) {
+    return cm_get_temp_pool()->count;
+}
+
+/// Release to marked position
+static inline void cm_temp_release_to(size_t mark) {
+    CmTempStringPool* pool = cm_get_temp_pool();
+    while (pool->count > mark) {
+        pool->count--;
+        cm_dealloc(pool->strings[pool->count]);
+        pool->strings[pool->count] = NULL;
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif

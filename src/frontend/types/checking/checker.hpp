@@ -125,9 +125,14 @@ class TypeChecker {
     ast::TypePtr common_type(ast::TypePtr a, ast::TypePtr b);
     std::vector<std::string> extract_format_variables(const std::string& format_str);
     void error(Span span, const std::string& msg);
+    void warning(Span span, const std::string& msg);
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
+
+    // 変数変更追跡（const推奨警告用）
+    void mark_variable_modified(const std::string& name);
+    void check_const_recommendations();
 
     // match式のヘルパー
     void check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr expected_type);
@@ -189,6 +194,21 @@ class TypeChecker {
 
     // 自動実装情報 (構造体名 → インターフェース名 → 実装済みフラグ)
     std::unordered_map<std::string, std::unordered_map<std::string, bool>> auto_impl_info_;
+
+    // 変更されたことのある変数（const推奨警告用）
+    std::unordered_set<std::string> modified_variables_;
+
+    // 宣言された非const変数の情報（名前 → Span）
+    std::unordered_map<std::string, Span> non_const_variable_spans_;
+
+    // 初期化済み変数の追跡（初期化前使用チェック用）
+    std::unordered_set<std::string> initialized_variables_;
+
+    // 変数を初期化済みとしてマーク
+    void mark_variable_initialized(const std::string& name);
+
+    // 初期化前使用をチェック
+    void check_uninitialized_use(const std::string& name, Span span);
 };
 
 }  // namespace cm

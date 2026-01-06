@@ -172,7 +172,8 @@ set(CM_SOURCES
     # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
     src/mir/lowering/impl.cpp
-    src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
+    src/mir/lowering/monomorphization_impl.cpp
+    src/mir/lowering/monomorphization_utils.cpp
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt.cpp
     src/mir/lowering/expr_basic.cpp
@@ -354,6 +355,7 @@ if(BUILD_TESTING)
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
+            src/mir/lowering/monomorphization_utils.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
@@ -376,6 +378,7 @@ if(BUILD_TESTING)
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
+            src/mir/lowering/monomorphization_utils.cpp
             src/mir/optimizations/optimization_pipeline.cpp
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})

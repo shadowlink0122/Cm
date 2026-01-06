@@ -132,6 +132,10 @@ class MIRToLLVM {
         return interfaceNames.count(typeName) > 0;
     }
 
+    /// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
+    /// System V ABI: 16バイト以下の構造体はレジスタで値渡し
+    bool isSmallStruct(const hir::TypePtr& type) const;
+
     /// インターフェース用のfat pointer型を取得（{i8* data, i8** vtable}）
     llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);
 

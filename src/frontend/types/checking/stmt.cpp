@@ -109,6 +109,16 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     } else {
         error(stmt_span, "Cannot infer type for '" + let.name + "'");
     }
+
+    // 非const変数を追跡（const推奨警告用）
+    if (!let.is_const) {
+        non_const_variable_spans_[let.name] = stmt_span;
+    }
+
+    // 初期化式がある場合は初期化済みとしてマーク
+    if (let.init) {
+        mark_variable_initialized(let.name);
+    }
 }
 
 void TypeChecker::check_return(ast::ReturnStmt& ret) {
