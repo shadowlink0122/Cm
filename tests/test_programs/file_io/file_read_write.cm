@@ -4,7 +4,7 @@ import std::fs::{read_file, write_file, exists, remove, size};
 
 int main() {
     // テストファイルパス
-    string path = "/tmp/cm_test_file.txt";
+    string path = "./tmp/cm_test_file.txt";
     string content = "Hello from Cm!\nThis is a test file.";
     
     // 書き込みテスト

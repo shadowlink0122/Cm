@@ -1,0 +1,12 @@
+Testing import as:
+PI via alias = 0
+
+Testing from import:
+dot(v1, v2) = 32
+
+Testing alias namespace:
+cross(v1, v2) = (-3, 6, -3)
+normalize(v1) = (0.0714286, 0.142857, 0.214286)
+
+Constants:
+E = 0

@@ -603,6 +603,8 @@ class Parser {
                 advance();  // consume 'operator'
                 ast::OperatorSig op_sig;
                 op_sig.return_type = parse_type();
+                // C++スタイルの配列戻り値型: int[] operator+(), int[3] operator-()
+                op_sig.return_type = check_array_suffix(std::move(op_sig.return_type));
 
                 auto op_kind = parse_operator_kind();
                 if (!op_kind) {
@@ -620,6 +622,8 @@ class Parser {
                 // 通常のメソッドシグネチャ
                 ast::MethodSig sig;
                 sig.return_type = parse_type();
+                // C++スタイルの配列戻り値型: int[] func(), int[3] func()
+                sig.return_type = check_array_suffix(std::move(sig.return_type));
                 sig.name = expect_ident();
                 expect(TokenKind::LParen);
                 sig.params = parse_params();

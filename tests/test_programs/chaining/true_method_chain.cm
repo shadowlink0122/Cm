@@ -1,0 +1,58 @@
+// 真のメソッドチェーンテスト
+// obj.method1().method2().field 形式のチェーンが動作することを保証
+
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+interface Movable {
+    Point move(int dx, int dy);
+}
+
+impl Point for Movable {
+    Point move(int dx, int dy) {
+        return Point { x: self.x + dx, y: self.y + dy };
+    }
+}
+
+int main() {
+    Point p = Point { x: 1, y: 2 };
+    
+    // Test 1: 単純なメソッドチェーン + フィールドアクセス
+    int x1 = p.move(5, 5).x;
+    println("Test 1 (single chain): x = {x1}");
+    if (x1 != 6) {
+        println("FAIL: expected 6");
+        return 1;
+    }
+    
+    // Test 2: 2連メソッドチェーン
+    int x2 = p.move(5, 5).move(10, 10).x;
+    println("Test 2 (double chain): x = {x2}");
+    if (x2 != 16) {
+        println("FAIL: expected 16");
+        return 1;
+    }
+    
+    // Test 3: 3連メソッドチェーン
+    Point p3 = p.move(1, 1).move(2, 2).move(3, 3);
+    println("Test 3 (triple chain): ({p3.x}, {p3.y})");
+    if (p3.x != 7 || p3.y != 8) {
+        println("FAIL: expected (7, 8)");
+        return 1;
+    }
+    
+    // Test 4: チェーンの中間結果のフィールドアクセス
+    int y4 = p.move(100, 200).y;
+    println("Test 4 (y field): y = {y4}");
+    if (y4 != 202) {
+        println("FAIL: expected 202");
+        return 1;
+    }
+    
+    println("All method chaining tests passed!");
+    return 0;
+}

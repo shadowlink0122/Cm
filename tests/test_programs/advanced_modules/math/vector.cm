@@ -12,24 +12,26 @@ float dot(Vector3 a, Vector3 b) {
 }
 
 Vector3 cross(Vector3 a, Vector3 b) {
-    Vector3 result;
-    result.x = a.y * b.z - a.z * b.y;
-    result.y = a.z * b.x - a.x * b.z;
-    result.z = a.x * b.y - a.y * b.x;
-    return result;
+    return Vector3 { 
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+    };
 }
 
-float magnitude(Vector3 v) {
-    return sqrt(dot(v, v));
+// 二乗距離を返す（sqrt不要）
+float magnitude_squared(Vector3 v) {
+    return dot(v, v);
 }
 
+// 単純化した正規化
 Vector3 normalize(Vector3 v) {
-    float m = magnitude(v);
-    Vector3 result;
-    result.x = v.x / m;
-    result.y = v.y / m;
-    result.z = v.z / m;
-    return result;
+    const float m = magnitude_squared(v);
+    return Vector3 {
+        x: v.x / m,
+        y: v.y / m,
+        z: v.z / m
+    };
 }
 
 // mathモジュール内でのみ使用可能
@@ -37,6 +39,5 @@ export {
     Vector3,
     dot,
     cross,
-    magnitude,  // math.cmで再エクスポートされない
     normalize
 };
