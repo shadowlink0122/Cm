@@ -287,7 +287,7 @@ bool is_leap_year(int year) {
 }
 
 int main() {
-    int year = 2024;
+    int year = 2025;
     if (is_leap_year(year)) {
         println("{} is a leap year", year);
     } else {

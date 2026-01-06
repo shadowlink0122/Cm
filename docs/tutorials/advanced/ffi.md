@@ -129,6 +129,21 @@ void destroy_buffer(SafeBuffer* buf) {
 }
 ```
 
+## 構造体の受け渡し
+
+```cm
+struct Point {
+    int x;
+    int y;
+}
+
+extern "C" {
+    void process_point(Point p);
+}
+```
+
+> **v0.11.0の重要アップデート**: C ABI互換性が修正されました。小さな構造体はポインタではなく、標準のC ABIに従って値として正しくレジスタまたはスタックで渡されるようになりました。これにより、既存のCライブラリとの連携がより安全かつ確実になります。
+
 ---
 
 ## 次のステップ

@@ -113,7 +113,7 @@ gen add cm-http --dev    # 開発時のみ
 name = "my-app"
 version = "0.1.0"
 authors = ["Your Name <you@example.com>"]
-edition = "2024"
+edition = "2025"
 description = "My Cm application"
 license = "MIT"
 repository = "https://github.com/example/my-app"

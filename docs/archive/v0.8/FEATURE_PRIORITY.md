@@ -226,7 +226,7 @@ module DataStructures {
 
 ## 実装マイルストーン
 
-### M1: 基本コンパイラ（2024年12月）✅
+### M1: 基本コンパイラ（2025年12月）✅
 - [x] Lexer
 - [x] Parser（基本）
 - [x] AST

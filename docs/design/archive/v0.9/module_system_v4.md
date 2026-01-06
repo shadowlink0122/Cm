@@ -398,7 +398,7 @@ class ModuleResolver {
         {"name": "dot", "type": "function", "signature": "float(Vector3, Vector3)"},
         {"name": "PI", "type": "const", "signature": "float", "value": "3.14159265359"}
     ],
-    "timestamp": "2024-01-01T00:00:00Z",
+    "timestamp": "2025-01-01T00:00:00Z",
     "hash": "sha256:..."
 }
 ```

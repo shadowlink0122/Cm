@@ -41,27 +41,28 @@ nav_order: 1
 ### Release Information
 
 - **[Release Notes](releases/)** - Version history and changelogs
-- **[Project Status](PROJECT_STATUS.md)** - Current implementation status
+- **[Feature Reference](features/)** - Current implementation status
 
 ---
 
 ## 🎯 Language Features
 
-### ✅ Implemented (v0.9.0)
+### ✅ Implemented (v0.10.0)
 
 - **C++ Style Syntax** - Familiar and readable
 - **Strong Type System** - Compile-time safety
 - **Generics** - Type-safe generic programming
 - **Interfaces** - Trait-based polymorphism
 - **LLVM Backend** - Native code generation
+- **WASM Support** - WebAssembly backend
 - **Pattern Matching** - Powerful match expressions
 - **Zero-cost Abstractions** - Performance without overhead
 
 ### 🔄 In Progress
 
-- **WASM Support** - WebAssembly backend
-- **Module System** - Package and dependency management
 - **Standard Library** - Core utilities and data structures
+- **Module System** - Enhanced package management
+- **Ownership System** - Memory safety without GC (v0.11.0+)
 
 ---
 
@@ -101,7 +102,7 @@ impl Circle for Drawable {
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/Cm.git
+git clone https://github.com/shadowlink0122/Cm.git
 cd Cm
 
 # Build with LLVM backend
@@ -121,7 +122,8 @@ ctest --test-dir build
 | Lexer/Parser | ✅ Complete | 90%+ |
 | Type System | ✅ Complete | 85%+ |
 | HIR/MIR | ✅ Complete | 80%+ |
-| LLVM Backend | 🔄 In Progress | 70%+ |
+| LLVM Backend | ✅ Complete | 85%+ |
+| WASM Backend | ✅ Complete | 80%+ |
 | Standard Library | 🔄 In Progress | 30%+ |
 
 ---
@@ -140,12 +142,12 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🔗 Links
 
-- [GitHub Repository](https://github.com/yourusername/Cm)
-- [Issue Tracker](https://github.com/yourusername/Cm/issues)
-- [Discussions](https://github.com/yourusername/Cm/discussions)
+- [GitHub Repository](https://github.com/shadowlink0122/Cm)
+- [Issue Tracker](https://github.com/shadowlink0122/Cm/issues)
+- [Discussions](https://github.com/shadowlink0122/Cm/discussions)
 
 ---
 
-**Last Updated:** v0.10.1 (January 2025)
+**Last Updated:** v0.10.0 (January 2025)
 
-© 2024-2025 Cm Language Project
+© 2025-2025 Cm Language Project

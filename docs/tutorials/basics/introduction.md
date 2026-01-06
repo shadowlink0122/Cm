@@ -178,7 +178,7 @@ struct Point with Eq + Ord + Clone {
 
 ## バージョン履歴
 
-### v0.9.0（現在）
+### v0.10.0（現在）
 
 - ✅ 配列とポインタ
 - ✅ with自動実装（LLVM）
@@ -214,7 +214,7 @@ struct Point with Eq + Ord + Clone {
 
 - [正式言語仕様](../../design/CANONICAL_SPEC.md)
 - [ロードマップ](../../../ROADMAP.md)
-- [リリースノート](../../releases/v0.9.0.md)
+- [リリースノート](../../releases/v0.10.0.md)
 
 ---
 

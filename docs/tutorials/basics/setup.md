@@ -114,7 +114,7 @@ cmake --build build -j8
 
 ```bash
 ./build/bin/cm --version
-# Cm Language Compiler v0.9.0
+# Cm Language Compiler v0.10.0
 ```
 
 ---

@@ -40,7 +40,7 @@ docs/
 │   └── compiler/
 └── releases/            # リリースノート
     ├── README.md
-    └── v0.9.0.md
+    └── v0.10.0.md
 ```
 
 ### 3. _config.yml の編集
@@ -293,5 +293,5 @@ google_analytics: UA-XXXXXXXXX-X
 
 ---
 
-**最終更新:** 2024-12-16  
+**最終更新:** 2025-12-16  
 **対象バージョン:** GitHub Pages + Jekyll (Cayman theme)

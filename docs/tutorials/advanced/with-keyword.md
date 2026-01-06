@@ -335,10 +335,10 @@ impl Person for Eq {
 
 | トレイト | インタプリタ | LLVM | WASM |
 |---------|------------|------|------|
-| Eq | ✅ | ✅ | ⚠️ v0.10.0 |
-| Ord | ✅ | ✅ | ⚠️ v0.10.0 |
-| Clone | ✅ | ✅ | ⚠️ v0.10.0 |
-| Hash | ✅ | ✅ | ⚠️ v0.10.0 |
+| Eq | ✅ | ✅ | ✅ |
+| Ord | ✅ | ✅ | ✅ |
+| Clone | ✅ | ✅ | ✅ |
+| Hash | ✅ | ✅ | ✅ |
 | Debug | ⬜ v0.10.0 | ⬜ v0.10.0 | ⬜ v0.10.0 |
 | Display | ⬜ v0.10.0 | ⬜ v0.10.0 | ⬜ v0.10.0 |
 
@@ -352,10 +352,10 @@ impl Person for Eq {
 
 ## 関連ドキュメント
 
-- [インターフェース](../guides/interfaces.md) - interface/impl構文
-- [演算子オーバーロード](../guides/operators.md) - operator実装
-- [正式言語仕様](../design/CANONICAL_SPEC.md) - with構文の仕様
+- [インターフェース](../types/interfaces.md) - interface/impl構文
+- [演算子オーバーロード](../advanced/operators.md) - operator実装
+- [正式言語仕様](../../design/CANONICAL_SPEC.md) - with構文の仕様
 
 ---
 
-**更新日:** 2024-12-16
+**最終更新:** 2025-01-05
