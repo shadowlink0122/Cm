@@ -94,6 +94,22 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         }
     } else if (let.type) {
         auto resolved_type = resolve_typedef(let.type);
+        // ポインタ型の場合、宣言時のconst情報を保持（借用システム Phase 2）
+        // const int* p = &x の場合、let.type->element_type->qualifiers.is_const = true
+        if (resolved_type->kind == ast::TypeKind::Pointer &&
+            let.type->kind == ast::TypeKind::Pointer && let.type->element_type &&
+            let.type->element_type->qualifiers.is_const) {
+            if (resolved_type->element_type) {
+                resolved_type->element_type->qualifiers.is_const = true;
+            }
+        }
+        // 借用システム Phase 2: const変数がポインタ型の場合、element_typeにconstを適用
+        // Cmでは "const int* p" は "const (int*) p" としてパースされるため、
+        // ポインタのelement_typeにconst修飾を伝播する
+        if (let.is_const && resolved_type->kind == ast::TypeKind::Pointer &&
+            resolved_type->element_type) {
+            resolved_type->element_type->qualifiers.is_const = true;
+        }
         if (init_type && !types_compatible(resolved_type, init_type)) {
             error(stmt_span, "Type mismatch in variable declaration '" + let.name +
                                  "': expected '" + ast::type_to_string(*resolved_type) +

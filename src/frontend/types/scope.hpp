@@ -19,6 +19,8 @@ struct Symbol {
     bool is_const = false;
     bool is_function = false;
     bool is_variadic = false;  // FFI関数の可変長引数（printf等）
+    bool is_moved = false;     // 所有権が移動済みか（Move Semantics）
+    size_t borrow_count = 0;   // 借用回数（借用安全性）
 
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
@@ -37,7 +39,8 @@ class Scope {
     bool define(const std::string& name, ast::TypePtr type, bool is_const = false) {
         if (symbols_.count(name))
             return false;  // 既存
-        symbols_[name] = Symbol{name, std::move(type), is_const, false, false, {}, nullptr, 0};
+        symbols_[name] =
+            Symbol{name, std::move(type), is_const, false, false, false, 0, {}, nullptr, 0};
         return true;
     }
 
@@ -76,6 +79,74 @@ class Scope {
 
     // 現スコープのみ検索
     bool has_local(const std::string& name) const { return symbols_.count(name) > 0; }
+
+    // 変数を移動済みとしてマーク（Move Semantics）
+    bool mark_moved(const std::string& name) {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            it->second.is_moved = true;
+            return true;
+        }
+        // 親スコープも検索してマーク
+        if (parent_) {
+            return parent_->mark_moved(name);
+        }
+        return false;
+    }
+
+    // 変数の移動状態をクリア（再代入時）
+    bool unmark_moved(const std::string& name) {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            it->second.is_moved = false;
+            return true;
+        }
+        // 親スコープも検索してクリア
+        if (parent_) {
+            return parent_->unmark_moved(name);
+        }
+        return false;
+    }
+
+    // 変数を借用する（借用カウント増加）
+    bool add_borrow(const std::string& name) {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            it->second.borrow_count++;
+            return true;
+        }
+        if (parent_) {
+            return parent_->add_borrow(name);
+        }
+        return false;
+    }
+
+    // 借用を解除する（借用カウント減少）
+    bool remove_borrow(const std::string& name) {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            if (it->second.borrow_count > 0) {
+                it->second.borrow_count--;
+            }
+            return true;
+        }
+        if (parent_) {
+            return parent_->remove_borrow(name);
+        }
+        return false;
+    }
+
+    // 変数が借用中かチェック
+    bool is_borrowed(const std::string& name) const {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            return it->second.borrow_count > 0;
+        }
+        if (parent_) {
+            return parent_->is_borrowed(name);
+        }
+        return false;
+    }
 
     Scope* parent() const { return parent_; }
 

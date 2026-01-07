@@ -93,6 +93,29 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         if (a->kind == ast::TypeKind::Interface) {
             return a->name == b->name;
         }
+        // ポインタ型の互換性チェック（借用安全性）
+        if (a->kind == ast::TypeKind::Pointer) {
+            // void* → T* の暗黙変換を許可（FFI用）
+            if (b->element_type && b->element_type->kind == ast::TypeKind::Void) {
+                return true;
+            }
+            // T* → void* の暗黙変換を許可（FFI用）
+            if (a->element_type && a->element_type->kind == ast::TypeKind::Void) {
+                return true;
+            }
+            // const T* → T* は禁止（constを外せない）
+            // b（代入元）がconstでa（代入先）が非constの場合は禁止
+            if (b->qualifiers.is_const && !a->qualifiers.is_const) {
+                return false;
+            }
+            // 要素型のconst外しも禁止
+            if (b->element_type && b->element_type->qualifiers.is_const && a->element_type &&
+                !a->element_type->qualifiers.is_const) {
+                return false;
+            }
+            // 要素型の互換性をチェック
+            return types_compatible(a->element_type, b->element_type);
+        }
         // 関数ポインタ型の互換性チェック
         if (a->kind == ast::TypeKind::Function) {
             if (!types_compatible(a->return_type, b->return_type)) {

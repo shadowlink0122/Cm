@@ -1,0 +1,9 @@
+// エラーケース: 構造体フィールド経由のconst借用後のmove
+struct Point { int x; int y; }
+
+int main() {
+    Point p = {1, 2};
+    const int* px = &p.x;  // pの一部を借用（未実装: 現在は全体借用不検知）
+    Point q = move p;      // 現在は許可される（将来的にはエラーにすべき）
+    return 0;
+}

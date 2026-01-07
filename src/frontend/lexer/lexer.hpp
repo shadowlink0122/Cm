@@ -101,6 +101,7 @@ class Lexer {
             {"macro", TokenKind::KwMacro},
             {"match", TokenKind::KwMatch},
             {"module", TokenKind::KwModule},
+            {"move", TokenKind::KwMove},
             {"mutable", TokenKind::KwMutable},
             {"namespace", TokenKind::KwNamespace},
             {"new", TokenKind::KwNew},

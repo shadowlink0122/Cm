@@ -209,6 +209,15 @@ class TypeChecker {
 
     // 初期化前使用をチェック
     void check_uninitialized_use(const std::string& name, Span span);
+
+    // ============================================================
+    // Move Semantics - 移動済み変数の追跡（Scopeベース）
+    // ============================================================
+    // 変数を移動済みとしてマーク（Scope経由）
+    void mark_variable_moved(const std::string& name);
+
+    // 移動後の使用をチェック（Scope経由）
+    void check_use_after_move(const std::string& name, Span span);
 };
 
 }  // namespace cm

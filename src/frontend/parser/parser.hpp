@@ -1033,9 +1033,17 @@ class Parser {
     ast::TypePtr parse_type() {
         ast::TypePtr type;
 
+        // const修飾子をチェック（借用システム Phase 2）
+        // const int* p や const T のような形式をサポート
+        bool has_const = consume_if(TokenKind::KwConst);
+
         // ポインタ/参照
         if (consume_if(TokenKind::Star)) {
             type = ast::make_pointer(parse_type());
+            // constポインタの場合、要素型にconst修飾を設定
+            if (has_const && type->element_type) {
+                type->element_type->qualifiers.is_const = true;
+            }
             return type;
         }
         if (consume_if(TokenKind::Amp)) {
@@ -1181,6 +1189,11 @@ class Parser {
             } else {
                 // 単純なポインタ型: void*, int*, etc.
                 advance();  // consume *
+                // const修飾子がある場合（const int* = pointer to const int）
+                // base_typeにconst修飾を設定
+                if (has_const) {
+                    base_type->qualifiers.is_const = true;
+                }
                 return ast::make_pointer(std::move(base_type));
             }
         }
