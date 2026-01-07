@@ -148,6 +148,18 @@ class Scope {
         return false;
     }
 
+    // 変数がmove済みかチェック
+    bool is_moved(const std::string& name) const {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            return it->second.is_moved;
+        }
+        if (parent_) {
+            return parent_->is_moved(name);
+        }
+        return false;
+    }
+
     Scope* parent() const { return parent_; }
 
    private:

@@ -185,6 +185,7 @@ struct HirLet {
     HirExprPtr init;
     bool is_const;
     bool is_static = false;  // static変数フラグ
+    bool is_move = false;    // move初期化フラグ（真のゼロコストmove用）
     HirExprPtr ctor_call;    // コンストラクタ呼び出し（オプション）
 };
 

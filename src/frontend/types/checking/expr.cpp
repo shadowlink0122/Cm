@@ -213,16 +213,20 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
 }
 
 ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
-    // 代入演算子の場合、左辺が識別子なら先にmoved状態をクリア
-    // これにより「x = 99」のような再代入でxが復活する
+    // 代入演算子の場合、左辺がmove済み変数ならエラー
+    // move後の変数は完全に無効化され、再代入も禁止
     bool is_assignment =
         (binary.op == ast::BinaryOp::Assign || binary.op == ast::BinaryOp::AddAssign ||
          binary.op == ast::BinaryOp::SubAssign || binary.op == ast::BinaryOp::MulAssign ||
          binary.op == ast::BinaryOp::DivAssign);
     if (is_assignment) {
         if (auto* ident = binary.left->as<ast::IdentExpr>()) {
-            // 代入前にmoved状態をクリア（復活処理）
-            scopes_.current().unmark_moved(ident->name);
+            // move済み変数への代入は禁止
+            if (scopes_.current().is_moved(ident->name)) {
+                error(binary.left->span, "Cannot assign to moved variable '" + ident->name +
+                                             "': variable no longer exists after move");
+                return ast::make_error();
+            }
         }
     }
 
@@ -262,8 +266,6 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 }
                 // 変数が変更されたことをマーク（const推奨警告用）
                 mark_variable_modified(ident->name);
-                // 移動済み変数への再代入で復活（Move Semantics）
-                scopes_.current().unmark_moved(ident->name);
             }
             // デリファレンス経由の代入チェック（借用システム Phase 2）
             // *p = value の場合、pがconstポインタなら代入禁止
