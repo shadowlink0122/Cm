@@ -1,3 +1,5 @@
+[English](MODULE_SYSTEM_STATUS.en.html)
+
 # モジュールシステム実装状況（2025-12-20）
 
 ## 📋 現在の状況

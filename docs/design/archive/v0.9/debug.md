@@ -1,3 +1,5 @@
+[English](debug.en.html)
+
 # デバッグモード設計
 
 ## 概要

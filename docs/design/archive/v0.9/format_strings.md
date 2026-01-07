@@ -1,3 +1,5 @@
+[English](format_strings.en.html)
+
 # Format Strings Design
 
 ## 概要

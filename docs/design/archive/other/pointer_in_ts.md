@@ -1,3 +1,5 @@
+[English](pointer_in_ts.en.html)
+
 # TypeScriptにおけるポインタ表現
 
 ## 概要

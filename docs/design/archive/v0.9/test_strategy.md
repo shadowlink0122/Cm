@@ -1,3 +1,5 @@
+[English](test_strategy.en.html)
+
 # テスト戦略
 
 ## 概要

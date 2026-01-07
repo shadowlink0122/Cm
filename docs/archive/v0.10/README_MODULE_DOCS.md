@@ -1,8 +1,10 @@
+[English](README_MODULE_DOCS.en.html)
+
 # モジュールシステム設計ドキュメント
 
 ## 最新仕様
 
-**📘 [MODULE_SYSTEM_FINAL.md](./MODULE_SYSTEM_FINAL.md)** - **モジュールシステム最終仕様書 v5.0**
+**📘 [MODULE_SYSTEM_FINAL.md](./MODULE_SYSTEM_FINAL.html)** - **モジュールシステム最終仕様書 v5.0**
 
 すべての実装はこのドキュメントに基づいて行います。
 

@@ -1,3 +1,5 @@
+[English](MODULE_SYSTEM_FINAL.en.html)
+
 # Cm言語 モジュールシステム 最終仕様書
 
 **バージョン**: 5.0  

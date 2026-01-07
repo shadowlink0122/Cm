@@ -1,3 +1,5 @@
+[English](002_type_system_analysis_20260105.en.html)
+
 # 型システム現状分析レポート (改訂版)
 
 **日付**: 2026年1月5日

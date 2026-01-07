@@ -1,3 +1,5 @@
+[English](MODULE_IMPLEMENTATION_LOG.en.html)
+
 # モジュールシステム実装ログ
 
 ## セッション: 2025-12-20
@@ -216,4 +218,3 @@ class ImportPreprocessor {
    - 基本的なテストの実行
 
 **合計推定時間**: 5-7時間（1日）
-

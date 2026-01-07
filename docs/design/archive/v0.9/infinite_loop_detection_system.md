@@ -1,3 +1,5 @@
+[English](infinite_loop_detection_system.en.html)
+
 # 無限ループ検出システム設計書
 
 ## 概要

@@ -1,3 +1,5 @@
+[English](004_refactoring_proposal_20260105.en.html)
+
 # リファクタリング提案 - v0.11.0+
 
 ## 概要

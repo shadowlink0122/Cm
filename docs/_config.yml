@@ -27,7 +27,6 @@ exclude:
   - archive
   - debug
   - move_files.sh
-  - design
 
 # Navigation
 nav_order: 1

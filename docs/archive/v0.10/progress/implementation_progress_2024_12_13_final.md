@@ -1,3 +1,5 @@
+[English](implementation_progress_2024_12_13_final.en.html)
+
 # 実装進捗レポート - 2025年12月13日 (最終版)
 
 ## エグゼクティブサマリー

@@ -1,3 +1,5 @@
+[English](008_implementation_and_roadmap_v0.11.en.html)
+
 # Cm言語 実装状況とロードマップ (v0.10.0 / v0.11.0)
 
 **日付**: 2025年1月5日

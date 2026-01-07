@@ -1,3 +1,5 @@
+[English](interfaces.en.html)
+
 # 言語ガイド - インターフェース
 
 ## 定義

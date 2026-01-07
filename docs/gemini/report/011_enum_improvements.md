@@ -1,3 +1,5 @@
+[English](011_enum_improvements.en.html)
+
 # Enum（代数的データ型）の改善とOptional/Resultの統一に関する提案
 
 ## 概要

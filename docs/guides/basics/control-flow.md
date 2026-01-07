@@ -1,3 +1,5 @@
+[English](control-flow.en.html)
+
 # 言語ガイド - 制御構文
 
 ## 条件分岐 (if)

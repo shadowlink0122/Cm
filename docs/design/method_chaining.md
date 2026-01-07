@@ -1,3 +1,5 @@
+[English](method_chaining.en.html)
+
 # 真のメソッドチェーン機能設計書 v1.1
 
 ## 概要

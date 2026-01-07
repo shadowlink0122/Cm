@@ -1,3 +1,5 @@
+[English](PROJECT_STRUCTURE.en.html)
+
 # Cm言語 プロジェクト構造
 
 ## ディレクトリ構成

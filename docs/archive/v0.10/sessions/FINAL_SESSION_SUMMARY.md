@@ -1,3 +1,5 @@
+[English](FINAL_SESSION_SUMMARY.en.html)
+
 # 最終セッションサマリー - 2025-12-20
 
 ## 🎉 本日の大きな成果

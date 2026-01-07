@@ -1,3 +1,5 @@
+[English](MODULE_IMPLEMENTATION_STATUS.en.html)
+
 # モジュールシステム実装状況
 
 **更新日時**: 2025-12-21  
@@ -7,8 +9,8 @@
 
 ## ドキュメント
 
-- **ユーザーガイド**: [MODULE_USER_GUIDE.md](../guides/MODULE_USER_GUIDE.md)
-- **設計文書**: [MODULE_SYSTEM_FINAL.md](MODULE_SYSTEM_FINAL.md)
+- **ユーザーガイド**: [MODULE_USER_GUIDE.md](../guides/MODULE_USER_GUIDE.html)
+- **設計文書**: [MODULE_SYSTEM_FINAL.md](MODULE_SYSTEM_FINAL.html)
 
 ---
 

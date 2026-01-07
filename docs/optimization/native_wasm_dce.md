@@ -1,3 +1,5 @@
+[English](native_wasm_dce.en.html)
+
 # HIR→MIRとnative/wasmの最適化調査（DCE中心）
 
 ## 目的

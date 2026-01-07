@@ -1,3 +1,5 @@
+[English](012_core_library_design.en.html)
+
 # Coreライブラリの設計とランタイムの分離
 
 ## 1. 目的

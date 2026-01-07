@@ -1,3 +1,5 @@
+[English](architecture.en.html)
+
 # Cm コンパイラアーキテクチャ設計
 
 ## 概要
@@ -147,7 +149,7 @@ private:
 
 ### 5. HIR（High-level IR）
 
-**詳細**: [hir.md](hir.md)
+**詳細**: [hir.md](hir.html)
 
 特徴:
 - 型情報が完全に付与
@@ -156,7 +158,7 @@ private:
 
 ### 6. MIR（Mid-level IR）
 
-**詳細**: [mir.md](mir.md)
+**詳細**: [mir.md](mir.html)
 
 特徴:
 - SSA形式（Static Single Assignment）
@@ -165,7 +167,7 @@ private:
 
 ### 7. LLVMバックエンド
 
-**詳細**: [../llvm_backend_implementation.md](../llvm_backend_implementation.md)
+**詳細**: [../llvm_backend_implementation.md](../llvm_backend_implementation.html)
 
 | ターゲット | 用途 | 経路 |
 |------------|------|------|

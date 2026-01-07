@@ -1,3 +1,5 @@
+[English](RESTRUCTURE_SUMMARY.en.html)
+
 # ドキュメント再構成サマリー
 
 **実施日:** 2025-12-16  

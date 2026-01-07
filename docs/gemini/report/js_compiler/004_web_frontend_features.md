@@ -1,3 +1,5 @@
+[English](004_web_frontend_features.en.html)
+
 # JSコンパイラ詳細設計: 004 Webフロントエンド機能
 
 ## 1. CSS as Struct

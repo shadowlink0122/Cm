@@ -1,3 +1,5 @@
+[English](STRING_INTERPOLATION_EXAMPLES.en.html)
+
 # String Interpolation Examples and Code References
 
 ## Quick Reference Examples
@@ -624,4 +626,3 @@ For 3-part string like `"a" + x + "b" + y`:
 4. **Memory Pooling**
    - Pre-allocate string buffers
    - Reduce malloc/free overhead
-

@@ -1,3 +1,5 @@
+[English](mir_ssa_redesign.en.html)
+
 # MIR SSA/Phi Node 再設計書
 
 ## 1. 背景と問題点

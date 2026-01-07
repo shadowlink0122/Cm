@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # Cm言語機能リファレンス
 
 このディレクトリには、Cm言語の各機能の詳細なドキュメントが含まれます。
@@ -8,19 +10,19 @@
 
 | 機能 | チュートリアル | 状態 |
 |------|------------|------|
-| **配列** | [基本: 配列](../tutorials/basics/arrays.md) | ✅ 完全実装 |
-| **ポインタ** | [基本: ポインタ](../tutorials/basics/pointers.md) | ✅ 完全実装 |
-| **with自動実装** | [高度: withキーワード](../tutorials/advanced/with-keyword.md) | ✅ LLVM/WASM完了 |
-| **match式** | [高度: match式](../tutorials/advanced/match.md) | ✅ 完全実装 |
-| **Enum型** | [型システム: Enum型](../tutorials/types/enums.md) | ✅ 完全実装 |
-| **typedef** | [型システム: typedef](../tutorials/types/typedef.md) | ✅ 完全実装 |
-| **typedef型ポインタ** | [型システム: typedef](../tutorials/types/typedef.md) | ✅ v0.10.0完了 |
-| **文字列操作** | [高度: 文字列操作](../tutorials/advanced/strings.md) | ✅ 完全実装 |
-| **関数ポインタ** | [高度: 関数ポインタ](../tutorials/advanced/function-pointers.md) | ✅ 完全実装 |
-| **デッドコード削除** | [コンパイラ: 最適化](../tutorials/compiler/optimization.md) | ✅ 完全実装 |
-| **型制約** | [型システム: 型制約](../tutorials/types/constraints.md) | ✅ AND/OR境界 |
-| **ラムダ式** | [高度: ラムダ式](../tutorials/advanced/lambda.md) | ✅ 完全実装 |
-| **スライス型** | [高度: スライス型](../tutorials/advanced/slices.md) | ✅ 完全実装 |
+| **配列** | [基本: 配列](../tutorials/basics/arrays.html) | ✅ 完全実装 |
+| **ポインタ** | [基本: ポインタ](../tutorials/basics/pointers.html) | ✅ 完全実装 |
+| **with自動実装** | [高度: withキーワード](../tutorials/advanced/with-keyword.html) | ✅ LLVM/WASM完了 |
+| **match式** | [高度: match式](../tutorials/advanced/match.html) | ✅ 完全実装 |
+| **Enum型** | [型システム: Enum型](../tutorials/types/enums.html) | ✅ 完全実装 |
+| **typedef** | [型システム: typedef](../tutorials/types/typedef.html) | ✅ 完全実装 |
+| **typedef型ポインタ** | [型システム: typedef](../tutorials/types/typedef.html) | ✅ v0.10.0完了 |
+| **文字列操作** | [高度: 文字列操作](../tutorials/advanced/strings.html) | ✅ 完全実装 |
+| **関数ポインタ** | [高度: 関数ポインタ](../tutorials/advanced/function-pointers.html) | ✅ 完全実装 |
+| **デッドコード削除** | [コンパイラ: 最適化](../tutorials/compiler/optimization.html) | ✅ 完全実装 |
+| **型制約** | [型システム: 型制約](../tutorials/types/constraints.html) | ✅ AND/OR境界 |
+| **ラムダ式** | [高度: ラムダ式](../tutorials/advanced/lambda.html) | ✅ 完全実装 |
+| **スライス型** | [高度: スライス型](../tutorials/advanced/slices.html) | ✅ 完全実装 |
 
 ### v0.11.0 予定
 
@@ -36,36 +38,36 @@
 
 ### 基本機能
 
-- **[変数と型](../guides/basics/variables.md)** - プリミティブ型、構造体
-- **[制御構文](../guides/basics/control-flow.md)** - if/while/for/switch
-- **[関数](../guides/basics/functions.md)** - 関数定義、オーバーロード
+- **[変数と型](../guides/basics/variables.html)** - プリミティブ型、構造体
+- **[制御構文](../guides/basics/control-flow.html)** - if/while/for/switch
+- **[関数](../guides/basics/functions.html)** - 関数定義、オーバーロード
 
 ### 型システム
 
-- **[ジェネリクス](../guides/types/generics.md)** - 型パラメータ、制約
-- **[インターフェース](../guides/types/interfaces.md)** - interface/impl
-- **[Enum型](../tutorials/types/enums.md)** - 列挙型
-- **[typedef](../tutorials/types/typedef.md)** - 型エイリアス
-- **[型制約](../tutorials/types/constraints.md)** - AND/OR境界
+- **[ジェネリクス](../guides/types/generics.html)** - 型パラメータ、制約
+- **[インターフェース](../guides/types/interfaces.html)** - interface/impl
+- **[Enum型](../tutorials/types/enums.html)** - 列挙型
+- **[typedef](../tutorials/types/typedef.html)** - 型エイリアス
+- **[型制約](../tutorials/types/constraints.html)** - AND/OR境界
 
 ### メモリ管理
 
-- **[配列](../tutorials/basics/arrays.md)** - 固定長配列
-- **[ポインタ](../tutorials/basics/pointers.md)** - メモリアドレス操作
-- **[スライス](../tutorials/advanced/slices.md)** - 動的配列
+- **[配列](../tutorials/basics/arrays.html)** - 固定長配列
+- **[ポインタ](../tutorials/basics/pointers.html)** - メモリアドレス操作
+- **[スライス](../tutorials/advanced/slices.html)** - 動的配列
 
 ### 高度な機能
 
-- **[match式](../tutorials/advanced/match.md)** - パターンマッチング
-- **[with自動実装](../tutorials/advanced/with-keyword.md)** - トレイト自動導出
-- **[演算子オーバーロード](../tutorials/advanced/operators.md)** - カスタム演算子
-- **[ラムダ式](../tutorials/advanced/lambda.md)** - 無名関数
+- **[match式](../tutorials/advanced/match.html)** - パターンマッチング
+- **[with自動実装](../tutorials/advanced/with-keyword.html)** - トレイト自動導出
+- **[演算子オーバーロード](../tutorials/advanced/operators.html)** - カスタム演算子
+- **[ラムダ式](../tutorials/advanced/lambda.html)** - 無名関数
 
 ### バックエンド
 
-- **[LLVMバックエンド](../tutorials/compiler/llvm.md)** - ネイティブコンパイル
-- **[WASMバックエンド](../tutorials/compiler/wasm.md)** - WebAssembly出力
-- **[最適化](../tutorials/compiler/optimization.md)** - MIR最適化パス
+- **[LLVMバックエンド](../tutorials/compiler/llvm.html)** - ネイティブコンパイル
+- **[WASMバックエンド](../tutorials/compiler/wasm.html)** - WebAssembly出力
+- **[最適化](../tutorials/compiler/optimization.html)** - MIR最適化パス
 
 ## 📝 各機能の実装状況
 
@@ -90,7 +92,7 @@
 
 - [言語ガイド](../guides/) - 包括的なガイド
 - [チュートリアル](../tutorials/) - ステップバイステップ
-- [正式言語仕様](../design/CANONICAL_SPEC.md) - 完全な仕様
+- [正式言語仕様](../design/CANONICAL_SPEC.html) - 完全な仕様
 - [サンプルコード](../../examples/) - 実用例
 
 ---

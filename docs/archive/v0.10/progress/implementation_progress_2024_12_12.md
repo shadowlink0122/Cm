@@ -1,3 +1,5 @@
+[English](implementation_progress_2024_12_12.en.html)
+
 # 実装進捗レポート - 2025年12月12日
 
 ## 本日の成果

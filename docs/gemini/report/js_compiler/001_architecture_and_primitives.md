@@ -1,3 +1,5 @@
+[English](001_architecture_and_primitives.en.html)
+
 # JSコンパイラ詳細設計: 001 アーキテクチャと基本型
 
 ## 1. コンパイルパイプライン

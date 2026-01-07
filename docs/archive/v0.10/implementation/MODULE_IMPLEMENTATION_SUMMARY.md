@@ -1,3 +1,5 @@
+[English](MODULE_IMPLEMENTATION_SUMMARY.en.html)
+
 # モジュールシステム実装サマリー（2025-12-20）
 
 ## 本日の実装内容

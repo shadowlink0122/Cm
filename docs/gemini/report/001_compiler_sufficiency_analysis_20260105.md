@@ -1,3 +1,5 @@
+[English](001_compiler_sufficiency_analysis_20260105.en.html)
+
 # コンパイラ実装の網羅的健全性調査レポート (改訂版)
 
 **日付**: 2026年1月5日

@@ -1,3 +1,5 @@
+[English](005_tooling_architecture_20260105.en.html)
+
 # ツール基盤（Lint/Format/LSP）のアーキテクチャ設計提案
 
 **日付**: 2026年1月5日

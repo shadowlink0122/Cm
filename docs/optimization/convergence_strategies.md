@@ -1,3 +1,5 @@
+[English](convergence_strategies.en.html)
+
 # 最適化パスの収束戦略
 
 ## 主要コンパイラの手法比較

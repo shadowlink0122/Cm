@@ -1,3 +1,5 @@
+[English](variables.en.html)
+
 # 言語ガイド - 変数と型
 
 ## プリミティブ型

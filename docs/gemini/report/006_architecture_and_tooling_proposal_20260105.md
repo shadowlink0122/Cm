@@ -1,3 +1,5 @@
+[English](006_architecture_and_tooling_proposal_20260105.en.html)
+
 # アーキテクチャ見直しとツール拡張提案
 
 **日付**: 2026年1月5日

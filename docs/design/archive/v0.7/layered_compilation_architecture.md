@@ -1,3 +1,5 @@
+[English](layered_compilation_architecture.en.html)
+
 # 階層化されたコンパイルアーキテクチャ
 
 ## 現状の問題

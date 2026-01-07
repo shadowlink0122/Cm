@@ -1,3 +1,5 @@
+[English](DOCUMENTATION_SUMMARY.en.html)
+
 # ドキュメント整理・拡充サマリー
 
 **実施日:** 2025-12-16  
@@ -167,9 +169,9 @@ docs/
 
 ## 🔗 関連作業
 
-- [v0.10.0リリースノート](releases/v0.10.0.md)
-- [ドキュメント整理サマリー](ORGANIZATION_SUMMARY.md)
-- [ロードマップ](../ROADMAP.md)
+- [v0.10.0リリースノート](releases/v0.10.0.html)
+- [ドキュメント整理サマリー](ORGANIZATION_SUMMARY.html)
+- [ロードマップ](../ROADMAP.html)
 
 ---
 

@@ -1,3 +1,5 @@
+[English](STRUCT_AND_ARRAY_DESIGN.en.html)
+
 # 構造体と配列の拡張設計
 
 **作成日**: 2025-12-20  
@@ -485,9 +487,9 @@ int main() {
 
 ### 7.2 関連ドキュメント
 
-- [CANONICAL_SPEC.md](CANONICAL_SPEC.md) - 言語仕様
-- [構造体チュートリアル](../tutorials/types/structs.md)
-- [配列チュートリアル](../tutorials/basics/arrays.md)
+- [CANONICAL_SPEC.md](CANONICAL_SPEC.html) - 言語仕様
+- [構造体チュートリアル](../tutorials/types/structs.html)
+- [配列チュートリアル](../tutorials/basics/arrays.html)
 
 ---
 

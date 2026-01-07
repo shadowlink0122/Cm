@@ -1,3 +1,5 @@
+[English](backends.en.html)
+
 # バックエンド設計
 
 ## 概要
@@ -88,9 +90,9 @@ cm compile program.cm --target=wasm32 -o program.wasm
 
 ### 詳細ドキュメント
 
-- [LLVM バックエンド実装ガイド](../llvm_backend_implementation.md)
-- [LLVM ランタイムライブラリ](../LLVM_RUNTIME_LIBRARY.md)
-- [LLVM 最適化パイプライン](../LLVM_OPTIMIZATION.md)
+- [LLVM バックエンド実装ガイド](../llvm_backend_implementation.html)
+- [LLVM ランタイムライブラリ](../LLVM_RUNTIME_LIBRARY.html)
+- [LLVM 最適化パイプライン](../LLVM_OPTIMIZATION.html)
 
 ---
 
@@ -140,4 +142,4 @@ cm run program.cm
 | ターゲット | 限定的 | 100+ターゲット |
 | デバッグ | バラバラ | DWARF統一 |
 
-詳細な比較は [backend_comparison.md](../backend_comparison.md) を参照してください。
+詳細な比較は [backend_comparison.md](../backend_comparison.html) を参照してください。

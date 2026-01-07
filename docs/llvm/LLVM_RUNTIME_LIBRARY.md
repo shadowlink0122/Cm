@@ -1,3 +1,5 @@
+[English](LLVM_RUNTIME_LIBRARY.en.html)
+
 # LLVM ランタイムライブラリ
 
 ## 概要
@@ -172,6 +174,6 @@ call void @cm_println_string(ptr %format3)
 
 ## 関連ドキュメント
 
-- [LLVM バックエンド実装ガイド](./llvm_backend_implementation.md)
-- [フォーマット文字列のLLVM実装](./STRING_INTERPOLATION_LLVM.md)
-- [FFI設計](./design/ffi.md)
+- [LLVM バックエンド実装ガイド](./llvm_backend_implementation.html)
+- [フォーマット文字列のLLVM実装](./STRING_INTERPOLATION_LLVM.html)
+- [FFI設計](./design/ffi.html)

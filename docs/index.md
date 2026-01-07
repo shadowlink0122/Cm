@@ -1,153 +1,299 @@
 ---
 layout: default
-title: Home
+title: ホーム
 nav_order: 1
 ---
 
-# Cm Programming Language
+[English](index.en.html)
 
-**A modern systems programming language with C++ syntax and Rust-inspired features**
+# Cm プログラミング言語
 
----
-
-## 🚀 Quick Links
-
-- [📚 Getting Started](QUICKSTART.md)
-- [📖 Tutorials](tutorials/)
-- [📋 Release Notes](releases/)
-- [🏗️ Project Structure](PROJECT_STRUCTURE.md)
-- [🎯 Roadmap](../ROADMAP.md)
+**C++の構文とRustにインスパイアされた機能を併せ持つ、モダンなシステムプログラミング言語**
 
 ---
 
-## 📖 Documentation
+## 🚀 クイックリンク
 
-### For Users
+- [📚 はじめる](QUICKSTART.html)
 
-- **[Tutorials](tutorials/)** - Step-by-step learning guide
-  - [Basics](tutorials/basics/) - Variables, functions, control flow
-  - [Types](tutorials/types/) - Structs, enums, interfaces
-  - [Advanced](tutorials/advanced/) - Generics, macros, match
-  - [Compiler](tutorials/compiler/) - LLVM backend, optimization
+- [📖 チュートリアル](tutorials/ja/)
 
-- **[Quick Start Guide](QUICKSTART.md)** - Get started in 5 minutes
+- [📋 リリースノート](releases/)
 
-### For Developers
+- [🏗️ プロジェクト構造](PROJECT_STRUCTURE.html)
 
-- **[Project Structure](PROJECT_STRUCTURE.md)** - Codebase organization
-- **[Development Guide](DEVELOPMENT.md)** - Contributing guidelines
-- **[Design Documents](design/)** - Language specifications and architecture
+- [🎯 ロードマップ](../ROADMAP.html)
 
-### Release Information
 
-- **[Release Notes](releases/)** - Version history and changelogs
-- **[Feature Reference](features/)** - Current implementation status
 
 ---
 
-## 🎯 Language Features
 
-### ✅ Implemented (v0.10.0)
 
-- **C++ Style Syntax** - Familiar and readable
-- **Strong Type System** - Compile-time safety
-- **Generics** - Type-safe generic programming
-- **Interfaces** - Trait-based polymorphism
-- **LLVM Backend** - Native code generation
-- **WASM Support** - WebAssembly backend
-- **Pattern Matching** - Powerful match expressions
-- **Zero-cost Abstractions** - Performance without overhead
+## 📖 ドキュメント
 
-### 🔄 In Progress
 
-- **Standard Library** - Core utilities and data structures
-- **Module System** - Enhanced package management
-- **Ownership System** - Memory safety without GC (v0.11.0+)
+
+### ユーザー向け
+
+
+
+- **[チュートリアル](tutorials/ja/)** - 段階的な学習ガイド
+  - [基本編](tutorials/ja/basics/) - 変数、関数、制御構文
+  - [型システム編](tutorials/ja/types/) - 構造体、Enum、インターフェース
+  - [高度な機能編](tutorials/ja/advanced/) - ジェネリクス、マクロ、match式
+  - [コンパイラ編](tutorials/ja/compiler/) - LLVMバックエンド、最適化
+
+
+
+- **[クイックスタートガイド](QUICKSTART.html)** - 5分で始めるCm言語
+
+
+
+### 開発者向け
+
+
+
+- **[プロジェクト構造](PROJECT_STRUCTURE.html)** - コードベースの構成
+
+- **[開発ガイド](DEVELOPMENT.html)** - 開発環境のセットアップ
+
+- **[貢献ガイド](CONTRIBUTING.html)** - 貢献のための規約と手順
+
+- **[設計ドキュメント](design/)** - 言語仕様とアーキテクチャ
+
+
+
+### リリース情報
+
+
+
+- **[リリースノート](releases/)** - バージョン履歴と変更ログ
+
+- **[機能リファレンス](features/)** - 現在の実装状況
+
+- **[ロードマップ](../ROADMAP.html)** - 将来の計画
+
+
 
 ---
 
-## 💡 Example Code
+
+
+## 🎯 言語の特徴
+
+
+
+### ✅ 実装済み (v0.10.0)
+
+
+
+- **C++ライクな構文** - 親しみやすく読みやすい
+
+- **強力な型システム** - コンパイル時の安全性
+
+- **ジェネリクス** - 型安全なジェネリックプログラミング
+
+- **インターフェース** - トレイトベースのポリモーフィズム
+
+- **LLVMバックエンド** - ネイティブコード生成
+
+- **WASMサポート** - WebAssemblyバックエンド
+
+- **パターンマッチング** - 強力なmatch式
+
+- **ゼロコスト抽象化** - オーバーヘッドのないパフォーマンス
+
+
+
+### 🔄 進行中
+
+
+
+- **標準ライブラリ** - コアユーティリティとデータ構造
+
+- **モジュールシステム** - 強化されたパッケージ管理
+
+- **所有権システム** - GCなしのメモリ安全性 (v0.11.0以降)
+
+
+
+---
+
+
+
+## 💡 コード例
+
+
 
 ```cm
+
 // Hello World
+
 int main() {
+
     println("Hello, Cm!");
+
     return 0;
+
 }
 
-// Generic function
+
+
+// ジェネリック関数
+
 <T: Ord> T max(T a, T b) {
+
     return a > b ? a : b;
+
 }
 
-// Interface implementation
+
+
+// インターフェース実装
+
 interface Drawable {
+
     void draw();
+
 }
+
+
 
 struct Circle {
+
     int radius;
+
 }
+
+
 
 impl Circle for Drawable {
+
     void draw() {
+
         println("Drawing circle with radius {}", self.radius);
+
     }
+
 }
+
 ```
+
+
 
 ---
 
-## 🛠️ Building from Source
+
+
+## 🛠️ ソースからのビルド
+
+
 
 ```bash
-# Clone the repository
+
+# リポジトリをクローン
+
 git clone https://github.com/shadowlink0122/Cm.git
+
 cd Cm
 
-# Build with LLVM backend
+
+
+# LLVMバックエンドでビルド
+
 cmake -B build -DCM_USE_LLVM=ON
+
 cmake --build build
 
-# Run tests
+
+
+# テストの実行
+
 ctest --test-dir build
+
 ```
 
+
+
 ---
 
-## 📊 Project Stats
 
-| Component | Status | Coverage |
+
+## 📊 プロジェクト統計
+
+
+
+| コンポーネント | ステータス | カバレッジ |
+
 |-----------|--------|----------|
-| Lexer/Parser | ✅ Complete | 90%+ |
-| Type System | ✅ Complete | 85%+ |
-| HIR/MIR | ✅ Complete | 80%+ |
-| LLVM Backend | ✅ Complete | 85%+ |
-| WASM Backend | ✅ Complete | 80%+ |
-| Standard Library | 🔄 In Progress | 30%+ |
+
+| Lexer/Parser | ✅ 完了 | 90%+ |
+
+| 型システム | ✅ 完了 | 85%+ |
+
+| HIR/MIR | ✅ 完了 | 80%+ |
+
+| LLVM Backend | ✅ 完了 | 85%+ |
+
+| WASM Backend | ✅ 完了 | 80%+ |
+
+| 標準ライブラリ | 🔄 進行中 | 30%+ |
+
+
 
 ---
 
-## 🤝 Contributing
 
-We welcome contributions! Please see our [Development Guide](DEVELOPMENT.md) for details.
 
----
+## 🤝 貢献について
 
-## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
 
----
+貢献を歓迎します！詳細は [貢献ガイド](CONTRIBUTING.html) をご覧ください。
 
-## 🔗 Links
 
-- [GitHub Repository](https://github.com/shadowlink0122/Cm)
-- [Issue Tracker](https://github.com/shadowlink0122/Cm/issues)
-- [Discussions](https://github.com/shadowlink0122/Cm/discussions)
 
 ---
 
-**Last Updated:** v0.10.0 (January 2025)
+
+
+## 📄 ライセンス
+
+
+
+本プロジェクトは MIT ライセンスの下で公開されています。詳細は LICENSE ファイルをご確認ください。
+
+
+
+---
+
+
+
+## 🔗 リンク
+
+
+
+- [GitHub リポジトリ](https://github.com/shadowlink0122/Cm)
+
+- [課題トラッカー](https://github.com/shadowlink0122/Cm/issues)
+
+- [ディスカッション](https://github.com/shadowlink0122/Cm/discussions)
+
+
+
+---
+
+
+
+**最終更新:** v0.10.0 (2025年1月)
+
+
 
 © 2025-2025 Cm Language Project
+
+
+
+---
+
+[English Version here](./)

@@ -1,3 +1,5 @@
+[English](optimization.en.html)
+
 # 言語ガイド - 最適化
 
 Cm言語コンパイラは複数の最適化パスを備えています。

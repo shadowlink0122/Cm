@@ -1,3 +1,5 @@
+[English](optimization_philosophy.en.html)
+
 # Cm言語の最適化哲学
 
 ## 基本理念

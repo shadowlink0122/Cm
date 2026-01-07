@@ -1,3 +1,5 @@
+[English](GITHUB_PAGES_SETUP.en.html)
+
 # GitHub Pages セットアップガイド
 
 このガイドでは、Cm言語のドキュメントをGitHub Pagesで公開する方法を説明します。

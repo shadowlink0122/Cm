@@ -1,3 +1,5 @@
+[English](DEVELOPMENT.en.html)
+
 # 開発環境ガイド
 
 *最終更新: 2025年1月*
@@ -109,4 +111,4 @@ examples/           # サンプルコード
 - 1ファイル1000行目安
 - デバッグ出力は `[STAGE]` 形式
 
-詳細: [CONTRIBUTING.md](../CONTRIBUTING.md)
+詳細: [CONTRIBUTING.md](../CONTRIBUTING.html)

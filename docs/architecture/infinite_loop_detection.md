@@ -1,3 +1,5 @@
+[English](infinite_loop_detection.en.html)
+
 # 無限ループ検出戦略
 
 ## エグゼクティブサマリー

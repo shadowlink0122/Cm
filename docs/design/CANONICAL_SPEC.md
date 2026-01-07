@@ -1,3 +1,5 @@
+[English](CANONICAL_SPEC.en.html)
+
 # Cm言語 正式仕様（矛盾解決版）
 
 このドキュメントはCm言語の**唯一の正式仕様**です。

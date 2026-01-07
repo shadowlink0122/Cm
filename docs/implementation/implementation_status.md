@@ -1,3 +1,5 @@
+[English](implementation_status.en.html)
+
 # Cm言語 実装状況レポート
 
 ## 現在の状況（2025年12月12日）

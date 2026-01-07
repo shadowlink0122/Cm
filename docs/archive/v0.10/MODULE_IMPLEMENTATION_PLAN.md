@@ -1,3 +1,5 @@
+[English](MODULE_IMPLEMENTATION_PLAN.en.html)
+
 # モジュールシステム実装計画
 
 ## 現状分析（2025-12-20）

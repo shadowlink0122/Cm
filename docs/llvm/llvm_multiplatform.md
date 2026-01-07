@@ -1,3 +1,5 @@
+[English](llvm_multiplatform.en.html)
+
 # LLVM マルチプラットフォーム対応
 
 ## 概要

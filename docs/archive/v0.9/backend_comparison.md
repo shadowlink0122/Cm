@@ -1,3 +1,5 @@
+[English](backend_comparison.en.html)
+
 # バックエンド比較：3言語 vs LLVM
 
 > **結論**: 2025年12月より、LLVMバックエンドを唯一のコード生成方式として採用しました。

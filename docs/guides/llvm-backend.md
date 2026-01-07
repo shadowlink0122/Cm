@@ -1,3 +1,5 @@
+[English](llvm-backend.en.html)
+
 # 言語ガイド - LLVMバックエンド
 
 Cm言語はLLVMを使用してネイティブバイナリを生成します。

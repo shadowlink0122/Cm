@@ -1,3 +1,5 @@
+[English](hir.en.html)
+
 # HIR (High-level Intermediate Representation) 設計
 
 ## 概要

@@ -1,3 +1,5 @@
+[English](MODULE_SYSTEM_PROGRESS.en.html)
+
 # モジュールシステム実装進捗レポート
 
 **日付**: 2025-12-20  

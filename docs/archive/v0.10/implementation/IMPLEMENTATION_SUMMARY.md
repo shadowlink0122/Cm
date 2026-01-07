@@ -1,3 +1,5 @@
+[English](IMPLEMENTATION_SUMMARY.en.html)
+
 # モジュールシステム実装総まとめ
 
 **日付**: 2025-12-20  

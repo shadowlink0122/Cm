@@ -1,3 +1,5 @@
+[English](MODULE_IMPLEMENTATION_FINAL_PLAN.en.html)
+
 # モジュールシステム完全実装計画
 
 ## 目標

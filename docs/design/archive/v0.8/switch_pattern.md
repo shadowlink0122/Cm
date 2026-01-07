@@ -1,3 +1,5 @@
+[English](switch_pattern.en.html)
+
 # Switch文パターンマッチング仕様
 
 ## 構文

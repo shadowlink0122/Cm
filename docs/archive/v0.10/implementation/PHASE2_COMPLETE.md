@@ -1,3 +1,5 @@
+[English](PHASE2_COMPLETE.en.html)
+
 # Phase 2 モジュールシステム実装完了
 
 **日付**: 2025-12-20  

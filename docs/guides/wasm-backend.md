@@ -1,3 +1,5 @@
+[English](wasm-backend.en.html)
+
 # 言語ガイド - WASMバックエンド
 
 WebAssemblyへのコンパイルをサポートしています。

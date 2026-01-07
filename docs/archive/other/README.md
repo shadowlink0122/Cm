@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # アーカイブドキュメント
 
 過去の設計文書や参考資料のアーカイブです。これらのドキュメントは古いか、現在のプロジェクト状態と一致しない可能性があります。
@@ -6,9 +8,9 @@
 
 このディレクトリのドキュメントは**参考資料**です。最新の情報は以下を参照してください：
 
-- **正式言語仕様**: [../design/CANONICAL_SPEC.md](../design/CANONICAL_SPEC.md)
-- **現在の実装状況**: [../implementation/implementation_status.md](../implementation/implementation_status.md)
-- **プロジェクト構造**: [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)
+- **正式言語仕様**: [../design/CANONICAL_SPEC.md](../design/CANONICAL_SPEC.html)
+- **現在の実装状況**: [../implementation/implementation_status.md](../implementation/implementation_status.html)
+- **プロジェクト構造**: [../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.html)
 
 ## 📚 アーカイブ一覧
 
@@ -16,32 +18,32 @@
 
 | ドキュメント | 説明 |
 |------------|------|
-| [CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md) | 過去のクリーンアップサマリー |
+| [CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.html) | 過去のクリーンアップサマリー |
 
 ### 構造体実装（v0.4.0以前）
 
 | ドキュメント | 説明 |
 |------------|------|
 | [STRUCT_EXECUTIVE_SUMMARY.txt](STRUCT_EXECUTIVE_SUMMARY.txt) | 構造体実装のエグゼクティブサマリー |
-| [STRUCT_IMPLEMENTATION_STATUS.md](STRUCT_IMPLEMENTATION_STATUS.md) | 構造体実装状況（旧） |
-| [STRUCT_INVESTIGATION_INDEX.md](STRUCT_INVESTIGATION_INDEX.md) | 構造体調査インデックス |
-| [STRUCT_QUICK_REFERENCE.md](STRUCT_QUICK_REFERENCE.md) | 構造体クイックリファレンス |
+| [STRUCT_IMPLEMENTATION_STATUS.md](STRUCT_IMPLEMENTATION_STATUS.html) | 構造体実装状況（旧） |
+| [STRUCT_INVESTIGATION_INDEX.md](STRUCT_INVESTIGATION_INDEX.html) | 構造体調査インデックス |
+| [STRUCT_QUICK_REFERENCE.md](STRUCT_QUICK_REFERENCE.html) | 構造体クイックリファレンス |
 
 ### 文字列補間（v0.5.0以前）
 
 | ドキュメント | 説明 |
 |------------|------|
-| [STRING_INTERPOLATION_ARCHITECTURE.md](STRING_INTERPOLATION_ARCHITECTURE.md) | 文字列補間アーキテクチャ |
-| [STRING_INTERPOLATION_EXAMPLES.md](STRING_INTERPOLATION_EXAMPLES.md) | 文字列補間の例 |
-| [STRING_INTERPOLATION_LLVM.md](STRING_INTERPOLATION_LLVM.md) | LLVM文字列補間実装 |
-| [STRING_INTERPOLATION_README.md](STRING_INTERPOLATION_README.md) | 文字列補間README |
+| [STRING_INTERPOLATION_ARCHITECTURE.md](STRING_INTERPOLATION_ARCHITECTURE.html) | 文字列補間アーキテクチャ |
+| [STRING_INTERPOLATION_EXAMPLES.md](STRING_INTERPOLATION_EXAMPLES.html) | 文字列補間の例 |
+| [STRING_INTERPOLATION_LLVM.md](STRING_INTERPOLATION_LLVM.html) | LLVM文字列補間実装 |
+| [STRING_INTERPOLATION_README.md](STRING_INTERPOLATION_README.html) | 文字列補間README |
 
 ### バックエンド比較
 
 | ドキュメント | 説明 |
 |------------|------|
-| [backend_comparison.md](backend_comparison.md) | 各バックエンドの比較（旧） |
-| [wasm_execution.md](wasm_execution.md) | WASM実行に関する文書（旧） |
+| [backend_comparison.md](backend_comparison.html) | 各バックエンドの比較（旧） |
+| [wasm_execution.md](wasm_execution.html) | WASM実行に関する文書（旧） |
 
 ## 📅 アーカイブされた理由
 

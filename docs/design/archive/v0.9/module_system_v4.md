@@ -1,3 +1,5 @@
+[English](module_system_v4.en.html)
+
 # Cm言語 モジュールシステム v4 設計仕様
 
 ## 概要とv3からの変更点

@@ -1,3 +1,5 @@
+[English](OPTIMIZATION_LEVEL_TESTING.en.html)
+
 # 最適化レベル別テスト実装完了
 
 **実装日**: 2026-01-04  
@@ -192,7 +194,7 @@ Version 1.2以降で段階的に実装。
 
 ## 関連ドキュメント
 
-- [ROADMAP.md](../ROADMAP.md) - Version 1.1.0セクション
-- [docs/optimization/OPTIMIZATION_STATUS.md](../docs/optimization/OPTIMIZATION_STATUS.md)
+- [ROADMAP.md](../ROADMAP.html) - Version 1.1.0セクション
+- [docs/optimization/OPTIMIZATION_STATUS.md](../docs/optimization/OPTIMIZATION_STATUS.html)
 - [Makefile](../Makefile) - 全ターゲット定義
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) - CI設定

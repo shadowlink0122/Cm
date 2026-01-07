@@ -1,3 +1,5 @@
+[English](VERSION_PLAN.en.html)
+
 # バージョン計画まとめ (v0.10.0 - v0.14.0)
 
 ## v0.10.0 - 安定化リリース ✅ 完了
@@ -33,8 +35,8 @@
 | **リファクタ** | エラー報告統一 | ⬜ |
 
 ### 参考ドキュメント
-- [所有権と借用](design/ownership_and_borrowing.md)
-- [リファクタリング提案](design/refactoring_proposal.md)
+- [所有権と借用](design/ownership_and_borrowing.html)
+- [リファクタリング提案](design/refactoring_proposal.html)
 
 ---
 

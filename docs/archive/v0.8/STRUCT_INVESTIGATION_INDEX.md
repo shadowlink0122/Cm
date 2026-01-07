@@ -1,3 +1,5 @@
+[English](STRUCT_INVESTIGATION_INDEX.en.html)
+
 # 構造体実装調査 - ドキュメントインデックス
 
 **調査日**: 2025-12-10  

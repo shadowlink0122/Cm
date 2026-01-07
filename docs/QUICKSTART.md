@@ -1,3 +1,5 @@
+[English](QUICKSTART.en.html)
+
 # Cm言語コンパイラ - クイックスタート
 
 ## 🚀 ビルド方法
@@ -137,7 +139,7 @@ make tlwp
 - [言語仕様](docs/spec/) - 型システム、構文
 - [設計文書](docs/design/) - モジュールシステム、アーキテクチャ
 - [チュートリアル](docs/tutorials/) - 詳細な使い方
-- [ロードマップ](ROADMAP.md) - 開発計画
+- [ロードマップ](ROADMAP.html) - 開発計画
 
 ## ✅ 実装済み機能（v0.10.0）
 

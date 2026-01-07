@@ -1,3 +1,5 @@
+[English](ORGANIZATION_SUMMARY.en.html)
+
 # ドキュメント整理サマリー
 
 **実施日:** 2025-12-15  

@@ -1,3 +1,5 @@
+[English](003_static_analysis_proposal_20260105.en.html)
+
 # コンパイル時静的解析の強化提案
 
 **日付**: 2026年1月5日

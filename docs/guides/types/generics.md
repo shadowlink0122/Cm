@@ -1,3 +1,5 @@
+[English](generics.en.html)
+
 # 言語ガイド - ジェネリクス
 
 ## ジェネリック関数

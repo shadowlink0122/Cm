@@ -1,3 +1,5 @@
+[English](003_functions_modules_control_flow.en.html)
+
 # JSコンパイラ詳細設計: 003 関数・モジュール・制御構文
 
 ## 1. 関数 (Functions)

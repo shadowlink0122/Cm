@@ -1,3 +1,5 @@
+[English](string_interpolation_implementation.en.html)
+
 # 文字列埋め込み実装計画
 
 ## 問題の本質

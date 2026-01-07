@@ -1,3 +1,5 @@
+[English](inline_asm.en.html)
+
 # インラインアセンブリ設計
 
 ## 概要

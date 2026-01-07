@@ -1,3 +1,5 @@
+[English](010_multitasking_and_async.en.html)
+
 # 非協調的マルチタスクとAsync/Await導入に向けたアルゴリズムと設計
 
 ## 概要

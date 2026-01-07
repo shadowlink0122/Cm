@@ -1,3 +1,5 @@
+[English](string_interpolation.en.html)
+
 # 文字列埋め込み（String Interpolation）の正しい実装
 
 ## 現在の問題点

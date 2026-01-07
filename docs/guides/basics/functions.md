@@ -1,3 +1,5 @@
+[English](functions.en.html)
+
 # 言語ガイド - 関数
 
 ## 基本的な定義
