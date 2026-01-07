@@ -7,9 +7,9 @@ has_children: true
 
 [日本語](../ja/)
 
-# Cm Language Tutorials v0.10.0
+# Cm Language Tutorials v0.11.0
 
-**Target Version:** v0.10.0  
+**Target Version:** v0.11.0  
 **Last Updated:** 2026-01-06
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
@@ -45,6 +45,8 @@ Estimated Time: 4-5 hours
    - [Generics](types/generics.html) - Type parameters, inference, monomorphization
    - [Interfaces](types/interfaces.html) - interface/impl/self
    - [Constraints](types/constraints.html) - AND/OR boundaries, where clause
+   - [Ownership](types/ownership.html) - Move semantics, Borrowing
+   - [Lifetimes](types/lifetimes.html) - Reference validity
 
 ### Path 3: Learning Advanced Features (For Advanced Users)
 
@@ -107,7 +109,7 @@ Estimated Time: 3 hours
 
 ---
 
-## ✅ Implementation Status (v0.10.0)
+## ✅ Implementation Status (v0.11.0)
 
 (Omitted for brevity, same as Japanese version)
 
@@ -115,7 +117,7 @@ Estimated Time: 3 hours
 
 **Total Tutorials:** 25 files  
 **Estimated Time:** 17-20 hours  
-**Target Version:** v0.10.0
+**Target Version:** v0.11.0
 
 ---
 

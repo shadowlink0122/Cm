@@ -4,8 +4,6 @@ title: Home (EN)
 nav_order: 1
 ---
 
-[日本語](./)
-
 # Cm Programming Language
 
 **A modern systems programming language with C++ syntax and Rust-inspired features**
@@ -18,7 +16,7 @@ nav_order: 1
 - [📖 Tutorials](tutorials/en/)
 - [📋 Release Notes](releases/)
 - [🏗️ Project Structure](PROJECT_STRUCTURE.html)
-- [🎯 Roadmap](../../ROADMAP.html)
+- [🎯 Roadmap](../../ROADMAP.md)
 
 ---
 
@@ -45,13 +43,13 @@ nav_order: 1
 
 - **[Release Notes](releases/)** - Version history and changelogs
 - **[Feature Reference](features/)** - Current implementation status
-- **[Roadmap](../../ROADMAP.html)** - Future plans
+- **[Roadmap](../../ROADMAP.md)** - Future plans
 
 ---
 
 ## 🎯 Language Features
 
-### ✅ Implemented (v0.10.0)
+### ✅ Implemented (v0.11.0)
 
 - **C++ Style Syntax** - Familiar and readable
 - **Strong Type System** - Compile-time safety
@@ -74,29 +72,16 @@ nav_order: 1
 
 ```cm
 // Hello World
-int main() {
-    println("Hello, Cm!");
-    return 0;
-}
+int main() { println("Hello, Cm!"); return 0; }
 
 // Generic function
-<T: Ord> T max(T a, T b) {
-    return a > b ? a : b;
-}
+<T: Ord> T max(T a, T b) { return a > b ? a : b; }
 
 // Interface implementation
-interface Drawable {
-    void draw();
-}
-
-struct Circle {
-    int radius;
-}
-
+interface Drawable { void draw(); }
+struct Circle { int radius; }
 impl Circle for Drawable {
-    void draw() {
-        println("Drawing circle with radius {}", self.radius);
-    }
+    void draw() { println("Circle({})", self.radius); }
 }
 ```
 
@@ -152,9 +137,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Last Updated:** v0.10.0 (January 2025)
+**Last Updated:** v0.11.0 (January 2026)
 
-© 2025-2025 Cm Language Project
+© 2025-2026 Cm Language Project
 
 ---
-[日本語版はこちら](./)
+[日本語版はこちら](../index.html)
