@@ -25,22 +25,40 @@ parent: Tutorials
 ### 基本演算
 
 ```cm
+int main() {
+    int a = 10, b = 3;
 
+    int sum = a + b;      // 13 (加算)
+    int diff = a - b;     // 7  (減算)
+    int prod = a * b;     // 30 (乗算)
+    int quot = a / b;     // 3  (除算)
+    int rem = a % b;      // 1  (剰余)
+    return 0;
+}
 ```
 
 ### 浮動小数点演算
 
 ```cm
-double x = 10.0, y = 3.0;
+int main() {
+    double x = 10.0, y = 3.0;
 
-double sum = x + y;   // 13.0
-double quot = x / y;  // 3.333...
-// double rem = x % y;  // エラー: %は整数のみ
+    double sum = x + y;   // 13.0
+    double quot = x / y;  // 3.333...
+    // double rem = x % y;  // エラー: %は整数のみ
+    return 0;
+}
 ```
 
 ### 単項演算子
 
 ```cm
+int main() {
+    int x = 10;
+    int neg = -x;         // -10 (符号反転)
+    int pos = +x;         // 10  (符号維持)
+    return 0;
+}
 ```
 
 ---
@@ -48,21 +66,31 @@ double quot = x / y;  // 3.333...
 ## 比較演算子
 
 ```cm
+int main() {
+    int a = 10, b = 20;
 
-bool eq = (a == b);   // false (等しい)
-bool ne = (a != b);   // true  (等しくない)
-bool lt = (a < b);    // true  (より小さい)
-bool le = (a <= b);   // true  (以下)
-bool gt = (a > b);    // false (より大きい)
-bool ge = (a >= b);   // false (以上)
+    bool eq = (a == b);   // false (等しい)
+    bool ne = (a != b);   // true  (等しくない)
+    bool lt = (a < b);    // true  (より小さい)
+    bool le = (a <= b);   // true  (以下)
+    bool gt = (a > b);    // false (より大きい)
+    bool ge = (a >= b);   // false (以上)
+    return 0;
+}
 ```
 
 ### 文字列比較
 
 ```cm
+int main() {
+    string s1 = "abc";
+    string s2 = "abc";
+    string s3 = "def";
 
-bool same = (s1 == s2);     // true
-bool diff = (s1 != s3);     // true
+    bool same = (s1 == s2);     // true
+    bool diff = (s1 != s3);     // true
+    return 0;
+}
 ```
 
 ---
@@ -72,43 +100,46 @@ bool diff = (s1 != s3);     // true
 ### AND (&&)
 
 ```cm
-bool a = true, b = false;
-
-bool result = a && b;  // false
-// 両方trueの時だけtrue
-
-    println("xは1から9の間");
+int main() {
+    bool a = true, b = false;
+    bool result = a && b;  // false
+    
+    int x = 5;
+    if (x > 0 && x < 10) {
+        println("xは1から9の間");
+    }
+    return 0;
 }
 ```
 
 ### OR (||)
 
 ```cm
-bool result = a || b;  // true
-// どちらかtrueならtrue
-
-    println("範囲外");
+int main() {
+    bool a = true, b = false;
+    bool result = a || b;  // true
+    
+    int x = 150;
+    if (x < 0 || x > 100) {
+        println("範囲外");
+    }
+    return 0;
 }
 ```
 
 ### NOT (!)
 
 ```cm
-bool flag = true;
-bool negated = !flag;  // false
-
-    println("空ではない");
+int main() {
+    bool flag = true;
+    bool negated = !flag;  // false
+    
+    bool is_empty = false;
+    if (!is_empty) {
+        println("空ではない");
+    }
+    return 0;
 }
-```
-
-### 短絡評価
-
-```cm
-// &&は左がfalseなら右を評価しない
-bool result = false && expensive_function();  // 呼ばれない
-
-// ||は左がtrueなら右を評価しない
-bool result = true || expensive_function();   // 呼ばれない
 ```
 
 ---
@@ -116,12 +147,16 @@ bool result = true || expensive_function();   // 呼ばれない
 ## 複合代入演算子
 
 ```cm
+int main() {
+    int x = 10;
 
-x += 5;   // x = x + 5;  → 15
-x -= 3;   // x = x - 3;  → 12
-x *= 2;   // x = x * 2;  → 24
-x /= 4;   // x = x / 4;  → 6
-x %= 4;   // x = x % 4;  → 2
+    x += 5;   // x = x + 5;  → 15
+    x -= 3;   // x = x - 3;  → 12
+    x *= 2;   // x = x * 2;  → 24
+    x /= 4;   // x = x / 4;  → 6
+    x %= 4;   // x = x % 4;  → 2
+    return 0;
+}
 ```
 
 ---
@@ -131,24 +166,39 @@ x %= 4;   // x = x % 4;  → 2
 ### 後置演算子
 
 ```cm
+int main() {
+    int i = 5;
+    int a = i++;  // a = 5, i = 6 (使用後に加算)
+    int b = i--;  // b = 6, i = 5 (使用後に減算)
+    return 0;
+}
 ```
 
 ### 前置演算子
 
 ```cm
+int main() {
+    int i = 5;
+    int a = ++i;  // a = 6, i = 6 (加算後に使用)
+    int b = --i;  // b = 5, i = 5 (減算後に使用)
+    return 0;
+}
 ```
 
 ### ループでの使用
 
 ```cm
-// 後置（一般的）
-for (int i = 0; i < 10; i++) {
-    println("{}", i);
-}
+int main() {
+    // 後置（一般的）
+    for (int i = 0; i < 10; i++) {
+        println("{}", i);
+    }
 
-// 前置（同じ結果）
-for (int i = 0; i < 10; ++i) {
-    println("{}", i);
+    // 前置（同じ結果）
+    for (int i = 0; i < 10; ++i) {
+        println("{}", i);
+    }
+    return 0;
 }
 ```
 
@@ -171,9 +221,14 @@ for (int i = 0; i < 10; ++i) {
 ### 例
 
 ```cm
+int main() {
+    int result = 2 + 3 * 4;     // 14 (3*4が先)
+    int result2 = (2 + 3) * 4;   // 20 (括弧が優先)
 
-bool b = 5 > 3 && 10 < 20;  // true
-bool b = 5 > 3 || false && true;  // true (&&が先)
+    bool b = 5 > 3 && 10 < 20;  // true
+    bool b2 = 5 > 3 || false && true;  // true (&&が先)
+    return 0;
+}
 ```
 
 ---
@@ -183,8 +238,18 @@ bool b = 5 > 3 || false && true;  // true (&&が先)
 条件式 `?` 真の値 `:` 偽の値
 
 ```cm
+int main() {
+    int a = 10, b = 20;
+    int max = (a > b) ? a : b;
 
-// ネスト可能（非推奨）
+    int age = 20;
+    string status = (age >= 20) ? "Adult" : "Minor";
+    
+    // ネスト可能（非推奨）
+    int x = 5;
+    int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
+    return 0;
+}
 ```
 
 ---
@@ -194,27 +259,30 @@ bool b = 5 > 3 || false && true;  // true (&&が先)
 ### ❌ 代入と比較の混同
 
 ```cm
-    // xは5になる
-}
+int main() {
+    int x = 10;
+    // if (x = 5) {  // 警告: 代入している
+        // xは5になる
+    // }
 
-// 正しい
-    // ...
+    // 正しい
+    if (x == 5) {  // 比較
+        // ...
+    }
+    return 0;
 }
 ```
 
 ### ❌ 整数除算の精度
 
 ```cm
+int main() {
+    int result = 5 / 2;  // 2 (整数除算)
 
-// 正しい
-double result = 5.0 / 2.0;  // 2.5
-```
-
-### ❌ 論理演算子とビット演算子
-
-```cm
-bool result = true & false;  // エラー: &はビット演算
-bool result = true && false; // OK: 論理AND
+    // 正しい
+    double d_result = 5.0 / 2.0;  // 2.5
+    return 0;
+}
 ```
 
 ---
@@ -228,6 +296,8 @@ bool result = true && false; // OK: 論理AND
 <summary>解答例</summary>
 
 ```cm
+int main() {
+    int a = 15, b = 4;
     
     println("{} + {} = {}", a, b, a + b);
     println("{} - {} = {}", a, b, a - b);
@@ -251,6 +321,9 @@ bool is_leap_year(int year) {
     return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
 
+int main() {
+    int year = 2025;
+    if (is_leap_year(year)) {
         println("{} is a leap year", year);
     } else {
         println("{} is not a leap year", year);

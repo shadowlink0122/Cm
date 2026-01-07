@@ -71,6 +71,11 @@ struct Pair<T, U> {
     p.second = second;
     return p;
 }
+
+int main() {
+    Pair<int, string> p = make_pair(1, "one");
+    return 0;
+}
 ```
 
 ---

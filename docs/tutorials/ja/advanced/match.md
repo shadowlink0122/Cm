@@ -25,14 +25,17 @@ parent: Tutorials
 ### リテラルパターン
 
 ```cm
-int value = 2;
+int main() {
+    int value = 2;
 
-match (value) {
-    0 => println("zero"),
-    1 => println("one"),
-    2 => println("two"),
-    3 => println("three"),
-    _ => println("other"),
+    match (value) {
+        0 => println("zero"),
+        1 => println("one"),
+        2 => println("two"),
+        3 => println("three"),
+        _ => println("other"),
+    }
+    return 0;
 }
 ```
 
@@ -44,18 +47,22 @@ match (value) {
 ### ブロック本体
 
 ```cm
-match (value) {
-    0 => {
-        println("This is zero");
-        println("Nothing here");
-    },
-    1 => {
-        println("This is one");
-        println("First number");
-    },
-    _ => {
-        println("Other number");
-    },
+int main() {
+    int value = 2;
+    match (value) {
+        0 => {
+            println("This is zero");
+            println("Nothing here");
+        },
+        1 => {
+            println("This is one");
+            println("First number");
+        },
+        _ => {
+            println("Other number");
+        },
+    }
+    return 0;
 }
 ```
 
@@ -63,12 +70,12 @@ match (value) {
 
 ```cm
 // 将来の構文
-string name = match (value) {
-    0 => "zero",
-    1 => "one",
-    2 => "two",
-    _ => "other",
-};
+// string name = match (value) {
+//     0 => "zero",
+//     1 => "one",
+//     2 => "two",
+//     _ => "other",
+// };
 ```
 
 ---
@@ -262,34 +269,40 @@ void with_default(int light) {
 ### switchの場合
 
 ```cm
-int value = 2;
+int main() {
+    int value = 2;
 
-switch (value) {
-    case(0) {
-        println("zero");
+    switch (value) {
+        case(0) {
+            println("zero");
+        }
+        case(1) {
+            println("one");
+        }
+        case(2) {
+            println("two");
+        }
+        else {
+            println("other");
+        }
     }
-    case(1) {
-        println("one");
-    }
-    case(2) {
-        println("two");
-    }
-    else {
-        println("other");
-    }
+    return 0;
 }
 ```
 
 ### matchの場合
 
 ```cm
-int value = 2;
+int main() {
+    int value = 2;
 
-match (value) {
-    0 => println("zero"),
-    1 => println("one"),
-    2 => println("two"),
-    _ => println("other"),
+    match (value) {
+        0 => println("zero"),
+        1 => println("one"),
+        2 => println("two"),
+        _ => println("other"),
+    }
+    return 0;
 }
 ```
 
@@ -367,11 +380,13 @@ void classify_number(int n) {
 
 ```cm
 // 間違い: ワイルドカードが先にあると他のパターンに到達しない
+/*
 match (value) {
     _ => println("Any"),  // これが全てマッチしてしまう
     0 => println("Zero"), // 到達不能
     1 => println("One"),  // 到達不能
 }
+*/
 ```
 
 ### ❌ 網羅性の不足
@@ -391,11 +406,13 @@ match (status) {
 ### ❌ カンマの忘れ
 
 ```cm
+/*
 match (value) {
     0 => println("zero"),
     1 => println("one")  // カンマがない！
     2 => println("two"),
 }
+*/
 ```
 
 ---

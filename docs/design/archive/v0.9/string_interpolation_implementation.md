@@ -160,7 +160,7 @@ println(greeting)
    - アライメント: `{text:<10}`
 
 3. **エスケープ**
-   - `"{{ literal brace }}"`
+   - `"{% raw %}{{ literal brace }}{% endraw %}"`
 
 4. **使用場所**
    - 変数代入

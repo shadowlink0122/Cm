@@ -25,22 +25,40 @@ parent: Tutorials
 ### Basic Operations
 
 ```cm
+int main() {
+    int a = 10, b = 3;
 
+    int sum = a + b;      // 13 (Addition)
+    int diff = a - b;     // 7  (Subtraction)
+    int prod = a * b;     // 30 (Multiplication)
+    int quot = a / b;     // 3  (Division)
+    int rem = a % b;      // 1  (Remainder)
+    return 0;
+}
 ```
 
 ### Floating Point Operations
 
 ```cm
-double x = 10.0, y = 3.0;
+int main() {
+    double x = 10.0, y = 3.0;
 
-double sum = x + y;   // 13.0
-double quot = x / y;  // 3.333...
-// double rem = x % y;  // Error: % is only for integers
+    double sum = x + y;   // 13.0
+    double quot = x / y;  // 3.333...
+    // double rem = x % y;  // Error: % is only for integers
+    return 0;
+}
 ```
 
 ### Unary Operators
 
 ```cm
+int main() {
+    int x = 10;
+    int neg = -x;         // -10 (Negation)
+    int pos = +x;         // 10  (Identity)
+    return 0;
+}
 ```
 
 ---
@@ -48,21 +66,31 @@ double quot = x / y;  // 3.333...
 ## Comparison Operators
 
 ```cm
+int main() {
+    int a = 10, b = 20;
 
-bool eq = (a == b);   // false (Equal)
-bool ne = (a != b);   // true  (Not equal)
-bool lt = (a < b);    // true  (Less than)
-bool le = (a <= b);   // true  (Less than or equal)
-bool gt = (a > b);    // false (Greater than)
-bool ge = (a >= b);   // false (Greater than or equal)
+    bool eq = (a == b);   // false (Equal)
+    bool ne = (a != b);   // true  (Not equal)
+    bool lt = (a < b);    // true  (Less than)
+    bool le = (a <= b);   // true  (Less than or equal)
+    bool gt = (a > b);    // false (Greater than)
+    bool ge = (a >= b);   // false (Greater than or equal)
+    return 0;
+}
 ```
 
 ### String Comparison
 
 ```cm
+int main() {
+    string s1 = "abc";
+    string s2 = "abc";
+    string s3 = "def";
 
-bool same = (s1 == s2);     // true
-bool diff = (s1 != s3);     // true
+    bool same = (s1 == s2);     // true
+    bool diff = (s1 != s3);     // true
+    return 0;
+}
 ```
 
 ---
@@ -72,43 +100,48 @@ bool diff = (s1 != s3);     // true
 ### AND (&&)
 
 ```cm
-bool a = true, b = false;
+int main() {
+    bool a = true, b = false;
+    bool result = a && b;  // false
+    // True only if both are true
 
-bool result = a && b;  // false
-// True only if both are true
-
-    println("x is between 1 and 9");
+    int x = 5;
+    if (x > 0 && x < 10) {
+        println("x is between 1 and 9");
+    }
+    return 0;
 }
 ```
 
 ### OR (||)
 
 ```cm
-bool result = a || b;  // true
-// True if either is true
+int main() {
+    bool a = true, b = false;
+    bool result = a || b;  // true
+    // True if either is true
 
-    println("Out of range");
+    int x = 150;
+    if (x < 0 || x > 100) {
+        println("Out of range");
+    }
+    return 0;
 }
 ```
 
 ### NOT (!)
 
 ```cm
-bool flag = true;
-bool negated = !flag;  // false
+int main() {
+    bool flag = true;
+    bool negated = !flag;  // false
 
-    println("Not empty");
+    bool is_empty = false;
+    if (!is_empty) {
+        println("Not empty");
+    }
+    return 0;
 }
-```
-
-### Short-circuit Evaluation
-
-```cm
-// &&: If left is false, right is not evaluated
-bool result = false && expensive_function();  // Not called
-
-// ||: If left is true, right is not evaluated
-bool result = true || expensive_function();   // Not called
 ```
 
 ---
@@ -116,12 +149,16 @@ bool result = true || expensive_function();   // Not called
 ## Compound Assignment Operators
 
 ```cm
+int main() {
+    int x = 10;
 
-x += 5;   // x = x + 5;  -> 15
-x -= 3;   // x = x - 3;  -> 12
-x *= 2;   // x = x * 2;  -> 24
-x /= 4;   // x = x / 4;  -> 6
-x %= 4;   // x = x % 4;  -> 2
+    x += 5;   // x = x + 5;  -> 15
+    x -= 3;   // x = x - 3;  -> 12
+    x *= 2;   // x = x * 2;  -> 24
+    x /= 4;   // x = x / 4;  -> 6
+    x %= 4;   // x = x % 4;  -> 2
+    return 0;
+}
 ```
 
 ---
@@ -131,24 +168,39 @@ x %= 4;   // x = x % 4;  -> 2
 ### Postfix
 
 ```cm
+int main() {
+    int i = 5;
+    int a = i++;  // a = 5, i = 6 (Increment after use)
+    int b = i--;  // b = 6, i = 5 (Decrement after use)
+    return 0;
+}
 ```
 
 ### Prefix
 
 ```cm
+int main() {
+    int i = 5;
+    int a = ++i;  // a = 6, i = 6 (Increment before use)
+    int b = --i;  // b = 5, i = 5 (Decrement before use)
+    return 0;
+}
 ```
 
 ### Usage in Loops
 
 ```cm
-// Postfix (Common)
-for (int i = 0; i < 10; i++) {
-    println("{}", i);
-}
+int main() {
+    // Postfix (Common)
+    for (int i = 0; i < 10; i++) {
+        println("{}", i);
+    }
 
-// Prefix (Same result)
-for (int i = 0; i < 10; ++i) {
-    println("{}", i);
+    // Prefix (Same result)
+    for (int i = 0; i < 10; ++i) {
+        println("{}", i);
+    }
+    return 0;
 }
 ```
 
@@ -171,9 +223,14 @@ Precedence (High -> Low):
 ### Example
 
 ```cm
+int main() {
+    int result = 2 + 3 * 4;     // 14 (3*4 first)
+    int result2 = (2 + 3) * 4;   // 20 (Parentheses first)
 
-bool b = 5 > 3 && 10 < 20;  // true
-bool b = 5 > 3 || false && true;  // true (&& first)
+    bool b = 5 > 3 && 10 < 20;  // true
+    bool b2 = 5 > 3 || false && true;  // true (&& first)
+    return 0;
+}
 ```
 
 ---
@@ -183,8 +240,18 @@ bool b = 5 > 3 || false && true;  // true (&& first)
 `condition ? true_value : false_value`
 
 ```cm
+int main() {
+    int a = 10, b = 20;
+    int max = (a > b) ? a : b;
 
-// Nested (Not recommended for readability)
+    int age = 20;
+    string status = (age >= 20) ? "Adult" : "Minor";
+
+    // Nested (Not recommended for readability)
+    int x = 5;
+    int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
+    return 0;
+}
 ```
 
 ---
@@ -194,27 +261,30 @@ bool b = 5 > 3 || false && true;  // true (&& first)
 ### ❌ Confusing Assignment and Comparison
 
 ```cm
-    // x becomes 5
-}
+int main() {
+    int x = 10;
+    // if (x = 5) {  // Warning: Assignment in condition
+        // x becomes 5
+    // }
 
-// Correct
-    // ...
+    // Correct
+    if (x == 5) {  // Comparison
+        // ...
+    }
+    return 0;
 }
 ```
 
 ### ❌ Integer Division Precision
 
 ```cm
+int main() {
+    int result = 5 / 2;  // 2 (Integer division)
 
-// Correct
-double result = 5.0 / 2.0;  // 2.5
-```
-
-### ❌ Logical vs Bitwise Operators
-
-```cm
-bool result = true & false;  // Error: & is bitwise
-bool result = true && false; // OK: Logical AND
+    // Correct
+    double d_result = 5.0 / 2.0;  // 2.5
+    return 0;
+}
 ```
 
 ---
@@ -228,6 +298,8 @@ Write a function that performs basic arithmetic operations on two numbers.
 <summary>Example Answer</summary>
 
 ```cm
+int main() {
+    int a = 15, b = 4;
     
     println("{} + {} = {}", a, b, a + b);
     println("{} - {} = {}", a, b, a - b);
@@ -251,6 +323,9 @@ bool is_leap_year(int year) {
     return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
 
+int main() {
+    int year = 2025;
+    if (is_leap_year(year)) {
         println("{} is a leap year", year);
     } else {
         println("{} is not a leap year", year);
@@ -271,7 +346,7 @@ bool is_leap_year(int year) {
 ## Related Links
 
 - [Operator Overloading](../advanced/operators.html)
-- Type Conversions
+- [Type Conversions](../types/conversions.html)
 
 ---
 

@@ -1,164 +1,130 @@
 ---
-title: 内部アルゴリズム
+title: Compiler Algorithms
+parent: Internals
 ---
 
 [日本語](../../ja/internals/algorithms.html)
 
-# コンパイラ内部アルゴリズム
+# Compiler Algorithms
 
-**学習目標:** Cmコンパイラで使用されているアルゴリズムを理解します。  
-**所要時間:** 20分  
-**難易度:** 🔴 上級
-
----
-
-## 概要
-
-Cmコンパイラはコンパイラ理論の標準的なアルゴリズムを実装しています。
+**Goal:** Understand the standard compiler algorithms used in the Cm compiler.  
+**Time:** 20 minutes  
+**Difficulty:** 🔴 Advanced
 
 ---
 
-## データフロー解析
+## Data Flow Analysis
 
-### Work-listアルゴリズム
+### Work-list Algorithm
 
-収束するまで繰り返し解析を行います。
+Performs iterative analysis until convergence is reached.
 
-**使用箇所:** SCCP, 定数伝播, 生存変数解析
+**Usage:** SCCP, Constant Propagation, Liveness Analysis
 
 ```
 Input:  CFG (Control Flow Graph)
-Output: 各ポイントでのデータフロー情報
+Output: Data flow information at each point
 
-worklist = 全基本ブロック
+worklist = all basic blocks
 while worklist is not empty:
     block = worklist.pop()
-    old = out[block]
+    old_out = out[block]
+    in[block] = meet(predecessors(block))
     out[block] = transfer(block, in[block])
+    if out[block] != old_out:
         add successors to worklist
 ```
 
 ---
 
-## 制御フロー解析
+## Control Flow Analysis
 
-### Tarjan's SCC（強連結成分分解）
+### Tarjan's SCC (Strongly Connected Components)
 
-循環依存を検出します。
+Detects circular dependencies.
 
-**使用箇所:** モジュール循環依存検出
+**Usage:** Module circular dependency detection.
 
-```
-時間計算量: O(V + E)
-空間計算量: O(V)
-```
+### Dominator Tree
 
-### 支配木（Dominator Tree）
+Determines if execution must pass through a specific point.
 
-ある地点を必ず通過するか判定します。
-
-**使用箇所:** LICM（ループ検出）、SSA構築
-
-```
-時間計算量: O(V × α(V))  // αはアッカーマン関数の逆関数
-```
+**Usage:** LICM (Loop detection), SSA construction.
 
 ---
 
-## 中間表現
+## Intermediate Representation
 
-### SSA形式（Static Single Assignment）
+### SSA (Static Single Assignment)
 
-各変数への代入を1回に限定した形式。
+A form where each variable is assigned exactly once.
 
-**利点:**
-- Use-Defチェーンの効率化
-- 定数伝播の簡易化
-- デッドコード検出の容易化
+**Benefits:**
+- Efficient Use-Def chains
+- Simplifies constant propagation
+- Easier dead code detection
 
 ```cm
-// 通常のコード
+// Normal Code
 x = 1;
 x = 2;
 y = x;
 
-// SSA形式
+// SSA Form
 x_1 = 1;
 x_2 = 2;
 y = x_2;
 ```
 
-### φ関数
+### Phi Function
 
-複数の経路からの値を統合します。
+Integrates values from multiple paths.
 
 ```
+if (cond) {
     x_1 = 10;
 } else {
     x_2 = 20;
 }
-x_3 = φ(x_1, x_2);  // 実行経路に応じた値を選択
+// Select value based on execution path
+x_3 = φ(x_1, x_2); 
 ```
 
 ---
 
-## 最適化アルゴリズム
+## Optimization Algorithms
 
 ### Value Numbering
 
-式の等価性をハッシュで判定します。
+Identifies equivalent expressions using hashing.
 
-**使用箇所:** GVN（共通部分式除去）
-
-```
-```
-
-### ループ解析
-
-ループ構造を特定してLICMを適用します。
-
-1. バックエッジ検出（後退辺）
-2. ループヘッダ特定
-3. ループ本体の収集
-4. 不変式の特定
-
----
-
-## 型システム
-
-### 型推論計画（将来）
-
-Hindley-Milner型推論を導入予定：
-
-1. **型変数生成** - 不明な型に変数を割り当て
-2. **制約収集** - 式から型の等式を収集
-3. **単一化** - 制約を解いて型を決定
-
-```
-Given: f(1, "hello")
-Constraint: T1 = int, T2 = string
-Unify: T = (int, string) -> R
-```
-
----
-
-## Monomorphization（単相化）
-
-ジェネリック関数を具象型ごとに生成します。
+**Usage:** GVN (Global Value Numbering).
 
 ```cm
-// ジェネリック定義
-func identity<T>(T x) -> T { return x; }
-
-// 生成されるコード
-func identity__int(int x) -> int { return x; }
-func identity__string(string x) -> string { return x; }
+// Assign the same number to identical operations
+int a = x + y; // v1 = Add(vx, vy)
+int b = x + y; // v1 = Add(vx, vy) -> No recalculation needed
 ```
 
 ---
 
-## 参考資料
+## Type System
 
-- [最適化パス](../compiler/optimization.html) - 各パスの詳細
-- [Engineering a Compiler](https://www.elsevier.com/books/engineering-a-compiler/cooper/978-0-12-815412-0) - Cooper & Torczon
-- [SSA-based Compiler Design](https://link.springer.com/book/10.1007/978-3-030-80515-9) - SSAの詳細
+### Monomorphization
+
+Instantiates generic functions for each concrete type.
+
+```cm
+// Generic Definition
+<T> T identity(T x) { return x; }
+
+// Generated Code
+int identity__int(int x) { return x; }
+string identity__string(string x) { return x; }
+```
+
+---
+
+## Reference
+
+- [Optimization Passes](optimization.html) - Details of each pass.

@@ -87,7 +87,7 @@ clang -c src/codegen/llvm/runtime.c -o .tmp/cm_runtime.o
 | 関数名 | シグネチャ | 説明 |
 |--------|-----------|------|
 | `cm_string_concat` | `char* (const char*, const char*)` | 2つの文字列を連結 |
-| `cm_unescape_braces` | `char* (const char*)` | `{{` → `{`, `}}` → `}` に変換 |
+| `cm_unescape_braces` | `char* (const char*)` | `{% raw %}{{` → `{`, `}}` → `}`{% endraw %} に変換 |
 
 ## サポートされるフォーマット指定子
 
@@ -126,7 +126,7 @@ clang -c src/codegen/llvm/runtime.c -o .tmp/cm_runtime.o
 
 ## エスケープ処理
 
-`cm_println_string` 関数は、出力前に `{{` を `{` に、`}}` を `}` に変換します。これにより、リテラルの波括弧を出力できます：
+`cm_println_string` 関数は、出力前に `{% raw %}{{` を `{`, `}}` を `}`{% endraw %} に変換します。これにより、リテラルの波括弧を出力できます：
 
 ```cm
 println("Literal braces: {{ and }}");

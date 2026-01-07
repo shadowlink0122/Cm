@@ -58,7 +58,7 @@ ExprPtr parse_interpolated_string(const std::string& raw) {
             parts.push_back(make_string_literal(raw.substr(pos, brace_start - pos)));
         }
 
-        // エスケープ {{ をチェック
+        // {% raw %}{{ をチェック{% endraw %}
         if (brace_start + 1 < raw.size() && raw[brace_start + 1] == '{') {
             parts.push_back(make_string_literal("{"));
             pos = brace_start + 2;

@@ -1,204 +1,183 @@
 ---
-title: 最適化パス
-parent: コンパイラ内部
+title: Optimization Passes
+parent: Internals
 ---
 
 [日本語](../../ja/internals/optimization.html)
 
-# 最適化パス詳細
+# Optimization Pass Details
 
-**学習目標:** Cmコンパイラの全最適化パスを理解します。  
-**所要時間:** 30分  
-**難易度:** 🔴 上級
-
----
-
-## パス一覧
-
-Cmコンパイラは以下の最適化パスを実装しています。
-
-| パス名 | 略称 | レベル | 効果 |
-|--------|------|--------|------|
-| 定数畳み込み | CF | 全レベル | コンパイル時計算 |
-| デッドコード除去 | DCE | 全レベル | 未使用コード削除 |
-| 定数伝播 | CP | -O1以上 | 変数定数化 |
-| 共通部分式除去 | CSE | -O1以上 | 重複計算削除 |
-| SCCP | SCCP | -O2以上 | 高度な定数解析 |
-| ループ不変式移動 | LICM | -O2以上 | ループ外への移動 |
-| Goto Chain除去 | GC | 全レベル | 連続ジャンプ統合 |
-| 無意味ブロック除去 | BB | 全レベル | 空ブロック削除 |
+**Goal:** Understand all optimization passes implemented in the Cm compiler.  
+**Time:** 30 minutes  
+**Difficulty:** 🔴 Advanced
 
 ---
 
-## 定数畳み込み（Constant Folding）
+## Pass List
 
-コンパイル時に計算可能な式を定数に置換します。
+The Cm compiler implements the following optimization passes:
+
+| Pass Name | Abbr | Level | Effect |
+|-----------|------|-------|--------|
+| Constant Folding | CF | All | Calculate at compile time |
+| Dead Code Elimination | DCE | All | Remove unused code |
+| Constant Propagation | CP | -O1+ | Replace variables with constants |
+| Common Subexpression Elimination | CSE | -O1+ | Remove redundant calculations |
+| SCCP | SCCP | -O2+ | Advanced constant analysis |
+| Loop Invariant Code Motion | LICM | -O2+ | Move calculations out of loops |
+| Goto Chain Removal | GC | All | Merge consecutive jumps |
+| Empty Block Removal | BB | All | Remove useless blocks |
+
+---
+
+## Constant Folding
+
+Replaces expressions that can be calculated at compile time with constants.
 
 ```cm
-// 最適化前
+// Before Optimization
+int x = 2 + 3 * 4;
+bool b = !true;
 
-// 最適化後
-```
-
-### アルゴリズム
-
-```
-for each instruction in block:
-        result = evaluate(instruction)
-        replace with constant(result)
-```
-
-### 対応演算
-
-- 算術演算: `+`, `-`, `*`, `/`, `%`
-- ビット演算: `&`, `|`, `^`, `<<`, `>>`
-- 比較演算: `==`, `!=`, `<`, `>`, `<=`, `>=`
-- 単項演算: `-`, `!`, `~`
-
----
-
-## デッドコード除去（Dead Code Elimination）
-
-使用されない値を定義するコードを削除します。
-
-```cm
-// 最適化前
-return y;
-
-// 最適化後
-return y;
-```
-
-### アルゴリズム（生存変数解析）
-
-```
-1. 戻り値・副作用のある命令を「使用」としてマーク
-2. 使用からDef-Useチェーンを辿り、必要な定義をマーク
-3. マークされていない定義を削除
+// After Optimization
+int x = 14;
+bool b = false;
 ```
 
 ---
 
-## 定数伝播（Constant Propagation）
+## Dead Code Elimination
 
-変数が定数であることが判明した場合、その使用箇所を定数に置換します。
+Removes code that defines values that are never used (and have no side effects).
 
 ```cm
-// 最適化前
+// Before Optimization
+int main() {
+    int x = 10;
+    int y = 20; // y is never used
+    return x;
+}
 
-// 最適化後
-```
-
-### Work-listアルゴリズム
-
-```
-worklist = all blocks
-while worklist is not empty:
-    block = worklist.pop()
-    for each instruction in block:
-        for each operand:
-                propagate constant
-        add successors to worklist
+// After Optimization
+int main() {
+    int x = 10;
+    // int y = 20; is removed
+    return x;
+}
 ```
 
 ---
 
-## SCCP（Sparse Conditional Constant Propagation）
+## Constant Propagation
 
-条件分岐の到達可能性を考慮した高度な定数伝播です。
+If a variable is known to be a constant, replaces its usages with that constant.
 
 ```cm
-// 最適化前
-    return 100;  // 常に到達可能
+// Before Optimization
+int x = 10;
+int y = x + 5;
+
+// After Optimization (Propagation + Folding)
+int x = 10;
+int y = 15; // x is replaced by 10, then 10 + 5 is folded
+```
+
+---
+
+## SCCP (Sparse Conditional Constant Propagation)
+
+An advanced constant propagation that considers the reachability of conditional branches.
+
+```cm
+// Before Optimization
+bool cond = true;
+if (cond) {
+    return 100;
 } else {
-    return 200;  // 到達不可能
+    return 200; // Unreachable code
 }
 
-// 最適化後
-return 100;
+// After Optimization
+return 100; // Branch removed
 ```
-
-### アルゴリズム
-
-1. **SSA-CFGワークリスト** - SSAグラフとCFGを同時に解析
-2. **格子値計算** - 各変数に⊤（未定）、定数、⊥（非定数）を割り当て
-3. **条件分岐解析** - 条件が定数の場合、到達不可能な分岐を削除
 
 ---
 
-## ループ不変式移動（LICM）
+## LICM (Loop Invariant Code Motion)
 
-ループ内で不変な計算をループ外に移動します。
+Moves calculations that are constant within a loop to the outside of the loop.
 
 ```cm
-// 最適化前
+// Before Optimization
 for (int i = 0; i < n; i++) {
-    arr[i] = x * i;
+    int val = x * y; // Constant within loop
+    arr[i] = val + i;
 }
 
-// 最適化後
+// After Optimization
+int val = x * y; // Moved to pre-header
 for (int i = 0; i < n; i++) {
-    arr[i] = x * i;
+    arr[i] = val + i;
 }
 ```
-
-### アルゴリズム
-
-1. **ループ検出** - バックエッジからループ構造を特定
-2. **不変式判定** - 命令の全オペランドがループ外で定義
-3. **移動可能性判定** - 副作用なし、例外なし
-4. **プレヘッダへ移動** - ループ入口前に配置
 
 ---
 
-## Goto Chain除去
+## Common Subexpression Elimination (CSE)
 
-連続したジャンプを単一のジャンプに統合します。
+Replaces repeated calculations of the same expression with a single calculation stored in a temporary variable.
+
+```cm
+// Before Optimization
+int a = x * y + z;
+int b = x * y + w;
+
+// After Optimization
+int tmp = x * y; // Calculated once
+int a = tmp + z;
+int b = tmp + w;
+```
+
+---
+
+## Goto Chain Removal
+
+Merges consecutive jump instructions into a single jump, skipping unnecessary blocks.
 
 ```
-// 最適化前
+// Before Optimization (MIR)
 bb0:
+    goto bb1
 bb1:
+    goto bb2
 bb2:
-    ...
+    return
 
-// 最適化後
+// After Optimization
 bb0:
+    goto bb2 // Skips bb1, jumps directly to bb2
 bb2:
-    ...
-```
-
-### アルゴリズム
-
-```
-for each block:
-        target = block.target
-        while target has only unconditional jump:
-            target = target.target
-        update all predecessors to jump to target
+    return
 ```
 
 ---
 
-## 最適化レベル
+## Optimization Levels
 
 ```bash
-./cm compile file.cm           # -O0: 最適化なし
-./cm compile -O1 file.cm       # -O1: 基本最適化
-./cm compile -O2 file.cm       # -O2: 全最適化
-./cm compile --release file.cm # リリースモード（-O2相当）
+./cm compile file.cm           # -O0: No optimization
+./cm compile -O1 file.cm       # -O1: Basic optimization
+./cm compile -O2 file.cm       # -O2: All optimizations
 ```
 
-| レベル | 有効なパス |
-|--------|-----------|
-| -O0 | Goto Chain, BB除去 |
-| -O1 | -O0 + CP, CSE, DCE |
+| Level | Enabled Passes |
+|-------|----------------|
+| -O0 | Goto Chain, BB Removal |
+| -O1 | -O0 + CP, CSE, DCE, CF |
 | -O2 | -O1 + SCCP, LICM |
 
 ---
 
-## 参考実装
+## Reference Implementation
 
-- [`src/mir/optimization/`](https://github.com/shadowlink0122/Cm/tree/main/src/mir/optimization) - すべての最適化パスの実装
-- [`src/mir/optimization/sccp.cpp`](https://github.com/shadowlink0122/Cm/blob/main/src/mir/optimization/sccp.cpp) - SCCP実装
-- [`src/mir/optimization/licm.cpp`](https://github.com/shadowlink0122/Cm/blob/main/src/mir/optimization/licm.cpp) - LICM実装
+- [`src/mir/optimization/`](https://github.com/shadowlink0122/Cm/tree/main/src/mir/optimization) - Implementation of all optimization passes.

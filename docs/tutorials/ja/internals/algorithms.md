@@ -1,5 +1,6 @@
 ---
 title: 内部アルゴリズム
+parent: コンパイラ内部
 ---
 
 [English](../../en/internals/algorithms.html)
@@ -33,8 +34,10 @@ Output: 各ポイントでのデータフロー情報
 worklist = 全基本ブロック
 while worklist is not empty:
     block = worklist.pop()
-    old = out[block]
+    old_out = out[block]
+    in[block] = meet(predecessors(block))
     out[block] = transfer(block, in[block])
+    if out[block] != old_out:
         add successors to worklist
 ```
 
@@ -58,10 +61,6 @@ while worklist is not empty:
 ある地点を必ず通過するか判定します。
 
 **使用箇所:** LICM（ループ検出）、SSA構築
-
-```
-時間計算量: O(V × α(V))  // αはアッカーマン関数の逆関数
-```
 
 ---
 
@@ -88,16 +87,18 @@ x_2 = 2;
 y = x_2;
 ```
 
-### φ関数
+### φ関数（Phi Function）
 
 複数の経路からの値を統合します。
 
 ```
+if (cond) {
     x_1 = 10;
 } else {
     x_2 = 20;
 }
-x_3 = φ(x_1, x_2);  // 実行経路に応じた値を選択
+// 実行経路に応じた値を選択
+x_3 = φ(x_1, x_2); 
 ```
 
 ---
@@ -110,7 +111,10 @@ x_3 = φ(x_1, x_2);  // 実行経路に応じた値を選択
 
 **使用箇所:** GVN（共通部分式除去）
 
-```
+```cm
+// 同じ演算には同じ番号を割り当てる
+int a = x + y; // v1 = Add(vx, vy)
+int b = x + y; // v1 = Add(vx, vy) -> 再計算不要
 ```
 
 ### ループ解析
@@ -126,39 +130,23 @@ x_3 = φ(x_1, x_2);  // 実行経路に応じた値を選択
 
 ## 型システム
 
-### 型推論計画（将来）
-
-Hindley-Milner型推論を導入予定：
-
-1. **型変数生成** - 不明な型に変数を割り当て
-2. **制約収集** - 式から型の等式を収集
-3. **単一化** - 制約を解いて型を決定
-
-```
-Given: f(1, "hello")
-Constraint: T1 = int, T2 = string
-Unify: T = (int, string) -> R
-```
-
----
-
-## Monomorphization（単相化）
+### Monomorphization（単相化）
 
 ジェネリック関数を具象型ごとに生成します。
 
 ```cm
 // ジェネリック定義
-func identity<T>(T x) -> T { return x; }
+<T> T identity(T x) { return x; }
 
 // 生成されるコード
-func identity__int(int x) -> int { return x; }
-func identity__string(string x) -> string { return x; }
+int identity__int(int x) { return x; }
+string identity__string(string x) { return x; }
 ```
 
 ---
 
 ## 参考資料
 
-- [最適化パス](../compiler/optimization.html) - 各パスの詳細
+- [最適化パス](optimization.html) - 各パスの詳細
 - [Engineering a Compiler](https://www.elsevier.com/books/engineering-a-compiler/cooper/978-0-12-815412-0) - Cooper & Torczon
 - [SSA-based Compiler Design](https://link.springer.com/book/10.1007/978-3-030-80515-9) - SSAの詳細
