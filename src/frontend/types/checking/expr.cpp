@@ -266,6 +266,29 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 }
                 // 変数が変更されたことをマーク（const推奨警告用）
                 mark_variable_modified(ident->name);
+
+                // ライフタイムチェック: ポインタ代入時のスコープ比較
+                // p = &x の場合、pのスコープレベル < xのスコープレベルなら危険
+                if (binary.op == ast::BinaryOp::Assign && ltype &&
+                    ltype->kind == ast::TypeKind::Pointer) {
+                    if (auto* unary = binary.right->as<ast::UnaryExpr>()) {
+                        if (unary->op == ast::UnaryOp::AddrOf) {
+                            if (auto* rhs_ident = unary->operand->as<ast::IdentExpr>()) {
+                                int lhs_level = scopes_.current().get_scope_level(ident->name);
+                                int rhs_level = scopes_.current().get_scope_level(rhs_ident->name);
+                                // 左辺が外側スコープ（寿命長い）で右辺が内側スコープ（寿命短い）→危険
+                                if (lhs_level < rhs_level) {
+                                    error(binary.left->span,
+                                          "Cannot store reference to '" + rhs_ident->name +
+                                              "' in '" + ident->name + "': '" + rhs_ident->name +
+                                              "' may be dropped while '" + ident->name +
+                                              "' is still alive");
+                                    return ast::make_error();
+                                }
+                            }
+                        }
+                    }
+                }
             }
             // デリファレンス経由の代入チェック（借用システム Phase 2）
             // *p = value の場合、pがconstポインタなら代入禁止

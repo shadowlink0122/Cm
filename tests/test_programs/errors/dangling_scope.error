@@ -1,0 +1,1 @@
+error: Cannot store reference to 'x' in 'p': 'x' may be dropped while 'p' is still alive

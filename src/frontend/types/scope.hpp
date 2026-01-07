@@ -20,7 +20,9 @@ struct Symbol {
     bool is_function = false;
     bool is_variadic = false;  // FFI関数の可変長引数（printf等）
     bool is_moved = false;     // 所有権が移動済みか（Move Semantics）
+    bool is_static = false;    // static変数（プログラム全体のライフタイム）
     size_t borrow_count = 0;   // 借用回数（借用安全性）
+    int scope_level = 0;       // スコープレベル（ライフタイム追跡）
 
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
@@ -33,14 +35,18 @@ struct Symbol {
 // ============================================================
 class Scope {
    public:
-    explicit Scope(Scope* parent = nullptr) : parent_(parent) {}
+    explicit Scope(Scope* parent = nullptr, int level = 0) : parent_(parent), level_(level) {}
+
+    // スコープレベル取得
+    int level() const { return level_; }
 
     // シンボル登録
-    bool define(const std::string& name, ast::TypePtr type, bool is_const = false) {
+    bool define(const std::string& name, ast::TypePtr type, bool is_const = false,
+                bool is_static = false) {
         if (symbols_.count(name))
             return false;  // 既存
-        symbols_[name] =
-            Symbol{name, std::move(type), is_const, false, false, false, 0, {}, nullptr, 0};
+        symbols_[name] = Symbol{name, std::move(type), is_const, false,   false, false, is_static,
+                                0,    level_,          {},       nullptr, 0};
         return true;
     }
 
@@ -162,8 +168,21 @@ class Scope {
 
     Scope* parent() const { return parent_; }
 
+    // 変数のスコープレベルを取得
+    int get_scope_level(const std::string& name) const {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            return it->second.scope_level;
+        }
+        if (parent_) {
+            return parent_->get_scope_level(name);
+        }
+        return 0;  // 見つからない場合はグローバルとみなす
+    }
+
    private:
     Scope* parent_;
+    int level_ = 0;
     std::unordered_map<std::string, Symbol> symbols_;
 };
 
@@ -173,14 +192,15 @@ class Scope {
 class ScopeStack {
    public:
     ScopeStack() {
-        push();  // グローバルスコープ
+        push();  // グローバルスコープ（レベル0）
     }
 
     void push() {
+        int new_level = static_cast<int>(scopes_.size());
         if (scopes_.empty()) {
-            scopes_.push_back(std::make_unique<Scope>(nullptr));
+            scopes_.push_back(std::make_unique<Scope>(nullptr, new_level));
         } else {
-            scopes_.push_back(std::make_unique<Scope>(scopes_.back().get()));
+            scopes_.push_back(std::make_unique<Scope>(scopes_.back().get(), new_level));
         }
     }
 
@@ -192,6 +212,9 @@ class ScopeStack {
 
     Scope& current() { return *scopes_.back(); }
     const Scope& current() const { return *scopes_.back(); }
+
+    // 現在のスコープレベル
+    int current_level() const { return static_cast<int>(scopes_.size()) - 1; }
 
     // グローバルスコープ
     Scope& global() { return *scopes_.front(); }

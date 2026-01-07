@@ -84,7 +84,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.type && let.type->kind == ast::TypeKind::Inferred) {
         if (init_type) {
             let.type = init_type;
-            scopes_.current().define(let.name, init_type, let.is_const);
+            scopes_.current().define(let.name, init_type, let.is_const, let.is_static);
             debug::tc::log(debug::tc::Id::TypeInfer,
                            "auto " + let.name + " : " + ast::type_to_string(*init_type),
                            debug::Level::Trace);
@@ -116,10 +116,10 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                  "', got '" + ast::type_to_string(*init_type) + "'");
         }
         let.type = resolved_type;
-        scopes_.current().define(let.name, resolved_type, let.is_const);
+        scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static);
     } else if (init_type) {
         let.type = init_type;
-        scopes_.current().define(let.name, init_type, let.is_const);
+        scopes_.current().define(let.name, init_type, let.is_const, let.is_static);
         debug::tc::log(debug::tc::Id::TypeInfer, let.name + " : " + ast::type_to_string(*init_type),
                        debug::Level::Trace);
     } else {
@@ -148,6 +148,29 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
             error(stmt_span, "Return type mismatch: expected '" +
                                  ast::type_to_string(*current_return_type_) + "', got '" +
                                  (val_type ? ast::type_to_string(*val_type) : "unknown") + "'");
+        }
+
+        // ライフタイムチェック: ローカル変数への参照を返すことを禁止
+        // return &x の場合、xがローカル変数ならダングリングポインタになる
+        // ただし、static変数はプログラム全体のライフタイムを持つので許可
+        if (val_type && val_type->kind == ast::TypeKind::Pointer) {
+            if (auto* unary = ret.value->as<ast::UnaryExpr>()) {
+                if (unary->op == ast::UnaryOp::AddrOf) {
+                    if (auto* ident = unary->operand->as<ast::IdentExpr>()) {
+                        // 変数のスコープレベルを確認
+                        int var_level = scopes_.current().get_scope_level(ident->name);
+                        // static変数かどうか確認
+                        auto sym = scopes_.current().lookup(ident->name);
+                        bool is_static = sym && sym->is_static;
+                        // レベル1以上はローカル変数（0=グローバル）、ただしstaticは除外
+                        if (var_level >= 1 && !is_static) {
+                            error(stmt_span,
+                                  "Cannot return reference to local variable '" + ident->name +
+                                      "': variable will be dropped when function returns");
+                        }
+                    }
+                }
+            }
         }
     } else if (current_return_type_->kind != ast::TypeKind::Void) {
         error(stmt_span, "Missing return value: expected '" +
