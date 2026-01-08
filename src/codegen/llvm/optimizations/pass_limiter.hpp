@@ -16,6 +16,10 @@ class OptimizationPassLimiter {
    private:
     static constexpr size_t MAX_ITERATIONS_PER_PASS = 100;
     static constexpr size_t MAX_TOTAL_ITERATIONS = 1000;
+    static constexpr size_t HIGH_COMPLEXITY_THRESHOLD = 100;
+    static constexpr size_t MEDIUM_COMPLEXITY_THRESHOLD = 50;
+    static constexpr size_t OPTIMIZATION_TIMEOUT_ABORT = 10;
+    static constexpr size_t OPTIMIZATION_TIMEOUT_WARN = 5;
 
    public:
     // 特定のパターンを持つモジュールに対して最適化レベルを制限
@@ -69,7 +73,7 @@ class OptimizationPassLimiter {
 
         // 複雑度に基づいて最適化レベルを調整
         if (requested_level >= 3) {
-            if (complexity_score > 100) {
+            if (complexity_score > HIGH_COMPLEXITY_THRESHOLD) {
                 std::cerr << "[OPT_LIMITER] 警告: モジュールの複雑度が高い (スコア: "
                           << complexity_score << ")\n";
                 std::cerr << "  - クロージャ: " << closure_count << "\n";
@@ -79,7 +83,7 @@ class OptimizationPassLimiter {
                 return 1;  // O1に下げる
             }
 
-            if (complexity_score > 50) {
+            if (complexity_score > MEDIUM_COMPLEXITY_THRESHOLD) {
                 std::cerr << "[OPT_LIMITER] 注意: モジュールがやや複雑 (スコア: "
                           << complexity_score << ")\n";
                 std::cerr << "[OPT_LIMITER] 最適化レベルを O3 から O2 に下げます\n";
@@ -126,13 +130,13 @@ class OptimizationPassLimiter {
         auto elapsed = std::chrono::steady_clock::now() - start_time;
         auto seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
 
-        if (seconds > 10) {
+        if (seconds > OPTIMIZATION_TIMEOUT_ABORT) {
             std::cerr << "[OPT_LIMITER] エラー: " << phase_name << " が " << seconds
                       << " 秒を超えています\n";
             return true;
         }
 
-        if (seconds > 5) {
+        if (seconds > OPTIMIZATION_TIMEOUT_WARN) {
             std::cerr << "[OPT_LIMITER] 警告: " << phase_name << " が " << seconds
                       << " 秒かかっています\n";
         }

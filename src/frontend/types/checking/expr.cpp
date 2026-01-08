@@ -264,6 +264,12 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                           "Cannot assign to const variable '" + ident->name + "'");
                     return ast::make_error();
                 }
+                // 借用チェック: 借用中の変数への代入を禁止（DRY原則）
+                if (scopes_.current().is_borrowed(ident->name)) {
+                    error(binary.left->span,
+                          "Cannot assign to '" + ident->name + "' while it is borrowed");
+                    return ast::make_error();
+                }
                 // 変数が変更されたことをマーク（const推奨警告用）
                 mark_variable_modified(ident->name);
 
@@ -398,11 +404,29 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
         case ast::UnaryOp::PreInc:
         case ast::UnaryOp::PreDec:
         case ast::UnaryOp::PostInc:
-        case ast::UnaryOp::PostDec:
+        case ast::UnaryOp::PostDec: {
+            // const check: 代入と同様に、const変数の変更を禁止（DRY原則）
+            if (auto* ident = unary.operand->as<ast::IdentExpr>()) {
+                auto sym = scopes_.current().lookup(ident->name);
+                if (sym && sym->is_const) {
+                    error(unary.operand->span,
+                          "Cannot modify const variable '" + ident->name + "'");
+                    return ast::make_error();
+                }
+                // 借用チェック: 借用中の変数への変更を禁止（DRY原則）
+                if (scopes_.current().is_borrowed(ident->name)) {
+                    error(unary.operand->span,
+                          "Cannot modify '" + ident->name + "' while it is borrowed");
+                    return ast::make_error();
+                }
+                // 変数が変更されたことをマーク（const推奨警告用）
+                mark_variable_modified(ident->name);
+            }
             if (!otype->is_numeric()) {
                 error(current_span_, "Increment/decrement requires numeric operand");
             }
             return otype;
+        }
     }
     return ast::make_error();
 }

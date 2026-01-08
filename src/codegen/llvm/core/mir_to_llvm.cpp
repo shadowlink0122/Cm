@@ -414,7 +414,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     const size_t MAX_INTERFACES = 10000;  // 無限ループ防止
     for (const auto& iface : program.interfaces) {
         if (++iface_count > MAX_INTERFACES) {
-            // debug_msg("MIR2LLVM", "ERROR: Too many interfaces, possible infinite loop");
             throw std::runtime_error("Too many interfaces in MIR program");
         }
         if (iface) {
@@ -813,7 +812,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // std::cerr << "[MIR2LLVM]       Block has terminator type "
         // << static_cast<int>(block.terminator->kind) << "\n";
     } else {
-        // debug_msg("MIR2LLVM", "Block has no terminator");
     }
 
     // blocksはunordered_mapなので、countで存在確認
@@ -821,7 +819,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
     if (blocks.count(block.id) > 0) {
         // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
-        // debug_msg("MIR2LLVM", "Insert point set");
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
         // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
@@ -866,7 +863,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         // 問題のある12個目のステートメントの詳細ログ
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
-            // debug_msg("MIR2LLVM", "WARNING: This is statement 11 that causes infinite loop");
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
                 // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local << "\n";
@@ -896,13 +892,10 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
         if (stmt_idx == block.statements.size() - 1) {
-            // debug_msg("MIR2LLVM", "This was the LAST statement, about to exit loop");
             // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
         }
         // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx << "\n";
     }
-
-    // debug_msg("MIR2LLVM", "FOR LOOP EXITED - All statements processed, checking terminator...");
 
     // ターミネータ処理
     if (block.terminator) {
@@ -1246,25 +1239,17 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             // static_cast<int>(binop.op)
             // << "\n";
 
-            // debug_msg("MIR2LLVM", "Converting LHS operand...");
             auto lhs = convertOperand(*binop.lhs);
             if (!lhs) {
-                // debug_msg("MIR2LLVM", "ERROR: Failed to convert LHS operand");
                 return nullptr;
             }
-            // debug_msg("MIR2LLVM", "LHS operand converted successfully");
 
-            // debug_msg("MIR2LLVM", "Converting RHS operand...");
             auto rhs = convertOperand(*binop.rhs);
             if (!rhs) {
-                // debug_msg("MIR2LLVM", "ERROR: Failed to convert RHS operand");
                 return nullptr;
             }
-            // debug_msg("MIR2LLVM", "RHS operand converted successfully");
 
-            // debug_msg("MIR2LLVM", "Calling convertBinaryOp...");
             auto result = convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
-            // debug_msg("MIR2LLVM", "BinaryOp converted successfully");
             return result;
         }
         case mir::MirRvalue::UnaryOp: {
@@ -1524,7 +1509,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     // 循環参照の検出
     if (processing.count(&operand) > 0) {
-        // debug_msg("MIR2LLVM", "ERROR: Circular reference detected in convertOperand");
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";
         if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
@@ -1535,7 +1519,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
     }
 
     if (recursion_depth >= MAX_RECURSION_DEPTH) {
-        // debug_msg("MIR2LLVM", "ERROR: Maximum recursion depth exceeded in convertOperand");
         // std::cerr << "[MIR2LLVM]        Current depth: " << recursion_depth << "\n";
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";

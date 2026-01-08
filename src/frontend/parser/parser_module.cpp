@@ -611,7 +611,6 @@ ast::DeclPtr Parser::parse_const_decl(bool is_export, std::vector<ast::Attribute
 // constexpr宣言
 // ============================================================
 ast::DeclPtr Parser::parse_constexpr() {
-    // uint32_t start_pos = current().start;  // TODO: use when constexpr is implemented
     expect(TokenKind::KwConstexpr);
 
     // constexpr変数またはconstexpr関数
@@ -645,7 +644,6 @@ ast::DeclPtr Parser::parse_constexpr() {
 // テンプレート宣言
 // ============================================================
 ast::DeclPtr Parser::parse_template_decl() {
-    // uint32_t start_pos = current().start;  // TODO: use when template support is implemented
     expect(TokenKind::KwTemplate);
 
     // テンプレートパラメータ

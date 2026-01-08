@@ -15,6 +15,13 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 無限ループ検出定数
+namespace loop_detector_limits {
+constexpr size_t MAX_COMPLEXITY_SCORE = 100000;
+constexpr size_t MAX_INSTRUCTION_COUNT = 10000;
+constexpr size_t HUGE_FUNCTION_LIMIT = 5;
+}  // namespace loop_detector_limits
+
 // 無限ループ検出クラス
 class InfiniteLoopDetector {
    private:
@@ -45,7 +52,7 @@ class InfiniteLoopDetector {
             }
 
             // 複雑度が異常に高い
-            if (complexity_score() > 100000) {
+            if (complexity_score() > loop_detector_limits::MAX_COMPLEXITY_SCORE) {
                 return true;
             }
 
@@ -72,7 +79,7 @@ class InfiniteLoopDetector {
         }
 
         // 全体の複雑度が異常に高い
-        if (total_complexity > 100000) {
+        if (total_complexity > loop_detector_limits::MAX_COMPLEXITY_SCORE) {
             return true;
         }
 
@@ -265,12 +272,12 @@ class PreCodeGenValidator {
                 inst_count += BB.size();
             }
 
-            if (inst_count > 10000) {
+            if (inst_count > loop_detector_limits::MAX_INSTRUCTION_COUNT) {
                 huge_functions++;
             }
         }
 
-        if (huge_functions > 5) {
+        if (huge_functions > loop_detector_limits::HUGE_FUNCTION_LIMIT) {
             std::cerr << "Error: Too many huge functions (" << huge_functions << ")\n";
             return false;
         }
