@@ -61,7 +61,7 @@ class Interpreter {
         debug::interp::log(debug::interp::Id::ExecuteStart, "Executing: " + func.name,
                            debug::Level::Debug);
 
-        ExecutionContext ctx(&func, &builtin_manager_.registry());
+        ExecutionContext ctx(&func, &builtin_manager_.registry(), &static_variables_);
 
         // 引数を設定
         for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); ++i) {
@@ -221,7 +221,7 @@ class Interpreter {
         debug::interp::log(debug::interp::Id::ExecuteStart, "Executing constructor: " + func.name,
                            debug::Level::Debug);
 
-        ExecutionContext ctx(&func, &builtin_manager_.registry());
+        ExecutionContext ctx(&func, &builtin_manager_.registry(), &static_variables_);
 
         // 引数を設定（argsへの参照を保持）
         for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); ++i) {

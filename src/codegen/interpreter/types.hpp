@@ -113,9 +113,12 @@ struct ExecutionContext {
     std::unordered_map<LocalId, Value> locals;
     BuiltinRegistry* builtins;
     std::unordered_set<LocalId> skip_static_init;  // 初期化をスキップするstatic変数
+    std::unordered_map<std::string, Value>* static_variables =
+        nullptr;  // static変数のグローバルマップ
 
-    ExecutionContext(const MirFunction* func, BuiltinRegistry* builtin_registry)
-        : function(func), builtins(builtin_registry) {
+    ExecutionContext(const MirFunction* func, BuiltinRegistry* builtin_registry,
+                     std::unordered_map<std::string, Value>* static_vars = nullptr)
+        : function(func), builtins(builtin_registry), static_variables(static_vars) {
         initialize_locals();
     }
 
