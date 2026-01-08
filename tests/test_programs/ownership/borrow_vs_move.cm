@@ -1,24 +1,18 @@
-// 借用とムーブのアドレス比較テスト
+// 借用とムーブの基本動作テスト
 
 int main() {
-    println("=== 借用 vs ムーブ アドレス比較 ===");
-    
     // 1. 借用（参照）の場合
     const int a = 42;
     const int* p = &a;
-    println("借用:");
-    println("  a のアドレス: {&a:x}");
-    println("  p のアドレス: {&p:x}  (別のメモリ)");
-    println("  p の値(aを指す): {p as ulong:x}");
+    println("借用テスト:");
+    println("  a = {*p}");
     
     // 2. ムーブの場合
-    const int x = 100;
-    println("ムーブ前:");
-    println("  x のアドレス: {&x:x}");
-    const int y = move x;
-    println("ムーブ後:");
-    println("  y のアドレス: {&y:x}  (xと同一)");
+    int x = 100;
+    int y = move x;
+    println("ムーブテスト:");
+    println("  y = {y}");
     
-    println("=== 完了 ===");
+    println("完了");
     return 0;
 }

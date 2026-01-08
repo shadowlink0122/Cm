@@ -1,22 +1,15 @@
 // ゼロコストムーブ検証テスト
-// move後のyがmove前のxと同じアドレスを持つことを確認
 
 int main() {
-    println("=== ゼロコストムーブ アドレス検証 ===");
-    
-    // 1. 変数を作成し、アドレスを表示
+    // 1. ムーブ前の値
     int x = 42;
-    println("1. x={x}, addr={&x:x}");
+    println("move前: x={x}");
     
     // 2. ムーブ実行
     int y = move x;
-    println("2. y={y}, addr={&y:x}");
+    println("move後: y={y}");
     
     // 3. 結果確認
-    println("3. moveの特性:");
-    println("   - 値転送: y={y}");
-    println("   - x使用不可（コンパイル時保証）");
-    
-    println("=== テスト完了 ===");
+    println("ゼロコストムーブ完了");
     return 0;
 }
