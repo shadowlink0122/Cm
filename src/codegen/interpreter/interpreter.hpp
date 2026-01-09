@@ -131,6 +131,15 @@ class Interpreter {
         for (size_t i = 0; i < args.size() && i < func.arg_locals.size(); ++i) {
             auto it = ctx.locals.find(func.arg_locals[i]);
             if (it != ctx.locals.end()) {
+                // PointerValueの場合は、store_to_placeで既にinternal_val_ptr経由で
+                // 直接書き込まれているため、ここでのコピーバックは不要
+                // args[i]自体の更新のみ行い、internal_val_ptrへの上書きはしない
+                if (args[i].type() == typeid(PointerValue)) {
+                    // ポinter引数は呼び出し元の変数への参照を持っており、
+                    // store_to_placeで既に書き込まれている
+                    // args[i]は引き続きPointerValueのままにする（呼び出し元が参照する可能性）
+                    continue;  // internal_val_ptrへのコピーバックをスキップ
+                }
                 args[i] = it->second;
             }
         }

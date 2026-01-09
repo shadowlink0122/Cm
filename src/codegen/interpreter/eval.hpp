@@ -7,6 +7,33 @@ namespace cm::mir::interp {
 /// 式・値の評価を担当するクラス
 class Evaluator {
    public:
+    /// 型のサイズを取得（フィールドオフセット計算用）
+    static size_t get_type_size(const hir::TypePtr& type) {
+        if (!type)
+            return 8;  // デフォルトは64bit
+        switch (type->kind) {
+            case hir::TypeKind::Bool:
+                return sizeof(bool);
+            case hir::TypeKind::Char:
+                return sizeof(char);
+            case hir::TypeKind::Int:
+                return sizeof(int32_t);
+            case hir::TypeKind::Long:
+                return sizeof(int64_t);
+            case hir::TypeKind::Float:
+                return sizeof(float);
+            case hir::TypeKind::Double:
+                return sizeof(double);
+            case hir::TypeKind::Pointer:
+                return sizeof(void*);
+            case hir::TypeKind::Struct:
+                // 構造体の場合、各フィールドサイズを8バイトと仮定
+                return 8;
+            default:
+                return sizeof(int64_t);
+        }
+    }
+
     /// 定数を値に変換
     static Value constant_to_value(const MirConstant& constant) {
         // 型情報がある場合、それに基づいて値を変換
@@ -17,6 +44,21 @@ class Evaluator {
                     return Value(static_cast<char>(std::get<int64_t>(constant.value)));
                 } else if (std::holds_alternative<char>(constant.value)) {
                     return Value(std::get<char>(constant.value));
+                }
+            }
+            // Pointer型（null）の場合
+            if (constant.type->kind == hir::TypeKind::Pointer) {
+                if (std::holds_alternative<std::monostate>(constant.value) ||
+                    (std::holds_alternative<int64_t>(constant.value) &&
+                     std::get<int64_t>(constant.value) == 0)) {
+                    // nullポinterとしてPointerValueを作成
+                    PointerValue pv;
+                    pv.raw_ptr = nullptr;
+                    pv.target_local = static_cast<LocalId>(-1);
+                    if (constant.type->element_type) {
+                        pv.element_type = constant.type->element_type;
+                    }
+                    return Value(pv);
                 }
             }
         }
@@ -63,6 +105,41 @@ class Evaluator {
                     } else {
                         return Value{};
                     }
+                } else if (result.type() == typeid(PointerValue)) {
+                    // 外部構造体へのフィールドアクセス（ptr->fieldのDeref後）
+                    auto& ptr = std::any_cast<PointerValue&>(result);
+                    if (ptr.is_external() && ptr.element_type &&
+                        ptr.element_type->kind == hir::TypeKind::Struct) {
+                        // 8バイト固定オフセットでアクセス
+                        size_t offset = proj.field_id * 8;
+                        void* field_ptr = static_cast<char*>(ptr.raw_ptr) + offset;
+                        // 読み取った8バイト値
+                        int64_t raw_value = *reinterpret_cast<int64_t*>(field_ptr);
+
+                        // ポinterフィールドの可能性を考慮（ヒューリスティック判定）
+                        // 小さな整数（-10000〜10000程度）はint値、それ以外はポinter値と推定
+                        void* potential_ptr = reinterpret_cast<void*>(raw_value);
+                        if (raw_value == 0) {
+                            // null ポinter
+                            PointerValue pv;
+                            pv.raw_ptr = nullptr;
+                            pv.target_local = static_cast<LocalId>(-1);
+                            pv.element_type = ptr.element_type;
+                            result = Value(pv);
+                        } else if (raw_value > 0x1000 && raw_value < 0x7FFFFFFFFFFF) {
+                            // ポinterアドレスとして有効な範囲
+                            PointerValue pv;
+                            pv.raw_ptr = potential_ptr;
+                            pv.target_local = static_cast<LocalId>(-1);
+                            pv.element_type = ptr.element_type;
+                            result = Value(pv);
+                        } else {
+                            // 通常の整数値
+                            result = Value(raw_value);
+                        }
+                    } else {
+                        return Value{};
+                    }
                 } else {
                     return Value{};
                 }
@@ -87,6 +164,64 @@ class Evaluator {
                         result = arr.elements[index];
                     } else {
                         return Value{};  // 範囲外
+                    }
+                } else if (result.type() == typeid(PointerValue)) {
+                    // ポインタ配列アクセス: ptr[i]
+                    auto& ptr = std::any_cast<PointerValue&>(result);
+                    if (ptr.is_external() && ptr.raw_ptr && ptr.element_type) {
+                        // 外部メモリへのオフセットアクセス
+                        size_t elem_size = 4;  // デフォルト4バイト
+                        switch (ptr.element_type->kind) {
+                            case hir::TypeKind::Int:
+                                elem_size = 4;
+                                break;
+                            case hir::TypeKind::Long:
+                                elem_size = 8;
+                                break;
+                            case hir::TypeKind::Float:
+                                elem_size = 4;
+                                break;
+                            case hir::TypeKind::Double:
+                                elem_size = 8;
+                                break;
+                            case hir::TypeKind::Char:
+                                elem_size = 1;
+                                break;
+                            case hir::TypeKind::Bool:
+                                elem_size = 1;
+                                break;
+                            default:
+                                elem_size = 8;
+                                break;
+                        }
+                        void* offset_ptr = static_cast<char*>(ptr.raw_ptr) + (index * elem_size);
+                        switch (ptr.element_type->kind) {
+                            case hir::TypeKind::Int:
+                                result = Value(
+                                    static_cast<int64_t>(*reinterpret_cast<int32_t*>(offset_ptr)));
+                                break;
+                            case hir::TypeKind::Long:
+                                result = Value(*reinterpret_cast<int64_t*>(offset_ptr));
+                                break;
+                            case hir::TypeKind::Float:
+                                result = Value(
+                                    static_cast<double>(*reinterpret_cast<float*>(offset_ptr)));
+                                break;
+                            case hir::TypeKind::Double:
+                                result = Value(*reinterpret_cast<double*>(offset_ptr));
+                                break;
+                            case hir::TypeKind::Char:
+                                result = Value(
+                                    static_cast<int64_t>(*reinterpret_cast<char*>(offset_ptr)));
+                                break;
+                            case hir::TypeKind::Bool:
+                                result = Value(*reinterpret_cast<bool*>(offset_ptr));
+                                break;
+                            default:
+                                return Value{};
+                        }
+                    } else {
+                        return Value{};
                     }
                 } else {
                     return Value{};
@@ -277,12 +412,43 @@ class Evaluator {
                     if (current->type() == typeid(PointerValue)) {
                         auto& ptr = std::any_cast<PointerValue&>(*current);
 
+                        // 外部ポinter（malloc経由）の場合
+                        if (ptr.is_external()) {
+                            // 外部ポinterはそのまま保持し、後続のField処理で使用
+                            // currentはPointerValueのまま保持される
+                            debug::interp::log(
+                                debug::interp::Id::Store,
+                                "External pointer Deref, raw_ptr=" +
+                                    std::to_string(reinterpret_cast<uintptr_t>(ptr.raw_ptr)),
+                                debug::Level::Debug);
+                            continue;  // 次のプロジェクションへ
+                        }
+
+                        debug::interp::log(
+                            debug::interp::Id::Store,
+                            "Deref: internal_val_ptr=" +
+                                std::to_string(reinterpret_cast<uintptr_t>(ptr.internal_val_ptr)) +
+                                ", target_local=" + std::to_string(ptr.target_local),
+                            debug::Level::Debug);
+
                         if (ptr.internal_val_ptr) {
                             current = ptr.internal_val_ptr;
+                            debug::interp::log(debug::interp::Id::Store,
+                                               "Using internal_val_ptr, current type: " +
+                                                   std::string(current->type().name()),
+                                               debug::Level::Debug);
                         } else {
                             auto target_it = ctx.locals.find(ptr.target_local);
                             if (target_it != ctx.locals.end()) {
                                 current = &target_it->second;
+                                debug::interp::log(debug::interp::Id::Store,
+                                                   "Using target_local, current type: " +
+                                                       std::string(current->type().name()),
+                                                   debug::Level::Debug);
+                            } else {
+                                debug::interp::log(debug::interp::Id::Store,
+                                                   "ERROR: target_local not found!",
+                                                   debug::Level::Error);
                             }
                         }
                     }
@@ -295,6 +461,28 @@ class Evaluator {
                 if (current->type() == typeid(StructValue)) {
                     auto& sv = std::any_cast<StructValue&>(*current);
                     sv.fields[last_proj.field_id] = value;
+                } else if (current->type() == typeid(PointerValue)) {
+                    // 外部構造体への書き込み
+                    auto& ptr = std::any_cast<PointerValue&>(*current);
+                    if (ptr.is_external() && ptr.element_type &&
+                        ptr.element_type->kind == hir::TypeKind::Struct) {
+                        // 8バイト固定オフセットで書き込み
+                        size_t offset = last_proj.field_id * 8;
+                        void* field_ptr = static_cast<char*>(ptr.raw_ptr) + offset;
+
+                        // int64_tとして書き込み（ポinterも8バイトなので対応）
+                        if (value.type() == typeid(int64_t)) {
+                            *reinterpret_cast<int64_t*>(field_ptr) = std::any_cast<int64_t>(value);
+                        } else if (value.type() == typeid(double)) {
+                            *reinterpret_cast<double*>(field_ptr) = std::any_cast<double>(value);
+                        } else if (value.type() == typeid(bool)) {
+                            *reinterpret_cast<int64_t*>(field_ptr) =
+                                std::any_cast<bool>(value) ? 1 : 0;
+                        } else if (value.type() == typeid(PointerValue)) {
+                            auto& pv = std::any_cast<PointerValue&>(value);
+                            *reinterpret_cast<void**>(field_ptr) = pv.raw_ptr;
+                        }
+                    }
                 }
             } else if (last_proj.kind == ProjectionKind::Index) {
                 // 配列インデックスへの格納
@@ -312,6 +500,78 @@ class Evaluator {
                             arr.elements.resize(index + 1);
                         }
                         arr.elements[index] = value;
+                    } else if (current->type() == typeid(PointerValue)) {
+                        // ポインタ配列への書き込み: ptr[i] = value
+                        auto& ptr = std::any_cast<PointerValue&>(*current);
+                        if (ptr.is_external() && ptr.raw_ptr && ptr.element_type) {
+                            // 外部メモリへのオフセット書き込み
+                            size_t elem_size = 4;  // デフォルト4バイト
+                            switch (ptr.element_type->kind) {
+                                case hir::TypeKind::Int:
+                                    elem_size = 4;
+                                    break;
+                                case hir::TypeKind::Long:
+                                    elem_size = 8;
+                                    break;
+                                case hir::TypeKind::Float:
+                                    elem_size = 4;
+                                    break;
+                                case hir::TypeKind::Double:
+                                    elem_size = 8;
+                                    break;
+                                case hir::TypeKind::Char:
+                                    elem_size = 1;
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    elem_size = 1;
+                                    break;
+                                default:
+                                    elem_size = 8;
+                                    break;
+                            }
+                            void* offset_ptr =
+                                static_cast<char*>(ptr.raw_ptr) + (index * elem_size);
+                            switch (ptr.element_type->kind) {
+                                case hir::TypeKind::Int:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int32_t*>(offset_ptr) =
+                                            static_cast<int32_t>(std::any_cast<int64_t>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Long:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<int64_t*>(offset_ptr) =
+                                            std::any_cast<int64_t>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Float:
+                                    if (value.type() == typeid(double)) {
+                                        *reinterpret_cast<float*>(offset_ptr) =
+                                            static_cast<float>(std::any_cast<double>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Double:
+                                    if (value.type() == typeid(double)) {
+                                        *reinterpret_cast<double*>(offset_ptr) =
+                                            std::any_cast<double>(value);
+                                    }
+                                    break;
+                                case hir::TypeKind::Char:
+                                    if (value.type() == typeid(int64_t)) {
+                                        *reinterpret_cast<char*>(offset_ptr) =
+                                            static_cast<char>(std::any_cast<int64_t>(value));
+                                    }
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    if (value.type() == typeid(bool)) {
+                                        *reinterpret_cast<bool*>(offset_ptr) =
+                                            std::any_cast<bool>(value);
+                                    }
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
                     }
                 }
             } else if (last_proj.kind == ProjectionKind::Deref) {
@@ -400,7 +660,14 @@ class Evaluator {
                             sv.fields[static_cast<FieldId>(ptr.field_index.value())] = value;
                         }
                     } else {
-                        ctx.locals[ptr.target_local] = value;
+                        // internal_val_ptrがある場合はそちらに直接書き込み
+                        // （呼び出し元のローカル変数への参照）
+                        if (ptr.internal_val_ptr) {
+                            *ptr.internal_val_ptr = value;
+                        } else {
+                            // フォールバック: 現在のコンテキストのローカル変数
+                            ctx.locals[ptr.target_local] = value;
+                        }
                     }
                 }
             }
@@ -836,9 +1103,16 @@ class Evaluator {
                             return Value(std::any_cast<int64_t>(operand) != 0);
                         }
                     } else if (data.target_type->kind == hir::TypeKind::Pointer) {
-                        // 整数からポインタへのキャスト
+                        // 整数からポインタへのキャスト（nullを含む）
                         if (operand.type() == typeid(int64_t)) {
-                            return Value(reinterpret_cast<void*>(std::any_cast<int64_t>(operand)));
+                            int64_t val = std::any_cast<int64_t>(operand);
+                            PointerValue pv;
+                            pv.raw_ptr = reinterpret_cast<void*>(val);
+                            pv.target_local = static_cast<LocalId>(-1);
+                            if (data.target_type->element_type) {
+                                pv.element_type = data.target_type->element_type;
+                            }
+                            return Value(pv);
                         }
                         // PointerValueのキャスト（型情報を更新）
                         if (operand.type() == typeid(PointerValue)) {

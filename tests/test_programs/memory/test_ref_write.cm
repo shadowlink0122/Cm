@@ -1,0 +1,23 @@
+// テスト: ポinter経由のローカル変数書き込み
+
+import std::io::println;
+
+void set_value(int* ptr, int value) {
+    println("set_value called");
+    *ptr = value;
+    println("  *ptr set to {value}");
+}
+
+int main() {
+    println("=== Pointer to local test ===");
+    
+    int result = 0;
+    println("result before: {result}");
+    
+    set_value(&result, 42);
+    
+    println("result after: {result}");
+    
+    println("=== Done ===");
+    return 0;
+}
