@@ -46,7 +46,7 @@ class LLVMCodeGen {
         bool debugInfo = false;
         bool verbose = false;
         bool verifyIR = true;
-        bool useCustomOptimizations = false;  // カスタム最適化を一時的に無効（デバッグ中）
+        bool useCustomOptimizations = false;  // カスタム最適化は無効（ハング発生のため要調査）
         std::string customTriple = "";  // カスタムターゲット
         std::string linkerScript = "";  // ベアメタル用
     };
@@ -249,15 +249,13 @@ class LLVMCodeGen {
             }
         }
 
-        // インポートがある場合の無限ループ回避（調整後のレベルも考慮）
-        // TODO: 根本的な修正 - インポート処理のLLVM最適化対応
-        if (hasImports && options.optimizationLevel > 0) {
-            // iter_closureパターンは検出済みでO0に調整されているはず
-            // その場合はすでにリターンしているので、ここには到達しない
-            cm::debug::codegen::log(
-                cm::debug::codegen::Id::LLVMOptimize,
-                "WARNING: Skipping O1-O3 optimization due to import infinite loop bug");
-            return;
+        // インポートがある場合の無限ループ回避
+        // 完全スキップではなく、安全なO1最適化を適用
+        if (hasImports && options.optimizationLevel > 1) {
+            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                    "NOTE: Reducing optimization to O1 due to import patterns "
+                                    "(O2/O3 may cause issues)");
+            options.optimizationLevel = 1;  // O1は安全に適用可能
         }
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
