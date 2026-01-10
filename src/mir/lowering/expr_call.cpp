@@ -2088,21 +2088,41 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         const auto& arg = call.args[i];
-        LocalId arg_local = lower_expression(*arg, ctx);
 
-        // メソッド呼び出しの第1引数（self）はアドレスを渡す
+        // メソッド呼び出しの第1引数（self）は特別な処理が必要
+        // selfが変数参照の場合、コピーを避けて直接元の変数への参照を取る
         if (is_method_call && i == 0) {
             hir::TypePtr arg_type = arg->type;
+
             // 引数が構造体型の場合、アドレスを取得
             if (arg_type && arg_type->kind == hir::TypeKind::Struct) {
+                // 引数がHirVarRefかどうかチェック
+                if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
+                    const auto& var_ref = **var_ref_ptr;
+                    // 元の変数を直接参照（コピーを避ける）
+                    auto original_var_opt = ctx.resolve_variable(var_ref.name);
+                    if (original_var_opt) {
+                        LocalId original_var = *original_var_opt;
+                        LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{ref_temp}, MirRvalue::ref(MirPlace{original_var}, false)));
+                        args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                        continue;
+                    }
+                }
+
+                // フォールバック: 通常のlower_expressionを使用
+                LocalId arg_local = lower_expression(*arg, ctx);
                 LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
                 ctx.push_statement(MirStatement::assign(
                     MirPlace{ref_temp}, MirRvalue::ref(MirPlace{arg_local}, false)));
                 args.push_back(MirOperand::copy(MirPlace{ref_temp}));
             } else {
+                LocalId arg_local = lower_expression(*arg, ctx);
                 args.push_back(MirOperand::copy(MirPlace{arg_local}));
             }
         } else {
+            LocalId arg_local = lower_expression(*arg, ctx);
             args.push_back(MirOperand::copy(MirPlace{arg_local}));
         }
     }

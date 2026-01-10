@@ -741,9 +741,11 @@ class Interpreter {
 
                 // メソッド呼び出しかどうかを判定（関数名に__が含まれる）
                 bool is_method = func_name.find("__") != std::string::npos;
-                if (is_method && !data.args.empty() && data.args[0]->kind == MirOperand::Copy) {
-                    auto& place = std::get<MirPlace>(data.args[0]->data);
-                    self_local = place.local;
+                if (is_method && !data.args.empty()) {
+                    if (data.args[0]->kind == MirOperand::Copy) {
+                        auto& place = std::get<MirPlace>(data.args[0]->data);
+                        self_local = place.local;
+                    }
                 }
 
                 // ターゲット関数が*Type（ポインタ）を期待しているが、argsにStructValueがある場合
@@ -756,12 +758,21 @@ class Interpreter {
                         if (param_decl.type && param_decl.type->kind == hir::TypeKind::Pointer) {
                             // パラメータがポインタ型だが、argsはStructValue
                             if (args[0].type() == typeid(StructValue)) {
-                                // argsの末尾に元の構造体を追加し、そこを指すPointerValueを作成
-                                args.push_back(args[0]);
-
+                                // 重要: 呼び出し元のctx.localsを直接指すPointerValueを作成
+                                // これによりメソッド内での self.field 変更が呼び出し元に反映される
                                 PointerValue ptr;
-                                ptr.target_local = invalid_local;     // 外部参照
-                                ptr.internal_val_ptr = &args.back();  // 末尾要素を指す
+                                ptr.target_local = self_local;
+
+                                // 呼び出し元のctx.localsエントリへの参照を設定
+                                auto self_it = ctx.locals.find(self_local);
+                                if (self_it != ctx.locals.end()) {
+                                    ptr.internal_val_ptr = &self_it->second;
+                                } else {
+                                    // フォールバック: argsにコピーを追加してそれを指す
+                                    args.push_back(args[0]);
+                                    ptr.internal_val_ptr = &args.back();
+                                }
+
                                 args[0] = Value(ptr);
                                 did_pointer_wrap = true;
                                 debug::interp::log(
@@ -770,6 +781,8 @@ class Interpreter {
                                         func_name,
                                     debug::Level::Debug);
                             }
+                            // 注意: args[0]がPointerValueの場合、MIR生成で既に正しい
+                            // internal_val_ptrが設定されているため、ここでは上書きしない
                         }
                     }
                 }
