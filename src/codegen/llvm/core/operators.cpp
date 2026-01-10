@@ -303,6 +303,17 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 return builder->CreateICmpEQ(cmpResult, llvm::ConstantInt::get(ctx.getI32Type(), 0),
                                              "streq");
             }
+            // ポインタとnull（整数0）の比較
+            if (lhs->getType()->isPointerTy() && rhs->getType()->isIntegerTy()) {
+                // 整数（null）をポインタ型に変換
+                rhs = builder->CreateIntToPtr(rhs, lhs->getType(), "null_to_ptr");
+                return builder->CreateICmpEQ(lhs, rhs, "ptr_eq");
+            }
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isPointerTy()) {
+                // 整数（null）をポインタ型に変換
+                lhs = builder->CreateIntToPtr(lhs, rhs->getType(), "null_to_ptr");
+                return builder->CreateICmpEQ(lhs, rhs, "ptr_eq");
+            }
             // 整数型のビット幅を揃える
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
@@ -329,6 +340,15 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
                 return builder->CreateICmpNE(cmpResult, llvm::ConstantInt::get(ctx.getI32Type(), 0),
                                              "strne");
+            }
+            // ポインタとnull（整数0）の比較
+            if (lhs->getType()->isPointerTy() && rhs->getType()->isIntegerTy()) {
+                rhs = builder->CreateIntToPtr(rhs, lhs->getType(), "null_to_ptr");
+                return builder->CreateICmpNE(lhs, rhs, "ptr_ne");
+            }
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isPointerTy()) {
+                lhs = builder->CreateIntToPtr(lhs, rhs->getType(), "null_to_ptr");
+                return builder->CreateICmpNE(lhs, rhs, "ptr_ne");
             }
             // 整数型のビット幅を揃える
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {

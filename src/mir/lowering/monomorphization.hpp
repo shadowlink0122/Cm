@@ -95,6 +95,10 @@ class Monomorphization : public MirLoweringBase {
             rewrite_generic_calls(program, new_needed);
         }
 
+        // ジェネリック関数モノモーフィック化後に再度構造体モノモーフィック化を実行
+        // （ジェネリック関数内で使用される Node<int> などを検出するため）
+        monomorphize_structs(program);
+
         // 構造体メソッド呼び出しのself引数を参照に変更
         // （構造体コピーではなく元の構造体アドレスを渡すように修正）
         fix_struct_method_self_args(program);

@@ -246,18 +246,7 @@ static hir::TypePtr substitute_type_in_type(
     // 1. 単純な型パラメータの場合（T → int）
     auto it = type_subst.find(type->name);
     if (it != type_subst.end()) {
-        std::cerr << "[MONO-TYPE-SUBST] Found: " << type->name << " -> " << it->second->name
-                  << std::endl;
         return it->second;
-    }
-    // デバッグ: TypeKind::Genericで名前がない場合をチェック
-    if (type->kind == hir::TypeKind::Generic && type->name.empty()) {
-        // type_substで見つからない場合、element_typeをチェック
-        std::cerr << "[MONO-TYPE-SUBST] Generic type with empty name, checking type_subst keys"
-                  << std::endl;
-        for (const auto& [k, v] : type_subst) {
-            std::cerr << "  key: " << k << std::endl;
-        }
     }
 
     // 1.5 type_argsが置換された場合、新しい構造体型を作成
@@ -623,28 +612,6 @@ void Monomorphization::generate_generic_specializations(
                 } else {
                     auto old_type = new_local.type;
                     new_local.type = substitute_type_in_type(new_local.type, type_subst, this);
-                    // デバッグ: 型置換の結果を確認
-                    if (old_type && new_local.type) {
-                        std::string old_info = old_type->name + " (type_args:" +
-                                               std::to_string(old_type->type_args.size()) + ")";
-                        std::string new_info =
-                            new_local.type->name +
-                            " (type_args:" + std::to_string(new_local.type->type_args.size()) + ")";
-                        if (old_type->kind == hir::TypeKind::Pointer && old_type->element_type) {
-                            old_info += " elem=" + old_type->element_type->name + "(type_args:" +
-                                        std::to_string(old_type->element_type->type_args.size()) +
-                                        ")";
-                        }
-                        if (new_local.type->kind == hir::TypeKind::Pointer &&
-                            new_local.type->element_type) {
-                            new_info +=
-                                " elem=" + new_local.type->element_type->name + "(type_args:" +
-                                std::to_string(new_local.type->element_type->type_args.size()) +
-                                ")";
-                        }
-                        std::cerr << "[MONO-DEBUG] Local " << local.name << " type: " << old_info
-                                  << " -> " << new_info << std::endl;
-                    }
                 }
             }
             specialized->locals.push_back(new_local);
@@ -1059,6 +1026,41 @@ void Monomorphization::collect_struct_specializations(
                 if (needed.find(spec_name) == needed.end()) {
                     needed[spec_name] = {local.type->name, type_args};
                     debug_msg("MONO", "Need struct specialization: " + spec_name);
+                }
+            }
+
+            // 既にマングリング済みの構造体名（Node__intなど）を検出
+            if ((local.type->kind == hir::TypeKind::Struct ||
+                 local.type->kind == hir::TypeKind::TypeAlias) &&
+                local.type->name.find("__") != std::string::npos) {
+                // 基本名を抽出（Node__int -> Node）
+                auto pos = local.type->name.find("__");
+                std::string base_name = local.type->name.substr(0, pos);
+
+                // 基本名がジェネリック構造体かチェック
+                if (generic_structs.count(base_name) > 0) {
+                    // 型引数を抽出（Node__int -> ["int"]）
+                    std::vector<std::string> type_args;
+                    std::string remainder = local.type->name.substr(pos + 2);
+
+                    // __で区切られた型引数を抽出
+                    size_t arg_pos = 0;
+                    while (arg_pos < remainder.size()) {
+                        auto next_pos = remainder.find("__", arg_pos);
+                        if (next_pos == std::string::npos) {
+                            type_args.push_back(remainder.substr(arg_pos));
+                            break;
+                        }
+                        type_args.push_back(remainder.substr(arg_pos, next_pos - arg_pos));
+                        arg_pos = next_pos + 2;
+                    }
+
+                    if (!type_args.empty()) {
+                        std::string spec_name = local.type->name;
+                        if (needed.find(spec_name) == needed.end()) {
+                            needed[spec_name] = {base_name, type_args};
+                        }
+                    }
                 }
             }
         }

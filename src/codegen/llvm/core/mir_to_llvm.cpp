@@ -2128,17 +2128,6 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(),
                                                          proj.field_id));  // フィールドインデックス
 
-                // デバッグ: GEP生成前の状態確認
-                if (structType) {
-                    auto* st = llvm::dyn_cast<llvm::StructType>(structType);
-                    std::cerr << "[GEP-DEBUG] structType name: "
-                              << (st ? st->getStructName().str() : "not_struct")
-                              << " structName: " << structName << std::endl;
-                } else {
-                    std::cerr << "[GEP-DEBUG] structType is NULL, structName: " << structName
-                              << std::endl;
-                }
-
                 addr = builder->CreateGEP(structType, addr, indices, "field_ptr");
 
                 // 次のプロジェクションのために型を更新

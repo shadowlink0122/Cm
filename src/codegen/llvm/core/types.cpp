@@ -80,7 +80,8 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
 
             // ジェネリック構造体の場合、型引数を考慮した名前を生成
             // 例: Node<int> -> Node__int
-            if (!type->type_args.empty()) {
+            // 既にマングリング済み(__含む)の場合はスキップ
+            if (!type->type_args.empty() && lookupName.find("__") == std::string::npos) {
                 for (const auto& typeArg : type->type_args) {
                     if (typeArg) {
                         lookupName += "__";
