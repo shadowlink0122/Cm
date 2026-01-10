@@ -1069,7 +1069,55 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     }
                                 } else if (proj.kind == mir::ProjectionKind::Field) {
                                     if (currentType->kind == hir::TypeKind::Struct) {
-                                        auto structIt = structDefs.find(currentType->name);
+                                        // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                                        std::string structLookupName = currentType->name;
+                                        if (!currentType->type_args.empty()) {
+                                            for (const auto& typeArg : currentType->type_args) {
+                                                if (typeArg) {
+                                                    structLookupName += "__";
+                                                    if (typeArg->kind == hir::TypeKind::Struct) {
+                                                        structLookupName += typeArg->name;
+                                                    } else {
+                                                        switch (typeArg->kind) {
+                                                            case hir::TypeKind::Int:
+                                                                structLookupName += "int";
+                                                                break;
+                                                            case hir::TypeKind::UInt:
+                                                                structLookupName += "uint";
+                                                                break;
+                                                            case hir::TypeKind::Long:
+                                                                structLookupName += "long";
+                                                                break;
+                                                            case hir::TypeKind::ULong:
+                                                                structLookupName += "ulong";
+                                                                break;
+                                                            case hir::TypeKind::Float:
+                                                                structLookupName += "float";
+                                                                break;
+                                                            case hir::TypeKind::Double:
+                                                                structLookupName += "double";
+                                                                break;
+                                                            case hir::TypeKind::Bool:
+                                                                structLookupName += "bool";
+                                                                break;
+                                                            case hir::TypeKind::Char:
+                                                                structLookupName += "char";
+                                                                break;
+                                                            case hir::TypeKind::String:
+                                                                structLookupName += "string";
+                                                                break;
+                                                            default:
+                                                                if (!typeArg->name.empty()) {
+                                                                    structLookupName +=
+                                                                        typeArg->name;
+                                                                }
+                                                                break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        auto structIt = structDefs.find(structLookupName);
                                         if (structIt != structDefs.end() &&
                                             proj.field_id < structIt->second->fields.size()) {
                                             currentType =
@@ -1164,8 +1212,61 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     switch (proj.kind) {
                                         case mir::ProjectionKind::Field:
                                             if (targetType->kind == hir::TypeKind::Struct) {
+                                                // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                                                std::string structLookupName = targetType->name;
+                                                if (!targetType->type_args.empty()) {
+                                                    for (const auto& typeArg :
+                                                         targetType->type_args) {
+                                                        if (typeArg) {
+                                                            structLookupName += "__";
+                                                            if (typeArg->kind ==
+                                                                hir::TypeKind::Struct) {
+                                                                structLookupName += typeArg->name;
+                                                            } else {
+                                                                switch (typeArg->kind) {
+                                                                    case hir::TypeKind::Int:
+                                                                        structLookupName += "int";
+                                                                        break;
+                                                                    case hir::TypeKind::UInt:
+                                                                        structLookupName += "uint";
+                                                                        break;
+                                                                    case hir::TypeKind::Long:
+                                                                        structLookupName += "long";
+                                                                        break;
+                                                                    case hir::TypeKind::ULong:
+                                                                        structLookupName += "ulong";
+                                                                        break;
+                                                                    case hir::TypeKind::Float:
+                                                                        structLookupName += "float";
+                                                                        break;
+                                                                    case hir::TypeKind::Double:
+                                                                        structLookupName +=
+                                                                            "double";
+                                                                        break;
+                                                                    case hir::TypeKind::Bool:
+                                                                        structLookupName += "bool";
+                                                                        break;
+                                                                    case hir::TypeKind::Char:
+                                                                        structLookupName += "char";
+                                                                        break;
+                                                                    case hir::TypeKind::String:
+                                                                        structLookupName +=
+                                                                            "string";
+                                                                        break;
+                                                                    default:
+                                                                        if (!typeArg->name
+                                                                                 .empty()) {
+                                                                            structLookupName +=
+                                                                                typeArg->name;
+                                                                        }
+                                                                        break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                                 auto structDefIt =
-                                                    structDefs.find(targetType->name);
+                                                    structDefs.find(structLookupName);
                                                 if (structDefIt != structDefs.end() &&
                                                     proj.field_id <
                                                         structDefIt->second->fields.size()) {
@@ -1313,7 +1414,54 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         // 既にGEPで移動している場合、現在の型を追跡
                         // フィールドアクセスでは元のローカル変数の型から辿る
                         if (structType && structType->kind == hir::TypeKind::Struct) {
-                            auto it = structTypes.find(structType->name);
+                            // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                            std::string structLookupName = structType->name;
+                            if (!structType->type_args.empty()) {
+                                for (const auto& typeArg : structType->type_args) {
+                                    if (typeArg) {
+                                        structLookupName += "__";
+                                        if (typeArg->kind == hir::TypeKind::Struct) {
+                                            structLookupName += typeArg->name;
+                                        } else {
+                                            switch (typeArg->kind) {
+                                                case hir::TypeKind::Int:
+                                                    structLookupName += "int";
+                                                    break;
+                                                case hir::TypeKind::UInt:
+                                                    structLookupName += "uint";
+                                                    break;
+                                                case hir::TypeKind::Long:
+                                                    structLookupName += "long";
+                                                    break;
+                                                case hir::TypeKind::ULong:
+                                                    structLookupName += "ulong";
+                                                    break;
+                                                case hir::TypeKind::Float:
+                                                    structLookupName += "float";
+                                                    break;
+                                                case hir::TypeKind::Double:
+                                                    structLookupName += "double";
+                                                    break;
+                                                case hir::TypeKind::Bool:
+                                                    structLookupName += "bool";
+                                                    break;
+                                                case hir::TypeKind::Char:
+                                                    structLookupName += "char";
+                                                    break;
+                                                case hir::TypeKind::String:
+                                                    structLookupName += "string";
+                                                    break;
+                                                default:
+                                                    if (!typeArg->name.empty()) {
+                                                        structLookupName += typeArg->name;
+                                                    }
+                                                    break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            auto it = structTypes.find(structLookupName);
                             if (it != structTypes.end()) {
                                 // LLVM 14: typed pointers require bitcast
 #if LLVM_VERSION_MAJOR < 15
@@ -1655,6 +1803,17 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                         }
                     }
 
+                    // LLVM 14 typed pointers:
+                    // 構造体型をロードする場合、アドレスを正しい型にキャスト
+#if LLVM_VERSION_MAJOR < 15
+                    if (fieldType->isStructTy()) {
+                        auto expectedPtrType = llvm::PointerType::get(fieldType, 0);
+                        if (addr->getType() != expectedPtrType) {
+                            addr =
+                                builder->CreateBitCast(addr, expectedPtrType, "ptr_to_struct_cast");
+                        }
+                    }
+#endif
                     return builder->CreateLoad(fieldType, addr, "field_load");
                 }
                 return nullptr;
@@ -1827,15 +1986,71 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 std::string structName;
 
                 // Generic型の場合も構造体として扱う（モノモーフィック化後の型）
-                if (currentType && (currentType->kind == hir::TypeKind::Struct ||
-                                    currentType->kind == hir::TypeKind::Generic)) {
-                    structName = currentType->name;
+                // ポインタ型の場合はelement_typeを使用
+                hir::TypePtr targetStructType = currentType;
+                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                    currentType->element_type) {
+                    targetStructType = currentType->element_type;
+                }
+                if (targetStructType && (targetStructType->kind == hir::TypeKind::Struct ||
+                                         targetStructType->kind == hir::TypeKind::Generic)) {
+                    structName = targetStructType->name;
+
+                    // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                    // 例: Node<int> -> Node__int
+                    // 既にマングリング済み(__含む)の場合はスキップ
+                    if (!targetStructType->type_args.empty() &&
+                        structName.find("__") == std::string::npos) {
+                        for (const auto& typeArg : targetStructType->type_args) {
+                            if (typeArg) {
+                                structName += "__";
+                                if (typeArg->kind == hir::TypeKind::Struct) {
+                                    structName += typeArg->name;
+                                } else {
+                                    switch (typeArg->kind) {
+                                        case hir::TypeKind::Int:
+                                            structName += "int";
+                                            break;
+                                        case hir::TypeKind::UInt:
+                                            structName += "uint";
+                                            break;
+                                        case hir::TypeKind::Long:
+                                            structName += "long";
+                                            break;
+                                        case hir::TypeKind::ULong:
+                                            structName += "ulong";
+                                            break;
+                                        case hir::TypeKind::Float:
+                                            structName += "float";
+                                            break;
+                                        case hir::TypeKind::Double:
+                                            structName += "double";
+                                            break;
+                                        case hir::TypeKind::Bool:
+                                            structName += "bool";
+                                            break;
+                                        case hir::TypeKind::Char:
+                                            structName += "char";
+                                            break;
+                                        case hir::TypeKind::String:
+                                            structName += "string";
+                                            break;
+                                        default:
+                                            if (!typeArg->name.empty()) {
+                                                structName += typeArg->name;
+                                            }
+                                            break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     auto it = structTypes.find(structName);
                     if (it != structTypes.end()) {
                         structType = it->second;
                     }
                 }
-
                 // フォールバック: 関数名から構造体名を推論
                 // Container__int__get → Container__int
                 if (!structType && currentMIRFunction) {
@@ -1912,6 +2127,17 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));  // 構造体ベース
                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(),
                                                          proj.field_id));  // フィールドインデックス
+
+                // デバッグ: GEP生成前の状態確認
+                if (structType) {
+                    auto* st = llvm::dyn_cast<llvm::StructType>(structType);
+                    std::cerr << "[GEP-DEBUG] structType name: "
+                              << (st ? st->getStructName().str() : "not_struct")
+                              << " structName: " << structName << std::endl;
+                } else {
+                    std::cerr << "[GEP-DEBUG] structType is NULL, structName: " << structName
+                              << std::endl;
+                }
 
                 addr = builder->CreateGEP(structType, addr, indices, "field_ptr");
 

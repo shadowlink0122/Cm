@@ -210,34 +210,77 @@ std::string get_type_name(const hir::TypePtr& type) {
 
 // 型名から正しいTypePtr型を作成するヘルパー
 hir::TypePtr make_type_from_name(const std::string& name) {
-    if (name == "int")
-        return hir::make_int();
-    if (name == "uint")
-        return hir::make_uint();
-    if (name == "long")
-        return hir::make_long();
-    if (name == "ulong")
-        return hir::make_ulong();
-    if (name == "short")
-        return hir::make_short();
-    if (name == "ushort")
-        return hir::make_ushort();
-    if (name == "tiny")
-        return hir::make_tiny();
-    if (name == "utiny")
-        return hir::make_utiny();
-    if (name == "float")
-        return hir::make_float();
-    if (name == "double")
-        return hir::make_double();
-    if (name == "char")
-        return hir::make_char();
-    if (name == "bool")
-        return hir::make_bool();
-    if (name == "string")
-        return hir::make_string();
-    if (name == "void")
-        return hir::make_void();
+    // プリミティブ型にはnameも設定（モノモーフィック化後にtype->nameが必要）
+    if (name == "int") {
+        auto t = hir::make_int();
+        t->name = "int";
+        return t;
+    }
+    if (name == "uint") {
+        auto t = hir::make_uint();
+        t->name = "uint";
+        return t;
+    }
+    if (name == "long") {
+        auto t = hir::make_long();
+        t->name = "long";
+        return t;
+    }
+    if (name == "ulong") {
+        auto t = hir::make_ulong();
+        t->name = "ulong";
+        return t;
+    }
+    if (name == "short") {
+        auto t = hir::make_short();
+        t->name = "short";
+        return t;
+    }
+    if (name == "ushort") {
+        auto t = hir::make_ushort();
+        t->name = "ushort";
+        return t;
+    }
+    if (name == "tiny") {
+        auto t = hir::make_tiny();
+        t->name = "tiny";
+        return t;
+    }
+    if (name == "utiny") {
+        auto t = hir::make_utiny();
+        t->name = "utiny";
+        return t;
+    }
+    if (name == "float") {
+        auto t = hir::make_float();
+        t->name = "float";
+        return t;
+    }
+    if (name == "double") {
+        auto t = hir::make_double();
+        t->name = "double";
+        return t;
+    }
+    if (name == "char") {
+        auto t = hir::make_char();
+        t->name = "char";
+        return t;
+    }
+    if (name == "bool") {
+        auto t = hir::make_bool();
+        t->name = "bool";
+        return t;
+    }
+    if (name == "string") {
+        auto t = hir::make_string();
+        t->name = "string";
+        return t;
+    }
+    if (name == "void") {
+        auto t = hir::make_void();
+        t->name = "void";
+        return t;
+    }
     // ユーザー定義型（構造体など）
     return hir::make_named(name);
 }

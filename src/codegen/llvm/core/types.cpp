@@ -76,12 +76,74 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
 
             // 構造体型を検索
-            auto it = structTypes.find(type->name);
+            std::string lookupName = type->name;
+
+            // ジェネリック構造体の場合、型引数を考慮した名前を生成
+            // 例: Node<int> -> Node__int
+            if (!type->type_args.empty()) {
+                for (const auto& typeArg : type->type_args) {
+                    if (typeArg) {
+                        lookupName += "__";
+                        // 型名を正規化（Pointer<int>ならint*など）
+                        if (typeArg->kind == hir::TypeKind::Struct) {
+                            lookupName += typeArg->name;
+                        } else {
+                            // プリミティブ型の場合
+                            switch (typeArg->kind) {
+                                case hir::TypeKind::Int:
+                                    lookupName += "int";
+                                    break;
+                                case hir::TypeKind::UInt:
+                                    lookupName += "uint";
+                                    break;
+                                case hir::TypeKind::Long:
+                                    lookupName += "long";
+                                    break;
+                                case hir::TypeKind::ULong:
+                                    lookupName += "ulong";
+                                    break;
+                                case hir::TypeKind::Float:
+                                    lookupName += "float";
+                                    break;
+                                case hir::TypeKind::Double:
+                                    lookupName += "double";
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    lookupName += "bool";
+                                    break;
+                                case hir::TypeKind::Char:
+                                    lookupName += "char";
+                                    break;
+                                case hir::TypeKind::String:
+                                    lookupName += "string";
+                                    break;
+                                default:
+                                    // その他の型は型名をそのまま使用
+                                    if (!typeArg->name.empty()) {
+                                        lookupName += typeArg->name;
+                                    }
+                                    break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            auto it = structTypes.find(lookupName);
             if (it != structTypes.end()) {
                 return it->second;
             }
+
+            // フォールバック: 元の名前でも検索
+            if (lookupName != type->name) {
+                auto it2 = structTypes.find(type->name);
+                if (it2 != structTypes.end()) {
+                    return it2->second;
+                }
+            }
+
             // 見つからない場合は不透明型として扱う
-            return llvm::StructType::create(ctx.getContext(), type->name);
+            return llvm::StructType::create(ctx.getContext(), lookupName);
         }
         case hir::TypeKind::TypeAlias: {
             // typedefの実際の型がある場合は再帰的に変換

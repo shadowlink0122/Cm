@@ -227,10 +227,63 @@ static hir::TypePtr substitute_type_in_type(
     if (!type)
         return nullptr;
 
+    // 0. type_argsを再帰的に置換（重要: T -> int を正しく処理）
+    std::vector<hir::TypePtr> substituted_type_args;
+    bool type_args_changed = false;
+    for (const auto& arg : type->type_args) {
+        if (arg) {
+            auto substituted_arg = substitute_type_in_type(arg, type_subst, mono);
+            substituted_type_args.push_back(substituted_arg);
+            if (substituted_arg != arg ||
+                (substituted_arg && arg && substituted_arg->name != arg->name)) {
+                type_args_changed = true;
+            }
+        } else {
+            substituted_type_args.push_back(nullptr);
+        }
+    }
+
     // 1. 単純な型パラメータの場合（T → int）
     auto it = type_subst.find(type->name);
     if (it != type_subst.end()) {
+        std::cerr << "[MONO-TYPE-SUBST] Found: " << type->name << " -> " << it->second->name
+                  << std::endl;
         return it->second;
+    }
+    // デバッグ: TypeKind::Genericで名前がない場合をチェック
+    if (type->kind == hir::TypeKind::Generic && type->name.empty()) {
+        // type_substで見つからない場合、element_typeをチェック
+        std::cerr << "[MONO-TYPE-SUBST] Generic type with empty name, checking type_subst keys"
+                  << std::endl;
+        for (const auto& [k, v] : type_subst) {
+            std::cerr << "  key: " << k << std::endl;
+        }
+    }
+
+    // 1.5 type_argsが置換された場合、新しい構造体型を作成
+    // ただし、既にマングリング済みの名前（__を含む）はスキップ
+    if (type_args_changed &&
+        (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::Generic)) {
+        // 既にマングリング済みの名前の場合はスキップ（二重マングリング防止）
+        if (type->name.find("__") != std::string::npos) {
+            // 既にマングリング済み: そのまま元の名前を使用して新しい型を作成
+            auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+            new_type->name = type->name;
+            new_type->type_args = substituted_type_args;
+            return new_type;
+        }
+
+        auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+        // 新しい名前を生成（Node -> Node__int）
+        std::string new_name = type->name;
+        for (const auto& arg : substituted_type_args) {
+            if (arg) {
+                new_name += "__" + get_type_name(arg);
+            }
+        }
+        new_type->name = new_name;
+        new_type->type_args = substituted_type_args;
+        return new_type;
     }
 
     // 2. ポインタ型の場合（Container<T>* → Container__int*）
@@ -244,6 +297,18 @@ static hir::TypePtr substitute_type_in_type(
                 new_ptr_type->element_type = substituted_elem;
                 new_ptr_type->name =
                     substituted_elem->name.empty() ? "" : (substituted_elem->name + "*");
+                // element_typeにtype_argsがない場合、元の型から継承（重要!）
+                if (substituted_elem->type_args.empty() && !type->element_type->type_args.empty()) {
+                    // 元のtype_argsを置換して設定
+                    for (const auto& orig_arg : type->element_type->type_args) {
+                        if (orig_arg) {
+                            auto subst_arg = substitute_type_in_type(orig_arg, type_subst, mono);
+                            if (subst_arg) {
+                                new_ptr_type->element_type->type_args.push_back(subst_arg);
+                            }
+                        }
+                    }
+                }
                 debug_msg("MONO", "Substituted pointer element_type: " +
                                       (type->element_type ? type->element_type->name : "null") +
                                       " -> " +
@@ -310,12 +375,37 @@ static hir::TypePtr substitute_type_in_type(
             if (any_substituted) {
                 // 新しい構造体名を生成
                 std::string new_name = base_name;
+                std::vector<hir::TypePtr> resolved_type_args;
                 for (const auto& p : new_params) {
                     new_name += "__" + p;
+                    // type_argsを設定（LLVMコード生成でマングリング名生成に必要）
+                    auto arg_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                    arg_type->name = p;
+                    // プリミティブ型の場合はTypeKindを設定
+                    if (p == "int")
+                        arg_type->kind = hir::TypeKind::Int;
+                    else if (p == "uint")
+                        arg_type->kind = hir::TypeKind::UInt;
+                    else if (p == "long")
+                        arg_type->kind = hir::TypeKind::Long;
+                    else if (p == "ulong")
+                        arg_type->kind = hir::TypeKind::ULong;
+                    else if (p == "float")
+                        arg_type->kind = hir::TypeKind::Float;
+                    else if (p == "double")
+                        arg_type->kind = hir::TypeKind::Double;
+                    else if (p == "bool")
+                        arg_type->kind = hir::TypeKind::Bool;
+                    else if (p == "char")
+                        arg_type->kind = hir::TypeKind::Char;
+                    else if (p == "string")
+                        arg_type->kind = hir::TypeKind::String;
+                    resolved_type_args.push_back(arg_type);
                 }
 
                 auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                 new_type->name = new_name;
+                new_type->type_args = resolved_type_args;
                 return new_type;
             }
         }
@@ -372,13 +462,38 @@ static hir::TypePtr substitute_type_in_type(
                 if (any_substituted) {
                     // 新しい構造体名を生成（Container__int 形式）
                     std::string new_name = base_name;
+                    std::vector<hir::TypePtr> resolved_type_args;
                     for (const auto& p : new_params) {
                         new_name += "__" + p;
+                        // type_argsを設定（LLVMコード生成でマングリング名生成に必要）
+                        auto arg_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                        arg_type->name = p;
+                        // プリミティブ型の場合はTypeKindを設定
+                        if (p == "int")
+                            arg_type->kind = hir::TypeKind::Int;
+                        else if (p == "uint")
+                            arg_type->kind = hir::TypeKind::UInt;
+                        else if (p == "long")
+                            arg_type->kind = hir::TypeKind::Long;
+                        else if (p == "ulong")
+                            arg_type->kind = hir::TypeKind::ULong;
+                        else if (p == "float")
+                            arg_type->kind = hir::TypeKind::Float;
+                        else if (p == "double")
+                            arg_type->kind = hir::TypeKind::Double;
+                        else if (p == "bool")
+                            arg_type->kind = hir::TypeKind::Bool;
+                        else if (p == "char")
+                            arg_type->kind = hir::TypeKind::Char;
+                        else if (p == "string")
+                            arg_type->kind = hir::TypeKind::String;
+                        resolved_type_args.push_back(arg_type);
                     }
 
                     // 重要: モノモーフィック化後の型はStructになる
                     auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                     new_type->name = new_name;
+                    new_type->type_args = resolved_type_args;
                     debug_msg("MONO", "Substituted angle-bracket type: " + type_name + " -> " +
                                           new_name + " (kind: Generic->Struct)");
                     return new_type;
@@ -399,8 +514,15 @@ static hir::TypePtr substitute_type_in_type(
                 applied = true;
             }
             if (applied) {
+                // type_argsを設定
+                std::vector<hir::TypePtr> resolved_type_args;
+                for (const auto& [param_name, param_type] : type_subst) {
+                    (void)param_name;
+                    resolved_type_args.push_back(param_type);
+                }
                 auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                 new_type->name = new_name;
+                new_type->type_args = resolved_type_args;
                 debug_msg("MONO", "Substituted generic type: " + type->name + " -> " + new_name);
                 return new_type;
             }
@@ -499,7 +621,30 @@ void Monomorphization::generate_generic_specializations(
                     new_local.type = new_ptr_type;
 
                 } else {
+                    auto old_type = new_local.type;
                     new_local.type = substitute_type_in_type(new_local.type, type_subst, this);
+                    // デバッグ: 型置換の結果を確認
+                    if (old_type && new_local.type) {
+                        std::string old_info = old_type->name + " (type_args:" +
+                                               std::to_string(old_type->type_args.size()) + ")";
+                        std::string new_info =
+                            new_local.type->name +
+                            " (type_args:" + std::to_string(new_local.type->type_args.size()) + ")";
+                        if (old_type->kind == hir::TypeKind::Pointer && old_type->element_type) {
+                            old_info += " elem=" + old_type->element_type->name + "(type_args:" +
+                                        std::to_string(old_type->element_type->type_args.size()) +
+                                        ")";
+                        }
+                        if (new_local.type->kind == hir::TypeKind::Pointer &&
+                            new_local.type->element_type) {
+                            new_info +=
+                                " elem=" + new_local.type->element_type->name + "(type_args:" +
+                                std::to_string(new_local.type->element_type->type_args.size()) +
+                                ")";
+                        }
+                        std::cerr << "[MONO-DEBUG] Local " << local.name << " type: " << old_info
+                                  << " -> " << new_info << std::endl;
+                    }
                 }
             }
             specialized->locals.push_back(new_local);
