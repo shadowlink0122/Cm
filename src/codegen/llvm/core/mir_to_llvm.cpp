@@ -1979,21 +1979,11 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 if (isPrimitiveImplMethod && allocatedType->isPointerTy() && currentMIRFunction &&
                     local < currentMIRFunction->locals.size()) {
                     auto& localInfo = currentMIRFunction->locals[local];
-                    if (localInfo.type && localInfo.type->kind == hir::TypeKind::Pointer &&
-                        localInfo.type->element_type) {
-                        auto elemType = localInfo.type->element_type;
-                        auto elemKind = elemType->kind;
-                        if (elemKind == hir::TypeKind::Int || elemKind == hir::TypeKind::UInt ||
-                            elemKind == hir::TypeKind::Long || elemKind == hir::TypeKind::ULong ||
-                            elemKind == hir::TypeKind::Float || elemKind == hir::TypeKind::Double ||
-                            elemKind == hir::TypeKind::Bool || elemKind == hir::TypeKind::Char) {
-                            // まずポインタをロード
-                            auto ptrVal = builder->CreateLoad(allocatedType, val, "ptr_load");
-                            // 次にプリミティブ値をロード
-                            auto primType = convertType(elemType);
-                            return builder->CreateLoad(primType, ptrVal, "prim_load");
-                        }
-                    }
+                    // 注: この処理は&resultのような出力ポインタ引数に問題を起こすため無効化
+                    // ポインタの参照先の値をロードすると、出力引数として渡す際に
+                    // 元の変数が更新されなくなる
+                    // 代わりにポインタ値そのものを返す
+                    (void)localInfo;  // 未使用警告を抑制
                 }
 
                 // スカラー型の場合はロード
