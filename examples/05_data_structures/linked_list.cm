@@ -1,0 +1,48 @@
+// linked_list.cm - 単方向リンクリストのデモ
+// FFIによるヒープ確保を示す
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+// ノード構造体
+struct Node {
+    int value;
+    Node* next;
+}
+
+int main() {
+    println("=== Linked List ===");
+    
+    // ノードを手動で作成
+    Node* head = malloc(sizeof(Node)) as Node*;
+    head->value = 1;
+    head->next = null as Node*;
+    
+    Node* second = malloc(sizeof(Node)) as Node*;
+    second->value = 2;
+    second->next = null as Node*;
+    head->next = second;
+    
+    Node* third = malloc(sizeof(Node)) as Node*;
+    third->value = 3;
+    third->next = null as Node*;
+    second->next = third;
+    
+    // リストを走査
+    println("List contents:");
+    Node* current = head;
+    while (current != null as Node*) {
+        println("  {current->value}");
+        current = current->next;
+    }
+    
+    // メモリ解放
+    free(third as void*);
+    free(second as void*);
+    free(head as void*);
+    println("Memory freed");
+    
+    return 0;
+}

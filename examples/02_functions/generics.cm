@@ -1,0 +1,32 @@
+// generics.cm - ジェネリクスのデモ
+// ジェネリック構造体を示す
+
+// ジェネリック構造体
+struct Pair<T> {
+    T first;
+    T second;
+}
+
+int main() {
+    println("=== Generics ===");
+    
+    // 1. ジェネリック構造体
+    println("--- Generic struct ---");
+    Pair<int> p = {first: 10, second: 20};
+    println("Pair<int>: ({p.first}, {p.second})");
+    
+    Pair<string> sp = {first: "hello", second: "world"};
+    println("Pair<string>: ({sp.first}, {sp.second})");
+    
+    // 2. 組み込み関数でmax/min
+    println("");
+    println("--- Built-in comparison ---");
+    const int a = 10;
+    const int b = 20;
+    int max_val = a;
+    if (b > max_val) { max_val = b; }
+    println("max(10, 20) = {max_val}");
+    
+    println("\n=== Done ===");
+    return 0;
+}

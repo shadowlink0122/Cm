@@ -1,0 +1,276 @@
+// priority_queue_generic.cm - ジェネリック PriorityQueue<T> (AVL木ベース)
+// 任意の型Tを管理できるジェネリックPriorityQueue
+// O(log n) の push/pop を保証
+
+import std::io::println;
+import std::io::print;
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+// ============================================================
+// AVLノード構造体（ジェネリック）
+// ============================================================
+struct AVLNode<T> {
+    T value;
+    AVLNode<T>* left;
+    AVLNode<T>* right;
+    int height;
+}
+
+// ============================================================
+// PriorityQueue構造体（ジェネリック）
+// ============================================================
+struct PriorityQueue<T> {
+    AVLNode<T>* root;
+    int size;
+}
+
+// ============================================================
+// Queue インターフェース（ジェネリック）
+// ============================================================
+interface Queue<T> {
+    void push(T value);
+    T pop();
+    T peek();
+    int get_size();
+    bool is_empty();
+}
+
+// ============================================================
+// AVLノード用内部ヘルパー関数（ジェネリック）
+// ============================================================
+
+// ノードの高さを取得
+<T> int node_height(AVLNode<T>* node) {
+    if (node == null) {
+        return 0;
+    }
+    return node->height;
+}
+
+// 新しいノードを作成
+<T> AVLNode<T>* create_node(T value) {
+    void* mem = malloc(sizeof(AVLNode<T>));
+    AVLNode<T>* node = mem as AVLNode<T>*;
+    node->value = value;
+    node->left = null as AVLNode<T>*;
+    node->right = null as AVLNode<T>*;
+    node->height = 1;
+    return node;
+}
+
+// 高さを更新
+<T> void update_height(AVLNode<T>* node) {
+    if (node != null) {
+        int left_h = node_height(node->left);
+        int right_h = node_height(node->right);
+        if (left_h > right_h) {
+            node->height = left_h + 1;
+        } else {
+            node->height = right_h + 1;
+        }
+    }
+}
+
+// バランスファクター
+<T> int balance_factor(AVLNode<T>* node) {
+    if (node == null) {
+        return 0;
+    }
+    return node_height(node->left) - node_height(node->right);
+}
+
+// 右回転
+<T> AVLNode<T>* rotate_right(AVLNode<T>* y) {
+    AVLNode<T>* x = y->left;
+    AVLNode<T>* t2 = x->right;
+    
+    x->right = y;
+    y->left = t2;
+    
+    update_height(y);
+    update_height(x);
+    
+    return x;
+}
+
+// 左回転
+<T> AVLNode<T>* rotate_left(AVLNode<T>* x) {
+    AVLNode<T>* y = x->right;
+    AVLNode<T>* t2 = y->left;
+    
+    y->left = x;
+    x->right = t2;
+    
+    update_height(x);
+    update_height(y);
+    
+    return y;
+}
+
+// ノード挿入
+<T> AVLNode<T>* insert_node(AVLNode<T>* node, T value) {
+    if (node == null) {
+        return create_node(value);
+    }
+    
+    if (value < node->value) {
+        node->left = insert_node(node->left, value);
+    } else {
+        node->right = insert_node(node->right, value);
+    }
+    
+    update_height(node);
+    
+    int bf = balance_factor(node);
+    
+    // 左左ケース
+    if (bf > 1 && node->left != null && value < node->left->value) {
+        return rotate_right(node);
+    }
+    
+    // 右右ケース
+    if (bf < -1 && node->right != null && value > node->right->value) {
+        return rotate_left(node);
+    }
+    
+    // 左右ケース
+    if (bf > 1 && node->left != null && value > node->left->value) {
+        node->left = rotate_left(node->left);
+        return rotate_right(node);
+    }
+    
+    // 右左ケース
+    if (bf < -1 && node->right != null && value < node->right->value) {
+        node->right = rotate_right(node->right);
+        return rotate_left(node);
+    }
+    
+    return node;
+}
+
+// 最小値ノードを見つける
+<T> AVLNode<T>* find_min(AVLNode<T>* node) {
+    AVLNode<T>* current = node;
+    while (current->left != null) {
+        current = current->left;
+    }
+    return current;
+}
+
+// 最小値ノードを削除
+<T> AVLNode<T>* delete_min(AVLNode<T>* node, T* out_value) {
+    if (node == null) {
+        return null as AVLNode<T>*;
+    }
+    
+    if (node->left == null) {
+        *out_value = node->value;
+        AVLNode<T>* right_child = node->right;
+        free(node as void*);
+        return right_child;
+    }
+    
+    node->left = delete_min(node->left, out_value);
+    
+    update_height(node);
+    
+    int bf = balance_factor(node);
+    
+    if (bf < -1) {
+        if (balance_factor(node->right) <= 0) {
+            return rotate_left(node);
+        } else {
+            node->right = rotate_right(node->right);
+            return rotate_left(node);
+        }
+    }
+    
+    if (bf > 1) {
+        if (balance_factor(node->left) >= 0) {
+            return rotate_right(node);
+        } else {
+            node->left = rotate_left(node->left);
+            return rotate_right(node);
+        }
+    }
+    
+    return node;
+}
+
+// ============================================================
+// PriorityQueue の Queue インターフェース実装（ジェネリック）
+// ============================================================
+impl<T> PriorityQueue<T> for Queue<T> {
+    void push(T value) {
+        self.root = insert_node(self.root, value);
+        self.size = self.size + 1;
+    }
+    
+    T pop() {
+        if (self.root == null) {
+            T default_val = 0 as T;
+            return default_val;
+        }
+        T result = 0 as T;
+        self.root = delete_min(self.root, &result);
+        self.size = self.size - 1;
+        return result;
+    }
+    
+    T peek() {
+        if (self.root == null) {
+            T default_val = 0 as T;
+            return default_val;
+        }
+        AVLNode<T>* min_node = find_min(self.root);
+        return min_node->value;
+    }
+    
+    int get_size() {
+        return self.size;
+    }
+    
+    bool is_empty() {
+        return self.size == 0;
+    }
+}
+
+// ============================================================
+// メイン関数
+// ============================================================
+int main() {
+    println("=== Generic PriorityQueue<T> ===\n");
+    
+    // ========== int版 ==========
+    println("--- PriorityQueue<int> ---");
+    PriorityQueue<int> pq;
+    pq.root = null as AVLNode<int>*;
+    pq.size = 0;
+    
+    println("Pushing: 50, 30, 70, 20, 40");
+    pq.push(50);
+    pq.push(30);
+    pq.push(70);
+    pq.push(20);
+    pq.push(40);
+    
+    int s = pq.get_size();
+    println("Size: {s}");
+    
+    int min_val = pq.peek();
+    println("Peek (min): {min_val}");
+    
+    println("\nPopping (sorted order):");
+    while (!pq.is_empty()) {
+        int v = pq.pop();
+        print("  {v}");
+    }
+    println("");
+    
+    println("\n=== Done ===");
+    return 0;
+}

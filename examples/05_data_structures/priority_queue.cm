@@ -1,0 +1,103 @@
+// priority_queue.cm - 優先度付きキュー（最小ヒープ）
+// ポインタ渡し関数ベースで実装
+
+// 状態型（優先度 + ノード）
+struct State {
+    int score;
+    int node;
+}
+
+// 優先度付きキュー
+struct PQ {
+    State[100] data;
+    int size;
+}
+
+// PQを初期化
+void pq_init(PQ* pq) {
+    pq->size = 0;
+}
+
+// 要素を追加（heapify up）
+void pq_push(PQ* pq, int score, int node) {
+    State s = {score: score, node: node};
+    pq->data[pq->size] = s;
+    
+    int i = pq->size;
+    pq->size = pq->size + 1;
+    
+    while (i > 0) {
+        int parent = (i - 1) / 2;
+        if (pq->data[parent].score <= pq->data[i].score) {
+            break;
+        }
+        // Swap
+        State temp = pq->data[i];
+        pq->data[i] = pq->data[parent];
+        pq->data[parent] = temp;
+        i = parent;
+    }
+}
+
+// 最小要素を取り出す（heapify down）
+State pq_pop(PQ* pq) {
+    State result = pq->data[0];
+    pq->size = pq->size - 1;
+    
+    if (pq->size > 0) {
+        pq->data[0] = pq->data[pq->size];
+        
+        int i = 0;
+        while (true) {
+            int left = 2 * i + 1;
+            int right = 2 * i + 2;
+            int smallest = i;
+            
+            if (left < pq->size && pq->data[left].score < pq->data[smallest].score) {
+                smallest = left;
+            }
+            if (right < pq->size && pq->data[right].score < pq->data[smallest].score) {
+                smallest = right;
+            }
+            
+            if (smallest == i) {
+                break;
+            }
+            
+            State temp = pq->data[i];
+            pq->data[i] = pq->data[smallest];
+            pq->data[smallest] = temp;
+            i = smallest;
+        }
+    }
+    
+    return result;
+}
+
+bool pq_empty(PQ* pq) {
+    return pq->size == 0;
+}
+
+int main() {
+    println("=== PriorityQueue Demo ===");
+    
+    PQ pq;
+    pq_init(&pq);
+    
+    // ランダムな順序で挿入
+    println("Pushing items:");
+    pq_push(&pq, 5, 0); println("  push(score=5, node=0)");
+    pq_push(&pq, 1, 1); println("  push(score=1, node=1)");
+    pq_push(&pq, 3, 2); println("  push(score=3, node=2)");
+    pq_push(&pq, 4, 3); println("  push(score=4, node=3)");
+    pq_push(&pq, 2, 4); println("  push(score=2, node=4)");
+    
+    println("\nPopping items (sorted by score):");
+    while (!pq_empty(&pq)) {
+        State s = pq_pop(&pq);
+        println("  score={s.score}, node={s.node}");
+    }
+    
+    println("\n=== Done ===");
+    return 0;
+}

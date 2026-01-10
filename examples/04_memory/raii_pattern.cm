@@ -1,0 +1,46 @@
+// raii_pattern.cm - RAIIパターンのデモ
+// デストラクタによる自動リソース解放を示す
+
+struct Resource {
+    string name;
+    int id;
+}
+
+impl Resource {
+    self(string n, int i) {
+        self.name = n;
+        self.id = i;
+        println("Resource '{self.name}' (id={self.id}) acquired");
+    }
+    
+    ~self() {
+        println("Resource '{self.name}' (id={self.id}) released");
+    }
+}
+
+int main() {
+    println("=== RAII Pattern ===");
+    
+    // 1. 基本的なRAII
+    println("--- Basic RAII ---");
+    {
+        Resource res("Basic", 0);
+        println("Using resource...");
+    }
+    println("After scope");
+    
+    // 2. ネストしたスコープ
+    println("");
+    println("--- Nested scope ---");
+    {
+        Resource outer("Outer", 1);
+        {
+            Resource inner("Inner", 2);
+            println("Inside inner scope");
+        }
+        println("Inside outer scope");
+    }
+    
+    println("\n=== Done ===");
+    return 0;
+}

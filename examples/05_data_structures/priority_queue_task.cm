@@ -1,0 +1,130 @@
+// priority_queue_task.cm - タスク優先度キューの例（with Ord使用）
+import std::io::println;
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+// Taskに with Ord でフィールド順比較を自動実装
+struct Task with Ord {
+    int priority;    // 低い値 = 高優先度
+    int id;
+}
+
+struct AVLNode<T> {
+    T value;
+    AVLNode<T>* left;
+    AVLNode<T>* right;
+    int height;
+}
+
+struct TaskQueue {
+    AVLNode<Task>* root;
+    int size;
+}
+
+// AVLヘルパー関数
+int nh(AVLNode<Task>* n) { if (n == null) { return 0; } return n->height; }
+
+AVLNode<Task>* cn(Task v) {
+    void* m = malloc(sizeof(AVLNode<Task>));
+    AVLNode<Task>* n = m as AVLNode<Task>*;
+    n->value = v; n->left = null as AVLNode<Task>*; n->right = null as AVLNode<Task>*; n->height = 1;
+    return n;
+}
+
+void uh(AVLNode<Task>* n) {
+    if (n != null) { int l = nh(n->left); int r = nh(n->right); n->height = (l > r ? l : r) + 1; }
+}
+
+int bf(AVLNode<Task>* n) { if (n == null) { return 0; } return nh(n->left) - nh(n->right); }
+
+AVLNode<Task>* rr(AVLNode<Task>* y) {
+    AVLNode<Task>* x = y->left; AVLNode<Task>* t = x->right;
+    x->right = y; y->left = t; uh(y); uh(x); return x;
+}
+
+AVLNode<Task>* rl(AVLNode<Task>* x) {
+    AVLNode<Task>* y = x->right; AVLNode<Task>* t = y->left;
+    y->left = x; x->right = t; uh(x); uh(y); return y;
+}
+
+AVLNode<Task>* ins(AVLNode<Task>* n, Task v) {
+    if (n == null) { return cn(v); }
+    if (v < n->value) { n->left = ins(n->left, v); }
+    else { n->right = ins(n->right, v); }
+    uh(n); int b = bf(n);
+    if (b > 1 && n->left != null && v < n->left->value) { return rr(n); }
+    if (b < -1 && n->right != null && !(v < n->right->value)) { return rl(n); }
+    if (b > 1 && n->left != null && !(v < n->left->value)) { n->left = rl(n->left); return rr(n); }
+    if (b < -1 && n->right != null && v < n->right->value) { n->right = rr(n->right); return rl(n); }
+    return n;
+}
+
+AVLNode<Task>* fm(AVLNode<Task>* n) {
+    AVLNode<Task>* c = n; while (c->left != null) { c = c->left; } return c;
+}
+
+AVLNode<Task>* dm(AVLNode<Task>* n, Task* o) {
+    if (n == null) { return null as AVLNode<Task>*; }
+    if (n->left == null) { *o = n->value; AVLNode<Task>* r = n->right; free(n as void*); return r; }
+    n->left = dm(n->left, o); uh(n); int b = bf(n);
+    if (b < -1) { if (bf(n->right) <= 0) { return rl(n); } n->right = rr(n->right); return rl(n); }
+    if (b > 1) { if (bf(n->left) >= 0) { return rr(n); } n->left = rl(n->left); return rr(n); }
+    return n;
+}
+
+// TaskQueue操作関数
+void tq_push(TaskQueue* q, Task v) { q->root = ins(q->root, v); q->size = q->size + 1; }
+
+Task tq_pop(TaskQueue* q) {
+    Task r; r.priority = 0; r.id = 0;
+    if (q->root != null) { q->root = dm(q->root, &r); q->size = q->size - 1; }
+    return r;
+}
+
+Task tq_peek(TaskQueue* q) {
+    Task r; r.priority = 0; r.id = 0;
+    if (q->root != null) { AVLNode<Task>* m = fm(q->root); r = m->value; }
+    return r;
+}
+
+int tq_size(TaskQueue* q) { return q->size; }
+bool tq_empty(TaskQueue* q) { return q->size == 0; }
+
+Task mt(int p, int id) { Task t; t.priority = p; t.id = id; return t; }
+
+int main() {
+    println("=== Task Priority Queue (with Ord) ===\n");
+    
+    TaskQueue tq;
+    tq.root = null as AVLNode<Task>*;
+    tq.size = 0;
+    
+    println("Adding tasks:");
+    tq_push(&tq, mt(3, 100)); println("  priority=3, id=100");
+    tq_push(&tq, mt(1, 200)); println("  priority=1, id=200");
+    tq_push(&tq, mt(2, 300)); println("  priority=2, id=300");
+    tq_push(&tq, mt(1, 400)); println("  priority=1, id=400");
+    tq_push(&tq, mt(5, 500)); println("  priority=5, id=500");
+    
+    int sz = tq_size(&tq);
+    println("\nQueue size: {sz}");
+    
+    Task top = tq_peek(&tq);
+    int top_id = top.id;
+    int top_pri = top.priority;
+    println("Highest priority: id={top_id}, priority={top_pri}");
+    
+    println("\nProcessing in priority order:");
+    while (!tq_empty(&tq)) {
+        Task t = tq_pop(&tq);
+        int tid = t.id;
+        int tpri = t.priority;
+        println("  id={tid} (priority={tpri})");
+    }
+    
+    println("\n=== Done ===");
+    return 0;
+}

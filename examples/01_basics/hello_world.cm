@@ -1,0 +1,18 @@
+// hello_world.cm - Cmの最初のプログラム
+// 基本的な出力と文字列補間を示す
+
+int main() {
+    // 基本的な出力
+    println("Hello, World!");
+    
+    // 文字列補間
+    const string name = "Cm";
+    const int version = 11;
+    println("Welcome to {name} v0.{version}.0!");
+    
+    // 数値フォーマット
+    const int hex_value = 255;
+    println("Hex: {hex_value:x}, Binary: {hex_value:b}");
+    
+    return 0;
+}

@@ -1,0 +1,35 @@
+// move_semantics.cm - ムーブセマンティクスのデモ
+// 値のムーブ、use-after-move防止を示す
+
+int main() {
+    println("=== Move Semantics ===");
+    
+    // 1. 基本的なmove
+    println("--- Basic move ---");
+    int x = 42;
+    println("Before move: x = {x}");
+    
+    int y = move x;  // xの所有権がyに移動
+    println("After move: y = {y}");
+    // println(x);  // Error: x is moved
+    
+    // 2. move後の変数は使用不可
+    println("");
+    println("--- Move safety ---");
+    int a = 100;
+    int b = move a;
+    println("b = {b}");
+    // a = 50;  // Error: Cannot assign to moved variable
+    
+    // 3. 新しい変数で再利用
+    println("");
+    println("--- New variable ---");
+    int val = 10;
+    int moved_val = move val;
+    // valは使えないが、moved_valは使える
+    moved_val = moved_val + 5;
+    println("moved_val = {moved_val}");
+    
+    println("\n=== Done ===");
+    return 0;
+}

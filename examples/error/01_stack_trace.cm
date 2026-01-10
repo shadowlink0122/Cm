@@ -1,7 +1,0 @@
-import ./lib::lib::lib_function;
-
-int main() {
-    int value = lib_function();
-    println("Library function returned: {value}");
-    return 0;
-}

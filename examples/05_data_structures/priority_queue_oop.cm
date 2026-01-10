@@ -1,0 +1,316 @@
+// priority_queue_oop.cm - C++風 PriorityQueue (AVL木ベース)
+// interface/implパターンを使用したオブジェクト指向実装
+// O(log n) の push/pop を保証
+
+import std::io::println;
+import std::io::print;
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+// ============================================================
+// AVLノード構造体
+// ============================================================
+struct AVLNode {
+    int value;
+    AVLNode* left;
+    AVLNode* right;
+    int height;
+}
+
+// ============================================================
+// PriorityQueue構造体
+// ============================================================
+struct PriorityQueue {
+    AVLNode* root;
+    int size;
+}
+
+// ============================================================
+// Queue インターフェース（公開API）
+// ============================================================
+interface Queue {
+    void push(int value);
+    int pop();
+    int peek();
+    int get_size();
+    bool is_empty();
+}
+
+// ============================================================
+// AVLノード用内部ヘルパー関数
+// （バランシングロジック - 内部実装）
+// ============================================================
+
+// ノードの高さを取得
+int node_height(AVLNode* node) {
+    if (node == null) {
+        return 0;
+    }
+    return node->height;
+}
+
+// 新しいノードを作成
+AVLNode* create_node(int value) {
+    void* mem = malloc(sizeof(AVLNode));
+    AVLNode* node = mem as AVLNode*;
+    node->value = value;
+    node->left = null as AVLNode*;
+    node->right = null as AVLNode*;
+    node->height = 1;
+    return node;
+}
+
+// 高さを更新
+void update_height(AVLNode* node) {
+    if (node != null) {
+        int left_h = node_height(node->left);
+        int right_h = node_height(node->right);
+        if (left_h > right_h) {
+            node->height = left_h + 1;
+        } else {
+            node->height = right_h + 1;
+        }
+    }
+}
+
+// バランスファクター（左高さ - 右高さ）
+int balance_factor(AVLNode* node) {
+    if (node == null) {
+        return 0;
+    }
+    return node_height(node->left) - node_height(node->right);
+}
+
+// 右回転
+AVLNode* rotate_right(AVLNode* y) {
+    AVLNode* x = y->left;
+    AVLNode* t2 = x->right;
+    
+    x->right = y;
+    y->left = t2;
+    
+    update_height(y);
+    update_height(x);
+    
+    return x;
+}
+
+// 左回転
+AVLNode* rotate_left(AVLNode* x) {
+    AVLNode* y = x->right;
+    AVLNode* t2 = y->left;
+    
+    y->left = x;
+    x->right = t2;
+    
+    update_height(x);
+    update_height(y);
+    
+    return y;
+}
+
+// ノード挿入（再帰的、バランシング込み）
+AVLNode* insert_node(AVLNode* node, int value) {
+    // 標準的なBST挿入
+    if (node == null) {
+        return create_node(value);
+    }
+    
+    if (value < node->value) {
+        node->left = insert_node(node->left, value);
+    } else {
+        node->right = insert_node(node->right, value);
+    }
+    
+    // 高さ更新
+    update_height(node);
+    
+    // バランスファクター取得
+    int bf = balance_factor(node);
+    
+    // 左左ケース
+    if (bf > 1 && node->left != null && value < node->left->value) {
+        return rotate_right(node);
+    }
+    
+    // 右右ケース
+    if (bf < -1 && node->right != null && value > node->right->value) {
+        return rotate_left(node);
+    }
+    
+    // 左右ケース
+    if (bf > 1 && node->left != null && value > node->left->value) {
+        node->left = rotate_left(node->left);
+        return rotate_right(node);
+    }
+    
+    // 右左ケース
+    if (bf < -1 && node->right != null && value < node->right->value) {
+        node->right = rotate_right(node->right);
+        return rotate_left(node);
+    }
+    
+    return node;
+}
+
+// 最小値を持つノードを見つける
+AVLNode* find_min(AVLNode* node) {
+    AVLNode* current = node;
+    while (current->left != null) {
+        current = current->left;
+    }
+    return current;
+}
+
+// 最小値ノードを削除（再帰的、バランシング込み）
+AVLNode* delete_min(AVLNode* node, int* out_value) {
+    if (node == null) {
+        return null as AVLNode*;
+    }
+    
+    // 最小値はこのノード
+    if (node->left == null) {
+        *out_value = node->value;
+        AVLNode* right_child = node->right;
+        free(node as void*);
+        return right_child;
+    }
+    
+    // 左に進む
+    node->left = delete_min(node->left, out_value);
+    
+    // 高さ更新
+    update_height(node);
+    
+    // バランスファクター取得
+    int bf = balance_factor(node);
+    
+    // リバランス
+    if (bf < -1) {
+        if (balance_factor(node->right) <= 0) {
+            return rotate_left(node);
+        } else {
+            node->right = rotate_right(node->right);
+            return rotate_left(node);
+        }
+    }
+    
+    if (bf > 1) {
+        if (balance_factor(node->left) >= 0) {
+            return rotate_right(node);
+        } else {
+            node->left = rotate_left(node->left);
+            return rotate_right(node);
+        }
+    }
+    
+    return node;
+}
+
+// ============================================================
+// PriorityQueue の Queue インターフェース実装
+// ============================================================
+impl PriorityQueue for Queue {
+    // 要素を追加
+    void push(int value) {
+        self.root = insert_node(self.root, value);
+        self.size = self.size + 1;
+    }
+    
+    // 最小要素を取り出して削除
+    int pop() {
+        if (self.root == null) {
+            return -1;  // エラー値
+        }
+        int result = 0;
+        self.root = delete_min(self.root, &result);
+        self.size = self.size - 1;
+        return result;
+    }
+    
+    // 最小要素を参照（削除しない）
+    int peek() {
+        if (self.root == null) {
+            return -1;  // エラー値
+        }
+        AVLNode* min_node = find_min(self.root);
+        return min_node->value;
+    }
+    
+    // サイズを取得
+    int get_size() {
+        return self.size;
+    }
+    
+    // 空かどうか
+    bool is_empty() {
+        return self.size == 0;
+    }
+}
+
+// ============================================================
+// メイン関数
+// ============================================================
+int main() {
+    println("=== PriorityQueue (C++ Style with Interface/Impl) ===\n");
+    
+    // PriorityQueueを作成
+    PriorityQueue pq;
+    pq.root = null as AVLNode*;
+    pq.size = 0;
+    
+    // 要素を追加
+    println("Pushing items:");
+    
+    print("  push(50)");
+    pq.push(50);
+    println("");
+    
+    print("  push(30)");
+    pq.push(30);
+    println("");
+    
+    print("  push(70)");
+    pq.push(70);
+    println("");
+    
+    print("  push(20)");
+    pq.push(20);
+    println("");
+    
+    print("  push(40)");
+    pq.push(40);
+    println("");
+    
+    print("  push(60)");
+    pq.push(60);
+    println("");
+    
+    print("  push(80)");
+    pq.push(80);
+    println("");
+    
+    print("  push(10)");
+    pq.push(10);
+    println("");
+    
+    // サイズと最小値を確認
+    int s = pq.get_size();
+    println("\nQueue size: {s}");
+    
+    int min_val = pq.peek();
+    println("Peek (min): {min_val}");
+    
+    // 全要素をpop（ソート順で出力される）
+    println("\nPopping items (sorted order):");
+    while (!pq.is_empty()) {
+        int val = pq.pop();
+        println("  pop() = {val}");
+    }
+    
+    println("\n=== Done ===");
+    return 0;
+}
