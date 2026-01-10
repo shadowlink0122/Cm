@@ -652,12 +652,17 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // プリミティブ型へのポインタの場合、一時変数はプリミティブ型として扱う
                     // これは借用selfの値を格納するための一時変数のケース
                     // 注意: impl メソッド（関数名に__を含む）内でのみ適用
+                    // また、local_0（self引数）からコピーされる一時変数のみ適用
+                    // &result のような通常のアドレス取得には適用しない
                     hir::TypePtr allocType = local.type;
                     bool isPrimitiveImplMethod = (func.name.find("__") != std::string::npos);
                     // 名前が_tで始まる場合は一時変数
                     bool isTempVar =
                         (local.name.size() >= 2 && local.name[0] == '_' && local.name[1] == 't');
-                    if (isPrimitiveImplMethod && isTempVar &&
+                    // さらに、最初の数個のローカル変数（selfのコピー先として使われる）のみに適用
+                    // local_0はself引数、local_1/local_2が最初の一時変数として使われることが多い
+                    bool isSelfCopyTarget = (i <= 2);
+                    if (isPrimitiveImplMethod && isTempVar && isSelfCopyTarget &&
                         local.type->kind == hir::TypeKind::Pointer && local.type->element_type) {
                         auto elemKind = local.type->element_type->kind;
                         if (elemKind == hir::TypeKind::Int || elemKind == hir::TypeKind::UInt ||
