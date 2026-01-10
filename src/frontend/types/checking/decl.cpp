@@ -365,12 +365,16 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
             scopes_.push();
             current_return_type_ = ast::make_void();
             scopes_.current().define("self", impl.target_type, false);
+            mark_variable_initialized("self");  // selfは常に初期化済み
             for (const auto& param : ctor->params) {
                 scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+                mark_variable_initialized(param.name);  // パラメータは常に初期化済み
             }
             for (auto& stmt : ctor->body) {
                 check_statement(*stmt);
             }
+            check_const_recommendations();
+            initialized_variables_.clear();
             scopes_.pop();
         }
 
@@ -378,9 +382,12 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
             scopes_.push();
             current_return_type_ = ast::make_void();
             scopes_.current().define("self", impl.target_type, false);
+            mark_variable_initialized("self");  // selfは常に初期化済み
             for (auto& stmt : impl.destructor->body) {
                 check_statement(*stmt);
             }
+            check_const_recommendations();
+            initialized_variables_.clear();
             scopes_.pop();
         }
 
@@ -394,12 +401,16 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
         scopes_.push();
         current_return_type_ = method->return_type;
         scopes_.current().define("self", impl.target_type, false);
+        mark_variable_initialized("self");  // selfは常に初期化済み
         for (const auto& param : method->params) {
             scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+            mark_variable_initialized(param.name);  // パラメータは常に初期化済み
         }
         for (auto& stmt : method->body) {
             check_statement(*stmt);
         }
+        check_const_recommendations();   // const推奨警告をチェック
+        initialized_variables_.clear();  // 次のメソッド用にクリア
         scopes_.pop();
     }
     current_return_type_ = nullptr;

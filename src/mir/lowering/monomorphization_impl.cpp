@@ -46,6 +46,11 @@ void Monomorphization::scan_generic_calls(
                     if (!type_args.empty()) {
                         auto key = std::make_pair(func_name, type_args);
                         needed[key].push_back(std::make_tuple(func->name, block_idx));
+                        debug_msg("MONO", "Scanned call in " + func->name + " to " + func_name +
+                                              " with type args: " + type_args[0]);
+                    } else {
+                        debug_msg("MONO", "WARNING: Could not infer type args for " + func_name +
+                                              " in " + func->name);
                     }
                 }
                 continue;
@@ -687,6 +692,27 @@ void Monomorphization::generate_generic_specializations(
             }
         }
 
+        // 特殊化関数内の自己再帰呼び出しを特殊化版に書き換え
+        for (auto& block : specialized->basic_blocks) {
+            if (!block || !block->terminator)
+                continue;
+            if (block->terminator->kind != MirTerminator::Call)
+                continue;
+
+            auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+                continue;
+
+            auto& called_func_name = std::get<std::string>(call_data.func->data);
+
+            // 自己再帰呼び出しのみを書き換え
+            if (called_func_name == func_name) {
+                call_data.func = MirOperand::function_ref(specialized_name);
+                debug_msg("MONO",
+                          "Rewrote recursive call: " + func_name + " -> " + specialized_name);
+            }
+        }
+
         program.functions.push_back(std::move(specialized));
 
         // 呼び出し箇所を書き換え
@@ -1189,6 +1215,17 @@ void Monomorphization::rewrite_generic_calls(
         rewrite_map[key] = specialized_name;
     }
 
+    // 単純なジェネリック関数名 -> 特殊化関数名のマップも構築
+    // (例: "create_node" -> "create_node__int")
+    std::map<std::string, std::string> simple_rewrite_map;
+    for (const auto& [key, specialized_name] : rewrite_map) {
+        const auto& [func_name, type_args] = key;
+        // 単純な関数名（メソッドではない）の場合のみ
+        if (func_name.find("__") == std::string::npos && func_name.find("<") == std::string::npos) {
+            simple_rewrite_map[func_name] = specialized_name;
+        }
+    }
+
     // 全関数の呼び出しを書き換え
     for (auto& func : program.functions) {
         if (!func)
@@ -1206,7 +1243,14 @@ void Monomorphization::rewrite_generic_calls(
 
                 auto& func_name = std::get<std::string>(call_data.func->data);
 
-                // Container<int>__print のような形式を検出
+                // 1. 単純なジェネリック関数呼び出し（create_node -> create_node__int）
+                auto simple_it = simple_rewrite_map.find(func_name);
+                if (simple_it != simple_rewrite_map.end()) {
+                    func_name = simple_it->second;
+                    continue;
+                }
+
+                // 2. Container<int>__print のような形式を検出
                 auto pos = func_name.find("<");
                 if (pos == std::string::npos)
                     continue;
