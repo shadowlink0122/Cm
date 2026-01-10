@@ -536,6 +536,28 @@ class MirLowering : public MirLoweringBase {
                 return;
         }
 
+        // ネストしたstruct型フィールドの比較関数を先に生成（再帰的自動実装）
+        for (const auto& field : st.fields) {
+            if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                std::string nested_func_name = field.type->name + "__op_eq";
+                bool exists = false;
+                for (const auto& func : mir_program.functions) {
+                    if (func && func->name == nested_func_name) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    for (const auto& mir_st : mir_program.structs) {
+                        if (mir_st && mir_st->name == field.type->name) {
+                            generate_builtin_eq_operator_for_monomorphized(*mir_st);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         auto mir_func = std::make_unique<MirFunction>();
         mir_func->name = func_name;
 
@@ -563,9 +585,11 @@ class MirLowering : public MirLoweringBase {
             block->terminator = MirTerminator::return_value();
         } else {
             std::vector<LocalId> cmp_results;
+            BlockId current_block = entry_block;
 
             for (size_t i = 0; i < st.fields.size(); ++i) {
                 const auto& field = st.fields[i];
+                auto* cur_block = mir_func->get_block(current_block);
 
                 LocalId cmp_result =
                     mir_func->add_local("_cmp" + std::to_string(i), hir::make_bool(), true, false);
@@ -574,20 +598,48 @@ class MirLowering : public MirLoweringBase {
                 LocalId self_field =
                     mir_func->add_local("_self_f" + std::to_string(i), field.type, true, false);
                 auto self_place = MirPlace(self_local, {PlaceProjection::field(i)});
-                block->statements.push_back(MirStatement::assign(
+                cur_block->statements.push_back(MirStatement::assign(
                     MirPlace(self_field), MirRvalue::use(MirOperand::copy(self_place))));
 
                 LocalId other_field =
                     mir_func->add_local("_other_f" + std::to_string(i), field.type, true, false);
                 auto other_place = MirPlace(other_local, {PlaceProjection::field(i)});
-                block->statements.push_back(MirStatement::assign(
+                cur_block->statements.push_back(MirStatement::assign(
                     MirPlace(other_field), MirRvalue::use(MirOperand::copy(other_place))));
 
-                block->statements.push_back(MirStatement::assign(
-                    MirPlace(cmp_result),
-                    MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(self_field)),
-                                      MirOperand::copy(MirPlace(other_field)))));
+                // フィールド型がstructの場合は__op_eq関数を呼び出す（再帰的比較）
+                if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                    std::string field_op_eq = field.type->name + "__op_eq";
+
+                    BlockId eq_call_success = mir_func->add_block();
+
+                    std::vector<MirOperandPtr> eq_args;
+                    eq_args.push_back(MirOperand::copy(MirPlace(self_field)));
+                    eq_args.push_back(MirOperand::copy(MirPlace(other_field)));
+
+                    auto eq_call_term = std::make_unique<MirTerminator>();
+                    eq_call_term->kind = MirTerminator::Call;
+                    eq_call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref(field_op_eq),
+                                                std::move(eq_args),
+                                                MirPlace(cmp_result),
+                                                eq_call_success,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    cur_block->terminator = std::move(eq_call_term);
+                    current_block = eq_call_success;
+                } else {
+                    // プリミティブ型は直接比較
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(cmp_result),
+                        MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(self_field)),
+                                          MirOperand::copy(MirPlace(other_field)))));
+                }
             }
+
+            auto* block = mir_func->get_block(current_block);
 
             if (cmp_results.size() == 1) {
                 block->statements.push_back(MirStatement::assign(
@@ -623,6 +675,30 @@ class MirLowering : public MirLoweringBase {
         for (const auto& func : mir_program.functions) {
             if (func && func->name == func_name)
                 return;
+        }
+
+        // ネストしたstruct型フィールドの比較関数を先に生成（再帰的自動実装）
+        for (const auto& field : st.fields) {
+            if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                // そのstruct用の比較関数が既に存在するかチェック
+                std::string nested_func_name = field.type->name + "__op_lt";
+                bool exists = false;
+                for (const auto& func : mir_program.functions) {
+                    if (func && func->name == nested_func_name) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    // ネスト構造体のMirStructを取得して再帰生成
+                    for (const auto& mir_st : mir_program.structs) {
+                        if (mir_st && mir_st->name == field.type->name) {
+                            generate_builtin_lt_operator_for_monomorphized(*mir_st);
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         auto mir_func = std::make_unique<MirFunction>();
@@ -678,10 +754,38 @@ class MirLowering : public MirLoweringBase {
 
                 LocalId lt_result =
                     mir_func->add_local("_lt" + std::to_string(i), hir::make_bool(), true, false);
-                field_block->statements.push_back(MirStatement::assign(
-                    MirPlace(lt_result),
-                    MirRvalue::binary(MirBinaryOp::Lt, MirOperand::copy(MirPlace(self_field)),
-                                      MirOperand::copy(MirPlace(other_field)))));
+
+                // フィールド型がstructの場合は__op_lt関数を呼び出す（再帰的比較）
+                if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                    std::string field_op_lt = field.type->name + "__op_lt";
+
+                    // 関数呼び出しのためのブロックを作成
+                    BlockId lt_call_success = mir_func->add_block();
+
+                    std::vector<MirOperandPtr> lt_args;
+                    lt_args.push_back(MirOperand::copy(MirPlace(self_field)));
+                    lt_args.push_back(MirOperand::copy(MirPlace(other_field)));
+
+                    auto lt_call_term = std::make_unique<MirTerminator>();
+                    lt_call_term->kind = MirTerminator::Call;
+                    lt_call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref(field_op_lt),
+                                                std::move(lt_args),
+                                                MirPlace(lt_result),
+                                                lt_call_success,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    field_block->terminator = std::move(lt_call_term);
+                    field_block = mir_func->get_block(lt_call_success);
+                } else {
+                    // プリミティブ型は直接比較
+                    field_block->statements.push_back(MirStatement::assign(
+                        MirPlace(lt_result),
+                        MirRvalue::binary(MirBinaryOp::Lt, MirOperand::copy(MirPlace(self_field)),
+                                          MirOperand::copy(MirPlace(other_field)))));
+                }
 
                 BlockId lt_true_block = mir_func->add_block();
                 BlockId lt_false_check_block = mir_func->add_block();
@@ -703,10 +807,38 @@ class MirLowering : public MirLoweringBase {
                 auto* gt_check_block = mir_func->get_block(lt_false_check_block);
                 LocalId gt_result =
                     mir_func->add_local("_gt" + std::to_string(i), hir::make_bool(), true, false);
-                gt_check_block->statements.push_back(MirStatement::assign(
-                    MirPlace(gt_result),
-                    MirRvalue::binary(MirBinaryOp::Gt, MirOperand::copy(MirPlace(self_field)),
-                                      MirOperand::copy(MirPlace(other_field)))));
+
+                // フィールド型がstructの場合はGT比較も関数呼び出し（引数入れ替え）
+                if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                    std::string field_op_lt = field.type->name + "__op_lt";
+
+                    BlockId gt_call_success = mir_func->add_block();
+
+                    // GT = other < self なので引数を逆にする
+                    std::vector<MirOperandPtr> gt_args;
+                    gt_args.push_back(MirOperand::copy(MirPlace(other_field)));
+                    gt_args.push_back(MirOperand::copy(MirPlace(self_field)));
+
+                    auto gt_call_term = std::make_unique<MirTerminator>();
+                    gt_call_term->kind = MirTerminator::Call;
+                    gt_call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref(field_op_lt),
+                                                std::move(gt_args),
+                                                MirPlace(gt_result),
+                                                gt_call_success,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    gt_check_block->terminator = std::move(gt_call_term);
+                    gt_check_block = mir_func->get_block(gt_call_success);
+                } else {
+                    // プリミティブ型は直接比較
+                    gt_check_block->statements.push_back(MirStatement::assign(
+                        MirPlace(gt_result),
+                        MirRvalue::binary(MirBinaryOp::Gt, MirOperand::copy(MirPlace(self_field)),
+                                          MirOperand::copy(MirPlace(other_field)))));
+                }
 
                 BlockId next_block = (i + 1 < st.fields.size()) ? field_blocks[i + 1] : false_block;
                 gt_check_block->terminator = MirTerminator::switch_int(
@@ -1208,10 +1340,55 @@ class MirLowering : public MirLoweringBase {
                 // self.field < other.field をチェック
                 LocalId lt_result =
                     mir_func->add_local("_lt" + std::to_string(i), hir::make_bool(), true, false);
-                field_block->statements.push_back(MirStatement::assign(
-                    MirPlace(lt_result),
-                    MirRvalue::binary(MirBinaryOp::Lt, MirOperand::copy(MirPlace(self_field)),
-                                      MirOperand::copy(MirPlace(other_field)))));
+
+                // フィールド型がstructの場合は__op_lt関数を呼び出す（再帰的比較）
+                if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                    std::string field_op_lt = field.type->name + "__op_lt";
+
+                    // ネスト構造体用の比較関数を先に生成（必要であれば）
+                    std::string nested_func_name = field_op_lt;
+                    bool exists = false;
+                    for (const auto& func : mir_program.functions) {
+                        if (func && func->name == nested_func_name) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        // ネスト構造体のHirStructを取得して再帰生成
+                        for (const auto& mir_st : mir_program.structs) {
+                            if (mir_st && mir_st->name == field.type->name) {
+                                generate_builtin_lt_operator_for_monomorphized(*mir_st);
+                                break;
+                            }
+                        }
+                    }
+
+                    BlockId lt_call_success = mir_func->add_block();
+
+                    std::vector<MirOperandPtr> lt_args;
+                    lt_args.push_back(MirOperand::copy(MirPlace(self_field)));
+                    lt_args.push_back(MirOperand::copy(MirPlace(other_field)));
+
+                    auto lt_call_term = std::make_unique<MirTerminator>();
+                    lt_call_term->kind = MirTerminator::Call;
+                    lt_call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref(field_op_lt),
+                                                std::move(lt_args),
+                                                MirPlace(lt_result),
+                                                lt_call_success,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    field_block->terminator = std::move(lt_call_term);
+                    field_block = mir_func->get_block(lt_call_success);
+                } else {
+                    field_block->statements.push_back(MirStatement::assign(
+                        MirPlace(lt_result),
+                        MirRvalue::binary(MirBinaryOp::Lt, MirOperand::copy(MirPlace(self_field)),
+                                          MirOperand::copy(MirPlace(other_field)))));
+                }
 
                 // lt_result が true なら true を返す
                 BlockId lt_true_block = mir_func->add_block();
@@ -1238,10 +1415,37 @@ class MirLowering : public MirLoweringBase {
                 // self.field > other.field をチェック
                 LocalId gt_result =
                     mir_func->add_local("_gt" + std::to_string(i), hir::make_bool(), true, false);
-                gt_check_block->statements.push_back(MirStatement::assign(
-                    MirPlace(gt_result),
-                    MirRvalue::binary(MirBinaryOp::Gt, MirOperand::copy(MirPlace(self_field)),
-                                      MirOperand::copy(MirPlace(other_field)))));
+
+                // フィールド型がstructの場合はGT比較も関数呼び出し（引数入れ替え）
+                if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                    std::string field_op_lt = field.type->name + "__op_lt";
+
+                    BlockId gt_call_success = mir_func->add_block();
+
+                    // GT = other < self なので引数を逆にする
+                    std::vector<MirOperandPtr> gt_args;
+                    gt_args.push_back(MirOperand::copy(MirPlace(other_field)));
+                    gt_args.push_back(MirOperand::copy(MirPlace(self_field)));
+
+                    auto gt_call_term = std::make_unique<MirTerminator>();
+                    gt_call_term->kind = MirTerminator::Call;
+                    gt_call_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref(field_op_lt),
+                                                std::move(gt_args),
+                                                MirPlace(gt_result),
+                                                gt_call_success,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    gt_check_block->terminator = std::move(gt_call_term);
+                    gt_check_block = mir_func->get_block(gt_call_success);
+                } else {
+                    gt_check_block->statements.push_back(MirStatement::assign(
+                        MirPlace(gt_result),
+                        MirRvalue::binary(MirBinaryOp::Gt, MirOperand::copy(MirPlace(self_field)),
+                                          MirOperand::copy(MirPlace(other_field)))));
+                }
 
                 // gt_result が true なら false を返す、そうでなければ次のフィールドへ
                 BlockId next_block = (i + 1 < st.fields.size()) ? field_blocks[i + 1] : false_block;
