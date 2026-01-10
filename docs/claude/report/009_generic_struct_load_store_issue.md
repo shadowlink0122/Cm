@@ -1,106 +1,86 @@
 # ジェネリクス構造体のLoad/Store問題分析と改善提案
 
 作成日: 2026-01-10
+更新日: 2026-01-10（queue<T>での構造体問題を追加）
 対象バージョン: v0.11.0
 
 ## エグゼクティブサマリー
 
-Cm言語でジェネリクスTに構造体を使用した際のload/store命令生成について調査しました。調査の結果、**基本的なジェネリクス構造体は正しく動作**していますが、**Aggregate Rvalue処理が未実装**という潜在的な問題を発見しました。また、大きな構造体の処理において最適化の余地があることも判明しました。
+Cm言語でジェネリクスTに構造体を使用した際の問題について調査しました。当初は基本的な機能は動作していると考えられましたが、**queue<T>などのコンテナに構造体を入れた場合、`sizeof(T)`が正しく計算されずメモリオーバーフローが発生する致命的な問題**を発見しました。
 
-## 1. 問題の詳細
+## 🔴 致命的問題：queue<T>での構造体サポート
 
-### 1.1 報告された症状
+### 問題の詳細
+
+**queue<T>、stack<T>、priority_queue<T>などのジェネリックコンテナに構造体を入れると動作しない**
 
 ```cm
-// 期待される動作
-struct Point {
-    int x;
-    int y;
-}
+struct Item {
+    int value;      // 4バイト
+    int priority;   // 4バイト
+}  // 実際のサイズ = 8バイト
 
-<T> T identity(T value) {
-    return value;  // Tが構造体の場合、load/storeが生成されない？
+struct Node<T> {
+    T data;         // 8バイト（Itemの場合）
+    Node<T>* next;  // 8バイト
+}  // 実際のサイズ = 16バイト
+
+<T> Node<T>* new_node(T data) {
+    void* mem = malloc(sizeof(Node<T>));  // ❌ 8バイトしか確保されない！
+    Node<T>* node = mem as Node<T>*;
+    node->data = data;  // ❌ メモリオーバーフロー！
+    node->next = null;  // ❌ 範囲外メモリへの書き込み！
+    return node;
 }
 
 int main() {
-    Point p = {x: 10, y: 20};
-    Point p2 = identity(p);  // 問題が発生？
-    return p2.x + p2.y;
+    Item item = {value: 42, priority: 1};
+    Node<Item>* node = new_node(item);  // クラッシュまたは未定義動作
 }
 ```
 
-### 1.2 調査結果
+### 根本原因
 
-**現状：基本機能は動作している**
-
-テストスイートを確認した結果、以下のテストが全てPASSしています：
-- `tests/test_programs/generics/basic_generics.cm`
-- `tests/test_programs/generics/option_type.cm`
-- `tests/test_programs/generics/impl_generics.cm`
-- `tests/test_programs/generics/struct_with_generic_method.cm`
-
-## 2. アーキテクチャ分析
-
-### 2.1 現在の構造体処理フロー
-
-```
-Cmソースコード
-    ↓
-[AST] 構造体リテラル: {x: 10, y: 20}
-    ↓
-[HIR] StructLiteral
-    ↓
-[MIR Lowering] フィールド単位の代入に展開
-    _temp = alloca Point
-    _temp.x = 10
-    _temp.y = 20
-    ↓
-[LLVM IR] 個別のstore命令
-    %1 = alloca %Point
-    %2 = getelementptr %Point, %1, 0, 0
-    store i32 10, %2
-    %3 = getelementptr %Point, %1, 0, 1
-    store i32 20, %3
-```
-
-### 2.2 モノモーフィゼーション（型の具体化）
-
-```cm
-// ジェネリック定義
-<T> T identity(T value) { return value; }
-
-// 使用時
-Point p2 = identity(p);
-
-// モノモーフィゼーション後
-Point identity__Point(Point value) { return value; }
-```
-
-**実装状態：✅ 正しく動作**
-- 型引数の解決と置換が正確
-- 構造体型の情報が適切に伝播
-- 名前マングリング：`identity<Point>` → `identity__Point`
-
-### 2.3 ABI対応
+**ファイル：** `src/hir/lowering/impl.cpp:486-599`
 
 ```cpp
-// src/codegen/llvm/core/mir_to_llvm.cpp:170-190
-bool isSmallStruct(llvm::Type* type) {
-    auto* structType = llvm::dyn_cast<llvm::StructType>(type);
-    if (!structType) return false;
+int64_t HirLowering::calculate_type_size(const TypePtr& type) {
+    switch (type->kind) {
+        case ast::TypeKind::Struct: {
+            auto it = struct_defs_.find(type->name);  // ❌ "Node<T>" を検索
+            // struct_defs_には "Node" として登録されているため見つからない
+            if (it != struct_defs_.end()) {
+                // ...
+            }
+            return 8;  // ❌ デフォルトで8バイトを返す
+        }
 
-    uint64_t size = dataLayout.getTypeAllocSize(structType);
-    return size <= 16;  // System V ABI: 16バイト以下は値渡し
+        // ❌ TypeKind::Generic のケースが存在しない！
+        default:
+            return 8;  // ジェネリック型は常に8バイトになる
+    }
 }
 ```
 
-**実装状態：✅ 適切に実装**
-- 小さい構造体：レジスタ渡し（値）
-- 大きい構造体：ポインタ渡し
+**問題のメカニズム：**
 
-## 3. 発見された問題点
+1. **HIR段階**：`sizeof(Node<T>)` が呼ばれる
+2. **型の種類**：`type->kind = TypeKind::Generic`（まだ具体化されていない）
+3. **構造体検索**：`struct_defs_.find("Node<T>")` → 見つからない（"Node"として登録）
+4. **結果**：デフォルトの8バイトを返す
+5. **実行時**：`malloc(8)` で8バイトしか確保されない
+6. **メモリ破壊**：16バイト必要な構造体に8バイトしか割り当てられない
 
-### 3.1 🔴 Aggregate Rvalue処理の未実装
+### 影響範囲
+
+すべてのジェネリックコンテナ実装が影響を受けます：
+- `examples/05_data_structures/priority_queue_generic.cm`
+- `tests/test_programs/generics/test_pqueue_simple.cm`
+- ユーザー定義のqueue、stack、list等
+
+## 🟡 既知の問題：Aggregate Rvalue処理
+
+### 問題の詳細
 
 **ファイル：** `src/codegen/llvm/core/mir_to_llvm.cpp:1328`
 
@@ -122,94 +102,116 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
 }
 ```
 
-**影響：**
-- 現在：構造体リテラルがフィールド単位代入で生成されるため問題なし
-- 将来：MIR最適化でAggregate Rvalueが生成されると失敗する可能性
+現在は構造体リテラルがフィールド単位代入で生成されるため問題になっていませんが、将来のMIR最適化で問題となる可能性があります。
 
-### 3.2 🟡 大きな構造体の非効率な処理
+## 修正提案
 
-**現在の実装：**
-```cpp
-// 全ての構造体がフィールド単位でコピーされる
-for (int i = 0; i < struct_fields; i++) {
-    // 個別のload/store
-}
-```
+### 優先度1：sizeof(T)計算の修正（致命的）
 
-**問題：**
-- 64バイト以上の構造体で非効率
-- キャッシュミスの増加
-- 命令数の増加
-
-### 3.3 🟡 特定のケースでの問題の可能性
-
-報告された「load/storeされない」問題は、以下のケースで発生している可能性があります：
-
-1. **循環参照を持つジェネリック構造体**
-```cm
-struct Node<T> {
-    T value;
-    Node<T>* next;  // 自己参照
-}
-```
-
-2. **ネストしたジェネリック構造体**
-```cm
-struct Wrapper<T> {
-    Option<T> value;
-}
-
-Wrapper<Wrapper<int>> nested;  // 深いネスト
-```
-
-3. **可変長配列を含む構造体**
-```cm
-struct Buffer<T> {
-    T[] data;  // スライス型
-}
-```
-
-## 4. 根本原因の分析
-
-### 4.1 MIR生成レベル
+**修正ファイル：** `src/hir/lowering/impl.cpp`
 
 ```cpp
-// src/mir/lowering/expr.cpp:823-850
-// 構造体リテラルの処理
-for (const auto& field : struct_literal.fields) {
-    // フィールド単位の代入として生成
-    auto field_place = create_field_place(temp_var, field.name);
-    auto assignment = create_assignment(field_place, field.value);
-    add_statement(assignment);
+int64_t HirLowering::calculate_type_size(const TypePtr& type) {
+    switch (type->kind) {
+        // 新規追加：ジェネリック型のケース
+        case ast::TypeKind::Generic: {
+            // Node<Item> のような具体化されたジェネリック型
+            if (!type->type_args.empty()) {
+                std::string base_name = extract_base_name(type->name);
+                auto it = struct_defs_.find(base_name);
+                if (it != struct_defs_.end()) {
+                    return calculate_generic_struct_size(
+                        it->second, type->type_args);
+                }
+            }
+            // T単体のようなジェネリック型パラメータ
+            // モノモーフィゼーション前なので実際のサイズは不明
+            // 最大サイズを仮定するか、エラーを報告すべき
+            return 8;  // 暫定的にポインタサイズ
+        }
+
+        case ast::TypeKind::Struct: {
+            // "Node<Item>" 形式のジェネリック構造体サポート
+            std::string lookup_name = type->name;
+            size_t bracket_pos = lookup_name.find('<');
+
+            if (bracket_pos != std::string::npos) {
+                // ジェネリック構造体
+                std::string base_name = lookup_name.substr(0, bracket_pos);
+                auto it = struct_defs_.find(base_name);
+
+                if (it != struct_defs_.end() && !type->type_args.empty()) {
+                    return calculate_generic_struct_size(
+                        it->second, type->type_args);
+                }
+            }
+
+            // 通常の構造体
+            auto it = struct_defs_.find(lookup_name);
+            if (it != struct_defs_.end()) {
+                auto [size, align] = calculate_struct_layout(it->second->fields);
+                return size;
+            }
+
+            // 構造体が見つからない場合はエラー
+            throw std::runtime_error(
+                "Unknown struct type for sizeof: " + lookup_name);
+        }
+
+        // ... 他のケース
+    }
 }
-// Aggregate Rvalueとしては生成されない
+
+// 新規ヘルパー関数
+int64_t HirLowering::calculate_generic_struct_size(
+    const ast::StructDef* struct_def,
+    const std::vector<TypePtr>& type_args) {
+
+    // 型パラメータを型引数で置換
+    std::unordered_map<std::string, TypePtr> type_map;
+    for (size_t i = 0; i < struct_def->generic_params.size() &&
+         i < type_args.size(); ++i) {
+        type_map[struct_def->generic_params[i].name] = type_args[i];
+    }
+
+    // 各フィールドのサイズを計算
+    int64_t total_size = 0;
+    int64_t max_align = 1;
+
+    for (const auto& field : struct_def->fields) {
+        TypePtr field_type = substitute_type(field.type, type_map);
+        int64_t field_size = calculate_type_size(field_type);
+        int64_t field_align = calculate_type_align(field_type);
+
+        // アラインメント調整
+        total_size = align_to(total_size, field_align);
+        total_size += field_size;
+
+        max_align = std::max(max_align, field_align);
+    }
+
+    // 構造体全体のアラインメント
+    total_size = align_to(total_size, max_align);
+
+    return total_size;
+}
 ```
 
-### 4.2 LLVM IR生成レベル
-
-```cpp
-// Aggregate Rvalueが来た場合の処理が未実装
-// → MIR最適化で構造体が最適化されると問題発生
-```
-
-## 5. 改善提案
-
-### 5.1 優先度1：Aggregate Rvalue処理の実装
+### 優先度2：Aggregate Rvalue処理の実装
 
 **修正ファイル：** `src/codegen/llvm/core/mir_to_llvm.cpp`
 
 ```cpp
-// convertRvalue()に追加
 case mir::MirRvalue::Aggregate: {
     auto& aggData = std::get<mir::MirRvalue::AggregateData>(rvalue.data);
 
     if (aggData.kind.type == mir::AggregateKind::Struct) {
         // 構造体型を取得
-        std::string structName = mangleStructName(aggData.kind.name, aggData.kind.type_args);
+        std::string structName = mangleStructName(
+            aggData.kind.name, aggData.kind.type_args);
         auto* structType = structTypes[structName];
 
         if (!structType) {
-            // エラー処理
             throw std::runtime_error("Unknown struct type: " + structName);
         }
 
@@ -227,161 +229,143 @@ case mir::MirRvalue::Aggregate: {
         if (isSmallStruct(structType)) {
             return builder->CreateLoad(structType, alloca, "agg_load");
         } else {
-            // 大きい構造体はポインタのまま
             return alloca;
         }
     }
 
-    // 他のAggregate型（配列等）の処理
     return nullptr;
 }
 ```
 
-### 5.2 優先度2：大きな構造体のmemcpy最適化
+### 優先度3：大きな構造体のmemcpy最適化
 
 ```cpp
-// src/codegen/llvm/core/mir_to_llvm.cpp に追加
 void copyStruct(llvm::Value* dst, llvm::Value* src, llvm::Type* structType) {
     uint64_t size = dataLayout.getTypeAllocSize(structType);
 
     if (size >= 64) {  // 64バイト以上
         // memcpyを使用
-        llvm::Value* dstPtr = builder->CreateBitCast(dst,
-            llvm::Type::getInt8PtrTy(context));
-        llvm::Value* srcPtr = builder->CreateBitCast(src,
-            llvm::Type::getInt8PtrTy(context));
-
-        builder->CreateMemCpy(dstPtr, llvm::MaybeAlign(8),
-                             srcPtr, llvm::MaybeAlign(8),
+        builder->CreateMemCpy(dst, llvm::MaybeAlign(8),
+                             src, llvm::MaybeAlign(8),
                              size);
     } else {
-        // 現在のフィールド単位コピーを使用
+        // フィールド単位のコピー
         copyFieldByField(dst, src, structType);
     }
 }
 ```
 
-### 5.3 優先度3：ジェネリクス構造体の特殊ケース処理
+## テストケース
 
-```cpp
-// モノモーフィゼーション時の特殊処理
-if (isRecursiveStruct(structType)) {
-    // 循環参照の処理
-    handleRecursiveStruct(structType);
-}
-
-if (hasVariableLengthArray(structType)) {
-    // 可変長配列を含む構造体の処理
-    handleDynamicStruct(structType);
-}
-```
-
-## 6. テストケースの追加
-
-### 6.1 大きな構造体のテスト
+### 構造体を使用するqueue<T>のテスト
 
 ```cm
-// tests/test_programs/generics/large_struct_generic.cm
-struct LargeData {
-    long[32] data;  // 256バイト
+// tests/test_programs/generics/queue_struct_test.cm
+struct Person {
+    string name;
+    int age;
+    double height;
 }
 
-<T> T pass_through(T value) {
-    T temp = value;  // コピー
-    return temp;
+struct Queue<T> {
+    struct Node<T> {
+        T data;
+        Node<T>* next;
+    }
+
+    Node<T>* front;
+    Node<T>* rear;
+    int size;
+}
+
+impl<T> Queue<T> {
+    self() {
+        self.front = null as Node<T>*;
+        self.rear = null as Node<T>*;
+        self.size = 0;
+    }
+
+    void enqueue(T item) {
+        void* mem = malloc(sizeof(Node<T>));  // ここが問題
+        Node<T>* new_node = mem as Node<T>*;
+        new_node->data = item;
+        new_node->next = null as Node<T>*;
+
+        if (self.rear == null as Node<T>*) {
+            self.front = new_node;
+            self.rear = new_node;
+        } else {
+            self.rear->next = new_node;
+            self.rear = new_node;
+        }
+        self.size = self.size + 1;
+    }
+
+    T dequeue() {
+        assert(self.size > 0, "Queue is empty");
+
+        T data = self.front->data;
+        Node<T>* temp = self.front;
+        self.front = self.front->next;
+
+        if (self.front == null as Node<T>*) {
+            self.rear = null as Node<T>*;
+        }
+
+        free(temp as void*);
+        self.size = self.size - 1;
+        return data;
+    }
 }
 
 int main() {
-    LargeData ld;
-    for (int i = 0; i < 32; i++) {
-        ld.data[i] = i as long;
-    }
+    Queue<Person> queue;
 
-    LargeData ld2 = pass_through(ld);
+    Person p1 = {name: "Alice", age: 30, height: 1.65};
+    Person p2 = {name: "Bob", age: 25, height: 1.80};
 
-    // 検証
-    for (int i = 0; i < 32; i++) {
-        assert(ld2.data[i] == i as long);
-    }
+    queue.enqueue(p1);
+    queue.enqueue(p2);
+
+    Person p = queue.dequeue();
+    assert(p.name == "Alice");
+    assert(p.age == 30);
+
+    p = queue.dequeue();
+    assert(p.name == "Bob");
+    assert(p.age == 25);
 
     return 0;
 }
 ```
 
-### 6.2 ネストしたジェネリクスのテスト
+## 実装優先順位
 
-```cm
-// tests/test_programs/generics/nested_generic_struct.cm
-struct Box<T> {
-    T value;
-}
+1. **即座（1-2日）**: sizeof(T)計算の修正 ← **最優先、メモリ破壊を防ぐ**
+2. **短期（3-5日）**: モノモーフィゼーション時のsizeof再計算
+3. **中期（1週間）**: Aggregate Rvalue処理の実装
+4. **長期（2週間）**: 大きな構造体の最適化
 
-struct Pair<A, B> {
-    A first;
-    B second;
-}
+## 期待される効果
 
-<T, U> Pair<T, U> make_pair(T a, U b) {
-    return Pair<T, U>{first: a, second: b};
-}
+### sizeof修正後
+- queue<構造体>が正しく動作
+- メモリオーバーフローの防止
+- セグメンテーションフォルトの解消
 
-int main() {
-    Box<int> box1 = {value: 42};
-    Box<double> box2 = {value: 3.14};
+### 全修正適用後
+- C++のSTLと同等の型安全性
+- 任意の型でのコンテナ使用が可能
+- パフォーマンスの向上（memcpy最適化）
 
-    Pair<Box<int>, Box<double>> nested = make_pair(box1, box2);
+## まとめ
 
-    assert(nested.first.value == 42);
-    assert(nested.second.value == 3.14);
+**現在の最大の問題は、ジェネリックコンテナで`sizeof(T)`が構造体の実際のサイズを返さないことです。** これによりメモリ割り当てが不足し、メモリ破壊やクラッシュが発生します。この問題は即座に修正が必要です。
 
-    return 0;
-}
-```
-
-## 7. 既存リファクタリング案との関係
-
-既存のリファクタリング案（001-007）を確認した結果：
-
-- **001_stl_implementation_analysis.md**: selfメソッド変更バグに言及（別問題）
-- **002_refactoring_proposal.md**: MIR最適化に言及（関連あり）
-- **003_implementation_roadmap.md**: STLコンテナ実装（間接的に関連）
-- **004_iterator_design_proposal.md**: イテレータ設計（直接関係なし）
-- **005_builtin_iterator_integration.md**: ビルトイン統合（直接関係なし）
-- **006_performance_bottleneck_analysis.md**: 最適化問題（関連あり）
-- **007_immediate_optimization_fixes.md**: 即座修正可能（直接関係なし）
-
-**結論：** ジェネリクス構造体のload/store問題は**新規の発見**であり、既存のリファクタリング案には含まれていません。
-
-## 8. 修正による期待効果
-
-### 短期効果（Aggregate Rvalue実装後）
-- MIR最適化の安全な有効化
-- 将来的な最適化への対応
-- エッジケースでのクラッシュ防止
-
-### 中期効果（memcpy最適化後）
-- 大きな構造体の処理: **2-3倍高速化**
-- メモリ帯域の効率化: **30-50%改善**
-- キャッシュ効率: **20-40%改善**
-
-## 9. 実装優先順位
-
-1. **即座（1-2日）**: Aggregate Rvalue処理の実装
-2. **短期（1週間）**: 大きな構造体のmemcpy最適化
-3. **中期（2週間）**: テストケースの充実
-4. **長期（1ヶ月）**: 特殊ケースの最適化
-
-## 10. まとめ
-
-ジェネリクス構造体の基本的な処理は**正しく動作**していますが、以下の改善が必要です：
-
-1. **Aggregate Rvalue処理の実装**（将来の最適化に必須）
-2. **大きな構造体の最適化**（パフォーマンス向上）
-3. **エッジケースの処理**（堅牢性向上）
-
-これらの改善により、Cm言語はC++のテンプレートと同等の表現力を持ちながら、より効率的なコード生成が可能になります。
+Aggregate Rvalue処理や大きな構造体の最適化は、将来的な改善事項として重要ですが、まずはsizeof問題を解決することが最優先です。
 
 ---
 
 **調査完了:** 2026-01-10
-**次のステップ:** Aggregate Rvalue処理の実装とテストケースの追加
+**更新内容:** queue<T>での構造体問題を追加
+**次のステップ:** sizeof(T)計算の修正実装

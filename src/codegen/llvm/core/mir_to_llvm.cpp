@@ -1914,14 +1914,21 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                             }
                         }
                         auto typeKind = elemType->kind;
-                        // プリミティブ型の場合はロード
-                        if (typeKind == hir::TypeKind::Int || typeKind == hir::TypeKind::UInt ||
+                        // プリミティブ型または構造体型の場合はロード
+                        bool isPrimitive =
+                            typeKind == hir::TypeKind::Int || typeKind == hir::TypeKind::UInt ||
                             typeKind == hir::TypeKind::Long || typeKind == hir::TypeKind::ULong ||
                             typeKind == hir::TypeKind::Short || typeKind == hir::TypeKind::UShort ||
                             typeKind == hir::TypeKind::Float || typeKind == hir::TypeKind::Double ||
-                            typeKind == hir::TypeKind::Bool || typeKind == hir::TypeKind::Char) {
-                            auto primType = convertType(elemType);
-                            return builder->CreateLoad(primType, val, "borrowed_prim_load");
+                            typeKind == hir::TypeKind::Bool || typeKind == hir::TypeKind::Char;
+                        // 構造体型/ジェネリック型もロードが必要
+                        bool isStruct =
+                            typeKind == hir::TypeKind::Struct || typeKind == hir::TypeKind::Generic;
+                        if (isPrimitive || isStruct) {
+                            auto loadType = convertType(elemType);
+                            return builder->CreateLoad(
+                                loadType, val,
+                                isPrimitive ? "borrowed_prim_load" : "borrowed_struct_load");
                         }
                     }
                 }
