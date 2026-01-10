@@ -8,6 +8,24 @@ namespace cm::mir {
 
 // let文のlowering
 void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
+    // move初期化の場合、新しいローカルを作成せずエイリアスとして登録（真のゼロコストmove）
+    // is_moveフラグはHIR loweringでMoveExprから初期化された場合に立てられる
+    if (let.is_move && let.init && !let.ctor_call) {
+        if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&let.init->kind)) {
+            if (*var_ref && !(*var_ref)->is_function_ref && !(*var_ref)->is_closure) {
+                auto src_local = ctx.resolve_variable((*var_ref)->name);
+                if (src_local) {
+                    // 元の変数を新しい名前で再登録（エイリアス）
+                    ctx.register_variable(let.name, *src_local);
+                    debug_msg("mir_move_alias", "[MIR] Move alias: '" + let.name + "' -> local " +
+                                                    std::to_string(*src_local) + " (same as '" +
+                                                    (*var_ref)->name + "')");
+                    return;
+                }
+            }
+        }
+    }
+
     // 新しいローカル変数を作成
     // is_const = true なら変更不可、false なら変更可能
     // is_static = true なら関数呼び出し間で値が保持される

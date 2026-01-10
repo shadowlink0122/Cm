@@ -1,3 +1,5 @@
+[English](llvm_opaque_pointer_issue.en.html)
+
 # LLVM Opaque Pointer Compatibility Issue
 
 ## 問題の概要

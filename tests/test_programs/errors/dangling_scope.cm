@@ -1,0 +1,9 @@
+// スコープ外への参照漏れ
+int main() {
+    int* p;
+    {
+        int x = 42;
+        p = &x;
+    }
+    return 0;
+}

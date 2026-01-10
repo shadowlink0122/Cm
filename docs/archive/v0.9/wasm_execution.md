@@ -1,3 +1,5 @@
+[English](wasm_execution.en.html)
+
 # WebAssemblyファイルの実行方法
 
 このドキュメントでは、Cm言語でコンパイルしたWebAssembly（WASM）ファイルの実行方法について説明します。

@@ -1,3 +1,5 @@
+[English](implementation_details.en.html)
+
 # Cm言語 最適化実装詳細
 
 ## 概要
@@ -304,6 +306,6 @@ if (debug_mode) {
 
 ## 関連ドキュメント
 
-- [最適化ロードマップ](./mir_optimization_roadmap.md)
-- [最適化パスAPI](./pass_api.md)
-- [インポート無限ループ問題](../issues/optimization_import_hang.md)
+- [最適化ロードマップ](./mir_optimization_roadmap.html)
+- [最適化パスAPI](./pass_api.html)
+- [インポート無限ループ問題](../issues/optimization_import_hang.html)

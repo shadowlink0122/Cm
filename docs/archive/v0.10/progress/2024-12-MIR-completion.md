@@ -1,7 +1,9 @@
+[English](2024-12-MIR-completion.en.html)
+
 # Cm言語 MIR実装完了報告
 
 ## 実施日
-2024年12月
+2025年12月
 
 ## 完了タスク
 

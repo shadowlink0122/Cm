@@ -1,3 +1,5 @@
+[English](module_system_v2.en.html)
+
 # Cm言語 モジュールシステム v2 設計仕様
 
 ## 概要

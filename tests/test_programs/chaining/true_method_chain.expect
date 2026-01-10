@@ -1,0 +1,5 @@
+Test 1 (single chain): x = 6
+Test 2 (double chain): x = 16
+Test 3 (triple chain): (7, 8)
+Test 4 (y field): y = 202
+All method chaining tests passed!

@@ -291,6 +291,15 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 }
                 continue;
             }
+            // MirRvalue::Ref（アドレス取得 &var）の場合、ターゲット変数をOverdefinedにする
+            // ポinter経由で変更される可能性があるため、定数として扱えない
+            if (assign_data.rvalue && assign_data.rvalue->kind == MirRvalue::Ref) {
+                const auto& ref_data = std::get<MirRvalue::RefData>(assign_data.rvalue->data);
+                if (ref_data.place.local < state.size()) {
+                    state[ref_data.place.local] = {LatticeKind::Overdefined, {}};
+                }
+            }
+
             LatticeValue value = eval_rvalue(func, *assign_data.rvalue, state);
             if (value.kind == LatticeKind::Constant) {
                 if (!can_bind_constant(func, assign_data.place.local, value.constant)) {

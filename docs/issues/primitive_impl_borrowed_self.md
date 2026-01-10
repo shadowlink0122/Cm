@@ -1,3 +1,5 @@
+[English](primitive_impl_borrowed_self.en.html)
+
 # Primitive Type Impl - Borrowed Self Issue
 
 ## 概要

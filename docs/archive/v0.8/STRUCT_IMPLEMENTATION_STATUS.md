@@ -1,3 +1,5 @@
+[English](STRUCT_IMPLEMENTATION_STATUS.en.html)
+
 # Cm言語 構造体実装調査報告書
 
 ## 実行日
@@ -669,4 +671,3 @@ LLVMバックエンドの完成が最も重要
 - `/Users/shadowlink/Documents/git/Cm/docs/design/CANONICAL_SPEC.md` - 言語仕様
 - `/Users/shadowlink/Documents/git/Cm/docs/FEATURE_PRIORITY.md` - 優先度リスト
 - `/Users/shadowlink/Documents/git/Cm/examples/impl/01_constructor_example.cm` - 使用例
-

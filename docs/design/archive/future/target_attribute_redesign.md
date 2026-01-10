@@ -1,3 +1,5 @@
+[English](target_attribute_redesign.en.html)
+
 # ターゲット属性の再設計提案
 
 ## 問題点

@@ -1,3 +1,5 @@
+[English](architecture_comparison.en.html)
+
 # アーキテクチャ比較
 
 ## 現在のアーキテクチャ（問題あり）

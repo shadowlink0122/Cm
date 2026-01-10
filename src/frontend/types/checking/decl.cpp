@@ -31,7 +31,7 @@ bool TypeChecker::check(ast::Program& program) {
 
 bool TypeChecker::has_errors() const {
     for (const auto& d : diagnostics_) {
-        if (d.kind == DiagKind::Error)
+        if (d.severity == DiagKind::Error)
             return true;
     }
     return false;
@@ -485,11 +485,19 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
             resolved_type = param.type;
         }
         scopes_.current().define(param.name, resolved_type, param.qualifiers.is_const);
+        // パラメータは初期化されているとみなす
+        mark_variable_initialized(param.name);
     }
 
     for (auto& stmt : func.body) {
         check_statement(*stmt);
     }
+
+    // 関数終了時にconst推奨警告をチェック
+    check_const_recommendations();
+
+    // 初期化追跡をクリア（次の関数用）
+    initialized_variables_.clear();
 
     scopes_.pop();
     current_return_type_ = nullptr;

@@ -54,7 +54,7 @@ CATEGORIES=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
-TIMEOUT=5
+TIMEOUT=10
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""

@@ -60,3 +60,9 @@ link.ld
 *.ll
 *.bc
 *.wasm
+
+# Jekyll
+.jekyll-cache/
+_site/
+.jekyll-metadata
+vendor/bundle/

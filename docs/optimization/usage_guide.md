@@ -1,3 +1,5 @@
+[English](usage_guide.en.html)
+
 # Cm言語 最適化使用ガイド
 
 ## 基本理念

@@ -1,0 +1,7 @@
+// エラーケース: const経由のポインタ変更禁止（Phase 2）
+int main() {
+    int x = 42;
+    const int* p = &x;
+    *p = 100;  // エラー: const経由の変更禁止
+    return 0;
+}

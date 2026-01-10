@@ -1,0 +1,8 @@
+// 借用安全性テスト: constポインタから非constポインタへの代入禁止
+// 期待: コンパイルエラー
+int main() {
+    int x = 42;
+    const int* p = &x;
+    int* a = p;  // エラー: const外し禁止
+    return 0;
+}

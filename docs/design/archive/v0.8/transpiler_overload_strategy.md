@@ -1,3 +1,5 @@
+[English](transpiler_overload_strategy.en.html)
+
 # トランスパイラ オーバーロード実装戦略
 
 ## 概要
@@ -123,12 +125,12 @@ impl AddScalar for Complex {
 ```rust
 // Rust マクロで型に基づくディスパッチ
 macro_rules! add {
-    ($a:expr, $b:expr) => {{
+    ($a:expr, $b:expr) => {% raw %}{{
         // 型推論に基づく選択
         let a = $a;
         let b = $b;
         _add_dispatch(a, b)
-    }};
+    }}{% endraw %};
 }
 
 #[inline]

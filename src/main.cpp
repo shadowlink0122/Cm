@@ -386,7 +386,7 @@ int main(int argc, char* argv[]) {
             // 診断情報を表示
             for (const auto& diag : parser.diagnostics()) {
                 // エラーメッセージをフォーマットして表示
-                std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
                 std::cerr << loc_mgr.format_error_location(diag.span,
                                                            error_type + ": " + diag.message);
             }
@@ -470,7 +470,7 @@ int main(int argc, char* argv[]) {
                     std::cerr << loc_mgr.format_error_with_source_map(
                         diag.span, diag.message, preprocess_result.source_map, file_contents);
                 } else {
-                    std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                    std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
                     std::cerr << loc_mgr.format_error_location(diag.span,
                                                                error_type + ": " + diag.message);
                 }

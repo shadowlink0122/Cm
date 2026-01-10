@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # JavaScript Codegen for Cm Language
 
 ## 概要
@@ -316,5 +318,5 @@ src/codegen/
 
 ## 関連ドキュメント
 
-- [ROADMAP.md](../../ROADMAP.md) - 全体のロードマップ
-- [LLVM Backend](../llvm/README.md) - LLVM バックエンドの実装
+- [ROADMAP.md](../../ROADMAP.html) - 全体のロードマップ
+- [LLVM Backend](../llvm/README.html) - LLVM バックエンドの実装

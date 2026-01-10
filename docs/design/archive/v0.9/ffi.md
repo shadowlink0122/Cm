@@ -1,3 +1,5 @@
+[English](ffi.en.html)
+
 # FFI (Foreign Function Interface) 設計
 
 ## 概要

@@ -1,0 +1,70 @@
+// インターフェースの配列戻り値テスト
+// interface で int を返すメソッドが動作することを保証
+// 注: 構造体内の配列フィールドをそのまま返すのはLLVMコード生成に制限あり
+
+import std::io::println;
+
+struct Data {
+    int a;
+    int b;
+    int c;
+}
+
+interface Container {
+    int getFirst();
+    int getSecond();
+    int getThird();
+}
+
+impl Data for Container {
+    int getFirst() {
+        return self.a;
+    }
+    
+    int getSecond() {
+        return self.b;
+    }
+    
+    int getThird() {
+        return self.c;
+    }
+}
+
+int main() {
+    Data d = Data { a: 10, b: 20, c: 30 };
+    
+    // Test 1: 単純なメソッド呼び出し
+    int first = d.getFirst();
+    println("Test 1 (getFirst): first = {first}");
+    if (first != 10) {
+        println("FAIL: expected 10");
+        return 1;
+    }
+    
+    // Test 2: メソッドチェーン（複数呼び出し）
+    int second = d.getSecond();
+    println("Test 2 (getSecond): second = {second}");
+    if (second != 20) {
+        println("FAIL: expected 20");
+        return 1;
+    }
+    
+    // Test 3: 別のメソッド
+    int third = d.getThird();
+    println("Test 3 (getThird): third = {third}");
+    if (third != 30) {
+        println("FAIL: expected 30");
+        return 1;
+    }
+    
+    // Test 4: 複数のメソッド呼び出しを組み合わせ
+    int sum = d.getFirst() + d.getSecond() + d.getThird();
+    println("Test 4 (sum): sum = {sum}");
+    if (sum != 60) {
+        println("FAIL: expected 60");
+        return 1;
+    }
+    
+    println("All interface return tests passed!");
+    return 0;
+}

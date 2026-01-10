@@ -1,10 +1,12 @@
+[English](architecture.en.html)
+
 # Cm コンパイラアーキテクチャ設計
 
 ## 概要
 
 Cm言語処理系は、LLVMバックエンドによるネイティブコンパイラとして実装されています。
 
-> **2024年12月より、LLVMバックエンドを唯一のコード生成方式として採用しています。**
+> **2025年12月より、LLVMバックエンドを唯一のコード生成方式として採用しています。**
 > 以前検討されていたRust/TypeScript/C++へのトランスパイルは廃止されました。
 
 **開発言語**: C++20 (Clang 17+推奨, GCC 13+, MSVC 2019+)
@@ -147,7 +149,7 @@ private:
 
 ### 5. HIR（High-level IR）
 
-**詳細**: [hir.md](hir.md)
+**詳細**: [hir.md](hir.html)
 
 特徴:
 - 型情報が完全に付与
@@ -156,7 +158,7 @@ private:
 
 ### 6. MIR（Mid-level IR）
 
-**詳細**: [mir.md](mir.md)
+**詳細**: [mir.md](mir.html)
 
 特徴:
 - SSA形式（Static Single Assignment）
@@ -165,7 +167,7 @@ private:
 
 ### 7. LLVMバックエンド
 
-**詳細**: [../llvm_backend_implementation.md](../llvm_backend_implementation.md)
+**詳細**: [../llvm_backend_implementation.md](../llvm_backend_implementation.html)
 
 | ターゲット | 用途 | 経路 |
 |------------|------|------|
@@ -175,7 +177,7 @@ private:
 
 ### 廃止されたバックエンド
 
-以下のバックエンドは2024年12月に廃止されました（ソースコードは参考のため保持）:
+以下のバックエンドは2025年12月に廃止されました（ソースコードは参考のため保持）:
 
 | バックエンド | 廃止理由 |
 |-------------|----------|

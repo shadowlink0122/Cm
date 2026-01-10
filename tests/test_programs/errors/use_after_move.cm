@@ -1,0 +1,8 @@
+// Move Semantics エラーテスト: 移動後の直接使用
+// 期待: コンパイルエラー "Variable 's' used after move"
+int main() {
+    int x = 42;
+    int y = move x;  // 所有権をyへ移動
+    int z = x;       // エラー: xは既にmove済み
+    return z;
+}

@@ -1,3 +1,5 @@
+[English](inline_assembly_spec.en.html)
+
 # Cm言語 インラインアセンブリ仕様書
 
 ## 概要

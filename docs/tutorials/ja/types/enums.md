@@ -1,0 +1,205 @@
+---
+title: Enum型
+parent: Tutorials
+---
+
+[English](../../en/types/enums.html)
+
+# 型システム編 - Enum型
+
+**難易度:** 🟡 中級  
+**所要時間:** 20分
+
+## 📚 この章で学ぶこと
+
+- Enum型の定義方法
+- メンバへのアクセス
+- 整数値の割り当て
+- switch/match文での活用
+
+---
+
+## Enum型の定義
+
+Enum（列挙型）は、関連する定数の集合を定義するための型です。
+
+```cm
+enum Status {
+    Ok,
+    Error,
+    Pending
+}
+
+int main() {
+    Status s = Status::Ok;
+    
+    if (s == Status::Ok) {
+        println("Success!");
+    }
+    return 0;
+}
+```
+
+### 値の指定とオートインクリメント
+
+メンバには整数値を割り当てることができます。省略した場合は 0 から始まり、前の値に +1 された値が自動的に割り当てられます。
+
+```cm
+enum Color {
+    Red = 1,
+    Green = 2,
+    Blue = 4
+}
+
+enum Direction {
+    North,      // 0
+    East,       // 1
+    South = 10,
+    West        // 11 (10 + 1)
+}
+
+int main() {
+    // 値の確認
+    println("North: {}", (int)Direction::North); // 0
+    println("South: {}", (int)Direction::South); // 10
+    return 0;
+}
+```
+
+---
+
+## 制御構文での利用
+
+### switch文での利用
+
+Cmの `switch` 文は Enum と非常に相性が良く、`case(Enum::Member)` の形式で記述します。
+
+```cm
+enum Status { Ok, Error, Pending }
+
+void handle_status(Status s) {
+    switch (s) {
+        case(Status::Ok) {
+            println("All good.");
+        }
+        case(Status::Error) {
+            println("Something went wrong.");
+        }
+        else {
+            println("Still waiting...");
+        }
+    }
+}
+
+int main() {
+    handle_status(Status::Error);
+    return 0;
+}
+```
+
+### match式での利用（推奨）
+
+`match` 式を使用すると、全てのパターンを網羅しているかコンパイラがチェックするため、より安全です。
+
+```cm
+enum Status { Ok, Error, Pending }
+
+void handle_status_safe(Status s) {
+    match (s) {
+        Status::Ok => println("OK"),
+        Status::Error => println("Error"),
+        Status::Pending => println("Pending"),
+    }
+}
+
+int main() {
+    handle_status_safe(Status::Pending);
+    return 0;
+}
+```
+
+---
+
+## よくある間違い
+
+### ❌ スコープ解決演算子の忘れ
+
+Enumのメンバにアクセスするには、必ず `Enum名::メンバ名` と記述する必要があります。
+
+```cm
+enum Status { Ok }
+
+int main() {
+    // Status s = Ok;  // エラー: Ok が見つかりません
+    Status s = Status::Ok; // 正解
+    return 0;
+}
+```
+
+### ❌ 異なるEnum型間の代入
+
+名前が異なる Enum は別の型として扱われるため、直接代入することはできません。
+
+```cm
+enum A { X }
+enum B { X }
+
+int main() {
+    A val_a = A::X;
+    // B val_b = val_a; // エラー: 型が一致しません
+    return 0;
+}
+```
+
+---
+
+## 練習問題
+
+### 問題1: 曜日Enum
+月曜日から日曜日までを表す Enum `Day` を作成し、引数で受け取った `Day` が週末（土日）かどうかを判定する関数 `is_weekend` を実装してください。
+
+<details>
+<summary>解答例</summary>
+
+```cm
+enum Day {
+    Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+}
+
+bool is_weekend(Day d) {
+    match (d) {
+        Day::Saturday | Day::Sunday => true,
+        _ => false,
+    }
+}
+
+int main() {
+    Day today = Day::Saturday;
+    if (is_weekend(today)) {
+        println("It's weekend!");
+    } else {
+        println("Work day...");
+    }
+    return 0;
+}
+```
+</details>
+
+---
+
+## 次のステップ
+
+✅ Enumの定義と使い方がわかった  
+✅ switch/matchでの活用方法を理解した  
+⏭️ 次は [typedef型エイリアス](typedef.html) を学びましょう
+
+## 関連リンク
+
+- [switch文](../../basics/control-flow.html)
+- [match式](../../advanced/match.html)
+- [構造体](structs.html)
+
+---
+
+**前の章:** [構造体](structs.html)  
+**次の章:** [typedef型エイリアス](typedef.html)

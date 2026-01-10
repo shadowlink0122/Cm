@@ -1,3 +1,5 @@
+[English](no_std_implementation_proposal.en.html)
+
 # no_std/ベアメタル最適化実装提案
 
 ## 概要

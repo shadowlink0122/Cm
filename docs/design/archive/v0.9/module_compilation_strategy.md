@@ -1,3 +1,5 @@
+[English](module_compilation_strategy.en.html)
+
 # Cm言語 モジュール分割コンパイル戦略
 
 ## 概要

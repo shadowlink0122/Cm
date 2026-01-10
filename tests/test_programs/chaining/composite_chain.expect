@@ -1,0 +1,6 @@
+Test 1 (translate.scale.x): 20
+Test 2 (scale.translate.y): 50
+Test 3 (getPoint.field): 1
+Test 4 (getPoint.translate.x): 11
+Test 5 (long chain): 13
+All composite chain tests passed!

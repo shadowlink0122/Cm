@@ -128,6 +128,11 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         hir_cast->operand = std::move(operand);
         hir_cast->target_type = cast_expr->target_type;
         return std::make_unique<HirExpr>(std::move(hir_cast), cast_expr->target_type);
+    } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
+        // move式: move x は x そのものを返す（所有権移動、ゼロコスト）
+        debug::hir::log(debug::hir::Id::ExprLower, "Lowering move expression", debug::Level::Debug);
+        // moveは単にオペランドを返す - 所有権追跡は型チェッカーで行われている
+        return lower_expr(*move_expr->operand);
     }
 
     debug::hir::log(debug::hir::Id::Warning, "Unknown expression type, using null literal",

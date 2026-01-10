@@ -1,3 +1,5 @@
+[English](buffered_codegen.en.html)
+
 # バッファベース・コード生成アーキテクチャ
 
 ## 問題：ストリーミング方式の欠点

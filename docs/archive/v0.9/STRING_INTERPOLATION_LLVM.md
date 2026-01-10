@@ -1,3 +1,5 @@
+[English](STRING_INTERPOLATION_LLVM.en.html)
+
 # String Interpolation and Format Strings in LLVM Backend
 
 ## Overview
@@ -468,4 +470,3 @@ println("Value: {}", x);
 | `src/codegen/llvm/runtime.c` | C runtime library |
 | `src/codegen/llvm/context.cpp` | Runtime function setup |
 | `std/io.cm` | Standard I/O library with FFI |
-

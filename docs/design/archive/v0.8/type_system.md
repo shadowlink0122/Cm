@@ -1,3 +1,5 @@
+[English](type_system.en.html)
+
 # Cm言語 型システム設計
 
 ## 型エイリアス（typedef）

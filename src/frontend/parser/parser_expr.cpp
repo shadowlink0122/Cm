@@ -308,6 +308,8 @@ ast::ExprPtr Parser::parse_multiplicative() {
 
 // 単項演算子
 ast::ExprPtr Parser::parse_unary() {
+    uint32_t start_pos = current().start;
+
     if (consume_if(TokenKind::Minus)) {
         auto operand = parse_unary();
         return ast::make_unary(ast::UnaryOp::Neg, std::move(operand));
@@ -335,6 +337,13 @@ ast::ExprPtr Parser::parse_unary() {
     if (consume_if(TokenKind::MinusMinus)) {
         auto operand = parse_unary();
         return ast::make_unary(ast::UnaryOp::PreDec, std::move(operand));
+    }
+    // move式: move expr → 所有権の移動を明示
+    if (consume_if(TokenKind::KwMove)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'move' expression",
+                        debug::Level::Debug);
+        auto operand = parse_unary();
+        return ast::make_move(std::move(operand), Span{start_pos, previous().end});
     }
 
     return parse_postfix();

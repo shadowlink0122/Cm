@@ -1,3 +1,5 @@
+[English](STRUCT_QUICK_REFERENCE.en.html)
+
 # 構造体実装 クイックリファレンス
 
 ## 概要

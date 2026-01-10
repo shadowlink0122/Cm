@@ -1,3 +1,5 @@
+[English](impl_blocks.en.html)
+
 # Cm言語 impl ブロック設計
 
 ## ジェネリック関数の構文（オプション3）

@@ -1,3 +1,5 @@
+[English](QUICKSTART.en.html)
+
 # Cm言語コンパイラ - クイックスタート
 
 ## 🚀 実行方法
@@ -102,7 +104,7 @@ ctest
 
 ## 📖 詳細ドキュメント
 
-- [サンプルプログラム集](examples/README.md)
-- [アーキテクチャ設計](docs/design/architecture.md)
-- [HIR設計](docs/design/hir.md)
-- [MIR設計](docs/design/mir.md)
+- [サンプルプログラム集](examples/README.html)
+- [アーキテクチャ設計](docs/design/architecture.html)
+- [HIR設計](docs/design/hir.html)
+- [MIR設計](docs/design/mir.html)

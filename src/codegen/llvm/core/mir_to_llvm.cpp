@@ -13,6 +13,67 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
+// System V ABI: 16バイト以下の構造体はレジスタで値渡し
+bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
+    if (!type || type->kind != hir::TypeKind::Struct) {
+        return false;
+    }
+
+    // 構造体定義を取得
+    auto it = structDefs.find(type->name);
+    if (it == structDefs.end()) {
+        return false;  // 定義が見つからない場合は安全のためポインタ渡し
+    }
+
+    const mir::MirStruct* structDef = it->second;
+
+    // フィールドのサイズを合計
+    size_t totalSize = 0;
+    for (const auto& field : structDef->fields) {
+        if (!field.type)
+            continue;
+
+        switch (field.type->kind) {
+            case hir::TypeKind::Bool:
+            case hir::TypeKind::Char:
+            case hir::TypeKind::Tiny:
+            case hir::TypeKind::UTiny:
+                totalSize += 1;
+                break;
+            case hir::TypeKind::Short:
+            case hir::TypeKind::UShort:
+                totalSize += 2;
+                break;
+            case hir::TypeKind::Int:
+            case hir::TypeKind::UInt:
+            case hir::TypeKind::Float:
+                totalSize += 4;
+                break;
+            case hir::TypeKind::Long:
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::Double:
+            case hir::TypeKind::Pointer:
+            case hir::TypeKind::String:
+                totalSize += 8;
+                break;
+            case hir::TypeKind::Struct:
+                // ネストした構造体は安全のためポインタ渡し
+                return false;
+            default:
+                totalSize += 8;  // デフォルトはポインタサイズ
+                break;
+        }
+
+        // 16バイトを超えたら即座にfalse
+        if (totalSize > 16) {
+            return false;
+        }
+    }
+
+    return totalSize <= 16;
+}
+
 // 関数の一意なIDを生成（オーバーロードを区別するため）
 std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
     // main関数は特別扱い
@@ -253,10 +314,15 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
                     paramTypes.push_back(fatPtrType);
                 } else {
                     auto llvmType = convertType(local.type);
-                    // 構造体はポインタとして渡す（opaque pointer）
+                    // 構造体の場合、ABIに従って値渡しかポインタ渡しを決定
                     if (local.type->kind == hir::TypeKind::Struct) {
-                        // LLVM 14+: opaque pointerを使用
-                        paramTypes.push_back(ctx.getPtrType());
+                        if (isSmallStruct(local.type)) {
+                            // 16バイト以下: 値渡し（System V ABI準拠）
+                            paramTypes.push_back(llvmType);
+                        } else {
+                            // 16バイト超: ポインタ渡し
+                            paramTypes.push_back(ctx.getPtrType());
+                        }
                     } else {
                         paramTypes.push_back(llvmType);
                     }
@@ -338,13 +404,16 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     currentProgram = &program;
 
+    // ターゲット判定をキャッシュ（境界チェックで使用）
+    std::string triple = module->getTargetTriple();
+    isWasmTarget = triple.find("wasm") != std::string::npos;
+
     // インターフェース名を収集
     // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
     size_t iface_count = 0;
     const size_t MAX_INTERFACES = 10000;  // 無限ループ防止
     for (const auto& iface : program.interfaces) {
         if (++iface_count > MAX_INTERFACES) {
-            // debug_msg("MIR2LLVM", "ERROR: Too many interfaces, possible infinite loop");
             throw std::runtime_error("Too many interfaces in MIR program");
         }
         if (iface) {
@@ -457,13 +526,19 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // デバッグ用プログレス表示
         guard.show_progress("Function", 0, func.basic_blocks.size());
 
-        // ランタイム関数（cm_print_*, cm_println_*など）はスキップ
+        // ランタイム関数（cm_*）はスキップ
         // これらはランタイムライブラリで実装されている
         if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
             func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
-            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0) {
+            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||
+            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0) {
+            return;
+        }
+
+        // 本体がない関数（extern関数）は宣言のみで本体を生成しない
+        if (func.basic_blocks.empty()) {
             return;
         }
 
@@ -487,7 +562,18 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         size_t argIdx = 0;
         for (auto& arg : currentFunction->args()) {
             if (argIdx < func.arg_locals.size()) {
-                locals[func.arg_locals[argIdx]] = &arg;
+                auto localIdx = func.arg_locals[argIdx];
+                // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用
+                // （C ABIで16バイト以下の構造体はレジスタ渡しされる）
+                if (arg.getType()->isStructTy()) {
+                    auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                        "arg_" + std::to_string(argIdx) + "_stack");
+                    builder->CreateStore(&arg, alloca);
+                    locals[localIdx] = alloca;
+                    allocatedLocals.insert(localIdx);  // allocaを追跡
+                } else {
+                    locals[localIdx] = &arg;
+                }
             }
             argIdx++;
         }
@@ -726,7 +812,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // std::cerr << "[MIR2LLVM]       Block has terminator type "
         // << static_cast<int>(block.terminator->kind) << "\n";
     } else {
-        // debug_msg("MIR2LLVM", "Block has no terminator");
     }
 
     // blocksはunordered_mapなので、countで存在確認
@@ -734,7 +819,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
     if (blocks.count(block.id) > 0) {
         // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
-        // debug_msg("MIR2LLVM", "Insert point set");
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
         // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
@@ -779,7 +863,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         // 問題のある12個目のステートメントの詳細ログ
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
-            // debug_msg("MIR2LLVM", "WARNING: This is statement 11 that causes infinite loop");
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
                 // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local << "\n";
@@ -809,13 +892,10 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
         if (stmt_idx == block.statements.size() - 1) {
-            // debug_msg("MIR2LLVM", "This was the LAST statement, about to exit loop");
             // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
         }
         // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx << "\n";
     }
-
-    // debug_msg("MIR2LLVM", "FOR LOOP EXITED - All statements processed, checking terminator...");
 
     // ターミネータ処理
     if (block.terminator) {
@@ -1159,25 +1239,17 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             // static_cast<int>(binop.op)
             // << "\n";
 
-            // debug_msg("MIR2LLVM", "Converting LHS operand...");
             auto lhs = convertOperand(*binop.lhs);
             if (!lhs) {
-                // debug_msg("MIR2LLVM", "ERROR: Failed to convert LHS operand");
                 return nullptr;
             }
-            // debug_msg("MIR2LLVM", "LHS operand converted successfully");
 
-            // debug_msg("MIR2LLVM", "Converting RHS operand...");
             auto rhs = convertOperand(*binop.rhs);
             if (!rhs) {
-                // debug_msg("MIR2LLVM", "ERROR: Failed to convert RHS operand");
                 return nullptr;
             }
-            // debug_msg("MIR2LLVM", "RHS operand converted successfully");
 
-            // debug_msg("MIR2LLVM", "Calling convertBinaryOp...");
             auto result = convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
-            // debug_msg("MIR2LLVM", "BinaryOp converted successfully");
             return result;
         }
         case mir::MirRvalue::UnaryOp: {
@@ -1437,7 +1509,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     // 循環参照の検出
     if (processing.count(&operand) > 0) {
-        // debug_msg("MIR2LLVM", "ERROR: Circular reference detected in convertOperand");
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";
         if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
@@ -1448,7 +1519,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
     }
 
     if (recursion_depth >= MAX_RECURSION_DEPTH) {
-        // debug_msg("MIR2LLVM", "ERROR: Maximum recursion depth exceeded in convertOperand");
         // std::cerr << "[MIR2LLVM]        Current depth: " << recursion_depth << "\n";
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";
@@ -1924,6 +1994,67 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                             "Cannot determine array type for index access",
                                             cm::debug::Level::Error);
                     return nullptr;
+                }
+
+                // 境界チェック: インデックスが配列サイズ未満かチェック
+                // 負のインデックスも符号なし比較で検出（負数は巨大な正数として扱われる）
+                uint64_t arraySize = arrayType->getArrayNumElements();
+                if (arraySize > 0) {
+                    // 配列サイズをi64で取得
+                    llvm::Value* sizeVal = llvm::ConstantInt::get(ctx.getI64Type(), arraySize);
+
+                    // インデックスをi64に変換（符号なし）
+                    llvm::Value* idxForCheck = indexVal;
+                    if (!indexVal->getType()->isIntegerTy(64)) {
+                        idxForCheck = builder->CreateZExt(indexVal, ctx.getI64Type(), "idx_zext");
+                    }
+
+                    // index < size のチェック（符号なし比較）
+                    llvm::Value* inBounds =
+                        builder->CreateICmpULT(idxForCheck, sizeVal, "bounds_check");
+
+                    // 条件分岐: 範囲内なら続行、範囲外ならパニック
+                    llvm::Function* func = builder->GetInsertBlock()->getParent();
+                    llvm::BasicBlock* continueBlock =
+                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_ok", func);
+                    llvm::BasicBlock* panicBlock =
+                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_fail", func);
+
+                    builder->CreateCondBr(inBounds, continueBlock, panicBlock);
+
+                    // パニックブロック: 境界外アクセスでパニック
+                    builder->SetInsertPoint(panicBlock);
+
+                    // WASMターゲットの場合はabortを呼び出さずunreachableのみ
+                    // （abortはWASMランタイムで未定義のため）
+                    // 注: isWasmTargetはconvert()で一度だけ計算されたキャッシュ値
+
+                    if (!isWasmTarget) {
+                        // ネイティブターゲット: cm_panic関数を呼び出し（ない場合はabortを使用）
+                        llvm::Function* panicFn = module->getFunction("cm_panic");
+                        if (!panicFn) {
+                            panicFn = module->getFunction("abort");
+                            if (!panicFn) {
+                                llvm::FunctionType* abortType = llvm::FunctionType::get(
+                                    llvm::Type::getVoidTy(ctx.getModule().getContext()), false);
+                                panicFn = llvm::Function::Create(
+                                    abortType, llvm::Function::ExternalLinkage, "abort", module);
+                            }
+                        }
+                        if (panicFn->getFunctionType()->getNumParams() > 0) {
+                            // cm_panicはメッセージを取る
+                            llvm::Value* msgPtr = builder->CreateGlobalStringPtr(
+                                "Array index out of bounds", "bounds_error_msg");
+                            builder->CreateCall(panicFn, {msgPtr});
+                        } else {
+                            builder->CreateCall(panicFn);
+                        }
+                    }
+                    // WASM/ネイティブ共通: unreachableで終了
+                    builder->CreateUnreachable();
+
+                    // 続行ブロックに移動
+                    builder->SetInsertPoint(continueBlock);
                 }
 
                 // GEPで配列要素のアドレスを取得

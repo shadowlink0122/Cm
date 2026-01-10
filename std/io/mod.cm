@@ -172,3 +172,42 @@ export void println_bool(bool b) {
 export void print_char(char c) {
     cm_print_char(c);
 }
+
+// ============================================================
+// 外部関数宣言 - 標準入力
+// ============================================================
+
+extern "C" string cm_read_line();
+extern "C" int cm_read_int();
+extern "C" char cm_read_char();
+
+// ============================================================
+// パブリックAPI - 標準入力
+// ============================================================
+
+/// 1行入力（改行は含まない）
+export string input() {
+    return cm_read_line();
+}
+
+/// 整数入力
+export int input_int() {
+    return cm_read_int();
+}
+
+/// 文字入力
+export char input_char() {
+    return cm_read_char();
+}
+
+/// プロンプト付き入力
+export string input(string prompt) {
+    cm_print_string(prompt);
+    return cm_read_line();
+}
+
+/// プロンプト付き整数入力
+export int input_int(string prompt) {
+    cm_print_string(prompt);
+    return cm_read_int();
+}

@@ -1,3 +1,5 @@
+[English](async.en.html)
+
 # 非同期処理 (async/await) 設計
 
 ## 概要

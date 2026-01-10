@@ -1,3 +1,5 @@
+[English](simplified_architecture.en.html)
+
 # シンプル化されたコンパイルアーキテクチャ
 
 ## 洞察：汎用MIRは不要

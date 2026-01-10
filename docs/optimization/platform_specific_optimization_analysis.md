@@ -1,3 +1,5 @@
+[English](platform_specific_optimization_analysis.en.html)
+
 # Cmコンパイラ プラットフォーム別最適化分析
 
 本ドキュメントは、Cmコンパイラのプラットフォーム別最適化要件を詳細に分析したものです。

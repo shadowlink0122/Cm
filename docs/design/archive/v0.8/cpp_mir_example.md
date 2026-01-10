@@ -1,3 +1,5 @@
+[English](cpp_mir_example.en.html)
+
 # CPP-MIR実装例
 
 ## 現在のパイプライン vs 提案するパイプライン

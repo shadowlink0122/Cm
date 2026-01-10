@@ -449,6 +449,15 @@ struct CastExpr {
 };
 
 // ============================================================
+// move式 - 所有権の移動を明示 (move expr)
+// ============================================================
+struct MoveExpr {
+    ExprPtr operand;  // 移動対象の式
+
+    explicit MoveExpr(ExprPtr e) : operand(std::move(e)) {}
+};
+
+// ============================================================
 // 式作成ヘルパー
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
@@ -525,6 +534,10 @@ inline ExprPtr make_typename_of_expr(ExprPtr expr, Span s = {}) {
 
 inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<CastExpr>(std::move(expr), std::move(type)), s);
+}
+
+inline ExprPtr make_move(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<MoveExpr>(std::move(expr)), s);
 }
 
 }  // namespace cm::ast

@@ -80,6 +80,13 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
     if (let.init) {
         debug::hir::log(debug::hir::Id::LetInit, "initializer present", debug::Level::Trace);
 
+        // move初期化の検出（真のゼロコストmove用）
+        if (auto* move_expr = let.init->as<ast::MoveExpr>()) {
+            hir_let->is_move = true;
+            debug::hir::log(debug::hir::Id::LetInit,
+                            "move initialization detected for: " + let.name, debug::Level::Debug);
+        }
+
         // 暗黙的構造体リテラルに型を伝播
         if (let.type && let.type->kind == ast::TypeKind::Struct) {
             if (auto* struct_lit = let.init->as<ast::StructLiteralExpr>()) {

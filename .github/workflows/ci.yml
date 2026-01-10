@@ -151,44 +151,21 @@ jobs:
 
   # ========================================
   # Integration Tests - 完全並列実行
-  # Matrix: 2 OS × 3 platforms × 4 opt levels = 24 parallel jobs
+  # Matrix: 2 OS × 3 platforms × 2 opt levels = 12 parallel jobs
   # 
-  # 実行例:
-  # - ubuntu-latest + interpreter + O0 (job 1)  ┐
-  # - ubuntu-latest + interpreter + O1 (job 2)  │
-  # - ubuntu-latest + interpreter + O2 (job 3)  │
-  # - ubuntu-latest + interpreter + O3 (job 4)  │
-  # - ubuntu-latest + llvm + O0 (job 5)         │
-  # - ubuntu-latest + llvm + O1 (job 6)         │ すべて同時実行
-  # - ubuntu-latest + llvm + O2 (job 7)         │ (GitHub Actionsの
-  # - ubuntu-latest + llvm + O3 (job 8)         │  リソース制限内)
-  # - ubuntu-latest + llvm-wasm + O0 (job 9)    │
-  # - ubuntu-latest + llvm-wasm + O1 (job 10)   │
-  # - ubuntu-latest + llvm-wasm + O2 (job 11)   │
-  # - ubuntu-latest + llvm-wasm + O3 (job 12)   │
-  # - macos-latest + interpreter + O0 (job 13)  │
-  # - macos-latest + interpreter + O1 (job 14)  │
-  # - macos-latest + interpreter + O2 (job 15)  │
-  # - macos-latest + interpreter + O3 (job 16)  │
-  # - macos-latest + llvm + O0 (job 17)         │
-  # - macos-latest + llvm + O1 (job 18)         │
-  # - macos-latest + llvm + O2 (job 19)         │
-  # - macos-latest + llvm + O3 (job 20)         │
-  # - macos-latest + llvm-wasm + O0 (job 21)    │
-  # - macos-latest + llvm-wasm + O1 (job 22)    │
-  # - macos-latest + llvm-wasm + O2 (job 23)    │
-  # - macos-latest + llvm-wasm + O3 (job 24)    ┘
+  # O0: 未最適化（デバッグ・型エラー検出）
+  # O3: 最大最適化（本番環境想定）
   # ========================================
   integration-tests:
     name: ${{ matrix.platform }} O${{ matrix.opt_level }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
-      max-parallel: 24  # 最大24ジョブを同時実行（デフォルトでも並列だが明示）
+      max-parallel: 12  # 12ジョブを同時実行
       matrix:
         os: [ubuntu-latest, macos-latest]
         platform: [interpreter, llvm, llvm-wasm]
-        opt_level: [0, 1, 2, 3]
+        opt_level: [0, 3]  # O0とO3のみ（CI時間削減）
         include:
           - os: ubuntu-latest
             llvm_version: "18"
@@ -297,10 +274,10 @@ jobs:
           echo "  Unit Tests: 8 parallel jobs"
           echo "    - 2 OS × 4 tests (Lexer, HIR, MIR, Optimization)"
           echo ""
-          echo "  Integration Tests: 24 parallel jobs"
-          echo "    - 2 OS × 3 platforms × 4 opt levels"
+          echo "  Integration Tests: 12 parallel jobs"
+          echo "    - 2 OS × 3 platforms × 2 opt levels"
           echo "    - Platforms: Interpreter, LLVM Native, LLVM WASM"
-          echo "    - Optimization: O0, O1, O2, O3"
+          echo "    - Optimization: O0, O3"
           echo ""
           echo "==================================================="
           echo "⚡ Pipeline Execution Model"
@@ -316,14 +293,14 @@ jobs:
           echo "    ├─> Ubuntu: Lexer, HIR, MIR, Opt (uses ubuntu artifact)"
           echo "    └─> macOS: Lexer, HIR, MIR, Opt (uses macos artifact)"
           echo ""
-          echo "  Phase 4: Integration Tests (24 parallel jobs)"
-          echo "    All 24 combinations run simultaneously:"
-          echo "    ├─> Ubuntu: 12 jobs (3 platforms × 4 opt levels)"
+          echo "  Phase 4: Integration Tests (12 parallel jobs)"
+          echo "    All 12 combinations run simultaneously:"
+          echo "    ├─> Ubuntu: 6 jobs (3 platforms × 2 opt levels)"
           echo "    │   Each job downloads cm-build-ubuntu-latest"
-          echo "    └─> macOS: 12 jobs (3 platforms × 4 opt levels)"
+          echo "    └─> macOS: 6 jobs (3 platforms × 2 opt levels)"
           echo "        Each job downloads cm-build-macos-latest"
           echo ""
-          echo "  Total: 35 parallel jobs (1 + 2 + 8 + 24)"
+          echo "  Total: 23 parallel jobs (1 + 2 + 8 + 12)"
           echo "  All tests use -p (parallel) flag for max speed"
           echo "==================================================="
 

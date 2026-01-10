@@ -1,0 +1,123 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+/* Cm言語テーマカラーカスタマイズ: 指定の青色を基調としたデザイン */
+
+/* 1. ページヘッダー (スクリーンショットの色を想定) */
+.page-header {
+  background-color: #0044cc !important; /* 仮：正確な色は画像解析後に反映 */
+  background-image: linear-gradient(120deg, #0033aa, #0055ff) !important;
+  padding: 5rem 6rem !important;
+}
+
+/* ヘッダー内のテキストを白にして視認性を向上 */
+.project-name {
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.project-tagline {
+  color: #ffffff !important;
+  opacity: 0.9 !important;
+}
+
+/* 2. セクション・見出しの色を統一: 黒 */
+h1, h2, h3, h4, h5, h6 {
+  color: #111111 !important; /* 純粋な黒よりわずかに柔らかい黒 */
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.3em;
+  font-weight: bold;
+}
+
+/* 3. ボタンのスタイル */
+.btn {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.btn:hover {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: #ffffff !important;
+}
+
+/* 4. リンクとアクセント */
+a {
+  color: #0055ff !important;
+}
+
+a:hover {
+  color: #0033aa !important;
+  text-decoration: underline;
+}
+
+/* 5. コードブロックと装飾 */
+pre {
+  border-left: 4px solid #0044cc !important;
+  background-color: #f8fafc !important; /* 非常に薄いグレー背景 */
+  padding: 1rem !important;
+  overflow-x: auto;
+  border-radius: 0 4px 4px 0;
+  color: #0044cc !important; /* 基本色を青に統一（ディレクトリ構成の記号もこれになる） */
+}
+
+/* code単体（インライン） */
+code {
+  color: #0044cc !important;
+  background-color: #f1f5f9 !important;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+/* ブロック内の全ての要素の背景色を透明にし、文字色を基本の青に統一 */
+pre code, pre span {
+  background-color: transparent !important;
+  color: #0044cc !important; /* 全てを一度青に強制 */
+}
+
+/* シンタックスハイライトの微調整（青の濃淡） */
+.highlight .k, .highlight .kd, .highlight .kn, .highlight .kp, .highlight .kr, .highlight .kt { 
+  color: #002288 !important; /* より濃い青（キーワード） */
+  font-weight: bold; 
+} 
+.highlight .s, .highlight .s1, .highlight .s2 { color: #2563eb !important; } /* 明るい青（文字列） */
+.highlight .mi, .highlight .mf { color: #1e40af !important; } /* 深い青（数値） */
+.highlight .o, .highlight .p { color: #0044cc !important; } /* 演算子・区切り（赤茶色になりやすい箇所を青に強制） */
+
+/* コメント部分: 視認性のためのグレーブルー */
+.highlight .c, .highlight .c1, .highlight .cm {
+  color: #64748b !important;
+  font-style: italic;
+}
+
+/* コメント部分: 落ち着いたグレーブルーに変更（背景なし） */
+.highlight .c, .highlight .c1, .highlight .cm {
+  color: #64748b !important;
+  font-style: italic;
+  background-color: transparent !important;
+}
+
+/* プリプロセッサ（#）: 記号としての青 */
+.highlight .cp {
+  color: #0044cc !important;
+  background-color: transparent !important;
+}
+
+/* 6. テーブル */
+table th {
+  background-color: #0044cc !important;
+  color: #ffffff !important;
+}
+
+/* 7. その他 */
+blockquote {
+  border-left: 4px solid #0044cc !important;
+}
+
+::selection {
+  background-color: #0055ff;
+  color: #ffffff;
+}

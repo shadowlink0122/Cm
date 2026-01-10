@@ -100,6 +100,25 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         }
         // ターゲット型を返す
         inferred_type = cast_expr->target_type;
+    } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
+        // move式: オペランドの型を推論し、変数をmoved状態にマーク
+        if (move_expr->operand) {
+            inferred_type = infer_type(*move_expr->operand);
+            // オペランドが識別子の場合、その変数を移動済みとしてマーク
+            if (auto* ident = move_expr->operand->as<ast::IdentExpr>()) {
+                // 借用中の変数はmove禁止（借用安全性）
+                if (scopes_.current().is_borrowed(ident->name)) {
+                    error(current_span_, "Cannot move '" + ident->name + "' while it is borrowed");
+                    return ast::make_error();
+                }
+                mark_variable_moved(ident->name);
+                debug::tc::log(debug::tc::Id::CheckExpr,
+                               "Marked variable '" + ident->name + "' as moved",
+                               debug::Level::Debug);
+            }
+        } else {
+            inferred_type = ast::make_error();
+        }
     } else {
         inferred_type = ast::make_error();
     }
@@ -181,12 +200,36 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
         error(current_span_, "Undefined variable '" + ident.name + "'");
         return ast::make_error();
     }
+
+    // 初期化前使用のチェック
+    check_uninitialized_use(ident.name, current_span_);
+
+    // 移動後使用のチェック（Move Semantics）
+    check_use_after_move(ident.name, current_span_);
+
     debug::tc::log(debug::tc::Id::Resolved, ident.name + " : " + ast::type_to_string(*sym->type),
                    debug::Level::Trace);
     return sym->type;
 }
 
 ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
+    // 代入演算子の場合、左辺がmove済み変数ならエラー
+    // move後の変数は完全に無効化され、再代入も禁止
+    bool is_assignment =
+        (binary.op == ast::BinaryOp::Assign || binary.op == ast::BinaryOp::AddAssign ||
+         binary.op == ast::BinaryOp::SubAssign || binary.op == ast::BinaryOp::MulAssign ||
+         binary.op == ast::BinaryOp::DivAssign);
+    if (is_assignment) {
+        if (auto* ident = binary.left->as<ast::IdentExpr>()) {
+            // move済み変数への代入は禁止
+            if (scopes_.current().is_moved(ident->name)) {
+                error(binary.left->span, "Cannot assign to moved variable '" + ident->name +
+                                             "': variable no longer exists after move");
+                return ast::make_error();
+            }
+        }
+    }
+
     auto ltype = infer_type(*binary.left);
     auto rtype = infer_type(*binary.right);
 
@@ -220,6 +263,57 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                     error(binary.left->span,
                           "Cannot assign to const variable '" + ident->name + "'");
                     return ast::make_error();
+                }
+                // 借用チェック: 借用中の変数への代入を禁止（DRY原則）
+                if (scopes_.current().is_borrowed(ident->name)) {
+                    error(binary.left->span,
+                          "Cannot assign to '" + ident->name + "' while it is borrowed");
+                    return ast::make_error();
+                }
+                // 変数が変更されたことをマーク（const推奨警告用）
+                mark_variable_modified(ident->name);
+
+                // ライフタイムチェック: ポインタ代入時のスコープ比較
+                // p = &x の場合、pのスコープレベル < xのスコープレベルなら危険
+                if (binary.op == ast::BinaryOp::Assign && ltype &&
+                    ltype->kind == ast::TypeKind::Pointer) {
+                    if (auto* unary = binary.right->as<ast::UnaryExpr>()) {
+                        if (unary->op == ast::UnaryOp::AddrOf) {
+                            if (auto* rhs_ident = unary->operand->as<ast::IdentExpr>()) {
+                                int lhs_level = scopes_.current().get_scope_level(ident->name);
+                                int rhs_level = scopes_.current().get_scope_level(rhs_ident->name);
+                                // 左辺が外側スコープ（寿命長い）で右辺が内側スコープ（寿命短い）→危険
+                                if (lhs_level < rhs_level) {
+                                    error(binary.left->span,
+                                          "Cannot store reference to '" + rhs_ident->name +
+                                              "' in '" + ident->name + "': '" + rhs_ident->name +
+                                              "' may be dropped while '" + ident->name +
+                                              "' is still alive");
+                                    return ast::make_error();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // デリファレンス経由の代入チェック（借用システム Phase 2）
+            // *p = value の場合、pがconstポインタなら代入禁止
+            else if (auto* unary = binary.left->as<ast::UnaryExpr>()) {
+                if (unary->op == ast::UnaryOp::Deref) {
+                    // デリファレンスされるポインタの型を取得
+                    auto ptr_type = infer_type(*unary->operand);
+                    if (ptr_type && ptr_type->kind == ast::TypeKind::Pointer) {
+                        // ポインタ自体がconstの場合（const int* p）
+                        if (ptr_type->qualifiers.is_const) {
+                            error(binary.left->span, "Cannot assign through const pointer");
+                            return ast::make_error();
+                        }
+                        // 要素型がconstの場合も禁止（const修飾された要素への代入）
+                        if (ptr_type->element_type && ptr_type->element_type->qualifiers.is_const) {
+                            error(binary.left->span, "Cannot assign through pointer to const");
+                            return ast::make_error();
+                        }
+                    }
                 }
             }
             if (!types_compatible(ltype, rtype)) {
@@ -300,15 +394,39 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
             if (otype->kind == ast::TypeKind::Function) {
                 return otype;
             }
+            // 借用追跡: オペランドが識別子の場合、借用を登録
+            if (auto* ident = unary.operand->as<ast::IdentExpr>()) {
+                scopes_.current().add_borrow(ident->name);
+                debug::tc::log(debug::tc::Id::CheckExpr, "Added borrow for '" + ident->name + "'",
+                               debug::Level::Debug);
+            }
             return ast::make_pointer(otype);
         case ast::UnaryOp::PreInc:
         case ast::UnaryOp::PreDec:
         case ast::UnaryOp::PostInc:
-        case ast::UnaryOp::PostDec:
+        case ast::UnaryOp::PostDec: {
+            // const check: 代入と同様に、const変数の変更を禁止（DRY原則）
+            if (auto* ident = unary.operand->as<ast::IdentExpr>()) {
+                auto sym = scopes_.current().lookup(ident->name);
+                if (sym && sym->is_const) {
+                    error(unary.operand->span,
+                          "Cannot modify const variable '" + ident->name + "'");
+                    return ast::make_error();
+                }
+                // 借用チェック: 借用中の変数への変更を禁止（DRY原則）
+                if (scopes_.current().is_borrowed(ident->name)) {
+                    error(unary.operand->span,
+                          "Cannot modify '" + ident->name + "' while it is borrowed");
+                    return ast::make_error();
+                }
+                // 変数が変更されたことをマーク（const推奨警告用）
+                mark_variable_modified(ident->name);
+            }
             if (!otype->is_numeric()) {
                 error(current_span_, "Increment/decrement requires numeric operand");
             }
             return otype;
+        }
     }
     return ast::make_error();
 }
@@ -743,6 +861,23 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
     func_type->param_types = std::move(param_types);
 
     return func_type;
+}
+
+// ============================================================
+// Move Semantics ヘルパー関数
+// ============================================================
+
+void TypeChecker::mark_variable_moved(const std::string& name) {
+    // Scopeベースの移動状態管理
+    scopes_.current().mark_moved(name);
+}
+
+void TypeChecker::check_use_after_move(const std::string& name, Span span) {
+    // Symbolのis_movedフラグをチェック
+    auto sym = scopes_.current().lookup(name);
+    if (sym && sym->is_moved) {
+        error(span, "Variable '" + name + "' used after move");
+    }
 }
 
 }  // namespace cm

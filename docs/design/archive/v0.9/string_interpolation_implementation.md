@@ -1,3 +1,5 @@
+[English](string_interpolation_implementation.en.html)
+
 # 文字列埋め込み実装計画
 
 ## 問題の本質
@@ -158,7 +160,7 @@ println(greeting)
    - アライメント: `{text:<10}`
 
 3. **エスケープ**
-   - `"{{ literal brace }}"`
+   - `"{% raw %}{{ literal brace }}{% endraw %}"`
 
 4. **使用場所**
    - 変数代入

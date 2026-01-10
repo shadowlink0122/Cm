@@ -195,6 +195,12 @@ class BuiltinManager {
             }
             return Value{};
         };
+
+        // std::mem名前空間の関数も登録（import std::mem::{malloc, free}用）
+        builtins_["std::mem::malloc"] = builtins_["malloc"];
+        builtins_["std::mem::free"] = builtins_["free"];
+        builtins_["std::mem::calloc"] = builtins_["calloc"];
+        builtins_["std::mem::realloc"] = builtins_["realloc"];
     }
 
     /// std::io 名前空間の関数を登録

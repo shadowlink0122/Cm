@@ -1,3 +1,5 @@
+[English](memory.en.html)
+
 # Cm メモリモデル設計
 
 ## 概要

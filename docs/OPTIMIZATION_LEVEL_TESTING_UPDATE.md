@@ -1,3 +1,5 @@
+[English](OPTIMIZATION_LEVEL_TESTING_UPDATE.en.html)
+
 # パラレル/シリアル対応追加
 
 **更新日**: 2026-01-04
@@ -161,6 +163,6 @@ make test-llvm-o2-serial
 
 ## 関連ドキュメント
 
-- [OPTIMIZATION_LEVEL_TESTING.md](OPTIMIZATION_LEVEL_TESTING.md) - 基本使用方法
+- [OPTIMIZATION_LEVEL_TESTING.md](OPTIMIZATION_LEVEL_TESTING.html) - 基本使用方法
 - [Makefile](../Makefile) - 全ターゲット定義
 - [unified_test_runner.sh](../tests/unified_test_runner.sh) - テストランナー実装

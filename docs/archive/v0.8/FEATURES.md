@@ -1,3 +1,5 @@
+[English](FEATURES.en.html)
+
 # Cm言語 実装済み機能一覧
 
 ## ✅ 実装済み機能

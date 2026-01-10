@@ -47,6 +47,7 @@ enum class TokenKind {
     KwConstexpr,  // constexpr keyword
     KwMatch,
     KwModule,  // module declaration
+    KwMove,    // move ownership
     KwMutable,
     KwNamespace,  // namespace declaration
     KwNew,

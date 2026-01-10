@@ -1,3 +1,5 @@
+[English](MODULE_FINAL_IMPLEMENTATION.en.html)
+
 # モジュールシステム完全実装（最終フェーズ）
 
 ## 目標

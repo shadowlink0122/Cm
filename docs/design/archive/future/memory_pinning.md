@@ -1,3 +1,5 @@
+[English](memory_pinning.en.html)
+
 # Cm言語のメモリピンニング機構設計
 
 ## 背景

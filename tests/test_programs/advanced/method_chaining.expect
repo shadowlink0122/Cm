@@ -1,0 +1,10 @@
+=== Method Chaining Test ===
+p: (10, 20)
+After move(5,5): (15, 25)
+Sum: 40
+Test 1: PASS
+Cloned point: (1, 2)
+Test 2: PASS
+Multiple chain result: 23
+Test 3: PASS
+=== Test Completed ===

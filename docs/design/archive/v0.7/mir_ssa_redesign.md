@@ -1,3 +1,5 @@
+[English](mir_ssa_redesign.en.html)
+
 # MIR SSA/Phi Node 再設計書
 
 ## 1. 背景と問題点
@@ -119,7 +121,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             // AND: lhs が false なら skip_rhs_bb へ
             ctx.set_terminator(MirTerminator::switch_int(
                 MirOperand::copy(MirPlace{lhs}),
-                {{1, eval_rhs_bb}},  // true -> 右辺を評価
+                {% raw %}{{1, eval_rhs_bb}}{% endraw %},  // true -> 右辺を評価
                 skip_rhs_bb          // false -> スキップ
             ));
 
@@ -147,7 +149,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             LocalId result = ctx.create_ssa_value("_and_result", hir::make_bool());
             ctx.push_statement(MirStatement::phi(
                 result,
-                {{rhs_result, eval_rhs_bb}, {false_result, skip_rhs_bb}}
+                {% raw %}{{rhs_result, eval_rhs_bb}, {false_result, skip_rhs_bb}}{% endraw %}
             ));
 
             return result;

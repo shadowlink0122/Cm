@@ -1,3 +1,5 @@
+[English](llvm_backend_implementation.en.html)
+
 # LLVM バックエンド実装ガイド
 
 ## 概要
@@ -153,7 +155,7 @@ LLVMバックエンドはCランタイムライブラリ（`runtime.c`）を使�
 - **フォーマット置換**: `cm_format_replace_int`, `cm_format_replace_uint`, `cm_format_replace_double`, `cm_format_replace_string`
 - **文字列操作**: `cm_string_concat`, `cm_unescape_braces`
 
-詳細は [LLVM ランタイムライブラリ](./LLVM_RUNTIME_LIBRARY.md) を参照してください。
+詳細は [LLVM ランタイムライブラリ](./LLVM_RUNTIME_LIBRARY.html) を参照してください。
 
 ## デバッグ
 
@@ -232,10 +234,10 @@ clang test.ll -o test
 
 ## 関連ドキュメント
 
-- [LLVM ランタイムライブラリ](./LLVM_RUNTIME_LIBRARY.md)
-- [LLVM 最適化パイプライン](./LLVM_OPTIMIZATION.md)
-- [フォーマット文字列のLLVM実装](./STRING_INTERPOLATION_LLVM.md)
-- [FFI設計](./design/ffi.md)
+- [LLVM ランタイムライブラリ](./LLVM_RUNTIME_LIBRARY.html)
+- [LLVM 最適化パイプライン](./LLVM_OPTIMIZATION.html)
+- [フォーマット文字列のLLVM実装](./STRING_INTERPOLATION_LLVM.html)
+- [FFI設計](./design/ffi.html)
 
 ## まとめ
 

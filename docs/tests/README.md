@@ -1,10 +1,12 @@
+[English](README.en.html)
+
 # Cm言語 テストドキュメント
 
 このディレクトリには、Cm言語コンパイラのテストシステムに関するドキュメントが含まれています。
 
 ## 📚 ドキュメント一覧
 
-### [TESTING_GUIDE.md](TESTING_GUIDE.md)
+### [TESTING_GUIDE.md](TESTING_GUIDE.html)
 **包括的なテストガイド**
 - テストディレクトリ構造の詳細
 - テストファイルの種類と役割
@@ -12,7 +14,7 @@
 - バックエンド別の考慮事項
 - トラブルシューティング
 
-### [TEST_QUICK_REFERENCE.md](TEST_QUICK_REFERENCE.md)
+### [TEST_QUICK_REFERENCE.md](TEST_QUICK_REFERENCE.html)
 **クイックリファレンス**
 - よく使うコマンド一覧
 - 並列実行の設定
@@ -111,6 +113,6 @@ tests/test_programs/
 
 ## 🔗 関連リンク
 
-- [プロジェクトREADME](../../README.md)
-- [設計ドキュメント](../design/README.md)
+- [プロジェクトREADME](../../README.html)
+- [設計ドキュメント](../design/README.html)
 - [unified_test_runner.sh](../../tests/unified_test_runner.sh) - テストランナースクリプト

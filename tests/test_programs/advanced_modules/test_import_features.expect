@@ -1,0 +1,12 @@
+Testing import as:
+PI via alias = 3.141593
+
+Testing from import:
+dot(v1, v2) = 32.000000
+
+Testing alias namespace:
+cross(v1, v2) = (-3.000000, 6.000000, -3.000000)
+normalize(v1) = (0.267261, 0.534522, 0.801784)
+
+Constants:
+E = 2.718282

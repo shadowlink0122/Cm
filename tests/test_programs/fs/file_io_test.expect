@@ -1,0 +1,8 @@
+=== File I/O Test ===
+Writing to file: SUCCESS
+Checking exists: SUCCESS
+Reading from file: SUCCESS
+Appending to file: SUCCESS
+Verifying append: SUCCESS
+Removing file: SUCCESS
+=== Test Completed ===

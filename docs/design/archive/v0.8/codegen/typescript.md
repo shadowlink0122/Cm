@@ -1,3 +1,5 @@
+[English](typescript.en.html)
+
 # TypeScript Codegen 設計
 
 ## 概要

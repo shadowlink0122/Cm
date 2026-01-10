@@ -1,0 +1,11 @@
+// Move Semantics: 再代入でmoved状態がクリアされるテスト
+// 期待: 正常終了、99を出力
+import std::io::println;
+
+int main() {
+    int x = 42;
+    int y = move x;  // xをmove
+    x = 99;          // xに再代入 → moved状態クリア
+    println("{x}");  // OK: xは再代入で復活
+    return 0;
+}

@@ -1,3 +1,5 @@
+[English](platform.en.html)
+
 # プラットフォーム・ターゲット設計
 
 ## 概要

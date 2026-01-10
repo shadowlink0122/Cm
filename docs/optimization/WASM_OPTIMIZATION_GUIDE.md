@@ -1,7 +1,9 @@
+[English](WASM_OPTIMIZATION_GUIDE.en.html)
+
 # WASM最適化完全ガイド
 
 **作成日**: 2026-01-04  
-**対象**: Cm言語 v0.9.0以降  
+**対象**: Cm言語 v0.10.0以降  
 **著者**: Cm Language Team
 
 ## 目次
@@ -706,10 +708,10 @@ Version 1.2以降で実装予定：
 
 ### 内部ドキュメント
 
-- [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) - 実装状況
-- [platform_specific_optimization_analysis.md](platform_specific_optimization_analysis.md) - 詳細分析
-- [native_wasm_dce.md](native_wasm_dce.md) - DCE詳細
-- [usage_guide.md](usage_guide.md) - 使用方法
+- [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.html) - 実装状況
+- [platform_specific_optimization_analysis.md](platform_specific_optimization_analysis.html) - 詳細分析
+- [native_wasm_dce.md](native_wasm_dce.html) - DCE詳細
+- [usage_guide.md](usage_guide.html) - 使用方法
 
 ### 外部リソース
 

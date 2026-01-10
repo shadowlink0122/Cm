@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../common/debug/par.hpp"
+#include "../../common/diagnostics.hpp"
 #include "../ast/decl.hpp"
 #include "../lexer/token.hpp"
 
@@ -13,17 +14,11 @@
 namespace cm {
 
 // ============================================================
-// 診断メッセージ
+// 診断メッセージ（共通定義への互換性エイリアス）
 // ============================================================
-enum class DiagKind { Error, Warning, Note };
-
-struct Diagnostic {
-    DiagKind kind;
-    Span span;
-    std::string message;
-
-    Diagnostic(DiagKind k, Span s, std::string m) : kind(k), span(s), message(std::move(m)) {}
-};
+// 注: 共通のdiagnostics.hppでSeverity、Diagnosticが定義されています
+// DiagKindはSeverityのエイリアスとして残します（後方互換性）
+using DiagKind = Severity;
 
 // ============================================================
 // パーサ
@@ -71,7 +66,7 @@ class Parser {
     const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
     bool has_errors() const {
         for (const auto& d : diagnostics_) {
-            if (d.kind == DiagKind::Error)
+            if (d.severity == DiagKind::Error)
                 return true;
         }
         return false;
@@ -608,6 +603,8 @@ class Parser {
                 advance();  // consume 'operator'
                 ast::OperatorSig op_sig;
                 op_sig.return_type = parse_type();
+                // C++スタイルの配列戻り値型: int[] operator+(), int[3] operator-()
+                op_sig.return_type = check_array_suffix(std::move(op_sig.return_type));
 
                 auto op_kind = parse_operator_kind();
                 if (!op_kind) {
@@ -625,6 +622,8 @@ class Parser {
                 // 通常のメソッドシグネチャ
                 ast::MethodSig sig;
                 sig.return_type = parse_type();
+                // C++スタイルの配列戻り値型: int[] func(), int[3] func()
+                sig.return_type = check_array_suffix(std::move(sig.return_type));
                 sig.name = expect_ident();
                 expect(TokenKind::LParen);
                 sig.params = parse_params();
@@ -1034,9 +1033,17 @@ class Parser {
     ast::TypePtr parse_type() {
         ast::TypePtr type;
 
+        // const修飾子をチェック（借用システム Phase 2）
+        // const int* p や const T のような形式をサポート
+        bool has_const = consume_if(TokenKind::KwConst);
+
         // ポインタ/参照
         if (consume_if(TokenKind::Star)) {
             type = ast::make_pointer(parse_type());
+            // constポインタの場合、要素型にconst修飾を設定
+            if (has_const && type->element_type) {
+                type->element_type->qualifiers.is_const = true;
+            }
             return type;
         }
         if (consume_if(TokenKind::Amp)) {
@@ -1182,6 +1189,11 @@ class Parser {
             } else {
                 // 単純なポインタ型: void*, int*, etc.
                 advance();  // consume *
+                // const修飾子がある場合（const int* = pointer to const int）
+                // base_typeにconst修飾を設定
+                if (has_const) {
+                    base_type->qualifiers.is_const = true;
+                }
                 return ast::make_pointer(std::move(base_type));
             }
         }

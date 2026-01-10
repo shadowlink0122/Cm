@@ -1,3 +1,5 @@
+[English](file_structure_reorganization.en.html)
+
 # ファイル構造再編成計画
 
 ## 現状の問題点
@@ -157,7 +159,7 @@ src/codegen/
    ```markdown
    ## Version 0.12.0 - 最適化インフラ強化
    MIR最適化パスの拡充とインポート時の無限ループ問題の解決。
-   詳細: [最適化ロードマップ](docs/optimization/roadmap.md)
+   詳細: [最適化ロードマップ](docs/optimization/roadmap.html)
    ```
 
 2. **docs/optimization/**: 最適化関連文書を集約

@@ -1,3 +1,5 @@
+[English](runtime_issue_investigation.en.html)
+
 # 最適化による実行時問題の調査結果
 
 ## 概要

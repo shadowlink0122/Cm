@@ -50,6 +50,9 @@ class MIRToLLVM {
         vtableGlobals;  // type_interface -> vtable
     const mir::MirProgram* currentProgram = nullptr;
 
+    // ターゲット情報キャッシュ
+    bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
+
    public:
     /// コンストラクタ
     explicit MIRToLLVM(LLVMContext& context)
@@ -131,6 +134,10 @@ class MIRToLLVM {
     bool isInterfaceType(const std::string& typeName) const {
         return interfaceNames.count(typeName) > 0;
     }
+
+    /// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
+    /// System V ABI: 16バイト以下の構造体はレジスタで値渡し
+    bool isSmallStruct(const hir::TypePtr& type) const;
 
     /// インターフェース用のfat pointer型を取得（{i8* data, i8** vtable}）
     llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);

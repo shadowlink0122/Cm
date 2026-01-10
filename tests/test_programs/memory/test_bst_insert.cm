@@ -1,0 +1,90 @@
+// テスト: 単純なnull比較と再帰関数
+
+import std::io::println;
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+struct Node {
+    int value;
+    Node* left;
+    Node* right;
+}
+
+// 新しいノードを作成
+Node* new_node(int value) {
+    void* mem = malloc(sizeof(Node));
+    Node* node = mem as Node*;
+    node->value = value;
+    node->left = null as Node*;
+    node->right = null as Node*;
+    return node;
+}
+
+// 再帰的なBST挿入（簡易版）
+Node* insert(Node* node, int value) {
+    println("  insert called with value={value}");
+    
+    // ベースケース: 空のツリー
+    if (node == null) {
+        println("    node is null, creating new node");
+        return new_node(value);
+    }
+    
+    println("    node exists, value={node->value}");
+    
+    // 左右に挿入
+    if (value < node->value) {
+        println("    going left");
+        node->left = insert(node->left, value);
+    } else {
+        println("    going right");
+        node->right = insert(node->right, value);
+    }
+    
+    return node;
+}
+
+int main() {
+    println("=== Simple BST Insert Test ===");
+    
+    Node* root = null as Node*;
+    
+    println("\nInserting 50:");
+    root = insert(root, 50);
+    
+    println("\nInserting 30:");
+    root = insert(root, 30);
+    
+    println("\nInserting 70:");
+    root = insert(root, 70);
+    
+    // 値を確認
+    println("\nTree structure:");
+    int r = root->value;
+    println("Root: {r}");
+    
+    if (root->left != null) {
+        int l = root->left->value;
+        println("Left: {l}");
+    }
+    
+    if (root->right != null) {
+        int ri = root->right->value;
+        println("Right: {ri}");
+    }
+    
+    // 解放（簡易版）
+    if (root->left != null) {
+        free(root->left as void*);
+    }
+    if (root->right != null) {
+        free(root->right as void*);
+    }
+    free(root as void*);
+    
+    println("\n=== Done ===");
+    return 0;
+}

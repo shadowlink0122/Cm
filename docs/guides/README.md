@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # Cm言語機能ガイド
 
 このディレクトリには、Cm言語の各機能の詳細なガイドが含まれます。
@@ -38,24 +40,24 @@ docs/tutorials/
 
 ### 1. 初心者向け
 
-1. **[はじめてのCm言語](getting-started.md)** - 環境構築と基本構文
-2. **[Hello, World!](../tutorials/hello-world.md)** - 最初のプログラム（作成予定）
-3. **[型システム](type-system.md)** - プリミティブ型と構造体
-4. **[配列](../tutorials/arrays.md)** - 配列の使い方 ✅
+1. **[はじめてのCm言語](getting-started.html)** - 環境構築と基本構文
+2. **[Hello, World!](../tutorials/hello-world.html)** - 最初のプログラム（作成予定）
+3. **[型システム](type-system.html)** - プリミティブ型と構造体
+4. **[配列](../tutorials/arrays.html)** - 配列の使い方 ✅
 
 ### 2. 中級者向け
 
-5. **[インターフェース](interfaces.md)** - interface/impl構文
-6. **[ジェネリクス](generics.md)** - 型パラメータと制約
-7. **[パターンマッチング](pattern-matching.md)** - match式
-8. **[ポインタ](../tutorials/pointers.md)** - メモリアドレス操作 ✅
+5. **[インターフェース](interfaces.html)** - interface/impl構文
+6. **[ジェネリクス](generics.html)** - 型パラメータと制約
+7. **[パターンマッチング](pattern-matching.html)** - match式
+8. **[ポインタ](../tutorials/pointers.html)** - メモリアドレス操作 ✅
 
 ### 3. 上級者向け
 
-9. **[演算子オーバーロード](operators.md)** - カスタム演算子
-10. **[with自動実装](../tutorials/with-keyword.md)** - トレイト自動導出 ✅
-11. **[メモリ管理](memory.md)** - 所有権とライフタイム
-12. **[LLVMバックエンド](llvm-backend.md)** - ネイティブコンパイル
+9. **[演算子オーバーロード](operators.html)** - カスタム演算子
+10. **[with自動実装](../tutorials/with-keyword.html)** - トレイト自動導出 ✅
+11. **[メモリ管理](memory.html)** - 所有権とライフタイム
+12. **[LLVMバックエンド](llvm-backend.html)** - ネイティブコンパイル
 
 ## 📖 クイックリファレンス
 
@@ -116,10 +118,10 @@ match (value) {
 
 ## 🔗 関連リンク
 
-- [正式言語仕様](../design/CANONICAL_SPEC.md)
+- [正式言語仕様](../design/CANONICAL_SPEC.html)
 - [サンプルコード](../../examples/)
 - [API リファレンス](../spec/)
 
 ---
 
-**更新日:** 2024-12-16
+**更新日:** 2025-12-16

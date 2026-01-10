@@ -1,10 +1,12 @@
+[English](backends.en.html)
+
 # バックエンド設計
 
 ## 概要
 
 Cm言語はLLVMバックエンドを使用してネイティブコードを生成します。
 
-> **2024年12月より、LLVMバックエンドが唯一のコード生成方式です。**
+> **2025年12月より、LLVMバックエンドが唯一のコード生成方式です。**
 > 以前検討されていたRust/TypeScript/C++へのトランスパイルは廃止されました。
 
 ## アーキテクチャ
@@ -88,9 +90,9 @@ cm compile program.cm --target=wasm32 -o program.wasm
 
 ### 詳細ドキュメント
 
-- [LLVM バックエンド実装ガイド](../llvm_backend_implementation.md)
-- [LLVM ランタイムライブラリ](../LLVM_RUNTIME_LIBRARY.md)
-- [LLVM 最適化パイプライン](../LLVM_OPTIMIZATION.md)
+- [LLVM バックエンド実装ガイド](../llvm_backend_implementation.html)
+- [LLVM ランタイムライブラリ](../LLVM_RUNTIME_LIBRARY.html)
+- [LLVM 最適化パイプライン](../LLVM_OPTIMIZATION.html)
 
 ---
 
@@ -117,7 +119,7 @@ cm run program.cm
 
 ## 廃止されたバックエンド
 
-以下のバックエンドは2024年12月に廃止されました。
+以下のバックエンドは2025年12月に廃止されました。
 ソースコードは参考のため `src/backends/` に保持されていますが、今後のメンテナンスや機能追加は行われません。
 
 ### Rustトランスパイラ（廃止）
@@ -140,4 +142,4 @@ cm run program.cm
 | ターゲット | 限定的 | 100+ターゲット |
 | デバッグ | バラバラ | DWARF統一 |
 
-詳細な比較は [backend_comparison.md](../backend_comparison.md) を参照してください。
+詳細な比較は [backend_comparison.md](../backend_comparison.html) を参照してください。

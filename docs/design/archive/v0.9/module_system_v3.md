@@ -1,3 +1,5 @@
+[English](module_system_v3.en.html)
+
 # Cm言語 モジュールシステム v3 設計仕様
 
 ## 基本原則

@@ -1,3 +1,5 @@
+[English](infinite_loop_detection.en.html)
+
 # MIR最適化無限ループ検出と対策
 
 ## 問題の症状

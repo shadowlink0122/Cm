@@ -1,3 +1,5 @@
+[English](LLVM_OPTIMIZATION.en.html)
+
 # LLVM 最適化パイプライン
 
 ## 概要
@@ -161,6 +163,6 @@ cm compile program.cm --emit-llvm -v
 
 ## 関連ドキュメント
 
-- [LLVMバックエンド実装](./llvm_backend_implementation.md)
-- [LLVMランタイムライブラリ](./LLVM_RUNTIME_LIBRARY.md)
-- [MIR設計](./design/mir.md)
+- [LLVMバックエンド実装](./llvm_backend_implementation.html)
+- [LLVMランタイムライブラリ](./LLVM_RUNTIME_LIBRARY.html)
+- [MIR設計](./design/mir.html)

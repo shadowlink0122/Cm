@@ -1,3 +1,5 @@
+[English](technical_challenges.en.html)
+
 # 技術的課題と解決策
 
 ## 概要
@@ -62,7 +64,7 @@ Cmの手動メモリ管理をRustに変換。
 |----|------|------------|
 | `Future<T>` | `impl Future<Output=T>` | `Promise<T>` |
 
-詳細: [async.md](async.md)
+詳細: [async.md](async.html)
 
 ---
 
@@ -81,7 +83,7 @@ Cmの手動メモリ管理をRustに変換。
 | `.cm.web` | Web専用 |
 | `.cm.baremetal` | Bare-metal専用 |
 
-詳細: [platform.md](platform.md)
+詳細: [platform.md](platform.html)
 
 ---
 

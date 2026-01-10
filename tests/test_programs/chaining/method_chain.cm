@@ -1,0 +1,37 @@
+import std::io::println;
+
+// メソッドチェーンテスト
+// 現行のCmコンパイラ仕様に合わせて外部関数として定義
+
+struct Chain {
+    int value;
+}
+
+// 値渡しで新しいChainを返す形式
+Chain Chain__add(Chain c, int n) {
+    println("add({n})");
+    return Chain { value: c.value + n };
+}
+
+Chain Chain__mul(Chain c, int n) {
+    println("mul({n})");
+    return Chain { value: c.value * n };
+}
+
+void Chain__print(Chain c) {
+    println("Value: {c.value}");
+}
+
+int main() {
+    println("Start");
+    const Chain c = Chain { value: 1 };
+    
+    // チェーンを分解: c.add(2).mul(3).print()
+    const Chain c1 = Chain__add(c, 2);
+    const Chain c2 = Chain__mul(c1, 3);
+    Chain__print(c2);
+    
+    println("End");
+    
+    return 0;
+}

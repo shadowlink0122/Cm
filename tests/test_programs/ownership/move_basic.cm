@@ -1,0 +1,10 @@
+// Move Semantics 基本テスト
+// 期待: 正常終了、"hello" を出力
+import std::io::println;
+
+int main() {
+    string s = "hello";
+    string t = move s;  // 所有権をtへ移動
+    println("{t}");
+    return 0;
+}

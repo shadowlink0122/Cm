@@ -1,3 +1,5 @@
+[English](known_limitations.en.html)
+
 # Cm コンパイラ 既知の制限事項
 ## 2025年1月
 

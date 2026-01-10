@@ -1,3 +1,5 @@
+[English](STRING_INTERPOLATION_README.en.html)
+
 # String Interpolation and Format Strings - Complete Documentation
 
 ## Summary
@@ -368,4 +370,3 @@ For specific questions about:
 - **How it works**: See STRING_INTERPOLATION_LLVM.md
 - **Architecture**: See STRING_INTERPOLATION_ARCHITECTURE.md
 - **Examples**: See STRING_INTERPOLATION_EXAMPLES.md
-

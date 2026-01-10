@@ -1,3 +1,5 @@
+[English](advanced_optimization_design.en.html)
+
 # 高度な最適化設計ドキュメント
 
 ## 概要

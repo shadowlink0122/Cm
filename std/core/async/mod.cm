@@ -1,0 +1,45 @@
+// std::core::async - 非同期処理のコア定義
+
+// ポーリング結果
+enum Poll {
+    Ready,
+    Pending
+}
+
+// 生のWakerテーブル
+// 仮想関数テーブルとして機能する
+struct WakerVTable {
+    // dataポインタを受け取って起床させる関数
+    void*(void*) wake;
+    void*(void*) clone;
+    void*(void*) drop;
+}
+
+// Waker（起床通知用オブジェクト）
+struct Waker {
+    void* data;           // 実装依存のデータポインタ
+    WakerVTable* vtable;  // 関数テーブルへのポインタ
+}
+
+impl Waker {
+    // タスクを起床させる
+    void wake() {
+        self.vtable.wake(self.data);
+    }
+
+    // Wakerを複製する
+    Waker clone() {
+        self.vtable.clone(self.data);
+        return Waker { data: self.data, vtable: self.vtable };
+    }
+}
+
+// 実行コンテキスト
+struct Context {
+    Waker* waker;
+}
+
+// Futureインターフェース
+interface Future {
+    Poll poll(Context* cx);
+}

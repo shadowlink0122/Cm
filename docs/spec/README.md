@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # Cm言語仕様
 
 このディレクトリにはCm言語の正式な仕様が含まれます。
@@ -8,11 +10,11 @@
 
 | ファイル | 内容 | 状態 |
 |----------|------|------|
-| [grammar.md](grammar.md) | 文法定義（BNF） | 🔨 作成中 |
-| [types.md](types.md) | 型システム | 📋 予定 |
-| [memory.md](memory.md) | メモリモデル | 📋 予定 |
-| [modules.md](modules.md) | モジュールシステム | 📋 予定 |
-| [stdlib.md](stdlib.md) | 標準ライブラリ | 📋 予定 |
+| [grammar.md](grammar.html) | 文法定義（BNF） | 🔨 作成中 |
+| [types.md](types.html) | 型システム | 📋 予定 |
+| [memory.md](memory.html) | メモリモデル | 📋 予定 |
+| [modules.md](modules.html) | モジュールシステム | 📋 予定 |
+| [stdlib.md](stdlib.html) | 標準ライブラリ | 📋 予定 |
 
 ## 言語概要
 

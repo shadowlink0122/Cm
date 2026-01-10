@@ -1,3 +1,5 @@
+[English](immediate_fix_plan.en.html)
+
 # 論理演算の即時修正案
 
 ## 1. 問題の分析
