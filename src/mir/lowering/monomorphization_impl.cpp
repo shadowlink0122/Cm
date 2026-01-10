@@ -156,20 +156,32 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
         }
 
         // 2. ジェネリック構造体パラメータの場合（Pair<T, U> → Pair__int__string）
-        // パラメータ型がジェネリック構造体かチェック
-        if (!param.type->type_args.empty() && hir_struct_defs) {
+        // または ポインタ型のelement_typeがジェネリック構造体の場合（Node<T>* → Node__Item*）
+        hir::TypePtr struct_type = param.type;
+        std::string struct_arg_type_name = arg_type_name;
+
+        // ポインタ型の場合、element_typeを使用
+        if (param.type->kind == hir::TypeKind::Pointer && param.type->element_type) {
+            struct_type = param.type->element_type;
+            // 引数の型名からも*を除去
+            if (!struct_arg_type_name.empty() && struct_arg_type_name.back() == '*') {
+                struct_arg_type_name.pop_back();
+            }
+        }
+
+        if (struct_type && !struct_type->type_args.empty() && hir_struct_defs) {
             // パラメータ型の構造体定義を取得
-            auto struct_it = hir_struct_defs->find(param.type->name);
+            auto struct_it = hir_struct_defs->find(struct_type->name);
             if (struct_it != hir_struct_defs->end() && struct_it->second) {
                 // 引数の型名からtype_argsを抽出（Pair__int__string → [int, string]）
-                std::string base_name = param.type->name;
-                size_t underscore_pos = arg_type_name.find("__");
+                std::string base_name = struct_type->name;
+                size_t underscore_pos = struct_arg_type_name.find("__");
 
                 if (underscore_pos != std::string::npos &&
-                    arg_type_name.substr(0, underscore_pos) == base_name) {
+                    struct_arg_type_name.substr(0, underscore_pos) == base_name) {
                     // 型引数を抽出
                     std::vector<std::string> extracted_args;
-                    std::string remaining = arg_type_name.substr(underscore_pos + 2);
+                    std::string remaining = struct_arg_type_name.substr(underscore_pos + 2);
 
                     size_t start = 0;
                     while (true) {
@@ -185,8 +197,8 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
 
                     // 型引数とジェネリックパラメータをマッチング
                     for (size_t j = 0;
-                         j < param.type->type_args.size() && j < extracted_args.size(); ++j) {
-                        const auto& type_arg = param.type->type_args[j];
+                         j < struct_type->type_args.size() && j < extracted_args.size(); ++j) {
+                        const auto& type_arg = struct_type->type_args[j];
                         if (type_arg) {
                             // このtype_argがジェネリックパラメータ名なら推論
                             for (const auto& generic_param : callee->generic_params) {
@@ -194,9 +206,32 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
                                     inferred_map[generic_param.name] = extracted_args[j];
                                     debug_msg("MONO", "Inferred " + generic_param.name + " = " +
                                                           extracted_args[j] +
-                                                          " from struct param " + param.type->name);
+                                                          " from struct param " +
+                                                          struct_type->name);
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. 戻り値型から推論（Item got = get_data(node) → T = Item）
+    if (callee->return_type && call_data.destination) {
+        // 戻り値型がジェネリックパラメータの場合
+        for (const auto& generic_param : callee->generic_params) {
+            if (callee->return_type->name == generic_param.name) {
+                // destination（呼び出し結果の格納先）からローカル変数の型を取得
+                if (call_data.destination->local < caller->locals.size()) {
+                    const auto& dest_local = caller->locals[call_data.destination->local];
+                    if (dest_local.type) {
+                        std::string dest_type_name = get_type_name(dest_local.type);
+                        if (!dest_type_name.empty() &&
+                            inferred_map.find(generic_param.name) == inferred_map.end()) {
+                            inferred_map[generic_param.name] = dest_type_name;
+                            debug_msg("MONO", "Inferred " + generic_param.name + " = " +
+                                                  dest_type_name + " from return type");
                         }
                     }
                 }
@@ -263,7 +298,7 @@ static hir::TypePtr substitute_type_in_type(
         }
 
         auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-        // 新しい名前を生成（Node -> Node__int）
+        // 新しい名前を生成（Node -> Node__Item）
         std::string new_name = type->name;
         for (const auto& arg : substituted_type_args) {
             if (arg) {
@@ -272,6 +307,7 @@ static hir::TypePtr substitute_type_in_type(
         }
         new_type->name = new_name;
         new_type->type_args = substituted_type_args;
+        // 注: 構造体の登録は呼び出し元で行う
         return new_type;
     }
 
@@ -612,6 +648,43 @@ void Monomorphization::generate_generic_specializations(
                 } else {
                     auto old_type = new_local.type;
                     new_local.type = substitute_type_in_type(new_local.type, type_subst, this);
+
+                    // ✅ 置換後の型がジェネリック構造体の具象化を含む場合、構造体を生成
+                    // 例: Node<T> -> Node<Item> の場合、Node__Itemを生成
+                    auto ensure_struct_specialization = [&](const hir::TypePtr& t) {
+                        if (!t)
+                            return;
+                        hir::TypePtr target = t;
+                        // ポインタ型の場合は要素型をチェック
+                        if (t->kind == hir::TypeKind::Pointer && t->element_type) {
+                            target = t->element_type;
+                        }
+                        // 構造体型でマングリング済みの名前（__を含む）を持つ場合
+                        if (target && target->kind == hir::TypeKind::Struct &&
+                            target->name.find("__") != std::string::npos) {
+                            // 基本名と型引数を抽出
+                            auto pos = target->name.find("__");
+                            std::string base_name = target->name.substr(0, pos);
+                            std::vector<std::string> struct_type_args;
+                            std::string remainder = target->name.substr(pos + 2);
+                            size_t arg_pos = 0;
+                            while (arg_pos < remainder.size()) {
+                                auto next = remainder.find("__", arg_pos);
+                                if (next == std::string::npos) {
+                                    struct_type_args.push_back(remainder.substr(arg_pos));
+                                    break;
+                                }
+                                struct_type_args.push_back(
+                                    remainder.substr(arg_pos, next - arg_pos));
+                                arg_pos = next + 2;
+                            }
+                            // 構造体特殊化を生成
+                            if (!struct_type_args.empty()) {
+                                generate_specialized_struct(program, base_name, struct_type_args);
+                            }
+                        }
+                    };
+                    ensure_struct_specialization(new_local.type);
                 }
             }
             specialized->locals.push_back(new_local);
@@ -1111,17 +1184,12 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
         MirStructField mir_field;
         mir_field.name = field.name;
 
-        // フィールドの型を置換
+        // フィールドの型を置換（再帰的に適用）
         hir::TypePtr field_type = field.type;
         if (field_type) {
-            // ジェネリック型パラメータならば置換
-            if (field_type->kind == hir::TypeKind::Generic ||
-                type_subst.count(field_type->name) > 0) {
-                auto subst_it = type_subst.find(field_type->name);
-                if (subst_it != type_subst.end()) {
-                    field_type = subst_it->second;
-                }
-            }
+            // ✅ substitute_type_in_typeを使用して再帰的に型を置換
+            // これによりT=ItemのようなStruct型も正しく置換される
+            field_type = substitute_type_in_type(field_type, type_subst, this);
         }
         mir_field.type = field_type;
 

@@ -2029,6 +2029,14 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                             }
                         }
                         auto typeKind = elemType->kind;
+
+                        // ローカル変数自体がポインタ型の場合はロードをスキップ
+                        // ポインタを格納するlocal_2のような変数はポインタ値をそのまま格納すべき
+                        if (localInfo.type->kind == hir::TypeKind::Pointer) {
+                            // ポインタ型のローカル変数へはポインタ値をそのまま返す
+                            return val;
+                        }
+
                         // プリミティブ型または構造体型の場合はロード
                         bool isPrimitive =
                             typeKind == hir::TypeKind::Int || typeKind == hir::TypeKind::UInt ||

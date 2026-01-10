@@ -593,6 +593,20 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
         case ast::TypeKind::Void:
             return 0;
 
+        case ast::TypeKind::Generic: {
+            // ジェネリック型のサイズ計算
+            // 例: Node<T> や Node<Item>
+
+            // Phase 1: 緊急修正 - 安全側のサイズを返す
+            // TODO: Phase 2でモノモーフィゼーション後の実際のサイズを計算
+            // Generic type size requested for: + type->name;
+
+            // ジェネリック構造体の場合、暫定的に大きめのサイズを返す
+            // これにより、malloc時にメモリ不足によるクラッシュを防ぐ
+            // 256バイトは大抵の構造体に対して十分なサイズ
+            return 256;  // 暫定的な安全サイズ
+        }
+
         default:
             return 8;  // 不明な型はポインタサイズと仮定
     }
