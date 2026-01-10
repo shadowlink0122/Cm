@@ -1552,6 +1552,121 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
 
             return value;
         }
+        case mir::MirRvalue::Aggregate: {
+            // 集約型（構造体、配列、タプル）の構築
+            auto& aggData = std::get<mir::MirRvalue::AggregateData>(rvalue.data);
+
+            if (aggData.kind.type == mir::AggregateKind::Type::Struct) {
+                // 構造体型を取得
+                std::string structName = aggData.kind.name;
+
+                // 型情報から型引数を取得してマングリング
+                if (aggData.kind.ty && !aggData.kind.ty->type_args.empty()) {
+                    for (const auto& typeArg : aggData.kind.ty->type_args) {
+                        if (typeArg) {
+                            structName += "__";
+                            switch (typeArg->kind) {
+                                case hir::TypeKind::Int:
+                                    structName += "int";
+                                    break;
+                                case hir::TypeKind::UInt:
+                                    structName += "uint";
+                                    break;
+                                case hir::TypeKind::Long:
+                                    structName += "long";
+                                    break;
+                                case hir::TypeKind::ULong:
+                                    structName += "ulong";
+                                    break;
+                                case hir::TypeKind::Float:
+                                    structName += "float";
+                                    break;
+                                case hir::TypeKind::Double:
+                                    structName += "double";
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    structName += "bool";
+                                    break;
+                                case hir::TypeKind::Char:
+                                    structName += "char";
+                                    break;
+                                case hir::TypeKind::Struct:
+                                    structName += typeArg->name;
+                                    break;
+                                default:
+                                    structName += "unknown";
+                                    break;
+                            }
+                        }
+                    }
+                }
+
+                auto it = structTypes.find(structName);
+                if (it == structTypes.end()) {
+                    // マングリングなしでも試す
+                    it = structTypes.find(aggData.kind.name);
+                }
+
+                if (it == structTypes.end() || !it->second) {
+                    // 構造体型が見つからない
+                    return nullptr;
+                }
+
+                auto* structType = it->second;
+
+                // 一時変数を作成してフィールドを初期化
+                auto* alloca = builder->CreateAlloca(structType, nullptr, "agg_temp");
+
+                // 各フィールドを初期化
+                for (size_t i = 0; i < aggData.operands.size(); ++i) {
+                    if (aggData.operands[i]) {
+                        auto* fieldValue = convertOperand(*aggData.operands[i]);
+                        if (fieldValue) {
+                            auto* gep =
+                                builder->CreateStructGEP(structType, alloca, i, "agg_field");
+                            builder->CreateStore(fieldValue, gep);
+                        }
+                    }
+                }
+
+                // 構造体値をロードして返す
+                return builder->CreateLoad(structType, alloca, "agg_load");
+            } else if (aggData.kind.type == mir::AggregateKind::Type::Array) {
+                // 配列の処理
+                if (aggData.operands.empty() || !aggData.operands[0]) {
+                    return nullptr;
+                }
+
+                // 最初の要素から型を推定
+                auto* firstElem = convertOperand(*aggData.operands[0]);
+                if (!firstElem) {
+                    return nullptr;
+                }
+
+                auto* elemType = firstElem->getType();
+                auto* arrayType = llvm::ArrayType::get(elemType, aggData.operands.size());
+                auto* alloca = builder->CreateAlloca(arrayType, nullptr, "arr_temp");
+
+                // 各要素を初期化
+                for (size_t i = 0; i < aggData.operands.size(); ++i) {
+                    if (aggData.operands[i]) {
+                        auto* elemValue = convertOperand(*aggData.operands[i]);
+                        if (elemValue) {
+                            auto* gep =
+                                builder->CreateGEP(arrayType, alloca,
+                                                   {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                                    llvm::ConstantInt::get(ctx.getI32Type(), i)},
+                                                   "arr_elem");
+                            builder->CreateStore(elemValue, gep);
+                        }
+                    }
+                }
+
+                return builder->CreateLoad(arrayType, alloca, "arr_load");
+            }
+
+            return nullptr;
+        }
         default:
             return nullptr;
     }
