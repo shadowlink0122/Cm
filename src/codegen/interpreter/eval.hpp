@@ -224,6 +224,44 @@ class Evaluator {
                             default:
                                 return Value{};
                         }
+                    } else if (ptr.internal_val_ptr && ptr.element_type) {
+                        // internal_val_ptrを使用（関数跨ぎでも参照透過性維持）
+                        Value& target = *ptr.internal_val_ptr;
+                        int64_t base_offset = ptr.array_index.value_or(0);
+                        int64_t total_index = base_offset + index;
+                        if (target.type() == typeid(ArrayValue)) {
+                            auto& arr = std::any_cast<ArrayValue&>(target);
+                            if (total_index >= 0 &&
+                                static_cast<size_t>(total_index) < arr.elements.size()) {
+                                result = arr.elements[total_index];
+                            } else {
+                                return Value{};  // 範囲外
+                            }
+                        } else {
+                            return Value{};
+                        }
+                    } else if (ptr.target_local != 0xFFFFFFFF && ptr.element_type) {
+                        // 内部メモリポインタ（同一コンテキスト内ローカル変数への参照）
+                        auto target_it = ctx.locals.find(ptr.target_local);
+                        if (target_it != ctx.locals.end()) {
+                            Value& target = target_it->second;
+                            // ポインタのオフセット（array_index）とインデックスを合わせて要素を取得
+                            int64_t base_offset = ptr.array_index.value_or(0);
+                            int64_t total_index = base_offset + index;
+                            if (target.type() == typeid(ArrayValue)) {
+                                auto& arr = std::any_cast<ArrayValue&>(target);
+                                if (total_index >= 0 &&
+                                    static_cast<size_t>(total_index) < arr.elements.size()) {
+                                    result = arr.elements[total_index];
+                                } else {
+                                    return Value{};  // 範囲外
+                                }
+                            } else {
+                                return Value{};
+                            }
+                        } else {
+                            return Value{};
+                        }
                     } else {
                         return Value{};
                     }

@@ -1962,8 +1962,13 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                 }
                             }
                         } else if (proj.kind == mir::ProjectionKind::Index && currentType) {
+                            // 配列型またはポインタ型経由のインデックスアクセス
                             if (currentType->kind == hir::TypeKind::Array &&
                                 currentType->element_type) {
+                                currentType = currentType->element_type;
+                            } else if (currentType->kind == hir::TypeKind::Pointer &&
+                                       currentType->element_type) {
+                                // ポインタ型経由のインデックスアクセス (ptr[i])
                                 currentType = currentType->element_type;
                             }
                         } else if (proj.kind == mir::ProjectionKind::Deref && currentType) {
@@ -2403,29 +2408,91 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
-                // 配列の要素型を取得（currentTypeを使用）
+                // 配列またはポインタ型を処理
                 llvm::Type* arrayType = nullptr;
-                if (currentType && currentType->kind == hir::TypeKind::Array) {
-                    arrayType = convertType(currentType);
+                llvm::Type* elemType = nullptr;
+                bool isPointerAccess = false;
+
+                // まずcurrentTypeを確認
+                if (currentType) {
+                    if (currentType->kind == hir::TypeKind::Array) {
+                        arrayType = convertType(currentType);
+                        elemType = convertType(currentType->element_type);
+                    } else if (currentType->kind == hir::TypeKind::Pointer &&
+                               currentType->element_type) {
+                        // ポインタ型経由のインデックスアクセス (ptr[i])
+                        elemType = convertType(currentType->element_type);
+                        isPointerAccess = true;
+                    }
                 }
 
-                if (!arrayType) {
+                if (!arrayType && !isPointerAccess) {
                     // フォールバック: place.localの型を使用
                     if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
                         auto& local = currentMIRFunction->locals[place.local];
-                        if (local.type && local.type->kind == hir::TypeKind::Array) {
-                            arrayType = convertType(local.type);
+                        if (local.type) {
+                            if (local.type->kind == hir::TypeKind::Array) {
+                                arrayType = convertType(local.type);
+                                elemType = convertType(local.type->element_type);
+                            } else if (local.type->kind == hir::TypeKind::Pointer &&
+                                       local.type->element_type) {
+                                elemType = convertType(local.type->element_type);
+                                isPointerAccess = true;
+                            }
                         }
                     }
                 }
 
-                if (!arrayType) {
+                if (!arrayType && !isPointerAccess) {
                     // 型情報が取得できない場合は、allocaまたはGEPから推測
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
-                        arrayType = allocaInst->getAllocatedType();
+                        auto allocType = allocaInst->getAllocatedType();
+                        if (allocType->isArrayTy()) {
+                            arrayType = allocType;
+                            elemType = allocType->getArrayElementType();
+                        } else if (allocType->isPointerTy()) {
+                            // ポインタ型のallocaの場合
+                            isPointerAccess = true;
+                            elemType = allocType;  // opaque pointerの場合は型情報がない
+                        }
                     } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
-                        arrayType = gepInst->getResultElementType();
+                        auto resultType = gepInst->getResultElementType();
+                        if (resultType && resultType->isArrayTy()) {
+                            arrayType = resultType;
+                            elemType = resultType->getArrayElementType();
+                        }
                     }
+                }
+
+                // ポインタ経由のインデックスアクセス
+                if (isPointerAccess && elemType) {
+                    // ポインタ値をloadしてからGEPでインデックスアクセス
+                    llvm::Value* ptrVal = addr;
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                        // allocaからポインタ値をload
+                        // LLVM 14: typed pointerモードでは正しい型でloadする必要がある
+                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                        ptrVal = builder->CreateLoad(allocatedType, addr, "ptr_load");
+                    } else if (addr->getType()->isPointerTy()) {
+                        // その他のポインタの場合
+                        ptrVal = builder->CreateLoad(llvm::PointerType::get(elemType, 0), addr,
+                                                     "ptr_load");
+                    }
+
+                    // LLVM 14: typed pointersモードではGEP前にポインタ型をelemTypeのポインタに変換
+                    llvm::Type* elemPtrType = llvm::PointerType::get(elemType, 0);
+                    if (ptrVal->getType() != elemPtrType) {
+                        ptrVal = builder->CreateBitCast(ptrVal, elemPtrType, "ptr_cast");
+                    }
+
+                    // GEPでptr + index*sizeof(elem)を計算
+                    addr = builder->CreateGEP(elemType, ptrVal, indexVal, "elem_ptr");
+
+                    // 次のプロジェクションのために型を更新
+                    if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                        currentType = currentType->element_type;
+                    }
+                    break;
                 }
 
                 if (!arrayType || !arrayType->isArrayTy()) {
@@ -2433,6 +2500,11 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                             "Cannot determine array type for index access",
                                             cm::debug::Level::Error);
                     return nullptr;
+                }
+
+                // 配列アクセスの場合
+                if (!elemType) {
+                    elemType = arrayType->getArrayElementType();
                 }
 
                 // 境界チェック: インデックスが配列サイズ未満かチェック
