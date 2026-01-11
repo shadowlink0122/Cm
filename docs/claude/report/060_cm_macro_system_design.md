@@ -1,37 +1,39 @@
-# Cm言語マクロシステム設計書（Cm構文準拠版）
+# Cm言語マクロシステム設計書（Cm構文完全準拠版）
 
 作成日: 2026-01-11
 対象バージョン: v0.11.0
-ステータス: 最終改訂
+ステータス: 最終改訂v2
 
 ## エグゼクティブサマリー
 
-Cm言語の**既存パーサーと中間言語（MIR）を活用**したマクロシステムを設計します。Rust風の構文を完全に排除し、Cmの構文規則に100%準拠します。
+Cm言語の**既存パーサーと中間言語（MIR）を活用**したマクロシステムを設計します。マクロはトップレベル宣言として、他の構文と統一された形式を採用します。
 
 ## 1. 設計理念
 
 ### 1.1 基本方針
 
-1. **既存パーサー活用**: 新たなパーサーを書かない
-2. **MIR統合**: 中間言語レベルで自然に処理
-3. **型安全重視**: autoを使わず明示的な型宣言
-4. **Cm構文準拠**: 関数オーバーロードのような自然な構文
+1. **トップレベル宣言の統一**: struct, enum, macro等すべて同じ形式
+2. **既存パーサー活用**: 新たなパーサーを書かない
+3. **MIR統合**: 中間言語レベルで自然に処理
+4. **型安全重視**: autoを使わず明示的な型宣言
 
-### 1.2 従来の問題点と解決
+### 1.2 構文の一貫性
 
-| 問題点 | 解決策 |
-|--------|--------|
-| $x:expr などRust構文 | **廃止** - 通常のパラメータ構文 |
-| 別パーサーが必要 | **不要** - 既存パーサーを拡張 |
-| autoの多用 | **禁止** - 明示的な型宣言 |
-| template<typename T> | **<T>構文** - Cm標準スタイル |
+| 宣言種別 | 構文例 |
+|---------|--------|
+| 構造体 | `struct Point { ... }` |
+| 列挙型 | `enum State { ... }` |
+| インターフェース | `interface Iterator { ... }` |
+| **マクロ** | `macro vec(...) { ... }` |
+| ジェネリック構造体 | `struct Vector<T> { ... }` |
+| **ジェネリックマクロ** | `macro min<T>(...) { ... }` |
 
 ## 2. マクロ定義構文
 
-### 2.1 基本構造（関数オーバーロード風）
+### 2.1 基本構造（トップレベル宣言）
 
 ```cm
-// マクロ定義：関数定義と同じ構文
+// マクロ定義：トップレベル宣言として
 macro vec() {
     return Vector<int>();
 }
@@ -54,25 +56,31 @@ macro vec(int first, int... rest) {
 }
 ```
 
-### 2.2 型ジェネリック対応
+### 2.2 型ジェネリック対応（正しい構文順）
 
 ```cm
-// ジェネリックマクロ（Cm標準の<T>構文）
-<T>
-macro create_vector(T first) {
+// ジェネリックマクロ（macroが先、<T>は名前の後）
+macro create_vector<T>(T first) {
     Vector<T> v;
     v.push(first);
     return v;
 }
 
-<T>
-macro create_vector(T first, T... rest) {
+macro create_vector<T>(T first, T... rest) {
     Vector<T> v;
     v.push(first);
     @foreach(r in rest) {
         v.push(r);
     }
     return v;
+}
+
+// 複数型パラメータ
+macro pair<T, U>(T first, U second) {
+    Pair<T, U> p;
+    p.first = first;
+    p.second = second;
+    return p;
 }
 ```
 
@@ -87,9 +95,12 @@ int main() {
     Vector<int> v2 = vec(1);
     Vector<int> v3 = vec(1, 2, 3);
 
+    // ジェネリックマクロの呼び出し
+    Vector<float> v4 = create_vector<float>(1.0f);
+    Vector<float> v5 = create_vector<float>(1.0f, 2.0f, 3.0f);
+
     // 型推論（将来的に）
-    Vector<float> v4 = create_vector(1.0f);
-    Vector<float> v5 = create_vector(1.0f, 2.0f, 3.0f);
+    Pair<int, string> p = pair(42, "hello");
 
     return 0;
 }
@@ -146,23 +157,45 @@ macro dbg(int value) {
 // dbg(x);  // 出力: [DEBUG] x = 42
 ```
 
+### 4.4 @type_name - 型名取得
+
+```cm
+macro print_type<T>(T value) {
+    printf("Type: %s, Value: ", @type_name(T));
+    @if(T == int) {
+        printf("%d\n", value);
+    }
+    @elif(T == float) {
+        printf("%f\n", value);
+    }
+    @else {
+        printf("<object>\n");
+    }
+}
+```
+
 ## 5. Pin実装用マクロ
 
-### 5.1 pinマクロ（Cm構文版）
+### 5.1 pinマクロ（正しい構文順）
 
 ```cm
 // 値をPinする
-<T>
-macro pin(T& value) {
+macro pin<T>(T& value) {
     Pin<T> pinned(value);
     return pinned;
 }
 
 // 新規変数として作成
-<T>
-macro pin_new(T value) {
+macro pin_new<T>(T value) {
     T temp = value;
     Pin<T> pinned(temp);
+    return pinned;
+}
+
+// Box版
+macro pin_box<T>(T value) {
+    Box<T> boxed = Box<T>::new(value);
+    Pin<Box<T>> pinned(boxed);
     return pinned;
 }
 
@@ -170,8 +203,8 @@ macro pin_new(T value) {
 int main() {
     int value = 42;
     Pin<int> p1 = pin(value);
-
     Pin<float> p2 = pin_new(3.14f);
+    Pin<Box<int>> p3 = pin_box(100);
 
     return 0;
 }
@@ -179,35 +212,38 @@ int main() {
 
 ## 6. 標準マクロライブラリ
 
-### 6.1 基本マクロ（Cm構文）
+### 6.1 基本マクロ（正しい構文）
 
 ```cm
 // std/macros.cm
 
 // 最小値
-<T>
-macro min(T a, T b) {
+macro min<T>(T a, T b) {
     return (a < b) ? a : b;
 }
 
 // 最大値
-<T>
-macro max(T a, T b) {
+macro max<T>(T a, T b) {
     return (a > b) ? a : b;
 }
 
 // スワップ
-<T>
-macro swap(T& a, T& b) {
+macro swap<T>(T& a, T& b) {
     T temp = a;
     a = b;
     b = temp;
 }
 
 // 配列サイズ
-<T, int N>
-macro array_size(T[N]& arr) {
+macro array_size<T, int N>(T[N]& arr) {
     return N;
+}
+
+// 範囲チェック
+macro clamp<T>(T value, T min_val, T max_val) {
+    if (value < min_val) return min_val;
+    if (value > max_val) return max_val;
+    return value;
 }
 ```
 
@@ -224,9 +260,8 @@ macro println(string format, void*... args) {
     printf("\n");
 }
 
-// デバッグ出力
-<T>
-macro debug(string name, T value) {
+// デバッグ出力（ジェネリック版）
+macro debug<T>(string name, T value) {
     fprintf(stderr, "[%s:%d] %s = ", __FILE__, __LINE__, name);
     // 型に応じた出力を生成
     @if(T == int) {
@@ -239,8 +274,36 @@ macro debug(string name, T value) {
         fprintf(stderr, "%s\n", value);
     }
     @else {
-        fprintf(stderr, "<object>\n");
+        fprintf(stderr, "<%s>\n", @type_name(T));
     }
+}
+```
+
+### 6.3 コレクションマクロ
+
+```cm
+// ベクター初期化
+macro vec_of<T>(T... elements) {
+    Vector<T> v;
+    @foreach(elem in elements) {
+        v.push(elem);
+    }
+    return v;
+}
+
+// マップ初期化（ペア形式）
+macro map_of<K, V>(K key, V value) {
+    Map<K, V> m;
+    m.insert(key, value);
+    return m;
+}
+
+// 使用例
+int main() {
+    Vector<int> numbers = vec_of(1, 2, 3, 4, 5);
+    Map<string, int> ages = map_of("Alice", 30);
+
+    return 0;
 }
 ```
 
@@ -260,26 +323,35 @@ macro debug(string name, T value) {
 [MIR生成] ← 通常の関数と同じ扱い
 ```
 
-### 7.2 MIR表現例
+### 7.2 パーサーでの認識
 
-```cm
-// マクロ呼び出し
-Vector<int> v = vec(1, 2, 3);
+```cpp
+// parser.cpp での処理
+if (current_token == "macro") {
+    // トップレベル宣言として処理
+    return parse_macro_declaration();
+}
 
-// AST展開後
-Vector<int> v;
-v.push(1);
-v.push(2);
-v.push(3);
+// macro <name> または macro <name><T>
+MacroDecl* parse_macro_declaration() {
+    expect("macro");
+    string name = parse_identifier();
 
-// MIR表現
-%0 = call Vector<int>::Vector()
-%1 = const 1 : int
-call Vector<int>::push(%0, %1)
-%2 = const 2 : int
-call Vector<int>::push(%0, %2)
-%3 = const 3 : int
-call Vector<int>::push(%0, %3)
+    // ジェネリックパラメータ（オプション）
+    if (current_token == "<") {
+        parse_generic_params();
+    }
+
+    // パラメータリスト
+    expect("(");
+    parse_parameter_list();
+    expect(")");
+
+    // マクロ本体
+    expect("{");
+    parse_macro_body();
+    expect("}");
+}
 ```
 
 ## 8. 衛生性の簡易実装
@@ -288,10 +360,10 @@ call Vector<int>::push(%0, %3)
 
 ```cm
 // マクロ内のローカル変数は自動的に一意な名前に変換
-macro safe_swap(int& a, int& b) {
-    int temp = a;  // → int __macro_temp_XXX = a;
+macro safe_swap<T>(T& a, T& b) {
+    T temp = a;  // → T __macro_temp_XXX = a;
     a = b;
-    b = temp;      // → b = __macro_temp_XXX;
+    b = temp;    // → b = __macro_temp_XXX;
 }
 
 // 名前衝突しない
@@ -308,16 +380,16 @@ int main() {
 
 ## 9. エラー処理
 
-### 9.1 コンパイルエラー
+### 9.1 構文エラー
 
 ```
-error: macro 'vec' expects arguments
-  --> main.cm:10:15
+error: expected generic parameters after macro name
+  --> main.cm:10:6
    |
-10 | Vector<int> v = vec;
-   |                 ^^^ missing ()
+10 | macro<T> vec(T first) {
+   |      ^ should be after 'vec'
    |
-   = help: did you mean vec()?
+   = help: correct syntax: macro vec<T>(T first)
 ```
 
 ### 9.2 型エラー
@@ -326,54 +398,69 @@ error: macro 'vec' expects arguments
 error: type mismatch in macro 'create_vector'
   --> main.cm:12:20
    |
-12 | Vector<int> v = create_vector(1, 2.0f);
-   |                               ^   ^^^^ float
-   |                               int
+12 | Vector<int> v = create_vector<int>(1, 2.0f);
+   |                                    ^   ^^^^ float
+   |                                    int
    |
-   = note: all arguments must have the same type
+   = note: all arguments must have the same type T
 ```
 
-## 10. 実装ロードマップ
+## 10. 構文のBNF（簡略版）
+
+```ebnf
+// トップレベル宣言
+top_level_decl ::= struct_decl
+                 | enum_decl
+                 | interface_decl
+                 | function_decl
+                 | macro_decl
+
+// マクロ宣言
+macro_decl ::= 'macro' identifier generic_params? '(' parameters ')' block
+
+// ジェネリックパラメータ
+generic_params ::= '<' type_param (',' type_param)* '>'
+
+// パラメータ
+parameters ::= parameter (',' parameter)*
+parameter ::= type identifier ('...')? ('=' default_value)?
+
+// マクロ本体
+block ::= '{' (statement | directive)* '}'
+directive ::= '@foreach' | '@if' | '@stringify' | '@type_name'
+```
+
+## 11. 実装優先度
 
 ### Phase 1: 基本実装
-1. マクロ定義の構文解析（既存パーサー拡張）
+1. `macro` キーワードの認識
 2. 単純な置換マクロ
 3. オーバーロード解決
 
-### Phase 2: 高度な機能
-1. @foreach, @if ディレクティブ
-2. 型ジェネリック対応
-3. 衛生性実装
+### Phase 2: ジェネリック対応
+1. `macro name<T>` 構文の解析
+2. 型パラメータの展開
+3. 型推論の基礎
 
-### Phase 3: 最適化
-1. 展開結果のキャッシュ
-2. インライン化との統合
-3. デバッグ情報の保持
-
-## 11. 他言語との比較
-
-| 機能 | Cm（本設計） | Rust | C++ |
-|------|------------|------|-----|
-| 構文 | 関数風 | 特殊構文 | #define |
-| 型安全 | ✅完全 | ✅ | ❌ |
-| 既存パーサー活用 | ✅ | ❌ | N/A |
-| 学習容易性 | ✅簡単 | ❌複雑 | ⚠️ |
-| MIR統合 | ✅自然 | N/A | N/A |
+### Phase 3: ディレクティブ
+1. @foreach 実装
+2. @if/@else 実装
+3. @stringify, @type_name 実装
 
 ## まとめ
 
 この設計により：
 
-1. **既存パーサーをそのまま活用**（新規パーサー不要）
-2. **Cm構文に100%準拠**（関数定義と同じ）
-3. **型安全性を完全保証**（autoを使わない）
-4. **MIRレベルで自然に処理**（特殊な処理不要）
-5. **学習コストゼロ**（関数と同じ構文）
+1. **構文の一貫性**: `macro vec<T>` はCmの他の宣言と同じ形式
+2. **既存パーサー活用**: トップレベル宣言として自然に処理
+3. **型安全性**: ジェネリックによる完全な型チェック
+4. **学習コスト最小**: 関数定義と同じ感覚で書ける
+5. **MIR統合**: 特殊処理不要で既存の最適化を活用
 
-Rustの複雑な構文を避け、Cmの既存インフラを最大限活用する実用的な設計です。
+トップレベル宣言として統一された、Cmらしいマクロシステムです。
 
 ---
 
 **作成者:** Claude Code
-**ステータス:** 最終設計
+**ステータス:** 最終設計v2
 **次ステップ:** パーサー拡張から実装開始

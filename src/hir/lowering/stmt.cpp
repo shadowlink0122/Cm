@@ -267,6 +267,71 @@ HirStmtPtr HirLowering::lower_for(ast::ForStmt& for_stmt) {
 HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
     debug::hir::log(debug::hir::Id::LoopLower, "Lowering for-in statement", debug::Level::Debug);
 
+    // イテレータベース展開: for (x in collection) → while (iter.has_next()) { x = iter.next(); ...
+    // }
+    if (for_in.use_iterator) {
+        debug::hir::log(debug::hir::Id::LoopLower,
+                        "Using iterator pattern: " + for_in.iterator_type_name,
+                        debug::Level::Debug);
+
+        // HirBlockを使ってスコープを作成
+        auto hir_block = std::make_unique<HirBlock>();
+
+        // 1. イテレータ変数の宣言: auto __iter = collection.iter();
+        std::string iter_name = "__for_in_iter_" + for_in.var_name;
+        auto iter_let = std::make_unique<HirLet>();
+        iter_let->name = iter_name;
+        // イテレータ型は未設定（型推論に任せる）
+
+        // collection.iter() 呼び出し
+        auto iter_call = std::make_unique<HirCall>();
+        std::string type_name =
+            for_in.iterable->type ? ast::type_to_string(*for_in.iterable->type) : "";
+        iter_call->func_name = type_name + "__iter";
+        iter_call->args.push_back(lower_expr(*for_in.iterable));
+        iter_let->init = std::make_unique<HirExpr>(std::move(iter_call), nullptr);
+
+        hir_block->stmts.push_back(std::make_unique<HirStmt>(std::move(iter_let)));
+
+        // 2. whileループ: while (__iter.has_next()) { ... }
+        auto hir_while = std::make_unique<HirWhile>();
+
+        // 条件: __iter.has_next()
+        auto has_next_call = std::make_unique<HirCall>();
+        has_next_call->func_name = for_in.iterator_type_name + "__has_next";
+        auto iter_ref = std::make_unique<HirVarRef>();
+        iter_ref->name = iter_name;
+        has_next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_ref), nullptr));
+        hir_while->cond = std::make_unique<HirExpr>(std::move(has_next_call), ast::make_bool());
+
+        // ループ本体
+        // var = __iter.next()
+        auto elem_let = std::make_unique<HirLet>();
+        elem_let->name = for_in.var_name;
+        elem_let->type = for_in.var_type;
+
+        auto next_call = std::make_unique<HirCall>();
+        next_call->func_name = for_in.iterator_type_name + "__next";
+        auto iter_ref2 = std::make_unique<HirVarRef>();
+        iter_ref2->name = iter_name;
+        next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_ref2), nullptr));
+        elem_let->init = std::make_unique<HirExpr>(std::move(next_call), for_in.var_type);
+
+        hir_while->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
+
+        // ユーザーのループ本体
+        for (auto& s : for_in.body) {
+            if (auto hs = lower_stmt(*s)) {
+                hir_while->body.push_back(std::move(hs));
+            }
+        }
+
+        hir_block->stmts.push_back(std::make_unique<HirStmt>(std::move(hir_while)));
+
+        return std::make_unique<HirStmt>(std::move(hir_block));
+    }
+
+    // 従来のインデックスベース展開（配列/スライス用）
     auto hir_for = std::make_unique<HirFor>();
 
     auto iterable_type = for_in.iterable->type;

@@ -31,9 +31,8 @@ Cm言語でメモリ上の値の移動を防ぐPin機能を提供します。**U
 ### 2.1 Pin型の定義（Cm構文）
 
 ```cm
-// Cmジェネリクス構文（<T>）
-<T>
-struct Pin {
+// Cmジェネリクス構文（struct Name<T>）
+struct Pin<T> {
 private:
     T* pointer;  // 固定された値へのポインタ
 
@@ -112,15 +111,13 @@ int main() {
 
 ```cm
 // 値を固定するマクロ
-<T>
-macro pin(T& value) {
+macro pin<T>(T& value) {
     Pin<T> pinned(value);
     return pinned;
 }
 
 // ヒープ上に作成して固定
-<T>
-macro pin_box(T value) {
+macro pin_box<T>(T value) {
     Box<T> boxed = Box<T>::new(value);
     Pin<Box<T>> pinned(boxed);
     return pinned;
@@ -147,8 +144,7 @@ int main() {
 
 ```cm
 // Boxの拡張（ジェネリクス使用）
-<T>
-struct Box {
+struct Box<T> {
     T* ptr;
 
     // Pin作成用の静的メソッド
@@ -180,8 +176,7 @@ int main() {
 
 ```cm
 // 参照カウント型でのPin
-<T>
-struct Rc {
+struct Rc<T> {
     T* ptr;
     int* count;
 
@@ -233,8 +228,7 @@ struct AsyncTask {
 
 ```cm
 // async関数の戻り値の型
-<T>
-struct Future {
+struct Future<T> {
     T result;
     bool ready;
 };
@@ -311,8 +305,7 @@ void unregister_pinned_address(void* addr) {
 
 ```cm
 // Vectorに格納されたPinされた要素
-<T>
-struct PinnedVector {
+struct PinnedVector<T> {
 private:
     Vector<Box<T>> storage;  // ヒープ確保で移動を防ぐ
 
@@ -335,8 +328,7 @@ public:
 
 ```cm
 // Pinされた要素のイテレータ
-<T>
-struct PinnedIterator {
+struct PinnedIterator<T> {
     Pin<T>* current;
 
     Pin<T>& operator*() {
@@ -356,7 +348,7 @@ struct PinnedIterator {
 
 ```cm
 // リリースビルドでは追加コストなし
-<T>
+// Pin<T>のメソッド実装（Tは既に定義済み）
 inline T& Pin<T>::get_mut() {
     // インライン化により関数呼び出しオーバーヘッドなし
     return *pointer;

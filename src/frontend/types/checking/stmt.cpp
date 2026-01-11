@@ -253,7 +253,50 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     }
 
     ast::TypePtr element_type;
-    if (iterable_type->kind == ast::TypeKind::Array) {
+
+    // Struct型の場合: iter()メソッドがあるか確認
+    if (iterable_type->kind == ast::TypeKind::Struct) {
+        std::string type_name = ast::type_to_string(*iterable_type);
+
+        // iter()メソッドを検索
+        auto it = type_methods_.find(type_name);
+        if (it != type_methods_.end()) {
+            auto method_it = it->second.find("iter");
+            if (method_it != it->second.end()) {
+                // iter()メソッドが存在 → イテレータベースで展開
+                for_in.use_iterator = true;
+
+                // イテレータの戻り値型を取得
+                if (method_it->second.return_type) {
+                    for_in.iterator_type_name = ast::type_to_string(*method_it->second.return_type);
+
+                    // イテレータのnext()メソッドから要素型を推定
+                    auto iter_it = type_methods_.find(for_in.iterator_type_name);
+                    if (iter_it != type_methods_.end()) {
+                        auto next_it = iter_it->second.find("next");
+                        if (next_it != iter_it->second.end() && next_it->second.return_type) {
+                            element_type = next_it->second.return_type;
+                        }
+                    }
+                }
+
+                debug::tc::log(debug::tc::Id::TypeInfer,
+                               "for-in: using iterator pattern for " + type_name +
+                                   " (iterator: " + for_in.iterator_type_name + ")",
+                               debug::Level::Debug);
+            }
+        }
+
+        // iter()メソッドがない場合はエラー
+        if (!for_in.use_iterator) {
+            error(stmt_span,
+                  "For-in requires an iterable type (array or type with iter() method), got '" +
+                      ast::type_to_string(*iterable_type) + "'");
+            scopes_.pop();
+            return;
+        }
+    } else if (iterable_type->kind == ast::TypeKind::Array) {
+        // 配列型: 従来のインデックスベース展開
         element_type = iterable_type->element_type;
     } else {
         error(stmt_span, "For-in requires an iterable type (array), got '" +

@@ -77,6 +77,10 @@ struct ForInStmt {
     ExprPtr iterable;           // イテレート対象（配列など）
     std::vector<StmtPtr> body;  // ループ本体
 
+    // イテレータベース展開用（型チェッカーで設定）
+    bool use_iterator = false;       // true: iter()/has_next()/next()パターンで展開
+    std::string iterator_type_name;  // イテレータ型名（例: "RangeIterator"）
+
     ForInStmt(std::string name, TypePtr type, ExprPtr iter, std::vector<StmtPtr> b)
         : var_name(std::move(name)),
           var_type(std::move(type)),
