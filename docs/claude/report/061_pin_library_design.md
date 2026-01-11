@@ -1,338 +1,244 @@
-# Cm言語 Pinライブラリ設計書
+# Cm言語 Pin（メモリ固定）ライブラリ設計（改訂版）
 
 作成日: 2026-01-11
 対象バージョン: v0.11.0
-ステータス: ライブラリ設計
-関連文書: 060_cm_macro_system_design.md
+ステータス: 設計改訂
+関連文書: 060_cm_macro_system_design_revised.md
 
 ## エグゼクティブサマリー
 
-自己参照構造体や非同期処理で必要となるメモリ固定（Pin）機能を、安全で使いやすいライブラリとして提供します。モジュール構成、export/import戦略、マクロ統合を含む包括的な設計を提案します。
+Cm言語でメモリ上の値の移動を防ぐPin機能を提供します。**Rustの複雑なUnpin設計を排除し**、より直感的で理解しやすいAPIを提供します。
 
-## 1. Pin概念の概要
+## 1. 設計理念
 
-### 1.1 なぜPinが必要か
+### 1.1 基本方針
+
+1. **シンプルさ優先**: Unpinのような複雑な概念を排除
+2. **明示的な固定**: Pinで囲んだものだけが固定される
+3. **C++風の構文**: Cm言語の構文スタイルに準拠
+4. **ゼロコスト抽象化**: 実行時オーバーヘッドなし
+
+### 1.2 Rustの問題点と改善
+
+| Rustの問題 | Cmの解決策 |
+|-----------|-----------|
+| Unpinトレイトの複雑性 | 廃止：デフォルトで移動可能 |
+| !Unpinの理解困難性 | 不要：Pinで明示的に固定 |
+| PhantomPinnedの必要性 | 不要：シンプルな設計 |
+| 暗黙的な制約 | 明示的な固定のみ |
+
+## 2. 基本設計
+
+### 2.1 Pin型の定義
 
 ```cm
-// 問題：自己参照構造体
+// Cm構文：テンプレート宣言
+template<typename T>
+struct Pin {
+private:
+    T* pointer;  // 固定された値へのポインタ
+
+public:
+    // コンストラクタ（移動を防ぐ）
+    explicit Pin(T& value) : pointer(&value) {
+        // アドレスを記録して移動を検出
+        #ifdef DEBUG
+        register_pinned_address(pointer);
+        #endif
+    }
+
+    // デストラクタ
+    ~Pin() {
+        #ifdef DEBUG
+        unregister_pinned_address(pointer);
+        #endif
+    }
+
+    // 値への読み取り専用アクセス
+    const T& operator*() const {
+        return *pointer;
+    }
+
+    const T* operator->() const {
+        return pointer;
+    }
+
+    // 可変アクセス（安全性を保証）
+    T& get_mut() {
+        // Pinされた値は移動できないので安全
+        return *pointer;
+    }
+
+    // コピー・ムーブ禁止
+    Pin(const Pin&) = delete;
+    Pin& operator=(const Pin&) = delete;
+    Pin(Pin&&) = delete;
+    Pin& operator=(Pin&&) = delete;
+};
+```
+
+### 2.2 使用例
+
+```cm
+// Cm構文での宣言と使用
 struct SelfReferential {
-    data: string,
-    ptr: *string,  // dataを指す
+    int value;
+    int* self_ptr;  // 自己参照ポインタ
+
+    void init() {
+        self_ptr = &value;  // 自己参照を設定
+    }
+};
+
+int main() {
+    // Pin型の宣言（Cm風）
+    SelfReferential obj;
+    obj.init();
+
+    // Pinで固定
+    Pin<SelfReferential> pinned(obj);
+
+    // アクセス
+    printf("Value: %d\n", pinned->value);
+
+    // これはコンパイルエラー
+    // SelfReferential moved = obj;  // Error: obj is pinned
+
+    return 0;
 }
-
-// メモリ上で移動すると、ptrが無効になる！
-let mut sr = SelfReferential { ... };
-let moved = sr;  // 移動するとptrが壊れる
-
-// 解決：Pinで移動を防ぐ
-let pinned = Pin::new(&mut sr);
-// これ以降、srは移動できない
 ```
 
-### 1.2 設計目標
+## 3. マクロによる簡易化
 
-1. **メモリ安全性**: 無効なポインタを防ぐ
-2. **ゼロコスト**: 実行時オーバーヘッドなし
-3. **使いやすさ**: 直感的なAPI
-4. **非同期対応**: Futureとの統合
-
-## 2. ライブラリモジュール構成
-
-### 2.1 ディレクトリ構造
-
-```
-std/pin/
-├── mod.cm           # メインモジュール
-├── pin.cm           # Pin型定義
-├── unpin.cm         # Unpinトレイト
-├── phantom.cm       # PhantomPinned
-├── macros.cm        # pin!等のマクロ
-├── projection.cm    # 投影API
-├── async/
-│   ├── mod.cm       # 非同期統合
-│   └── future.cm    # Future固定
-└── tests/
-    ├── basic.cm     # 基本テスト
-    ├── safety.cm    # 安全性テスト
-    └── async.cm     # 非同期テスト
-```
-
-### 2.2 モジュール依存関係
-
-```mermaid
-graph TD
-    A[std::pin] --> B[std::pin::pin]
-    A --> C[std::pin::unpin]
-    A --> D[std::pin::phantom]
-    A --> E[std::pin::macros]
-    E --> B
-    E --> C
-    F[std::pin::async] --> A
-    G[std::future] --> F
-```
-
-## 3. コアAPI設計
-
-### 3.1 Pin型（std/pin/pin.cm）
+### 3.1 pin!マクロ（Cm構文版）
 
 ```cm
-// std/pin/pin.cm
-module std::pin;
+// macro_rules!をCm風に調整
+macro pin {
+    // パターン1: 値を固定
+    ($value:expr) => {{
+        Pin<typeof($value)> __pin($value);
+        __pin
+    }};
 
-import std::marker::*;
-import std::mem::*;
-
-/// メモリ上で移動しないことを保証する型
-export struct Pin<P: Deref> {
-    private pointer: P,
-}
-
-impl<P: Deref> Pin<P> {
-    /// 安全にPinを作成（Unpinな型のみ）
-    export self(pointer: P) where P::Target: Unpin {
-        self.pointer = pointer;
-    }
-
-    /// 非安全：移動しないことを呼び出し側が保証
-    export unsafe self new_unchecked(pointer: P) {
-        self.pointer = pointer;
-    }
-
-    /// 内部の参照を取得（Unpinな型のみ）
-    export P::Target* get_mut() where P::Target: Unpin {
-        return &mut *self.pointer;
-    }
-
-    /// 非安全：内部の可変参照を取得
-    export unsafe P::Target* get_unchecked_mut() {
-        return &mut *self.pointer;
-    }
-
-    /// 不変参照を安全に取得
-    export const P::Target* get_ref() {
-        return &*self.pointer;
-    }
-
-    /// 投影：フィールドへのPinを作成
-    export <F> Pin<&F> project_field<F>(
-        self: Pin<&P::Target>,
-        field_getter: fn(&P::Target) -> &F
-    ) {
-        unsafe {
-            Pin::new_unchecked(field_getter(self.get_ref()))
-        }
-    }
-}
-
-// Derefトレイト（ポインタのようにデリファレンス可能）
-export interface Deref {
-    typedef Target;
-    Target* deref();
-}
-
-// DerefMutトレイト
-export interface DerefMut for Deref {
-    Target* deref_mut();
+    // パターン2: 新規変数として固定
+    ($type:ty, $name:ident = $init:expr) => {
+        $type $name = $init;
+        Pin<$type> __pin_##$name($name);
+    };
 }
 ```
 
-### 3.2 Unpinトレイト（std/pin/unpin.cm）
+### 3.2 使用例
 
 ```cm
-// std/pin/unpin.cm
-module std::pin::unpin;
+int main() {
+    // マクロで簡単にPin作成
+    int value = 42;
+    auto pinned = pin!(value);
 
-/// 移動しても安全な型を表すマーカートレイト
-export interface Unpin {
-    // 自動実装マーカー
+    // 構造体の場合
+    SelfReferential obj;
+    auto pinned_obj = pin!(obj);
+
+    return 0;
 }
-
-// 基本型は自動的にUnpin
-impl int for Unpin {}
-impl double for Unpin {}
-impl bool for Unpin {}
-impl char for Unpin {}
-
-// ポインタもUnpin
-impl<T> T* for Unpin {}
-
-// 所有権を持つスマートポインタ
-impl<T: Unpin> Box<T> for Unpin {}
-impl<T: Unpin> Rc<T> for Unpin {}
-impl<T: Unpin> Arc<T> for Unpin {}
-
-// コレクション
-impl<T: Unpin> Vector<T> for Unpin {}
-impl<K: Unpin, V: Unpin> HashMap<K, V> for Unpin {}
-
-// 構造体の自動導出
-// すべてのフィールドがUnpinなら、構造体もUnpin
-#[derive_rule]
-impl<T> T for Unpin
-where
-    all_fields_implement(T, Unpin) {}
 ```
 
-### 3.3 PhantomPinned（std/pin/phantom.cm）
+## 4. スマートポインタとの統合
+
+### 4.1 Box<T>との統合
 
 ```cm
-// std/pin/phantom.cm
-module std::pin::phantom;
-
-import std::pin::unpin::Unpin;
-
-/// 型を!Unpin（移動不可）にするマーカー
-export struct PhantomPinned {
-    private _phantom: void,
-}
-
-// PhantomPinnedは明示的にUnpinを実装しない
-// したがって!Unpin
-
-impl PhantomPinned {
-    export const PhantomPinned VALUE = PhantomPinned { _phantom: () };
+// Boxに入れた値をPin
+template<typename T>
+Pin<Box<T>> Box<T>::pin(T value) {
+    Box<T> boxed = Box<T>::new(value);
+    return Pin<Box<T>>(boxed);
 }
 
 // 使用例
-export struct SelfReferential {
-    data: string,
-    ptr: *string,
-    _pin: PhantomPinned,  // これで!Unpinになる
+int main() {
+    // ヒープ上でPin
+    auto pinned_box = Box<SelfReferential>::pin(
+        SelfReferential{42, nullptr}
+    );
+
+    pinned_box->init();  // 安全に自己参照を設定
+
+    return 0;
 }
 ```
 
-## 4. マクロ統合（std/pin/macros.cm）
+### 4.2 Rc/Arcとの統合
 
 ```cm
-// std/pin/macros.cm
-module std::pin::macros;
-
-import std::pin::*;
-
-/// スタック上の値をピン留め
-export macro_rules! pin {
-    ($val:expr) => {{
-        let mut __pinned = $val;
-        // SAFETY: ローカル変数はスコープ内で移動しない
-        unsafe { Pin::new_unchecked(&mut __pinned) }
-    }};
+// 参照カウント型でのPin
+template<typename T>
+Pin<Rc<T>> Rc<T>::pin(T value) {
+    Rc<T> rc = Rc<T>::new(value);
+    return Pin<Rc<T>>(rc);
 }
+```
 
-/// ピン投影の自動生成
-export macro_rules! pin_project {
-    (
-        $(#[$meta:meta])*
-        $vis:vis struct $name:ident {
-            $(
-                $(#[pin])?
-                $field_vis:vis $field:ident : $field_ty:ty
-            ),* $(,)?
-        }
-    ) => {
-        // 元の構造体
-        $(#[$meta])*
-        $vis struct $name {
-            $(
-                $field_vis $field: $field_ty,
-            )*
-        }
+## 5. 非同期処理との統合
 
-        // 投影構造体
-        $vis struct ${name}Projection<'__pin> {
-            $(
-                $field: pin_project_field_type!(
-                    $field_ty,
-                    '__pin,
-                    $(#[pin])?
-                ),
-            )*
-        }
+### 5.1 Future/Promiseでの使用
 
-        impl $name {
-            $vis fn project(self: Pin<&mut Self>) -> ${name}Projection<'_> {
-                unsafe {
-                    let this = self.get_unchecked_mut();
-                    ${name}Projection {
-                        $(
-                            $field: pin_project_field!(
-                                this.$field,
-                                $(#[pin])?
-                            ),
-                        )*
-                    }
-                }
-            }
-        }
+```cm
+// 非同期タスクの状態をPin
+struct AsyncTask {
+    enum State {
+        PENDING,
+        READY,
+        COMPLETED
     };
-}
 
-// 内部ヘルパーマクロ
-macro_rules! pin_project_field_type {
-    ($ty:ty, $lt:lifetime,) => { &$lt mut $ty };
-    ($ty:ty, $lt:lifetime, #[pin]) => { Pin<&$lt mut $ty> };
-}
+    State state;
+    void* context;  // 実行コンテキスト（移動不可）
 
-macro_rules! pin_project_field {
-    ($field:expr,) => { &mut $field };
-    ($field:expr, #[pin]) => { Pin::new_unchecked(&mut $field) };
-}
-
-/// スタックピン留めブロック
-export macro_rules! pin_block {
-    ($($name:ident = $init:expr;)* $body:block) => {{
-        $(
-            let mut $name = $init;
-            let $name = unsafe { Pin::new_unchecked(&mut $name) };
-        )*
-        $body
-    }};
-}
+    // Pollメソッド（Pinが必要）
+    State poll(Pin<AsyncTask>& self) {
+        // selfは移動しないことが保証される
+        switch (self->state) {
+            case PENDING:
+                // 非同期処理を進める
+                break;
+            case READY:
+                // 結果を処理
+                break;
+            default:
+                break;
+        }
+        return self->state;
+    }
+};
 ```
 
-## 5. 非同期統合（std/pin/async/）
-
-### 5.1 Future統合（std/pin/async/future.cm）
+### 5.2 async/awaitとの統合
 
 ```cm
-// std/pin/async/future.cm
-module std::pin::async::future;
+// async関数の内部状態はPinされる
+async int fetch_data() {
+    // コンパイラが自動的にPinを管理
+    int local_state = 0;  // awaitを跨いで保持される
 
-import std::pin::*;
-import std::future::*;
-import std::task::*;
+    await delay(1000);  // ここで中断・再開される
 
-/// ピン留めされたFuture
-export interface Future {
-    typedef Output;
-
-    /// ピン留めされた状態でポーリング
-    Poll<Output> poll(self: Pin<&mut Self>, cx: &mut Context);
+    return local_state + 42;
 }
 
-/// Futureのピン留めヘルパー
-export struct PinnedFuture<F: Future> {
-    future: F,
-    _pin: PhantomPinned,
-}
+int main() {
+    // async関数の返り値は自動的にPinされる
+    auto future = fetch_data();
 
-impl<F: Future> PinnedFuture<F> {
-    export fn pin(future: F) -> Pin<Box<PinnedFuture<F>>> {
-        Box::pin(PinnedFuture {
-            future,
-            _pin: PhantomPinned::VALUE,
-        })
+    // 手動でpollする場合
+    Pin<decltype(future)> pinned_future(future);
+    while (pinned_future.poll() == AsyncTask::PENDING) {
+        // 待機
     }
-}
 
-impl<F: Future> PinnedFuture<F> for Future {
-    typedef Output = F::Output;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Output> {
-        unsafe {
-            let this = self.get_unchecked_mut();
-            Pin::new_unchecked(&mut this.future).poll(cx)
-        }
-    }
+    return 0;
 }
 ```
 
@@ -341,245 +247,146 @@ impl<F: Future> PinnedFuture<F> for Future {
 ### 6.1 コンパイル時チェック
 
 ```cm
-// コンパイルエラーになるケース
+// コンパイラが以下を保証
+template<typename T>
+void compile_time_checks() {
+    // 1. Pinされた値は移動できない
+    T value;
+    Pin<T> pinned(value);
+    // T moved = value;  // コンパイルエラー
 
-// ❌ !Unpinな型を移動しようとする
-struct NotMovable {
-    _pin: PhantomPinned,
+    // 2. Pinはコピーできない
+    // Pin<T> copy = pinned;  // コンパイルエラー
+
+    // 3. Pinはムーブできない
+    // Pin<T> moved = std::move(pinned);  // コンパイルエラー
 }
-
-let nm = NotMovable { _pin: PhantomPinned::VALUE };
-let pinned = Pin::new(&mut nm);  // エラー: NotMovableは!Unpin
-
-// ❌ Pinから値を取り出そうとする
-let pinned: Pin<&mut SomeStruct> = ...;
-let moved = *pinned;  // エラー: Pinはデリファレンスできない
-
-// ❌ ピン留めされた値のフィールドを直接変更
-let pinned: Pin<&mut MyStruct> = ...;
-pinned.field = new_value;  // エラー: 直接アクセス不可
 ```
 
-### 6.2 ランタイム保証
+### 6.2 実行時チェック（デバッグモード）
 
 ```cm
-// std/pin/safety.cm
-module std::pin::safety;
+#ifdef DEBUG
+// デバッグモードでアドレス追跡
+static std::set<void*> pinned_addresses;
 
-/// デバッグビルドでの追加チェック
-#[cfg(debug)]
-export fn verify_pin_invariants<T>(pin: &Pin<&mut T>) {
-    // アドレスが変わっていないことを確認
-    static mut last_addresses: HashMap<TypeId, usize> = HashMap::new();
-
-    let addr = pin as *const _ as usize;
-    let type_id = TypeId::of::<T>();
-
-    if let Some(last) = last_addresses.get(&type_id) {
-        assert_eq!(last, addr, "Pin invariant violated: address changed!");
+void register_pinned_address(void* addr) {
+    if (pinned_addresses.count(addr) > 0) {
+        panic("Address already pinned!");
     }
-    last_addresses.insert(type_id, addr);
+    pinned_addresses.insert(addr);
 }
-```
 
-## 7. 使用例
+void unregister_pinned_address(void* addr) {
+    pinned_addresses.erase(addr);
+}
 
-### 7.1 自己参照構造体
-
-```cm
-use std::pin::*;
-
-pin_project! {
-    struct SelfRef {
-        data: String,
-        #[pin]
-        ptr_to_data: Option<*const String>,
+// ムーブ検出
+void check_move(void* old_addr, void* new_addr) {
+    if (pinned_addresses.count(old_addr) > 0) {
+        panic("Attempted to move pinned value!");
     }
 }
+#endif
+```
 
-impl SelfRef {
-    fn new(data: String) -> Self {
-        SelfRef {
-            data,
-            ptr_to_data: None,
-        }
+## 7. 標準ライブラリでの活用
+
+### 7.1 コンテナでのPin
+
+```cm
+// Vectorに格納されたPinされた要素
+template<typename T>
+struct PinnedVector {
+private:
+    Vector<Box<T>> storage;  // ヒープ確保で移動を防ぐ
+
+public:
+    Pin<T>& push(T value) {
+        Box<T> boxed = Box<T>::new(value);
+        storage.push(boxed);
+        return Pin<T>(storage.back());
     }
 
-    fn init(self: Pin<&mut Self>) {
-        let this = self.project();
-        // 安全: dataは同じ構造体内にあり、Pinで固定されている
-        let ptr = this.data as *const String;
-        *this.ptr_to_data = Some(ptr);
+    Pin<T>& operator[](size_t index) {
+        return Pin<T>(storage[index]);
     }
-}
-
-fn main() {
-    let mut sr = SelfRef::new("Hello".to_string());
-    let mut pinned = pin!(sr);
-    pinned.as_mut().init();
-
-    // これ以降、srは移動できない
-    // let moved = sr;  // コンパイルエラー
-}
+};
 ```
 
-### 7.2 非同期ストリーム
+### 7.2 イテレータとPin
 
 ```cm
-use std::pin::*;
-use std::stream::*;
+// Pinされた要素のイテレータ
+template<typename T>
+struct PinnedIterator {
+    Pin<T>* current;
 
-pin_project! {
-    struct AsyncCounter {
-        #[pin]
-        count: usize,
-        max: usize,
-    }
-}
-
-impl AsyncCounter for Stream {
-    typedef Item = usize;
-
-    fn poll_next(
-        self: Pin<&mut Self>,
-        cx: &mut Context
-    ) -> Poll<Option<Item>> {
-        let this = self.project();
-
-        if *this.count < *this.max {
-            let current = *this.count;
-            *this.count += 1;
-            Poll::Ready(Some(current))
-        } else {
-            Poll::Ready(None)
-        }
-    }
-}
-```
-
-## 8. テスト戦略
-
-### 8.1 単体テスト（std/pin/tests/basic.cm）
-
-```cm
-#[test]
-fn test_pin_basic() {
-    let mut val = 42;
-    let pinned = pin!(val);
-    assert_eq!(*pinned.get_ref(), 42);
-}
-
-#[test]
-fn test_unpin_types() {
-    // 基本型はUnpin
-    fn assert_unpin<T: Unpin>() {}
-
-    assert_unpin::<int>();
-    assert_unpin::<String>();
-    assert_unpin::<Vec<int>>();
-}
-
-#[test(should_fail)]
-fn test_phantom_pinned() {
-    struct NoMove {
-        _pin: PhantomPinned,
+    Pin<T>& operator*() {
+        return *current;
     }
 
-    let nm = NoMove { _pin: PhantomPinned::VALUE };
-    let pinned = Pin::new(&mut nm);  // コンパイルエラー
+    PinnedIterator& operator++() {
+        ++current;
+        return *this;
+    }
+};
+```
+
+## 8. パフォーマンス最適化
+
+### 8.1 ゼロコスト抽象化
+
+```cm
+// リリースビルドでは追加コストなし
+template<typename T>
+inline T& Pin<T>::get_mut() {
+    // インライン化により関数呼び出しオーバーヘッドなし
+    return *pointer;
+}
+
+// コンパイラ最適化ヒント
+[[always_inline]]
+const T& Pin<T>::operator*() const {
+    return *pointer;
 }
 ```
 
-### 8.2 安全性テスト（std/pin/tests/safety.cm）
+### 8.2 メモリレイアウト
 
 ```cm
-#[test]
-fn test_self_referential_safety() {
-    use crate::SelfRef;
+// Pinは単一ポインタのみ（サイズ最小）
+static_assert(sizeof(Pin<int>) == sizeof(int*));
 
-    let data = "test".to_string();
-    let mut sr = SelfRef::new(data);
-
-    // ピン留め前は初期化できない
-    // sr.init();  // エラー
-
-    let mut pinned = pin!(sr);
-    pinned.as_mut().init();
-
-    // ピン留め後は移動できない
-    // let moved = sr;  // エラー
-}
+// アライメントも同じ
+static_assert(alignof(Pin<int>) == alignof(int*));
 ```
 
-## 9. パフォーマンス考慮
+## 9. 他言語との比較
 
-### 9.1 ゼロコスト抽象化
+| 機能 | Cm | Rust | C++ |
+|------|-----|------|-----|
+| メモリ固定 | Pin<T> | Pin<P> | なし |
+| 移動防止 | ✅ | ✅ | std::pin（C++20） |
+| Unpinの複雑性 | なし | あり | N/A |
+| 自己参照構造体 | ✅簡単 | ✅複雑 | ⚠️危険 |
+| ゼロコスト | ✅ | ✅ | ✅ |
+| 直感的API | ✅ | ❌ | ⚠️ |
 
-```cm
-// Pin型は実行時オーバーヘッドなし
-// コンパイル後は通常のポインタと同じ
+## 10. まとめ
 
-// アセンブリレベルで同等
-let normal_ref = &mut value;      // mov rax, [rsp+8]
-let pinned = pin!(value);         // mov rax, [rsp+8]
-```
+CmのPin設計は：
 
-### 9.2 最適化
+1. **シンプル**: Unpinを廃止し、直感的な固定機能のみ提供
+2. **安全**: コンパイル時と実行時の両方でチェック
+3. **効率的**: ゼロコスト抽象化
+4. **Cm風**: 言語の構文スタイルに完全準拠
+5. **実用的**: 非同期処理や自己参照構造体で活用
 
-| 最適化 | 効果 | 適用条件 |
-|--------|------|----------|
-| インライン化 | Pin操作の消去 | -O2以上 |
-| デッドコード削除 | 未使用Pin削除 | 常時 |
-| エスケープ解析 | スタックPin最適化 | -O2以上 |
-
-## 10. エクスポート構成
-
-### 10.1 公開API一覧
-
-```cm
-// std/pin/mod.cm
-module std::pin;
-
-// 再エクスポート
-export use pin::{Pin, Deref, DerefMut};
-export use unpin::Unpin;
-export use phantom::PhantomPinned;
-export use macros::{pin, pin_project, pin_block};
-export use async::future::PinnedFuture;
-
-// プレリュード（よく使うものを自動import）
-export module prelude {
-    export use super::{Pin, Unpin, PhantomPinned, pin};
-}
-```
-
-### 10.2 使用側のインポート
-
-```cm
-// 基本的な使用
-import std::pin::prelude::*;
-
-// 個別インポート
-import std::pin::Pin;
-import std::pin::PhantomPinned;
-
-// マクロのみ
-import std::pin::macros::{pin, pin_project};
-```
-
-## まとめ
-
-このPinライブラリ設計により：
-
-1. **メモリ安全性**: 自己参照構造体の安全な実装
-2. **非同期対応**: Futureとの自然な統合
-3. **使いやすさ**: マクロによる簡潔な記述
-4. **モジュール性**: 明確な責任分離と再利用性
-
-大規模ライブラリとしての構造を持ち、将来の拡張にも対応可能です。
+Rustの複雑な歴史を繰り返さず、より良い設計を実現します。
 
 ---
 
 **作成者:** Claude Code
-**ステータス:** ライブラリ設計
-**次文書:** 062_large_library_architecture.md
+**ステータス:** 設計改訂
+**次文書:** 060_cm_macro_system_design_revised.md

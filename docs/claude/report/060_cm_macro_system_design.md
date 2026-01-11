@@ -1,381 +1,312 @@
-# Cm言語マクロシステム設計書
+# Cm言語マクロシステム設計書（改訂版）
 
 作成日: 2026-01-11
 対象バージョン: v0.11.0
-ステータス: 設計提案
+ステータス: 設計改訂
 
 ## エグゼクティブサマリー
 
-Cm言語に安全で衛生的なマクロシステムを導入します。Rustの`macro_rules!`を参考にしながら、Pin実装のような高度なライブラリ開発を可能にする設計を提案します。
+Cm言語に安全で衛生的なマクロシステムを導入します。**Rust風の構文を避け、C++風のCm言語スタイルに準拠した設計**を行います。
 
 ## 1. 設計理念
 
 ### 1.1 基本方針
 
-1. **衛生的（Hygienic）**: 変数名の衝突を防ぐ
-2. **型安全**: マクロ展開後も型チェックを保証
-3. **段階的展開**: デバッグ可能な展開プロセス
-4. **エラーの明確化**: マクロエラーの詳細な報告
+1. **C++風構文の維持**: Cm言語の構文スタイルを尊重
+2. **衛生的（Hygienic）**: 変数名の衝突を防ぐ
+3. **型安全**: マクロ展開後も型チェックを保証
+4. **直感的**: C++プログラマーにも理解しやすい
 
 ### 1.2 マクロの種類
 
 ```cm
-// 1. 宣言的マクロ（macro_rules スタイル）
-macro_rules! vec {
+// 1. 関数風マクロ（C++風）
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+// 2. パターンマクロ（新機能）
+macro vec {
     () => { Vector::new() };
-    ($($x:expr),*) => {{
-        let mut v = Vector::new();
-        $(v.push($x);)*
+    ($x:expr, ...) => {{
+        Vector<typeof($x)> v;
+        v.push($x);
+        ...
         v
     }};
 }
 
-// 2. 手続き的マクロ（将来実装）
-#[proc_macro]
-fn derive_debug(input: TokenStream) -> TokenStream {
-    // コード生成
-}
-
-// 3. 属性マクロ
-#[derive(Debug, Clone)]
-struct Point { x: int, y: int }
+// 3. 属性マクロ（将来実装）
+[[derive(Debug, Clone)]]
+struct Point { int x; int y; };
 ```
 
-## 2. 宣言的マクロ設計
+## 2. パターンマクロ設計
 
-### 2.1 構文定義
+### 2.1 構文定義（Cm風）
 
 ```ebnf
-macro_declaration ::= 'macro_rules!' identifier '{' macro_rules '}'
+macro_definition ::= 'macro' identifier '{' macro_rules '}'
 
 macro_rules ::= macro_rule (';' macro_rule)* ';'?
 
-macro_rule ::= macro_matcher '=>' macro_transcriber
+macro_rule ::= macro_pattern '=>' macro_body
 
-macro_matcher ::= '(' token_tree* ')'
-                | '[' token_tree* ']'
-                | '{' token_tree* '}'
+macro_pattern ::= '(' pattern_elements ')'
 
-token_tree ::= token
-             | macro_matcher
-             | '$' identifier ':' fragment_specifier
-             | '$' '(' token_tree* ')' separator? repetition_op
+macro_body ::= expression | '{' statements '}'
 
-fragment_specifier ::= 'expr' | 'stmt' | 'pat' | 'ty' | 'ident'
-                     | 'path' | 'literal' | 'block' | 'item'
-                     | 'meta' | 'tt'
+pattern_element ::= token
+                  | '$' identifier ':' type_spec
+                  | '$' identifier '...'
+                  | '...'
 
-repetition_op ::= '*' | '+' | '?'
-
-separator ::= token
+type_spec ::= 'expr' | 'stmt' | 'type' | 'ident'
+            | 'literal' | 'block'
 ```
 
-### 2.2 フラグメント指定子
+### 2.2 フラグメント指定子（簡略化）
 
 | 指定子 | マッチ対象 | 例 |
 |--------|-----------|-----|
 | `expr` | 式 | `x + 1`, `func()` |
-| `stmt` | 文 | `let x = 5;` |
-| `ty` | 型 | `int`, `Vector<T>` |
+| `stmt` | 文 | `int x = 5;` |
+| `type` | 型 | `int`, `Vector<T>` |
 | `ident` | 識別子 | `foo`, `x` |
-| `path` | パス | `std::vec::Vector` |
 | `literal` | リテラル | `42`, `"hello"` |
 | `block` | ブロック | `{ ... }` |
-| `pat` | パターン | `Some(x)`, `_` |
-| `item` | アイテム | 関数、構造体定義 |
-| `tt` | トークンツリー | 任意のトークン |
 
-## 3. Pin実装用マクロ
+## 3. 基本マクロ例
 
-### 3.1 pin!マクロ
+### 3.1 vec!マクロ（Cm構文版）
 
 ```cm
-// Pin作成マクロ
-macro_rules! pin {
-    ($val:expr) => {{
-        // スタック上にピン留めされた値を作成
-        let mut pinned = $val;
-        // SAFETY: ローカル変数は移動しない
-        unsafe { Pin::new_unchecked(&mut pinned) }
+// Vectorを簡単に作成するマクロ
+macro vec {
+    // 空のVector
+    () => {
+        Vector<int>()
+    };
+
+    // 単一型の要素
+    ($first:expr) => {{
+        Vector<typeof($first)> v;
+        v.push($first);
+        v
+    }};
+
+    // 複数要素（可変長）
+    ($first:expr, $rest:expr...) => {{
+        Vector<typeof($first)> v;
+        v.push($first);
+        $(v.push($rest);)...
+        v
     }};
 }
 
 // 使用例
-let future = pin!(async_operation());
+int main() {
+    auto v1 = vec!();           // 空のVector
+    auto v2 = vec!(1);           // Vector<int> with 1
+    auto v3 = vec!(1, 2, 3);    // Vector<int> with 1,2,3
+
+    return 0;
+}
 ```
 
-### 3.2 pin_project!マクロ
+### 3.2 assert!マクロ（Cm構文版）
 
 ```cm
-// 自己参照構造体のための投影マクロ
-macro_rules! pin_project {
+// アサーションマクロ
+macro assert {
+    ($cond:expr) => {
+        if (!($cond)) {
+            fprintf(stderr, "Assertion failed: %s\n", #$cond);
+            abort();
+        }
+    };
+
+    ($cond:expr, $msg:literal) => {
+        if (!($cond)) {
+            fprintf(stderr, "Assertion failed: %s\n  Message: %s\n",
+                   #$cond, $msg);
+            abort();
+        }
+    };
+}
+
+// 使用例
+void test() {
+    int x = 5;
+    assert!(x > 0);
+    assert!(x < 10, "x must be less than 10");
+}
+```
+
+### 3.3 println!マクロ（Cm構文版）
+
+```cm
+// 改行付き出力マクロ
+macro println {
+    () => {
+        printf("\n");
+    };
+
+    ($fmt:literal) => {
+        printf($fmt "\n");
+    };
+
+    ($fmt:literal, $args:expr...) => {
+        printf($fmt "\n", $args...);
+    };
+}
+
+// 使用例
+int main() {
+    println!();                        // 改行のみ
+    println!("Hello, World!");        // 文字列出力
+    println!("Value: %d", 42);        // フォーマット付き
+
+    return 0;
+}
+```
+
+## 4. Pin実装用マクロ
+
+### 4.1 pin!マクロ（Cm構文版）
+
+```cm
+// Pin作成マクロ
+macro pin {
+    ($val:ident) => {{
+        Pin<typeof($val)> __pinned($val);
+        __pinned
+    }};
+
+    ($type:type $name:ident = $init:expr) => {{
+        $type $name = $init;
+        Pin<$type> __pinned_##$name($name);
+        __pinned_##$name
+    }};
+}
+
+// 使用例
+int main() {
+    int value = 42;
+    auto pinned = pin!(value);
+
+    // 新規変数として作成
+    auto pinned_new = pin!(int x = 100);
+
+    return 0;
+}
+```
+
+### 4.2 pin_struct!マクロ
+
+```cm
+// 自己参照構造体用マクロ
+macro pin_struct {
     (
-        $(#[$meta:meta])*
         struct $name:ident {
-            $(
-                $(#[pin])?
-                $field_vis:vis $field:ident : $field_ty:ty
-            ),* $(,)?
+            $($field:ident : $type:type;)...
         }
     ) => {
-        $(#[$meta])*
         struct $name {
-            $(
-                $field_vis $field: $field_ty,
-            )*
-        }
+            $($field : $type;)...
 
-        // 投影メソッドの自動生成
-        impl $name {
-            fn project(self: Pin<&mut Self>) -> __Projection {
-                unsafe {
-                    let this = self.get_unchecked_mut();
-                    __Projection {
-                        $(
-                            $field: project_field!(
-                                this.$field,
-                                $(#[pin])?
-                            ),
-                        )*
-                    }
-                }
-            }
-        }
-
-        // 内部投影構造体
-        struct __Projection<'a> {
-            $(
-                $field: project_type!($field_ty, $(#[pin])?),
-            )*
-        }
-    };
-}
-```
-
-### 3.3 assert_pinned!マクロ
-
-```cm
-// コンパイル時ピン留め検証
-macro_rules! assert_pinned {
-    ($ty:ty) => {
-        const _: () = {
-            // PhantomPinnedを含む型かチェック
-            fn __assert_not_unpin<T: ?Sized + Unpin>() {}
-            fn __assert_pinned<T: ?Sized>(_: &T) {
-                // コンパイルエラーを生成
-                __assert_not_unpin::<T>();
+            // Pinされた状態でのみ初期化可能
+            void init_pinned(Pin<$name>& self) {
+                // 自己参照の設定など
             }
         };
+
+        // Pin用のヘルパー関数
+        Pin<$name> make_pinned_##$name() {
+            $name instance;
+            Pin<$name> pinned(instance);
+            pinned.init_pinned(pinned);
+            return pinned;
+        }
     };
 }
 ```
 
-## 4. マクロ展開メカニズム
+## 5. マクロ展開メカニズム
 
-### 4.1 展開フロー
+### 5.1 展開フロー
 
 ```
-ソースコード
+ソースコード（Cm構文）
     ↓
 [Lexer: トークン化]
     ↓
-[マクロ収集フェーズ]
+[マクロ検出]
     ↓
-[マクロ展開フェーズ] ← 再帰的展開
+[パターンマッチング]
+    ↓
+[マクロ展開] ← 再帰的展開
+    ↓
+[衛生性適用]
     ↓
 [構文解析]
     ↓
 AST
 ```
 
-### 4.2 衛生性の実装
-
-```cpp
-// src/macro/hygiene.hpp
-namespace cm::macro {
-
-class HygieneContext {
-    struct SyntaxContext {
-        uint32_t id;
-        ExpansionInfo expansion;
-        std::set<Symbol> introduced_names;
-    };
-
-    // 各識別子に構文コンテキストを付与
-    struct HygienicIdent {
-        std::string name;
-        SyntaxContext context;
-
-        bool operator==(const HygienicIdent& other) const {
-            // 同じコンテキストの同じ名前のみ等しい
-            return name == other.name &&
-                   context.id == other.context.id;
-        }
-    };
-
-public:
-    HygienicIdent create_ident(const std::string& name,
-                               const ExpansionInfo& expansion) {
-        SyntaxContext ctx{
-            next_context_id++,
-            expansion,
-            {}
-        };
-        return {name, ctx};
-    }
-
-    // gensym: ユニークなシンボル生成
-    std::string gensym(const std::string& base) {
-        return base + "__" + std::to_string(gensym_counter++);
-    }
-
-private:
-    uint32_t next_context_id = 1;
-    uint32_t gensym_counter = 0;
-};
-
-}  // namespace cm::macro
-```
-
-### 4.3 マクロマッチングエンジン
-
-```cpp
-// src/macro/matcher.hpp
-class MacroMatcher {
-public:
-    struct MatchResult {
-        bool success;
-        std::map<std::string, MatchedFragment> bindings;
-        std::string error;
-    };
-
-    MatchResult match(const TokenStream& input,
-                     const MacroPattern& pattern) {
-        MatchState state;
-
-        if (match_recursive(input, pattern, 0, 0, state)) {
-            return {true, state.bindings, ""};
-        }
-
-        return {false, {}, generate_error(state)};
-    }
-
-private:
-    bool match_recursive(const TokenStream& input,
-                        const MacroPattern& pattern,
-                        size_t input_pos,
-                        size_t pattern_pos,
-                        MatchState& state) {
-        // パターンマッチングの実装
-        if (pattern_pos >= pattern.size()) {
-            return input_pos == input.size();
-        }
-
-        const auto& pat_elem = pattern[pattern_pos];
-
-        // メタ変数のマッチ
-        if (pat_elem.is_metavar()) {
-            return match_metavar(input, input_pos,
-                                pat_elem, state);
-        }
-
-        // 繰り返しのマッチ
-        if (pat_elem.is_repetition()) {
-            return match_repetition(input, input_pos,
-                                   pat_elem, state);
-        }
-
-        // リテラルトークンのマッチ
-        if (input_pos < input.size() &&
-            input[input_pos] == pat_elem.token) {
-            return match_recursive(input, pattern,
-                                 input_pos + 1,
-                                 pattern_pos + 1,
-                                 state);
-        }
-
-        return false;
-    }
-};
-```
-
-## 5. エラー処理
-
-### 5.1 マクロエラーの種類
+### 5.2 衛生性の実装（簡略化）
 
 ```cm
-enum class MacroError {
-    // パターンマッチエラー
-    E0601_NO_MATCHING_PATTERN,
-    E0602_AMBIGUOUS_MATCH,
-    E0603_INVALID_FRAGMENT,
-
-    // 展開エラー
-    E0611_RECURSION_LIMIT,
-    E0612_EXPANSION_OVERFLOW,
-    E0613_UNBOUND_METAVAR,
-
-    // 衛生性エラー
-    E0621_NAME_COLLISION,
-    E0622_CONTEXT_MISMATCH,
-};
-```
-
-### 5.2 エラーメッセージ例
-
-```
-error[E0601]: no rules expected the token `]`
-  --> src/main.cm:10:15
-   |
-10 | let v = vec![1, 2, 3];
-   |               ^ no rules expected this token
-   |
-   = note: expected one of: `,`, `)`
-   = help: the macro `vec` expects either:
-           - vec!() for empty vector
-           - vec![elem; count] for repetition
-           - vec![elem1, elem2, ...] for list
-```
-
-## 6. デバッグ支援
-
-### 6.1 展開トレース
-
-```cm
-// マクロ展開のトレース出力
-#[macro_trace]
-macro_rules! complex_macro {
-    ($x:expr) => {
-        println!("Value: {}", $x * 2)
-    };
+// マクロ内で生成される変数は自動的にユニーク化
+macro swap {
+    ($a:ident, $b:ident) => {{
+        auto __temp = $a;  // __tempは自動的にユニーク名になる
+        $a = $b;
+        $b = __temp;
+    }};
 }
 
-// 出力:
-// [MACRO] Expanding complex_macro!(5)
-// [MACRO]   Matched pattern: ($x:expr)
-// [MACRO]   Binding: $x = 5
-// [MACRO]   Transcribing: println!("Value: {}", $x * 2)
-// [MACRO]   Result: println!("Value: {}", 5 * 2)
+// 使用例（名前衝突なし）
+int main() {
+    int x = 1, y = 2;
+    int __temp = 100;  // ユーザーの__temp
+
+    swap!(x, y);  // マクロの__tempと衝突しない
+
+    printf("%d\n", __temp);  // 100が出力される
+
+    return 0;
+}
 ```
 
-### 6.2 展開の可視化
+## 6. エラー処理
 
-```bash
-# マクロ展開の確認
-cm expand src/main.cm --macro vec
+### 6.1 エラーメッセージ例
 
-# 出力:
-# Original:
-#   let v = vec![1, 2, 3];
-#
-# Expanded:
-#   let v = {
-#       let mut __temp = Vector::new();
-#       __temp.push(1);
-#       __temp.push(2);
-#       __temp.push(3);
-#       __temp
-#   };
+```
+error: no matching pattern for macro 'vec'
+  --> main.cm:10:15
+   |
+10 | auto v = vec!{1, 2, 3};
+   |               ^ expected '(' but found '{'
+   |
+   = help: vec! expects one of:
+           - vec!() for empty vector
+           - vec!(elem, ...) for list
+```
+
+### 6.2 デバッグ支援
+
+```cm
+// マクロ展開の確認
+#pragma macro_trace(vec)  // vecマクロの展開をトレース
+
+int main() {
+    auto v = vec!(1, 2, 3);
+    // [MACRO] Expanding vec!(1, 2, 3)
+    // [MACRO]   Matched pattern: ($first:expr, $rest:expr...)
+    // [MACRO]   Result: Vector<int> v; v.push(1); v.push(2); v.push(3); v
+
+    return 0;
+}
 ```
 
 ## 7. 標準マクロライブラリ
@@ -383,34 +314,40 @@ cm expand src/main.cm --macro vec
 ### 7.1 基本マクロ
 
 ```cm
-// std/macros/core.cm
-export macro_rules! assert {
-    ($cond:expr) => {
-        if (!$cond) {
-            panic("Assertion failed: {}", stringify!($cond));
-        }
-    };
-    ($cond:expr, $msg:expr) => {
-        if (!$cond) {
-            panic("Assertion failed: {}\n  Message: {}",
-                  stringify!($cond), $msg);
-        }
+// std/macros.cm
+
+// 最小/最大値
+macro min {
+    ($a:expr, $b:expr) => {
+        (($a) < ($b) ? ($a) : ($b))
     };
 }
 
-export macro_rules! debug_assert {
-    ($($arg:tt)*) => {
-        #[cfg(debug)]
-        assert!($($arg)*);
+macro max {
+    ($a:expr, $b:expr) => {
+        (($a) > ($b) ? ($a) : ($b))
     };
 }
 
-export macro_rules! unreachable {
+// デバッグ出力
+macro dbg {
+    ($val:expr) => {{
+        fprintf(stderr, "[%s:%d] %s = ",
+                __FILE__, __LINE__, #$val);
+        auto __result = $val;
+        // 型に応じた出力（将来実装）
+        print_debug(__result);
+        __result
+    }};
+}
+
+// TODO マクロ
+macro todo {
     () => {
-        panic("Entered unreachable code");
+        panic("not yet implemented");
     };
-    ($msg:expr) => {
-        panic("Entered unreachable code: {}", $msg);
+    ($msg:literal) => {
+        panic("not yet implemented: " $msg);
     };
 }
 ```
@@ -418,85 +355,73 @@ export macro_rules! unreachable {
 ### 7.2 コレクションマクロ
 
 ```cm
-// std/macros/collections.cm
-export macro_rules! vec {
-    () => { Vector::new() };
-    ($elem:expr; $n:expr) => {{
-        let mut v = Vector::with_capacity($n);
-        for _ in 0..$n {
-            v.push($elem);
-        }
-        v
-    }};
-    ($($x:expr),+ $(,)?) => {{
-        let mut v = Vector::new();
-        $(v.push($x);)+
-        v
-    }};
-}
+// ハッシュマップ
+macro hashmap {
+    () => {
+        HashMap<int, int>()
+    };
 
-export macro_rules! hashmap {
-    () => { HashMap::new() };
-    ($($key:expr => $value:expr),* $(,)?) => {{
-        let mut map = HashMap::new();
-        $(map.insert($key, $value);)*
+    ($($key:expr => $val:expr),+) => {{
+        auto map = HashMap<typeof($key), typeof($val)>();
+        $(map.insert($key, $val);)+
         map
     }};
 }
+
+// 使用例
+int main() {
+    auto map = hashmap!(
+        "one" => 1,
+        "two" => 2,
+        "three" => 3
+    );
+
+    return 0;
+}
 ```
 
-## 8. パフォーマンス考慮
+## 8. C++マクロとの違い
 
-### 8.1 展開の最適化
+| 機能 | Cm マクロ | C++ マクロ |
+|------|----------|-----------|
+| パターンマッチ | ✅ | ❌ |
+| 型安全 | ✅ | ❌ |
+| 衛生性 | ✅ | ❌ |
+| 再帰展開 | ✅ 制限付き | ⚠️ 危険 |
+| デバッグ | ✅ 容易 | ❌ 困難 |
+| 可変長引数 | ✅ ... 構文 | ⚠️ __VA_ARGS__ |
 
-```cpp
-class MacroExpander {
-    // メモ化による重複展開の回避
-    std::map<MacroCallHash, ExpandedResult> cache;
+## 9. 実装優先度
 
-    TokenStream expand_cached(const MacroCall& call) {
-        auto hash = compute_hash(call);
+1. **Phase 1（必須）**
+   - 基本パターンマッチング
+   - 単純な展開
+   - vec!, assert!マクロ
 
-        if (auto it = cache.find(hash); it != cache.end()) {
-            return it->second.clone_with_new_context();
-        }
+2. **Phase 2（重要）**
+   - 衛生性の実装
+   - pin!マクロ
+   - エラー処理改善
 
-        auto result = expand_impl(call);
-        cache[hash] = result;
-        return result;
-    }
-};
-```
-
-### 8.2 制限事項
-
-| 制限 | デフォルト値 | 設定可能範囲 |
-|------|------------|-------------|
-| 再帰深度 | 128 | 32-1024 |
-| 展開サイズ | 65536 tokens | 1KB-1MB |
-| ネスト深度 | 64 | 16-256 |
-
-## 9. 他言語との比較
-
-| 機能 | Cm | Rust | C++ | C |
-|------|-----|------|-----|---|
-| 衛生的マクロ | ✅ | ✅ | ❌ | ❌ |
-| パターンマッチ | ✅ | ✅ | ❌ | ❌ |
-| 型安全 | ✅ | ✅ | ❌ | ❌ |
-| デバッグ支援 | ✅ | ⚠️ | ❌ | ❌ |
-| 手続きマクロ | 🔄 | ✅ | ❌ | ❌ |
+3. **Phase 3（将来）**
+   - 属性マクロ
+   - 手続きマクロ
+   - IDEサポート
 
 ## 10. まとめ
 
-このマクロシステムにより：
+CmのマクロシステムはCmのマクロシステムは：
 
-1. **安全なメタプログラミング**: 衛生性と型安全性を保証
-2. **Pin実装のサポート**: 複雑なライブラリ開発が可能
-3. **優れたデバッグ性**: 展開の可視化とトレース
-4. **段階的な学習**: シンプルから高度な使用まで
+1. **Cm構文準拠**: C++風の構文スタイルを維持
+2. **シンプル**: Rustの複雑さを避けた設計
+3. **安全**: 衛生性と型安全性を保証
+4. **実用的**: Pin実装などで即座に活用可能
+5. **段階的**: 基本機能から順次実装
+
+C++の#defineマクロの問題を解決しつつ、Rustの複雑性も回避する、バランスの取れた設計です。
 
 ---
 
 **作成者:** Claude Code
-**ステータス:** 設計提案
-**次文書:** 061_pin_library_design.md
+**ステータス:** 設計改訂
+**実装開始:** 基本マクロから段階的に
