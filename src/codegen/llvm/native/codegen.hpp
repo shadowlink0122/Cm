@@ -250,14 +250,9 @@ class LLVMCodeGen {
             }
         }
 
-        // インポートがある場合の無限ループ回避
-        // 完全スキップではなく、安全なO1最適化を適用
-        if (hasImports && options.optimizationLevel > 1) {
-            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
-                                    "NOTE: Reducing optimization to O1 due to import patterns "
-                                    "(O2/O3 may cause issues)");
-            options.optimizationLevel = 1;  // O1は安全に適用可能
-        }
+        // NOTE: 以前はimport使用時にO1制限を行っていたが、
+        // RecursionLimiterとOptimizationPassLimiterによる事前検証で
+        // 無限ループの根本原因が解消されたため、O2/O3を完全有効化
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
                                 "Level " + std::to_string(options.optimizationLevel));
