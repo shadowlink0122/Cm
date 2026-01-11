@@ -1,0 +1,18 @@
+import std::io::println;
+
+// const generics パーステスト
+// Phase 1: パース確認のみ（型解決は今後実装）
+
+// 定数パラメータを持つ構造体
+// 注: T[SIZE]構文のパースを確認
+struct Buffer<T, const SIZE: int> {
+    T* data;  // TODO: T[SIZE] dataは型解決側の対応が必要
+    int len;
+}
+
+int main() {
+    // パースのテスト
+    println("const generics parse test");
+    
+    return 0;
+}

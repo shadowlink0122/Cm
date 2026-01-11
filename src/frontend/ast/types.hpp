@@ -123,6 +123,8 @@ struct Type {
 
     // 配列用: 固定長の場合サイズ
     std::optional<uint32_t> array_size;
+    // 配列用: 定数パラメータによるサイズ指定（const N: intを使用）
+    std::string size_param_name;
 
     // ユーザー定義型/ジェネリック用: 型名
     std::string name;
@@ -256,6 +258,14 @@ inline TypePtr make_array(TypePtr elem, std::optional<uint32_t> size = std::null
     return t;
 }
 
+// 定数パラメータによる配列サイズ指定
+inline TypePtr make_array_with_param(TypePtr elem, const std::string& param_name) {
+    auto t = std::make_shared<Type>(TypeKind::Array);
+    t->element_type = std::move(elem);
+    t->size_param_name = param_name;
+    return t;
+}
+
 inline TypePtr make_named(const std::string& name) {
     auto t = std::make_shared<Type>(TypeKind::Struct);
     t->name = name;
@@ -328,6 +338,10 @@ inline std::string type_to_string(const Type& t) {
             if (t.array_size) {
                 return (t.element_type ? type_to_string(*t.element_type) : "?") + "[" +
                        std::to_string(*t.array_size) + "]";
+            }
+            if (!t.size_param_name.empty()) {
+                return (t.element_type ? type_to_string(*t.element_type) : "?") + "[" +
+                       t.size_param_name + "]";
             }
             return (t.element_type ? type_to_string(*t.element_type) : "?") + "[]";
         case TypeKind::Struct:

@@ -56,19 +56,29 @@ struct TypeConstraint {
 };
 
 // ============================================================
-// ジェネリックパラメータ（インターフェース境界付き）
+// ジェネリックパラメータの種類
+// ============================================================
+enum class GenericParamKind {
+    Type,   // 型パラメータ（T, U等）
+    Const,  // 定数パラメータ（const N: int等）
+};
+
+// ============================================================
+// ジェネリックパラメータ（インターフェース境界付き、定数パラメータ対応）
 // ============================================================
 struct GenericParam {
-    std::string name;                      // 型パラメータ名（T, U等）
-    std::vector<std::string> constraints;  // 後方互換性用
-    TypeConstraint type_constraint;        // インターフェース境界
+    GenericParamKind kind = GenericParamKind::Type;  // パラメータの種類
+    std::string name;                                // パラメータ名（T, N等）
+    std::vector<std::string> constraints;            // 後方互換性用
+    TypeConstraint type_constraint;  // インターフェース境界（型パラメータ用）
+    TypePtr const_type;              // 定数パラメータの型（int, bool等）
 
     GenericParam() = default;
-    explicit GenericParam(std::string n) : name(std::move(n)) {}
+    explicit GenericParam(std::string n) : kind(GenericParamKind::Type), name(std::move(n)) {}
 
-    // 後方互換性: constraints リストから構築
+    // 後方互換性: constraints リストから構築（型パラメータ）
     GenericParam(std::string n, std::vector<std::string> c)
-        : name(std::move(n)), constraints(std::move(c)) {
+        : kind(GenericParamKind::Type), name(std::move(n)), constraints(std::move(c)) {
         if (!constraints.empty()) {
             if (constraints.size() == 1) {
                 type_constraint = TypeConstraint(constraints[0]);
@@ -79,14 +89,20 @@ struct GenericParam {
         }
     }
 
-    // 新しい構築方法: TypeConstraint から
+    // 新しい構築方法: TypeConstraint から（型パラメータ）
     GenericParam(std::string n, TypeConstraint tc)
-        : name(std::move(n)), type_constraint(std::move(tc)) {
+        : kind(GenericParamKind::Type), name(std::move(n)), type_constraint(std::move(tc)) {
         // 後方互換性: type_constraintからconstraintsを設定
         constraints = type_constraint.interfaces;
     }
 
+    // 定数パラメータ用コンストラクタ
+    GenericParam(std::string n, TypePtr ct)
+        : kind(GenericParamKind::Const), name(std::move(n)), const_type(std::move(ct)) {}
+
     bool has_constraint() const { return !type_constraint.is_empty(); }
+    bool is_const() const { return kind == GenericParamKind::Const; }
+    bool is_type() const { return kind == GenericParamKind::Type; }
 };
 
 // ============================================================

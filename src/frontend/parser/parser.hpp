@@ -958,6 +958,7 @@ class Parser {
 
     // ジェネリックパラメータ（<T>, <T: Interface>, <T: I + J>, <T: I | J>, <T, U>）をパース
     // すべての制約はインターフェース境界として解釈される
+    // const N: int のような定数パラメータもサポート
     // 戻り値: pair<名前リスト（後方互換）, GenericParamリスト（制約付き）>
     std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2() {
         std::vector<std::string> names;
@@ -975,59 +976,75 @@ class Parser {
                 break;  // 空のパラメータリスト
             }
 
-            // 型パラメータ名
-            std::string param_name = expect_ident();
-            std::vector<std::string> interfaces;
-            ast::ConstraintKind constraint_kind = ast::ConstraintKind::None;
+            // const パラメータかどうかチェック
+            if (consume_if(TokenKind::KwConst)) {
+                // 定数パラメータ: const N: int
+                std::string param_name = expect_ident();
+                expect(TokenKind::Colon);
+                ast::TypePtr const_type = parse_type();
 
-            // インターフェース境界（: Interface）
-            if (consume_if(TokenKind::Colon)) {
-                interfaces.push_back(expect_ident());
-                constraint_kind = ast::ConstraintKind::Single;
+                names.push_back(param_name);
+                params.emplace_back(param_name, std::move(const_type));
 
-                // 複合インターフェース境界
-                // T: I | J (OR - いずれかを実装)
-                // T: I + J (AND - すべてを実装)
-                if (check(TokenKind::Pipe)) {
-                    // OR制約: T: I | J
-                    constraint_kind = ast::ConstraintKind::Or;
-                    while (consume_if(TokenKind::Pipe)) {
-                        interfaces.push_back(expect_ident());
-                    }
-                } else if (check(TokenKind::Plus)) {
-                    // AND制約: T: I + J
-                    constraint_kind = ast::ConstraintKind::And;
-                    while (consume_if(TokenKind::Plus)) {
-                        interfaces.push_back(expect_ident());
-                    }
-                }
-            }
-
-            names.push_back(param_name);
-
-            // GenericParamを作成
-            if (constraint_kind != ast::ConstraintKind::None) {
-                ast::TypeConstraint tc(constraint_kind, interfaces);
-                params.emplace_back(param_name, std::move(tc));
+                debug::par::log(debug::par::Id::FuncDef,
+                                "Const generic param: " + param_name + " : " +
+                                    (const_type ? ast::type_to_string(*const_type) : "unknown"),
+                                debug::Level::Debug);
             } else {
-                params.emplace_back(param_name);
-            }
+                // 型パラメータ: T または T: Interface
+                std::string param_name = expect_ident();
+                std::vector<std::string> interfaces;
+                ast::ConstraintKind constraint_kind = ast::ConstraintKind::None;
 
-            // デバッグ出力
-            std::string constraint_str;
-            if (!interfaces.empty()) {
-                std::string separator =
-                    (constraint_kind == ast::ConstraintKind::Or) ? " | " : " + ";
-                for (size_t i = 0; i < interfaces.size(); ++i) {
-                    if (i > 0)
-                        constraint_str += separator;
-                    constraint_str += interfaces[i];
+                // インターフェース境界（: Interface）
+                if (consume_if(TokenKind::Colon)) {
+                    interfaces.push_back(expect_ident());
+                    constraint_kind = ast::ConstraintKind::Single;
+
+                    // 複合インターフェース境界
+                    // T: I | J (OR - いずれかを実装)
+                    // T: I + J (AND - すべてを実装)
+                    if (check(TokenKind::Pipe)) {
+                        // OR制約: T: I | J
+                        constraint_kind = ast::ConstraintKind::Or;
+                        while (consume_if(TokenKind::Pipe)) {
+                            interfaces.push_back(expect_ident());
+                        }
+                    } else if (check(TokenKind::Plus)) {
+                        // AND制約: T: I + J
+                        constraint_kind = ast::ConstraintKind::And;
+                        while (consume_if(TokenKind::Plus)) {
+                            interfaces.push_back(expect_ident());
+                        }
+                    }
                 }
+
+                names.push_back(param_name);
+
+                // GenericParamを作成
+                if (constraint_kind != ast::ConstraintKind::None) {
+                    ast::TypeConstraint tc(constraint_kind, interfaces);
+                    params.emplace_back(param_name, std::move(tc));
+                } else {
+                    params.emplace_back(param_name);
+                }
+
+                // デバッグ出力
+                std::string constraint_str;
+                if (!interfaces.empty()) {
+                    std::string separator =
+                        (constraint_kind == ast::ConstraintKind::Or) ? " | " : " + ";
+                    for (size_t i = 0; i < interfaces.size(); ++i) {
+                        if (i > 0)
+                            constraint_str += separator;
+                        constraint_str += interfaces[i];
+                    }
+                }
+                debug::par::log(debug::par::Id::FuncDef,
+                                "Generic param: " + param_name +
+                                    (constraint_str.empty() ? "" : " : " + constraint_str),
+                                debug::Level::Debug);
             }
-            debug::par::log(debug::par::Id::FuncDef,
-                            "Generic param: " + param_name +
-                                (constraint_str.empty() ? "" : " : " + constraint_str),
-                            debug::Level::Debug);
 
         } while (consume_if(TokenKind::Comma));
 
@@ -1311,12 +1328,28 @@ class Parser {
         // T[N] 形式をチェック
         if (consume_if(TokenKind::LBracket)) {
             std::optional<uint32_t> size;
+            std::string size_param_name;
+
             if (check(TokenKind::IntLiteral)) {
+                // 数値リテラル: int[5]
                 size = static_cast<uint32_t>(current().get_int());
                 advance();
+            } else if (check(TokenKind::Ident)) {
+                // 識別子（定数パラメータ）: T[SIZE]
+                size_param_name = std::string(current().get_string());
+                advance();
             }
+            // 空の場合はスライス: T[]
+
             expect(TokenKind::RBracket);
-            auto arr_type = ast::make_array(std::move(base_type), size);
+
+            ast::TypePtr arr_type;
+            if (!size_param_name.empty()) {
+                arr_type = ast::make_array_with_param(std::move(base_type), size_param_name);
+            } else {
+                arr_type = ast::make_array(std::move(base_type), size);
+            }
+
             // 配列の後にさらにサフィックスがあるかチェック（例: int[2]*）
             return check_array_suffix(std::move(arr_type));
         }
