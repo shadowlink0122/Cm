@@ -274,7 +274,8 @@ class Interpreter {
         BlockId current_block = block_id;
 
         // 反復処理でブロックを実行（再帰を避ける）
-        while (current_block != INVALID_BLOCK && current_block < ctx.function->basic_blocks.size()) {
+        while (current_block != INVALID_BLOCK &&
+               current_block < ctx.function->basic_blocks.size()) {
             const auto& block = *ctx.function->basic_blocks[current_block];
 
             // デバッグ: ブロック実行情報
