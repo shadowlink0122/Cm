@@ -566,3 +566,714 @@ void test_recursive_always() {
 **作成者:** Claude Code
 **ステータス:** 実装設計完了
 **次のステップ:** Phase 1の実装開始
+
+## 高度な最適化機能設計（047-049）
+
+### 047: Link Time Optimization (LTO)
+
+#### 基本設計
+```cpp
+// src/codegen/llvm/lto/lto_manager.hpp
+class LTOManager {
+private:
+    llvm::lto::LTO lto_instance;
+    llvm::lto::Config config;
+    std::vector<std::unique_ptr<llvm::Module>> modules;
+
+public:
+    void configure() {
+        config.OptLevel = 3;  // O3最適化
+        config.DisableVerify = false;
+        config.CPU = llvm::sys::getHostCPUName();
+
+        // ThinLTO設定
+        config.UseNewPM = true;
+        config.CGOptLevel = llvm::CodeGenOpt::Aggressive;
+
+        // クロスモジュールインライン
+        config.OptPipeline = "default<O3>";
+        config.AAPipeline = "default";
+    }
+
+    void add_module(std::unique_ptr<llvm::Module> module) {
+        // ビットコードの保存
+        std::string bitcode;
+        llvm::raw_string_ostream os(bitcode);
+        llvm::WriteBitcodeToFile(*module, os);
+
+        // LTOに追加
+        auto buffer = llvm::MemoryBuffer::getMemBuffer(bitcode);
+        lto_instance.add(std::move(buffer), {});
+
+        modules.push_back(std::move(module));
+    }
+
+    std::unique_ptr<llvm::Module> optimize() {
+        // 全モジュールを結合して最適化
+        lto_instance.run([](size_t task, const llvm::lto::NativeObjectOutput &output) {
+            // ネイティブオブジェクトの処理
+        });
+
+        // 最適化されたモジュールを返す
+        return merge_and_optimize_modules();
+    }
+
+private:
+    std::unique_ptr<llvm::Module> merge_and_optimize_modules() {
+        // モジュール結合
+        auto merged = std::make_unique<llvm::Module>("merged", modules[0]->getContext());
+        llvm::Linker linker(*merged);
+
+        for (auto& module : modules) {
+            linker.linkInModule(std::move(module));
+        }
+
+        // 全体最適化パス
+        llvm::PassBuilder PB;
+        llvm::ModuleAnalysisManager MAM;
+        llvm::ModulePassManager MPM;
+
+        // インタープロシージャル最適化
+        MPM.addPass(llvm::GlobalDCEPass());           // 未使用関数削除
+        MPM.addPass(llvm::InternalizePASS());         // 非公開化
+        MPM.addPass(llvm::IPSCCPPass());              // 定数伝播
+        MPM.addPass(llvm::GlobalOptPass());           // グローバル最適化
+        MPM.addPass(llvm::DeadArgumentEliminationPass()); // 引数削除
+
+        MPM.run(*merged, MAM);
+        return merged;
+    }
+};
+```
+
+#### Cm側の制御
+```cm
+// コンパイラフラグ
+// cm build --lto=thin    # ThinLTO（並列処理可能）
+// cm build --lto=full    # Full LTO（最大最適化）
+// cm build --lto=off     # LTOなし（デフォルト）
+
+// アトリビュート制御
+#[lto(always)]     // 必ずLTOに含める
+#[lto(never)]      // LTOから除外
+#[lto(thin)]       // ThinLTOのみ
+export void critical_function() {
+    // この関数は必ずLTO最適化される
+}
+```
+
+### 048: Profile Guided Optimization (PGO)
+
+#### プロファイル収集
+```cpp
+// src/codegen/llvm/pgo/profile_manager.hpp
+class ProfileManager {
+private:
+    std::string profile_data_path;
+    llvm::ProfileSummaryInfo* PSI;
+    llvm::BlockFrequencyInfo* BFI;
+
+public:
+    // Phase 1: プロファイル計測コードの挿入
+    void instrument_module(llvm::Module& module) {
+        llvm::PassBuilder PB;
+
+        // プロファイル計測パス
+        PB.registerPipelineStartEPCallback(
+            [](llvm::ModulePassManager &MPM, llvm::OptimizationLevel) {
+                MPM.addPass(llvm::PGOInstrumentationGen());
+            });
+
+        // カウンタ挿入
+        for (auto& F : module) {
+            if (F.isDeclaration()) continue;
+
+            // 各基本ブロックにカウンタ
+            for (auto& BB : F) {
+                auto* counter = create_profile_counter(&BB);
+                BB.getInstList().push_front(counter);
+            }
+        }
+    }
+
+    // Phase 2: プロファイルデータの読み込み
+    void load_profile(const std::string& profile_path) {
+        auto buffer = llvm::MemoryBuffer::getFile(profile_path);
+        if (!buffer) {
+            error("Failed to load profile data");
+            return;
+        }
+
+        // プロファイル情報の解析
+        auto reader = llvm::IndexedInstrProfReader::create(
+            std::move(buffer.get())
+        );
+
+        PSI = new llvm::ProfileSummaryInfo(module);
+        PSI->refresh();
+    }
+
+    // Phase 3: プロファイルベースの最適化
+    void optimize_with_profile(llvm::Module& module) {
+        llvm::PassBuilder PB;
+
+        // ホットパス最適化
+        PB.registerPipelineStartEPCallback(
+            [this](llvm::ModulePassManager &MPM, llvm::OptimizationLevel) {
+                MPM.addPass(llvm::PGOInstrumentationUse(profile_data_path));
+                MPM.addPass(llvm::SampleProfileLoaderPass(profile_data_path));
+            });
+
+        // 関数ごとの最適化
+        for (auto& F : module) {
+            optimize_function_with_profile(F);
+        }
+    }
+
+private:
+    void optimize_function_with_profile(llvm::Function& F) {
+        if (!BFI) {
+            BFI = new llvm::BlockFrequencyInfo(F, *BPI, *LI);
+        }
+
+        // ホットパスのインライン化
+        for (auto& BB : F) {
+            uint64_t freq = BFI->getBlockFreq(&BB).getFrequency();
+
+            if (freq > HOT_THRESHOLD) {
+                // 積極的な最適化
+                mark_hot_path(&BB);
+                aggressive_inline(&BB);
+            } else if (freq < COLD_THRESHOLD) {
+                // コールドパスの最適化抑制
+                mark_cold_path(&BB);
+                outline_cold_code(&BB);
+            }
+        }
+    }
+};
+```
+
+#### Cm側の使用方法
+```bash
+# Step 1: プロファイル計測ビルド
+cm build --pgo-generate=profile.data
+
+# Step 2: 代表的なワークロードを実行
+./program typical_input.txt
+
+# Step 3: プロファイルを使った最適化ビルド
+cm build --pgo-use=profile.data
+```
+
+### 049: SIMD ベクトル化
+
+#### 自動ベクトル化
+```cpp
+// src/codegen/llvm/vectorization/auto_vectorizer.hpp
+class AutoVectorizer {
+private:
+    llvm::LoopVectorizePass vectorizer;
+    llvm::SLPVectorizerPass slp_vectorizer;
+
+public:
+    void vectorize_loops(llvm::Function& F) {
+        llvm::LoopAnalysisManager LAM;
+        llvm::FunctionAnalysisManager FAM;
+
+        // ループのベクトル化
+        for (auto& loop : LAM.getLoops(F)) {
+            if (can_vectorize(loop)) {
+                vectorize_loop(loop);
+            }
+        }
+    }
+
+private:
+    bool can_vectorize(llvm::Loop* loop) {
+        // ベクトル化可能性のチェック
+        if (!loop->isLoopSimplifyForm()) return false;
+        if (!loop->getLoopPreheader()) return false;
+
+        // 依存性解析
+        auto* DA = new llvm::DependenceAnalysis();
+        for (auto* BB : loop->blocks()) {
+            for (auto& I1 : *BB) {
+                for (auto& I2 : *BB) {
+                    if (auto dep = DA->depends(&I1, &I2, true)) {
+                        if (!dep->isLoopIndependent()) {
+                            return false;  // ループ間依存あり
+                        }
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    void vectorize_loop(llvm::Loop* loop) {
+        // ベクトル幅の決定
+        unsigned VF = determine_vector_width(loop);
+
+        // ループの変換
+        auto* preheader = loop->getLoopPreheader();
+        auto* header = loop->getHeader();
+
+        // ベクトルレジスタの準備
+        for (unsigned i = 0; i < VF; i++) {
+            // SIMD命令の生成
+            generate_simd_instructions(header, i, VF);
+        }
+    }
+};
+```
+
+#### Cm側のSIMDサポート
+```cm
+// SIMD組み込み型
+typedef float4 = __vector(float, 4);
+typedef int8 = __vector(int, 8);
+
+// SIMD演算
+#[vectorize(enable)]
+void vector_add(float* a, float* b, float* c, int n) {
+    #pragma simd
+    for (int i = 0; i < n; i++) {
+        c[i] = a[i] + b[i];  // 自動ベクトル化
+    }
+}
+
+// 明示的なSIMD
+void explicit_simd(float4* a, float4* b, float4* c, int n) {
+    for (int i = 0; i < n; i++) {
+        c[i] = a[i] + b[i];  // float4の加算
+    }
+}
+
+// SIMD組み込み関数
+namespace std::simd {
+    float4 load(float* ptr);
+    void store(float* ptr, float4 v);
+    float4 add(float4 a, float4 b);
+    float4 mul(float4 a, float4 b);
+    float4 fma(float4 a, float4 b, float4 c);  // a * b + c
+    float horizontal_sum(float4 v);
+}
+```
+
+## インライン実装詳細設計（052-059）
+
+### 052: Inline Parser実装
+
+```cpp
+// src/frontend/parser/inline_parser.cpp
+class InlineParser {
+public:
+    void parse_inline_attribute(FunctionDecl* func) {
+        if (current_token == Token::LBRACKET) {
+            consume(Token::LBRACKET);
+
+            if (consume_keyword("inline")) {
+                if (consume(Token::LPAREN)) {
+                    parse_inline_directive(func);
+                    consume(Token::RPAREN);
+                }
+            }
+
+            consume(Token::RBRACKET);
+        }
+    }
+
+private:
+    void parse_inline_directive(FunctionDecl* func) {
+        if (check_keyword("always")) {
+            func->inline_directive = InlineDirective::Always;
+        } else if (check_keyword("never")) {
+            func->inline_directive = InlineDirective::Never;
+        } else if (check_keyword("hint")) {
+            func->inline_directive = InlineDirective::Hint;
+        }
+    }
+};
+```
+
+### 053: Inline HIR統合
+
+```cpp
+// src/hir/inline_hir.hpp
+struct HIRInlineAnalyzer {
+    struct InlineMetrics {
+        size_t instruction_count;
+        size_t call_count;
+        size_t loop_depth;
+        bool has_recursion;
+        bool has_indirect_calls;
+    };
+
+    InlineMetrics analyze(const HIRFunction& func) {
+        InlineMetrics metrics{};
+
+        for (const auto& stmt : func.body) {
+            analyze_statement(stmt, metrics, 0);
+        }
+
+        return metrics;
+    }
+
+private:
+    void analyze_statement(const HIRStmt& stmt, InlineMetrics& m, int loop_depth) {
+        m.instruction_count++;
+
+        switch (stmt.kind) {
+            case HIRStmtKind::Call:
+                m.call_count++;
+                if (stmt.call.is_indirect) {
+                    m.has_indirect_calls = true;
+                }
+                if (stmt.call.target == func.name) {
+                    m.has_recursion = true;
+                }
+                break;
+
+            case HIRStmtKind::Loop:
+                m.loop_depth = std::max(m.loop_depth, loop_depth + 1);
+                for (const auto& s : stmt.loop.body) {
+                    analyze_statement(s, m, loop_depth + 1);
+                }
+                break;
+        }
+    }
+};
+```
+
+### 054: Inline MIR最適化
+
+```cpp
+// src/mir/passes/inline_pass.cpp
+class InlinePass : public MIRPass {
+private:
+    std::map<std::string, InlineDecision> decisions;
+
+public:
+    void run(MIRProgram& program) override {
+        // Phase 1: インライン候補の収集
+        collect_candidates(program);
+
+        // Phase 2: インライン決定
+        make_decisions(program);
+
+        // Phase 3: インライン展開
+        perform_inlining(program);
+
+        // Phase 4: クリーンアップ
+        cleanup_after_inlining(program);
+    }
+
+private:
+    void perform_inlining(MIRProgram& program) {
+        for (auto& func : program.functions) {
+            for (auto& bb : func.basic_blocks) {
+                for (auto& stmt : bb.statements) {
+                    if (stmt.kind == MIRStmtKind::Call) {
+                        if (should_inline(stmt.call)) {
+                            inline_call(func, bb, stmt);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void inline_call(MIRFunction& caller, MIRBlock& bb, MIRStmt& call) {
+        auto* callee = find_function(call.target);
+        if (!callee) return;
+
+        // パラメータマッピング
+        std::map<MIROperand, MIROperand> mapping;
+        for (size_t i = 0; i < call.args.size(); i++) {
+            mapping[callee->params[i]] = call.args[i];
+        }
+
+        // 関数本体のコピーと変数置換
+        auto inlined_body = clone_and_substitute(callee->body, mapping);
+
+        // 呼び出し文を展開した本体で置換
+        replace_statement(bb, call, inlined_body);
+    }
+};
+```
+
+### 055: Inline LLVM統合
+
+```cpp
+// src/codegen/llvm/inline_llvm.cpp
+class LLVMInliner {
+private:
+    llvm::InlineParams params;
+
+public:
+    void setup_inline_params() {
+        params.DefaultThreshold = 225;  // デフォルト閾値
+        params.HintThreshold = 325;     // hint時の閾値
+        params.ColdThreshold = 45;      // コールドパスの閾値
+        params.OptSizeThreshold = 75;   // サイズ最適化時
+        params.LocallyHotCallSiteThreshold = 525;  // ホットパス
+    }
+
+    void apply_inline_attributes(llvm::Function* func, InlineDirective directive) {
+        switch (directive) {
+            case InlineDirective::Always:
+                func->addFnAttr(llvm::Attribute::AlwaysInline);
+                break;
+            case InlineDirective::Never:
+                func->addFnAttr(llvm::Attribute::NoInline);
+                break;
+            case InlineDirective::Hint:
+                func->addFnAttr(llvm::Attribute::InlineHint);
+                break;
+        }
+    }
+
+    void run_inline_pass(llvm::Module& module) {
+        llvm::legacy::FunctionPassManager FPM(&module);
+
+        // インラインパスの追加
+        FPM.add(llvm::createFunctionInliningPass(params));
+        FPM.add(llvm::createEarlyCSEPass());  // 共通部分式除去
+        FPM.add(llvm::createCFGSimplificationPass());  // CFG簡略化
+
+        for (auto& F : module) {
+            FPM.run(F);
+        }
+    }
+};
+```
+
+### 056: Inline Test
+
+```cm
+// tests/inline/inline_test.cm
+#[test]
+void test_inline_always() {
+    #[inline(always)]
+    int add(int a, int b) {
+        return a + b;
+    }
+
+    // この呼び出しは必ずインライン展開される
+    int result = add(1, 2);
+    assert(result == 3);
+
+    // アセンブリで確認
+    // 関数呼び出しではなく、直接加算になっているはず
+}
+
+#[test]
+void test_inline_never() {
+    #[inline(never)]
+    int multiply(int a, int b) {
+        return a * b;
+    }
+
+    // この呼び出しはインライン展開されない
+    int result = multiply(3, 4);
+    assert(result == 12);
+
+    // アセンブリで確認
+    // call命令が残っているはず
+}
+
+#[test]
+void test_recursive_inline() {
+    #[inline(always)]  // エラーになるはず
+    int factorial(int n) {
+        if (n <= 1) return 1;
+        return n * factorial(n - 1);
+    }
+
+    // コンパイルエラー: 再帰関数はinline(always)不可
+}
+```
+
+### 057: Inline Benchmark
+
+```cm
+// benchmarks/inline_benchmark.cm
+import std::time;
+
+struct BenchmarkResult {
+    String name;
+    double time_ms;
+    size_t iterations;
+}
+
+// ベンチマーク1: 小さい関数のインライン
+#[inline(always)]
+int small_func_inlined(int x) {
+    return x * 2 + 1;
+}
+
+#[inline(never)]
+int small_func_not_inlined(int x) {
+    return x * 2 + 1;
+}
+
+BenchmarkResult bench_small_function() {
+    const int iterations = 10000000;
+
+    // インライン版
+    auto start1 = time::now();
+    int sum1 = 0;
+    for (int i = 0; i < iterations; i++) {
+        sum1 += small_func_inlined(i);
+    }
+    auto time1 = time::elapsed_ms(start1);
+
+    // 非インライン版
+    auto start2 = time::now();
+    int sum2 = 0;
+    for (int i = 0; i < iterations; i++) {
+        sum2 += small_func_not_inlined(i);
+    }
+    auto time2 = time::elapsed_ms(start2);
+
+    println(f"Inline speedup: {time2 / time1}x");
+
+    return BenchmarkResult{
+        "small_function_inline",
+        time1,
+        iterations
+    };
+}
+
+// ベンチマーク2: 大きい関数のインライン（コード膨張の測定）
+void measure_code_size() {
+    // コンパイル時にバイナリサイズを比較
+    // cm build --inline-threshold=0   # インラインなし
+    // cm build --inline-threshold=999 # 積極的インライン
+}
+```
+
+### 058: Inline Debug
+
+```cpp
+// src/debug/inline_debugger.hpp
+class InlineDebugger {
+private:
+    struct InlineEvent {
+        std::string caller;
+        std::string callee;
+        SourceLocation location;
+        InlineDecision decision;
+        std::string reason;
+    };
+
+    std::vector<InlineEvent> events;
+
+public:
+    void record_inline_decision(const std::string& caller,
+                               const std::string& callee,
+                               SourceLocation loc,
+                               InlineDecision decision,
+                               const std::string& reason) {
+        events.push_back({caller, callee, loc, decision, reason});
+    }
+
+    void dump_inline_report(std::ostream& out) {
+        out << "=== Inline Optimization Report ===\n";
+        out << "Total decisions: " << events.size() << "\n\n";
+
+        int inlined_count = 0;
+        int not_inlined_count = 0;
+
+        for (const auto& event : events) {
+            if (event.decision == InlineDecision::Yes) {
+                inlined_count++;
+                out << "[INLINED] ";
+            } else {
+                not_inlined_count++;
+                out << "[NOT INLINED] ";
+            }
+
+            out << event.caller << " -> " << event.callee
+                << " at " << event.location << "\n";
+            out << "  Reason: " << event.reason << "\n";
+        }
+
+        out << "\nSummary:\n";
+        out << "  Inlined: " << inlined_count << "\n";
+        out << "  Not inlined: " << not_inlined_count << "\n";
+    }
+};
+```
+
+### 059: Inline Documentation
+
+```markdown
+# Cm Inline Optimization Guide
+
+## 概要
+Cm言語のインライン最適化は、関数呼び出しのオーバーヘッドを削減し、
+さらなる最適化の機会を提供します。
+
+## 使用方法
+
+### 基本的な使い方
+\```cm
+#[inline(always)]  // 必ずインライン展開
+int add(int a, int b) {
+    return a + b;
+}
+
+#[inline(never)]   // インライン展開しない
+void debug_log(String msg) {
+    println(f"[DEBUG] {msg}");
+}
+
+#[inline(hint)]    // コンパイラにヒントを与える
+int calculate(int x) {
+    return x * x + 2 * x + 1;
+}
+\```
+
+### ベストプラクティス
+
+1. **小さな関数には`inline(always)`**
+   - 1-3行の単純な関数
+   - getter/setter
+
+2. **デバッグ関数には`inline(never)`**
+   - ログ出力
+   - アサーション
+
+3. **通常は`inline(hint)`かデフォルト**
+   - コンパイラの判断に任せる
+
+### トラブルシューティング
+
+**Q: インライン展開されているか確認したい**
+A: `--dump-inline-report`フラグを使用
+\```bash
+cm build --dump-inline-report
+\```
+
+**Q: コードサイズが大きくなりすぎる**
+A: インライン閾値を調整
+\```bash
+cm build --inline-threshold=100  # デフォルト: 225
+\```
+
+**Q: 再帰関数がインライン展開でエラーになる**
+A: 再帰関数は`inline(always)`できません。`inline(hint)`を使用してください。
+
+## パフォーマンスガイドライン
+
+| 関数の種類 | 推奨設定 | 理由 |
+|-----------|---------|------|
+| Getter/Setter | `always` | 非常に小さく、頻繁に呼ばれる |
+| 数値計算 | `hint` | サイズと速度のバランス |
+| I/O操作 | `never` | 大きく、最適化効果が薄い |
+| ホットパス | `always`/`hint` | プロファイル結果に基づく |
+| コールドパス | `never` | コードサイズ削減 |
+```

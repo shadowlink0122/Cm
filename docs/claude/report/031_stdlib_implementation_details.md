@@ -107,6 +107,9 @@ export interface Allocator {
 // デフォルトアロケータ
 export struct SystemAllocator {}
 
+// 注意: impl単独ブロックはコンストラクタ・デストラクタのみ定義可能
+// 通常のメソッドはinterfaceとimpl forで定義する必要がある
+
 impl SystemAllocator for Allocator {
     void* alloc(int size) {
         if (size <= 0) return null;

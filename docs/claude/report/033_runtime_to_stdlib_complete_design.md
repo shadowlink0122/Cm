@@ -183,12 +183,21 @@ module std::string;
 
 import std::mem;
 
+// Stringインターフェース定義
+export interface StringOps {
+    void push(byte c);
+    void append(String s);
+    int length();
+    byte* c_str();
+}
+
 export struct String {
     private byte* data;
     private int len;
     private int cap;
 }
 
+// 重要: impl単独ブロックはコンストラクタ・デストラクタのみ定義可能
 impl String {
     self() {
         self.data = null;
@@ -215,7 +224,10 @@ impl String {
             mem::GLOBAL.free_fn(self.data);
         }
     }
+}
 
+// メソッドはinterface実装として定義
+impl String for StringOps {
     void push(byte c) {
         if (self.len + 1 >= self.cap) {
             self.grow();
@@ -228,6 +240,14 @@ impl String {
         for (int i = 0; i < s.len; i++) {
             self.push(s.data[i]);
         }
+    }
+
+    int length() {
+        return self.len;
+    }
+
+    byte* c_str() {
+        return self.data;
     }
 
     private void grow() {
@@ -611,3 +631,780 @@ define void @main() {
 **作成者:** Claude Code
 **ステータス:** 設計完了
 **次のステップ:** Phase 1のシステムインターフェース実装
+
+## 標準ライブラリ拡張設計（034-039）
+
+### 034: Vector実装
+
+#### 基本設計
+```cm
+// std/collections/vector.cm
+struct Vector<T> {
+    T* data;
+    size_t len;
+    size_t cap;
+}
+
+impl<T> Vector<T> {
+    // コンストラクタ
+    static Vector<T> new() {
+        return Vector<T>{null, 0, 0};
+    }
+
+    static Vector<T> with_capacity(size_t capacity) {
+        T* buffer = (T*)malloc(sizeof(T) * capacity);
+        return Vector<T>{buffer, 0, capacity};
+    }
+
+    // 基本操作
+    void push(T value) {
+        if (self.len >= self.cap) {
+            self.grow();
+        }
+        self.data[self.len++] = value;
+    }
+
+    T pop() {
+        if (self.len == 0) {
+            panic("pop from empty vector");
+        }
+        return self.data[--self.len];
+    }
+
+    T& operator[](size_t index) {
+        if (index >= self.len) {
+            panic("index out of bounds");
+        }
+        return self.data[index];
+    }
+
+    // 成長戦略
+    private void grow() {
+        size_t new_cap = self.cap == 0 ? 8 : self.cap * 2;
+        T* new_data = (T*)realloc(self.data, sizeof(T) * new_cap);
+        if (!new_data) {
+            panic("allocation failed");
+        }
+        self.data = new_data;
+        self.cap = new_cap;
+    }
+
+    // イテレータサポート
+    T* begin() { return self.data; }
+    T* end() { return self.data + self.len; }
+}
+
+// イテレータトレイト実装
+impl<T> Vector<T> for Iterator<T> {
+    type Item = T;
+
+    bool has_next() {
+        return self.cursor < self.len;
+    }
+
+    T next() {
+        return self.data[self.cursor++];
+    }
+}
+```
+
+### 035: HashMap実装
+
+#### 基本設計
+```cm
+// std/collections/hashmap.cm
+struct Entry<K, V> {
+    K key;
+    V value;
+    Entry<K, V>* next;  // チェイン法
+    uint32_t hash;
+}
+
+struct HashMap<K, V> {
+    Entry<K, V>** buckets;
+    size_t bucket_count;
+    size_t size;
+    float load_factor;
+}
+
+impl<K: Hash + Eq, V> HashMap<K, V> {
+    static HashMap<K, V> new() {
+        return HashMap<K, V>::with_capacity(16);
+    }
+
+    static HashMap<K, V> with_capacity(size_t capacity) {
+        size_t bucket_count = next_power_of_two(capacity);
+        Entry<K, V>** buckets = (Entry<K, V>**)calloc(bucket_count, sizeof(Entry<K, V>*));
+        return HashMap<K, V>{buckets, bucket_count, 0, 0.75};
+    }
+
+    // 基本操作
+    void insert(K key, V value) {
+        if ((float)self.size / self.bucket_count > self.load_factor) {
+            self.resize();
+        }
+
+        uint32_t hash = key.hash();
+        size_t idx = hash & (self.bucket_count - 1);
+
+        Entry<K, V>* entry = self.buckets[idx];
+        while (entry) {
+            if (entry.key == key) {
+                entry.value = value;
+                return;
+            }
+            entry = entry.next;
+        }
+
+        // 新規エントリ
+        Entry<K, V>* new_entry = new Entry<K, V>{key, value, self.buckets[idx], hash};
+        self.buckets[idx] = new_entry;
+        self.size++;
+    }
+
+    V* get(K key) {
+        uint32_t hash = key.hash();
+        size_t idx = hash & (self.bucket_count - 1);
+
+        Entry<K, V>* entry = self.buckets[idx];
+        while (entry) {
+            if (entry.key == key) {
+                return &entry.value;
+            }
+            entry = entry.next;
+        }
+        return null;
+    }
+
+    bool remove(K key) {
+        uint32_t hash = key.hash();
+        size_t idx = hash & (self.bucket_count - 1);
+
+        Entry<K, V>** current = &self.buckets[idx];
+        while (*current) {
+            if ((*current).key == key) {
+                Entry<K, V>* to_remove = *current;
+                *current = to_remove.next;
+                delete to_remove;
+                self.size--;
+                return true;
+            }
+            current = &(*current).next;
+        }
+        return false;
+    }
+
+    // リサイズ
+    private void resize() {
+        size_t new_bucket_count = self.bucket_count * 2;
+        Entry<K, V>** new_buckets = (Entry<K, V>**)calloc(new_bucket_count, sizeof(Entry<K, V>*));
+
+        // 再ハッシュ
+        for (size_t i = 0; i < self.bucket_count; i++) {
+            Entry<K, V>* entry = self.buckets[i];
+            while (entry) {
+                Entry<K, V>* next = entry.next;
+                size_t new_idx = entry.hash & (new_bucket_count - 1);
+                entry.next = new_buckets[new_idx];
+                new_buckets[new_idx] = entry;
+                entry = next;
+            }
+        }
+
+        free(self.buckets);
+        self.buckets = new_buckets;
+        self.bucket_count = new_bucket_count;
+    }
+}
+
+// Hash trait
+trait Hash {
+    uint32_t hash();
+}
+
+// 基本型の実装
+impl int for Hash {
+    uint32_t hash() {
+        // MurmurHash3の簡易版
+        uint32_t h = (uint32_t)self;
+        h ^= h >> 16;
+        h *= 0x85ebca6b;
+        h ^= h >> 13;
+        h *= 0xc2b2ae35;
+        h ^= h >> 16;
+        return h;
+    }
+}
+
+impl String for Hash {
+    uint32_t hash() {
+        // FNV-1a hash
+        uint32_t hash = 2166136261u;
+        for (int i = 0; i < self.len; i++) {
+            hash ^= (uint32_t)self.data[i];
+            hash *= 16777619;
+        }
+        return hash;
+    }
+}
+```
+
+### 036: String改善（UTF-8サポート）
+
+#### UTF-8サポート設計
+```cm
+// std/string/utf8.cm
+struct Utf8String {
+    byte* data;
+    size_t byte_len;    // バイト長
+    size_t char_count;  // 文字数（キャッシュ）
+}
+
+impl Utf8String {
+    // UTF-8文字境界の検出
+    static bool is_char_boundary(byte b) {
+        // 継続バイトではない（10xxxxxx以外）
+        return (b & 0xC0) != 0x80;
+    }
+
+    // UTF-8文字のバイト数を取得
+    static int char_len(byte first_byte) {
+        if ((first_byte & 0x80) == 0) return 1;      // 0xxxxxxx
+        if ((first_byte & 0xE0) == 0xC0) return 2;    // 110xxxxx
+        if ((first_byte & 0xF0) == 0xE0) return 3;    // 1110xxxx
+        if ((first_byte & 0xF8) == 0xF0) return 4;    // 11110xxx
+        return 1; // エラー時は1バイトとして扱う
+    }
+
+    // 文字数のカウント
+    size_t count_chars() {
+        size_t count = 0;
+        size_t i = 0;
+        while (i < self.byte_len) {
+            i += char_len(self.data[i]);
+            count++;
+        }
+        self.char_count = count;  // キャッシュ更新
+        return count;
+    }
+
+    // n番目の文字を取得（Unicodeコードポイント）
+    uint32_t char_at(size_t index) {
+        size_t current = 0;
+        size_t byte_pos = 0;
+
+        while (byte_pos < self.byte_len && current < index) {
+            byte_pos += char_len(self.data[byte_pos]);
+            current++;
+        }
+
+        if (byte_pos >= self.byte_len) {
+            panic("index out of bounds");
+        }
+
+        return decode_utf8_char(&self.data[byte_pos]);
+    }
+
+    // UTF-8文字のデコード
+    private uint32_t decode_utf8_char(byte* p) {
+        byte b0 = p[0];
+
+        if ((b0 & 0x80) == 0) {
+            return b0;
+        }
+        if ((b0 & 0xE0) == 0xC0) {
+            return ((b0 & 0x1F) << 6) | (p[1] & 0x3F);
+        }
+        if ((b0 & 0xF0) == 0xE0) {
+            return ((b0 & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+        }
+        if ((b0 & 0xF8) == 0xF0) {
+            return ((b0 & 0x07) << 18) | ((p[1] & 0x3F) << 12) |
+                   ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);
+        }
+        return 0xFFFD; // 置換文字
+    }
+
+    // 部分文字列の取得（文字単位）
+    Utf8String substring(size_t start, size_t len) {
+        size_t start_byte = 0;
+        size_t current = 0;
+
+        // 開始位置を探す
+        while (start_byte < self.byte_len && current < start) {
+            start_byte += char_len(self.data[start_byte]);
+            current++;
+        }
+
+        // 長さを計算
+        size_t end_byte = start_byte;
+        size_t count = 0;
+        while (end_byte < self.byte_len && count < len) {
+            end_byte += char_len(self.data[end_byte]);
+            count++;
+        }
+
+        // 新しい文字列を作成
+        size_t byte_count = end_byte - start_byte;
+        byte* new_data = (byte*)malloc(byte_count + 1);
+        memcpy(new_data, self.data + start_byte, byte_count);
+        new_data[byte_count] = 0;
+
+        return Utf8String{new_data, byte_count, count};
+    }
+}
+```
+
+### 037: File I/O拡張
+
+#### ファイル操作の完全実装
+```cm
+// std/fs/file.cm
+struct File {
+    int fd;
+    String path;
+    FileMode mode;
+    bool is_open;
+}
+
+enum FileMode {
+    Read = 0x01,
+    Write = 0x02,
+    Append = 0x04,
+    Create = 0x08,
+    Truncate = 0x10,
+}
+
+impl File {
+    static File open(String path, FileMode mode) {
+        int flags = 0;
+
+        if (mode & FileMode::Read && mode & FileMode::Write) {
+            flags = O_RDWR;
+        } else if (mode & FileMode::Read) {
+            flags = O_RDONLY;
+        } else if (mode & FileMode::Write) {
+            flags = O_WRONLY;
+        }
+
+        if (mode & FileMode::Create) flags |= O_CREAT;
+        if (mode & FileMode::Append) flags |= O_APPEND;
+        if (mode & FileMode::Truncate) flags |= O_TRUNC;
+
+        int fd = __sys_open(path.c_str(), flags, 0644);
+        if (fd < 0) {
+            panic("Failed to open file");
+        }
+
+        return File{fd, path, mode, true};
+    }
+
+    size_t read(byte* buffer, size_t count) {
+        if (!self.is_open) panic("File is closed");
+        ssize_t result = __sys_read(self.fd, buffer, count);
+        if (result < 0) panic("Read failed");
+        return result;
+    }
+
+    size_t write(byte* buffer, size_t count) {
+        if (!self.is_open) panic("File is closed");
+        ssize_t result = __sys_write(self.fd, buffer, count);
+        if (result < 0) panic("Write failed");
+        return result;
+    }
+
+    void seek(int64_t offset, SeekFrom from) {
+        if (!self.is_open) panic("File is closed");
+        int whence = 0;
+        switch (from) {
+            case SeekFrom::Start: whence = SEEK_SET; break;
+            case SeekFrom::Current: whence = SEEK_CUR; break;
+            case SeekFrom::End: whence = SEEK_END; break;
+        }
+        if (__sys_lseek(self.fd, offset, whence) < 0) {
+            panic("Seek failed");
+        }
+    }
+
+    String read_to_string() {
+        // ファイルサイズを取得
+        struct stat st;
+        if (__sys_fstat(self.fd, &st) < 0) {
+            panic("Failed to get file size");
+        }
+
+        // バッファを確保して読み込み
+        byte* buffer = (byte*)malloc(st.st_size + 1);
+        size_t total_read = 0;
+
+        while (total_read < st.st_size) {
+            size_t chunk = self.read(buffer + total_read, st.st_size - total_read);
+            if (chunk == 0) break;
+            total_read += chunk;
+        }
+
+        buffer[total_read] = 0;
+        return String{buffer, total_read};
+    }
+
+    void close() {
+        if (self.is_open) {
+            __sys_close(self.fd);
+            self.is_open = false;
+        }
+    }
+
+    ~File() {
+        self.close();
+    }
+}
+
+// 便利関数
+String read_file(String path) {
+    File f = File::open(path, FileMode::Read);
+    String content = f.read_to_string();
+    f.close();
+    return content;
+}
+
+void write_file(String path, String content) {
+    File f = File::open(path, FileMode::Write | FileMode::Create | FileMode::Truncate);
+    f.write(content.data, content.len);
+    f.close();
+}
+```
+
+### 038: Network（ソケット通信）
+
+#### 基本的なTCP/UDPサポート
+```cm
+// std/net/socket.cm
+struct TcpSocket {
+    int fd;
+    SocketAddr addr;
+}
+
+struct SocketAddr {
+    uint32_t ip;    // IPv4アドレス
+    uint16_t port;
+}
+
+impl TcpSocket {
+    static TcpSocket connect(String host, uint16_t port) {
+        // DNS解決
+        uint32_t ip = resolve_host(host);
+
+        int fd = __sys_socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) panic("Failed to create socket");
+
+        struct sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        addr.sin_addr.s_addr = htonl(ip);
+
+        if (__sys_connect(fd, &addr, sizeof(addr)) < 0) {
+            __sys_close(fd);
+            panic("Failed to connect");
+        }
+
+        return TcpSocket{fd, SocketAddr{ip, port}};
+    }
+
+    size_t send(byte* data, size_t len) {
+        ssize_t result = __sys_send(self.fd, data, len, 0);
+        if (result < 0) panic("Send failed");
+        return result;
+    }
+
+    size_t recv(byte* buffer, size_t len) {
+        ssize_t result = __sys_recv(self.fd, buffer, len, 0);
+        if (result < 0) panic("Recv failed");
+        return result;
+    }
+
+    void close() {
+        __sys_close(self.fd);
+    }
+}
+
+struct TcpListener {
+    int fd;
+    SocketAddr addr;
+}
+
+impl TcpListener {
+    static TcpListener bind(String addr, uint16_t port) {
+        int fd = __sys_socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) panic("Failed to create socket");
+
+        // SO_REUSEADDR を設定
+        int reuse = 1;
+        __sys_setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+        struct sockaddr_in bind_addr;
+        bind_addr.sin_family = AF_INET;
+        bind_addr.sin_port = htons(port);
+        bind_addr.sin_addr.s_addr = INADDR_ANY;
+
+        if (__sys_bind(fd, &bind_addr, sizeof(bind_addr)) < 0) {
+            __sys_close(fd);
+            panic("Failed to bind");
+        }
+
+        if (__sys_listen(fd, 128) < 0) {
+            __sys_close(fd);
+            panic("Failed to listen");
+        }
+
+        return TcpListener{fd, SocketAddr{0, port}};
+    }
+
+    TcpSocket accept() {
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+
+        int client_fd = __sys_accept(self.fd, &client_addr, &addr_len);
+        if (client_fd < 0) panic("Accept failed");
+
+        uint32_t ip = ntohl(client_addr.sin_addr.s_addr);
+        uint16_t port = ntohs(client_addr.sin_port);
+
+        return TcpSocket{client_fd, SocketAddr{ip, port}};
+    }
+}
+
+// HTTPクライアントの例
+struct HttpClient {
+    static String get(String url) {
+        // URLをパース
+        String host, path;
+        uint16_t port = 80;
+        parse_url(url, host, path, port);
+
+        // 接続
+        TcpSocket socket = TcpSocket::connect(host, port);
+
+        // リクエストを送信
+        String request = format("GET {} HTTP/1.1\r\n"
+                              "Host: {}\r\n"
+                              "Connection: close\r\n"
+                              "\r\n", path, host);
+        socket.send(request.data, request.len);
+
+        // レスポンスを読み取り
+        byte buffer[4096];
+        String response;
+        size_t n;
+
+        while ((n = socket.recv(buffer, sizeof(buffer))) > 0) {
+            response.append(buffer, n);
+        }
+
+        socket.close();
+
+        // ヘッダーとボディを分離
+        int body_start = response.find("\r\n\r\n");
+        if (body_start != -1) {
+            return response.substring(body_start + 4);
+        }
+
+        return response;
+    }
+}
+```
+
+### 039: Thread（スレッド対応）
+
+#### 基本的なスレッドサポート
+```cm
+// std/thread/thread.cm
+struct Thread {
+    pthread_t handle;
+    void* (*func)(void*);
+    void* arg;
+    bool joinable;
+}
+
+impl Thread {
+    static Thread spawn<F: Fn()>(F func) {
+        Thread t;
+        t.func = thread_wrapper<F>;
+        t.arg = new F(func);
+        t.joinable = true;
+
+        if (pthread_create(&t.handle, null, t.func, t.arg) != 0) {
+            panic("Failed to create thread");
+        }
+
+        return t;
+    }
+
+    void* join() {
+        if (!self.joinable) {
+            panic("Thread is not joinable");
+        }
+
+        void* result;
+        if (pthread_join(self.handle, &result) != 0) {
+            panic("Failed to join thread");
+        }
+
+        self.joinable = false;
+        return result;
+    }
+
+    void detach() {
+        if (!self.joinable) {
+            panic("Thread is not joinable");
+        }
+
+        if (pthread_detach(self.handle) != 0) {
+            panic("Failed to detach thread");
+        }
+
+        self.joinable = false;
+    }
+
+    static void sleep(uint64_t millis) {
+        struct timespec ts;
+        ts.tv_sec = millis / 1000;
+        ts.tv_nsec = (millis % 1000) * 1000000;
+        nanosleep(&ts, null);
+    }
+
+    static void yield() {
+        sched_yield();
+    }
+}
+
+// ミューテックス
+struct Mutex<T> {
+    pthread_mutex_t mutex;
+    T* data;
+}
+
+impl<T> Mutex<T> {
+    static Mutex<T> new(T value) {
+        Mutex<T> m;
+        pthread_mutex_init(&m.mutex, null);
+        m.data = new T(value);
+        return m;
+    }
+
+    MutexGuard<T> lock() {
+        pthread_mutex_lock(&self.mutex);
+        return MutexGuard<T>{&self.mutex, self.data};
+    }
+
+    bool try_lock() {
+        return pthread_mutex_trylock(&self.mutex) == 0;
+    }
+
+    ~Mutex() {
+        pthread_mutex_destroy(&self.mutex);
+        delete self.data;
+    }
+}
+
+struct MutexGuard<T> {
+    pthread_mutex_t* mutex;
+    T* data;
+}
+
+impl<T> MutexGuard<T> {
+    T& operator*() { return *self.data; }
+    T* operator->() { return self.data; }
+
+    ~MutexGuard() {
+        pthread_mutex_unlock(self.mutex);
+    }
+}
+
+// 条件変数
+struct CondVar {
+    pthread_cond_t cond;
+}
+
+impl CondVar {
+    static CondVar new() {
+        CondVar cv;
+        pthread_cond_init(&cv.cond, null);
+        return cv;
+    }
+
+    void wait<T>(MutexGuard<T>& guard) {
+        pthread_cond_wait(&self.cond, guard.mutex);
+    }
+
+    void notify_one() {
+        pthread_cond_signal(&self.cond);
+    }
+
+    void notify_all() {
+        pthread_cond_broadcast(&self.cond);
+    }
+
+    ~CondVar() {
+        pthread_cond_destroy(&self.cond);
+    }
+}
+
+// チャンネル（メッセージパッシング）
+struct Channel<T> {
+    struct Node {
+        T data;
+        Node* next;
+    }
+
+    Node* head;
+    Node* tail;
+    Mutex<void> mutex;
+    CondVar not_empty;
+    bool closed;
+}
+
+impl<T> Channel<T> {
+    static Channel<T> new() {
+        return Channel<T>{null, null, Mutex<void>::new(), CondVar::new(), false};
+    }
+
+    void send(T value) {
+        auto guard = self.mutex.lock();
+        if (self.closed) panic("Channel is closed");
+
+        Node* node = new Node{value, null};
+        if (self.tail) {
+            self.tail->next = node;
+        } else {
+            self.head = node;
+        }
+        self.tail = node;
+
+        self.not_empty.notify_one();
+    }
+
+    T recv() {
+        auto guard = self.mutex.lock();
+
+        while (!self.head && !self.closed) {
+            self.not_empty.wait(guard);
+        }
+
+        if (!self.head) panic("Channel is closed");
+
+        Node* node = self.head;
+        self.head = node->next;
+        if (!self.head) self.tail = null;
+
+        T value = node->data;
+        delete node;
+        return value;
+    }
+
+    void close() {
+        auto guard = self.mutex.lock();
+        self.closed = true;
+        self.not_empty.notify_all();
+    }
+}
+```
