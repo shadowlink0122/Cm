@@ -862,6 +862,43 @@ class Evaluator {
                     return Value(equal);
                 case MirBinaryOp::Ne:
                     return Value(!equal);
+                case MirBinaryOp::Lt:
+                case MirBinaryOp::Le:
+                case MirBinaryOp::Gt:
+                case MirBinaryOp::Ge: {
+                    // ポインタの大小比較：raw_ptrまたはarray_indexで比較
+                    uintptr_t l_addr = 0;
+                    uintptr_t r_addr = 0;
+
+                    if (l.is_external()) {
+                        l_addr = reinterpret_cast<uintptr_t>(l.raw_ptr);
+                    } else {
+                        // 内部ポインタの場合はtarget_localとarray_indexから擬似アドレス生成
+                        l_addr = static_cast<uintptr_t>(l.target_local) * 1000000 +
+                                 l.array_index.value_or(0);
+                    }
+
+                    if (r.is_external()) {
+                        r_addr = reinterpret_cast<uintptr_t>(r.raw_ptr);
+                    } else {
+                        r_addr = static_cast<uintptr_t>(r.target_local) * 1000000 +
+                                 r.array_index.value_or(0);
+                    }
+
+                    switch (op) {
+                        case MirBinaryOp::Lt:
+                            return Value(l_addr < r_addr);
+                        case MirBinaryOp::Le:
+                            return Value(l_addr <= r_addr);
+                        case MirBinaryOp::Gt:
+                            return Value(l_addr > r_addr);
+                        case MirBinaryOp::Ge:
+                            return Value(l_addr >= r_addr);
+                        default:
+                            break;
+                    }
+                    break;
+                }
                 default:
                     break;
             }
