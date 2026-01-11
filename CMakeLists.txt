@@ -179,6 +179,12 @@ set(CM_SOURCES
     src/mir/lowering/expr_basic.cpp
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
+    # auto_impl (トレイト別自動実装)
+    src/mir/lowering/auto_impl/generator.cpp
+    src/mir/lowering/auto_impl/eq.cpp
+    src/mir/lowering/auto_impl/ord.cpp
+    src/mir/lowering/auto_impl/clone_hash.cpp
+    src/mir/lowering/auto_impl/debug_display_css.cpp
 )
 
 # Add LLVM sources if enabled

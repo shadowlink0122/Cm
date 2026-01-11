@@ -1,0 +1,216 @@
+// 明示的インターフェース実装のデモ
+// 注: これは提案段階のコードで、現在のCmでは動作しません
+import std::io::println;
+
+// ============================================================
+// インターフェース定義（明示的宣言）
+// ============================================================
+
+interface Iterator {
+    bool has_next();
+    int next();  // 簡略化のためintに限定
+}
+
+interface Iterable {
+    Iterator* iter();
+}
+
+// ============================================================
+// カスタムコレクション型
+// ============================================================
+
+struct MyCollection {
+    int* data;
+    int size;
+    int capacity;
+}
+
+impl MyCollection {
+    self(int initial_capacity) {
+        self.capacity = initial_capacity;
+        self.size = 0;
+        self.data = (int*)malloc(sizeof(int) * initial_capacity);
+    }
+
+    void push(int value) {
+        if (self.size >= self.capacity) {
+            // リサイズ処理（簡略化）
+            return;
+        }
+        self.data[self.size] = value;
+        self.size = self.size + 1;
+    }
+
+    int get(int index) {
+        if (index < 0 || index >= self.size) {
+            return -1;  // エラー値
+        }
+        return self.data[index];
+    }
+}
+
+// ============================================================
+// イテレータ実装
+// ============================================================
+
+struct MyCollectionIterator {
+    int* current;
+    int* end;
+}
+
+// コンストラクタ
+impl MyCollectionIterator {
+    self(int* start, int size) {
+        self.current = start;
+        self.end = start + size;
+    }
+}
+
+// ❌ これだけではIteratorインターフェースを満たさない
+// メソッドがあっても暗黙的には実装されない
+
+// ✅ 明示的にIteratorインターフェースを実装
+impl MyCollectionIterator for Iterator {
+    bool has_next() {
+        return self.current < self.end;
+    }
+
+    int next() {
+        if (!self.has_next()) {
+            return -1;  // エラー値
+        }
+        int value = *self.current;
+        self.current = self.current + 1;
+        return value;
+    }
+}
+
+// ✅ MyCollectionに明示的にIterableを実装
+impl MyCollection for Iterable {
+    Iterator* iter() {
+        // MyCollectionIteratorを作成して返す
+        MyCollectionIterator* iter = (MyCollectionIterator*)malloc(sizeof(MyCollectionIterator));
+        *iter = MyCollectionIterator(self.data, self.size);
+        // MyCollectionIteratorはIteratorを実装しているので、
+        // Iterator*として返せる（アップキャスト）
+        return (Iterator*)iter;
+    }
+}
+
+// ============================================================
+// 別の例：ダクトタイピングしない証明
+// ============================================================
+
+struct FakeIterator {
+    int index;
+}
+
+impl FakeIterator {
+    // Iteratorと同じメソッド名を持つが...
+    bool has_next() {
+        return self.index < 10;
+    }
+
+    int next() {
+        self.index = self.index + 1;
+        return self.index;
+    }
+}
+
+// ❌ FakeIteratorはIteratorインターフェースを実装していない
+// 以下のような使用はコンパイルエラー:
+// Iterator* fake = (Iterator*)&fake_iter;  // エラー！
+
+// ============================================================
+// 汎用関数（インターフェースを使用）
+// ============================================================
+
+// Iteratorインターフェースを受け取る汎用関数
+int sum_all(Iterator* iter) {
+    int total = 0;
+    while (iter->has_next()) {
+        total = total + iter->next();
+    }
+    return total;
+}
+
+// Iterableインターフェースを受け取る汎用関数
+void print_all(Iterable* collection) {
+    Iterator* iter = collection->iter();
+    println("Collection contents:");
+    while (iter->has_next()) {
+        int val = iter->next();
+        println("  {val}");
+    }
+    free(iter);  // メモリ解放
+}
+
+// ============================================================
+// メイン関数
+// ============================================================
+
+int main() {
+    println("=== Explicit Interface Implementation Demo ===\n");
+
+    // MyCollectionを作成
+    MyCollection coll = MyCollection(10);
+    coll.push(10);
+    coll.push(20);
+    coll.push(30);
+    coll.push(40);
+    coll.push(50);
+
+    // 1. 直接イテレータを使用
+    println("1. Direct iterator usage:");
+    MyCollectionIterator iter1 = MyCollectionIterator(coll.data, coll.size);
+    while (iter1.has_next()) {
+        int val = iter1.next();
+        println("  Value: {val}");
+    }
+
+    // 2. Iteratorインターフェース経由で使用
+    println("\n2. Through Iterator interface:");
+    MyCollectionIterator* iter2 = (MyCollectionIterator*)malloc(sizeof(MyCollectionIterator));
+    *iter2 = MyCollectionIterator(coll.data, coll.size);
+
+    // MyCollectionIteratorはIteratorを実装しているのでキャスト可能
+    Iterator* iter_interface = (Iterator*)iter2;
+    int total = sum_all(iter_interface);
+    println("  Sum: {total}");
+    free(iter2);
+
+    // 3. Iterableインターフェース経由で使用
+    println("\n3. Through Iterable interface:");
+    // MyCollectionはIterableを実装しているのでキャスト可能
+    Iterable* iterable = (Iterable*)&coll;
+    print_all(iterable);
+
+    // 4. for-in文での使用（提案）
+    println("\n4. Proposed for-in syntax:");
+    println("// for (int x in coll) {");
+    println("//     println(\"{x}\");");
+    println("// }");
+    println("// ↑ MyCollectionはIterableを実装しているので使用可能");
+
+    // 5. FakeIteratorは使えないことを示す
+    println("\n5. FakeIterator cannot be used as Iterator:");
+    FakeIterator fake;
+    fake.index = 0;
+    // 以下はコンパイルエラー（型安全）:
+    // Iterator* bad = (Iterator*)&fake;  // エラー！
+    // int bad_sum = sum_all(bad);        // エラー！
+    println("  FakeIterator has matching methods but doesn't implement Iterator");
+    println("  This prevents accidental interface satisfaction");
+
+    // クリーンアップ
+    free(coll.data);
+
+    println("\n=== Summary ===");
+    println("✅ Explicit 'impl Type for Interface' provides clarity");
+    println("✅ No accidental interface implementation");
+    println("✅ Type-safe interface usage");
+    println("✅ Arrays and slices get automatic implementation");
+    println("✅ Custom types require explicit implementation");
+
+    return 0;
+}
