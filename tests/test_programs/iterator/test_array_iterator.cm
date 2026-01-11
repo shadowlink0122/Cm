@@ -1,0 +1,60 @@
+import std::io::println;
+
+// IntArrayIterator テスト
+// impl内メソッドを使用（Phase 1で実装済み）
+// ポインタフィールドはコンストラクタでのみ使用し、メソッドでは回避
+
+struct IntArrayIterator {
+    int* current;
+    int* end;
+    int remaining_count;  // 残り要素数を明示的に管理
+}
+
+impl IntArrayIterator {
+    self(int* data, int size) {
+        self.current = data;
+        self.end = data + size;
+        self.remaining_count = size;
+    }
+    
+    // 残り要素数で判定（ポインタ比較を回避）
+    bool has_next() {
+        return self.remaining_count > 0;
+    }
+    
+    int next() {
+        int value = *self.current;
+        self.current = self.current + 1;
+        self.remaining_count = self.remaining_count - 1;
+        return value;
+    }
+    
+    int remaining() {
+        return self.remaining_count;
+    }
+}
+
+int main() {
+    int[5] arr = [10, 20, 30, 40, 50];
+    
+    // イテレータを作成
+    IntArrayIterator iter = IntArrayIterator(&arr[0], 5);
+    
+    // 残り要素数を確認
+    int rem = iter.remaining();
+    println("remaining: {rem}");
+    
+    // イテレータで走査して合計を計算
+    int sum = 0;
+    while (iter.has_next()) {
+        int val = iter.next();
+        sum = sum + val;
+    }
+    println("sum: {sum}");
+    
+    // 走査後は残り0
+    int rem_after = iter.remaining();
+    println("remaining after: {rem_after}");
+    
+    return 0;
+}

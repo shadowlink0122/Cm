@@ -2,6 +2,69 @@
 module std.iter;
 
 // ============================================================
+// イテレータインターフェース
+// ============================================================
+
+/// 基本的なイテレータインターフェース（int型専用）
+/// 注: ジェネリックインターフェースは現在未サポートのため型別に定義
+export interface IntIterator {
+    bool has_next();
+    int next();
+    int peek();
+}
+
+/// イテラブルインターフェース（int型専用）
+export interface IntIterable {
+    IntIterator iter();
+}
+
+// ============================================================
+// 配列イテレータ
+// ============================================================
+
+/// ポインタベースの配列イテレータ（int型専用）
+export struct IntArrayIterator {
+    int* current;    // 現在の要素へのポインタ
+    int* end;        // 終端へのポインタ（含まない）
+}
+
+impl IntArrayIterator {
+    // コンストラクタ
+    self(int* data, int size) {
+        self.current = data;
+        self.end = data + size;
+    }
+    
+    // 次の要素があるか確認
+    bool has_next() {
+        return self.current < self.end;
+    }
+    
+    // 次の要素を取得し、ポインタを進める
+    int next() {
+        int value = *self.current;
+        self.current = self.current + 1;
+        return value;
+    }
+    
+    // 次の要素を取得（ポインタは進めない）
+    int peek() {
+        return *self.current;
+    }
+    
+    // 残りの要素数を取得
+    int remaining() {
+        int count = 0;
+        int* p = self.current;
+        while (p < self.end) {
+            count = count + 1;
+            p = p + 1;
+        }
+        return count;
+    }
+}
+
+// ============================================================
 // Range構造体（範囲イテレータ）
 // ============================================================
 
@@ -69,6 +132,47 @@ export int at(Range r, int n) {
 }
 
 // ============================================================
+// RangeIterator（Range用イテレータ）
+// ============================================================
+
+/// Range用のイテレータ
+export struct RangeIterator {
+    int current;
+    int end;
+    int step;
+}
+
+impl RangeIterator {
+    // Rangeからイテレータを作成
+    self(Range r) {
+        self.current = r.start;
+        self.end = r.end;
+        self.step = r.step;
+    }
+    
+    // 次の要素があるか確認
+    bool has_next() {
+        if (self.step > 0) {
+            return self.current < self.end;
+        } else {
+            return self.current > self.end;
+        }
+    }
+    
+    // 次の要素を取得
+    int next() {
+        int value = self.current;
+        self.current = self.current + self.step;
+        return value;
+    }
+    
+    // 次の要素を確認（進めない）
+    int peek() {
+        return self.current;
+    }
+}
+
+// ============================================================
 // ユーティリティ関数
 // ============================================================
 
@@ -78,3 +182,4 @@ export <T> void swap(T* a, T* b) {
     *a = *b;
     *b = tmp;
 }
+
