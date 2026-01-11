@@ -44,16 +44,26 @@ class Interpreter {
     // static変数の初期化フラグ（関数名::変数名 → 初期化済みか）
     std::unordered_map<std::string, bool> static_initialized_;
 
-    /// 関数を名前で検索
+    /// 関数を名前で検索（ボディを持つ関数をextern宣言より優先）
     const MirFunction* find_function(const std::string& name) const {
         if (!current_program_)
             return nullptr;
+
+        const MirFunction* extern_func = nullptr;
         for (const auto& func : current_program_->functions) {
             if (func && func->name == name) {
-                return func.get();
+                // ボディ（basic_blocks）を持つ関数を優先
+                if (!func->basic_blocks.empty()) {
+                    return func.get();
+                }
+                // extern宣言（ボディなし）は記録しておく
+                if (!extern_func) {
+                    extern_func = func.get();
+                }
             }
         }
-        return nullptr;
+        // ボディを持つ関数がなければextern宣言を返す
+        return extern_func;
     }
 
     /// 関数を実行
@@ -146,7 +156,17 @@ class Interpreter {
 
         // 戻り値を取得
         auto it = ctx.locals.find(func.return_local);
-        return it != ctx.locals.end() ? it->second : Value{};
+        Value return_val = it != ctx.locals.end() ? it->second : Value{};
+
+        // デバッグ: 戻り値の情報を出力
+        debug::interp::log(debug::interp::Id::Return,
+                           "Function " + func.name +
+                               " return_local=" + std::to_string(func.return_local) +
+                               ", found=" + (it != ctx.locals.end() ? "yes" : "no") +
+                               ", type=" + std::string(return_val.type().name()),
+                           debug::Level::Debug);
+
+        return return_val;
     }
 
     /// static変数を初期化（初回のみ初期値を使用、2回目以降は保存された値を復元）
@@ -258,6 +278,12 @@ class Interpreter {
 
         const auto& block = *ctx.function->basic_blocks[block_id];
 
+        // デバッグ: ブロック実行情報
+        debug::interp::log(debug::interp::Id::ExecuteStart,
+                           "Block bb" + std::to_string(block_id) + " with " +
+                               std::to_string(block.statements.size()) + " stmts",
+                           debug::Level::Debug);
+
         // 文を実行
         for (const auto& stmt : block.statements) {
             execute_statement(ctx, *stmt);
@@ -327,6 +353,11 @@ class Interpreter {
                         }
                     }
                 }
+                // デバッグ: 代入の実行をログ出力
+                debug::interp::log(debug::interp::Id::Assign,
+                                   "Assign _" + std::to_string(data.place.local) +
+                                       " = value (type: " + std::string(val.type().name()) + ")",
+                                   debug::Level::Debug);
 
                 Evaluator::store_to_place(ctx, data.place, val);
                 break;
