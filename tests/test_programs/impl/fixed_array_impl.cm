@@ -1,7 +1,7 @@
 import std::io::println;
 
-// 固定長配列→スライスimplフォールバックテスト
-// impl int[] for Interface のメソッドを int[5] からも呼び出せることを確認
+// 固定長配列から直接スライスimplメソッドを呼び出すテスト
+// impl int[] for Interface のメソッドを int[5] から直接呼び出し
 
 interface Summable {
     int sum();
@@ -22,7 +22,7 @@ impl int[] for Summable {
 
 int main() {
     const int[5] arr = [1, 2, 3, 4, 5];  // 固定長配列
-    const int s = arr.sum();  // スライスimplメソッドを呼び出し
+    const int s = arr.sum();  // 直接呼び出し
     println("sum: {s}");
     return 0;
 }

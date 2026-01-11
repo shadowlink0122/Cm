@@ -669,5 +669,77 @@ tjp2: test-js-o2-parallel
 .PHONY: tjp3
 tjp3: test-js-o3-parallel
 
+# ========================================
+# Benchmark Commands
+# ========================================
+
+# Run all benchmarks (compare with Python, C++, Rust)
+.PHONY: bench
+bench:
+	@echo "=========================================="
+	@echo "   Running Cm Language Benchmarks"
+	@echo "=========================================="
+	@chmod +x tests/bench_marks/run_individual_benchmarks.sh
+	@cd tests/bench_marks && ./run_individual_benchmarks.sh
+
+# Quick benchmark (prime numbers only)
+.PHONY: bench-prime
+bench-prime:
+	@echo "Running prime number benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/01_prime.cm -o /tmp/bench_prime
+	@time /tmp/bench_prime
+
+# Quick benchmark (fibonacci recursive)
+.PHONY: bench-fib
+bench-fib:
+	@echo "Running fibonacci recursive benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/02_fibonacci_recursive.cm -o /tmp/bench_fib
+	@time /tmp/bench_fib
+
+# Quick benchmark (array sort)
+.PHONY: bench-sort
+bench-sort:
+	@echo "Running array sort benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/04_array_sort.cm -o /tmp/bench_sort
+	@time /tmp/bench_sort
+
+# Quick benchmark (matrix multiply)
+.PHONY: bench-matrix
+bench-matrix:
+	@echo "Running matrix multiply benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/05_matrix_multiply.cm -o /tmp/bench_matrix
+	@time /tmp/bench_matrix
+
+# Run interpreter benchmarks
+.PHONY: bench-interpreter
+bench-interpreter:
+	@echo "Running interpreter benchmarks..."
+	@for file in tests/bench_marks/cm/*.cm; do \
+		echo "Running $$file..."; \
+		time ./cm run $$file; \
+		echo ""; \
+	done
+
+# Clean benchmark results
+.PHONY: bench-clean
+bench-clean:
+	@echo "Cleaning benchmark files..."
+	@rm -rf tests/bench_marks/results/*
+	@rm -f tests/bench_marks/cm/*_native
+	@rm -f tests/bench_marks/cpp/01_prime
+	@rm -f tests/bench_marks/cpp/02_fibonacci_recursive
+	@rm -f tests/bench_marks/cpp/03_fibonacci_iterative
+	@rm -f tests/bench_marks/cpp/04_array_sort
+	@rm -f tests/bench_marks/cpp/05_matrix_multiply
+	@rm -f tests/bench_marks/cpp/*.o
+	@rm -f tests/bench_marks/cpp/cpp_results.txt
+	@rm -f tests/bench_marks/python/*.pyc
+	@rm -rf tests/bench_marks/python/__pycache__
+	@rm -f tests/bench_marks/python/python_results.txt
+	@if [ -d tests/bench_marks/rust ]; then cd tests/bench_marks/rust && cargo clean 2>/dev/null || true; fi
+	@rm -f tests/bench_marks/rust/rust_results.txt
+	@rm -f /tmp/bench_*
+	@echo "✅ Benchmark cleanup complete!"
+
 # デフォルトファイル設定
 FILE ?=

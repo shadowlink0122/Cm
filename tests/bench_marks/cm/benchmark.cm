@@ -1,0 +1,151 @@
+// Cm言語ベンチマークプログラム
+// 複数のアルゴリズムで実行速度を測定
+
+import std;
+
+// ベンチマーク1: 素数計算
+bool is_prime(int n) {
+    if (n <= 1) return false;
+    if (n <= 3) return true;
+    if (n % 2 == 0 || n % 3 == 0) return false;
+
+    int i = 5;
+    while (i * i <= n) {
+        if (n % i == 0 || n % (i + 2) == 0) {
+            return false;
+        }
+        i = i + 6;
+    }
+    return true;
+}
+
+int count_primes(int limit) {
+    int count = 0;
+    for (int i = 2; i <= limit; i++) {
+        if (is_prime(i)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+// ベンチマーク2: フィボナッチ計算（再帰）
+int fibonacci_recursive(int n) {
+    if (n <= 1) return n;
+    return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+}
+
+// ベンチマーク3: フィボナッチ計算（反復）
+int fibonacci_iterative(int n) {
+    if (n <= 1) return n;
+
+    int prev = 0;
+    int curr = 1;
+    for (int i = 2; i <= n; i++) {
+        int next = prev + curr;
+        prev = curr;
+        curr = next;
+    }
+    return curr;
+}
+
+// ベンチマーク4: 配列操作
+void array_operations(int size) {
+    int[10000] arr;
+
+    // 配列初期化
+    for (int i = 0; i < size; i++) {
+        arr[i] = i;
+    }
+
+    // バブルソート
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = 0; j < size - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                int temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+
+    // 配列の合計
+    int sum = 0;
+    for (int i = 0; i < size; i++) {
+        sum = sum + arr[i];
+    }
+}
+
+// ベンチマーク5: 行列乗算
+void matrix_multiply(int n) {
+    int[100][100] a;
+    int[100][100] b;
+    int[100][100] c;
+
+    // 行列初期化
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            a[i][j] = i + j;
+            b[i][j] = i - j;
+            c[i][j] = 0;
+        }
+    }
+
+    // 行列乗算
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            for (int k = 0; k < n; k++) {
+                c[i][j] = c[i][j] + a[i][k] * b[k][j];
+            }
+        }
+    }
+}
+
+// 時間計測用のヘルパー（簡易版）
+int get_time_ms() {
+    // 実際の実装では時間取得のシステムコールを使用
+    return 0;
+}
+
+int main() {
+    println("Cm Benchmark Starting...");
+
+    // ベンチマーク1: 素数計算（10000までの素数をカウント）
+    println("Benchmark 1: Prime Numbers");
+    int prime_count = count_primes(10000);
+    println("  Primes found: {prime_count}");
+
+    // ベンチマーク2: フィボナッチ（再帰）
+    println("Benchmark 2: Fibonacci (Recursive)");
+    int fib_result = 0;
+    for (int i = 0; i < 100; i++) {
+        fib_result = fib_result + fibonacci_recursive(20);
+    }
+    println("  Result: {fib_result}");
+
+    // ベンチマーク3: フィボナッチ（反復）
+    println("Benchmark 3: Fibonacci (Iterative)");
+    int fib_iter_sum = 0;
+    for (int i = 0; i < 10000; i++) {
+        fib_iter_sum = fib_iter_sum + fibonacci_iterative(30);
+    }
+    println("  Result: {fib_iter_sum}");
+
+    // ベンチマーク4: 配列操作（1000要素のバブルソートを10回）
+    println("Benchmark 4: Array Operations");
+    for (int i = 0; i < 10; i++) {
+        array_operations(1000);
+    }
+    println("  Completed 10 iterations");
+
+    // ベンチマーク5: 行列乗算（50x50行列を100回）
+    println("Benchmark 5: Matrix Multiplication");
+    for (int i = 0; i < 100; i++) {
+        matrix_multiply(50);
+    }
+    println("  Completed 100 iterations");
+
+    println("Cm Benchmark Completed!");
+
+    return 0;
+}

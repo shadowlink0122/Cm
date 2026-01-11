@@ -1,0 +1,29 @@
+// ベンチマーク3: フィボナッチ数列（反復版）
+// 1,000,000番目のフィボナッチ数を計算（大きな数のループ性能）
+
+import std::io;
+
+int fibonacci_iter(int n) {
+    if (n <= 1) {
+        return n;
+    }
+
+    int prev = 0;
+    int curr = 1;
+
+    for (int i = 2; i <= n; i++) {
+        int next = (prev + curr) % 1000000007;  // オーバーフロー防止
+        prev = curr;
+        curr = next;
+    }
+
+    return curr;
+}
+
+int main() {
+    int n = 1000000;
+    int result = fibonacci_iter(n);
+
+    println("Fibonacci({n}) mod 1000000007 = {result}");
+    return 0;
+}
