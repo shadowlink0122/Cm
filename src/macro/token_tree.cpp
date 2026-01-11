@@ -15,7 +15,8 @@ TokenTree::TokenTree(const TokenTree& other) : kind(other.kind) {
                 new_delim->delimiter = (*delim)->delimiter;
                 // 各トークンツリーを深くコピー
                 for (const auto& token : (*delim)->tokens) {
-                    new_delim->tokens.push_back(token);  // TokenTreeのコピーコンストラクタを再帰的に呼び出し
+                    new_delim->tokens.push_back(
+                        token);  // TokenTreeのコピーコンストラクタを再帰的に呼び出し
                 }
                 data = std::move(new_delim);
             }
@@ -30,7 +31,8 @@ TokenTree::TokenTree(const TokenTree& other) : kind(other.kind) {
                 auto new_rep = std::make_unique<RepetitionNode>();
                 // パターンを深くコピー
                 for (const auto& token : (*rep)->pattern) {
-                    new_rep->pattern.push_back(token);  // TokenTreeのコピーコンストラクタを再帰的に呼び出し
+                    new_rep->pattern.push_back(
+                        token);  // TokenTreeのコピーコンストラクタを再帰的に呼び出し
                 }
                 new_rep->op = (*rep)->op;
                 new_rep->separator = (*rep)->separator;

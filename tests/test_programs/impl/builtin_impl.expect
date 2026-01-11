@@ -1,1 +1,2 @@
-builtin impl test passed
+value: 42
+5 + 10 = 15

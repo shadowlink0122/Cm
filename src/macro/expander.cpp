@@ -8,18 +8,30 @@ namespace cm::macro {
 
 // MacroExpansionError のエラーメッセージフォーマット
 std::string MacroExpansionError::format_error(Kind kind, const std::string& message,
-                                             const SourceLocation& location) {
+                                              const SourceLocation& location) {
     std::string kind_str;
     switch (kind) {
-        case Kind::UNDEFINED_MACRO: kind_str = "Undefined macro"; break;
-        case Kind::NO_MATCHING_PATTERN: kind_str = "No matching pattern"; break;
-        case Kind::RECURSION_LIMIT: kind_str = "Recursion limit exceeded"; break;
-        case Kind::EXPANSION_OVERFLOW: kind_str = "Expansion overflow"; break;
-        case Kind::UNBOUND_METAVAR: kind_str = "Unbound metavariable"; break;
-        case Kind::INVALID_REPETITION: kind_str = "Invalid repetition"; break;
+        case Kind::UNDEFINED_MACRO:
+            kind_str = "Undefined macro";
+            break;
+        case Kind::NO_MATCHING_PATTERN:
+            kind_str = "No matching pattern";
+            break;
+        case Kind::RECURSION_LIMIT:
+            kind_str = "Recursion limit exceeded";
+            break;
+        case Kind::EXPANSION_OVERFLOW:
+            kind_str = "Expansion overflow";
+            break;
+        case Kind::UNBOUND_METAVAR:
+            kind_str = "Unbound metavariable";
+            break;
+        case Kind::INVALID_REPETITION:
+            kind_str = "Invalid repetition";
+            break;
     }
-    return fmt::format("[MACRO] {}: {} at {}:{}",
-        kind_str, message, location.line, location.column);
+    return fmt::format("[MACRO] {}: {} at {}:{}", kind_str, message, location.line,
+                       location.column);
 }
 
 // CacheKey の比較演算子
@@ -39,9 +51,7 @@ bool MacroExpander::CacheKey::operator<(const CacheKey& other) const {
 }
 
 // コンストラクタ
-MacroExpander::MacroExpander(const ExpansionConfig& config)
-    : config_(config) {
-}
+MacroExpander::MacroExpander(const ExpansionConfig& config) : config_(config) {}
 
 // マクロ定義を登録
 void MacroExpander::register_macro(std::unique_ptr<MacroDefinition> definition) {
@@ -76,11 +86,9 @@ std::vector<Token> MacroExpander::expand(const MacroCall& call) {
     // マクロが定義されているか確認
     auto it = macros_.find(call.name);
     if (it == macros_.end()) {
-        throw MacroExpansionError(
-            MacroExpansionError::Kind::UNDEFINED_MACRO,
-            fmt::format("Macro '{}' is not defined", call.name),
-            call.location
-        );
+        throw MacroExpansionError(MacroExpansionError::Kind::UNDEFINED_MACRO,
+                                  fmt::format("Macro '{}' is not defined", call.name),
+                                  call.location);
     }
 
     // 統計情報を更新
@@ -150,11 +158,9 @@ std::vector<Token> MacroExpander::expand_all(const std::vector<Token>& tokens) {
 }
 
 // 単一のマクロを展開
-std::vector<Token> MacroExpander::expand_single(
-    const MacroDefinition& definition,
-    const std::vector<Token>& args,
-    const SourceLocation& call_site
-) {
+std::vector<Token> MacroExpander::expand_single(const MacroDefinition& definition,
+                                                const std::vector<Token>& args,
+                                                const SourceLocation& call_site) {
     // 各ルールを順番に試す
     for (const auto& rule : definition.rules) {
         // パターンマッチング
@@ -162,11 +168,7 @@ std::vector<Token> MacroExpander::expand_single(
 
         if (match_result.success) {
             // 構文コンテキストを作成
-            auto context = hygiene_.create_context(
-                definition.name,
-                call_site,
-                nullptr
-            );
+            auto context = hygiene_.create_context(definition.name, call_site, nullptr);
 
             // トランスクライバーを展開
             auto result = transcribe(rule.transcriber, match_result.bindings, context);
@@ -182,19 +184,15 @@ std::vector<Token> MacroExpander::expand_single(
     }
 
     // マッチするパターンがない
-    throw MacroExpansionError(
-        MacroExpansionError::Kind::NO_MATCHING_PATTERN,
-        fmt::format("No matching pattern for macro '{}'", definition.name),
-        call_site
-    );
+    throw MacroExpansionError(MacroExpansionError::Kind::NO_MATCHING_PATTERN,
+                              fmt::format("No matching pattern for macro '{}'", definition.name),
+                              call_site);
 }
 
 // トランスクライバーを展開
-std::vector<Token> MacroExpander::transcribe(
-    const MacroTranscriber& transcriber,
-    const MatchBindings& bindings,
-    const SyntaxContext& context
-) {
+std::vector<Token> MacroExpander::transcribe(const MacroTranscriber& transcriber,
+                                             const MatchBindings& bindings,
+                                             const SyntaxContext& context) {
     std::vector<Token> result;
 
     // 衛生性ガード
@@ -215,11 +213,9 @@ std::vector<Token> MacroExpander::transcribe(
 }
 
 // トークンツリーを展開
-std::vector<Token> MacroExpander::transcribe_tree(
-    const TokenTree& tree,
-    const MatchBindings& bindings,
-    const SyntaxContext& context
-) {
+std::vector<Token> MacroExpander::transcribe_tree(const TokenTree& tree,
+                                                  const MatchBindings& bindings,
+                                                  const SyntaxContext& context) {
     std::vector<Token> result;
 
     switch (tree.kind) {
@@ -288,19 +284,15 @@ std::vector<Token> MacroExpander::transcribe_tree(
 }
 
 // メタ変数を展開
-std::vector<Token> MacroExpander::transcribe_metavar(
-    const MetaVariable& metavar,
-    const MatchBindings& bindings,
-    const SyntaxContext& context
-) {
+std::vector<Token> MacroExpander::transcribe_metavar(const MetaVariable& metavar,
+                                                     const MatchBindings& bindings,
+                                                     const SyntaxContext& context) {
     // バインディングからメタ変数の値を取得
     auto it = bindings.find(metavar.name);
     if (it == bindings.end()) {
-        throw MacroExpansionError(
-            MacroExpansionError::Kind::UNBOUND_METAVAR,
-            fmt::format("Metavariable '${}' is not bound", metavar.name),
-            SourceLocation{}
-        );
+        throw MacroExpansionError(MacroExpansionError::Kind::UNBOUND_METAVAR,
+                                  fmt::format("Metavariable '${}' is not bound", metavar.name),
+                                  SourceLocation{});
     }
 
     const MatchedFragment& fragment = it->second;
@@ -320,19 +312,16 @@ std::vector<Token> MacroExpander::transcribe_metavar(
         throw MacroExpansionError(
             MacroExpansionError::Kind::INVALID_REPETITION,
             fmt::format("Cannot expand repetition metavariable '${}' directly", metavar.name),
-            SourceLocation{}
-        );
+            SourceLocation{});
     }
 
     return result;
 }
 
 // 繰り返しを展開
-std::vector<Token> MacroExpander::transcribe_repetition(
-    const RepetitionNode& repetition,
-    const MatchBindings& bindings,
-    const SyntaxContext& context
-) {
+std::vector<Token> MacroExpander::transcribe_repetition(const RepetitionNode& repetition,
+                                                        const MatchBindings& bindings,
+                                                        const SyntaxContext& context) {
     std::vector<Token> result;
 
     // TODO: 繰り返しの展開実装
@@ -342,19 +331,15 @@ std::vector<Token> MacroExpander::transcribe_repetition(
 }
 
 // トークンストリームからマクロ呼び出しを検出
-std::optional<MacroCall> MacroExpander::detect_macro_call(
-    const std::vector<Token>& tokens,
-    size_t& pos
-) {
+std::optional<MacroCall> MacroExpander::detect_macro_call(const std::vector<Token>& tokens,
+                                                          size_t& pos) {
     if (pos >= tokens.size()) {
         return std::nullopt;
     }
 
     // identifier! パターンを検出
-    if (tokens[pos].type == TokenType::Identifier &&
-        pos + 1 < tokens.size() &&
+    if (tokens[pos].type == TokenType::Identifier && pos + 1 < tokens.size() &&
         tokens[pos + 1].value == "!") {
-
         MacroCall call;
         call.name = tokens[pos].value;
         call.location = tokens[pos].location;
@@ -371,10 +356,7 @@ std::optional<MacroCall> MacroExpander::detect_macro_call(
 }
 
 // マクロ呼び出しの引数を解析
-std::vector<Token> MacroExpander::parse_macro_args(
-    const std::vector<Token>& tokens,
-    size_t& pos
-) {
+std::vector<Token> MacroExpander::parse_macro_args(const std::vector<Token>& tokens, size_t& pos) {
     std::vector<Token> args;
 
     if (pos >= tokens.size()) {
@@ -415,10 +397,8 @@ std::vector<Token> MacroExpander::parse_macro_args(
 }
 
 // 展開結果のトークンを衛生的にする
-std::vector<Token> MacroExpander::apply_hygiene(
-    const std::vector<Token>& tokens,
-    const SyntaxContext& context
-) {
+std::vector<Token> MacroExpander::apply_hygiene(const std::vector<Token>& tokens,
+                                                const SyntaxContext& context) {
     std::vector<Token> result;
 
     for (const auto& token : tokens) {
@@ -431,12 +411,10 @@ std::vector<Token> MacroExpander::apply_hygiene(
 // 再帰深度のチェック
 void MacroExpander::check_recursion_depth(const std::string& macro_name) {
     if (current_recursion_depth_ > config_.max_recursion_depth) {
-        throw MacroExpansionError(
-            MacroExpansionError::Kind::RECURSION_LIMIT,
-            fmt::format("Macro '{}' exceeded recursion limit of {}",
-                       macro_name, config_.max_recursion_depth),
-            SourceLocation{}
-        );
+        throw MacroExpansionError(MacroExpansionError::Kind::RECURSION_LIMIT,
+                                  fmt::format("Macro '{}' exceeded recursion limit of {}",
+                                              macro_name, config_.max_recursion_depth),
+                                  SourceLocation{});
     }
 
     // 統計情報を更新
@@ -450,10 +428,8 @@ void MacroExpander::check_expansion_size(size_t size) {
     if (size > config_.max_expansion_size) {
         throw MacroExpansionError(
             MacroExpansionError::Kind::EXPANSION_OVERFLOW,
-            fmt::format("Expansion size {} exceeds limit of {}",
-                       size, config_.max_expansion_size),
-            SourceLocation{}
-        );
+            fmt::format("Expansion size {} exceeds limit of {}", size, config_.max_expansion_size),
+            SourceLocation{});
     }
 }
 
@@ -465,8 +441,7 @@ void MacroExpander::trace(const std::string& message) {
 }
 
 // 展開のトレース出力
-void MacroExpander::trace_expansion(const MacroCall& call,
-                                   const std::vector<Token>& result) {
+void MacroExpander::trace_expansion(const MacroCall& call, const std::vector<Token>& result) {
     if (!config_.trace_expansions) {
         return;
     }
@@ -476,14 +451,16 @@ void MacroExpander::trace_expansion(const MacroCall& call,
 
     // 引数を出力
     for (size_t i = 0; i < call.args.size(); ++i) {
-        if (i > 0) ss << " ";
+        if (i > 0)
+            ss << " ";
         ss << call.args[i].value;
     }
     ss << ") => ";
 
     // 結果を出力
     for (size_t i = 0; i < result.size(); ++i) {
-        if (i > 0) ss << " ";
+        if (i > 0)
+            ss << " ";
         ss << result[i].value;
     }
 

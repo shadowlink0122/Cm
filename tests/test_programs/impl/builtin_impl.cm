@@ -1,7 +1,7 @@
 import std::io::println;
 
-// プリミティブ型へのimplテスト
-// impl int for Interface
+// プリミティブ型へのimpl + メソッド呼び出しテスト
+// impl int for Interface { method() } が動作することを確認
 
 interface Printable {
     void print();
@@ -9,14 +9,27 @@ interface Printable {
 
 impl int for Printable {
     void print() {
-        println("int value: {self}");
+        println("value: {self}");
+    }
+}
+
+interface Addable {
+    int add_ten();
+}
+
+impl int for Addable {
+    int add_ten() {
+        return self + 10;
     }
 }
 
 int main() {
-    int x = 42;
-    // x.print();  // TODO: メソッド呼び出し構文
+    const int x = 42;
+    x.print();  // メソッド呼び出し: "value: 42"
     
-    println("builtin impl test passed");
+    const int y = 5;
+    const int result = y.add_ten();  // メソッド呼び出し: 15
+    println("5 + 10 = {result}");
+    
     return 0;
 }

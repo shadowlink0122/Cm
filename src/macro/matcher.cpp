@@ -6,18 +6,13 @@
 namespace cm::macro {
 
 // パターンと入力のマッチング
-MatchResult MacroMatcher::match(
-    const std::vector<Token>& input,
-    const MacroPattern& pattern
-) {
+MatchResult MacroMatcher::match(const std::vector<Token>& input, const MacroPattern& pattern) {
     return match_tree(input, pattern.tokens);
 }
 
 // トークンツリーと入力のマッチング
-MatchResult MacroMatcher::match_tree(
-    const std::vector<Token>& input,
-    const std::vector<TokenTree>& pattern
-) {
+MatchResult MacroMatcher::match_tree(const std::vector<Token>& input,
+                                     const std::vector<TokenTree>& pattern) {
     MatchState state;
 
     if (match_recursive(input, pattern, 0, 0, state)) {
@@ -25,10 +20,8 @@ MatchResult MacroMatcher::match_tree(
         if (state.deepest_match_pos == input.size()) {
             return MatchResult::Success(std::move(state.bindings));
         } else {
-            return MatchResult::Failure(fmt::format(
-                "Unexpected tokens after position {}",
-                state.deepest_match_pos
-            ));
+            return MatchResult::Failure(
+                fmt::format("Unexpected tokens after position {}", state.deepest_match_pos));
         }
     }
 
@@ -36,13 +29,9 @@ MatchResult MacroMatcher::match_tree(
 }
 
 // 再帰的マッチング
-bool MacroMatcher::match_recursive(
-    const std::vector<Token>& input,
-    const std::vector<TokenTree>& pattern,
-    size_t input_pos,
-    size_t pattern_pos,
-    MatchState& state
-) {
+bool MacroMatcher::match_recursive(const std::vector<Token>& input,
+                                   const std::vector<TokenTree>& pattern, size_t input_pos,
+                                   size_t pattern_pos, MatchState& state) {
     // 最深マッチ位置を更新
     if (input_pos > state.deepest_match_pos) {
         state.deepest_match_pos = input_pos;
@@ -77,8 +66,7 @@ bool MacroMatcher::match_recursive(
         auto* pattern_token = current_pattern.get_token();
         if (pattern_token && input_pos < input.size()) {
             if (match_token(input[input_pos], *pattern_token)) {
-                return match_recursive(input, pattern,
-                                     input_pos + 1, pattern_pos + 1, state);
+                return match_recursive(input, pattern, input_pos + 1, pattern_pos + 1, state);
             }
         }
         return false;
@@ -90,8 +78,7 @@ bool MacroMatcher::match_recursive(
         if (delimited) {
             size_t new_input_pos = input_pos;
             if (match_delimited(input, new_input_pos, *delimited, state)) {
-                return match_recursive(input, pattern,
-                                     new_input_pos, pattern_pos + 1, state);
+                return match_recursive(input, pattern, new_input_pos, pattern_pos + 1, state);
             }
         }
         return false;
@@ -103,8 +90,7 @@ bool MacroMatcher::match_recursive(
         if (metavar) {
             size_t new_input_pos = input_pos;
             if (match_metavar(input, new_input_pos, *metavar, state)) {
-                return match_recursive(input, pattern,
-                                     new_input_pos, pattern_pos + 1, state);
+                return match_recursive(input, pattern, new_input_pos, pattern_pos + 1, state);
             }
         }
         return false;
@@ -116,8 +102,7 @@ bool MacroMatcher::match_recursive(
         if (repetition) {
             size_t new_input_pos = input_pos;
             if (match_repetition(input, new_input_pos, *repetition, state)) {
-                return match_recursive(input, pattern,
-                                     new_input_pos, pattern_pos + 1, state);
+                return match_recursive(input, pattern, new_input_pos, pattern_pos + 1, state);
             }
         }
         return false;
@@ -127,22 +112,14 @@ bool MacroMatcher::match_recursive(
 }
 
 // 単一トークンのマッチング
-bool MacroMatcher::match_token(
-    const Token& input_token,
-    const Token& pattern_token
-) {
+bool MacroMatcher::match_token(const Token& input_token, const Token& pattern_token) {
     // トークンの型と値が一致すればマッチ
-    return input_token.type == pattern_token.type &&
-           input_token.value == pattern_token.value;
+    return input_token.type == pattern_token.type && input_token.value == pattern_token.value;
 }
 
 // デリミタ付きトークン群のマッチング
-bool MacroMatcher::match_delimited(
-    const std::vector<Token>& input,
-    size_t& input_pos,
-    const DelimitedTokens& pattern,
-    MatchState& state
-) {
+bool MacroMatcher::match_delimited(const std::vector<Token>& input, size_t& input_pos,
+                                   const DelimitedTokens& pattern, MatchState& state) {
     if (input_pos >= input.size()) {
         return false;
     }
@@ -179,10 +156,7 @@ bool MacroMatcher::match_delimited(
     }
 
     // デリミタ内のトークンを抽出
-    std::vector<Token> inner_tokens(
-        input.begin() + input_pos + 1,
-        input.begin() + close_pos
-    );
+    std::vector<Token> inner_tokens(input.begin() + input_pos + 1, input.begin() + close_pos);
 
     // 内部パターンとマッチング
     MatchState inner_state;
@@ -200,19 +174,13 @@ bool MacroMatcher::match_delimited(
 }
 
 // メタ変数のマッチング
-bool MacroMatcher::match_metavar(
-    const std::vector<Token>& input,
-    size_t& input_pos,
-    const MetaVariable& metavar,
-    MatchState& state
-) {
+bool MacroMatcher::match_metavar(const std::vector<Token>& input, size_t& input_pos,
+                                 const MetaVariable& metavar, MatchState& state) {
     auto matched = match_fragment(input, input_pos, metavar.specifier);
     if (!matched) {
-        state.error_messages.push_back(fmt::format(
-            "Failed to match metavar ${} as {}",
-            metavar.name,
-            fragment_spec_to_string(metavar.specifier)
-        ));
+        state.error_messages.push_back(fmt::format("Failed to match metavar ${} as {}",
+                                                   metavar.name,
+                                                   fragment_spec_to_string(metavar.specifier)));
         return false;
     }
 
@@ -227,12 +195,8 @@ bool MacroMatcher::match_metavar(
 }
 
 // 繰り返しのマッチング
-bool MacroMatcher::match_repetition(
-    const std::vector<Token>& input,
-    size_t& input_pos,
-    const RepetitionNode& repetition,
-    MatchState& state
-) {
+bool MacroMatcher::match_repetition(const std::vector<Token>& input, size_t& input_pos,
+                                    const RepetitionNode& repetition, MatchState& state) {
     std::vector<MatchedFragment> matches;
     size_t match_count = 0;
     size_t current_pos = input_pos;
@@ -289,11 +253,9 @@ bool MacroMatcher::match_repetition(
 }
 
 // フラグメント指定子に応じたマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_fragment(
-    const std::vector<Token>& input,
-    size_t& input_pos,
-    FragmentSpecifier spec
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_fragment(const std::vector<Token>& input,
+                                                               size_t& input_pos,
+                                                               FragmentSpecifier spec) {
     switch (spec) {
         case FragmentSpecifier::EXPR:
             return match_expr(input, input_pos);
@@ -323,10 +285,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_fragment(
 }
 
 // 式のマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_expr(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_expr(const std::vector<Token>& input,
+                                                           size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
@@ -343,25 +303,29 @@ std::optional<std::vector<Token>> MacroMatcher::match_expr(
         const Token& token = input[input_pos];
 
         // デリミタの深さを追跡
-        if (token.value == "(") paren_depth++;
+        if (token.value == "(")
+            paren_depth++;
         else if (token.value == ")") {
-            if (paren_depth == 0) break;
+            if (paren_depth == 0)
+                break;
             paren_depth--;
-        }
-        else if (token.value == "[") bracket_depth++;
+        } else if (token.value == "[")
+            bracket_depth++;
         else if (token.value == "]") {
-            if (bracket_depth == 0) break;
+            if (bracket_depth == 0)
+                break;
             bracket_depth--;
-        }
-        else if (token.value == "{") brace_depth++;
+        } else if (token.value == "{")
+            brace_depth++;
         else if (token.value == "}") {
-            if (brace_depth == 0) break;
+            if (brace_depth == 0)
+                break;
             brace_depth--;
         }
         // 式の終端を示すトークン
         else if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
-            if (token.value == ";" || token.value == "," ||
-                token.value == ")" || token.value == "]" || token.value == "}") {
+            if (token.value == ";" || token.value == "," || token.value == ")" ||
+                token.value == "]" || token.value == "}") {
                 break;
             }
         }
@@ -379,10 +343,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_expr(
 }
 
 // 文のマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_stmt(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_stmt(const std::vector<Token>& input,
+                                                           size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
@@ -418,10 +380,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_stmt(
 }
 
 // 型のマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_type(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_type(const std::vector<Token>& input,
+                                                           size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
@@ -452,12 +412,9 @@ std::optional<std::vector<Token>> MacroMatcher::match_type(
 }
 
 // 識別子のマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_ident(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
-    if (input_pos >= input.size() ||
-        input[input_pos].type != TokenType::Identifier) {
+std::optional<std::vector<Token>> MacroMatcher::match_ident(const std::vector<Token>& input,
+                                                            size_t& input_pos) {
+    if (input_pos >= input.size() || input[input_pos].type != TokenType::Identifier) {
         return std::nullopt;
     }
 
@@ -467,10 +424,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_ident(
 }
 
 // パスのマッチング（std::vector など）
-std::optional<std::vector<Token>> MacroMatcher::match_path(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_path(const std::vector<Token>& input,
+                                                           size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
@@ -485,15 +440,13 @@ std::optional<std::vector<Token>> MacroMatcher::match_path(
     input_pos++;
 
     // :: で区切られた追加の識別子
-    while (input_pos + 1 < input.size() &&
-           input[input_pos].value == ":" &&
+    while (input_pos + 1 < input.size() && input[input_pos].value == ":" &&
            input[input_pos + 1].value == ":") {
         result.push_back(input[input_pos]);      // :
         result.push_back(input[input_pos + 1]);  // :
         input_pos += 2;
 
-        if (input_pos < input.size() &&
-            input[input_pos].type == TokenType::Identifier) {
+        if (input_pos < input.size() && input[input_pos].type == TokenType::Identifier) {
             result.push_back(input[input_pos]);
             input_pos++;
         } else {
@@ -505,17 +458,14 @@ std::optional<std::vector<Token>> MacroMatcher::match_path(
 }
 
 // リテラルのマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_literal(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_literal(const std::vector<Token>& input,
+                                                              size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
 
     const Token& token = input[input_pos];
-    if (token.type == TokenType::Number ||
-        token.type == TokenType::String ||
+    if (token.type == TokenType::Number || token.type == TokenType::String ||
         token.type == TokenType::Character ||
         (token.type == TokenType::Keyword &&
          (token.value == "true" || token.value == "false" || token.value == "null"))) {
@@ -528,10 +478,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_literal(
 }
 
 // ブロックのマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_block(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_block(const std::vector<Token>& input,
+                                                            size_t& input_pos) {
     if (input_pos >= input.size() || input[input_pos].value != "{") {
         return std::nullopt;
     }
@@ -550,20 +498,15 @@ std::optional<std::vector<Token>> MacroMatcher::match_block(
 }
 
 // パターンのマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_pattern(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_pattern(const std::vector<Token>& input,
+                                                              size_t& input_pos) {
     // 簡単な実装：識別子またはリテラル
-    return match_ident(input, input_pos)
-        .or_else([&]() { return match_literal(input, input_pos); });
+    return match_ident(input, input_pos).or_else([&]() { return match_literal(input, input_pos); });
 }
 
 // アイテムのマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_item(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_item(const std::vector<Token>& input,
+                                                           size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
@@ -574,10 +517,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_item(
 }
 
 // メタデータのマッチング
-std::optional<std::vector<Token>> MacroMatcher::match_meta(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_meta(const std::vector<Token>& input,
+                                                           size_t& input_pos) {
     if (input_pos >= input.size() || input[input_pos].value != "#") {
         return std::nullopt;
     }
@@ -600,17 +541,14 @@ std::optional<std::vector<Token>> MacroMatcher::match_meta(
 }
 
 // トークンツリーのマッチング（任意のトークン）
-std::optional<std::vector<Token>> MacroMatcher::match_tt(
-    const std::vector<Token>& input,
-    size_t& input_pos
-) {
+std::optional<std::vector<Token>> MacroMatcher::match_tt(const std::vector<Token>& input,
+                                                         size_t& input_pos) {
     if (input_pos >= input.size()) {
         return std::nullopt;
     }
 
     // デリミタの場合は対応する閉じデリミタまで
-    if (input[input_pos].value == "(" ||
-        input[input_pos].value == "[" ||
+    if (input[input_pos].value == "(" || input[input_pos].value == "[" ||
         input[input_pos].value == "{") {
         size_t close = find_matching_delimiter(input, input_pos);
         if (close != std::string::npos) {
@@ -630,10 +568,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_tt(
 }
 
 // デリミタのバランスを確認
-size_t MacroMatcher::find_matching_delimiter(
-    const std::vector<Token>& tokens,
-    size_t start_pos
-) const {
+size_t MacroMatcher::find_matching_delimiter(const std::vector<Token>& tokens,
+                                             size_t start_pos) const {
     if (start_pos >= tokens.size()) {
         return std::string::npos;
     }
@@ -641,10 +577,14 @@ size_t MacroMatcher::find_matching_delimiter(
     const std::string& open = tokens[start_pos].value;
     std::string close;
 
-    if (open == "(") close = ")";
-    else if (open == "[") close = "]";
-    else if (open == "{") close = "}";
-    else return std::string::npos;
+    if (open == "(")
+        close = ")";
+    else if (open == "[")
+        close = "]";
+    else if (open == "{")
+        close = "}";
+    else
+        return std::string::npos;
 
     int depth = 1;
     for (size_t i = start_pos + 1; i < tokens.size(); ++i) {

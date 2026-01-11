@@ -1,27 +1,27 @@
 #pragma once
 
+#include "../lexer/token.hpp"
+
 #include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
-#include "../lexer/token.hpp"
-
 namespace cm::macro {
 
 // フラグメント指定子（マクロパターンの型）
 enum class FragmentSpecifier {
-    EXPR,      // 式
-    STMT,      // 文
-    PAT,       // パターン
-    TY,        // 型
-    IDENT,     // 識別子
-    PATH,      // パス（std::vector など）
-    LITERAL,   // リテラル
-    BLOCK,     // ブロック { ... }
-    ITEM,      // アイテム（関数、構造体定義など）
-    META,      // メタデータ（アトリビュート）
-    TT,        // トークンツリー（任意のトークン）
+    EXPR,     // 式
+    STMT,     // 文
+    PAT,      // パターン
+    TY,       // 型
+    IDENT,    // 識別子
+    PATH,     // パス（std::vector など）
+    LITERAL,  // リテラル
+    BLOCK,    // ブロック { ... }
+    ITEM,     // アイテム（関数、構造体定義など）
+    META,     // メタデータ（アトリビュート）
+    TT,       // トークンツリー（任意のトークン）
 };
 
 // 繰り返し演算子
@@ -73,22 +73,17 @@ struct TokenTree {
     };
 
     Kind kind;
-    std::variant<
-        Token,
-        std::unique_ptr<DelimitedTokens>,
-        MetaVariable,
-        std::unique_ptr<RepetitionNode>
-    > data;
+    std::variant<Token, std::unique_ptr<DelimitedTokens>, MetaVariable,
+                 std::unique_ptr<RepetitionNode>>
+        data;
 
     // コンストラクタ
-    explicit TokenTree(Token token)
-        : kind(Kind::TOKEN), data(std::move(token)) {}
+    explicit TokenTree(Token token) : kind(Kind::TOKEN), data(std::move(token)) {}
 
     explicit TokenTree(std::unique_ptr<DelimitedTokens> delimited)
         : kind(Kind::DELIMITED), data(std::move(delimited)) {}
 
-    explicit TokenTree(MetaVariable metavar)
-        : kind(Kind::METAVAR), data(std::move(metavar)) {}
+    explicit TokenTree(MetaVariable metavar) : kind(Kind::METAVAR), data(std::move(metavar)) {}
 
     explicit TokenTree(std::unique_ptr<RepetitionNode> repetition)
         : kind(Kind::REPETITION), data(std::move(repetition)) {}
@@ -182,34 +177,57 @@ struct MacroCall {
 // フラグメント指定子の文字列変換
 inline const char* fragment_spec_to_string(FragmentSpecifier spec) {
     switch (spec) {
-        case FragmentSpecifier::EXPR: return "expr";
-        case FragmentSpecifier::STMT: return "stmt";
-        case FragmentSpecifier::PAT: return "pat";
-        case FragmentSpecifier::TY: return "ty";
-        case FragmentSpecifier::IDENT: return "ident";
-        case FragmentSpecifier::PATH: return "path";
-        case FragmentSpecifier::LITERAL: return "literal";
-        case FragmentSpecifier::BLOCK: return "block";
-        case FragmentSpecifier::ITEM: return "item";
-        case FragmentSpecifier::META: return "meta";
-        case FragmentSpecifier::TT: return "tt";
-        default: return "unknown";
+        case FragmentSpecifier::EXPR:
+            return "expr";
+        case FragmentSpecifier::STMT:
+            return "stmt";
+        case FragmentSpecifier::PAT:
+            return "pat";
+        case FragmentSpecifier::TY:
+            return "ty";
+        case FragmentSpecifier::IDENT:
+            return "ident";
+        case FragmentSpecifier::PATH:
+            return "path";
+        case FragmentSpecifier::LITERAL:
+            return "literal";
+        case FragmentSpecifier::BLOCK:
+            return "block";
+        case FragmentSpecifier::ITEM:
+            return "item";
+        case FragmentSpecifier::META:
+            return "meta";
+        case FragmentSpecifier::TT:
+            return "tt";
+        default:
+            return "unknown";
     }
 }
 
 // 文字列からフラグメント指定子への変換
 inline std::optional<FragmentSpecifier> string_to_fragment_spec(const std::string& str) {
-    if (str == "expr") return FragmentSpecifier::EXPR;
-    if (str == "stmt") return FragmentSpecifier::STMT;
-    if (str == "pat") return FragmentSpecifier::PAT;
-    if (str == "ty") return FragmentSpecifier::TY;
-    if (str == "ident") return FragmentSpecifier::IDENT;
-    if (str == "path") return FragmentSpecifier::PATH;
-    if (str == "literal") return FragmentSpecifier::LITERAL;
-    if (str == "block") return FragmentSpecifier::BLOCK;
-    if (str == "item") return FragmentSpecifier::ITEM;
-    if (str == "meta") return FragmentSpecifier::META;
-    if (str == "tt") return FragmentSpecifier::TT;
+    if (str == "expr")
+        return FragmentSpecifier::EXPR;
+    if (str == "stmt")
+        return FragmentSpecifier::STMT;
+    if (str == "pat")
+        return FragmentSpecifier::PAT;
+    if (str == "ty")
+        return FragmentSpecifier::TY;
+    if (str == "ident")
+        return FragmentSpecifier::IDENT;
+    if (str == "path")
+        return FragmentSpecifier::PATH;
+    if (str == "literal")
+        return FragmentSpecifier::LITERAL;
+    if (str == "block")
+        return FragmentSpecifier::BLOCK;
+    if (str == "item")
+        return FragmentSpecifier::ITEM;
+    if (str == "meta")
+        return FragmentSpecifier::META;
+    if (str == "tt")
+        return FragmentSpecifier::TT;
     return std::nullopt;
 }
 

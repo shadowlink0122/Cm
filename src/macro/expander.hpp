@@ -1,20 +1,20 @@
 #pragma once
 
-#include <map>
-#include <memory>
-#include <string>
-#include <vector>
-
 #include "../lexer/token.hpp"
 #include "hygiene.hpp"
 #include "matcher.hpp"
 #include "token_tree.hpp"
 
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace cm::macro {
 
 // マクロ展開エラー
 class MacroExpansionError : public std::runtime_error {
-public:
+   public:
     enum class Kind {
         UNDEFINED_MACRO,
         NO_MATCHING_PATTERN,
@@ -24,21 +24,20 @@ public:
         INVALID_REPETITION,
     };
 
-    MacroExpansionError(Kind kind, const std::string& message,
-                        const SourceLocation& location)
-        : std::runtime_error(format_error(kind, message, location))
-        , kind_(kind)
-        , location_(location) {}
+    MacroExpansionError(Kind kind, const std::string& message, const SourceLocation& location)
+        : std::runtime_error(format_error(kind, message, location)),
+          kind_(kind),
+          location_(location) {}
 
     Kind kind() const { return kind_; }
     const SourceLocation& location() const { return location_; }
 
-private:
+   private:
     Kind kind_;
     SourceLocation location_;
 
     static std::string format_error(Kind kind, const std::string& message,
-                                   const SourceLocation& location);
+                                    const SourceLocation& location);
 };
 
 // 展開統計情報
@@ -51,16 +50,16 @@ struct ExpansionStats {
 
 // マクロ展開設定
 struct ExpansionConfig {
-    size_t max_recursion_depth = 128;     // 最大再帰深度
-    size_t max_expansion_size = 65536;    // 最大展開サイズ（トークン数）
-    bool enable_hygiene = true;           // 衛生性を有効化
-    bool enable_caching = true;           // 展開結果のキャッシュ
-    bool trace_expansions = false;        // 展開のトレース出力
+    size_t max_recursion_depth = 128;   // 最大再帰深度
+    size_t max_expansion_size = 65536;  // 最大展開サイズ（トークン数）
+    bool enable_hygiene = true;         // 衛生性を有効化
+    bool enable_caching = true;         // 展開結果のキャッシュ
+    bool trace_expansions = false;      // 展開のトレース出力
 };
 
 // マクロ展開器
 class MacroExpander {
-public:
+   public:
     explicit MacroExpander(const ExpansionConfig& config = ExpansionConfig{});
     ~MacroExpander() = default;
 
@@ -88,7 +87,7 @@ public:
     // デバッグ用：展開のトレースを有効化
     void set_trace_enabled(bool enabled) { config_.trace_expansions = enabled; }
 
-private:
+   private:
     // マクロ定義の格納
     std::map<std::string, std::unique_ptr<MacroDefinition>> macros_;
 
@@ -119,57 +118,37 @@ private:
     // 内部メソッド
 
     // 単一のマクロを展開
-    std::vector<Token> expand_single(
-        const MacroDefinition& definition,
-        const std::vector<Token>& args,
-        const SourceLocation& call_site
-    );
+    std::vector<Token> expand_single(const MacroDefinition& definition,
+                                     const std::vector<Token>& args,
+                                     const SourceLocation& call_site);
 
     // トランスクライバーを展開
-    std::vector<Token> transcribe(
-        const MacroTranscriber& transcriber,
-        const MatchBindings& bindings,
-        const SyntaxContext& context
-    );
+    std::vector<Token> transcribe(const MacroTranscriber& transcriber,
+                                  const MatchBindings& bindings, const SyntaxContext& context);
 
     // トークンツリーを展開
-    std::vector<Token> transcribe_tree(
-        const TokenTree& tree,
-        const MatchBindings& bindings,
-        const SyntaxContext& context
-    );
+    std::vector<Token> transcribe_tree(const TokenTree& tree, const MatchBindings& bindings,
+                                       const SyntaxContext& context);
 
     // メタ変数を展開
-    std::vector<Token> transcribe_metavar(
-        const MetaVariable& metavar,
-        const MatchBindings& bindings,
-        const SyntaxContext& context
-    );
+    std::vector<Token> transcribe_metavar(const MetaVariable& metavar,
+                                          const MatchBindings& bindings,
+                                          const SyntaxContext& context);
 
     // 繰り返しを展開
-    std::vector<Token> transcribe_repetition(
-        const RepetitionNode& repetition,
-        const MatchBindings& bindings,
-        const SyntaxContext& context
-    );
+    std::vector<Token> transcribe_repetition(const RepetitionNode& repetition,
+                                             const MatchBindings& bindings,
+                                             const SyntaxContext& context);
 
     // トークンストリームからマクロ呼び出しを検出
-    std::optional<MacroCall> detect_macro_call(
-        const std::vector<Token>& tokens,
-        size_t& pos
-    );
+    std::optional<MacroCall> detect_macro_call(const std::vector<Token>& tokens, size_t& pos);
 
     // マクロ呼び出しの引数を解析
-    std::vector<Token> parse_macro_args(
-        const std::vector<Token>& tokens,
-        size_t& pos
-    );
+    std::vector<Token> parse_macro_args(const std::vector<Token>& tokens, size_t& pos);
 
     // 展開結果のトークンを衛生的にする
-    std::vector<Token> apply_hygiene(
-        const std::vector<Token>& tokens,
-        const SyntaxContext& context
-    );
+    std::vector<Token> apply_hygiene(const std::vector<Token>& tokens,
+                                     const SyntaxContext& context);
 
     // 再帰深度のチェック
     void check_recursion_depth(const std::string& macro_name);
@@ -179,27 +158,24 @@ private:
 
     // トレース出力
     void trace(const std::string& message);
-    void trace_expansion(const MacroCall& call,
-                        const std::vector<Token>& result);
+    void trace_expansion(const MacroCall& call, const std::vector<Token>& result);
 
     // 再帰深度管理用のRAIIガード
     class RecursionGuard {
-    public:
+       public:
         RecursionGuard(MacroExpander& expander, const std::string& macro_name)
             : expander_(expander), macro_name_(macro_name) {
             expander_.current_recursion_depth_++;
             expander_.check_recursion_depth(macro_name_);
         }
 
-        ~RecursionGuard() {
-            expander_.current_recursion_depth_--;
-        }
+        ~RecursionGuard() { expander_.current_recursion_depth_--; }
 
         // コピー・ムーブ禁止
         RecursionGuard(const RecursionGuard&) = delete;
         RecursionGuard& operator=(const RecursionGuard&) = delete;
 
-    private:
+       private:
         MacroExpander& expander_;
         std::string macro_name_;
     };

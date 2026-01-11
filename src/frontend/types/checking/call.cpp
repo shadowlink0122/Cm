@@ -534,6 +534,74 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         return ast::make_int();
     }
 
+    // ユーザー定義のimplメソッドを検索（impl int[] for Interface など）
+    std::string type_key = ast::type_to_string(*obj_type);
+    auto impl_it = type_methods_.find(type_key);
+    if (impl_it != type_methods_.end()) {
+        auto method_it = impl_it->second.find(member.member);
+        if (method_it != impl_it->second.end()) {
+            const auto& method_info = method_it->second;
+            // 引数の型チェック
+            if (member.args.size() != method_info.param_types.size()) {
+                error(current_span_, "Method '" + member.member + "' expects " +
+                                         std::to_string(method_info.param_types.size()) +
+                                         " arguments, got " + std::to_string(member.args.size()));
+            } else {
+                for (size_t i = 0; i < member.args.size(); ++i) {
+                    auto arg_type = infer_type(*member.args[i]);
+                    if (!types_compatible(method_info.param_types[i], arg_type)) {
+                        std::string expected = ast::type_to_string(*method_info.param_types[i]);
+                        std::string actual = ast::type_to_string(*arg_type);
+                        error(current_span_, "Argument type mismatch in method call '" +
+                                                 member.member + "': expected " + expected +
+                                                 ", got " + actual);
+                    }
+                }
+            }
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "Array impl method: " + type_key + "." + member.member +
+                               "() : " + ast::type_to_string(*method_info.return_type),
+                           debug::Level::Debug);
+            return method_info.return_type;
+        }
+    }
+
+    // 固定長配列の場合、スライス型（T[]）へのフォールバック検索
+    if (obj_type->array_size.has_value() && obj_type->element_type) {
+        std::string slice_key = ast::type_to_string(*obj_type->element_type) + "[]";
+        auto slice_impl_it = type_methods_.find(slice_key);
+        if (slice_impl_it != type_methods_.end()) {
+            auto method_it = slice_impl_it->second.find(member.member);
+            if (method_it != slice_impl_it->second.end()) {
+                const auto& method_info = method_it->second;
+                // 引数の型チェック
+                if (member.args.size() != method_info.param_types.size()) {
+                    error(current_span_, "Method '" + member.member + "' expects " +
+                                             std::to_string(method_info.param_types.size()) +
+                                             " arguments, got " +
+                                             std::to_string(member.args.size()));
+                } else {
+                    for (size_t i = 0; i < member.args.size(); ++i) {
+                        auto arg_type = infer_type(*member.args[i]);
+                        if (!types_compatible(method_info.param_types[i], arg_type)) {
+                            std::string expected = ast::type_to_string(*method_info.param_types[i]);
+                            std::string actual = ast::type_to_string(*arg_type);
+                            error(current_span_, "Argument type mismatch in method call '" +
+                                                     member.member + "': expected " + expected +
+                                                     ", got " + actual);
+                        }
+                    }
+                }
+                debug::tc::log(debug::tc::Id::Resolved,
+                               "Array impl fallback to slice: " + type_key + " -> " + slice_key +
+                                   "." + member.member +
+                                   "() : " + ast::type_to_string(*method_info.return_type),
+                               debug::Level::Debug);
+                return method_info.return_type;
+            }
+        }
+    }
+
     error(current_span_, "Unknown array method '" + member.member + "'");
     return ast::make_error();
 }

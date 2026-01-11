@@ -1,7 +1,7 @@
 import std::io::println;
 
-// スライス型へのimplテスト
-// impl int[] for Interface { method() } が動作することを確認
+// 固定長配列→スライスimplフォールバックテスト
+// impl int[] for Interface のメソッドを int[5] からも呼び出せることを確認
 
 interface Summable {
     int sum();
@@ -21,8 +21,8 @@ impl int[] for Summable {
 }
 
 int main() {
-    const int[] nums = [1, 2, 3, 4, 5];
-    const int s = nums.sum();
+    const int[5] arr = [1, 2, 3, 4, 5];  // 固定長配列
+    const int s = arr.sum();  // スライスimplメソッドを呼び出し
     println("sum: {s}");
     return 0;
 }

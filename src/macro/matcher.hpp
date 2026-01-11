@@ -1,34 +1,33 @@
 #pragma once
 
+#include "../lexer/token.hpp"
+#include "token_tree.hpp"
+
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "../lexer/token.hpp"
-#include "token_tree.hpp"
-
 namespace cm::macro {
 
 // マッチした値の型
 struct MatchedFragment {
     enum class Kind {
-        TOKEN,      // 単一トークン
-        TOKEN_SEQ,  // トークンのシーケンス
-        REPETITION, // 繰り返しマッチ結果
+        TOKEN,       // 単一トークン
+        TOKEN_SEQ,   // トークンのシーケンス
+        REPETITION,  // 繰り返しマッチ結果
     };
 
     Kind kind;
-    std::variant<
-        Token,                               // 単一トークン
-        std::vector<Token>,                  // トークンシーケンス
-        std::vector<MatchedFragment>        // 繰り返し結果
-    > value;
+    std::variant<Token,                        // 単一トークン
+                 std::vector<Token>,           // トークンシーケンス
+                 std::vector<MatchedFragment>  // 繰り返し結果
+                 >
+        value;
 
     // コンストラクタ
-    explicit MatchedFragment(Token token)
-        : kind(Kind::TOKEN), value(std::move(token)) {}
+    explicit MatchedFragment(Token token) : kind(Kind::TOKEN), value(std::move(token)) {}
 
     explicit MatchedFragment(std::vector<Token> tokens)
         : kind(Kind::TOKEN_SEQ), value(std::move(tokens)) {}
@@ -41,9 +40,7 @@ struct MatchedFragment {
     bool is_token_seq() const { return kind == Kind::TOKEN_SEQ; }
     bool is_repetition() const { return kind == Kind::REPETITION; }
 
-    const Token* get_token() const {
-        return is_token() ? std::get_if<Token>(&value) : nullptr;
-    }
+    const Token* get_token() const { return is_token() ? std::get_if<Token>(&value) : nullptr; }
 
     const std::vector<Token>* get_token_seq() const {
         return is_token_seq() ? std::get_if<std::vector<Token>>(&value) : nullptr;
@@ -63,13 +60,9 @@ struct MatchResult {
     MatchBindings bindings;
     std::string error_message;
 
-    static MatchResult Success(MatchBindings bindings) {
-        return {true, std::move(bindings), ""};
-    }
+    static MatchResult Success(MatchBindings bindings) { return {true, std::move(bindings), ""}; }
 
-    static MatchResult Failure(const std::string& error) {
-        return {false, {}, error};
-    }
+    static MatchResult Failure(const std::string& error) { return {false, {}, error}; }
 };
 
 // マッチング状態（内部使用）
@@ -82,124 +75,72 @@ struct MatchState {
 // マクロマッチャー
 // パターンと入力トークンのマッチングを行う
 class MacroMatcher {
-public:
+   public:
     MacroMatcher() = default;
     ~MacroMatcher() = default;
 
     // パターンと入力のマッチング
-    MatchResult match(
-        const std::vector<Token>& input,
-        const MacroPattern& pattern
-    );
+    MatchResult match(const std::vector<Token>& input, const MacroPattern& pattern);
 
     // トークンツリーと入力のマッチング（再帰用）
-    MatchResult match_tree(
-        const std::vector<Token>& input,
-        const std::vector<TokenTree>& pattern
-    );
+    MatchResult match_tree(const std::vector<Token>& input, const std::vector<TokenTree>& pattern);
 
-private:
+   private:
     // 再帰的マッチング
-    bool match_recursive(
-        const std::vector<Token>& input,
-        const std::vector<TokenTree>& pattern,
-        size_t input_pos,
-        size_t pattern_pos,
-        MatchState& state
-    );
+    bool match_recursive(const std::vector<Token>& input, const std::vector<TokenTree>& pattern,
+                         size_t input_pos, size_t pattern_pos, MatchState& state);
 
     // 単一トークンのマッチング
-    bool match_token(
-        const Token& input_token,
-        const Token& pattern_token
-    );
+    bool match_token(const Token& input_token, const Token& pattern_token);
 
     // デリミタ付きトークン群のマッチング
-    bool match_delimited(
-        const std::vector<Token>& input,
-        size_t& input_pos,
-        const DelimitedTokens& pattern,
-        MatchState& state
-    );
+    bool match_delimited(const std::vector<Token>& input, size_t& input_pos,
+                         const DelimitedTokens& pattern, MatchState& state);
 
     // メタ変数のマッチング
-    bool match_metavar(
-        const std::vector<Token>& input,
-        size_t& input_pos,
-        const MetaVariable& metavar,
-        MatchState& state
-    );
+    bool match_metavar(const std::vector<Token>& input, size_t& input_pos,
+                       const MetaVariable& metavar, MatchState& state);
 
     // 繰り返しのマッチング
-    bool match_repetition(
-        const std::vector<Token>& input,
-        size_t& input_pos,
-        const RepetitionNode& repetition,
-        MatchState& state
-    );
+    bool match_repetition(const std::vector<Token>& input, size_t& input_pos,
+                          const RepetitionNode& repetition, MatchState& state);
 
     // フラグメント指定子に応じたマッチング
-    std::optional<std::vector<Token>> match_fragment(
-        const std::vector<Token>& input,
-        size_t& input_pos,
-        FragmentSpecifier spec
-    );
+    std::optional<std::vector<Token>> match_fragment(const std::vector<Token>& input,
+                                                     size_t& input_pos, FragmentSpecifier spec);
 
     // 各フラグメント指定子のマッチング関数
-    std::optional<std::vector<Token>> match_expr(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_expr(const std::vector<Token>& input,
+                                                 size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_stmt(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_stmt(const std::vector<Token>& input,
+                                                 size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_type(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_type(const std::vector<Token>& input,
+                                                 size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_ident(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_ident(const std::vector<Token>& input,
+                                                  size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_path(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_path(const std::vector<Token>& input,
+                                                 size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_literal(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_literal(const std::vector<Token>& input,
+                                                    size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_block(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_block(const std::vector<Token>& input,
+                                                  size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_pattern(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_pattern(const std::vector<Token>& input,
+                                                    size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_item(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_item(const std::vector<Token>& input,
+                                                 size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_meta(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_meta(const std::vector<Token>& input,
+                                                 size_t& input_pos);
 
-    std::optional<std::vector<Token>> match_tt(
-        const std::vector<Token>& input,
-        size_t& input_pos
-    );
+    std::optional<std::vector<Token>> match_tt(const std::vector<Token>& input, size_t& input_pos);
 
     // ユーティリティ関数
     bool is_expr_start(const Token& token) const;
@@ -208,10 +149,7 @@ private:
     bool is_pattern_start(const Token& token) const;
 
     // デリミタのバランスを確認
-    size_t find_matching_delimiter(
-        const std::vector<Token>& tokens,
-        size_t start_pos
-    ) const;
+    size_t find_matching_delimiter(const std::vector<Token>& tokens, size_t start_pos) const;
 
     // エラーメッセージ生成
     std::string generate_error(const MatchState& state) const;

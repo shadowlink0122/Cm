@@ -7,18 +7,15 @@ namespace cm::macro {
 
 // コンストラクタ
 HygieneContext::HygieneContext()
-    : next_context_id_(1)
-    , gensym_counter_(0)
-    , current_expansion_depth_(0)
-    , name_map_(hygiene_ident_less) {
-}
+    : next_context_id_(1),
+      gensym_counter_(0),
+      current_expansion_depth_(0),
+      name_map_(hygiene_ident_less) {}
 
 // 新しい構文コンテキストを作成
-SyntaxContext HygieneContext::create_context(
-    const std::string& macro_name,
-    const SourceLocation& call_site,
-    const std::shared_ptr<SyntaxContext>& parent
-) {
+SyntaxContext HygieneContext::create_context(const std::string& macro_name,
+                                             const SourceLocation& call_site,
+                                             const std::shared_ptr<SyntaxContext>& parent) {
     SyntaxContext context;
     context.id = next_context_id_.fetch_add(1);
     context.expansion.macro_name = macro_name;
@@ -36,10 +33,7 @@ std::string HygieneContext::gensym(const std::string& base) {
 }
 
 // 識別子を衛生的にする
-HygienicIdent HygieneContext::make_hygienic(
-    const std::string& name,
-    const SyntaxContext& context
-) {
+HygienicIdent HygieneContext::make_hygienic(const std::string& name, const SyntaxContext& context) {
     HygienicIdent ident;
     ident.name = name;
     ident.context = context;
@@ -47,10 +41,7 @@ HygienicIdent HygieneContext::make_hygienic(
 }
 
 // トークンを衛生的にする
-Token HygieneContext::make_hygienic_token(
-    const Token& token,
-    const SyntaxContext& context
-) {
+Token HygieneContext::make_hygienic_token(const Token& token, const SyntaxContext& context) {
     // 識別子トークンの場合のみ衛生的な処理を適用
     if (token.type == TokenType::Identifier) {
         auto hygienic_ident = make_hygienic(token.value, context);
@@ -118,10 +109,8 @@ SyntaxContext HygieneContext::current_context() const {
 }
 
 // 名前の衝突チェック
-bool HygieneContext::has_name_conflict(
-    const std::string& name,
-    const SyntaxContext& context
-) const {
+bool HygieneContext::has_name_conflict(const std::string& name,
+                                       const SyntaxContext& context) const {
     // 同じ名前で異なるコンテキストの識別子が既に存在するかチェック
     for (const auto& [ident, resolved_name] : name_map_) {
         if (ident.name == name && !context.is_same_context(ident.context)) {
@@ -145,28 +134,22 @@ void HygieneContext::dump_contexts() const {
 
     std::cout << "[HYGIENE] Name Map:" << std::endl;
     for (const auto& [ident, resolved] : name_map_) {
-        std::cout << fmt::format("  {} (ctx:{}) -> {}",
-            ident.name, ident.context.id, resolved) << std::endl;
+        std::cout << fmt::format("  {} (ctx:{}) -> {}", ident.name, ident.context.id, resolved)
+                  << std::endl;
     }
 }
 
 // コンテキストの説明文を生成
 std::string HygieneContext::describe_context(const SyntaxContext& context) const {
-    return fmt::format("Context(id:{}, macro:{}, depth:{}, location:{}:{})",
-        context.id,
-        context.expansion.macro_name,
-        context.expansion.expansion_depth,
-        context.expansion.call_site.line,
-        context.expansion.call_site.column);
+    return fmt::format("Context(id:{}, macro:{}, depth:{}, location:{}:{})", context.id,
+                       context.expansion.macro_name, context.expansion.expansion_depth,
+                       context.expansion.call_site.line, context.expansion.call_site.column);
 }
 
 // ユニークな名前を生成（内部用）
 std::string HygieneContext::generate_unique_name(const std::string& base) {
     // コンテキストIDを含むユニークな名前を生成
-    return fmt::format("{}_ctx{}_{}",
-        base,
-        current_context().id,
-        gensym_counter_.fetch_add(1));
+    return fmt::format("{}_ctx{}_{}", base, current_context().id, gensym_counter_.fetch_add(1));
 }
 
 }  // namespace cm::macro

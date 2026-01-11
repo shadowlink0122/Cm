@@ -1343,6 +1343,19 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             method_type_name = type_name.substr(last_colon + 2);
         }
 
+        // 固定長配列（T[N]）の場合、スライス型名（T[]）にマッピング
+        // impl int[] for Interface のメソッドを int[5], int[10] 等からも呼び出し可能にする
+        if (obj_type && obj_type->kind == ast::TypeKind::Array &&
+            obj_type->array_size.has_value()) {
+            if (obj_type->element_type) {
+                method_type_name = ast::type_to_string(*obj_type->element_type) + "[]";
+                debug::hir::log(
+                    debug::hir::Id::MethodCallLower,
+                    "Fixed-size array -> slice impl: " + type_name + " -> " + method_type_name,
+                    debug::Level::Debug);
+            }
+        }
+
         auto hir = std::make_unique<HirCall>();
         hir->func_name = method_type_name + "__" + mem.member;
 
