@@ -823,9 +823,19 @@ class Interpreter {
                 Value result = execute_function(*callee, args);
 
                 // メソッド呼び出しの場合、selfをコピーバック
-                // ポインタラップした場合はargs.back()から、そうでなければargs[0]から
+                // ポインタラップした場合はinternal_val_ptrから元のStructValueを取得
                 if (self_local != invalid_local && !args.empty()) {
-                    if (did_pointer_wrap && args.size() > 1) {
+                    if (did_pointer_wrap && args[0].type() == typeid(PointerValue)) {
+                        // PointerValueでラップしていた場合、internal_val_ptrから
+                        // 変更後のStructValueを取得してコピーバック
+                        auto& ptr = std::any_cast<PointerValue&>(args[0]);
+                        if (ptr.internal_val_ptr &&
+                            ptr.internal_val_ptr->type() == typeid(StructValue)) {
+                            ctx.locals[self_local] = *ptr.internal_val_ptr;
+                        }
+                        // internal_val_ptrがStructValueでない場合は何もしない
+                        // （既にstore_to_placeで更新されている）
+                    } else if (did_pointer_wrap && args.size() > 1) {
                         ctx.locals[self_local] = args.back();
                     } else {
                         ctx.locals[self_local] = args[0];

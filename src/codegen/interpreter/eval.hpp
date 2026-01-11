@@ -89,6 +89,10 @@ class Evaluator {
     static Value load_from_place(ExecutionContext& ctx, const MirPlace& place) {
         auto it = ctx.locals.find(place.local);
         if (it == ctx.locals.end()) {
+            debug::interp::log(
+                debug::interp::Id::Load,
+                "load_from_place: local _" + std::to_string(place.local) + " not found",
+                debug::Level::Debug);
             return Value{};
         }
 
@@ -231,6 +235,14 @@ class Evaluator {
                 if (result.type() == typeid(PointerValue)) {
                     auto& ptr = std::any_cast<PointerValue&>(result);
 
+                    debug::interp::log(
+                        debug::interp::Id::Load,
+                        std::string("Deref: internal_val_ptr=") +
+                            (ptr.internal_val_ptr ? "set" : "null") +
+                            ", target_local=" + std::to_string(ptr.target_local) +
+                            ", is_external=" + (ptr.is_external() ? "true" : "false"),
+                        debug::Level::Debug);
+
                     // 外部メモリへのポインタの場合
                     if (ptr.is_external()) {
                         // 型に応じて外部メモリから値を読み取る
@@ -321,6 +333,14 @@ class Evaluator {
                             }
                         } else {
                             result = *target_value;
+                            debug::interp::log(
+                                debug::interp::Id::Load,
+                                std::string("Deref result: type=") +
+                                    (result.type() == typeid(StructValue)    ? "StructValue"
+                                     : result.type() == typeid(int64_t)      ? "int64_t"
+                                     : result.type() == typeid(PointerValue) ? "PointerValue"
+                                                                             : "other"),
+                                debug::Level::Debug);
                         }
                     } else {
                         return Value{};
