@@ -1377,9 +1377,48 @@ void Monomorphization::update_type_references(MirProgram& program) {
 
                     // ソースローカルの型情報を取得
                     auto info_it = struct_info.find(source_local);
-                    if (info_it != struct_info.end()) {
-                        const auto& [base_name, type_args] = info_it->second;
 
+                    // struct_infoにある場合とない場合で分岐
+                    std::string base_name;
+                    std::vector<std::string> type_args;
+                    bool has_struct_info = false;
+
+                    if (info_it != struct_info.end()) {
+                        has_struct_info = true;
+                        base_name = info_it->second.first;
+                        type_args = info_it->second.second;
+                    } else {
+                        // struct_infoにないが、マングリング済み構造体名を持つローカルの場合
+                        // 例: _4: Iterator__int
+                        if (source_local < func->locals.size()) {
+                            auto& local_type = func->locals[source_local].type;
+                            if (local_type && local_type->kind == hir::TypeKind::Struct) {
+                                std::string type_name = local_type->name;
+                                size_t pos = type_name.find("__");
+                                if (pos != std::string::npos) {
+                                    base_name = type_name.substr(0, pos);
+                                    // 型引数を抽出
+                                    std::string remainder = type_name.substr(pos + 2);
+                                    size_t arg_pos = 0;
+                                    while (arg_pos < remainder.size()) {
+                                        auto next_pos = remainder.find("__", arg_pos);
+                                        if (next_pos == std::string::npos) {
+                                            type_args.push_back(remainder.substr(arg_pos));
+                                            break;
+                                        }
+                                        type_args.push_back(
+                                            remainder.substr(arg_pos, next_pos - arg_pos));
+                                        arg_pos = next_pos + 2;
+                                    }
+                                    if (generic_structs.count(base_name) > 0) {
+                                        has_struct_info = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (has_struct_info && !base_name.empty()) {
                         // プロジェクションチェーン全体を辿って最終的なフィールド型を取得
                         // 例: node.data.value → Node.data(=T→Item) → Item.value(=int)
                         hir::TypePtr current_field_type = nullptr;
@@ -1412,6 +1451,7 @@ void Monomorphization::update_type_references(MirProgram& program) {
                                 for (size_t pi = 0;
                                      pi < params_it->second.size() && pi < current_type_args.size();
                                      ++pi) {
+                                    // 直接型パラメータ名と一致する場合
                                     if (field_type->name == params_it->second[pi]) {
                                         // 型パラメータを具体型に置換
                                         current_field_type =
@@ -1423,6 +1463,17 @@ void Monomorphization::update_type_references(MirProgram& program) {
                                             current_type_args
                                                 .clear();  // 具体型なのでtype_argsはクリア
                                         }
+                                        is_final_type_resolved = true;
+                                        break;
+                                    }
+                                    // ポインタ型でelement_typeが型パラメータの場合 (*T → *int)
+                                    if (field_type->kind == hir::TypeKind::Pointer &&
+                                        field_type->element_type &&
+                                        field_type->element_type->name == params_it->second[pi]) {
+                                        // ポインタ要素型を置換
+                                        auto concrete_elem =
+                                            make_type_from_name(current_type_args[pi]);
+                                        current_field_type = hir::make_pointer(concrete_elem);
                                         is_final_type_resolved = true;
                                         break;
                                     }
@@ -1443,21 +1494,10 @@ void Monomorphization::update_type_references(MirProgram& program) {
 
                         // 最終的なフィールド型が得られた場合、dest_localの型を更新
                         if (current_field_type) {
-                            // プリミティブ型は変更しない（int, string等は正しく設定済み）
-                            if (current_field_type->kind != hir::TypeKind::Int &&
-                                current_field_type->kind != hir::TypeKind::UInt &&
-                                current_field_type->kind != hir::TypeKind::Long &&
-                                current_field_type->kind != hir::TypeKind::ULong &&
-                                current_field_type->kind != hir::TypeKind::Float &&
-                                current_field_type->kind != hir::TypeKind::Double &&
-                                current_field_type->kind != hir::TypeKind::Bool &&
-                                current_field_type->kind != hir::TypeKind::Char &&
-                                current_field_type->kind != hir::TypeKind::String) {
-                                func->locals[dest_local].type = current_field_type;
-                                debug_msg("MONO", "Updated field access type in " + func->name +
-                                                      ": " + func->locals[dest_local].name +
-                                                      " -> " + current_field_type->name);
-                            }
+                            func->locals[dest_local].type = current_field_type;
+                            debug_msg("MONO", "Updated field access type in " + func->name + ": " +
+                                                  func->locals[dest_local].name + " -> " +
+                                                  hir::type_to_string(*current_field_type));
                         }
                     }
                 }
