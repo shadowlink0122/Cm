@@ -288,6 +288,7 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
 
     std::string type_name = ast::type_to_string(*impl.target_type);
 
+    // コンストラクタ/デストラクタの登録（is_ctor_implの場合）
     if (impl.is_ctor_impl) {
         for (const auto& ctor : impl.constructors) {
             std::string mangled_name = type_name + "__ctor";
@@ -309,7 +310,7 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
             scopes_.global().define_function(mangled_name, std::move(param_types),
                                              ast::make_void());
         }
-        return;
+        // 早期リターンを削除: メソッドも登録を続行
     }
 
     if (!impl.interface_name.empty()) {
@@ -360,6 +361,7 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
                        debug::Level::Debug);
     }
 
+    // コンストラクタ/デストラクタのチェック
     if (impl.is_ctor_impl) {
         for (auto& ctor : impl.constructors) {
             scopes_.push();
@@ -391,8 +393,7 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
             scopes_.pop();
         }
 
-        current_return_type_ = nullptr;
-        return;
+        // 早期リターンを削除: メソッドのチェックも続行
     }
 
     current_impl_target_type_ = type_name;

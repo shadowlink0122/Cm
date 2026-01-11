@@ -1,0 +1,62 @@
+import std::io::println;
+
+// ジェネリックイテレータ構造体テスト
+// 現在のCm言語で動作する形式
+
+// ジェネリックイテレータ構造体
+struct Iterator<T> {
+    T* data;
+    int size;
+    int index;
+}
+
+// int専用のヘルパー関数
+bool int_iter_has_next(Iterator<int>* iter) {
+    return iter->index < iter->size;
+}
+
+int int_iter_next(Iterator<int>* iter) {
+    int* data = iter->data;
+    int idx = iter->index;
+    int value = data[idx];
+    iter->index = idx + 1;
+    return value;
+}
+
+int int_iter_peek(Iterator<int>* iter) {
+    int* data = iter->data;
+    int idx = iter->index;
+    return data[idx];
+}
+
+int main() {
+    // int配列でテスト
+    int[4] nums = [10, 20, 30, 40];
+    
+    // ジェネリック構造体はデフォルト初期化後フィールド設定
+    Iterator<int> int_iter;
+    int_iter.data = &nums[0];
+    int_iter.size = 4;
+    int_iter.index = 0;
+    
+    // peekは値を消費しない
+    int first_peek = int_iter_peek(&int_iter);
+    println("peek: {first_peek}");
+    
+    // nextは値を消費
+    int first_next = int_iter_next(&int_iter);
+    println("next: {first_next}");
+    
+    // 再度peekすると次の要素
+    int second_peek = int_iter_peek(&int_iter);
+    println("peek after next: {second_peek}");
+    
+    // 残りを走査
+    println("remaining values:");
+    while (int_iter_has_next(&int_iter)) {
+        int v = int_iter_next(&int_iter);
+        println("  {v}");
+    }
+    
+    return 0;
+}

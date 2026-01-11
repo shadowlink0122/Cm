@@ -848,14 +848,27 @@ class Parser {
 
                     decl->constructors.push_back(std::move(ctor));
                 } else {
-                    // selfでもデストラクタでもない場合、エラーを報告してスキップ
-                    error("Expected 'self' or '~self' in constructor impl block");
-                    // 次の有効なトークンまでスキップ
-                    while (
-                        !check(TokenKind::RBrace) && !is_at_end() &&
-                        !(current().kind == TokenKind::Ident && current().get_string() == "self") &&
-                        !check(TokenKind::Tilde) && !check(TokenKind::KwOverload)) {
-                        advance();
+                    // selfでもデストラクタでもない場合、通常メソッドとして解析
+                    // これにより impl<T> Type<T> { void method() { ... } } が可能になる
+                    std::vector<ast::AttributeNode> method_attrs;
+                    while (is_attribute_start()) {
+                        method_attrs.push_back(parse_attribute());
+                    }
+
+                    // private修飾子をチェック
+                    bool is_private = consume_if(TokenKind::KwPrivate);
+
+                    auto func = parse_function(false, false, false, false, std::move(method_attrs));
+                    if (auto* f = func->as<ast::FunctionDecl>()) {
+                        if (is_private) {
+                            f->visibility = ast::Visibility::Private;
+                        } else {
+                            f->visibility = ast::Visibility::Export;
+                        }
+                        decl->methods.push_back(
+                            std::unique_ptr<ast::FunctionDecl>(static_cast<ast::FunctionDecl*>(
+                                std::get<std::unique_ptr<ast::FunctionDecl>>(func->kind)
+                                    .release())));
                     }
                 }
             } catch (...) {

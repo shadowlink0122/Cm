@@ -1,0 +1,82 @@
+import std::io::println;
+
+// 両方向イテレータのテスト
+// ドキュメント023 BidirectionalIteratorの設計確認
+
+struct BiIter {
+    int* begin;    // 開始位置
+    int* current;  // 現在位置
+    int* end;      // 終端位置
+}
+
+impl BiIter {
+    self(int* data, int size) {
+        self.begin = data;
+        self.current = data;
+        self.end = data + size;
+    }
+}
+
+// 前方向
+bool has_next(BiIter* iter) {
+    return iter->current < iter->end;
+}
+
+int next(BiIter* iter) {
+    int* cur = iter->current;
+    int value = *cur;
+    iter->current = cur + 1;
+    return value;
+}
+
+// 後方向
+bool has_prev(BiIter* iter) {
+    return iter->current > iter->begin;
+}
+
+int prev(BiIter* iter) {
+    int* cur = iter->current - 1;
+    iter->current = cur;
+    return *cur;
+}
+
+// 位置取得
+int position(BiIter* iter) {
+    int* c = iter->current;
+    int* b = iter->begin;
+    int pos = 0;
+    while (b < c) {
+        pos = pos + 1;
+        b = b + 1;
+    }
+    return pos;
+}
+
+int main() {
+    int[5] arr = [10, 20, 30, 40, 50];
+    BiIter iter = BiIter(&arr[0], 5);
+    
+    // 前方向に走査
+    println("Forward:");
+    while (has_next(&iter)) {
+        int v = next(&iter);
+        println("  {v}");
+    }
+    
+    // 現在位置は終端
+    int pos1 = position(&iter);
+    println("position: {pos1}");
+    
+    // 後方向に走査
+    println("Backward:");
+    while (has_prev(&iter)) {
+        int v = prev(&iter);
+        println("  {v}");
+    }
+    
+    // 現在位置は先頭
+    int pos2 = position(&iter);
+    println("position: {pos2}");
+    
+    return 0;
+}
