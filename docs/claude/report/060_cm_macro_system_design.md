@@ -1,427 +1,379 @@
-# Cm言語マクロシステム設計書（改訂版）
+# Cm言語マクロシステム設計書（Cm構文準拠版）
 
 作成日: 2026-01-11
 対象バージョン: v0.11.0
-ステータス: 設計改訂
+ステータス: 最終改訂
 
 ## エグゼクティブサマリー
 
-Cm言語に安全で衛生的なマクロシステムを導入します。**Rust風の構文を避け、C++風のCm言語スタイルに準拠した設計**を行います。
+Cm言語の**既存パーサーと中間言語（MIR）を活用**したマクロシステムを設計します。Rust風の構文を完全に排除し、Cmの構文規則に100%準拠します。
 
 ## 1. 設計理念
 
 ### 1.1 基本方針
 
-1. **C++風構文の維持**: Cm言語の構文スタイルを尊重
-2. **衛生的（Hygienic）**: 変数名の衝突を防ぐ
-3. **型安全**: マクロ展開後も型チェックを保証
-4. **直感的**: C++プログラマーにも理解しやすい
+1. **既存パーサー活用**: 新たなパーサーを書かない
+2. **MIR統合**: 中間言語レベルで自然に処理
+3. **型安全重視**: autoを使わず明示的な型宣言
+4. **Cm構文準拠**: 関数オーバーロードのような自然な構文
 
-### 1.2 マクロの種類
+### 1.2 従来の問題点と解決
 
-```cm
-// 1. 関数風マクロ（C++風）
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
+| 問題点 | 解決策 |
+|--------|--------|
+| $x:expr などRust構文 | **廃止** - 通常のパラメータ構文 |
+| 別パーサーが必要 | **不要** - 既存パーサーを拡張 |
+| autoの多用 | **禁止** - 明示的な型宣言 |
+| template<typename T> | **<T>構文** - Cm標準スタイル |
 
-// 2. パターンマクロ（新機能）
-macro vec {
-    () => { Vector::new() };
-    ($x:expr, ...) => {{
-        Vector<typeof($x)> v;
-        v.push($x);
-        ...
-        v
-    }};
-}
+## 2. マクロ定義構文
 
-// 3. 属性マクロ（将来実装）
-[[derive(Debug, Clone)]]
-struct Point { int x; int y; };
-```
-
-## 2. パターンマクロ設計
-
-### 2.1 構文定義（Cm風）
-
-```ebnf
-macro_definition ::= 'macro' identifier '{' macro_rules '}'
-
-macro_rules ::= macro_rule (';' macro_rule)* ';'?
-
-macro_rule ::= macro_pattern '=>' macro_body
-
-macro_pattern ::= '(' pattern_elements ')'
-
-macro_body ::= expression | '{' statements '}'
-
-pattern_element ::= token
-                  | '$' identifier ':' type_spec
-                  | '$' identifier '...'
-                  | '...'
-
-type_spec ::= 'expr' | 'stmt' | 'type' | 'ident'
-            | 'literal' | 'block'
-```
-
-### 2.2 フラグメント指定子（簡略化）
-
-| 指定子 | マッチ対象 | 例 |
-|--------|-----------|-----|
-| `expr` | 式 | `x + 1`, `func()` |
-| `stmt` | 文 | `int x = 5;` |
-| `type` | 型 | `int`, `Vector<T>` |
-| `ident` | 識別子 | `foo`, `x` |
-| `literal` | リテラル | `42`, `"hello"` |
-| `block` | ブロック | `{ ... }` |
-
-## 3. 基本マクロ例
-
-### 3.1 vec!マクロ（Cm構文版）
+### 2.1 基本構造（関数オーバーロード風）
 
 ```cm
-// Vectorを簡単に作成するマクロ
-macro vec {
-    // 空のVector
-    () => {
-        Vector<int>()
-    };
-
-    // 単一型の要素
-    ($first:expr) => {{
-        Vector<typeof($first)> v;
-        v.push($first);
-        v
-    }};
-
-    // 複数要素（可変長）
-    ($first:expr, $rest:expr...) => {{
-        Vector<typeof($first)> v;
-        v.push($first);
-        $(v.push($rest);)...
-        v
-    }};
+// マクロ定義：関数定義と同じ構文
+macro vec() {
+    return Vector<int>();
 }
 
-// 使用例
+macro vec(int first) {
+    Vector<int> v;
+    v.push(first);
+    return v;
+}
+
+// 可変長引数版（Cm既存の...構文）
+macro vec(int first, int... rest) {
+    Vector<int> v;
+    v.push(first);
+    // 展開時にrestの各要素に対してpushを生成
+    @foreach(r in rest) {
+        v.push(r);
+    }
+    return v;
+}
+```
+
+### 2.2 型ジェネリック対応
+
+```cm
+// ジェネリックマクロ（Cm標準の<T>構文）
+<T>
+macro create_vector(T first) {
+    Vector<T> v;
+    v.push(first);
+    return v;
+}
+
+<T>
+macro create_vector(T first, T... rest) {
+    Vector<T> v;
+    v.push(first);
+    @foreach(r in rest) {
+        v.push(r);
+    }
+    return v;
+}
+```
+
+## 3. マクロ呼び出し構文
+
+### 3.1 関数呼び出し風
+
+```cm
 int main() {
-    auto v1 = vec!();           // 空のVector
-    auto v2 = vec!(1);           // Vector<int> with 1
-    auto v3 = vec!(1, 2, 3);    // Vector<int> with 1,2,3
+    // 通常の関数呼び出しと同じ
+    Vector<int> v1 = vec();
+    Vector<int> v2 = vec(1);
+    Vector<int> v3 = vec(1, 2, 3);
+
+    // 型推論（将来的に）
+    Vector<float> v4 = create_vector(1.0f);
+    Vector<float> v5 = create_vector(1.0f, 2.0f, 3.0f);
 
     return 0;
 }
 ```
 
-### 3.2 assert!マクロ（Cm構文版）
+## 4. 特殊マクロディレクティブ
+
+### 4.1 @foreach - 繰り返し展開
 
 ```cm
-// アサーションマクロ
-macro assert {
-    ($cond:expr) => {
-        if (!($cond)) {
-            fprintf(stderr, "Assertion failed: %s\n", #$cond);
-            abort();
-        }
-    };
-
-    ($cond:expr, $msg:literal) => {
-        if (!($cond)) {
-            fprintf(stderr, "Assertion failed: %s\n  Message: %s\n",
-                   #$cond, $msg);
-            abort();
-        }
-    };
+macro print_all(string... messages) {
+    @foreach(msg in messages) {
+        printf("%s\n", msg);
+    }
 }
 
-// 使用例
-void test() {
-    int x = 5;
-    assert!(x > 0);
-    assert!(x < 10, "x must be less than 10");
+// 展開結果：
+// print_all("Hello", "World") →
+// printf("%s\n", "Hello");
+// printf("%s\n", "World");
+```
+
+### 4.2 @if/@else - 条件付き展開
+
+```cm
+macro assert(bool condition, string message = "") {
+    @if(message == "") {
+        if (!condition) {
+            fprintf(stderr, "Assertion failed at %s:%d\n",
+                   __FILE__, __LINE__);
+            abort();
+        }
+    }
+    @else {
+        if (!condition) {
+            fprintf(stderr, "Assertion failed: %s at %s:%d\n",
+                   message, __FILE__, __LINE__);
+            abort();
+        }
+    }
 }
 ```
 
-### 3.3 println!マクロ（Cm構文版）
+### 4.3 @stringify - 文字列化
 
 ```cm
-// 改行付き出力マクロ
-macro println {
-    () => {
-        printf("\n");
-    };
-
-    ($fmt:literal) => {
-        printf($fmt "\n");
-    };
-
-    ($fmt:literal, $args:expr...) => {
-        printf($fmt "\n", $args...);
-    };
+macro dbg(int value) {
+    fprintf(stderr, "[DEBUG] %s = %d\n", @stringify(value), value);
+    return value;
 }
 
-// 使用例
-int main() {
-    println!();                        // 改行のみ
-    println!("Hello, World!");        // 文字列出力
-    println!("Value: %d", 42);        // フォーマット付き
-
-    return 0;
-}
+// 使用例：
+// int x = 42;
+// dbg(x);  // 出力: [DEBUG] x = 42
 ```
 
-## 4. Pin実装用マクロ
+## 5. Pin実装用マクロ
 
-### 4.1 pin!マクロ（Cm構文版）
+### 5.1 pinマクロ（Cm構文版）
 
 ```cm
-// Pin作成マクロ
-macro pin {
-    ($val:ident) => {{
-        Pin<typeof($val)> __pinned($val);
-        __pinned
-    }};
+// 値をPinする
+<T>
+macro pin(T& value) {
+    Pin<T> pinned(value);
+    return pinned;
+}
 
-    ($type:type $name:ident = $init:expr) => {{
-        $type $name = $init;
-        Pin<$type> __pinned_##$name($name);
-        __pinned_##$name
-    }};
+// 新規変数として作成
+<T>
+macro pin_new(T value) {
+    T temp = value;
+    Pin<T> pinned(temp);
+    return pinned;
 }
 
 // 使用例
 int main() {
     int value = 42;
-    auto pinned = pin!(value);
+    Pin<int> p1 = pin(value);
 
-    // 新規変数として作成
-    auto pinned_new = pin!(int x = 100);
-
-    return 0;
-}
-```
-
-### 4.2 pin_struct!マクロ
-
-```cm
-// 自己参照構造体用マクロ
-macro pin_struct {
-    (
-        struct $name:ident {
-            $($field:ident : $type:type;)...
-        }
-    ) => {
-        struct $name {
-            $($field : $type;)...
-
-            // Pinされた状態でのみ初期化可能
-            void init_pinned(Pin<$name>& self) {
-                // 自己参照の設定など
-            }
-        };
-
-        // Pin用のヘルパー関数
-        Pin<$name> make_pinned_##$name() {
-            $name instance;
-            Pin<$name> pinned(instance);
-            pinned.init_pinned(pinned);
-            return pinned;
-        }
-    };
-}
-```
-
-## 5. マクロ展開メカニズム
-
-### 5.1 展開フロー
-
-```
-ソースコード（Cm構文）
-    ↓
-[Lexer: トークン化]
-    ↓
-[マクロ検出]
-    ↓
-[パターンマッチング]
-    ↓
-[マクロ展開] ← 再帰的展開
-    ↓
-[衛生性適用]
-    ↓
-[構文解析]
-    ↓
-AST
-```
-
-### 5.2 衛生性の実装（簡略化）
-
-```cm
-// マクロ内で生成される変数は自動的にユニーク化
-macro swap {
-    ($a:ident, $b:ident) => {{
-        auto __temp = $a;  // __tempは自動的にユニーク名になる
-        $a = $b;
-        $b = __temp;
-    }};
-}
-
-// 使用例（名前衝突なし）
-int main() {
-    int x = 1, y = 2;
-    int __temp = 100;  // ユーザーの__temp
-
-    swap!(x, y);  // マクロの__tempと衝突しない
-
-    printf("%d\n", __temp);  // 100が出力される
+    Pin<float> p2 = pin_new(3.14f);
 
     return 0;
 }
 ```
 
-## 6. エラー処理
+## 6. 標準マクロライブラリ
 
-### 6.1 エラーメッセージ例
-
-```
-error: no matching pattern for macro 'vec'
-  --> main.cm:10:15
-   |
-10 | auto v = vec!{1, 2, 3};
-   |               ^ expected '(' but found '{'
-   |
-   = help: vec! expects one of:
-           - vec!() for empty vector
-           - vec!(elem, ...) for list
-```
-
-### 6.2 デバッグ支援
-
-```cm
-// マクロ展開の確認
-#pragma macro_trace(vec)  // vecマクロの展開をトレース
-
-int main() {
-    auto v = vec!(1, 2, 3);
-    // [MACRO] Expanding vec!(1, 2, 3)
-    // [MACRO]   Matched pattern: ($first:expr, $rest:expr...)
-    // [MACRO]   Result: Vector<int> v; v.push(1); v.push(2); v.push(3); v
-
-    return 0;
-}
-```
-
-## 7. 標準マクロライブラリ
-
-### 7.1 基本マクロ
+### 6.1 基本マクロ（Cm構文）
 
 ```cm
 // std/macros.cm
 
-// 最小/最大値
-macro min {
-    ($a:expr, $b:expr) => {
-        (($a) < ($b) ? ($a) : ($b))
-    };
+// 最小値
+<T>
+macro min(T a, T b) {
+    return (a < b) ? a : b;
 }
 
-macro max {
-    ($a:expr, $b:expr) => {
-        (($a) > ($b) ? ($a) : ($b))
-    };
+// 最大値
+<T>
+macro max(T a, T b) {
+    return (a > b) ? a : b;
 }
 
-// デバッグ出力
-macro dbg {
-    ($val:expr) => {{
-        fprintf(stderr, "[%s:%d] %s = ",
-                __FILE__, __LINE__, #$val);
-        auto __result = $val;
-        // 型に応じた出力（将来実装）
-        print_debug(__result);
-        __result
-    }};
+// スワップ
+<T>
+macro swap(T& a, T& b) {
+    T temp = a;
+    a = b;
+    b = temp;
 }
 
-// TODO マクロ
-macro todo {
-    () => {
-        panic("not yet implemented");
-    };
-    ($msg:literal) => {
-        panic("not yet implemented: " $msg);
-    };
+// 配列サイズ
+<T, int N>
+macro array_size(T[N]& arr) {
+    return N;
 }
 ```
 
-### 7.2 コレクションマクロ
+### 6.2 出力マクロ
 
 ```cm
-// ハッシュマップ
-macro hashmap {
-    () => {
-        HashMap<int, int>()
-    };
-
-    ($($key:expr => $val:expr),+) => {{
-        auto map = HashMap<typeof($key), typeof($val)>();
-        $(map.insert($key, $val);)+
-        map
-    }};
+// 改行付き出力
+macro println() {
+    printf("\n");
 }
 
-// 使用例
-int main() {
-    auto map = hashmap!(
-        "one" => 1,
-        "two" => 2,
-        "three" => 3
-    );
+macro println(string format, void*... args) {
+    printf(format, args);
+    printf("\n");
+}
 
+// デバッグ出力
+<T>
+macro debug(string name, T value) {
+    fprintf(stderr, "[%s:%d] %s = ", __FILE__, __LINE__, name);
+    // 型に応じた出力を生成
+    @if(T == int) {
+        fprintf(stderr, "%d\n", value);
+    }
+    @elif(T == float) {
+        fprintf(stderr, "%f\n", value);
+    }
+    @elif(T == string) {
+        fprintf(stderr, "%s\n", value);
+    }
+    @else {
+        fprintf(stderr, "<object>\n");
+    }
+}
+```
+
+## 7. MIRレベルでの処理
+
+### 7.1 マクロ展開のタイミング
+
+```
+ソースコード（Cm構文）
+    ↓
+[Lexer] → [Parser] → AST
+    ↓
+[マクロ展開フェーズ] ← ASTレベルで展開
+    ↓
+[HIR生成]
+    ↓
+[MIR生成] ← 通常の関数と同じ扱い
+```
+
+### 7.2 MIR表現例
+
+```cm
+// マクロ呼び出し
+Vector<int> v = vec(1, 2, 3);
+
+// AST展開後
+Vector<int> v;
+v.push(1);
+v.push(2);
+v.push(3);
+
+// MIR表現
+%0 = call Vector<int>::Vector()
+%1 = const 1 : int
+call Vector<int>::push(%0, %1)
+%2 = const 2 : int
+call Vector<int>::push(%0, %2)
+%3 = const 3 : int
+call Vector<int>::push(%0, %3)
+```
+
+## 8. 衛生性の簡易実装
+
+### 8.1 自動変数名変換
+
+```cm
+// マクロ内のローカル変数は自動的に一意な名前に変換
+macro safe_swap(int& a, int& b) {
+    int temp = a;  // → int __macro_temp_XXX = a;
+    a = b;
+    b = temp;      // → b = __macro_temp_XXX;
+}
+
+// 名前衝突しない
+int main() {
+    int x = 1, y = 2;
+    int temp = 100;  // ユーザーの変数
+
+    safe_swap(x, y);  // tempは衝突しない
+
+    printf("%d\n", temp);  // 100が出力される
     return 0;
 }
 ```
 
-## 8. C++マクロとの違い
+## 9. エラー処理
 
-| 機能 | Cm マクロ | C++ マクロ |
-|------|----------|-----------|
-| パターンマッチ | ✅ | ❌ |
-| 型安全 | ✅ | ❌ |
-| 衛生性 | ✅ | ❌ |
-| 再帰展開 | ✅ 制限付き | ⚠️ 危険 |
-| デバッグ | ✅ 容易 | ❌ 困難 |
-| 可変長引数 | ✅ ... 構文 | ⚠️ __VA_ARGS__ |
+### 9.1 コンパイルエラー
 
-## 9. 実装優先度
+```
+error: macro 'vec' expects arguments
+  --> main.cm:10:15
+   |
+10 | Vector<int> v = vec;
+   |                 ^^^ missing ()
+   |
+   = help: did you mean vec()?
+```
 
-1. **Phase 1（必須）**
-   - 基本パターンマッチング
-   - 単純な展開
-   - vec!, assert!マクロ
+### 9.2 型エラー
 
-2. **Phase 2（重要）**
-   - 衛生性の実装
-   - pin!マクロ
-   - エラー処理改善
+```
+error: type mismatch in macro 'create_vector'
+  --> main.cm:12:20
+   |
+12 | Vector<int> v = create_vector(1, 2.0f);
+   |                               ^   ^^^^ float
+   |                               int
+   |
+   = note: all arguments must have the same type
+```
 
-3. **Phase 3（将来）**
-   - 属性マクロ
-   - 手続きマクロ
-   - IDEサポート
+## 10. 実装ロードマップ
 
-## 10. まとめ
+### Phase 1: 基本実装
+1. マクロ定義の構文解析（既存パーサー拡張）
+2. 単純な置換マクロ
+3. オーバーロード解決
 
-CmのマクロシステムはCmのマクロシステムは：
+### Phase 2: 高度な機能
+1. @foreach, @if ディレクティブ
+2. 型ジェネリック対応
+3. 衛生性実装
 
-1. **Cm構文準拠**: C++風の構文スタイルを維持
-2. **シンプル**: Rustの複雑さを避けた設計
-3. **安全**: 衛生性と型安全性を保証
-4. **実用的**: Pin実装などで即座に活用可能
-5. **段階的**: 基本機能から順次実装
+### Phase 3: 最適化
+1. 展開結果のキャッシュ
+2. インライン化との統合
+3. デバッグ情報の保持
 
-C++の#defineマクロの問題を解決しつつ、Rustの複雑性も回避する、バランスの取れた設計です。
+## 11. 他言語との比較
+
+| 機能 | Cm（本設計） | Rust | C++ |
+|------|------------|------|-----|
+| 構文 | 関数風 | 特殊構文 | #define |
+| 型安全 | ✅完全 | ✅ | ❌ |
+| 既存パーサー活用 | ✅ | ❌ | N/A |
+| 学習容易性 | ✅簡単 | ❌複雑 | ⚠️ |
+| MIR統合 | ✅自然 | N/A | N/A |
+
+## まとめ
+
+この設計により：
+
+1. **既存パーサーをそのまま活用**（新規パーサー不要）
+2. **Cm構文に100%準拠**（関数定義と同じ）
+3. **型安全性を完全保証**（autoを使わない）
+4. **MIRレベルで自然に処理**（特殊な処理不要）
+5. **学習コストゼロ**（関数と同じ構文）
+
+Rustの複雑な構文を避け、Cmの既存インフラを最大限活用する実用的な設計です。
 
 ---
 
 **作成者:** Claude Code
-**ステータス:** 設計改訂
-**実装開始:** 基本マクロから段階的に
+**ステータス:** 最終設計
+**次ステップ:** パーサー拡張から実装開始

@@ -13,42 +13,36 @@
 ### 基本構文
 
 ```cm
-// 定数パラメータの宣言
-struct Array<T, const N: int> {
-    T[N] data;
+// 定数パラメータの宣言（新構文）
+struct Array<T, SIZE: const int> {
+    T[SIZE] data;
 }
 
 // 関数での使用
-<T, const N: int> T[N] create_array() { ... }
+<T, N: const int> T[N] create_array() { ... }
 
 // implでの使用
-impl<T, const N: int> T[N] for Iterable<T> { ... }
+impl<T, N: const int> T[N] for Iterable<T> { ... }
 ```
 
-### 構文BNF
+> [!IMPORTANT]
+> **制約**: `T[N]`の`N`は必ずジェネリクスの定数パラメータでなければなりません。
+> グローバル変数やローカル変数を使用した`T[n]`は不正です。
 
-```ebnf
-generic_params = '<' generic_param (',' generic_param)* '>'
-generic_param  = type_param | const_param
-type_param     = IDENT (':' type_constraint)?
-const_param    = 'const' IDENT ':' const_type
-const_type     = 'int' | 'uint' | 'bool' | 'char'
+### 不正な例
+
+```cm
+// ❌ 不正: グローバル変数は使用不可
+const int SIZE = 10;
+impl T[SIZE] for Iterable<T> { ... }  // エラー
+
+// ❌ 不正: ローカル変数は使用不可
+int n = get_size();
+int[n] arr;  // エラー（VLA）
+
+// ✅ 正しい: const genericパラメータを使用
+impl<T, N: const int> T[N] for Iterable<T> { ... }
 ```
-
-## AST変更
-
-### src/frontend/ast/decl.hpp
-
-```cpp
-// 現在
-std::vector<std::string> generic_params;
-
-// 変更後
-struct GenericParam {
-    enum class Kind { Type, Const };
-    
-    Kind kind = Kind::Type;
-    std::string name;
     
     // Type: 制約リスト
     std::vector<std::string> constraints;

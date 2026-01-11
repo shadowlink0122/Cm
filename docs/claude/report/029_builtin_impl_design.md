@@ -30,12 +30,18 @@ impl<T> T[] for Iterable<T> {
 }
 
 // 固定長配列への impl（const generics必要）
-impl<T, const N: int> T[N] for Iterable<T> {
+impl<T, N: const int> T[N] for Iterable<T> {
     ArrayIterator<T> iter() {
         return ArrayIterator<T>(&self[0], N);
     }
 }
 ```
+
+> [!IMPORTANT]
+> **`T[N]`の制約**: `N`は必ずconst genericパラメータでなければなりません。
+> - ✅ `impl<T, N: const int> T[N]` - 正しい
+> - ❌ `impl<T> T[SIZE]` where SIZE is a global variable - 不正
+> - ❌ `impl<T> T[5]` - リテラルも不正（ジェネリック性がない）
 
 ### 代替構文案
 
