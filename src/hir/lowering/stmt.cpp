@@ -281,7 +281,10 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         std::string iter_name = "__for_in_iter_" + for_in.var_name;
         auto iter_let = std::make_unique<HirLet>();
         iter_let->name = iter_name;
-        // イテレータ型は未設定（型推論に任せる）
+        // イテレータ型を設定（Struct型として作成）
+        if (!for_in.iterator_type_name.empty()) {
+            iter_let->type = ast::make_named(for_in.iterator_type_name);
+        }
 
         // collection.iter() 呼び出し
         auto iter_call = std::make_unique<HirCall>();
@@ -289,7 +292,7 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
             for_in.iterable->type ? ast::type_to_string(*for_in.iterable->type) : "";
         iter_call->func_name = type_name + "__iter";
         iter_call->args.push_back(lower_expr(*for_in.iterable));
-        iter_let->init = std::make_unique<HirExpr>(std::move(iter_call), nullptr);
+        iter_let->init = std::make_unique<HirExpr>(std::move(iter_call), iter_let->type);
 
         hir_block->stmts.push_back(std::make_unique<HirStmt>(std::move(iter_let)));
 

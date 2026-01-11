@@ -1,0 +1,62 @@
+import std::io::println;
+
+// for-in + イテレータ統合テスト
+// Range構造体をfor-inで直接使用
+
+// Range構造体
+struct Range {
+    int start;
+    int end;
+    int step;
+}
+
+// RangeIterator構造体
+struct RangeIterator {
+    int current;
+    int end;
+    int step;
+}
+
+impl RangeIterator {
+    bool has_next() {
+        return self.current < self.end;
+    }
+    
+    int next() {
+        int value = self.current;
+        self.current = self.current + self.step;
+        return value;
+    }
+}
+
+// Rangeにiter()メソッドを実装
+impl Range {
+    RangeIterator iter() {
+        RangeIterator it;
+        it.current = self.start;
+        it.end = self.end;
+        it.step = self.step;
+        return it;
+    }
+}
+
+// ヘルパー関数
+Range range(int start, int end) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+int main() {
+    Range r = range(1, 5);
+    
+    // for-in + イテレータ: 自動的にiter()/has_next()/next()パターンで展開
+    for (int x in r) {
+        println("{x}");
+    }
+    
+    println("done");
+    return 0;
+}
