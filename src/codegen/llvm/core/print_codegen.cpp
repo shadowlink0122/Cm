@@ -99,7 +99,11 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
     auto valueType = value->getType();
 
     // HIR型がPointer型の場合、ポインタを16進数で表示
-    if (hirType && hirType->kind == hir::TypeKind::Pointer) {
+    // ただし、value自体がプリミティブ型（整数、浮動小数点）の場合は除外
+    // （プリミティブimplのself参照がポインタ経由で渡されるケース）
+    if (hirType && hirType->kind == hir::TypeKind::Pointer &&
+        (valueType->isPointerTy() ||
+         (valueType->isIntegerTy() && valueType->getIntegerBitWidth() == 64))) {
         // ポインタを整数（64ビット）にキャストして16進数表示
         llvm::Value* ptrAsInt = nullptr;
         if (value->getType()->isPointerTy()) {
@@ -250,6 +254,62 @@ void MIRToLLVM::generatePrintFormatCall(const mir::MirTerminator::CallData& call
     for (size_t i = 2; i < callData.args.size(); ++i) {
         auto value = convertOperand(*callData.args[i]);
         auto hirType = getOperandType(*callData.args[i]);
+
+        // プリミティブimplメソッドのself引数の場合：ポインタからプリミティブ値をロード
+        // valueがポインタ型で、hirTypeがPointerで、カレント関数がプリミティブimplメソッドの場合
+        if (value->getType()->isPointerTy() && hirType && hirType->kind == hir::TypeKind::Pointer &&
+            currentMIRFunction) {
+            const std::string& funcName = currentMIRFunction->name;
+            size_t dunderPos = funcName.find("__");
+            if (dunderPos != std::string::npos) {
+                std::string typeName = funcName.substr(0, dunderPos);
+                if (typeName == "int" || typeName == "uint" || typeName == "long" ||
+                    typeName == "ulong" || typeName == "short" || typeName == "ushort" ||
+                    typeName == "float" || typeName == "double" || typeName == "bool" ||
+                    typeName == "char") {
+                    // selfポインタからプリミティブ値をロード
+                    llvm::Type* primType = nullptr;
+                    if (typeName == "int" || typeName == "uint") {
+                        primType = ctx.getI32Type();
+                    } else if (typeName == "long" || typeName == "ulong") {
+                        primType = ctx.getI64Type();
+                    } else if (typeName == "short" || typeName == "ushort") {
+                        primType = ctx.getI16Type();
+                    } else if (typeName == "float") {
+                        primType = ctx.getF32Type();
+                    } else if (typeName == "double") {
+                        primType = ctx.getF64Type();
+                    } else if (typeName == "bool" || typeName == "char") {
+                        primType = ctx.getI8Type();
+                    }
+                    if (primType) {
+                        value = builder->CreateLoad(primType, value, "print_prim_self_load");
+                        // hirTypeも更新してプリミティブとして処理されるようにする
+                        if (typeName == "int")
+                            hirType = hir::make_int();
+                        else if (typeName == "uint")
+                            hirType = hir::make_uint();
+                        else if (typeName == "long")
+                            hirType = hir::make_long();
+                        else if (typeName == "ulong")
+                            hirType = hir::make_ulong();
+                        else if (typeName == "short")
+                            hirType = hir::make_short();
+                        else if (typeName == "ushort")
+                            hirType = hir::make_ushort();
+                        else if (typeName == "float")
+                            hirType = hir::make_float();
+                        else if (typeName == "double")
+                            hirType = hir::make_double();
+                        else if (typeName == "bool")
+                            hirType = hir::make_bool();
+                        else if (typeName == "char")
+                            hirType = hir::make_char();
+                    }
+                }
+            }
+        }
+
         currentStr = generateFormatReplace(currentStr, value, hirType);
     }
 

@@ -1345,10 +1345,12 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
         // 固定長配列（T[N]）の場合、スライス型名（T[]）にマッピング
         // impl int[] for Interface のメソッドを int[5], int[10] 等からも呼び出し可能にする
+        bool needs_array_to_slice = false;
         if (obj_type && obj_type->kind == ast::TypeKind::Array &&
             obj_type->array_size.has_value()) {
             if (obj_type->element_type) {
                 method_type_name = ast::type_to_string(*obj_type->element_type) + "[]";
+                needs_array_to_slice = true;
                 debug::hir::log(
                     debug::hir::Id::MethodCallLower,
                     "Fixed-size array -> slice impl: " + type_name + " -> " + method_type_name,
@@ -1359,7 +1361,47 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         auto hir = std::make_unique<HirCall>();
         hir->func_name = method_type_name + "__" + mem.member;
 
-        hir->args.push_back(std::move(obj_hir));
+        // 固定長配列→スライス変換が必要な場合、cm_array_to_sliceで変換
+        if (needs_array_to_slice && obj_type->element_type) {
+            // cm_array_to_slice(ptr, len, elem_size) を呼び出してスライスを作成
+            auto convert_call = std::make_unique<HirCall>();
+            convert_call->func_name = "cm_array_to_slice";
+
+            // 配列のアドレスを取得
+            auto addr_op = std::make_unique<HirUnary>();
+            addr_op->op = HirUnaryOp::AddrOf;
+            addr_op->operand = std::move(obj_hir);
+            auto ptr_type = ast::make_pointer(obj_type->element_type);
+            convert_call->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+
+            // 配列サイズ（コンパイル時定数）
+            auto size_lit = std::make_unique<HirLiteral>();
+            size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+            convert_call->args.push_back(
+                std::make_unique<HirExpr>(std::move(size_lit), ast::make_long()));
+
+            // 要素サイズを計算
+            int64_t elem_size = 4;  // デフォルトはint
+            auto elem_kind = obj_type->element_type->kind;
+            if (elem_kind == ast::TypeKind::Char || elem_kind == ast::TypeKind::Bool) {
+                elem_size = 1;
+            } else if (elem_kind == ast::TypeKind::Long || elem_kind == ast::TypeKind::ULong ||
+                       elem_kind == ast::TypeKind::Double) {
+                elem_size = 8;
+            } else if (elem_kind == ast::TypeKind::Pointer || elem_kind == ast::TypeKind::String) {
+                elem_size = 8;
+            }
+            auto elem_size_lit = std::make_unique<HirLiteral>();
+            elem_size_lit->value = elem_size;
+            convert_call->args.push_back(
+                std::make_unique<HirExpr>(std::move(elem_size_lit), ast::make_long()));
+
+            // 変換結果をself引数として渡す
+            auto slice_type = ast::make_array(obj_type->element_type, std::nullopt);
+            hir->args.push_back(std::make_unique<HirExpr>(std::move(convert_call), slice_type));
+        } else {
+            hir->args.push_back(std::move(obj_hir));
+        }
 
         for (auto& arg : mem.args) {
             hir->args.push_back(lower_expr(*arg));

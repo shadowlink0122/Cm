@@ -2064,6 +2064,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                               "Local " + std::to_string(local) + " is null when trying to copy!");
                 }
             }
+
             if (val && llvm::isa<llvm::AllocaInst>(val)) {
                 // アロケーションの場合
                 auto allocaInst = llvm::cast<llvm::AllocaInst>(val);
@@ -2080,14 +2081,57 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 bool isPrimitiveImplMethod =
                     currentMIRFunction &&
                     (currentMIRFunction->name.find("__") != std::string::npos);
+
                 if (isPrimitiveImplMethod && allocatedType->isPointerTy() && currentMIRFunction &&
                     local < currentMIRFunction->locals.size()) {
                     auto& localInfo = currentMIRFunction->locals[local];
-                    // 注: この処理は&resultのような出力ポインタ引数に問題を起こすため無効化
-                    // ポインタの参照先の値をロードすると、出力引数として渡す際に
-                    // 元の変数が更新されなくなる
-                    // 代わりにポインタ値そのものを返す
-                    (void)localInfo;  // 未使用警告を抑制
+                    // selfローカル（最初の引数ローカル）かどうかをチェック
+                    bool isSelfLocal = !currentMIRFunction->arg_locals.empty() &&
+                                       local == currentMIRFunction->arg_locals[0];
+                    // localNameが"self"の場合もチェック
+                    if (!isSelfLocal && localInfo.name == "self") {
+                        isSelfLocal = true;
+                    }
+
+                    if (isSelfLocal) {
+                        // プリミティブ型のimplメソッドか判定
+                        // 関数名が int__xxx, long__xxx 等の形式
+                        const std::string& funcName = currentMIRFunction->name;
+                        size_t dunderPos = funcName.find("__");
+                        if (dunderPos != std::string::npos) {
+                            std::string typeName = funcName.substr(0, dunderPos);
+                            bool isPrimitiveType = typeName == "int" || typeName == "uint" ||
+                                                   typeName == "long" || typeName == "ulong" ||
+                                                   typeName == "short" || typeName == "ushort" ||
+                                                   typeName == "float" || typeName == "double" ||
+                                                   typeName == "bool" || typeName == "char";
+
+                            if (isPrimitiveType) {
+                                // まずポインタをロード
+                                auto ptrVal =
+                                    builder->CreateLoad(allocatedType, val, "self_ptr_load");
+                                // 次にプリミティブ型を決定してロード
+                                llvm::Type* elemType = nullptr;
+                                if (typeName == "int" || typeName == "uint") {
+                                    elemType = ctx.getI32Type();
+                                } else if (typeName == "long" || typeName == "ulong") {
+                                    elemType = ctx.getI64Type();
+                                } else if (typeName == "short" || typeName == "ushort") {
+                                    elemType = ctx.getI16Type();
+                                } else if (typeName == "float") {
+                                    elemType = ctx.getF32Type();
+                                } else if (typeName == "double") {
+                                    elemType = ctx.getF64Type();
+                                } else if (typeName == "bool" || typeName == "char") {
+                                    elemType = ctx.getI8Type();
+                                }
+                                if (elemType) {
+                                    return builder->CreateLoad(elemType, ptrVal,
+                                                               "borrowed_self_prim_load");
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // スカラー型の場合はロード

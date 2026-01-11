@@ -269,29 +269,32 @@ class Interpreter {
         }
     }
 
-    /// ブロックを実行（再帰的）
+    /// ブロックを実行（反復的 - スタックオーバーフロー回避）
     void execute_block(ExecutionContext& ctx, BlockId block_id) {
-        if (block_id == INVALID_BLOCK)
-            return;
-        if (block_id >= ctx.function->basic_blocks.size())
-            return;
+        BlockId current_block = block_id;
 
-        const auto& block = *ctx.function->basic_blocks[block_id];
+        // 反復処理でブロックを実行（再帰を避ける）
+        while (current_block != INVALID_BLOCK && current_block < ctx.function->basic_blocks.size()) {
+            const auto& block = *ctx.function->basic_blocks[current_block];
 
-        // デバッグ: ブロック実行情報
-        debug::interp::log(debug::interp::Id::ExecuteStart,
-                           "Block bb" + std::to_string(block_id) + " with " +
-                               std::to_string(block.statements.size()) + " stmts",
-                           debug::Level::Debug);
+            // デバッグ: ブロック実行情報
+            debug::interp::log(debug::interp::Id::ExecuteStart,
+                               "Block bb" + std::to_string(current_block) + " with " +
+                                   std::to_string(block.statements.size()) + " stmts",
+                               debug::Level::Debug);
 
-        // 文を実行
-        for (const auto& stmt : block.statements) {
-            execute_statement(ctx, *stmt);
-        }
+            // 文を実行
+            for (const auto& stmt : block.statements) {
+                execute_statement(ctx, *stmt);
+            }
 
-        // ターミネータを実行
-        if (block.terminator) {
-            execute_terminator(ctx, *block.terminator);
+            // ターミネータを実行して次のブロックを決定
+            BlockId next_block = INVALID_BLOCK;
+            if (block.terminator) {
+                next_block = execute_terminator_iterative(ctx, *block.terminator);
+            }
+
+            current_block = next_block;
         }
     }
 
@@ -370,13 +373,12 @@ class Interpreter {
         }
     }
 
-    /// ターミネータを実行
-    void execute_terminator(ExecutionContext& ctx, const MirTerminator& term) {
+    /// ターミネータを実行（反復的バージョン - 次のブロックIDを返す）
+    BlockId execute_terminator_iterative(ExecutionContext& ctx, const MirTerminator& term) {
         switch (term.kind) {
             case MirTerminator::Goto: {
                 auto& data = std::get<MirTerminator::GotoData>(term.data);
-                execute_block(ctx, data.target);
-                break;
+                return data.target;
             }
             case MirTerminator::SwitchInt: {
                 auto& data = std::get<MirTerminator::SwitchIntData>(term.data);
@@ -398,18 +400,16 @@ class Interpreter {
                 // マッチするケースを探す
                 for (const auto& [target_val, target_block] : data.targets) {
                     if (val == target_val) {
-                        execute_block(ctx, target_block);
-                        return;
+                        return target_block;
                     }
                 }
 
                 // デフォルト
-                execute_block(ctx, data.otherwise);
-                break;
+                return data.otherwise;
             }
             case MirTerminator::Return: {
                 // 関数から戻る（戻り値は_0に設定済み）
-                break;
+                return INVALID_BLOCK;
             }
             case MirTerminator::Unreachable: {
                 throw std::runtime_error("Reached unreachable code");
@@ -417,10 +417,10 @@ class Interpreter {
             case MirTerminator::Call: {
                 auto& data = std::get<MirTerminator::CallData>(term.data);
                 execute_call(ctx, data);
-                execute_block(ctx, data.success);
-                break;
+                return data.success;
             }
         }
+        return INVALID_BLOCK;
     }
 
     /// 関数呼び出しを実行
