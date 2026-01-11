@@ -686,10 +686,12 @@ class Interpreter {
             return;
         }
 
-        // 組み込み関数を探す
+        // 組み込み関数を探す（extern空関数より優先）
         auto& builtins = *ctx.builtins;
         auto builtin_it = builtins.find(func_name);
         if (builtin_it != builtins.end()) {
+            debug::interp::log(debug::interp::Id::Call, "Found builtin: " + func_name,
+                               debug::Level::Debug);
             Value result = builtin_it->second(args, ctx.locals);
             if (data.destination) {
                 Evaluator::store_to_place(ctx, *data.destination, result);

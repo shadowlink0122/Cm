@@ -1,39 +1,37 @@
-# Cm言語マクロシステム設計書（Cm構文完全準拠版）
+# Cm言語マクロシステム設計書（完全Cm構文統一版）
 
 作成日: 2026-01-11
 対象バージョン: v0.11.0
-ステータス: 最終改訂v2
+ステータス: 最終設計v3
 
 ## エグゼクティブサマリー
 
-Cm言語の**既存パーサーと中間言語（MIR）を活用**したマクロシステムを設計します。マクロはトップレベル宣言として、他の構文と統一された形式を採用します。
+Cm言語のマクロシステムを**完全にCm構文と統一**します。`@`プレフィックスを排除し、既存のAST構造にシームレスに統合することで、学習コストゼロの自然なマクロシステムを実現します。
 
 ## 1. 設計理念
 
 ### 1.1 基本方針
 
-1. **トップレベル宣言の統一**: struct, enum, macro等すべて同じ形式
-2. **既存パーサー活用**: 新たなパーサーを書かない
-3. **MIR統合**: 中間言語レベルで自然に処理
-4. **型安全重視**: autoを使わず明示的な型宣言
+1. **完全なCm構文統一**: `@`などの特殊記法を排除
+2. **AST完全統合**: 既存のAST構造をそのまま使用
+3. **段階的型チェック**: 展開後に通常の型チェック
+4. **ゼロ学習コスト**: 新しい構文なし
 
-### 1.2 構文の一貫性
+### 1.2 構文の完全一貫性
 
-| 宣言種別 | 構文例 |
-|---------|--------|
-| 構造体 | `struct Point { ... }` |
-| 列挙型 | `enum State { ... }` |
-| インターフェース | `interface Iterator { ... }` |
-| **マクロ** | `macro vec(...) { ... }` |
-| ジェネリック構造体 | `struct Vector<T> { ... }` |
-| **ジェネリックマクロ** | `macro min<T>(...) { ... }` |
+| 要素 | 通常の関数 | マクロ |
+|------|-----------|--------|
+| 定義 | `int add(int a, int b)` | `macro add(int a, int b)` |
+| ジェネリック | `T max<T>(T a, T b)` | `macro max<T>(T a, T b)` |
+| 制御構造 | `if`, `for`, `while` | **同じ** `if`, `for`, `while` |
+| 型操作 | N/A | `typeof()`, `sizeof()` |
 
-## 2. マクロ定義構文
+## 2. マクロ定義構文（純粋なCm）
 
-### 2.1 基本構造（トップレベル宣言）
+### 2.1 基本構造
 
 ```cm
-// マクロ定義：トップレベル宣言として
+// マクロ定義：完全にCm構文
 macro vec() {
     return Vector<int>();
 }
@@ -44,423 +42,368 @@ macro vec(int first) {
     return v;
 }
 
-// 可変長引数版（Cm既存の...構文）
+// 可変長引数版（通常のfor文）
 macro vec(int first, int... rest) {
     Vector<int> v;
     v.push(first);
-    // 展開時にrestの各要素に対してpushを生成
-    @foreach(r in rest) {
+    for (int r : rest) {  // 通常のfor文！
         v.push(r);
     }
     return v;
 }
 ```
 
-### 2.2 型ジェネリック対応（正しい構文順）
+### 2.2 ジェネリックマクロ
 
 ```cm
-// ジェネリックマクロ（macroが先、<T>は名前の後）
-macro create_vector<T>(T first) {
-    Vector<T> v;
-    v.push(first);
-    return v;
+// ジェネリックマクロも自然な構文
+macro min<T>(T a, T b) {
+    return (a < b) ? a : b;
 }
 
 macro create_vector<T>(T first, T... rest) {
     Vector<T> v;
     v.push(first);
-    @foreach(r in rest) {
-        v.push(r);
+    for (T element : rest) {  // 通常のfor文
+        v.push(element);
     }
     return v;
 }
-
-// 複数型パラメータ
-macro pair<T, U>(T first, U second) {
-    Pair<T, U> p;
-    p.first = first;
-    p.second = second;
-    return p;
-}
 ```
 
-## 3. マクロ呼び出し構文
+## 3. 特殊な要素は組み込み関数のみ
 
-### 3.1 関数呼び出し風
+### 3.1 コンパイル時組み込み関数
 
 ```cm
-int main() {
-    // 通常の関数呼び出しと同じ
-    Vector<int> v1 = vec();
-    Vector<int> v2 = vec(1);
-    Vector<int> v3 = vec(1, 2, 3);
-
-    // ジェネリックマクロの呼び出し
-    Vector<float> v4 = create_vector<float>(1.0f);
-    Vector<float> v5 = create_vector<float>(1.0f, 2.0f, 3.0f);
-
-    // 型推論（将来的に）
-    Pair<int, string> p = pair(42, "hello");
-
-    return 0;
-}
+// 必要最小限の組み込み関数
+stringify(expr)       // 式を文字列化
+typeof(expr)          // 型情報取得
+sizeof(type)          // サイズ取得
+type_name<T>()        // 型名取得
+is_same_type<T, U>() // 型比較
 ```
 
-## 4. 特殊マクロディレクティブ
-
-### 4.1 @foreach - 繰り返し展開
+### 3.2 実例
 
 ```cm
-macro print_all(string... messages) {
-    @foreach(msg in messages) {
-        printf("%s\n", msg);
-    }
-}
-
-// 展開結果：
-// print_all("Hello", "World") →
-// printf("%s\n", "Hello");
-// printf("%s\n", "World");
-```
-
-### 4.2 @if/@else - 条件付き展開
-
-```cm
+// assertマクロ（純粋なCm構文）
 macro assert(bool condition, string message = "") {
-    @if(message == "") {
+    if (message == "") {  // 通常のif文
         if (!condition) {
-            fprintf(stderr, "Assertion failed at %s:%d\n",
+            fprintf(stderr, "Assertion failed: %s at %s:%d\n",
+                   stringify(condition),  // 組み込み関数
+                   __FILE__, __LINE__);
+            abort();
+        }
+    } else {
+        if (!condition) {
+            fprintf(stderr, "Assertion failed: %s\n  Message: %s at %s:%d\n",
+                   stringify(condition), message,
                    __FILE__, __LINE__);
             abort();
         }
     }
-    @else {
-        if (!condition) {
-            fprintf(stderr, "Assertion failed: %s at %s:%d\n",
-                   message, __FILE__, __LINE__);
-            abort();
+}
+```
+
+### 3.3 型に基づく条件分岐
+
+```cm
+// デバッグ出力（型判定も通常のif）
+macro debug<T>(string name, T value) {
+    fprintf(stderr, "[DEBUG] %s = ", name);
+
+    // コンパイル時型判定（組み込み関数使用）
+    if (is_same_type<T, int>()) {
+        fprintf(stderr, "%d\n", value);
+    }
+    else if (is_same_type<T, float>()) {
+        fprintf(stderr, "%f\n", value);
+    }
+    else if (is_same_type<T, string>()) {
+        fprintf(stderr, "%s\n", value);
+    }
+    else {
+        fprintf(stderr, "<%s>\n", type_name<T>());
+    }
+}
+```
+
+## 4. AST統合設計
+
+### 4.1 ASTノード定義
+
+```cpp
+// AST定義（既存構造を拡張）
+class ASTNode {
+    enum NodeType {
+        FUNCTION_DECL,
+        STRUCT_DECL,
+        MACRO_DECL,      // マクロ定義（新規）
+        MACRO_CALL,      // マクロ呼び出し（新規）
+        FUNCTION_CALL,
+        // ...
+    };
+};
+
+// マクロ定義ノード（関数定義とほぼ同じ）
+class MacroDecl : public ASTNode {
+    string name;
+    vector<GenericParam> type_params;
+    vector<Parameter> params;
+    BlockStatement body;  // 通常のAST！
+};
+
+// マクロ呼び出しノード
+class MacroCall : public ASTNode {
+    string name;
+    vector<Type> type_args;
+    vector<Expression> args;
+    SourceLocation call_site;  // エラー報告用
+};
+```
+
+### 4.2 コンパイルパイプライン
+
+```
+ソースコード
+    ↓
+[Lexer] → [Parser] → AST（マクロ含む）
+    ↓
+[マクロ収集]  ← Pass 1: マクロ定義を登録
+    ↓
+[マクロ展開]  ← Pass 2: 呼び出しを展開
+    ↓
+[型解決・HIR生成]
+    ↓
+[型チェック]  ← 展開後の通常の型チェック
+    ↓
+[MIR生成]
+```
+
+### 4.3 展開タイミングの詳細
+
+```cpp
+class CompilerPipeline {
+    void compile(SourceFile* file) {
+        // 1. パース（マクロも通常のASTとして）
+        AST* ast = parser.parse(file);
+
+        // 2. マクロ収集フェーズ
+        MacroRegistry registry;
+        for (auto node : ast->top_level_decls) {
+            if (node->type == MACRO_DECL) {
+                registry.register_macro(node);
+            }
         }
+
+        // 3. マクロ展開フェーズ
+        MacroExpander expander(registry);
+        ast = expander.expand_all(ast);
+
+        // 4. 通常の型チェック（展開済みAST）
+        TypeChecker checker;
+        checker.check(ast);
+
+        // 5. HIR/MIR生成
+        auto hir = generate_hir(ast);
+        auto mir = generate_mir(hir);
     }
+};
+```
+
+## 5. マクロ展開の実装
+
+### 5.1 展開器の設計
+
+```cpp
+class MacroExpander {
+    MacroRegistry& registry;
+
+public:
+    AST* expand_all(AST* ast) {
+        // トップダウンで展開
+        return expand_node(ast);
+    }
+
+private:
+    ASTNode* expand_node(ASTNode* node) {
+        if (node->type == MACRO_CALL) {
+            return expand_macro_call(node);
+        }
+
+        // 子ノードを再帰的に展開
+        for (auto& child : node->children) {
+            child = expand_node(child);
+        }
+        return node;
+    }
+
+    ASTNode* expand_macro_call(MacroCall* call) {
+        // 1. マクロ定義を取得
+        auto macro = registry.find(call->name);
+
+        // 2. 型推論（必要なら）
+        auto type_args = infer_type_args(call, macro);
+
+        // 3. マクロ本体をインスタンス化
+        auto instantiated = instantiate_macro(
+            macro,
+            type_args,
+            call->args
+        );
+
+        // 4. 展開結果を返す（通常のAST）
+        return instantiated;
+    }
+};
+```
+
+### 5.2 型推論
+
+```cpp
+// 引数から型パラメータを推論
+vector<Type> infer_type_args(MacroCall* call, MacroDecl* macro) {
+    if (macro->type_params.empty()) {
+        return {};  // ジェネリックでない
+    }
+
+    // 引数の型から推論
+    TypeInferer inferer;
+    for (int i = 0; i < call->args.size(); i++) {
+        auto arg_type = get_type_of_expr(call->args[i]);
+        auto param_type = macro->params[i].type;
+        inferer.unify(param_type, arg_type);
+    }
+
+    return inferer.get_substitution();
 }
 ```
 
-### 4.3 @stringify - 文字列化
+## 6. 実例：標準マクロライブラリ
 
-```cm
-macro dbg(int value) {
-    fprintf(stderr, "[DEBUG] %s = %d\n", @stringify(value), value);
-    return value;
-}
-
-// 使用例：
-// int x = 42;
-// dbg(x);  // 出力: [DEBUG] x = 42
-```
-
-### 4.4 @type_name - 型名取得
-
-```cm
-macro print_type<T>(T value) {
-    printf("Type: %s, Value: ", @type_name(T));
-    @if(T == int) {
-        printf("%d\n", value);
-    }
-    @elif(T == float) {
-        printf("%f\n", value);
-    }
-    @else {
-        printf("<object>\n");
-    }
-}
-```
-
-## 5. Pin実装用マクロ
-
-### 5.1 pinマクロ（正しい構文順）
-
-```cm
-// 値をPinする
-macro pin<T>(T& value) {
-    Pin<T> pinned(value);
-    return pinned;
-}
-
-// 新規変数として作成
-macro pin_new<T>(T value) {
-    T temp = value;
-    Pin<T> pinned(temp);
-    return pinned;
-}
-
-// Box版
-macro pin_box<T>(T value) {
-    Box<T> boxed = Box<T>::new(value);
-    Pin<Box<T>> pinned(boxed);
-    return pinned;
-}
-
-// 使用例
-int main() {
-    int value = 42;
-    Pin<int> p1 = pin(value);
-    Pin<float> p2 = pin_new(3.14f);
-    Pin<Box<int>> p3 = pin_box(100);
-
-    return 0;
-}
-```
-
-## 6. 標準マクロライブラリ
-
-### 6.1 基本マクロ（正しい構文）
+### 6.1 基本マクロ（純粋なCm構文）
 
 ```cm
 // std/macros.cm
 
-// 最小値
+// 最小値（通常の三項演算子）
 macro min<T>(T a, T b) {
     return (a < b) ? a : b;
 }
 
-// 最大値
-macro max<T>(T a, T b) {
-    return (a > b) ? a : b;
-}
-
-// スワップ
+// スワップ（通常の代入文）
 macro swap<T>(T& a, T& b) {
     T temp = a;
     a = b;
     b = temp;
 }
 
-// 配列サイズ
-macro array_size<T, int N>(T[N]& arr) {
-    return N;
-}
-
-// 範囲チェック
-macro clamp<T>(T value, T min_val, T max_val) {
-    if (value < min_val) return min_val;
-    if (value > max_val) return max_val;
-    return value;
-}
-```
-
-### 6.2 出力マクロ
-
-```cm
-// 改行付き出力
-macro println() {
-    printf("\n");
-}
-
-macro println(string format, void*... args) {
-    printf(format, args);
-    printf("\n");
-}
-
-// デバッグ出力（ジェネリック版）
-macro debug<T>(string name, T value) {
-    fprintf(stderr, "[%s:%d] %s = ", __FILE__, __LINE__, name);
-    // 型に応じた出力を生成
-    @if(T == int) {
-        fprintf(stderr, "%d\n", value);
-    }
-    @elif(T == float) {
-        fprintf(stderr, "%f\n", value);
-    }
-    @elif(T == string) {
-        fprintf(stderr, "%s\n", value);
-    }
-    @else {
-        fprintf(stderr, "<%s>\n", @type_name(T));
-    }
-}
-```
-
-### 6.3 コレクションマクロ
-
-```cm
-// ベクター初期化
+// ベクター初期化（通常のfor文）
 macro vec_of<T>(T... elements) {
     Vector<T> v;
-    @foreach(elem in elements) {
+    for (T elem : elements) {  // 純粋なCm構文
         v.push(elem);
     }
     return v;
 }
-
-// マップ初期化（ペア形式）
-macro map_of<K, V>(K key, V value) {
-    Map<K, V> m;
-    m.insert(key, value);
-    return m;
-}
-
-// 使用例
-int main() {
-    Vector<int> numbers = vec_of(1, 2, 3, 4, 5);
-    Map<string, int> ages = map_of("Alice", 30);
-
-    return 0;
-}
 ```
 
-## 7. MIRレベルでの処理
-
-### 7.1 マクロ展開のタイミング
-
-```
-ソースコード（Cm構文）
-    ↓
-[Lexer] → [Parser] → AST
-    ↓
-[マクロ展開フェーズ] ← ASTレベルで展開
-    ↓
-[HIR生成]
-    ↓
-[MIR生成] ← 通常の関数と同じ扱い
-```
-
-### 7.2 パーサーでの認識
-
-```cpp
-// parser.cpp での処理
-if (current_token == "macro") {
-    // トップレベル宣言として処理
-    return parse_macro_declaration();
-}
-
-// macro <name> または macro <name><T>
-MacroDecl* parse_macro_declaration() {
-    expect("macro");
-    string name = parse_identifier();
-
-    // ジェネリックパラメータ（オプション）
-    if (current_token == "<") {
-        parse_generic_params();
-    }
-
-    // パラメータリスト
-    expect("(");
-    parse_parameter_list();
-    expect(")");
-
-    // マクロ本体
-    expect("{");
-    parse_macro_body();
-    expect("}");
-}
-```
-
-## 8. 衛生性の簡易実装
-
-### 8.1 自動変数名変換
+### 6.2 Pin関連マクロ
 
 ```cm
-// マクロ内のローカル変数は自動的に一意な名前に変換
-macro safe_swap<T>(T& a, T& b) {
-    T temp = a;  // → T __macro_temp_XXX = a;
-    a = b;
-    b = temp;    // → b = __macro_temp_XXX;
+// Pinマクロ（特殊構文なし）
+macro pin<T>(T& value) {
+    Pin<T> pinned(value);
+    return pinned;
 }
 
-// 名前衝突しない
-int main() {
-    int x = 1, y = 2;
-    int temp = 100;  // ユーザーの変数
-
-    safe_swap(x, y);  // tempは衝突しない
-
-    printf("%d\n", temp);  // 100が出力される
-    return 0;
+macro pin_box<T>(T value) {
+    Box<T> boxed = Box<T>::new(value);
+    Pin<Box<T>> pinned(boxed);
+    return pinned;
 }
 ```
 
-## 9. エラー処理
+## 7. エラー処理とデバッグ
 
-### 9.1 構文エラー
+### 7.1 エラー位置の保持
+
+```cpp
+// 展開時に元の位置情報を保持
+struct ExpandedNode {
+    ASTNode* node;
+    SourceLocation original_location;  // マクロ呼び出し位置
+    SourceLocation expanded_location;  // 展開後の位置
+};
+```
+
+### 7.2 エラーメッセージ
 
 ```
-error: expected generic parameters after macro name
-  --> main.cm:10:6
+error: type mismatch in expanded macro 'vec_of'
+  --> main.cm:10:15
    |
-10 | macro<T> vec(T first) {
-   |      ^ should be after 'vec'
+10 | Vector<int> v = vec_of(1, 2.0, 3);
+   |                        ^   ^^^ float
+   |                        int
    |
-   = help: correct syntax: macro vec<T>(T first)
+   = note: in expansion of macro 'vec_of'
+   = note: all elements must have the same type T
 ```
 
-### 9.2 型エラー
+## 8. 利点
 
-```
-error: type mismatch in macro 'create_vector'
-  --> main.cm:12:20
-   |
-12 | Vector<int> v = create_vector<int>(1, 2.0f);
-   |                                    ^   ^^^^ float
-   |                                    int
-   |
-   = note: all arguments must have the same type T
-```
+### 8.1 実装の簡潔性
 
-## 10. 構文のBNF（簡略版）
+- パーサーの変更最小限（`macro`キーワード追加のみ）
+- 既存のAST構造をそのまま使用
+- 型チェッカーの変更不要
 
-```ebnf
-// トップレベル宣言
-top_level_decl ::= struct_decl
-                 | enum_decl
-                 | interface_decl
-                 | function_decl
-                 | macro_decl
+### 8.2 ユーザビリティ
 
-// マクロ宣言
-macro_decl ::= 'macro' identifier generic_params? '(' parameters ')' block
+- **学習コストゼロ**: 新しい構文なし
+- **デバッグが容易**: 通常のコードと同じ
+- **IDEサポート**: 既存のツールが使える
 
-// ジェネリックパラメータ
-generic_params ::= '<' type_param (',' type_param)* '>'
+### 8.3 保守性
 
-// パラメータ
-parameters ::= parameter (',' parameter)*
-parameter ::= type identifier ('...')? ('=' default_value)?
+- 特殊な`@`ディレクティブなし
+- マクロも通常の関数と同じ扱い
+- テストが書きやすい
 
-// マクロ本体
-block ::= '{' (statement | directive)* '}'
-directive ::= '@foreach' | '@if' | '@stringify' | '@type_name'
-```
-
-## 11. 実装優先度
+## 9. 実装ロードマップ
 
 ### Phase 1: 基本実装
-1. `macro` キーワードの認識
-2. 単純な置換マクロ
-3. オーバーロード解決
+1. `macro`キーワードの認識
+2. MacroDecl/MacroCall ASTノード
+3. 単純な展開
 
-### Phase 2: ジェネリック対応
-1. `macro name<T>` 構文の解析
-2. 型パラメータの展開
-3. 型推論の基礎
+### Phase 2: 型システム統合
+1. 型推論
+2. ジェネリックマクロ
+3. 型安全性の保証
 
-### Phase 3: ディレクティブ
-1. @foreach 実装
-2. @if/@else 実装
-3. @stringify, @type_name 実装
+### Phase 3: 組み込み関数
+1. `stringify()`, `typeof()`
+2. `type_name<T>()`, `is_same_type<T,U>()`
+3. コンパイル時評価
 
 ## まとめ
 
 この設計により：
 
-1. **構文の一貫性**: `macro vec<T>` はCmの他の宣言と同じ形式
-2. **既存パーサー活用**: トップレベル宣言として自然に処理
-3. **型安全性**: ジェネリックによる完全な型チェック
-4. **学習コスト最小**: 関数定義と同じ感覚で書ける
-5. **MIR統合**: 特殊処理不要で既存の最適化を活用
+1. **完全なCm構文統一**: 特殊記法ゼロ
+2. **AST完全統合**: 既存インフラを100%活用
+3. **型安全性**: 展開後の通常の型チェック
+4. **学習コストゼロ**: Cm構文がそのまま使える
+5. **実装が簡潔**: パーサーの変更最小限
 
-トップレベル宣言として統一された、Cmらしいマクロシステムです。
+特殊な構文を一切導入せず、**純粋なCm構文だけで強力なマクロシステム**を実現します。
 
 ---
 
 **作成者:** Claude Code
-**ステータス:** 最終設計v2
-**次ステップ:** パーサー拡張から実装開始
+**ステータス:** 最終設計v3
+**主な変更:** `@`プレフィックス完全排除、AST統合詳細追加
