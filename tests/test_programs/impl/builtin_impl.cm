@@ -1,0 +1,22 @@
+import std::io::println;
+
+// プリミティブ型へのimplテスト
+// impl int for Interface
+
+interface Printable {
+    void print();
+}
+
+impl int for Printable {
+    void print() {
+        println("int value: {self}");
+    }
+}
+
+int main() {
+    int x = 42;
+    // x.print();  // TODO: メソッド呼び出し構文
+    
+    println("builtin impl test passed");
+    return 0;
+}

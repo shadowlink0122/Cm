@@ -669,6 +669,8 @@ class Parser {
         }
 
         auto target = parse_type();  // Type (Vec<T> など、ジェネリクスは型に含まれる)
+        // 配列/スライスサフィックスをチェック (int[], int[5] など)
+        target = check_array_suffix(std::move(target));
 
         // forがあればメソッド実装、なければコンストラクタ/デストラクタ専用
         if (consume_if(TokenKind::KwFor)) {
@@ -976,30 +978,29 @@ class Parser {
                 break;  // 空のパラメータリスト
             }
 
-            // const パラメータかどうかチェック
-            if (consume_if(TokenKind::KwConst)) {
-                // 定数パラメータ: const N: int
-                std::string param_name = expect_ident();
-                expect(TokenKind::Colon);
-                ast::TypePtr const_type = parse_type();
+            // パラメータ名を読む
+            std::string param_name = expect_ident();
 
-                names.push_back(param_name);
-                params.emplace_back(param_name, std::move(const_type));
+            // コロンがあれば制約を読む
+            if (consume_if(TokenKind::Colon)) {
+                // const キーワードがあれば定数パラメータ
+                // <N: const int> 形式
+                if (consume_if(TokenKind::KwConst)) {
+                    ast::TypePtr const_type = parse_type();
 
-                debug::par::log(debug::par::Id::FuncDef,
-                                "Const generic param: " + param_name + " : " +
-                                    (const_type ? ast::type_to_string(*const_type) : "unknown"),
-                                debug::Level::Debug);
-            } else {
-                // 型パラメータ: T または T: Interface
-                std::string param_name = expect_ident();
-                std::vector<std::string> interfaces;
-                ast::ConstraintKind constraint_kind = ast::ConstraintKind::None;
+                    names.push_back(param_name);
+                    params.emplace_back(param_name, std::move(const_type));
 
-                // インターフェース境界（: Interface）
-                if (consume_if(TokenKind::Colon)) {
+                    debug::par::log(debug::par::Id::FuncDef,
+                                    "Const generic param: " + param_name + " : const " +
+                                        (const_type ? ast::type_to_string(*const_type) : "unknown"),
+                                    debug::Level::Debug);
+                } else {
+                    // 通常のインターフェース制約: <T: Interface>
+                    std::vector<std::string> interfaces;
+                    ast::ConstraintKind constraint_kind = ast::ConstraintKind::Single;
+
                     interfaces.push_back(expect_ident());
-                    constraint_kind = ast::ConstraintKind::Single;
 
                     // 複合インターフェース境界
                     // T: I | J (OR - いずれかを実装)
@@ -1017,21 +1018,13 @@ class Parser {
                             interfaces.push_back(expect_ident());
                         }
                     }
-                }
 
-                names.push_back(param_name);
-
-                // GenericParamを作成
-                if (constraint_kind != ast::ConstraintKind::None) {
+                    names.push_back(param_name);
                     ast::TypeConstraint tc(constraint_kind, interfaces);
                     params.emplace_back(param_name, std::move(tc));
-                } else {
-                    params.emplace_back(param_name);
-                }
 
-                // デバッグ出力
-                std::string constraint_str;
-                if (!interfaces.empty()) {
+                    // デバッグ出力
+                    std::string constraint_str;
                     std::string separator =
                         (constraint_kind == ast::ConstraintKind::Or) ? " | " : " + ";
                     for (size_t i = 0; i < interfaces.size(); ++i) {
@@ -1039,10 +1032,16 @@ class Parser {
                             constraint_str += separator;
                         constraint_str += interfaces[i];
                     }
+                    debug::par::log(debug::par::Id::FuncDef,
+                                    "Generic param: " + param_name + " : " + constraint_str,
+                                    debug::Level::Debug);
                 }
-                debug::par::log(debug::par::Id::FuncDef,
-                                "Generic param: " + param_name +
-                                    (constraint_str.empty() ? "" : " : " + constraint_str),
+            } else {
+                // 制約なし: <T>
+                names.push_back(param_name);
+                params.emplace_back(param_name);
+
+                debug::par::log(debug::par::Id::FuncDef, "Generic param: " + param_name,
                                 debug::Level::Debug);
             }
 

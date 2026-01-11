@@ -1,0 +1,25 @@
+import std::io::println;
+
+// スライス型へのimplテスト
+// impl<T> T[] for Iterable<T>
+
+interface IntIterable {
+    void print_all();
+}
+
+// int スライスへのimpl
+impl int[] for IntIterable {
+    void print_all() {
+        // スライスの要素を出力
+        int i = 0;
+        // while (i < len(self)) {
+        //     println("{self[i]}");
+        //     i = i + 1;
+        // }
+    }
+}
+
+int main() {
+    println("slice impl test passed");
+    return 0;
+}
