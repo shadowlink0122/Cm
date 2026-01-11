@@ -1,0 +1,29 @@
+// test_struct_type_arg.cm - 構造体型をTとして使うテスト
+import std::io::println;
+
+// テスト用の構造体
+struct Item {
+    int value;
+}
+
+// ジェネリック構造体
+struct Node<T> {
+    T data;
+    Node<T>* next;
+}
+
+int main() {
+    println("Test start");
+    
+    // Item版のNode
+    Node<Item> node1;
+    Item item1 = {value: 42};
+    node1.data = item1;
+    node1.next = null as Node<Item>*;
+    
+    int v = node1.data.value;
+    println("node1.data.value = {v}");
+    
+    println("Test done");
+    return 0;
+}

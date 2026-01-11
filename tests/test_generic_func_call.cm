@@ -1,0 +1,43 @@
+// test_generic_func_call.cm - ジェネリック関数呼び出しテスト
+import std::io::println;
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+// テスト用の構造体
+struct Item {
+    int value;
+}
+
+// ジェネリック構造体
+struct Node<T> {
+    T data;
+    Node<T>* next;
+}
+
+// ジェネリック関数: ノード作成
+<T> Node<T>* new_node(T data) {
+    void* mem = malloc(sizeof(Node<T>));
+    Node<T>* node = mem as Node<T>*;
+    node->data = data;
+    node->next = null as Node<T>*;
+    return node;
+}
+
+int main() {
+    println("Test start");
+    
+    // ジェネリック関数呼び出し（T=Item）
+    Item item1 = {value: 42};
+    Node<Item>* node = new_node(item1);
+    
+    int v = node->data.value;
+    println("node->data.value = {v}");
+    
+    free(node as void*);
+    
+    println("Test done");
+    return 0;
+}

@@ -1,0 +1,23 @@
+// test_nested_generic.cm - ネストされたジェネリック参照テスト
+import std::io::println;
+
+// 自己参照を持つジェネリック構造体
+struct Node<T> {
+    T data;
+    Node<T>* next;  // ネストされたジェネリック参照
+}
+
+int main() {
+    println("Test start");
+    
+    // int版のNode
+    Node<int> node1;
+    node1.data = 100;
+    node1.next = null as Node<int>*;
+    
+    int v = node1.data;
+    println("node1.data = {v}");
+    
+    println("Test done");
+    return 0;
+}

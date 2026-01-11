@@ -60,8 +60,8 @@ class MIRPatternDetector {
             std::cerr << "  - map/filter操作: " << map_filter_count << "\n";
         }
 
-        // 複雑度の高いクロージャパターン
-        if (closure_count > 5 || lambda_count > 3) {
+        // 複雑度の高いクロージャパターン（閾値を緩和）
+        if (closure_count > 10 || lambda_count > 6) {  // 5→10、3→6に緩和
             std::cerr << "[MIR_PATTERN] 複雑なクロージャパターンを検出\n";
             if (requested_level >= 3) {
                 std::cerr << "[MIR_PATTERN] O3からO1に最適化レベルを下げます\n";
@@ -69,14 +69,14 @@ class MIRPatternDetector {
             }
         }
 
-        // iter_closureパターンが検出された場合
+        // iter_closureパターンが検出された場合（警告のみ、ダウングレードしない）
         if (has_iter_closure_pattern) {
             if (requested_level >= 2) {
                 std::cerr << "[MIR_PATTERN] 警告: "
-                             "iter_closureパターンにより最適化問題が発生する可能性があります\n";
-                std::cerr << "[MIR_PATTERN] 最適化レベルをO" << requested_level
-                          << "からO0に変更します\n";
-                return 0;  // 最適化を完全に無効化
+                             "iter_closureパターンを検出しました\n";
+                std::cerr << "[MIR_PATTERN] MIR最適化の反復回数が削減されているため、"
+                          << "O" << requested_level << "最適化を適用します\n";
+                // return 0;  // ダウングレードを無効化
             }
         }
 

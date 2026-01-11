@@ -1380,35 +1380,83 @@ void Monomorphization::update_type_references(MirProgram& program) {
                     if (info_it != struct_info.end()) {
                         const auto& [base_name, type_args] = info_it->second;
 
-                        // 元の構造体定義からフィールドの型を取得
-                        auto struct_it = hir_struct_defs->find(base_name);
-                        if (struct_it != hir_struct_defs->end() && struct_it->second) {
-                            const auto* st = struct_it->second;
-                            if (field_id < st->fields.size()) {
-                                auto field_type = st->fields[field_id].type;
+                        // プロジェクションチェーン全体を辿って最終的なフィールド型を取得
+                        // 例: node.data.value → Node.data(=T→Item) → Item.value(=int)
+                        hir::TypePtr current_field_type = nullptr;
+                        std::string current_struct_name = base_name;
+                        std::vector<std::string> current_type_args = type_args;
+                        bool is_final_type_resolved = false;
 
-                                // フィールド型がジェネリック型パラメータなら置換
-                                if (field_type && (field_type->kind == hir::TypeKind::Generic ||
-                                                   struct_type_params[base_name].size() > 0)) {
-                                    auto params_it = struct_type_params.find(base_name);
-                                    if (params_it != struct_type_params.end()) {
-                                        for (size_t pi = 0;
-                                             pi < params_it->second.size() && pi < type_args.size();
-                                             ++pi) {
-                                            if (field_type->name == params_it->second[pi]) {
-                                                // 型を置換
-                                                auto new_type = make_type_from_name(type_args[pi]);
-                                                func->locals[dest_local].type = new_type;
-                                                debug_msg("MONO",
-                                                          "Updated field access type in " +
-                                                              func->name + ": " +
-                                                              func->locals[dest_local].name +
-                                                              " -> " + type_args[pi]);
-                                                break;
-                                            }
+                        for (const auto& proj : place->projections) {
+                            if (proj.kind != ProjectionKind::Field)
+                                break;
+
+                            FieldId fid = proj.field_id;
+
+                            // 現在の構造体定義を取得
+                            auto struct_it = hir_struct_defs->find(current_struct_name);
+                            if (struct_it == hir_struct_defs->end() || !struct_it->second)
+                                break;
+
+                            const auto* st = struct_it->second;
+                            if (fid >= st->fields.size())
+                                break;
+
+                            auto field_type = st->fields[fid].type;
+                            if (!field_type)
+                                break;
+
+                            // フィールド型がジェネリック型パラメータの場合、置換
+                            auto params_it = struct_type_params.find(current_struct_name);
+                            if (params_it != struct_type_params.end()) {
+                                for (size_t pi = 0;
+                                     pi < params_it->second.size() && pi < current_type_args.size();
+                                     ++pi) {
+                                    if (field_type->name == params_it->second[pi]) {
+                                        // 型パラメータを具体型に置換
+                                        current_field_type =
+                                            make_type_from_name(current_type_args[pi]);
+                                        // 置換後の型が構造体の場合、次のフィールドアクセスのために情報を更新
+                                        if (current_field_type &&
+                                            current_field_type->kind == hir::TypeKind::Struct) {
+                                            current_struct_name = current_field_type->name;
+                                            current_type_args
+                                                .clear();  // 具体型なのでtype_argsはクリア
                                         }
+                                        is_final_type_resolved = true;
+                                        break;
                                     }
                                 }
+                            }
+
+                            // フィールド型がジェネリックパラメータでない場合
+                            if (!is_final_type_resolved || current_field_type == nullptr) {
+                                current_field_type = field_type;
+                                if (field_type->kind == hir::TypeKind::Struct) {
+                                    current_struct_name = field_type->name;
+                                    // type_argsを抽出
+                                    current_type_args = extract_type_args_strings(field_type);
+                                }
+                            }
+                            is_final_type_resolved = false;  // 次のプロジェクションのためにリセット
+                        }
+
+                        // 最終的なフィールド型が得られた場合、dest_localの型を更新
+                        if (current_field_type) {
+                            // プリミティブ型は変更しない（int, string等は正しく設定済み）
+                            if (current_field_type->kind != hir::TypeKind::Int &&
+                                current_field_type->kind != hir::TypeKind::UInt &&
+                                current_field_type->kind != hir::TypeKind::Long &&
+                                current_field_type->kind != hir::TypeKind::ULong &&
+                                current_field_type->kind != hir::TypeKind::Float &&
+                                current_field_type->kind != hir::TypeKind::Double &&
+                                current_field_type->kind != hir::TypeKind::Bool &&
+                                current_field_type->kind != hir::TypeKind::Char &&
+                                current_field_type->kind != hir::TypeKind::String) {
+                                func->locals[dest_local].type = current_field_type;
+                                debug_msg("MONO", "Updated field access type in " + func->name +
+                                                      ": " + func->locals[dest_local].name +
+                                                      " -> " + current_field_type->name);
                             }
                         }
                     }

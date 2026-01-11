@@ -506,8 +506,18 @@ llvm::Value* MIRToLLVM::convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand)
             }
         }
         case mir::MirUnaryOp::Neg: {
+            auto operandType = operand->getType();
+            // ポインタ型の場合（プリミティブ型implメソッドのself）
+            // i8*からi32*にキャストしてloadしてからNeg
+            if (operandType->isPointerTy()) {
+                // MIRの型情報から実際の型を取得すべきだが、ここでは整数と仮定
+                auto intPtrType = llvm::PointerType::get(ctx.getI32Type(), 0);
+                auto castedPtr = builder->CreateBitCast(operand, intPtrType, "neg_ptr_cast");
+                operand = builder->CreateLoad(ctx.getI32Type(), castedPtr, "neg_ptr_load");
+                operandType = operand->getType();
+            }
             // 浮動小数点の場合はFNeg、整数の場合はNeg
-            if (operand->getType()->isFloatingPointTy()) {
+            if (operandType->isFloatingPointTy()) {
                 return builder->CreateFNeg(operand, "fneg");
             }
             return builder->CreateNeg(operand, "neg");

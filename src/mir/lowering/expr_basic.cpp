@@ -391,7 +391,20 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     }
 
     // ベースオブジェクトを取得
-    LocalId object = lower_expression(*current, ctx);
+    // 変数参照の場合は直接その変数のLocalIdを使用してコピーを避ける
+    // lower_expressionだと一時変数にコピーされてしまい、プロジェクションが失われる
+    LocalId object;
+    if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&current->kind)) {
+        auto var_id = ctx.resolve_variable((*var_ref)->name);
+        if (var_id) {
+            object = *var_id;
+        } else {
+            // 変数が見つからない場合はlower_expressionにフォールバック
+            object = lower_expression(*current, ctx);
+        }
+    } else {
+        object = lower_expression(*current, ctx);
+    }
     hir::TypePtr obj_type = current->type;
 
     // MIRのローカル変数の型を取得（selfの場合はポインタ型）
@@ -437,20 +450,99 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
             return ctx.new_temp(hir::make_error());
         }
 
-        auto field_idx = ctx.get_field_index(current_type->name, field_name);
+        // ジェネリック構造体の場合、ベース名で検索（例: Node<Item> -> Node, Pair__int -> Pair）
+        std::string base_name = current_type->name;
+
+        // マングリング済み名前（__を含む）の場合、ベース名を抽出
+        size_t mangled_pos = base_name.find("__");
+        std::string original_base = base_name;
+        if (mangled_pos != std::string::npos) {
+            base_name = base_name.substr(0, mangled_pos);
+        }
+
+        auto field_idx = ctx.get_field_index(base_name, field_name);
         if (!field_idx) {
-            debug_msg("MIR", "Error: Field '" + field_name + "' not found in struct '" +
-                                 current_type->name + "'");
-            return ctx.new_temp(hir::make_error());
+            // マングリング前の名前でも見つからない場合、元の名前で再試行
+            field_idx = ctx.get_field_index(original_base, field_name);
+            if (!field_idx) {
+                debug_msg("MIR", "Error: Field '" + field_name + "' not found in struct '" +
+                                     base_name + "'");
+                return ctx.new_temp(hir::make_error());
+            }
         }
 
         place.projections.push_back(PlaceProjection::field(*field_idx));
 
         // 次のフィールドの型を取得
-        if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
-            const auto* struct_def = ctx.struct_defs->at(current_type->name);
+        // ジェネリック構造体の場合type_argsを保持し、フィールド型置換に使用
+        if (ctx.struct_defs && ctx.struct_defs->count(base_name)) {
+            const auto* struct_def = ctx.struct_defs->at(base_name);
             if (*field_idx < struct_def->fields.size()) {
-                current_type = struct_def->fields[*field_idx].type;
+                hir::TypePtr field_type = struct_def->fields[*field_idx].type;
+
+                // フィールド型がジェネリックパラメータの場合、type_argsから置換
+                // 注: HIRでTがStruct扱いになる場合があるため、generic_params名で照合
+                if (field_type && !current_type->type_args.empty()) {
+                    for (size_t j = 0; j < struct_def->generic_params.size() &&
+                                       j < current_type->type_args.size();
+                         ++j) {
+                        // field_typeの名前がgeneric_paramsに一致する場合、置換
+                        if (struct_def->generic_params[j].name == field_type->name) {
+                            field_type = current_type->type_args[j];
+                            break;
+                        }
+                    }
+                }
+                // type_argsが空でもマングリング済み名前（Pair__int等）から型引数を抽出
+                else if (field_type && current_type->type_args.empty() &&
+                         current_type->name.find("__") != std::string::npos) {
+                    // マングリング名から型引数を抽出
+                    std::vector<std::string> extracted_args;
+                    std::string name = current_type->name;
+                    size_t pos = name.find("__");
+                    while (pos != std::string::npos) {
+                        size_t next = name.find("__", pos + 2);
+                        if (next == std::string::npos) {
+                            extracted_args.push_back(name.substr(pos + 2));
+                        } else {
+                            extracted_args.push_back(name.substr(pos + 2, next - pos - 2));
+                        }
+                        pos = next;
+                    }
+                    // generic_paramsと照合して置換
+                    for (size_t j = 0;
+                         j < struct_def->generic_params.size() && j < extracted_args.size(); ++j) {
+                        if (struct_def->generic_params[j].name == field_type->name) {
+                            // 抽出した型名から具体型を作成
+                            const std::string& type_name = extracted_args[j];
+                            hir::TypePtr concrete_type;
+                            if (type_name == "int") {
+                                concrete_type = hir::make_int();
+                            } else if (type_name == "uint") {
+                                concrete_type = hir::make_uint();
+                            } else if (type_name == "long") {
+                                concrete_type = hir::make_long();
+                            } else if (type_name == "ulong") {
+                                concrete_type = hir::make_ulong();
+                            } else if (type_name == "double") {
+                                concrete_type = hir::make_double();
+                            } else if (type_name == "float") {
+                                concrete_type = hir::make_float();
+                            } else if (type_name == "bool") {
+                                concrete_type = hir::make_bool();
+                            } else if (type_name == "string") {
+                                concrete_type = hir::make_string();
+                            } else {
+                                // その他は構造体として扱う
+                                concrete_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                                concrete_type->name = type_name;
+                            }
+                            field_type = concrete_type;
+                            break;
+                        }
+                    }
+                }
+                current_type = field_type;
             } else {
                 current_type = hir::make_int();
             }
@@ -460,7 +552,22 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     }
 
     // 最終的なフィールドの型で一時変数を作成
-    LocalId result = ctx.new_temp(current_type);
+    // 重要: shared_ptrの参照共有で後から型が変更される問題を回避するため、
+    // 型をディープコピーする
+    hir::TypePtr final_type = current_type;
+    if (current_type &&
+        (current_type->kind == hir::TypeKind::Int || current_type->kind == hir::TypeKind::UInt ||
+         current_type->kind == hir::TypeKind::Long || current_type->kind == hir::TypeKind::Float ||
+         current_type->kind == hir::TypeKind::Double ||
+         current_type->kind == hir::TypeKind::Bool)) {
+        // プリミティブ型は新しいインスタンスを作成
+        final_type = std::make_shared<hir::Type>(*current_type);
+    } else if (current_type && current_type->kind == hir::TypeKind::Struct) {
+        // 構造体型も新しいインスタンスを作成
+        final_type = std::make_shared<hir::Type>(*current_type);
+    }
+
+    LocalId result = ctx.new_temp(final_type);
 
     ctx.push_statement(
         MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(place))));

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <chrono>
+#include <functional>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/PassManager.h>
 #include <llvm/Passes/PassBuilder.h>
@@ -12,9 +15,6 @@
 #include <llvm/Transforms/Scalar/SimplifyCFG.h>
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Vectorize.h>
-#include <atomic>
-#include <chrono>
-#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -23,7 +23,7 @@ namespace cm::codegen::llvm_backend {
 
 // 個別パスの実行とタイムアウト検出
 class PassDebugger {
-public:
+   public:
     struct PassResult {
         std::string passName;
         bool success;
@@ -32,87 +32,86 @@ public:
         std::string error;
     };
 
-    static std::vector<PassResult> runPassesWithTimeout(
-        llvm::Module& module,
-        llvm::PassBuilder& passBuilder,
-        llvm::OptimizationLevel optLevel,
-        int timeoutMs = 5000) {
-
+    static std::vector<PassResult> runPassesWithTimeout(llvm::Module& module,
+                                                        llvm::PassBuilder& passBuilder,
+                                                        llvm::OptimizationLevel optLevel,
+                                                        int timeoutMs = 5000) {
         std::vector<PassResult> results;
 
         // O2/O3で一般的に使用される主要パス
         std::vector<std::pair<std::string, std::function<void(llvm::Module&)>>> passes;
 
-        if (optLevel == llvm::OptimizationLevel::O2 ||
-            optLevel == llvm::OptimizationLevel::O3) {
-
+        if (optLevel == llvm::OptimizationLevel::O2 || optLevel == llvm::OptimizationLevel::O3) {
             // 問題を起こしやすいパスを個別にテスト
             passes = {
-                {"InstCombine", [&](llvm::Module& m) {
-                    llvm::FunctionPassManager FPM;
-                    FPM.addPass(llvm::InstCombinePass());
+                {"InstCombine",
+                 [&](llvm::Module& m) {
+                     llvm::FunctionPassManager FPM;
+                     FPM.addPass(llvm::InstCombinePass());
 
-                    llvm::ModuleAnalysisManager MAM;
-                    llvm::FunctionAnalysisManager FAM;
-                    llvm::CGSCCAnalysisManager CGAM;
-                    llvm::LoopAnalysisManager LAM;
+                     llvm::ModuleAnalysisManager MAM;
+                     llvm::FunctionAnalysisManager FAM;
+                     llvm::CGSCCAnalysisManager CGAM;
+                     llvm::LoopAnalysisManager LAM;
 
-                    passBuilder.registerModuleAnalyses(MAM);
-                    passBuilder.registerFunctionAnalyses(FAM);
-                    passBuilder.registerCGSCCAnalyses(CGAM);
-                    passBuilder.registerLoopAnalyses(LAM);
-                    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+                     passBuilder.registerModuleAnalyses(MAM);
+                     passBuilder.registerFunctionAnalyses(FAM);
+                     passBuilder.registerCGSCCAnalyses(CGAM);
+                     passBuilder.registerLoopAnalyses(LAM);
+                     passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-                    for (auto& F : m) {
-                        if (!F.isDeclaration()) {
-                            FPM.run(F, FAM);
-                        }
-                    }
-                }},
+                     for (auto& F : m) {
+                         if (!F.isDeclaration()) {
+                             FPM.run(F, FAM);
+                         }
+                     }
+                 }},
 
-                {"SimplifyCFG", [&](llvm::Module& m) {
-                    llvm::FunctionPassManager FPM;
-                    FPM.addPass(llvm::SimplifyCFGPass());
+                {"SimplifyCFG",
+                 [&](llvm::Module& m) {
+                     llvm::FunctionPassManager FPM;
+                     FPM.addPass(llvm::SimplifyCFGPass());
 
-                    llvm::ModuleAnalysisManager MAM;
-                    llvm::FunctionAnalysisManager FAM;
-                    llvm::CGSCCAnalysisManager CGAM;
-                    llvm::LoopAnalysisManager LAM;
+                     llvm::ModuleAnalysisManager MAM;
+                     llvm::FunctionAnalysisManager FAM;
+                     llvm::CGSCCAnalysisManager CGAM;
+                     llvm::LoopAnalysisManager LAM;
 
-                    passBuilder.registerModuleAnalyses(MAM);
-                    passBuilder.registerFunctionAnalyses(FAM);
-                    passBuilder.registerCGSCCAnalyses(CGAM);
-                    passBuilder.registerLoopAnalyses(LAM);
-                    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+                     passBuilder.registerModuleAnalyses(MAM);
+                     passBuilder.registerFunctionAnalyses(FAM);
+                     passBuilder.registerCGSCCAnalyses(CGAM);
+                     passBuilder.registerLoopAnalyses(LAM);
+                     passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-                    for (auto& F : m) {
-                        if (!F.isDeclaration()) {
-                            FPM.run(F, FAM);
-                        }
-                    }
-                }},
+                     for (auto& F : m) {
+                         if (!F.isDeclaration()) {
+                             FPM.run(F, FAM);
+                         }
+                     }
+                 }},
 
-                {"GVN", [&](llvm::Module& m) {
-                    llvm::FunctionPassManager FPM;
-                    FPM.addPass(llvm::GVNPass());
+                {"GVN",
+                 [&](llvm::Module& m) {
+                     llvm::FunctionPassManager FPM;
+                     FPM.addPass(llvm::GVNPass());
 
-                    llvm::ModuleAnalysisManager MAM;
-                    llvm::FunctionAnalysisManager FAM;
-                    llvm::CGSCCAnalysisManager CGAM;
-                    llvm::LoopAnalysisManager LAM;
+                     llvm::ModuleAnalysisManager MAM;
+                     llvm::FunctionAnalysisManager FAM;
+                     llvm::CGSCCAnalysisManager CGAM;
+                     llvm::LoopAnalysisManager LAM;
 
-                    passBuilder.registerModuleAnalyses(MAM);
-                    passBuilder.registerFunctionAnalyses(FAM);
-                    passBuilder.registerCGSCCAnalyses(CGAM);
-                    passBuilder.registerLoopAnalyses(LAM);
-                    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+                     passBuilder.registerModuleAnalyses(MAM);
+                     passBuilder.registerFunctionAnalyses(FAM);
+                     passBuilder.registerCGSCCAnalyses(CGAM);
+                     passBuilder.registerLoopAnalyses(LAM);
+                     passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-                    for (auto& F : m) {
-                        if (!F.isDeclaration()) {
-                            FPM.run(F, FAM);
-                        }
-                    }
-                }},
+                     for (auto& F : m) {
+                         if (!F.isDeclaration()) {
+                             FPM.run(F, FAM);
+                         }
+                     }
+                 }},
 
                 // ベクトル化パスはLLVM17では直接利用できないため、コメントアウト
                 // LoopVectorizeとSLPVectorizeは、PassBuilderを通じて間接的に追加される
@@ -185,7 +184,7 @@ public:
             // タイムアウトした場合は以降のパスをスキップ
             if (result.timeout) {
                 llvm::errs() << "[PASS_DEBUG] Pass '" << passName
-                           << "' timed out! Skipping remaining passes.\n";
+                             << "' timed out! Skipping remaining passes.\n";
                 break;
             }
         }
@@ -214,4 +213,4 @@ public:
     }
 };
 
-} // namespace cm::codegen::llvm_backend
+}  // namespace cm::codegen::llvm_backend

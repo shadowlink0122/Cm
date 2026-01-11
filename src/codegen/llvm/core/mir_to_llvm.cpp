@@ -571,6 +571,33 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     builder->CreateStore(&arg, alloca);
                     locals[localIdx] = alloca;
                     allocatedLocals.insert(localIdx);  // allocaを追跡
+                } else if (arg.getType()->isPointerTy() && argIdx == 0 &&
+                           localIdx < func.locals.size()) {
+                    // プリミティブ型implメソッドのself引数: i8*で渡されるがローカルはプリミティブ型
+                    // 例: int__abs(i8* %arg0) で selfはint型
+                    auto& localType = func.locals[localIdx].type;
+                    if (localType && (localType->kind == hir::TypeKind::Int ||
+                                      localType->kind == hir::TypeKind::UInt ||
+                                      localType->kind == hir::TypeKind::Long ||
+                                      localType->kind == hir::TypeKind::ULong ||
+                                      localType->kind == hir::TypeKind::Float ||
+                                      localType->kind == hir::TypeKind::Double ||
+                                      localType->kind == hir::TypeKind::Bool ||
+                                      localType->kind == hir::TypeKind::Char)) {
+                        // i8*をプリミティブ型のポインタにキャストしてload
+                        auto primType = convertType(localType);
+                        auto primPtrType = llvm::PointerType::get(primType, 0);
+                        auto castedPtr =
+                            builder->CreateBitCast(&arg, primPtrType, "prim_self_cast");
+                        auto loadedVal = builder->CreateLoad(primType, castedPtr, "prim_self_load");
+                        // allocaに格納
+                        auto alloca = builder->CreateAlloca(primType, nullptr, "prim_self");
+                        builder->CreateStore(loadedVal, alloca);
+                        locals[localIdx] = alloca;
+                        allocatedLocals.insert(localIdx);
+                    } else {
+                        locals[localIdx] = &arg;
+                    }
                 } else {
                     locals[localIdx] = &arg;
                 }
@@ -1144,6 +1171,25 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             if (sourceType->isPointerTy() && targetType->isStructTy()) {
                                 // ポインタからロードして構造体値を取得
                                 rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
+                                sourceType = rvalue->getType();
+                            }
+                            // sourceがポインタで、targetがプリミティブ整数型の場合
+                            // (プリミティブ型implメソッドのselfコピー: i8* -> i32)
+                            else if (sourceType->isPointerTy() && targetType->isIntegerTy() &&
+                                     targetType->getIntegerBitWidth() >= 8) {
+                                // i8*をtargetType*にキャストしてload
+                                auto targetPtrType = llvm::PointerType::get(targetType, 0);
+                                auto castedPtr =
+                                    builder->CreateBitCast(rvalue, targetPtrType, "prim_cast");
+                                rvalue = builder->CreateLoad(targetType, castedPtr, "prim_load");
+                                sourceType = rvalue->getType();
+                            }
+                            // sourceがポインタで、targetが浮動小数点型の場合
+                            else if (sourceType->isPointerTy() && targetType->isFloatingPointTy()) {
+                                auto targetPtrType = llvm::PointerType::get(targetType, 0);
+                                auto castedPtr =
+                                    builder->CreateBitCast(rvalue, targetPtrType, "float_cast");
+                                rvalue = builder->CreateLoad(targetType, castedPtr, "float_load");
                                 sourceType = rvalue->getType();
                             }
 
@@ -1859,6 +1905,59 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                     auto& fields = structIt->second->fields;
                                     if (proj.field_id < fields.size()) {
                                         currentType = fields[proj.field_id].type;
+
+                                        // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
+                                        // 例: Box__intのvalue: T -> int
+                                        if (currentType && currentType->name.length() <= 2 &&
+                                            !currentType->name.empty()) {
+                                            // ベースローカルの型名からマングリング名を抽出
+                                            auto& baseLocal =
+                                                currentMIRFunction->locals[place.local].type;
+                                            std::string mangledName;
+                                            if (baseLocal) {
+                                                if (!baseLocal->type_args.empty() &&
+                                                    baseLocal->type_args[0]) {
+                                                    // type_argsがある場合は直接使用
+                                                    currentType = baseLocal->type_args[0];
+                                                } else if (baseLocal->name.find("__") !=
+                                                           std::string::npos) {
+                                                    // マングリング名から型引数を抽出 (Box__int ->
+                                                    // int)
+                                                    mangledName = baseLocal->name;
+                                                    size_t pos = mangledName.find("__");
+                                                    std::string typeArg =
+                                                        mangledName.substr(pos + 2);
+                                                    size_t nextPos = typeArg.find("__");
+                                                    if (nextPos != std::string::npos) {
+                                                        typeArg = typeArg.substr(0, nextPos);
+                                                    }
+                                                    if (!typeArg.empty()) {
+                                                        if (typeArg == "int")
+                                                            currentType = hir::make_int();
+                                                        else if (typeArg == "uint")
+                                                            currentType = hir::make_uint();
+                                                        else if (typeArg == "long")
+                                                            currentType = hir::make_long();
+                                                        else if (typeArg == "ulong")
+                                                            currentType = hir::make_ulong();
+                                                        else if (typeArg == "float")
+                                                            currentType = hir::make_float();
+                                                        else if (typeArg == "double")
+                                                            currentType = hir::make_double();
+                                                        else if (typeArg == "bool")
+                                                            currentType = hir::make_bool();
+                                                        else if (typeArg == "string")
+                                                            currentType = hir::make_string();
+                                                        else {
+                                                            auto st = std::make_shared<hir::Type>(
+                                                                hir::TypeKind::Struct);
+                                                            st->name = typeArg;
+                                                            currentType = st;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

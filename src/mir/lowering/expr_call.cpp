@@ -1211,13 +1211,153 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     PlaceProjection::field(*field_idx));
 
                                                 // 次のフィールドの型を取得
+                                                // ベース名を抽出（Pair__int -> Pair）
+                                                std::string struct_name_for_def =
+                                                    current_type->name;
+                                                size_t mangled_pos = struct_name_for_def.find("__");
+                                                std::string original_struct_name =
+                                                    struct_name_for_def;
+                                                if (mangled_pos != std::string::npos) {
+                                                    struct_name_for_def =
+                                                        struct_name_for_def.substr(0, mangled_pos);
+                                                }
+
                                                 if (ctx.struct_defs &&
-                                                    ctx.struct_defs->count(current_type->name)) {
+                                                    ctx.struct_defs->count(struct_name_for_def)) {
                                                     const auto* struct_def =
-                                                        ctx.struct_defs->at(current_type->name);
+                                                        ctx.struct_defs->at(struct_name_for_def);
                                                     if (*field_idx < struct_def->fields.size()) {
-                                                        current_type =
+                                                        hir::TypePtr field_type =
                                                             struct_def->fields[*field_idx].type;
+
+                                                        // フィールド型がジェネリックパラメータの場合、type_argsまたはマングリング名から具体型を取得
+                                                        bool has_type_args =
+                                                            !current_type->type_args.empty();
+                                                        if (field_type &&
+                                                            (has_type_args ||
+                                                             mangled_pos != std::string::npos)) {
+                                                            std::vector<std::string> extracted_args;
+
+                                                            // type_argsから直接取得
+                                                            if (has_type_args) {
+                                                                for (const auto& ta :
+                                                                     current_type->type_args) {
+                                                                    if (ta) {
+                                                                        std::string ta_name;
+                                                                        if (ta->name.empty()) {
+                                                                            if (ta->kind ==
+                                                                                hir::TypeKind::Int)
+                                                                                ta_name = "int";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         UInt)
+                                                                                ta_name = "uint";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Long)
+                                                                                ta_name = "long";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Double)
+                                                                                ta_name = "double";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Float)
+                                                                                ta_name = "float";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Bool)
+                                                                                ta_name = "bool";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         String)
+                                                                                ta_name = "string";
+                                                                            else
+                                                                                ta_name =
+                                                                                    "int";  // default
+                                                                        } else {
+                                                                            ta_name = ta->name;
+                                                                        }
+                                                                        extracted_args.push_back(
+                                                                            ta_name);
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                // マングリング名から型引数を抽出
+                                                                std::string name =
+                                                                    original_struct_name;
+                                                                size_t pos = name.find("__");
+                                                                while (pos != std::string::npos) {
+                                                                    size_t next =
+                                                                        name.find("__", pos + 2);
+                                                                    if (next == std::string::npos) {
+                                                                        extracted_args.push_back(
+                                                                            name.substr(pos + 2));
+                                                                    } else {
+                                                                        extracted_args.push_back(
+                                                                            name.substr(
+                                                                                pos + 2,
+                                                                                next - pos - 2));
+                                                                    }
+                                                                    pos = next;
+                                                                }
+                                                            }
+
+                                                            // generic_paramsと照合して置換
+                                                            for (size_t j = 0;
+                                                                 j < struct_def->generic_params
+                                                                         .size() &&
+                                                                 j < extracted_args.size();
+                                                                 ++j) {
+                                                                if (struct_def->generic_params[j]
+                                                                        .name == field_type->name) {
+                                                                    const std::string& type_name =
+                                                                        extracted_args[j];
+                                                                    if (type_name == "int") {
+                                                                        field_type =
+                                                                            hir::make_int();
+                                                                    } else if (type_name ==
+                                                                               "uint") {
+                                                                        field_type =
+                                                                            hir::make_uint();
+                                                                    } else if (type_name ==
+                                                                               "long") {
+                                                                        field_type =
+                                                                            hir::make_long();
+                                                                    } else if (type_name ==
+                                                                               "ulong") {
+                                                                        field_type =
+                                                                            hir::make_ulong();
+                                                                    } else if (type_name ==
+                                                                               "double") {
+                                                                        field_type =
+                                                                            hir::make_double();
+                                                                    } else if (type_name ==
+                                                                               "float") {
+                                                                        field_type =
+                                                                            hir::make_float();
+                                                                    } else if (type_name ==
+                                                                               "bool") {
+                                                                        field_type =
+                                                                            hir::make_bool();
+                                                                    } else if (type_name ==
+                                                                               "string") {
+                                                                        field_type =
+                                                                            hir::make_string();
+                                                                    } else {
+                                                                        field_type =
+                                                                            std::make_shared<
+                                                                                hir::Type>(
+                                                                                hir::TypeKind::
+                                                                                    Struct);
+                                                                        field_type->name =
+                                                                            type_name;
+                                                                    }
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                        current_type = field_type;
                                                     } else {
                                                         current_type = hir::make_int();
                                                     }

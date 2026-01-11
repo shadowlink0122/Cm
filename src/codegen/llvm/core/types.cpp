@@ -143,6 +143,35 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 }
             }
 
+            // 特殊化構造体が見つからない場合、structDefsも確認
+            auto defIt = structDefs.find(lookupName);
+            if (defIt != structDefs.end()) {
+                // 構造体定義が存在する場合、LLVM型を作成して登録
+                auto structType = llvm::StructType::create(ctx.getContext(), lookupName);
+                structTypes[lookupName] = structType;
+
+                // フィールド型を設定
+                std::vector<llvm::Type*> fieldTypes;
+                for (const auto& field : defIt->second->fields) {
+                    fieldTypes.push_back(convertType(field.type));
+                }
+                structType->setBody(fieldTypes);
+
+                // デバッグ情報
+                std::cerr << "[LLVM] Registered specialized struct: " << lookupName << " with "
+                          << fieldTypes.size() << " fields\n";
+
+                return structType;
+            }
+
+            // エラーログを追加
+            std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
+            std::cerr << "       Available types: ";
+            for (const auto& [name, _] : structTypes) {
+                std::cerr << name << " ";
+            }
+            std::cerr << "\n";
+
             // 見つからない場合は不透明型として扱う
             return llvm::StructType::create(ctx.getContext(), lookupName);
         }

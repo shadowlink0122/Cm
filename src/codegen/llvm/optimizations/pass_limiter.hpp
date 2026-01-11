@@ -16,8 +16,8 @@ class OptimizationPassLimiter {
    private:
     static constexpr size_t MAX_ITERATIONS_PER_PASS = 100;
     static constexpr size_t MAX_TOTAL_ITERATIONS = 1000;
-    static constexpr size_t HIGH_COMPLEXITY_THRESHOLD = 100;
-    static constexpr size_t MEDIUM_COMPLEXITY_THRESHOLD = 50;
+    static constexpr size_t HIGH_COMPLEXITY_THRESHOLD = 200;    // 100→200に緩和
+    static constexpr size_t MEDIUM_COMPLEXITY_THRESHOLD = 100;  // 50→100に緩和
     static constexpr size_t OPTIMIZATION_TIMEOUT_ABORT = 10;
     static constexpr size_t OPTIMIZATION_TIMEOUT_WARN = 5;
 

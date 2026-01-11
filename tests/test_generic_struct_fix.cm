@@ -1,0 +1,26 @@
+// ジェネリック構造体の修正テスト
+import std::io::println;
+
+struct Node<T> {
+    T value;
+    Node<T>* next;
+}
+
+struct Item {
+    int data;
+}
+
+int main() {
+    // ジェネリック構造体のインスタンス化
+    Item item = {data: 42};
+    Node<Item> node = {value: item, next: null};
+
+    // 値の確認
+    if (node.value.data == 42) {
+        println("Generic struct test: PASS");
+        return 0;
+    } else {
+        println("Generic struct test: FAIL");
+        return 1;
+    }
+}

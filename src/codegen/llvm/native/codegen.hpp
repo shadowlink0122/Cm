@@ -345,10 +345,10 @@ class LLVMCodeGen {
         // O2/O3でverboseモードが有効な場合、個別パステストを実行
         if (options.verbose && (options.optimizationLevel >= 2)) {
             llvm::errs() << "[PASS_DEBUG] Running individual pass debugging for O"
-                       << options.optimizationLevel << "\n";
+                         << options.optimizationLevel << "\n";
 
-            auto results = PassDebugger::runPassesWithTimeout(
-                context->getModule(), passBuilder, optLevel, 5000);
+            auto results = PassDebugger::runPassesWithTimeout(context->getModule(), passBuilder,
+                                                              optLevel, 5000);
             cm::codegen::llvm_backend::PassDebugger::printResults(results);
 
             // タイムアウトしたパスがある場合は、O1に下げて実行
@@ -356,8 +356,8 @@ class LLVMCodeGen {
             for (const auto& result : results) {
                 if (result.timeout) {
                     hasTimeout = true;
-                    llvm::errs() << "[PASS_DEBUG] Detected timeout in pass: "
-                              << result.passName << "\n";
+                    llvm::errs() << "[PASS_DEBUG] Detected timeout in pass: " << result.passName
+                                 << "\n";
                     llvm::errs() << "[PASS_DEBUG] Falling back to O1 optimization\n";
                     break;
                 }
