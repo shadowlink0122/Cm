@@ -71,8 +71,8 @@ v0.10.0からの主要な変更点をまとめました。このリリースで�
 
 | 環境 | 結果 |
 |------|------|
-| Mac (LLVM 14) | 250/262 passed, 0 failed |
-| Ubuntu Docker (LLVM 18) | 250/262 passed, 0 failed |
+| Mac (LLVM 17) | 250/262 passed, 0 failed |
+| Ubuntu Docker (LLVM 17) | 250/262 passed, 0 failed |
 
 ## 既知の問題（スキップ中）
 

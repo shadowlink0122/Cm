@@ -92,76 +92,69 @@ int main() {
 
 ---
 
-## Borrowing (Pointer-based in v0.11.0)
+## Borrowing (Address-based Borrow Counting)
 
-**Important:** Current Cm uses pointers for borrowing. C++-style references (`&T`) are not yet implemented.
+**Important:** In Cm v0.11.0, taking a variable's address with the `&` operator marks that variable as "borrowed".
 
-### Immutable Borrowing (const pointer)
+### How Borrowing Works
 
 ```cm
 int main() {
+    int x = 100;
+    int* px = &x;  // Taking address with & marks x as borrowed
+
+    // Restrictions while borrowed:
+    // int y = move x;  // Compile error: Cannot move while borrowed
+    // x = 200;         // Compile error: Cannot modify while borrowed
+    // x++;             // Compile error: Cannot increment while borrowed
+
+    println("*px = {*px}");  // Access through pointer is OK
+    return 0;
+}
+```
+
+### const Pointers vs Regular Pointers
+
+```cm
+int main() {
+    // const pointer - cannot modify the target
     const int value = 42;
-    const int* ref = &value;  // Borrow via const pointer
+    const int* cptr = &value;
+    // *cptr = 50;  // Error: Cannot modify through const pointer
 
-    println("Value: {*ref}");  // Dereference to access
+    // Regular pointer - can modify the target
+    int mutable = 10;
+    int* ptr = &mutable;  // mutable becomes borrowed
+    *ptr = 20;  // Modifying through pointer is OK
 
-    // *ref = 50;  // Error: Cannot modify through const pointer
-
-    return 0;
-}
-```
-
-### Mutable Borrowing (pointer)
-
-```cm
-int main() {
-    int x = 10;
-    int* px = &x;  // Mutable borrow via pointer
-
-    *px = 20;  // Modify through pointer
-    println("x = {x}");  // Prints: x = 20
+    // However, direct operations on mutable are blocked:
+    // mutable = 30;  // Error: Cannot modify while borrowed
+    // mutable++;     // Error: Cannot increment while borrowed
 
     return 0;
 }
 ```
 
-### Borrowing and Move Restrictions
+### Current Limitations
+
+**Note:** The current implementation has these limitations:
+
+1. **Borrow release timing** - Borrows persist until scope exit (manual release not implemented)
+2. **Multiple borrows** - Multiple pointers to the same variable are allowed and all counted
+3. **Function argument borrowing** - Borrowing through function calls is not tracked
 
 ```cm
-int main() {
-    int y = 100;
-    const int* py = &y;  // y is borrowed
-
-    // int z = move y;  // Error: Cannot move while borrowed
-    // y = 200;         // Error: Cannot modify while borrowed
-
-    println("*py = {*py}");
-
-    return 0;
-}
-```
-
-### Struct Borrowing
-
-```cm
-struct Point { int x; int y; }
-
-void print_point(const Point* p) {  // Borrow via const pointer
-    println("Point({}, {})", p.x, p.y);  // Auto-dereference
+void use_pointer(int* p) {
+    *p = 100;
 }
 
 int main() {
-    Point pt = {x: 10, y: 20};
-    print_point(&pt);  // Pass address
-
-    // pt is still valid after borrowing
-    println("x: {}", pt.x);
-
+    int x = 50;
+    use_pointer(&x);  // Borrowing in function calls not tracked
+    x = 60;  // This currently doesn't error (implementation limitation)
     return 0;
 }
 ```
-
-**Note:** Cm's pointer syntax automatically dereferences for struct field access (`p.x` instead of `(*p).x`).
 
 ---
 
