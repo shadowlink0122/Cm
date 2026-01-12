@@ -38,7 +38,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            llvm_version: "18"
+            llvm_version: "17"
           - os: macos-latest
             llvm_version: "14"
     runs-on: ${{ matrix.os }}
@@ -112,7 +112,7 @@ jobs:
         test: [lexer, hir_lowering, mir_lowering, mir_optimization]
         include:
           - os: ubuntu-latest
-            llvm_version: "18"
+            llvm_version: "17"
           - os: macos-latest
             llvm_version: "14"
     runs-on: ${{ matrix.os }}
@@ -168,7 +168,7 @@ jobs:
         opt_level: [0, 3]  # O0とO3のみ（CI時間削減）
         include:
           - os: ubuntu-latest
-            llvm_version: "18"
+            llvm_version: "17"
           - os: macos-latest
             llvm_version: "14"
     runs-on: ${{ matrix.os }}
@@ -254,9 +254,9 @@ jobs:
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          sudo ./llvm.sh 18
-          sudo apt-get install -y llvm-18-dev clang-18
-          echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
+          sudo ./llvm.sh 17
+          sudo apt-get install -y llvm-17-dev clang-17
+          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
 
       # C++/Rust/Pythonのセットアップ
       - name: Install benchmark dependencies
