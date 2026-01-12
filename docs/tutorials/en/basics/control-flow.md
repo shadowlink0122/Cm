@@ -159,7 +159,7 @@ for (int i = 0, j = 10; i < 5; i++, j--) {
 ### Range-based for (for-in)
 
 ```cm
-int[5] arr = {1, 2, 3, 4, 5};
+int[5] arr = [1, 2, 3, 4, 5];
 
 // With type
 for (int n in arr) {

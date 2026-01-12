@@ -28,7 +28,7 @@ Cm言語の配列は、C++スタイルの固定長配列をサポートします
 int[5] numbers;
 
 // 宣言と初期化
-int[3] values = {1, 2, 3};
+int[3] values = [1, 2, 3];
 
 // サイズ推論
 int[] auto_size = {10, 20, 30};  // サイズ3と推論
@@ -44,7 +44,7 @@ int[10] zeros;  // すべて0
 int[5] primes = {2, 3, 5, 7, 11};
 
 // 部分初期化
-int[5] partial = {1, 2};  // {1, 2, 0, 0, 0}
+int[5] partial = [1, 2];  // {1, 2, 0, 0, 0}
 ```
 
 ## 要素のアクセス
@@ -75,7 +75,7 @@ int size3 = arr.length();   // 5（全て同じ）
 ### 要素検索
 
 ```cm
-int[5] numbers = {1, 2, 3, 4, 5};
+int[5] numbers = [1, 2, 3, 4, 5];
 
 // indexOf - 要素の位置を検索
 int pos = numbers.indexOf(3);  // 2
@@ -92,7 +92,7 @@ bool has_5 = numbers.contains(5);  // true
 ### 高階関数メソッド
 
 ```cm
-int[5] numbers = {1, 2, 3, 4, 5};
+int[5] numbers = [1, 2, 3, 4, 5];
 
 // some - いずれかが条件を満たすか
 bool has_even = numbers.some(|x| x % 2 == 0);  // true
@@ -138,7 +138,7 @@ int main() {
 
 ```cm
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
 
     // 配列→ポインタ変換
     int* p = arr;  // arr[0]のアドレス
@@ -160,7 +160,7 @@ void print_array(int* data, int size) {
 }
 
 int main() {
-    int[5] numbers = {1, 2, 3, 4, 5};
+    int[5] numbers = [1, 2, 3, 4, 5];
     print_array(numbers, 5);  // 配列→ポインタ変換
     return 0;
 }
@@ -174,7 +174,7 @@ int main() {
 struct Point { int x; int y; }
 
 int main() {
-    int[5] numbers = {1, 2, 3, 4, 5};
+    int[5] numbers = [1, 2, 3, 4, 5];
 
     // 型指定あり
     for (int n in numbers) {

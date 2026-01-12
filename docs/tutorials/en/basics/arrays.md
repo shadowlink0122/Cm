@@ -30,7 +30,7 @@ parent: Tutorials
 int[5] numbers;
 
 // Declaration and initialization
-int[3] values = {1, 2, 3};
+int[3] values = [1, 2, 3];
 
 // Size inference
 int[] auto_size = {10, 20, 30};  // Inferred size: 3
@@ -46,7 +46,7 @@ int[10] zeros;  // All 0
 int[5] primes = {2, 3, 5, 7, 11};
 
 // Partial initialization
-int[5] partial = {1, 2};  // {1, 2, 0, 0, 0}
+int[5] partial = [1, 2];  // {1, 2, 0, 0, 0}
 ```
 
 ## Element Access
@@ -79,7 +79,7 @@ int size3 = arr.length();   // 5 (All equivalent)
 ### Searching Elements
 
 ```cm
-int[5] numbers = {1, 2, 3, 4, 5};
+int[5] numbers = [1, 2, 3, 4, 5];
 
 // indexOf - Find element position
 int pos = numbers.indexOf(3);  // 2
@@ -96,7 +96,7 @@ bool has_5 = numbers.contains(5);  // true
 ### Higher-Order Methods
 
 ```cm
-int[5] numbers = {1, 2, 3, 4, 5};
+int[5] numbers = [1, 2, 3, 4, 5];
 
 // some - Check if any element matches condition
 bool has_even = numbers.some(|x| x % 2 == 0);  // true
@@ -143,7 +143,7 @@ Arrays automatically convert to pointers when passed to functions or assigned to
 
 ```cm
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
 
     // Array to Pointer conversion
     int* p = arr;  // Address of arr[0]
@@ -165,7 +165,7 @@ void print_array(int* data, int size) {
 }
 
 int main() {
-    int[5] numbers = {1, 2, 3, 4, 5};
+    int[5] numbers = [1, 2, 3, 4, 5];
     print_array(numbers, 5);  // Decays to pointer
     return 0;
 }
@@ -181,7 +181,7 @@ Iterate over arrays easily with range-based for loops.
 struct Point { int x; int y; }
 
 int main() {
-    int[5] numbers = {1, 2, 3, 4, 5};
+    int[5] numbers = [1, 2, 3, 4, 5];
 
     // With type
     for (int n in numbers) {

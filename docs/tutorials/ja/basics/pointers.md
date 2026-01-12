@@ -80,7 +80,7 @@ int main() {
 
 ```cm
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
     int* p = arr;  // 配列の先頭アドレス
 
     // ポインタの加算
@@ -158,7 +158,7 @@ int main() {
 
 ```cm
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
 
     // 暗黙的変換
     int* p = arr;  // arr[0]のアドレス
@@ -173,7 +173,7 @@ void process(int* data, int size) {
 }
 
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
     process(arr, 5);  // 配列→ポインタ変換
     return 0;
 }

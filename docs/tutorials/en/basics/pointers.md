@@ -82,7 +82,7 @@ int main() {
 
 ```cm
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
     int* p = arr;  // Points to arr[0]
 
     // Addition
@@ -160,7 +160,7 @@ Arrays implicitly convert to pointers.
 
 ```cm
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
 
     // Implicit conversion
     int* p = arr;
@@ -175,7 +175,7 @@ void process(int* data, int size) {
 }
 
 int main() {
-    int[5] arr = {1, 2, 3, 4, 5};
+    int[5] arr = [1, 2, 3, 4, 5];
     process(arr, 5);
     return 0;
 }

@@ -121,7 +121,7 @@ impl<T> Iterable<T> for T[] {
 ### 3.2 使用例
 
 ```cm
-int[5] arr = {1, 2, 3, 4, 5};
+int[5] arr = [1, 2, 3, 4, 5];
 
 // 単純なfor-in（item only）
 for (item in arr) {
