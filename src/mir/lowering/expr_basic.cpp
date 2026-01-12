@@ -708,8 +708,10 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 get_func = "cm_slice_get_i8";
             } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
                 get_func = "cm_slice_get_i64";
-            } else if (elem_kind == hir::TypeKind::Double || elem_kind == hir::TypeKind::Float) {
+            } else if (elem_kind == hir::TypeKind::Double) {
                 get_func = "cm_slice_get_f64";
+            } else if (elem_kind == hir::TypeKind::Float) {
+                get_func = "cm_slice_get_f32";
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
                        elem_kind == hir::TypeKind::Struct) {
                 get_func = "cm_slice_get_ptr";

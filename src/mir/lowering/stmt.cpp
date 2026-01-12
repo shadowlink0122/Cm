@@ -259,9 +259,10 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     } else if (elem_kind == hir::TypeKind::Long ||
                                elem_kind == hir::TypeKind::ULong) {
                         push_func = "cm_slice_push_i64";
-                    } else if (elem_kind == hir::TypeKind::Double ||
-                               elem_kind == hir::TypeKind::Float) {
+                    } else if (elem_kind == hir::TypeKind::Double) {
                         push_func = "cm_slice_push_f64";
+                    } else if (elem_kind == hir::TypeKind::Float) {
+                        push_func = "cm_slice_push_f32";
                     } else if (elem_kind == hir::TypeKind::Pointer ||
                                elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {
@@ -353,6 +354,24 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                             elem_value = slice_local;
                         } else {
                             elem_value = expr_lowering->lower_expression(*elem, ctx);
+
+                            // floatスライスへのdouble要素の場合、floatにキャスト
+                            // 浮動小数点リテラルはデフォルトでdoubleとして解析される
+                            if (elem_kind == hir::TypeKind::Float) {
+                                hir::TypePtr actual_elem_type = nullptr;
+                                if (elem_value < ctx.func->locals.size()) {
+                                    actual_elem_type = ctx.func->locals[elem_value].type;
+                                }
+                                if (actual_elem_type &&
+                                    actual_elem_type->kind == hir::TypeKind::Double) {
+                                    LocalId casted = ctx.new_temp(hir::make_float());
+                                    ctx.push_statement(MirStatement::assign(
+                                        MirPlace{casted},
+                                        MirRvalue::cast(MirOperand::copy(MirPlace{elem_value}),
+                                                        hir::make_float())));
+                                    elem_value = casted;
+                                }
+                            }
                         }
 
                         BlockId success_block = ctx.new_block();
