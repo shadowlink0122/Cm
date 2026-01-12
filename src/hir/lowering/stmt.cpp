@@ -303,9 +303,13 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         // 条件: __iter.has_next()
         auto has_next_call = std::make_unique<HirCall>();
         has_next_call->func_name = for_in.iterator_type_name + "__has_next";
+        // イテレータのアドレスを渡す（selfはポインタとして受け取る）
         auto iter_ref = std::make_unique<HirVarRef>();
         iter_ref->name = iter_name;
-        has_next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_ref), nullptr));
+        auto iter_addr = std::make_unique<HirUnary>();
+        iter_addr->op = HirUnaryOp::AddrOf;
+        iter_addr->operand = std::make_unique<HirExpr>(std::move(iter_ref), nullptr);
+        has_next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_addr), nullptr));
         hir_while->cond = std::make_unique<HirExpr>(std::move(has_next_call), ast::make_bool());
 
         // ループ本体
@@ -316,9 +320,13 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
 
         auto next_call = std::make_unique<HirCall>();
         next_call->func_name = for_in.iterator_type_name + "__next";
+        // イテレータのアドレスを渡す（selfはポインタとして受け取る）
         auto iter_ref2 = std::make_unique<HirVarRef>();
         iter_ref2->name = iter_name;
-        next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_ref2), nullptr));
+        auto iter_addr2 = std::make_unique<HirUnary>();
+        iter_addr2->op = HirUnaryOp::AddrOf;
+        iter_addr2->operand = std::make_unique<HirExpr>(std::move(iter_ref2), nullptr);
+        next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_addr2), nullptr));
         elem_let->init = std::make_unique<HirExpr>(std::move(next_call), for_in.var_type);
 
         hir_while->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
