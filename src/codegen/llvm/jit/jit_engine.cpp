@@ -10,15 +10,10 @@
 #include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
-#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/Transforms/IPO.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/InstCombine/InstCombine.h>
-#include <llvm/Transforms/Scalar.h>
-#include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 
 namespace cm::codegen::jit {
@@ -77,40 +72,43 @@ void JITEngine::registerRuntimeSymbols() {
     // ランタイム関数はLLVM IR内で宣言され、リンク時に解決される
 }
 
-/// LLVM最適化パスを適用
+/// LLVM最適化パスを適用（新パスマネージャー使用、LLVM 14-18対応）
 void JITEngine::optimizeModule(llvm::Module& module, int optLevel) {
     if (optLevel <= 0)
         return;
 
-    // Legacy PassManagerBuilder を使用（LLVM 14対応）
-    llvm::legacy::PassManager pm;
-    llvm::legacy::FunctionPassManager fpm(&module);
+    // 新パスマネージャーを使用（LLVM 14以降対応）
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::CGSCCAnalysisManager CGAM;
+    llvm::ModuleAnalysisManager MAM;
 
-    // PassManagerBuilderで標準最適化パスを構成
-    llvm::PassManagerBuilder builder;
-    builder.OptLevel = static_cast<unsigned>(optLevel);
-    builder.SizeLevel = 0;
+    llvm::PassBuilder PB;
 
-    if (optLevel >= 2) {
-        builder.Inliner = llvm::createFunctionInliningPass(optLevel, 0, false);
+    // 分析マネージャーを登録
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    // 最適化レベルに応じたパイプラインを構築
+    llvm::OptimizationLevel level;
+    switch (optLevel) {
+        case 1:
+            level = llvm::OptimizationLevel::O1;
+            break;
+        case 2:
+            level = llvm::OptimizationLevel::O2;
+            break;
+        case 3:
+        default:
+            level = llvm::OptimizationLevel::O3;
+            break;
     }
 
-    // 関数パス追加
-    builder.populateFunctionPassManager(fpm);
-    // モジュールパス追加
-    builder.populateModulePassManager(pm);
-
-    // 関数パス実行
-    fpm.doInitialization();
-    for (auto& func : module) {
-        if (!func.isDeclaration()) {
-            fpm.run(func);
-        }
-    }
-    fpm.doFinalization();
-
-    // モジュールパス実行
-    pm.run(module);
+    llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(level);
+    MPM.run(module, MAM);
 }
 
 JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& entryPoint,
