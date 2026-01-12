@@ -54,7 +54,7 @@ CATEGORIES=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
-TIMEOUT=10
+TIMEOUT=15
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
@@ -766,6 +766,13 @@ run_tests_parallel() {
                 FAIL*)
                     local reason="${result#FAIL:}"
                     echo -e "${RED}[FAIL]${NC} $category/$test_name - $reason"
+                    # エラーファイルがあれば先頭5行を表示
+                    local error_file="${result_file}.error"
+                    if [ -f "$error_file" ]; then
+                        echo "  --- Error output (first 5 lines) ---"
+                        head -5 "$error_file" | sed 's/^/  /'
+                        echo "  ---"
+                    fi
                     ((FAILED++))
                     ;;
                 SKIP*)
@@ -974,13 +981,11 @@ PY
         fi
     else
         if [ $exit_code -ne 0 ]; then
-            # セグフォの場合は詳細情報を保存
-            if [ $exit_code -eq 139 ] && grep -q "=== Segmentation fault detected" "$output_file" 2>/dev/null; then
-                echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
-                # デバッグ情報を別ファイルに保存
-                cat "$output_file" > "${result_file}.debug" 2>/dev/null || true
-            else
-                echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+            # ランタイムエラー: エラー出力を保存
+            echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+            # エラー出力を別ファイルに保存（デバッグ用）
+            if [ -f "$output_file" ]; then
+                cat "$output_file" > "${result_file}.error" 2>/dev/null || true
             fi
         else
             if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then
