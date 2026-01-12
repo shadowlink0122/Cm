@@ -142,20 +142,3 @@ jobs:
       
       - name: Run Interpreter Tests (O3)
         run: make tip3
-
-  summary:
-    name: Interpreter Summary
-    needs: [interpreter-o0, interpreter-o3]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Check Results
-        run: |
-          echo "=== Interpreter Tests Summary ==="
-          echo "O0: ${{ needs.interpreter-o0.result }}"
-          echo "O3: ${{ needs.interpreter-o3.result }}"
-          if [ "${{ needs.interpreter-o0.result }}" = "success" ] && [ "${{ needs.interpreter-o3.result }}" = "success" ]; then
-            echo "✅ All interpreter tests passed!"
-          else
-            echo "❌ Some tests failed"; exit 1
-          fi

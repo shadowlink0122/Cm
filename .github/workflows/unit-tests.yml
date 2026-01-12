@@ -263,29 +263,3 @@ jobs:
   # ========================================
   # Summary
   # ========================================
-  unit-tests-summary:
-    name: Unit Tests Summary
-    needs: [test-lexer, test-hir, test-mir, test-optimization]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Check Results
-        run: |
-          echo "=== Unit Tests Summary ==="
-          echo "Lexer: ${{ needs.test-lexer.result }}"
-          echo "HIR: ${{ needs.test-hir.result }}"
-          echo "MIR: ${{ needs.test-mir.result }}"
-          echo "Optimization: ${{ needs.test-optimization.result }}"
-          
-          FAILED=0
-          if [ "${{ needs.test-lexer.result }}" != "success" ]; then FAILED=1; fi
-          if [ "${{ needs.test-hir.result }}" != "success" ]; then FAILED=1; fi
-          if [ "${{ needs.test-mir.result }}" != "success" ]; then FAILED=1; fi
-          if [ "${{ needs.test-optimization.result }}" != "success" ]; then FAILED=1; fi
-          
-          if [ $FAILED -eq 0 ]; then
-            echo "✅ All unit tests passed!"
-          else
-            echo "❌ Some unit tests failed"
-            exit 1
-          fi

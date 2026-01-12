@@ -142,20 +142,3 @@ jobs:
       
       - name: Run LLVM Native Tests (O3)
         run: make tlp3
-
-  summary:
-    name: LLVM Native Summary
-    needs: [llvm-native-o0, llvm-native-o3]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Check Results
-        run: |
-          echo "=== LLVM Native Tests Summary ==="
-          echo "O0: ${{ needs.llvm-native-o0.result }}"
-          echo "O3: ${{ needs.llvm-native-o3.result }}"
-          if [ "${{ needs.llvm-native-o0.result }}" = "success" ] && [ "${{ needs.llvm-native-o3.result }}" = "success" ]; then
-            echo "✅ All LLVM native tests passed!"
-          else
-            echo "❌ Some tests failed"; exit 1
-          fi
