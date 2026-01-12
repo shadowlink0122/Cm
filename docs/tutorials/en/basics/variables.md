@@ -78,11 +78,12 @@ int x = 1, y = 2, z = 3;
 
 ---
 
-## const Modifier
+## const Modifier (Required in v0.11.0+)
 
-Defines immutable constants.
+**Important Change (v0.11.0):** The `const` keyword is now **mandatory** for all immutable variables. Variables without `const` are mutable by default.
 
 ```cm
+// v0.11.0+: Must explicitly use const for immutables
 const int MAX_SIZE = 100;
 const double PI = 3.14159;
 const string GREETING = "Hello";
@@ -90,14 +91,20 @@ const string GREETING = "Hello";
 // MAX_SIZE = 200;  // Error: const cannot be modified
 ```
 
-### const vs Normal Variables
+### const vs Mutable Variables
 
 ```cm
-int normal = 10;
-normal = 20;      // OK
+// Mutable variable (default)
+int counter = 10;
+counter = 20;      // OK: can reassign
 
+// Immutable variable (must use const)
 const int constant = 10;
-// constant = 20; // Error: Cannot modify
+// constant = 20; // Error: Cannot modify const
+
+// The compiler will warn if a variable could be const
+int value = 42;
+// If 'value' is never modified, compiler suggests: "Consider making 'value' const"
 ```
 
 ---

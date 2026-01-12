@@ -21,66 +21,147 @@ parent: Tutorials
 
 ## What is Ownership?
 
-Cm (since v0.11.0) guarantees memory safety without garbage collection using an ownership system similar to Rust.
+Cm (since v0.11.0) guarantees memory safety without garbage collection using an ownership system.
 
 **Ownership Rules:**
-1.  Each value has a single variable that is its "owner".
-2.  When the owner goes out of scope, the value is dropped.
-3.  Assignment or passing by value transfers ownership ("Move").
+1. Each value has a single variable that is its "owner"
+2. When the owner goes out of scope, the value is dropped
+3. Ownership can be explicitly transferred using the `move` keyword
+4. After moving, the original variable cannot be used
 
 ---
 
-## Move
+## Move Semantics (v0.11.0+)
 
-For non-primitive types like structs, assignment moves ownership.
+The `move` keyword explicitly transfers ownership of a value.
+
+### Using the move Keyword
 
 ```cm
-struct Box { int x; }
-
 int main() {
-    Box a = {x: 10};
-    Box b = a;  // Ownership moved from a to b
-    
-    // println("{}", a.x); // Error: a is moved
-    println("{}", b.x); // OK: b is the owner
+    // Primitive types can also be moved
+    int x = 42;
+    int y = move x;  // x's ownership transferred to y
+
+    println("{y}");     // OK: y owns the value
+    // println("{x}");  // Error: x is moved and cannot be used
+
+    // After move, reassignment is also forbidden
+    // x = 50;  // Error: Cannot assign to moved variable
+
     return 0;
 }
 ```
 
-### Copy
+### Struct Move
 
-Primitive types like `int` implement `Copy`, so they are copied instead of moved.
+```cm
+struct Box { int value; }
+
+int main() {
+    Box a = {value: 10};
+    Box b = move a;  // Explicit move
+
+    println("{}", b.value); // OK: b is the owner
+    // println("{}", a.value); // Error: a is moved
+
+    return 0;
+}
+```
+
+### Copy vs Move
+
+Primitive types are copied by default unless explicitly moved:
+
+```cm
+int main() {
+    // Default copy behavior
+    int x = 10;
+    int y = x;        // Copied (both x and y are valid)
+    println("{x} {y}"); // OK: both accessible
+
+    // Explicit move
+    int a = 20;
+    int b = move a;   // Moved
+    println("{b}");    // OK
+    // println("{a}"); // Error: a is moved
+
+    return 0;
+}
+```
+
+---
+
+## Borrowing (Pointer-based in v0.11.0)
+
+**Important:** Current Cm uses pointers for borrowing. C++-style references (`&T`) are not yet implemented.
+
+### Immutable Borrowing (const pointer)
+
+```cm
+int main() {
+    const int value = 42;
+    const int* ref = &value;  // Borrow via const pointer
+
+    println("Value: {*ref}");  // Dereference to access
+
+    // *ref = 50;  // Error: Cannot modify through const pointer
+
+    return 0;
+}
+```
+
+### Mutable Borrowing (pointer)
 
 ```cm
 int main() {
     int x = 10;
-    int y = x;  // Copied
+    int* px = &x;  // Mutable borrow via pointer
+
+    *px = 20;  // Modify through pointer
+    println("x = {x}");  // Prints: x = 20
+
     return 0;
 }
 ```
 
----
-
-## Borrowing
-
-To use a value without taking ownership, you can "borrow" it.
-
-### Immutable Reference (`&T`)
-
-Allows reading but not modifying or taking ownership.
+### Borrowing and Move Restrictions
 
 ```cm
-void print_box(const Box& b) { // Borrow
-    println("Box({})", b.x);
+int main() {
+    int y = 100;
+    const int* py = &y;  // y is borrowed
+
+    // int z = move y;  // Error: Cannot move while borrowed
+    // y = 200;         // Error: Cannot modify while borrowed
+
+    println("*py = {*py}");
+
+    return 0;
+}
+```
+
+### Struct Borrowing
+
+```cm
+struct Point { int x; int y; }
+
+void print_point(const Point* p) {  // Borrow via const pointer
+    println("Point({}, {})", p.x, p.y);  // Auto-dereference
 }
 
 int main() {
-    Box a = {x: 10};
-    print_box(&a); // Pass reference
-    println("{}", a.x); // a is still valid
+    Point pt = {x: 10, y: 20};
+    print_point(&pt);  // Pass address
+
+    // pt is still valid after borrowing
+    println("x: {}", pt.x);
+
     return 0;
 }
 ```
+
+**Note:** Cm's pointer syntax automatically dereferences for struct field access (`p.x` instead of `(*p).x`).
 
 ---
 

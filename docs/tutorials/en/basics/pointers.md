@@ -78,6 +78,39 @@ int main() {
 }
 ```
 
+## Pointers and Borrowing (v0.11.0+)
+
+In Cm v0.11.0, pointers serve as the foundation for the borrowing system:
+
+```cm
+int main() {
+    // Immutable borrowing via const pointer
+    const int value = 42;
+    const int* immutable_ref = &value;
+    println("Borrowed value: {*immutable_ref}");
+    // *immutable_ref = 50;  // Error: Cannot modify
+
+    // Mutable borrowing via pointer
+    int mut_value = 100;
+    int* mutable_ref = &mut_value;
+    *mutable_ref = 200;  // OK: Can modify
+    println("Modified: {mut_value}");  // 200
+
+    // Borrowing prevents moving
+    int data = 10;
+    int* borrowed = &data;
+    // int moved = move data;  // Error: Cannot move borrowed value
+
+    return 0;
+}
+```
+
+**Key Points:**
+- `const T*` for immutable borrowing (read-only)
+- `T*` for mutable borrowing (read-write)
+- Borrowed values cannot be moved
+- Pointers ensure memory safety with ownership rules
+
 ## Pointer Arithmetic
 
 ```cm

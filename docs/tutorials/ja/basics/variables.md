@@ -78,11 +78,12 @@ int x = 1, y = 2, z = 3;
 
 ---
 
-## const修飾子
+## const修飾子（v0.11.0以降で必須）
 
-変更不可な定数を定義します。
+**重要な変更（v0.11.0）:** `const`キーワードは不変変数に対して**必須**となりました。`const`のない変数はデフォルトで可変です。
 
 ```cm
+// v0.11.0以降：不変変数には明示的にconstが必要
 const int MAX_SIZE = 100;
 const double PI = 3.14159;
 const string GREETING = "Hello";
@@ -90,14 +91,20 @@ const string GREETING = "Hello";
 // MAX_SIZE = 200;  // エラー: constは変更不可
 ```
 
-### const vs 通常の変数
+### const vs 可変変数
 
 ```cm
-int normal = 10;
-normal = 20;      // OK
+// 可変変数（デフォルト）
+int counter = 10;
+counter = 20;      // OK：再代入可能
 
+// 不変変数（constが必須）
 const int constant = 10;
-// constant = 20; // エラー: 変更不可
+// constant = 20; // エラー: const変数は変更不可
+
+// コンパイラは変数がconstになるべきか警告を出します
+int value = 42;
+// 'value'が変更されない場合、コンパイラが提案：「'value'をconstにすることを検討してください」
 ```
 
 ---

@@ -76,6 +76,39 @@ int main() {
 }
 ```
 
+## ポインタと借用（v0.11.0以降）
+
+Cm v0.11.0では、ポインタが借用システムの基盤となっています：
+
+```cm
+int main() {
+    // constポインタによる不変借用
+    const int value = 42;
+    const int* immutable_ref = &value;
+    println("借用した値: {*immutable_ref}");
+    // *immutable_ref = 50;  // エラー: 変更不可
+
+    // ポインタによる可変借用
+    int mut_value = 100;
+    int* mutable_ref = &mut_value;
+    *mutable_ref = 200;  // OK: 変更可能
+    println("変更後: {mut_value}");  // 200
+
+    // 借用中は移動不可
+    int data = 10;
+    int* borrowed = &data;
+    // int moved = move data;  // エラー: 借用中の値は移動できない
+
+    return 0;
+}
+```
+
+**重要なポイント:**
+- `const T*` で不変借用（読み取り専用）
+- `T*` で可変借用（読み書き可能）
+- 借用された値は移動できない
+- ポインタが所有権ルールでメモリ安全性を保証
+
 ## ポインタ演算
 
 ```cm
