@@ -631,10 +631,23 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         if (obj_hir->type) {
             obj_type = obj_hir->type;
             type_name = ast::type_to_string(*obj_hir->type);
+            debug::hir::log(debug::hir::Id::MethodCallLower, "obj_hir->type = " + type_name,
+                            debug::Level::Info);
         } else if (mem.object->type) {
             obj_type = mem.object->type;
             type_name = ast::type_to_string(*mem.object->type);
+            debug::hir::log(debug::hir::Id::MethodCallLower, "mem.object->type = " + type_name,
+                            debug::Level::Info);
+        } else {
+            debug::hir::log(
+                debug::hir::Id::MethodCallLower,
+                "WARNING: Both obj_hir->type and mem.object->type are null for method: " +
+                    mem.member,
+                debug::Level::Warn);
         }
+
+        // obj_typeがnullの場合はデバッグログのみ
+        // （フォールバックは使用せず、型チェッカーの設定に依存）
 
         // 配列のビルトインメソッド処理
         if (obj_type && obj_type->kind == ast::TypeKind::Array) {

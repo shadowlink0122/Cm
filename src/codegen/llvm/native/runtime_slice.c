@@ -187,6 +187,23 @@ void cm_slice_push_slice(void* slice_ptr, void* inner_slice_ptr) {
     slice->len++;
 }
 
+// blob（可変サイズデータ）をpush（ユニオン型/構造体用）
+// スライスのelem_sizeに従ってデータをコピー
+void cm_slice_push_blob(void* slice_ptr, void* data_ptr) {
+    if (!slice_ptr || !data_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    // elem_sizeを使用してデータをコピー
+    char* dest = (char*)slice->data + (slice->len * slice->elem_size);
+    cm_memcpy(dest, data_ptr, slice->elem_size);
+    slice->len++;
+}
+
 // i8要素をpop（char/bool用）
 int8_t cm_slice_pop_i8(void* slice_ptr) {
     if (!slice_ptr)

@@ -678,6 +678,17 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
             is_slice = !index_expr.object->type->array_size.has_value();
         }
     }
+    // フォールバック: HIR型情報がnullの場合、MIRローカル変数の型から判定
+    // これは構造体フィールドへのインデックスアクセス（c.values[0]など）で必要
+    if (!is_slice && array < ctx.func->locals.size()) {
+        hir::TypePtr array_type = ctx.func->locals[array].type;
+        if (array_type && array_type->kind == hir::TypeKind::Array) {
+            if (array_type->element_type) {
+                elem_type = array_type->element_type;
+            }
+            is_slice = !array_type->array_size.has_value();
+        }
+    }
 
     LocalId result = ctx.new_temp(elem_type);
 

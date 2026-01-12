@@ -248,8 +248,12 @@ if(CM_USE_LLVM)
     # ランタイムライブラリはUnix系でのみビルド（Windows/MSVCは未対応）
     if(NOT WIN32)
         # ランタイムライブラリ用のclangとターゲット設定
-        # 全プラットフォームで--target形式を使用（統一的でシンプル）
-        set(CM_RUNTIME_CLANG "clang")
+        # macOSではシステムclangを使用（Homebrew LLVMはSDK検出に問題がある）
+        if(APPLE)
+            set(CM_RUNTIME_CLANG "/usr/bin/clang")
+        else()
+            set(CM_RUNTIME_CLANG "clang")
+        endif()
         
         if(APPLE)
             # macOSではSDKパスを検出してsysrootを設定（Homebrew LLVMに必要）

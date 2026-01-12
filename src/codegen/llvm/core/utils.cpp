@@ -210,6 +210,8 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
             valType = ctx.getF64Type();
         else if (name == "cm_slice_push_ptr" || name == "cm_slice_push_slice")
             valType = ctx.getPtrType();
+        else if (name == "cm_slice_push_blob")
+            valType = ctx.getPtrType();  // blobデータへのポインタ
         auto funcType =
             llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType(), valType}, false);
         auto func = module->getOrInsertFunction(name, funcType);

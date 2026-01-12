@@ -1391,17 +1391,101 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                         MirRvalue::use(
                                                             MirOperand::constant(idx_const))));
 
-                                                    place.projections.push_back(
-                                                        PlaceProjection::index(idx_local));
-
-                                                    // 配列の要素型に更新
-                                                    if (current_type &&
+                                                    // スライス（動的配列）かどうか判定
+                                                    bool is_slice_type =
+                                                        current_type &&
                                                         current_type->kind ==
                                                             hir::TypeKind::Array &&
-                                                        current_type->element_type) {
-                                                        current_type = current_type->element_type;
+                                                        !current_type->array_size.has_value();
+
+                                                    if (is_slice_type) {
+                                                        // スライスの場合:
+                                                        // まずスライスポインタをロードし、cm_slice_get_*を呼び出す
+                                                        hir::TypePtr elem_type =
+                                                            current_type->element_type
+                                                                ? current_type->element_type
+                                                                : hir::make_int();
+
+                                                        // 現在のPlaceからスライスポインタをロード
+                                                        LocalId slice_ptr =
+                                                            ctx.new_temp(current_type);
+                                                        ctx.push_statement(MirStatement::assign(
+                                                            MirPlace{slice_ptr},
+                                                            MirRvalue::use(
+                                                                MirOperand::copy(place))));
+
+                                                        // cm_slice_get_*関数を決定
+                                                        std::string get_func = "cm_slice_get_i32";
+                                                        auto elem_kind = elem_type->kind;
+                                                        if (elem_kind == hir::TypeKind::Char ||
+                                                            elem_kind == hir::TypeKind::Bool ||
+                                                            elem_kind == hir::TypeKind::Tiny ||
+                                                            elem_kind == hir::TypeKind::UTiny) {
+                                                            get_func = "cm_slice_get_i8";
+                                                        } else if (elem_kind ==
+                                                                       hir::TypeKind::Long ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::ULong) {
+                                                            get_func = "cm_slice_get_i64";
+                                                        } else if (elem_kind ==
+                                                                       hir::TypeKind::Double ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::Float) {
+                                                            get_func = "cm_slice_get_f64";
+                                                        } else if (elem_kind ==
+                                                                       hir::TypeKind::Pointer ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::String ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::Struct) {
+                                                            get_func = "cm_slice_get_ptr";
+                                                        }
+
+                                                        LocalId result = ctx.new_temp(elem_type);
+                                                        BlockId success_block = ctx.new_block();
+
+                                                        std::vector<MirOperandPtr> call_args;
+                                                        call_args.push_back(
+                                                            MirOperand::copy(MirPlace{slice_ptr}));
+                                                        call_args.push_back(
+                                                            MirOperand::copy(MirPlace{idx_local}));
+
+                                                        auto call_term =
+                                                            std::make_unique<MirTerminator>();
+                                                        call_term->kind = MirTerminator::Call;
+                                                        call_term->data = MirTerminator::CallData{
+                                                            MirOperand::function_ref(get_func),
+                                                            std::move(call_args),
+                                                            MirPlace{result},
+                                                            success_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
+                                                        ctx.set_terminator(std::move(call_term));
+                                                        ctx.switch_to_block(success_block);
+
+                                                        // 結果を追加
+                                                        arg_locals.push_back(result);
+                                                        current_type = elem_type;
+                                                        // スライスの場合、残りの処理をスキップ
+                                                        remaining.clear();
+                                                        continue;
                                                     } else {
-                                                        current_type = hir::make_int();
+                                                        // 静的配列の場合は従来のインデックスプロジェクション
+                                                        place.projections.push_back(
+                                                            PlaceProjection::index(idx_local));
+
+                                                        // 配列の要素型に更新
+                                                        if (current_type &&
+                                                            current_type->kind ==
+                                                                hir::TypeKind::Array &&
+                                                            current_type->element_type) {
+                                                            current_type =
+                                                                current_type->element_type;
+                                                        } else {
+                                                            current_type = hir::make_int();
+                                                        }
                                                     }
                                                 } catch (...) {
                                                     valid = false;
@@ -2062,6 +2146,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 多次元スライス: 内側スライスはポインタとしてpush
                         push_func = "cm_slice_push_slice";
+                    } else if (elem_kind == hir::TypeKind::Union) {
+                        // ユニオン型: blobとしてメモリコピー
+                        push_func = "cm_slice_push_blob";
                     } else if (elem_kind == hir::TypeKind::Pointer ||
                                elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {
