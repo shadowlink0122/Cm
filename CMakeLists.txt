@@ -230,6 +230,13 @@ target_link_libraries(cm PRIVATE cm_frontend)
 if(CM_USE_LLVM)
     target_link_libraries(cm PRIVATE cm_llvm_backend)
     
+    # Linux: JITがホストプロセスからシンボルを解決できるように
+    # ランタイムシンボル（cm_print_*, cm_format_*など）をエクスポート
+    if(UNIX AND NOT APPLE)
+        set_target_properties(cm PROPERTIES ENABLE_EXPORTS ON)
+        target_link_options(cm PRIVATE "-rdynamic")
+    endif()
+    
     # LLVMのホストターゲットを取得
     execute_process(
         COMMAND llvm-config --host-target
