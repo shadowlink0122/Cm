@@ -195,14 +195,17 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_slice_push_i8" || name == "cm_slice_push_i32" ||
-               name == "cm_slice_push_i64" || name == "cm_slice_push_f64" ||
-               name == "cm_slice_push_ptr" || name == "cm_slice_push_slice") {
+               name == "cm_slice_push_i64" || name == "cm_slice_push_f32" ||
+               name == "cm_slice_push_f64" || name == "cm_slice_push_ptr" ||
+               name == "cm_slice_push_slice") {
         // void cm_slice_push_*(i8* slice, value)
         llvm::Type* valType = ctx.getI32Type();
         if (name == "cm_slice_push_i8")
             valType = ctx.getI8Type();
         else if (name == "cm_slice_push_i64")
             valType = ctx.getI64Type();
+        else if (name == "cm_slice_push_f32")
+            valType = ctx.getF32Type();
         else if (name == "cm_slice_push_f64")
             valType = ctx.getF64Type();
         else if (name == "cm_slice_push_ptr" || name == "cm_slice_push_slice")
@@ -212,14 +215,16 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_slice_pop_i8" || name == "cm_slice_pop_i32" ||
-               name == "cm_slice_pop_i64" || name == "cm_slice_pop_f64" ||
-               name == "cm_slice_pop_ptr") {
+               name == "cm_slice_pop_i64" || name == "cm_slice_pop_f32" ||
+               name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") {
         // value cm_slice_pop_*(i8* slice)
         llvm::Type* retType = ctx.getI32Type();
         if (name == "cm_slice_pop_i8")
             retType = ctx.getI8Type();
         else if (name == "cm_slice_pop_i64")
             retType = ctx.getI64Type();
+        else if (name == "cm_slice_pop_f32")
+            retType = ctx.getF32Type();
         else if (name == "cm_slice_pop_f64")
             retType = ctx.getF64Type();
         else if (name == "cm_slice_pop_ptr")
@@ -253,6 +258,11 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     } else if (name == "__builtin_slice_get_i64" || name == "cm_slice_get_i64") {
         auto funcType =
             llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_slice_get_f32" || name == "cm_slice_get_f32") {
+        auto funcType =
+            llvm::FunctionType::get(ctx.getF32Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "__builtin_slice_get_f64" || name == "cm_slice_get_f64") {

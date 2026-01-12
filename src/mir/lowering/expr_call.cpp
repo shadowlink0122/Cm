@@ -2055,8 +2055,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     } else if (elem_kind == hir::TypeKind::Long ||
                                elem_kind == hir::TypeKind::ULong) {
                         push_func = "cm_slice_push_i64";
-                    } else if (elem_kind == hir::TypeKind::Double ||
-                               elem_kind == hir::TypeKind::Float) {
+                    } else if (elem_kind == hir::TypeKind::Float) {
+                        push_func = "cm_slice_push_f32";
+                    } else if (elem_kind == hir::TypeKind::Double) {
                         push_func = "cm_slice_push_f64";
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 多次元スライス: 内側スライスはポインタとしてpush
@@ -2114,8 +2115,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                         } else if (elem_kind == hir::TypeKind::Long ||
                                    elem_kind == hir::TypeKind::ULong) {
                             pop_func = "cm_slice_pop_i64";
-                        } else if (elem_kind == hir::TypeKind::Double ||
-                                   elem_kind == hir::TypeKind::Float) {
+                        } else if (elem_kind == hir::TypeKind::Float) {
+                            pop_func = "cm_slice_pop_f32";
+                        } else if (elem_kind == hir::TypeKind::Double) {
                             pop_func = "cm_slice_pop_f64";
                         } else if (elem_kind == hir::TypeKind::Pointer ||
                                    elem_kind == hir::TypeKind::String ||
