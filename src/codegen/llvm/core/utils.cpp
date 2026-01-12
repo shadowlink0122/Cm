@@ -602,6 +602,25 @@ llvm::Value* MIRToLLVM::callIntrinsic([[maybe_unused]] const std::string& name,
     return nullptr;
 }
 
+// ヒープ割り当てされたローカル変数を解放
+void MIRToLLVM::freeHeapAllocatedLocals() {
+    // ヒープ割り当てされたローカル変数を解放
+    if (heapAllocatedLocals.empty())
+        return;
+
+    auto freeFunc = declareExternalFunction("free");
+    for (auto localId : heapAllocatedLocals) {
+        auto it = locals.find(localId);
+        if (it != locals.end()) {
+            // ポインタを取得（allocaからロード）
+            auto ptrAlloca = it->second;
+            auto heapPtr = builder->CreateLoad(ctx.getPtrType(), ptrAlloca, "heap_ptr_to_free");
+            // free呼び出し（不透明ポインタはそのまま使用可能）
+            builder->CreateCall(freeFunc, {heapPtr});
+        }
+    }
+}
+
 // パニック生成
 void MIRToLLVM::generatePanic(const std::string& message) {
     auto msgStr = builder->CreateGlobalStringPtr(message, "panic_msg");

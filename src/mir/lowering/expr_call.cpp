@@ -2058,6 +2058,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     } else if (elem_kind == hir::TypeKind::Double ||
                                elem_kind == hir::TypeKind::Float) {
                         push_func = "cm_slice_push_f64";
+                    } else if (elem_kind == hir::TypeKind::Array) {
+                        // 多次元スライス: 内側スライスはポインタとしてpush
+                        push_func = "cm_slice_push_slice";
                     } else if (elem_kind == hir::TypeKind::Pointer ||
                                elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {

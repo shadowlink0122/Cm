@@ -31,6 +31,9 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             break;
         }
         case mir::MirTerminator::Return: {
+            // ヒープ割り当てされたローカル変数を解放
+            freeHeapAllocatedLocals();
+
             if (currentMIRFunction->name == "main") {
                 // main関数は常にi32を返す
                 if (currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
@@ -1092,8 +1095,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     auto& returnLocal =
                         currentMIRFunction->locals[currentMIRFunction->return_local];
                     if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
+                        // ヒープ割り当てされたローカル変数を解放
+                        freeHeapAllocatedLocals();
                         builder->CreateRetVoid();
                     } else if (currentMIRFunction->name == "main") {
+                        // ヒープ割り当てされたローカル変数を解放
+                        freeHeapAllocatedLocals();
                         // main関数はi32 0を返す
                         builder->CreateRet(llvm::ConstantInt::get(ctx.getI32Type(), 0));
                     } else {
@@ -1105,6 +1112,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                 retVal = builder->CreateLoad(allocaInst->getAllocatedType(), retVal,
                                                              "retval");
                             }
+                            // ヒープ割り当てされたローカル変数を解放
+                            freeHeapAllocatedLocals();
                             builder->CreateRet(retVal);
                         } else {
                             builder->CreateUnreachable();
