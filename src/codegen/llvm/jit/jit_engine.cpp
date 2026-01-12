@@ -17,6 +17,17 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 
+// LLVM 14-16: レガシーPassManager (PassManagerBuilderが存在)
+// LLVM 17+: 新PassManager のみ (PassManagerBuilder削除)
+#if LLVM_VERSION_MAJOR < 17
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#endif
+
 namespace cm::codegen::jit {
 
 JITEngine::JITEngine() {
@@ -73,12 +84,45 @@ void JITEngine::registerRuntimeSymbols() {
     // ランタイム関数はLLVM IR内で宣言され、リンク時に解決される
 }
 
-/// LLVM最適化パスを適用（新パスマネージャー使用、LLVM 14-18対応）
+/// LLVM最適化パスを適用
+/// LLVM 14-16: レガシーPassManagerBuilder
+/// LLVM 17+: 新PassBuilder
 void JITEngine::optimizeModule(llvm::Module& module, int optLevel) {
     if (optLevel <= 0)
         return;
 
-    // 新パスマネージャーを使用（LLVM 14以降対応）
+#if LLVM_VERSION_MAJOR < 17
+    // LLVM 14-16: レガシーPassManager を使用
+    llvm::legacy::PassManager pm;
+    llvm::legacy::FunctionPassManager fpm(&module);
+
+    // PassManagerBuilderで標準最適化パスを構成
+    llvm::PassManagerBuilder builder;
+    builder.OptLevel = static_cast<unsigned>(optLevel);
+    builder.SizeLevel = 0;
+
+    if (optLevel >= 2) {
+        builder.Inliner = llvm::createFunctionInliningPass(optLevel, 0, false);
+    }
+
+    // 関数パス追加
+    builder.populateFunctionPassManager(fpm);
+    // モジュールパス追加
+    builder.populateModulePassManager(pm);
+
+    // 関数パス実行
+    fpm.doInitialization();
+    for (auto& func : module) {
+        if (!func.isDeclaration()) {
+            fpm.run(func);
+        }
+    }
+    fpm.doFinalization();
+
+    // モジュールパス実行
+    pm.run(module);
+#else
+    // LLVM 17+: 新PassBuilder を使用
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;
@@ -110,6 +154,7 @@ void JITEngine::optimizeModule(llvm::Module& module, int optLevel) {
 
     llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(level);
     MPM.run(module, MAM);
+#endif
 }
 
 JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& entryPoint,
@@ -163,8 +208,9 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
             "Entry point '" + entryPoint + "' not found: " + llvm::toString(mainSymbol.takeError());
         return result;
     }
+
     // 関数ポインタを取得して実行
-    // LLVM 14: getAddress(), LLVM 15+: getValue() / toPtr()
+    // LLVM 14: getAddress(), LLVM 15+: toPtr()
     using MainFnType = int (*)();
 #if LLVM_VERSION_MAJOR >= 15
     auto mainFn = mainSymbol->toPtr<MainFnType>();
