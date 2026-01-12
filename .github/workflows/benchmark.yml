@@ -1,265 +1,80 @@
-name: Performance Benchmark
+name: Benchmark
 
 on:
   push:
-    branches: [main, develop, feature/v0.11.0]
+    branches: [main, develop]
   pull_request:
     branches: [main]
-  workflow_dispatch:  # 手動実行も可能
+  workflow_dispatch:
 
 env:
   BUILD_TYPE: Release
 
 jobs:
   # ========================================
-  # Benchmark - パフォーマンス測定と検証
+  # Build and Run Benchmarks (Single Job)
   # ========================================
   benchmark:
-    name: Performance Benchmark (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            llvm_version: "18"
-          - os: macos-latest
-            llvm_version: "14"
-    runs-on: ${{ matrix.os }}
-
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    
     steps:
       - uses: actions/checkout@v4
 
-      # LLVM インストール (Ubuntu)
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
+      - name: Install LLVM
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }}
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
+          sudo ./llvm.sh 17
+          sudo apt-get install -y llvm-17-dev clang-17
+          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm" >> $GITHUB_ENV
 
-      # LLVM インストール (macOS)
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }} coreutils
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
-          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+      - name: Install Google Test
+        run: sudo apt-get install -y libgtest-dev
 
-      # Cmコンパイラビルド
-      - name: Build Cm Compiler
+      - name: Configure CMake
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DCM_USE_LLVM=ON \
-            -DBUILD_TESTING=OFF
-          cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+            -DCM_USE_LLVM=ON
 
-      # C++コンパイラインストール
-      - name: Install C++ Compiler
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y g++
+      - name: Build
+        run: cmake --build build -j$(nproc)
 
-      # Rustインストール
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      # Pythonセットアップ
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      # ベンチマーク準備
-      - name: Prepare benchmarks
+      - name: Run All Benchmarks
         run: |
-          cd tests/bench_marks
-
-          # Cm ベンチマークのビルド
-          echo "=== Building Cm benchmarks ==="
-          cd cm
-          for file in *.cm; do
-            echo "Compiling $file..."
-            ../../../build/bin/cm -O3 "$file" -o "${file%.cm}" || true
-          done
-          cd ..
-
-          # C++ ベンチマークのビルド
-          echo "=== Building C++ benchmarks ==="
-          cd cpp
-          for file in *.cpp; do
-            echo "Compiling $file..."
-            g++ -O3 -std=c++20 "$file" -o "${file%.cpp}" || clang++ -O3 -std=c++20 "$file" -o "${file%.cpp}"
-          done
-          cd ..
-
-          # Rust ベンチマークのビルド
-          echo "=== Building Rust benchmarks ==="
-          cd rust
-          for dir in */; do
-            if [ -d "$dir" ]; then
-              echo "Building $dir..."
-              cd "$dir"
-              cargo build --release
-              cd ..
+          echo "=== Running Cm JIT Benchmarks ==="
+          
+          PASS=0
+          FAIL=0
+          
+          for bench in 06_prime_sieve 07_fibonacci_memoized 04_array_sort 05_matrix_multiply; do
+            echo ""
+            echo "--- $bench ---"
+            
+            if [ -f "tests/bench_marks/cm/${bench}.cm" ]; then
+              echo "Running tests/bench_marks/cm/${bench}.cm..."
+              if timeout 120 ./cm run tests/bench_marks/cm/${bench}.cm > /dev/null 2>&1; then
+                echo "✅ $bench: PASS"
+                PASS=$((PASS + 1))
+              else
+                echo "❌ $bench: FAIL"
+                FAIL=$((FAIL + 1))
+              fi
+            else
+              echo "⚠️ $bench: SKIP (file not found)"
             fi
           done
-          cd ..
-
-      # ベンチマーク実行
-      - name: Run benchmarks
-        run: |
-          # タイムアウトコマンドの設定（macOSではgtimeoutを使用）
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            TIMEOUT_CMD="gtimeout"
+          
+          echo ""
+          echo "=== Benchmark Results ==="
+          echo "Passed: $PASS"
+          echo "Failed: $FAIL"
+          
+          if [ $FAIL -gt 0 ]; then
+            echo "⚠️ Some benchmarks failed (non-critical)"
+            # ベンチマーク失敗はCIを失敗させない
           else
-            TIMEOUT_CMD="timeout"
+            echo "✅ All benchmarks passed!"
           fi
-
-          cd tests/bench_marks
-          mkdir -p results
-
-          # タイムアウト付きで個別ベンチマーク実行
-          echo "=== Running individual benchmarks ==="
-
-          # 素数判定
-          echo "--- Prime Sieve (10000) ---"
-          $TIMEOUT_CMD 5 python/01_prime_sieve.py || true
-          $TIMEOUT_CMD 5 cpp/01_prime_sieve || true
-          $TIMEOUT_CMD 5 rust/01_prime_sieve/target/release/prime_sieve || true
-          $TIMEOUT_CMD 5 cm/01_prime_sieve || true
-
-          # フィボナッチ
-          echo "--- Fibonacci Memoized (40) ---"
-          $TIMEOUT_CMD 5 python/02_fibonacci_memo.py || true
-          $TIMEOUT_CMD 5 cpp/02_fibonacci_memo || true
-          $TIMEOUT_CMD 5 rust/02_fibonacci_memo/target/release/fibonacci_memo || true
-          $TIMEOUT_CMD 5 cm/02_fibonacci_memo || true
-
-          # 配列ソート
-          echo "--- Array Sort (1000) ---"
-          $TIMEOUT_CMD 5 python/03_array_sort.py || true
-          $TIMEOUT_CMD 5 cpp/03_array_sort || true
-          $TIMEOUT_CMD 5 rust/03_array_sort/target/release/array_sort || true
-          $TIMEOUT_CMD 5 cm/03_array_sort || true
-
-          # 行列乗算
-          echo "--- Matrix Multiply (500x500) ---"
-          $TIMEOUT_CMD 30 python/04_matrix_multiply.py || true
-          $TIMEOUT_CMD 30 cpp/04_matrix_multiply || true
-          $TIMEOUT_CMD 30 rust/04_matrix_multiply/target/release/matrix_multiply || true
-          $TIMEOUT_CMD 30 cm/04_matrix_multiply || true
-
-      # パフォーマンス検証スクリプト
-      - name: Create performance verification script
-        run: |
-          cat > verify_performance.py << 'EOF'
-          #!/usr/bin/env python3
-          """
-          パフォーマンス検証スクリプト
-          Cmの性能がC++/Rustより著しく劣っていないことを確認
-          """
-          import sys
-          import re
-
-          def parse_time(output_line):
-              """実行時間を抽出（秒単位）"""
-              # "Time: 0.123s" や "Elapsed: 0.123 seconds" などのパターン
-              patterns = [
-                  r'Time:\s*([\d.]+)\s*s',
-                  r'Elapsed:\s*([\d.]+)\s*seconds?',
-                  r'実行時間:\s*([\d.]+)\s*秒',
-                  r'(\d+\.\d+)\s*seconds?'
-              ]
-              for pattern in patterns:
-                  match = re.search(pattern, output_line, re.IGNORECASE)
-                  if match:
-                      return float(match.group(1))
-              return None
-
-          # TODO: 実際の出力をパースして比較
-          # 現時点では基本的なチェックのみ
-          print("Performance verification placeholder")
-          print("In production, this would:")
-          print("1. Parse benchmark outputs")
-          print("2. Compare Cm performance with C++/Rust")
-          print("3. Fail if Cm is >2x slower than best competitor")
-
-          sys.exit(0)
-          EOF
-
-          chmod +x verify_performance.py
-
-      # パフォーマンス検証
-      - name: Verify performance
-        run: |
-          python3 verify_performance.py
-
-      # 結果のアーティファクト保存
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: benchmark-results-${{ matrix.os }}
-          path: |
-            tests/bench_marks/results/
-          retention-days: 30
-
-  # ========================================
-  # Performance Report - 結果レポート生成
-  # ========================================
-  performance-report:
-    name: Performance Report
-    needs: benchmark
-    runs-on: ubuntu-latest
-    if: always()
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # ベンチマーク結果をダウンロード
-      - name: Download all benchmark results
-        uses: actions/download-artifact@v4
-        with:
-          pattern: benchmark-results-*
-          merge-multiple: true
-
-      # レポート生成
-      - name: Generate performance report
-        run: |
-          echo "# Performance Benchmark Report" > BENCHMARK_REPORT.md
-          echo "" >> BENCHMARK_REPORT.md
-          echo "## Summary" >> BENCHMARK_REPORT.md
-          echo "" >> BENCHMARK_REPORT.md
-          echo "✅ Cm performance is competitive with C++ and Rust" >> BENCHMARK_REPORT.md
-          echo "" >> BENCHMARK_REPORT.md
-          echo "## Details" >> BENCHMARK_REPORT.md
-          echo "" >> BENCHMARK_REPORT.md
-          echo "| Benchmark | Cm (JIT) | C++ (O3) | Rust (release) | Python |" >> BENCHMARK_REPORT.md
-          echo "|-----------|----------|----------|----------------|--------|" >> BENCHMARK_REPORT.md
-          echo "| Prime Sieve (10000) | ~0.003s | ~0.003s | ~0.003s | ~0.5s |" >> BENCHMARK_REPORT.md
-          echo "| Fibonacci (40) | ~0.001s | ~0.001s | ~0.001s | ~0.2s |" >> BENCHMARK_REPORT.md
-          echo "| Array Sort (1000) | ~0.002s | ~0.002s | ~0.002s | ~0.1s |" >> BENCHMARK_REPORT.md
-          echo "| Matrix Multiply (500x500) | ~0.013s | ~0.012s | ~0.014s | ~3.0s |" >> BENCHMARK_REPORT.md
-
-          cat BENCHMARK_REPORT.md
-
-      # PRコメントとして投稿（PR時のみ）
-      - name: Comment PR with results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('BENCHMARK_REPORT.md', 'utf8');
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            });
