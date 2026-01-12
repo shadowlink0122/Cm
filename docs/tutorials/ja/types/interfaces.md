@@ -78,11 +78,14 @@ int main() {
     Circle c;
     c.radius = 10;
     c.draw();  // Circleのdrawが呼ばれる
-    
+
     Square s;
     s.side = 5;
     s.draw();  // Squareのdrawが呼ばれる
-    
+
+    // 変更しない構造体はconstで宣言すべき
+    // const Circle c2 = {radius: 15};  // constの場合
+
     return 0;
 }
 ```

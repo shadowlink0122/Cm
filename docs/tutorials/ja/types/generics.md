@@ -18,9 +18,9 @@ parent: Tutorials
 }
 
 int main() {
-    int i = identity(42);
-    double d = identity(3.14);
-    string s = identity("Hello");
+    const int i = identity(42);  // 結果は不変
+    const double d = identity(3.14);
+    const string s = identity("Hello");
     return 0;
 }
 ```
@@ -33,8 +33,8 @@ int main() {
 }
 
 int main() {
-    int i = max(10, 20);
-    double d = max(3.14, 2.71);
+    const int i = max(10, 20);  // 結果は不変
+    const double d = max(3.14, 2.71);
     return 0;
 }
 ```
@@ -73,7 +73,7 @@ struct Pair<T, U> {
 }
 
 int main() {
-    Pair<int, string> p = make_pair(1, "one");
+    const Pair<int, string> p = make_pair(1, "one");  // 結果は不変
     return 0;
 }
 ```

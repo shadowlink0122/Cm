@@ -36,7 +36,7 @@ parent: Tutorials
 
 ### Optional
 
-- **LLVM 14-18+**
+- **LLVM 17**
   - Required for native compilation
   - Not required for interpreter-only usage
 
@@ -54,10 +54,10 @@ parent: Tutorials
 
 ```bash
 # Install via Homebrew
-brew install cmake llvm@18
+brew install cmake llvm@17
 
 # Set Clang path
-export PATH="/opt/homebrew/opt/llvm@18/bin:$PATH"
+export PATH="/opt/homebrew/opt/llvm@17/bin:$PATH"
 ```
 
 ### Ubuntu/Debian
@@ -212,7 +212,7 @@ brew install cmake
 ```bash
 # Specify LLVM_DIR
 cmake -B build -DCM_USE_LLVM=ON \
-  -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+  -DLLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm
 ```
 
 #### C++20 Compiler Error
@@ -243,10 +243,10 @@ export PATH="$PWD/build/bin:$PATH"
 
 ```bash
 # macOS
-export DYLD_LIBRARY_PATH="/opt/homebrew/opt/llvm@18/lib:$DYLD_LIBRARY_PATH"
+export DYLD_LIBRARY_PATH="/opt/homebrew/opt/llvm@17/lib:$DYLD_LIBRARY_PATH"
 
 # Linux
-export LD_LIBRARY_PATH="/usr/lib/llvm-18/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="/usr/lib/llvm-17/lib:$LD_LIBRARY_PATH"
 ```
 
 ---

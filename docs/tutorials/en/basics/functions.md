@@ -25,16 +25,16 @@ parent: Tutorials
 Functions are defined in the format `ReturnType FunctionName(Parameters) { ... }`.
 
 ```cm
-int add(int a, int b) {
+int add(const int a, const int b) {  // Parameters won't change, use const
     return a + b;
 }
 
-void greet(string name) {
+void greet(const string name) {  // name won't be modified
     println("Hello, {}!", name);
 }
 
 int main() {
-    int sum = add(10, 20);
+    const int sum = add(10, 20);  // Result is immutable
     greet("Alice");
     return 0;
 }
@@ -96,7 +96,7 @@ You can define multiple functions with the same name but different parameters (t
 The `overload` keyword is required.
 
 ```cm
-overload int max(int a, int b) {
+overload int max(const int a, const int b) {
     return a > b ? a : b;
 }
 

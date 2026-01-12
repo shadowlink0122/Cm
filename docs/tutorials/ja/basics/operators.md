@@ -26,13 +26,14 @@ parent: Tutorials
 
 ```cm
 int main() {
-    int a = 10, b = 3;
+    const int a = 10;  // 演算に使う値は不変
+    const int b = 3;
 
-    int sum = a + b;      // 13 (加算)
-    int diff = a - b;     // 7  (減算)
-    int prod = a * b;     // 30 (乗算)
-    int quot = a / b;     // 3  (除算)
-    int rem = a % b;      // 1  (剰余)
+    const int sum = a + b;      // 13 (加算)
+    const int diff = a - b;     // 7  (減算)
+    const int prod = a * b;     // 30 (乗算)
+    const int quot = a / b;     // 3  (除算)
+    const int rem = a % b;      // 1  (剰余)
     return 0;
 }
 ```
@@ -41,10 +42,11 @@ int main() {
 
 ```cm
 int main() {
-    double x = 10.0, y = 3.0;
+    const double x = 10.0;  // constで不変に
+    const double y = 3.0;
 
-    double sum = x + y;   // 13.0
-    double quot = x / y;  // 3.333...
+    const double sum = x + y;   // 13.0
+    const double quot = x / y;  // 3.333...
     // double rem = x % y;  // エラー: %は整数のみ
     return 0;
 }
@@ -54,9 +56,9 @@ int main() {
 
 ```cm
 int main() {
-    int x = 10;
-    int neg = -x;         // -10 (符号反転)
-    int pos = +x;         // 10  (符号維持)
+    const int x = 10;  // constで不変に
+    const int neg = -x;         // -10 (符号反転)
+    const int pos = +x;         // 10  (符号維持)
     return 0;
 }
 ```
@@ -67,14 +69,15 @@ int main() {
 
 ```cm
 int main() {
-    int a = 10, b = 20;
+    const int a = 10;  // constで不変に
+    const int b = 20;
 
-    bool eq = (a == b);   // false (等しい)
-    bool ne = (a != b);   // true  (等しくない)
-    bool lt = (a < b);    // true  (より小さい)
-    bool le = (a <= b);   // true  (以下)
-    bool gt = (a > b);    // false (より大きい)
-    bool ge = (a >= b);   // false (以上)
+    const bool eq = (a == b);   // false (等しい)
+    const bool ne = (a != b);   // true  (等しくない)
+    const bool lt = (a < b);    // true  (より小さい)
+    const bool le = (a <= b);   // true  (以下)
+    const bool gt = (a > b);    // false (より大きい)
+    const bool ge = (a >= b);   // false (以上)
     return 0;
 }
 ```

@@ -25,13 +25,17 @@ parent: Tutorials
 関数は `戻り値の型 関数名(パラメータ) { ... }` の形式で定義します。
 
 ```cm
+int add(const int a, const int b) {  // パラメータは変更しないのでconst
     return a + b;
 }
 
-void greet(string name) {
+void greet(const string name) {  // nameも変更しないのでconst
     println("Hello, {}!", name);
 }
 
+int main() {
+    const int result = add(3, 5);  // 結果も変更しない
+    greet("Alice");
     return 0;
 }
 ```
@@ -56,8 +60,12 @@ Cmではデフォルトで値渡しが行われます。
 
 ```cm
 void increment(int n) {
+    n++;  // コピーを変更（元の値には影響なし）
 }
 
+int main() {
+    int x = 10;  // 可変変数（変更予定がないならconstにすべき）
+    increment(x);
     println("{}", x);  // 10（変更されない）
     return 0;
 }
@@ -69,8 +77,12 @@ void increment(int n) {
 
 ```cm
 void increment(int* n) {
+    (*n)++;  // ポインタの参照先を変更
 }
 
+int main() {
+    int x = 10;  // 可変変数（変更するのでconstは使えない）
+    increment(&x);
     println("{}", x);  // 11（変更される）
     return 0;
 }
@@ -84,16 +96,19 @@ void increment(int* n) {
 `overload` キーワードを付ける必要があります。
 
 ```cm
-overload int max(int a, int b) {
+overload int max(const int a, const int b) {
     return a > b ? a : b;
 }
 
-overload double max(double a, double b) {
+overload double max(const double a, const double b) {
     return a > b ? a : b;
 }
 
-    println("max int: {}", max(10, 20));
-    println("max double: {}", max(3.14, 2.71));
+int main() {
+    const int maxInt = max(10, 20);
+    const double maxDouble = max(3.14, 2.71);
+    println("max int: {}", maxInt);
+    println("max double: {}", maxDouble);
     return 0;
 }
 ```

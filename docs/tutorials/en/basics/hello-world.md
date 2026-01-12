@@ -34,15 +34,17 @@ int main() {
 
 ```cm
 int main() {
-    int x = 42;
+    const int x = 42;  // Use const for immutable values
     println("The answer is {}", x);
 
-    string name = "Alice";
-    int age = 25;
+    const string name = "Alice";  // String is also const
+    const int age = 25;           // Age won't change
     println("{} is {} years old", name, age);
     return 0;
 }
 ```
+
+**Important (v0.11.0+)**: Always use `const` for variables that won't be modified. This helps the compiler optimize better and makes your code intent clearer.
 
 ---
 

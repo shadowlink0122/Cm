@@ -25,7 +25,9 @@ parent: Tutorials
 ### 基本的なif文
 
 ```cm
+const int score = 85;  // スコアは変更しないのでconst
 
+if (score >= 90) {
     println("Grade: A");
 } else if (score >= 80) {
     println("Grade: B");
@@ -41,13 +43,17 @@ parent: Tutorials
 ### 条件式
 
 ```cm
+const int x = 10;  // constで不変にする
 
+if (x > 0) {
     println("Positive");
 }
 
+if (x % 2 == 0) {
     println("Even");
 }
 
+if (x >= 5 && x <= 15) {
     println("Between 5 and 15");
 }
 ```
@@ -55,8 +61,11 @@ parent: Tutorials
 ### ネストしたif
 
 ```cm
-bool has_license = true;
+const int age = 25;  // 年齢は変更しないのでconst
+const bool has_license = true;  // ライセンス有無も不変
 
+if (age >= 18) {
+    if (has_license) {
         println("Can drive");
     } else {
         println("Need license");
@@ -71,8 +80,16 @@ bool has_license = true;
 ## 三項演算子
 
 ```cm
+const int a = 10;  // constで不変
+const int b = 20;  // constで不変
+const int max = (a > b) ? a : b;  // 結果も不変
+
+const int age = 25;
+const string status = (age >= 20) ? "Adult" : "Minor";
 
 // ネスト可能（ただし可読性に注意）
+const int x = 5;
+const int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
 ```
 
 ---

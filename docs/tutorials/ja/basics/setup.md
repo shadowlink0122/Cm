@@ -36,7 +36,7 @@ parent: Tutorials
 
 ### オプション
 
-- **LLVM 14-18+**
+- **LLVM 17**
   - ネイティブコンパイルに必要
   - インタプリタのみならLLVMなしでも可
 
@@ -54,10 +54,10 @@ parent: Tutorials
 
 ```bash
 # Homebrewでインストール
-brew install cmake llvm@18
+brew install cmake llvm@17
 
 # Clangのパスを設定
-export PATH="/opt/homebrew/opt/llvm@18/bin:$PATH"
+export PATH="/opt/homebrew/opt/llvm@17/bin:$PATH"
 ```
 
 ### Ubuntu/Debian
@@ -212,7 +212,7 @@ brew install cmake
 ```bash
 # LLVM_DIR を指定
 cmake -B build -DCM_USE_LLVM=ON \
-  -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+  -DLLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm
 ```
 
 #### C++20コンパイラエラー
@@ -243,10 +243,10 @@ export PATH="$PWD/build/bin:$PATH"
 
 ```bash
 # macOS
-export DYLD_LIBRARY_PATH="/opt/homebrew/opt/llvm@18/lib:$DYLD_LIBRARY_PATH"
+export DYLD_LIBRARY_PATH="/opt/homebrew/opt/llvm@17/lib:$DYLD_LIBRARY_PATH"
 
 # Linux
-export LD_LIBRARY_PATH="/usr/lib/llvm-18/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="/usr/lib/llvm-17/lib:$LD_LIBRARY_PATH"
 ```
 
 ---

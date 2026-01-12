@@ -34,15 +34,17 @@ int main() {
 
 ```cm
 int main() {
-    int x = 42;
+    const int x = 42;  // 変更しない値はconstを使用
     println("The answer is {}", x);
 
-    string name = "Alice";
-    int age = 25;
+    const string name = "Alice";  // 文字列もconstで不変に
+    const int age = 25;           // 年齢も変更しない
     println("{} is {} years old", name, age);
     return 0;
 }
 ```
+
+**重要（v0.11.0以降）**: 変更しない変数には必ず`const`をつけます。これによりコンパイラが最適化を行いやすくなり、コードの意図も明確になります。
 
 ---
 
