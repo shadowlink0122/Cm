@@ -6,6 +6,7 @@
 #include "../core/context.hpp"
 #include "../core/mir_to_llvm.hpp"
 
+#include <llvm/Config/llvm-config.h>
 #include <llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h>
 #include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
@@ -162,10 +163,15 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
             "Entry point '" + entryPoint + "' not found: " + llvm::toString(mainSymbol.takeError());
         return result;
     }
-    // 関数ポインタを取得して実行 (LLVM 14互換)
+    // 関数ポインタを取得して実行
+    // LLVM 14: getAddress(), LLVM 15+: getValue() / toPtr()
     using MainFnType = int (*)();
+#if LLVM_VERSION_MAJOR >= 15
+    auto mainFn = mainSymbol->toPtr<MainFnType>();
+#else
     auto mainAddr = mainSymbol->getAddress();
     auto mainFn = reinterpret_cast<MainFnType>(static_cast<uintptr_t>(mainAddr));
+#endif
 
     // main()を実行
     try {

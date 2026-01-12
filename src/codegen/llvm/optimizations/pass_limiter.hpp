@@ -94,7 +94,8 @@ class OptimizationPassLimiter {
     static bool shouldAbortOptimization(const std::chrono::steady_clock::time_point& start_time,
                                         const std::string& phase_name) {
         auto elapsed = std::chrono::steady_clock::now() - start_time;
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+        auto seconds =
+            static_cast<size_t>(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count());
 
         if (seconds > OPTIMIZATION_TIMEOUT_ABORT) {
             std::cerr << "[OPT_LIMITER] エラー: " << phase_name << " が " << seconds

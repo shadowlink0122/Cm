@@ -1369,11 +1369,10 @@ void Monomorphization::update_type_references(MirProgram& program) {
                 if (!place || place->projections.empty())
                     continue;
 
-                // フィールドアクセスの場合
                 if (place->projections[0].kind == ProjectionKind::Field) {
                     LocalId source_local = place->local;
                     LocalId dest_local = assign.place.local;
-                    FieldId field_id = place->projections[0].field_id;
+                    (void)place->projections[0].field_id;  // 未使用警告を抑制
 
                     // ソースローカルの型情報を取得
                     auto info_it = struct_info.find(source_local);

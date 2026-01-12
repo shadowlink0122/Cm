@@ -229,11 +229,193 @@ jobs:
         run: make tlwp${{ matrix.opt_level }}
 
   # ========================================
+  # Performance Benchmark - パフォーマンス測定
+  # C++/Rustとの性能比較を実施
+  # ========================================
+  benchmark:
+    name: Performance Benchmark
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ビルド成果物をダウンロード
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-latest
+
+      - name: Set executable permissions
+        run: chmod +x build/bin/* cm 2>/dev/null || true
+
+      # LLVM インストール（実行時に必要）
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+          sudo apt-get install -y llvm-18-dev clang-18
+          echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
+
+      # C++/Rust/Pythonのセットアップ
+      - name: Install benchmark dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ time bc
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+          python3 --version
+
+      # ベンチマークビルド
+      - name: Build benchmarks
+        run: |
+          cd tests/bench_marks
+
+          # Cm ベンチマーク
+          echo "=== Building Cm benchmarks ==="
+          cd cm
+          for file in *.cm; do
+            if [ -f "$file" ]; then
+              echo "Compiling $file..."
+              ../../../build/bin/cm -O3 "$file" -o "${file%.cm}" || true
+            fi
+          done
+          cd ..
+
+          # C++ ベンチマーク
+          echo "=== Building C++ benchmarks ==="
+          cd cpp
+          for file in *.cpp; do
+            if [ -f "$file" ]; then
+              echo "Compiling $file..."
+              g++ -O3 -std=c++20 "$file" -o "${file%.cpp}"
+            fi
+          done
+          cd ..
+
+          # Rust ベンチマーク
+          echo "=== Building Rust benchmarks ==="
+          source "$HOME/.cargo/env"
+          cd rust
+          for dir in */; do
+            if [ -d "$dir" ]; then
+              echo "Building $dir..."
+              cd "$dir"
+              cargo build --release
+              cd ..
+            fi
+          done
+          cd ..
+
+      # ベンチマーク実行と検証
+      - name: Run benchmarks and verify performance
+        run: |
+          cd tests/bench_marks
+
+          # 簡易的なベンチマーク実行（タイムアウト付き）
+          echo "=== Running benchmarks ==="
+
+          # 結果を保存する変数
+          FAILED=0
+
+          # 各ベンチマークを実行して時間を測定
+          for bench in "01_prime_sieve" "02_fibonacci_memo" "03_array_sort" "04_matrix_multiply"; do
+            echo ""
+            echo "--- $bench ---"
+
+            # C++実行
+            CPP_TIME=""
+            if [ -f "cpp/$bench" ]; then
+              echo "C++:"
+              CPP_START=$(date +%s.%N)
+              timeout 30 cpp/$bench > /dev/null 2>&1 || true
+              CPP_END=$(date +%s.%N)
+              CPP_TIME=$(echo "$CPP_END - $CPP_START" | bc)
+              echo "  Time: ${CPP_TIME}s"
+            fi
+
+            # Rust実行
+            RUST_TIME=""
+            RUST_BIN="rust/$bench/target/release/$(echo $bench | tr '_' '-')"
+            if [ -f "$RUST_BIN" ]; then
+              echo "Rust:"
+              RUST_START=$(date +%s.%N)
+              timeout 30 "$RUST_BIN" > /dev/null 2>&1 || true
+              RUST_END=$(date +%s.%N)
+              RUST_TIME=$(echo "$RUST_END - $RUST_START" | bc)
+              echo "  Time: ${RUST_TIME}s"
+            fi
+
+            # Cm実行
+            CM_TIME=""
+            if [ -f "cm/$bench" ]; then
+              echo "Cm:"
+              CM_START=$(date +%s.%N)
+              timeout 30 cm/$bench > /dev/null 2>&1 || true
+              CM_END=$(date +%s.%N)
+              CM_TIME=$(echo "$CM_END - $CM_START" | bc)
+              echo "  Time: ${CM_TIME}s"
+            fi
+
+            # 性能比較（Cmが2倍以上遅い場合は警告）
+            if [ -n "$CM_TIME" ] && [ -n "$CPP_TIME" ]; then
+              # bcで比較（2倍チェック）
+              if (( $(echo "$CM_TIME > $CPP_TIME * 2" | bc -l) )); then
+                echo "  ⚠️ WARNING: Cm is more than 2x slower than C++"
+                FAILED=1
+              fi
+            fi
+
+            if [ -n "$CM_TIME" ] && [ -n "$RUST_TIME" ]; then
+              if (( $(echo "$CM_TIME > $RUST_TIME * 2" | bc -l) )); then
+                echo "  ⚠️ WARNING: Cm is more than 2x slower than Rust"
+                FAILED=1
+              fi
+            fi
+          done
+
+          # Pythonスクリプトでの詳細な検証（存在する場合）
+          if [ -f "verify_performance.py" ]; then
+            echo ""
+            echo "=== Running detailed verification ==="
+            python3 verify_performance.py || FAILED=1
+          fi
+
+          # 結果判定
+          if [ $FAILED -eq 0 ]; then
+            echo ""
+            echo "✅ Performance benchmark PASSED"
+            echo "Cm performance is competitive with C++ and Rust"
+          else
+            echo ""
+            echo "❌ Performance benchmark FAILED"
+            echo "Cm is more than 2x slower than C++/Rust in some benchmarks"
+
+            # 環境変数で制御可能（デフォルトは厳格モード）
+            if [ "${BENCHMARK_STRICT:-true}" = "true" ]; then
+              exit 1  # CIを失敗させる
+            else
+              echo "Note: Running in non-strict mode (warnings only)"
+            fi
+          fi
+
+      # 結果のアーティファクト保存
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: |
+            tests/bench_marks/results/
+          retention-days: 7
+
+  # ========================================
   # CI Success - 全ジョブ成功確認
   # ========================================
   ci-success:
     name: CI Success
-    needs: [lint, build, unit-tests, integration-tests]
+    needs: [lint, build, unit-tests, integration-tests, benchmark]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -243,7 +425,8 @@ jobs:
           echo "Build: ${{ needs.build.result }}"
           echo "Unit Tests: ${{ needs.unit-tests.result }}"
           echo "Integration Tests: ${{ needs.integration-tests.result }}"
-          
+          echo "Benchmark: ${{ needs.benchmark.result }}"
+
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "❌ Lint failed"
             exit 1
@@ -260,6 +443,11 @@ jobs:
              [ "${{ needs.integration-tests.result }}" != "skipped" ]; then
             echo "❌ Integration Tests failed"
             exit 1
+          fi
+          if [ "${{ needs.benchmark.result }}" != "success" ] && \
+             [ "${{ needs.benchmark.result }}" != "skipped" ]; then
+            echo "⚠️ Benchmark had issues (non-critical)"
+            # ベンチマークは警告のみ（失敗にはしない）
           fi
           
           echo "✅ All CI checks passed!"

@@ -613,6 +613,7 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
 
                 if (struct_def) {
                     for (const auto& field : struct_def->fields) {
+                        (void)field;  // 未使用警告を抑制（サイズはポインタサイズで見積もり）
                         // ジェネリック型パラメータは最大でポインタサイズと仮定
                         estimated_size += 8;
                     }

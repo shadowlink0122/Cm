@@ -82,6 +82,7 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
 
         // move初期化の検出（真のゼロコストmove用）
         if (auto* move_expr = let.init->as<ast::MoveExpr>()) {
+            (void)move_expr;  // 未使用警告を抑制（検出のみで実際の値は使用しない）
             hir_let->is_move = true;
             debug::hir::log(debug::hir::Id::LetInit,
                             "move initialization detected for: " + let.name, debug::Level::Debug);
