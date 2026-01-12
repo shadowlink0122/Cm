@@ -1,0 +1,186 @@
+// std::iter - イテレータモジュール
+// 
+// イテレータシステムのエントリポイント。
+// 各サブモジュールの機能を集約してエクスポートします。
+// 
+// サブモジュール構成:
+//   std::iter::traits   - イテレータインターフェース定義
+//   std::iter::array    - 配列イテレータ
+//   std::iter::range    - 範囲構造体・イテレータ
+//   std::iter::adapters - map/filter等のアダプタ（将来実装）
+
+module std.iter;
+
+// ============================================================
+// エクスポート集約
+// ============================================================
+
+// 注: 現在のCm言語はモジュールの再エクスポートをサポートしていないため、
+// 主要な型と関数はこのファイルで直接定義しています。
+// 将来的には以下のような形式でサブモジュールを参照できるようになる予定:
+// 
+//   export use std.iter.traits::*;
+//   export use std.iter.array::*;
+//   export use std.iter.range::*;
+//   export use std.iter.adapters::*;
+
+// ============================================================
+// インターフェース（traits.cmから）
+// ============================================================
+
+/// 基本的なイテレータインターフェース（int型専用）
+export interface IntIterator {
+    bool has_next();
+    int next();
+    int peek();
+}
+
+/// イテラブルインターフェース（int型専用）
+export interface IntIterable {
+    IntIterator iter();
+}
+
+// ============================================================
+// 配列イテレータ（array.cmから）
+// ============================================================
+
+/// ポインタベースの配列イテレータ（int型専用）
+export struct IntArrayIterator {
+    int* current;
+    int* end;
+}
+
+impl IntArrayIterator {
+    self(int* data, int size) {
+        self.current = data;
+        self.end = data + size;
+    }
+    
+    bool has_next() {
+        return self.current < self.end;
+    }
+    
+    int next() {
+        int value = *self.current;
+        self.current = self.current + 1;
+        return value;
+    }
+    
+    int peek() {
+        return *self.current;
+    }
+    
+    int remaining() {
+        int count = 0;
+        int* p = self.current;
+        while (p < self.end) {
+            count = count + 1;
+            p = p + 1;
+        }
+        return count;
+    }
+}
+
+// ============================================================
+// Range（range.cmから）
+// ============================================================
+
+/// 整数範囲を表す構造体
+export struct Range {
+    int start;
+    int end;
+    int step;
+}
+
+export Range range(int end) {
+    Range r;
+    r.start = 0;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+export Range range(int start, int end) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+export Range range(int start, int end, int step) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = step;
+    return r;
+}
+
+export int len(Range r) {
+    if (r.step == 0) { return 0; }
+    if (r.step > 0) {
+        if (r.end <= r.start) { return 0; }
+        return (r.end - r.start + r.step - 1) / r.step;
+    } else {
+        if (r.start <= r.end) { return 0; }
+        return (r.start - r.end - r.step - 1) / (-r.step);
+    }
+}
+
+export bool is_empty(Range r) {
+    return len(r) == 0;
+}
+
+export int at(Range r, int n) {
+    return r.start + n * r.step;
+}
+
+/// Range用のイテレータ
+export struct RangeIterator {
+    int current;
+    int end;
+    int step;
+}
+
+impl RangeIterator {
+    self(Range r) {
+        self.current = r.start;
+        self.end = r.end;
+        self.step = r.step;
+    }
+    
+    overload self(int start, int end, int step) {
+        self.current = start;
+        self.end = end;
+        self.step = step;
+    }
+    
+    bool has_next() {
+        if (self.step > 0) {
+            return self.current < self.end;
+        } else {
+            return self.current > self.end;
+        }
+    }
+    
+    int next() {
+        int value = self.current;
+        self.current = self.current + self.step;
+        return value;
+    }
+    
+    int peek() {
+        return self.current;
+    }
+}
+
+// ============================================================
+// ユーティリティ（adapters.cmから）
+// ============================================================
+
+/// 2つの値をスワップ
+export <T> void swap(T* a, T* b) {
+    T tmp = *a;
+    *a = *b;
+    *b = tmp;
+}

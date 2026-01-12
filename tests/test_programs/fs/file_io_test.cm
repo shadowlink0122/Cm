@@ -1,0 +1,67 @@
+// ファイルI/Oのテスト
+import std::fs;
+import std::io;
+
+int main() {
+    string path = "test_io.txt";
+    string content = "Hello, Cm File I/O!\nLine 2: Testing write/read.";
+    
+    println("=== File I/O Test ===");
+    
+    // 1. Write
+    print("Writing to file: ");
+    if (fs::write_file(path, content)) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+        return 1;
+    }
+    
+    // 2. Exists
+    print("Checking exists: ");
+    if (fs::exists(path)) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+    }
+    
+    // 3. Read
+    print("Reading from file: ");
+    string read_back = fs::read_file(path);
+    if (read_back == content) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+        println("Expected: " + content);
+        println("Got: " + read_back);
+    }
+    
+    // 4. Append
+    print("Appending to file: ");
+    string extra = "\nLine 3: Appended.";
+    if (fs::append_file(path, extra)) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+    }
+    
+    // 5. Read all back
+    print("Verifying append: ");
+    string final_content = fs::read_file(path);
+    if (final_content == content + extra) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+    }
+    
+    // 6. Remove
+    print("Removing file: ");
+    if (fs::remove(path)) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+    }
+    
+    println("=== Test Completed ===");
+    return 0;
+}

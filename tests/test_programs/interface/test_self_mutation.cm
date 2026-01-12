@@ -1,0 +1,45 @@
+// テスト: メソッド内でselfのフィールドを変更
+import std::io::println;
+
+struct Counter {
+    int count;
+}
+
+interface CounterOps {
+    void increment();
+    int get_count();
+}
+
+impl Counter for CounterOps {
+    void increment() {
+        self.count = self.count + 1;
+    }
+    
+    int get_count() {
+        return self.count;
+    }
+}
+
+int main() {
+    println("=== Self Field Mutation Test ===");
+    
+    Counter c;
+    c.count = 0;
+    
+    println("Initial count: {c.count}");
+    
+    c.increment();
+    println("After 1st increment: {c.count}");
+    
+    c.increment();
+    println("After 2nd increment: {c.count}");
+    
+    c.increment();
+    println("After 3rd increment: {c.count}");
+    
+    int final_count = c.get_count();
+    println("get_count() returns: {final_count}");
+    
+    println("=== Done ===");
+    return 0;
+}

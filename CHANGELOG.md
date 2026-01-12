@@ -42,7 +42,7 @@ Cm言語コンパイラの変更履歴です。
   - ポインタ/アドレス値: 0xプレフィックスあり（例: `0x1234abcd`）
 - **テスト整理**: アドレス関連テストを `formatting` から `memory` ディレクトリへ移動
 
-## [0.9.0] - 2024-12-15 (完了)
+## [0.9.0] - 2025-12-15 (完了)
 
 ### 追加
 
@@ -119,7 +119,7 @@ Cm言語コンパイラの変更履歴です。
 - `tests/test_programs/interface/with_eq_basic.cm`
 - `tests/test_programs/interface/with_multi_struct.cm`
 
-## [0.8.0] - 2024-12-14
+## [0.8.0] - 2025-12-14
 
 ### 追加
 
@@ -168,7 +168,7 @@ Cm言語コンパイラの変更履歴です。
 - `tests/test_programs/errors/match_non_exhaustive.cm`
 - `tests/test_programs/errors/match_enum_non_exhaustive.cm`
 
-## [0.7.0] - 2024-12-14
+## [0.7.0] - 2025-12-14
 
 ### 追加
 
@@ -208,7 +208,7 @@ Cm言語コンパイラの変更履歴です。
 - WASMバックエンドで基本的なプログラムとジェネリクスが動作
 - インタプリタでは全てのジェネリクス機能が動作
 
-## [0.6.0] - 2024-12-14
+## [0.6.0] - 2025-12-14
 
 ### 追加
 

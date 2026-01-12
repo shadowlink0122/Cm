@@ -4,9 +4,9 @@
 #include "../../common/runtime_platform.h"
 
 #ifndef CM_NO_STD
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #endif
 
 // ============================================================
@@ -44,10 +44,12 @@ char* cm_strcat(char* dst, const char* src) {
 
 void cm_write_stdout(const char* str, size_t len) {
     fwrite(str, 1, len, stdout);
+    fflush(stdout);  // JIT実行時に出力が確実に表示されるようにflush
 }
 
 void cm_write_stderr(const char* str, size_t len) {
     fwrite(str, 1, len, stderr);
+    fflush(stderr);
 }
 
 #endif  // !CM_NO_STD

@@ -1,0 +1,123 @@
+// std::iter::range - 範囲イテレータ
+// 
+// 整数範囲（0..10, 5..0 step -1 など）のイテレーション機能を提供。
+// for-in文との統合時に使用される基本的なイテレータ。
+
+module std.iter.range;
+
+// ============================================================
+// Range - 整数範囲構造体
+// ============================================================
+
+/// 整数範囲を表す構造体
+/// start (含む) から end (含まない) までの範囲
+export struct Range {
+    int start;  // 開始値（含む）
+    int end;    // 終了値（含まない）
+    int step;   // ステップ（正負どちらも可）
+}
+
+/// 範囲を作成（0..end, step=1）
+export Range range(int end) {
+    Range r;
+    r.start = 0;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+/// 範囲を作成（start..end, step=1）
+export Range range(int start, int end) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+/// 範囲を作成（start..end step n）
+export Range range(int start, int end, int step) {
+    Range r;
+    r.start = start;
+    r.end = end;
+    r.step = step;
+    return r;
+}
+
+/// 範囲の長さ（要素数）を取得
+export int len(Range r) {
+    if (r.step == 0) {
+        return 0;
+    }
+    if (r.step > 0) {
+        if (r.end <= r.start) {
+            return 0;
+        }
+        return (r.end - r.start + r.step - 1) / r.step;
+    } else {
+        // step < 0: 降順
+        if (r.start <= r.end) {
+            return 0;
+        }
+        return (r.start - r.end - r.step - 1) / (-r.step);
+    }
+}
+
+/// 範囲が空かどうか
+export bool is_empty(Range r) {
+    return len(r) == 0;
+}
+
+/// 範囲のn番目の要素を取得（0-indexed）
+export int at(Range r, int n) {
+    return r.start + n * r.step;
+}
+
+// ============================================================
+// RangeIterator - Range用イテレータ
+// ============================================================
+
+/// Range用のイテレータ
+/// 昇順・降順どちらにも対応
+export struct RangeIterator {
+    int current;
+    int end;
+    int step;
+}
+
+impl RangeIterator {
+    /// Rangeからイテレータを作成
+    self(Range r) {
+        self.current = r.start;
+        self.end = r.end;
+        self.step = r.step;
+    }
+    
+    /// 別のコンストラクタ（直接値指定）
+    overload self(int start, int end, int step) {
+        self.current = start;
+        self.end = end;
+        self.step = step;
+    }
+    
+    /// 次の要素があるか確認
+    bool has_next() {
+        if (self.step > 0) {
+            return self.current < self.end;
+        } else {
+            return self.current > self.end;
+        }
+    }
+    
+    /// 次の要素を取得
+    int next() {
+        int value = self.current;
+        self.current = self.current + self.step;
+        return value;
+    }
+    
+    /// 次の要素を確認（進めない）
+    int peek() {
+        return self.current;
+    }
+}

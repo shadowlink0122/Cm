@@ -1,3 +1,5 @@
+[English](DEBUG_SYSTEM_IMPROVEMENTS.en.html)
+
 # デバッグシステム改善ドキュメント
 
 ## 概要

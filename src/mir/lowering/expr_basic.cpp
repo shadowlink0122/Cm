@@ -391,7 +391,20 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     }
 
     // ベースオブジェクトを取得
-    LocalId object = lower_expression(*current, ctx);
+    // 変数参照の場合は直接その変数のLocalIdを使用してコピーを避ける
+    // lower_expressionだと一時変数にコピーされてしまい、プロジェクションが失われる
+    LocalId object;
+    if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&current->kind)) {
+        auto var_id = ctx.resolve_variable((*var_ref)->name);
+        if (var_id) {
+            object = *var_id;
+        } else {
+            // 変数が見つからない場合はlower_expressionにフォールバック
+            object = lower_expression(*current, ctx);
+        }
+    } else {
+        object = lower_expression(*current, ctx);
+    }
     hir::TypePtr obj_type = current->type;
 
     // MIRのローカル変数の型を取得（selfの場合はポインタ型）
@@ -437,20 +450,99 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
             return ctx.new_temp(hir::make_error());
         }
 
-        auto field_idx = ctx.get_field_index(current_type->name, field_name);
+        // ジェネリック構造体の場合、ベース名で検索（例: Node<Item> -> Node, Pair__int -> Pair）
+        std::string base_name = current_type->name;
+
+        // マングリング済み名前（__を含む）の場合、ベース名を抽出
+        size_t mangled_pos = base_name.find("__");
+        std::string original_base = base_name;
+        if (mangled_pos != std::string::npos) {
+            base_name = base_name.substr(0, mangled_pos);
+        }
+
+        auto field_idx = ctx.get_field_index(base_name, field_name);
         if (!field_idx) {
-            debug_msg("MIR", "Error: Field '" + field_name + "' not found in struct '" +
-                                 current_type->name + "'");
-            return ctx.new_temp(hir::make_error());
+            // マングリング前の名前でも見つからない場合、元の名前で再試行
+            field_idx = ctx.get_field_index(original_base, field_name);
+            if (!field_idx) {
+                debug_msg("MIR", "Error: Field '" + field_name + "' not found in struct '" +
+                                     base_name + "'");
+                return ctx.new_temp(hir::make_error());
+            }
         }
 
         place.projections.push_back(PlaceProjection::field(*field_idx));
 
         // 次のフィールドの型を取得
-        if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
-            const auto* struct_def = ctx.struct_defs->at(current_type->name);
+        // ジェネリック構造体の場合type_argsを保持し、フィールド型置換に使用
+        if (ctx.struct_defs && ctx.struct_defs->count(base_name)) {
+            const auto* struct_def = ctx.struct_defs->at(base_name);
             if (*field_idx < struct_def->fields.size()) {
-                current_type = struct_def->fields[*field_idx].type;
+                hir::TypePtr field_type = struct_def->fields[*field_idx].type;
+
+                // フィールド型がジェネリックパラメータの場合、type_argsから置換
+                // 注: HIRでTがStruct扱いになる場合があるため、generic_params名で照合
+                if (field_type && !current_type->type_args.empty()) {
+                    for (size_t j = 0; j < struct_def->generic_params.size() &&
+                                       j < current_type->type_args.size();
+                         ++j) {
+                        // field_typeの名前がgeneric_paramsに一致する場合、置換
+                        if (struct_def->generic_params[j].name == field_type->name) {
+                            field_type = current_type->type_args[j];
+                            break;
+                        }
+                    }
+                }
+                // type_argsが空でもマングリング済み名前（Pair__int等）から型引数を抽出
+                else if (field_type && current_type->type_args.empty() &&
+                         current_type->name.find("__") != std::string::npos) {
+                    // マングリング名から型引数を抽出
+                    std::vector<std::string> extracted_args;
+                    std::string name = current_type->name;
+                    size_t pos = name.find("__");
+                    while (pos != std::string::npos) {
+                        size_t next = name.find("__", pos + 2);
+                        if (next == std::string::npos) {
+                            extracted_args.push_back(name.substr(pos + 2));
+                        } else {
+                            extracted_args.push_back(name.substr(pos + 2, next - pos - 2));
+                        }
+                        pos = next;
+                    }
+                    // generic_paramsと照合して置換
+                    for (size_t j = 0;
+                         j < struct_def->generic_params.size() && j < extracted_args.size(); ++j) {
+                        if (struct_def->generic_params[j].name == field_type->name) {
+                            // 抽出した型名から具体型を作成
+                            const std::string& type_name = extracted_args[j];
+                            hir::TypePtr concrete_type;
+                            if (type_name == "int") {
+                                concrete_type = hir::make_int();
+                            } else if (type_name == "uint") {
+                                concrete_type = hir::make_uint();
+                            } else if (type_name == "long") {
+                                concrete_type = hir::make_long();
+                            } else if (type_name == "ulong") {
+                                concrete_type = hir::make_ulong();
+                            } else if (type_name == "double") {
+                                concrete_type = hir::make_double();
+                            } else if (type_name == "float") {
+                                concrete_type = hir::make_float();
+                            } else if (type_name == "bool") {
+                                concrete_type = hir::make_bool();
+                            } else if (type_name == "string") {
+                                concrete_type = hir::make_string();
+                            } else {
+                                // その他は構造体として扱う
+                                concrete_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                                concrete_type->name = type_name;
+                            }
+                            field_type = concrete_type;
+                            break;
+                        }
+                    }
+                }
+                current_type = field_type;
             } else {
                 current_type = hir::make_int();
             }
@@ -460,7 +552,22 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     }
 
     // 最終的なフィールドの型で一時変数を作成
-    LocalId result = ctx.new_temp(current_type);
+    // 重要: shared_ptrの参照共有で後から型が変更される問題を回避するため、
+    // 型をディープコピーする
+    hir::TypePtr final_type = current_type;
+    if (current_type &&
+        (current_type->kind == hir::TypeKind::Int || current_type->kind == hir::TypeKind::UInt ||
+         current_type->kind == hir::TypeKind::Long || current_type->kind == hir::TypeKind::Float ||
+         current_type->kind == hir::TypeKind::Double ||
+         current_type->kind == hir::TypeKind::Bool)) {
+        // プリミティブ型は新しいインスタンスを作成
+        final_type = std::make_shared<hir::Type>(*current_type);
+    } else if (current_type && current_type->kind == hir::TypeKind::Struct) {
+        // 構造体型も新しいインスタンスを作成
+        final_type = std::make_shared<hir::Type>(*current_type);
+    }
+
+    LocalId result = ctx.new_temp(final_type);
 
     ctx.push_statement(
         MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(place))));
@@ -571,6 +678,17 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
             is_slice = !index_expr.object->type->array_size.has_value();
         }
     }
+    // フォールバック: HIR型情報がnullの場合、MIRローカル変数の型から判定
+    // これは構造体フィールドへのインデックスアクセス（c.values[0]など）で必要
+    if (!is_slice && array < ctx.func->locals.size()) {
+        hir::TypePtr array_type = ctx.func->locals[array].type;
+        if (array_type && array_type->kind == hir::TypeKind::Array) {
+            if (array_type->element_type) {
+                elem_type = array_type->element_type;
+            }
+            is_slice = !array_type->array_size.has_value();
+        }
+    }
 
     LocalId result = ctx.new_temp(elem_type);
 
@@ -590,8 +708,10 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 get_func = "cm_slice_get_i8";
             } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
                 get_func = "cm_slice_get_i64";
-            } else if (elem_kind == hir::TypeKind::Double || elem_kind == hir::TypeKind::Float) {
+            } else if (elem_kind == hir::TypeKind::Double) {
                 get_func = "cm_slice_get_f64";
+            } else if (elem_kind == hir::TypeKind::Float) {
+                get_func = "cm_slice_get_f32";
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
                        elem_kind == hir::TypeKind::Struct) {
                 get_func = "cm_slice_get_ptr";
@@ -686,16 +806,136 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
 
     // 各フィールドを初期化（名前付き初期化のみ）
     for (const auto& field : lit.fields) {
-        // フィールド値をlower
-        LocalId field_value = lower_expression(*field.value, ctx);
-
         // フィールドインデックスを名前から検索
         size_t field_idx = 0;
+        hir::TypePtr field_type = nullptr;
         if (struct_def) {
             auto idx = ctx.get_field_index(lit.type_name, field.name);
             if (idx) {
                 field_idx = *idx;
+                if (*idx < struct_def->fields.size()) {
+                    field_type = struct_def->fields[*idx].type;
+                }
             }
+        }
+
+        // スライスフィールドへの配列リテラル代入をチェック
+        bool is_slice_field = field_type && field_type->kind == hir::TypeKind::Array &&
+                              !field_type->array_size.has_value();
+
+        bool is_array_literal = false;
+        const hir::HirArrayLiteral* arr_lit = nullptr;
+        if (auto* arr_lit_ptr =
+                std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&field.value->kind)) {
+            if (*arr_lit_ptr) {
+                is_array_literal = true;
+                arr_lit = arr_lit_ptr->get();
+            }
+        }
+
+        LocalId field_value;
+
+        if (is_slice_field && is_array_literal && arr_lit) {
+            // 配列リテラルからスライスを作成
+            hir::TypePtr elem_type =
+                field_type->element_type ? field_type->element_type : hir::make_int();
+
+            // 要素サイズを取得
+            int64_t elem_size = 4;  // デフォルトはint
+            auto elem_kind = elem_type->kind;
+            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                elem_size = 1;
+            } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
+                elem_size = 2;
+            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
+                       elem_kind == hir::TypeKind::Double) {
+                elem_size = 8;
+            } else if (elem_kind == hir::TypeKind::Float) {
+                elem_size = 4;
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
+                       elem_kind == hir::TypeKind::Struct) {
+                elem_size = 8;
+            }
+
+            // スライス用の一時変数を作成
+            field_value = ctx.new_temp(field_type);
+
+            // cm_slice_new(elem_size, initial_capacity) を呼び出し
+            LocalId elem_size_local = ctx.new_temp(hir::make_long());
+            MirConstant elem_size_const;
+            elem_size_const.value = static_cast<int64_t>(elem_size);
+            elem_size_const.type = hir::make_long();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{elem_size_local}, MirRvalue::use(MirOperand::constant(elem_size_const))));
+
+            LocalId init_cap_local = ctx.new_temp(hir::make_long());
+            MirConstant init_cap_const;
+            init_cap_const.value = static_cast<int64_t>(arr_lit->elements.size());
+            init_cap_const.type = hir::make_long();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{init_cap_local}, MirRvalue::use(MirOperand::constant(init_cap_const))));
+
+            // cm_slice_new呼び出し
+            BlockId new_block = ctx.new_block();
+            std::vector<MirOperandPtr> new_args;
+            new_args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
+            new_args.push_back(MirOperand::copy(MirPlace{init_cap_local}));
+
+            auto new_term = std::make_unique<MirTerminator>();
+            new_term->kind = MirTerminator::Call;
+            new_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
+                                                     std::move(new_args),
+                                                     MirPlace{field_value},
+                                                     new_block,
+                                                     std::nullopt,
+                                                     "",
+                                                     "",
+                                                     false};
+            ctx.set_terminator(std::move(new_term));
+            ctx.switch_to_block(new_block);
+
+            // push関数名を決定
+            std::string push_func = "cm_slice_push_i32";
+            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                push_func = "cm_slice_push_i8";
+            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
+                push_func = "cm_slice_push_i64";
+            } else if (elem_kind == hir::TypeKind::Double) {
+                push_func = "cm_slice_push_f64";
+            } else if (elem_kind == hir::TypeKind::Float) {
+                push_func = "cm_slice_push_f32";
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
+                       elem_kind == hir::TypeKind::Struct) {
+                push_func = "cm_slice_push_ptr";
+            }
+
+            // 各要素をpushで追加
+            for (const auto& elem : arr_lit->elements) {
+                LocalId elem_value = lower_expression(*elem, ctx);
+
+                BlockId success_block = ctx.new_block();
+                std::vector<MirOperandPtr> push_args;
+                push_args.push_back(MirOperand::copy(MirPlace{field_value}));
+                push_args.push_back(MirOperand::copy(MirPlace{elem_value}));
+
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(push_func),
+                                                          std::move(push_args),
+                                                          std::nullopt,
+                                                          success_block,
+                                                          std::nullopt,
+                                                          "",
+                                                          "",
+                                                          false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success_block);
+            }
+        } else {
+            // 通常の処理
+            field_value = lower_expression(*field.value, ctx);
         }
 
         // フィールドへの代入を生成

@@ -1,7 +1,0 @@
-// 正しいHello Worldプログラム
-import std::io::println;
-
-int main() {
-    println("Hello, World!");
-    return 0;
-}

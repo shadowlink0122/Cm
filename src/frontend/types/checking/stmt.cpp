@@ -84,7 +84,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.type && let.type->kind == ast::TypeKind::Inferred) {
         if (init_type) {
             let.type = init_type;
-            scopes_.current().define(let.name, init_type, let.is_const);
+            scopes_.current().define(let.name, init_type, let.is_const, let.is_static);
             debug::tc::log(debug::tc::Id::TypeInfer,
                            "auto " + let.name + " : " + ast::type_to_string(*init_type),
                            debug::Level::Trace);
@@ -94,20 +94,46 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         }
     } else if (let.type) {
         auto resolved_type = resolve_typedef(let.type);
+        // ポインタ型の場合、宣言時のconst情報を保持（借用システム Phase 2）
+        // const int* p = &x の場合、let.type->element_type->qualifiers.is_const = true
+        if (resolved_type->kind == ast::TypeKind::Pointer &&
+            let.type->kind == ast::TypeKind::Pointer && let.type->element_type &&
+            let.type->element_type->qualifiers.is_const) {
+            if (resolved_type->element_type) {
+                resolved_type->element_type->qualifiers.is_const = true;
+            }
+        }
+        // 借用システム Phase 2: const変数がポインタ型の場合、element_typeにconstを適用
+        // Cmでは "const int* p" は "const (int*) p" としてパースされるため、
+        // ポインタのelement_typeにconst修飾を伝播する
+        if (let.is_const && resolved_type->kind == ast::TypeKind::Pointer &&
+            resolved_type->element_type) {
+            resolved_type->element_type->qualifiers.is_const = true;
+        }
         if (init_type && !types_compatible(resolved_type, init_type)) {
             error(stmt_span, "Type mismatch in variable declaration '" + let.name +
                                  "': expected '" + ast::type_to_string(*resolved_type) +
                                  "', got '" + ast::type_to_string(*init_type) + "'");
         }
         let.type = resolved_type;
-        scopes_.current().define(let.name, resolved_type, let.is_const);
+        scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static);
     } else if (init_type) {
         let.type = init_type;
-        scopes_.current().define(let.name, init_type, let.is_const);
+        scopes_.current().define(let.name, init_type, let.is_const, let.is_static);
         debug::tc::log(debug::tc::Id::TypeInfer, let.name + " : " + ast::type_to_string(*init_type),
                        debug::Level::Trace);
     } else {
         error(stmt_span, "Cannot infer type for '" + let.name + "'");
+    }
+
+    // 非const変数を追跡（const推奨警告用）
+    if (!let.is_const) {
+        non_const_variable_spans_[let.name] = stmt_span;
+    }
+
+    // 初期化式がある場合は初期化済みとしてマーク
+    if (let.init) {
+        mark_variable_initialized(let.name);
     }
 }
 
@@ -122,6 +148,29 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
             error(stmt_span, "Return type mismatch: expected '" +
                                  ast::type_to_string(*current_return_type_) + "', got '" +
                                  (val_type ? ast::type_to_string(*val_type) : "unknown") + "'");
+        }
+
+        // ライフタイムチェック: ローカル変数への参照を返すことを禁止
+        // return &x の場合、xがローカル変数ならダングリングポインタになる
+        // ただし、static変数はプログラム全体のライフタイムを持つので許可
+        if (val_type && val_type->kind == ast::TypeKind::Pointer) {
+            if (auto* unary = ret.value->as<ast::UnaryExpr>()) {
+                if (unary->op == ast::UnaryOp::AddrOf) {
+                    if (auto* ident = unary->operand->as<ast::IdentExpr>()) {
+                        // 変数のスコープレベルを確認
+                        int var_level = scopes_.current().get_scope_level(ident->name);
+                        // static変数かどうか確認
+                        auto sym = scopes_.current().lookup(ident->name);
+                        bool is_static = sym && sym->is_static;
+                        // レベル1以上はローカル変数（0=グローバル）、ただしstaticは除外
+                        if (var_level >= 1 && !is_static) {
+                            error(stmt_span,
+                                  "Cannot return reference to local variable '" + ident->name +
+                                      "': variable will be dropped when function returns");
+                        }
+                    }
+                }
+            }
         }
     } else if (current_return_type_->kind != ast::TypeKind::Void) {
         error(stmt_span, "Missing return value: expected '" +
@@ -204,7 +253,50 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     }
 
     ast::TypePtr element_type;
-    if (iterable_type->kind == ast::TypeKind::Array) {
+
+    // Struct型の場合: iter()メソッドがあるか確認
+    if (iterable_type->kind == ast::TypeKind::Struct) {
+        std::string type_name = ast::type_to_string(*iterable_type);
+
+        // iter()メソッドを検索
+        auto it = type_methods_.find(type_name);
+        if (it != type_methods_.end()) {
+            auto method_it = it->second.find("iter");
+            if (method_it != it->second.end()) {
+                // iter()メソッドが存在 → イテレータベースで展開
+                for_in.use_iterator = true;
+
+                // イテレータの戻り値型を取得
+                if (method_it->second.return_type) {
+                    for_in.iterator_type_name = ast::type_to_string(*method_it->second.return_type);
+
+                    // イテレータのnext()メソッドから要素型を推定
+                    auto iter_it = type_methods_.find(for_in.iterator_type_name);
+                    if (iter_it != type_methods_.end()) {
+                        auto next_it = iter_it->second.find("next");
+                        if (next_it != iter_it->second.end() && next_it->second.return_type) {
+                            element_type = next_it->second.return_type;
+                        }
+                    }
+                }
+
+                debug::tc::log(debug::tc::Id::TypeInfer,
+                               "for-in: using iterator pattern for " + type_name +
+                                   " (iterator: " + for_in.iterator_type_name + ")",
+                               debug::Level::Debug);
+            }
+        }
+
+        // iter()メソッドがない場合はエラー
+        if (!for_in.use_iterator) {
+            error(stmt_span,
+                  "For-in requires an iterable type (array or type with iter() method), got '" +
+                      ast::type_to_string(*iterable_type) + "'");
+            scopes_.pop();
+            return;
+        }
+    } else if (iterable_type->kind == ast::TypeKind::Array) {
+        // 配列型: 従来のインデックスベース展開
         element_type = iterable_type->element_type;
     } else {
         error(stmt_span, "For-in requires an iterable type (array), got '" +

@@ -1,3 +1,5 @@
+[English](optimization_methods.en.html)
+
 # Cm向け最適化手法の調査メモ
 
 ## 目的

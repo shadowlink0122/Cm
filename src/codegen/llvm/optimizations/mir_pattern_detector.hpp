@@ -10,13 +10,14 @@ namespace cm::codegen::llvm_backend {
 // MIRレベルでパターンを検出し、最適化レベルを調整
 class MIRPatternDetector {
    public:
-    // MIRプログラムから問題のあるパターンを検出
+    // MIRプログラムから問題のあるパターンを検出（情報提供のみ）
+    // 注意: Cmポリシーに従い、暗黙的なダウングレードは行わない
     static int adjustOptimizationLevel(const mir::MirProgram& program, int requested_level) {
         if (requested_level == 0) {
             return 0;  // O0はそのまま
         }
 
-        // クロージャとイテレータのカウント
+        // クロージャとイテレータのカウント（情報収集のみ）
         size_t closure_count = 0;
         size_t iterator_count = 0;
         size_t lambda_count = 0;
@@ -48,56 +49,25 @@ class MIRPatternDetector {
             }
         }
 
-        // iter_closureパターンの検出（厳密）
-        bool has_iter_closure_pattern = false;
+        // 複雑なパターンがある場合は警告のみ（ダウングレードしない）
+        if (closure_count > 10 || lambda_count > 6) {
+            std::cerr << "[MIR_INFO] 複雑なクロージャパターンを検出\n";
+            std::cerr << "  - クロージャ: " << closure_count << ", ラムダ: " << lambda_count
+                      << "\n";
+            // 注意: 暗黙的ダウングレードは廃止
+        }
 
-        // イテレータとクロージャが両方存在し、map/filter操作がある
+        // iter_closureパターンの検出（警告のみ）
         if (iterator_count > 0 && closure_count > 0 && map_filter_count > 0) {
-            has_iter_closure_pattern = true;
-            std::cerr << "[MIR_PATTERN] iter_closureパターンを検出:\n";
+            std::cerr << "[MIR_INFO] iter_closureパターンを検出:\n";
             std::cerr << "  - イテレータ関数: " << iterator_count << "\n";
             std::cerr << "  - クロージャ関数: " << closure_count << "\n";
             std::cerr << "  - map/filter操作: " << map_filter_count << "\n";
+            // 注意: 暗黙的ダウングレードは廃止
         }
 
-        // 複雑度の高いクロージャパターン
-        if (closure_count > 5 || lambda_count > 3) {
-            std::cerr << "[MIR_PATTERN] 複雑なクロージャパターンを検出\n";
-            if (requested_level >= 3) {
-                std::cerr << "[MIR_PATTERN] O3からO1に最適化レベルを下げます\n";
-                return 1;
-            }
-        }
-
-        // iter_closureパターンが検出された場合
-        if (has_iter_closure_pattern) {
-            if (requested_level >= 2) {
-                std::cerr << "[MIR_PATTERN] 警告: "
-                             "iter_closureパターンにより最適化問題が発生する可能性があります\n";
-                std::cerr << "[MIR_PATTERN] 最適化レベルをO" << requested_level
-                          << "からO0に変更します\n";
-                return 0;  // 最適化を完全に無効化
-            }
-        }
-
-        // main関数の複雑度チェック
-        for (const auto& func : program.functions) {
-            if (func->name == "main" && func->basic_blocks.size() > 0) {
-                auto& first_block = *func->basic_blocks[0];
-
-                // main関数の最初のブロックが大きすぎる場合
-                if (first_block.statements.size() > 100) {
-                    std::cerr << "[MIR_PATTERN] main関数の最初のブロックが大きすぎます（"
-                              << first_block.statements.size() << " statements）\n";
-                    if (requested_level >= 3) {
-                        std::cerr << "[MIR_PATTERN] O3からO2に最適化レベルを下げます\n";
-                        return 2;
-                    }
-                }
-            }
-        }
-
-        return requested_level;  // 変更なし
+        // 常にユーザー指定の最適化レベルを維持
+        return requested_level;
     }
 
     // デバッグ情報の出力

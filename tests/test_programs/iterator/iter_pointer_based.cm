@@ -1,0 +1,69 @@
+import std::io::println;
+
+// ポインタベースのイテレータ構造体テスト
+// ドキュメント023-027の設計に基づく基本実装
+
+// イテレータ構造体（intに特化）
+struct IntIterator {
+    int* current;  // 現在の要素へのポインタ
+    int* end;      // 終端へのポインタ
+}
+
+impl IntIterator {
+    // コンストラクタ
+    self(int* data, int size) {
+        self.current = data;
+        self.end = data + size;
+    }
+}
+
+// 次の要素があるか確認
+bool has_next(IntIterator* iter) {
+    return iter->current < iter->end;
+}
+
+// 次の要素を取得
+int next(IntIterator* iter) {
+    int* cur = iter->current;
+    int value = *cur;
+    iter->current = cur + 1;
+    return value;
+}
+
+// 残りの要素数
+int remaining(IntIterator* iter) {
+    // ポインタ減算
+    int* e = iter->end;
+    int* c = iter->current;
+    int count = 0;
+    while (c < e) {
+        count = count + 1;
+        c = c + 1;
+    }
+    return count;
+}
+
+int main() {
+    int[5] arr = [1, 2, 3, 4, 5];
+    
+    // イテレータを作成
+    IntIterator iter = IntIterator(&arr[0], 5);
+    
+    // 残り要素数を確認
+    int rem = remaining(&iter);
+    println("remaining: {rem}");
+    
+    // イテレータで走査
+    int sum = 0;
+    while (has_next(&iter)) {
+        int val = next(&iter);
+        sum = sum + val;
+    }
+    println("sum: {sum}");
+    
+    // 走査後は残り0
+    int rem_after = remaining(&iter);
+    println("remaining after: {rem_after}");
+    
+    return 0;
+}

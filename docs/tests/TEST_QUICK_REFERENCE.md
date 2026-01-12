@@ -1,3 +1,5 @@
+[English](TEST_QUICK_REFERENCE.en.html)
+
 # Cm言語テスト クイックリファレンス
 
 ## 🚀 よく使うコマンド

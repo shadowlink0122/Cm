@@ -1,3 +1,5 @@
+[English](mir_optimization_roadmap.en.html)
+
 # Cm言語 最適化ロードマップ v0.12.0+
 
 ## 概要
@@ -205,10 +207,10 @@ make size-compare   # バイナリサイズの比較
 3. 自動ベクトル化
 
 ## 関連ドキュメント
-- [最適化実装詳細](./implementation_details.md)
-- [最適化パスAPI](./pass_api.md)
-- [インポート無限ループ問題](../issues/optimization_import_hang.md)
-- [パフォーマンステスト結果](./benchmarks.md)
+- [最適化実装詳細](./implementation_details.html)
+- [最適化パスAPI](./pass_api.html)
+- [インポート無限ループ問題](../issues/optimization_import_hang.html)
+- [パフォーマンステスト結果](./benchmarks.html)
 
 ## 凡例
 - ✅ 実装済み

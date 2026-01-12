@@ -1,3 +1,5 @@
+[English](mir_type_preservation_proposal.en.html)
+
 # MIR型情報保持の改善提案
 
 ## 問題の背景

@@ -1,0 +1,2273 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cm Language Grammar</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        .production { margin: 20px 0; padding: 10px; border-left: 3px solid #007acc; }
+        .lhs { font-weight: bold; color: #007acc; }
+        .terminal { color: #008000; }
+        .nonterminal { color: #800080; }
+        .operator { color: #ff6600; }
+        .alternative { margin-left: 40px; }
+        .stats { background: #f0f0f0; padding: 10px; margin: 20px 0; }
+        h1 { color: #007acc; }
+    </style>
+</head>
+<body>
+    <h1>Cm Language Grammar (BNF)</h1>
+
+<div class="stats">
+<strong>Statistics:</strong><br>
+Start Symbol: <span class="nonterminal">program</span><br>
+Productions: 100<br>
+Terminals: 133<br>
+Nonterminals: 100<br>
+</div>
+<div class="production">
+<span class="lhs">program</span> ::=
+<div class="alternative">
+<span class="nonterminal">top_level_decl*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">top_level_decl</span> ::=
+<div class="alternative">
+<span class="nonterminal">import_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">function_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">struct_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">trait_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">impl_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">typedef_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">macro_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">enum_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">operator_decl</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">import_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'import'</span>
+ 
+<span class="nonterminal">string_literal</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">function_decl</span> ::=
+<div class="alternative">
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">where_clause?</span>
+ 
+<span class="nonterminal">block</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">where_clause?</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">struct_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'struct'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="nonterminal">where_clause?</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">struct_member*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">struct_member</span> ::=
+<div class="alternative">
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">function_decl</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">trait_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'trait'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">trait_member*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">trait_member</span> ::=
+<div class="alternative">
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">block</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">impl_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'impl'</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="nonterminal">trait_name</span>
+ 
+<span class="terminal">'for'</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">where_clause?</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">impl_member*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'impl'</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">where_clause?</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">impl_member*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">impl_member</span> ::=
+<div class="alternative">
+<span class="nonterminal">function_decl</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'type'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'='</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">typedef_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'typedef'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="terminal">'='</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">macro_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'macro'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">where_clause?</span>
+ 
+<span class="nonterminal">block</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">enum_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'enum'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">generic_params?</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">enum_variant</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">enum_variant)*</span>
+ 
+<span class="terminal">','</span>
+ 
+<span class="operator">?</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">enum_variant</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">type_list</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">struct_member*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">operator_decl</span> ::=
+<div class="alternative">
+<span class="terminal">'operator'</span>
+ 
+<span class="nonterminal">operator_symbol</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">block</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'operator'</span>
+ 
+<span class="nonterminal">operator_symbol</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">operator_symbol</span> ::=
+<div class="alternative">
+<span class="terminal">'+'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'-'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'*'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'/'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'%'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'=='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'!='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'<'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'<='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>='</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'&'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'|'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'^'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'~'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'!'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'<<'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>>'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'[]'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'()'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">generic_params</span> ::=
+<div class="alternative">
+<span class="terminal">'<'</span>
+ 
+<span class="nonterminal">generic_param_list</span>
+ 
+<span class="terminal">'>'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">generic_param_list</span> ::=
+<div class="alternative">
+<span class="nonterminal">generic_param</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">generic_param)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">generic_param</span> ::=
+<div class="alternative">
+<span class="nonterminal">type_param</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">const_param</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">type_param</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">(':'</span>
+ 
+<span class="nonterminal">type_constraint)?</span>
+ 
+<span class="nonterminal">('='</span>
+ 
+<span class="nonterminal">type)?</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">const_param</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="terminal">'const'</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">('='</span>
+ 
+<span class="nonterminal">const_expr)?</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">type_constraint</span> ::=
+<div class="alternative">
+<span class="nonterminal">union_type</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type_name</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">where_clause</span> ::=
+<div class="alternative">
+<span class="terminal">'where'</span>
+ 
+<span class="nonterminal">where_bound</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">where_bound)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">where_bound</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="nonterminal">interface_bound</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">interface_bound</span> ::=
+<div class="alternative">
+<span class="nonterminal">trait_name</span>
+ 
+<span class="nonterminal">('+'</span>
+ 
+<span class="nonterminal">trait_name)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">type</span> ::=
+<div class="alternative">
+<span class="nonterminal">primitive_type</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type_name</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type_name</span>
+ 
+<span class="terminal">'<'</span>
+ 
+<span class="nonterminal">type_list</span>
+ 
+<span class="terminal">'>'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">'['</span>
+ 
+<span class="nonterminal">const_expr</span>
+ 
+<span class="terminal">']'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">'*'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">'&'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">type_list</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">union_type</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'typeof'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">primitive_type</span> ::=
+<div class="alternative">
+<span class="terminal">'int'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'uint'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'tiny'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'utiny'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'short'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'ushort'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'long'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'ulong'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'double'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'float'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'bool'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'char'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'void'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'string'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'size_t'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">union_type</span> ::=
+<div class="alternative">
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">('|'</span>
+ 
+<span class="nonterminal">type)+</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">type_list</span> ::=
+<div class="alternative">
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">type)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">type_name</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">('::'</span>
+ 
+<span class="nonterminal">identifier)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">trait_name</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">('::'</span>
+ 
+<span class="nonterminal">identifier)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">statement</span> ::=
+<div class="alternative">
+<span class="nonterminal">declaration_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">expression_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">if_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">switch_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">while_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">for_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">return_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">break_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">continue_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">defer_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">block</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">declaration_statement</span> ::=
+<div class="alternative">
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">('='</span>
+ 
+<span class="nonterminal">expression)?</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">expression_statement</span> ::=
+<div class="alternative">
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">if_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'if'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">statement</span>
+ 
+<span class="nonterminal">('else'</span>
+ 
+<span class="nonterminal">statement)?</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">switch_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'switch'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">case_clause*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">case_clause</span> ::=
+<div class="alternative">
+<span class="terminal">'case'</span>
+ 
+<span class="nonterminal">const_expr</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="nonterminal">statement*</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'default'</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="nonterminal">statement*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">while_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'while'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">statement</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">for_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'for'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">for_init?</span>
+ 
+<span class="terminal">';'</span>
+ 
+<span class="nonterminal">expression?</span>
+ 
+<span class="terminal">';'</span>
+ 
+<span class="nonterminal">expression?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'for'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">statement</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">for_init</span> ::=
+<div class="alternative">
+<span class="nonterminal">declaration_statement</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">expression</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">return_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'return'</span>
+ 
+<span class="nonterminal">expression?</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">break_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'break'</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">continue_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'continue'</span>
+ 
+<span class="terminal">';'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">defer_statement</span> ::=
+<div class="alternative">
+<span class="terminal">'defer'</span>
+ 
+<span class="nonterminal">statement</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">block</span> ::=
+<div class="alternative">
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">statement*</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">expression</span> ::=
+<div class="alternative">
+<span class="nonterminal">assignment_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">assignment_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">conditional_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">unary_expr</span>
+ 
+<span class="nonterminal">assign_op</span>
+ 
+<span class="nonterminal">assignment_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">assign_op</span> ::=
+<div class="alternative">
+<span class="terminal">'='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'+='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'-='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'*='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'/='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'%='</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'&='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'|='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'^='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'<<='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>>='</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">conditional_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">logical_or_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">logical_or_expr</span>
+ 
+<span class="terminal">'?'</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="nonterminal">conditional_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">logical_or_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">logical_and_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">logical_or_expr</span>
+ 
+<span class="terminal">'||'</span>
+ 
+<span class="nonterminal">logical_and_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">logical_and_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">inclusive_or_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">logical_and_expr</span>
+ 
+<span class="terminal">'&&'</span>
+ 
+<span class="nonterminal">inclusive_or_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">inclusive_or_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">exclusive_or_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">inclusive_or_expr</span>
+ 
+<span class="terminal">'|'</span>
+ 
+<span class="nonterminal">exclusive_or_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">exclusive_or_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">and_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">exclusive_or_expr</span>
+ 
+<span class="terminal">'^'</span>
+ 
+<span class="nonterminal">and_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">and_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">equality_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">and_expr</span>
+ 
+<span class="terminal">'&'</span>
+ 
+<span class="nonterminal">equality_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">equality_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">relational_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">equality_expr</span>
+ 
+<span class="nonterminal">('=='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'!='</span>
+ 
+<span class="operator">)</span>
+ 
+<span class="nonterminal">relational_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">relational_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">shift_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">relational_expr</span>
+ 
+<span class="nonterminal">('<'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'<='</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>='</span>
+ 
+<span class="operator">)</span>
+ 
+<span class="nonterminal">shift_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">shift_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">additive_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">shift_expr</span>
+ 
+<span class="nonterminal">('<<'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'>>'</span>
+ 
+<span class="operator">)</span>
+ 
+<span class="nonterminal">additive_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">additive_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">multiplicative_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">additive_expr</span>
+ 
+<span class="nonterminal">('+'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'-'</span>
+ 
+<span class="operator">)</span>
+ 
+<span class="nonterminal">multiplicative_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">multiplicative_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">cast_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">multiplicative_expr</span>
+ 
+<span class="nonterminal">('*'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'/'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'%'</span>
+ 
+<span class="operator">)</span>
+ 
+<span class="nonterminal">cast_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">cast_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">unary_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">cast_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">unary_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">postfix_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'++'</span>
+ 
+<span class="nonterminal">unary_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'--'</span>
+ 
+<span class="nonterminal">unary_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">unary_operator</span>
+ 
+<span class="nonterminal">cast_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'sizeof'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'sizeof'</span>
+ 
+<span class="nonterminal">unary_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'typeof'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">unary_operator</span> ::=
+<div class="alternative">
+<span class="terminal">'&'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'*'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'+'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'-'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'~'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'!'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">postfix_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">primary_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'['</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">']'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">argument_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'.'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'->'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'++'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'--'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">postfix_expr</span>
+ 
+<span class="terminal">'<'</span>
+ 
+<span class="nonterminal">type_list</span>
+ 
+<span class="terminal">'>'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">primary_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">lambda_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">format_string</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">lambda_expr</span> ::=
+<div class="alternative">
+<span class="terminal">'['</span>
+ 
+<span class="nonterminal">capture_list?</span>
+ 
+<span class="terminal">']'</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">param_list?</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="nonterminal">type?</span>
+ 
+<span class="nonterminal">block</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">capture_list</span> ::=
+<div class="alternative">
+<span class="nonterminal">capture_item</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">capture_item)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">capture_item</span> ::=
+<div class="alternative">
+<span class="terminal">'&'</span>
+ 
+<span class="operator">?</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">format_string</span> ::=
+<div class="alternative">
+<span class="terminal">'f"'</span>
+ 
+<span class="nonterminal">format_string_content</span>
+ 
+<span class="terminal">'"'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">format_string_content</span> ::=
+<div class="alternative">
+<span class="nonterminal">(format_text</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="nonterminal">format_expr)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">format_text</span> ::=
+<div class="alternative">
+<span class="nonterminal">[^{}]+</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">format_expr</span> ::=
+<div class="alternative">
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'{'</span>
+ 
+<span class="nonterminal">expression</span>
+ 
+<span class="terminal">':'</span>
+ 
+<span class="nonterminal">format_spec</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">param_list</span> ::=
+<div class="alternative">
+<span class="nonterminal">parameter</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">parameter)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">parameter</span> ::=
+<div class="alternative">
+<span class="nonterminal">type</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">('='</span>
+ 
+<span class="nonterminal">const_expr)?</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">type</span>
+ 
+<span class="terminal">'...'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">argument_list</span> ::=
+<div class="alternative">
+<span class="nonterminal">expression</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">expression)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">const_expr</span> ::=
+<div class="alternative">
+<span class="nonterminal">conditional_expr</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">literal</span> ::=
+<div class="alternative">
+<span class="nonterminal">integer_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">float_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">char_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">string_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">bool_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">null_literal</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">integer_literal</span> ::=
+<div class="alternative">
+<span class="nonterminal">decimal_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">hex_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">binary_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">octal_literal</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">decimal_literal</span> ::=
+<div class="alternative">
+<span class="nonterminal">[0-9]</span>
+ 
+<span class="nonterminal">[0-9_]*</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">[1-9]</span>
+ 
+<span class="nonterminal">[0-9_]*</span>
+ 
+<span class="nonterminal">integer_suffix?</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">hex_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'0x'</span>
+ 
+<span class="nonterminal">[0-9a-fA-F]</span>
+ 
+<span class="nonterminal">[0-9a-fA-F_]*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">binary_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'0b'</span>
+ 
+<span class="nonterminal">[01]</span>
+ 
+<span class="nonterminal">[01_]*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">octal_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'0o'</span>
+ 
+<span class="nonterminal">[0-7]</span>
+ 
+<span class="nonterminal">[0-7_]*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">integer_suffix</span> ::=
+<div class="alternative">
+<span class="terminal">'u'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'U'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'l'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'L'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'ul'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'UL'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">float_literal</span> ::=
+<div class="alternative">
+<span class="nonterminal">[0-9]+</span>
+ 
+<span class="terminal">'.'</span>
+ 
+<span class="nonterminal">[0-9]+</span>
+ 
+<span class="nonterminal">([eE]</span>
+ 
+<span class="nonterminal">[+-]?</span>
+ 
+<span class="nonterminal">[0-9]+)?</span>
+ 
+<span class="nonterminal">float_suffix?</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">[0-9]+</span>
+ 
+<span class="nonterminal">[eE]</span>
+ 
+<span class="nonterminal">[+-]?</span>
+ 
+<span class="nonterminal">[0-9]+</span>
+ 
+<span class="nonterminal">float_suffix?</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">float_suffix</span> ::=
+<div class="alternative">
+<span class="terminal">'f'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'F'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'d'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'D'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">char_literal</span> ::=
+<div class="alternative">
+<span class="nonterminal">"'"</span>
+ 
+<span class="nonterminal">(escape_sequence</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="nonterminal">[^'\\\n])</span>
+ 
+<span class="nonterminal">"'"</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">string_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'"'</span>
+ 
+<span class="nonterminal">(escape_sequence</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="nonterminal">[^"\\\n])*</span>
+ 
+<span class="terminal">'"'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">raw_string_literal</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">raw_string_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'r"'</span>
+ 
+<span class="nonterminal">[^"]*</span>
+ 
+<span class="terminal">'"'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'r</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">escape_sequence</span> ::=
+<div class="alternative">
+<span class="terminal">'\\'</span>
+ 
+<span class="nonterminal">['"\\nrtbfav]</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'\\x'</span>
+ 
+<span class="nonterminal">hex_digit</span>
+ 
+<span class="nonterminal">hex_digit</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'\\u'</span>
+ 
+<span class="nonterminal">hex_digit{4}</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'\\U'</span>
+ 
+<span class="nonterminal">hex_digit{8}</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">bool_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'true'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'false'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">null_literal</span> ::=
+<div class="alternative">
+<span class="terminal">'null'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'nullptr'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">identifier</span> ::=
+<div class="alternative">
+<span class="nonterminal">[a-zA-Z_]</span>
+ 
+<span class="nonterminal">[a-zA-Z0-9_]*</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'`'</span>
+ 
+<span class="nonterminal">[^`]+</span>
+ 
+<span class="terminal">'`'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">keyword</span> ::=
+<div class="alternative">
+<span class="terminal">'if'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'else'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'while'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'for'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'switch'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'case'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'default'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'break'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'continue'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'return'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'defer'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'struct'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'enum'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'trait'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'impl'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'typedef'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'macro'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'import'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'export'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'module'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'operator'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'private'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'const'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'static'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'sizeof'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'typeof'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'true'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'false'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'null'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'nullptr'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'void'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'int'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'uint'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'tiny'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'utiny'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'short'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'ushort'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'long'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'ulong'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'float'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'double'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'bool'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'char'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'string'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'auto'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'with'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'where'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'as'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">delimiter</span> ::=
+<div class="alternative">
+<span class="terminal">'('</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">')'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'['</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">']'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'{'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'}'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">';'</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">','</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">':'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">comment</span> ::=
+<div class="alternative">
+<span class="terminal">'//'</span>
+ 
+<span class="nonterminal">[^\n]*</span>
+ 
+<span class="terminal">'\n'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'/*'</span>
+ 
+<span class="nonterminal">([^*]</span>
+ 
+<span class="operator">|</span>
+ 
+<span class="terminal">'*'</span>
+ 
+<span class="nonterminal">[^/])*</span>
+ 
+<span class="terminal">'*/'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">whitespace</span> ::=
+<div class="alternative">
+<span class="nonterminal">[</span>
+ 
+<span class="nonterminal">\t\n\r]+</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">preprocessor</span> ::=
+<div class="alternative">
+<span class="terminal">'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">preprocessor_directive</span> ::=
+<div class="alternative">
+<span class="terminal">'include'</span>
+ 
+<span class="nonterminal">string_literal</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'define'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+<span class="nonterminal">replacement?</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'ifdef'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'ifndef'</span>
+ 
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'if'</span>
+ 
+<span class="nonterminal">const_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'else'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'elif'</span>
+ 
+<span class="nonterminal">const_expr</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'endif'</span>
+ 
+</div>
+<div class="alternative">|
+<span class="terminal">'pragma'</span>
+ 
+<span class="nonterminal">pragma_args</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">attribute</span> ::=
+<div class="alternative">
+<span class="terminal">'[['</span>
+ 
+<span class="nonterminal">attribute_list</span>
+ 
+<span class="terminal">']]'</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">attribute_list</span> ::=
+<div class="alternative">
+<span class="nonterminal">attribute_spec</span>
+ 
+<span class="nonterminal">(','</span>
+ 
+<span class="nonterminal">attribute_spec)*</span>
+ 
+</div>
+</div>
+<div class="production">
+<span class="lhs">attribute_spec</span> ::=
+<div class="alternative">
+<span class="nonterminal">identifier</span>
+ 
+</div>
+<div class="alternative">|
+<span class="nonterminal">identifier</span>
+ 
+<span class="terminal">'('</span>
+ 
+<span class="nonterminal">argument_list</span>
+ 
+<span class="terminal">')'</span>
+ 
+</div>
+</div>
+
+</body>
+</html>

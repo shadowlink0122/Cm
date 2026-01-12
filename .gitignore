@@ -60,3 +60,28 @@ link.ld
 *.ll
 *.bc
 *.wasm
+
+# Jekyll
+.jekyll-cache/
+_site/
+.jekyll-metadata
+vendor/bundle/
+
+# Benchmark binaries and results
+tests/bench_marks/results/
+tests/bench_marks/cm/*_native
+tests/bench_marks/cpp/01_*[!.cpp]
+tests/bench_marks/cpp/02_*[!.cpp]
+tests/bench_marks/cpp/03_*[!.cpp]
+tests/bench_marks/cpp/04_*[!.cpp]
+tests/bench_marks/cpp/05_*[!.cpp]
+tests/bench_marks/cpp/06_*[!.cpp]
+tests/bench_marks/cpp/07_*[!.cpp]
+tests/bench_marks/rust/target/
+tests/bench_marks/rust/Cargo.lock
+tests/bench_marks/python/__pycache__/
+tests/bench_marks/python/*.pyc
+*.results.txt
+cpp_results.txt
+rust_results.txt
+python_results.txt

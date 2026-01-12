@@ -1,0 +1,16 @@
+import std::io::println;
+
+// const generics パーステスト
+// 新しい構文: <N: const int> 形式
+
+// 定数パラメータを持つ構造体
+struct Buffer<T, SIZE: const int> {
+    T* data;
+    int len;
+}
+
+int main() {
+    println("const generics parse test - new syntax");
+    
+    return 0;
+}

@@ -37,6 +37,31 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
         return true;
 
+    // 再帰ガード：相互参照型による無限再帰を防止
+    // 型ペアを正規化してセットで管理
+    static thread_local std::set<std::pair<std::string, std::string>> visited_pairs;
+    std::string a_str = ast::type_to_string(*a);
+    std::string b_str = ast::type_to_string(*b);
+    // 順序を正規化（a < b）
+    auto key = a_str < b_str ? std::make_pair(a_str, b_str) : std::make_pair(b_str, a_str);
+
+    if (visited_pairs.count(key) > 0) {
+        // 既に比較中のペア → 無限再帰を回避、同じと見なす
+        return true;
+    }
+
+    // RAIIガード
+    struct RecursionGuard {
+        std::set<std::pair<std::string, std::string>>& set;
+        std::pair<std::string, std::string> k;
+        RecursionGuard(std::set<std::pair<std::string, std::string>>& s,
+                       std::pair<std::string, std::string> key)
+            : set(s), k(key) {
+            set.insert(k);
+        }
+        ~RecursionGuard() { set.erase(k); }
+    } guard(visited_pairs, key);
+
     // ジェネリック型パラメータのチェック
     std::string a_name = ast::type_to_string(*a);
     std::string b_name = ast::type_to_string(*b);
@@ -67,6 +92,29 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         }
         if (a->kind == ast::TypeKind::Interface) {
             return a->name == b->name;
+        }
+        // ポインタ型の互換性チェック（借用安全性）
+        if (a->kind == ast::TypeKind::Pointer) {
+            // void* → T* の暗黙変換を許可（FFI用）
+            if (b->element_type && b->element_type->kind == ast::TypeKind::Void) {
+                return true;
+            }
+            // T* → void* の暗黙変換を許可（FFI用）
+            if (a->element_type && a->element_type->kind == ast::TypeKind::Void) {
+                return true;
+            }
+            // const T* → T* は禁止（constを外せない）
+            // b（代入元）がconstでa（代入先）が非constの場合は禁止
+            if (b->qualifiers.is_const && !a->qualifiers.is_const) {
+                return false;
+            }
+            // 要素型のconst外しも禁止
+            if (b->element_type && b->element_type->qualifiers.is_const && a->element_type &&
+                !a->element_type->qualifiers.is_const) {
+                return false;
+            }
+            // 要素型の互換性をチェック
+            return types_compatible(a->element_type, b->element_type);
         }
         // 関数ポインタ型の互換性チェック
         if (a->kind == ast::TypeKind::Function) {
@@ -179,7 +227,29 @@ void TypeChecker::error(Span span, const std::string& msg) {
     diagnostics_.emplace_back(DiagKind::Error, span, msg);
 }
 
-// type_implements_interface: 型が指定されたインターフェースを実装しているかチェック
+void TypeChecker::warning(Span span, const std::string& msg) {
+    debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Warn);
+    diagnostics_.emplace_back(DiagKind::Warning, span, msg);
+}
+
+// 変数が変更されたことをマーク
+void TypeChecker::mark_variable_modified(const std::string& name) {
+    modified_variables_.insert(name);
+}
+
+// const推奨警告をチェック（関数終了時に呼び出す）
+void TypeChecker::check_const_recommendations() {
+    for (const auto& [name, span] : non_const_variable_spans_) {
+        // 変更されていない変数に対してconst推奨警告
+        if (modified_variables_.count(name) == 0) {
+            warning(span, "Variable '" + name + "' is never modified, consider using 'const'");
+        }
+    }
+    // 次の関数用にクリア
+    modified_variables_.clear();
+    non_const_variable_spans_.clear();
+}
+
 bool TypeChecker::type_implements_interface(const std::string& type_name,
                                             const std::string& interface_name) {
     // プリミティブ型の組み込みインターフェース
@@ -239,6 +309,24 @@ bool TypeChecker::check_type_constraints(const std::string& type_name,
         }
     }
     return true;
+}
+
+void TypeChecker::mark_variable_initialized(const std::string& name) {
+    initialized_variables_.insert(name);
+}
+
+void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
+    // 初期化されていない変数の使用を検出
+    // 注: 関数パラメータは常に初期化されているとみなす
+    auto sym = scopes_.current().lookup(name);
+    if (!sym) {
+        return;  // 変数が見つからない場合は他のエラー処理に任せる
+    }
+
+    // initialized_variables_に含まれていない場合は警告
+    if (initialized_variables_.count(name) == 0) {
+        warning(span, "Variable '" + name + "' may be used before initialization");
+    }
 }
 
 }  // namespace cm

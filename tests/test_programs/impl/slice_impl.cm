@@ -1,0 +1,28 @@
+import std::io::println;
+
+// スライス型へのimplテスト
+// impl int[] for Interface { method() } が動作することを確認
+
+interface Summable {
+    int sum();
+}
+
+impl int[] for Summable {
+    int sum() {
+        int total = 0;
+        int i = 0;
+        const int length = self.len();
+        while (i < length) {
+            total = total + self[i];
+            i = i + 1;
+        }
+        return total;
+    }
+}
+
+int main() {
+    const int[] nums = [1, 2, 3, 4, 5];
+    const int s = nums.sum();
+    println("sum: {s}");
+    return 0;
+}

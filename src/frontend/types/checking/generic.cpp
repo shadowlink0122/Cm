@@ -83,6 +83,33 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
                     }
                 }
             }
+            // パラメータがポインタ型で内部がジェネリック構造体の場合（例：Node<T>*）
+            else if (param_type->kind == ast::TypeKind::Pointer && param_type->element_type &&
+                     arg_type->kind == ast::TypeKind::Pointer && arg_type->element_type) {
+                auto inner_param = param_type->element_type;
+                auto inner_arg = arg_type->element_type;
+
+                if (inner_param->kind == ast::TypeKind::Struct && !inner_param->type_args.empty() &&
+                    inner_arg->kind == ast::TypeKind::Struct &&
+                    inner_param->name == inner_arg->name) {
+                    // ポインタを剥がしてジェネリック構造体から型引数を推論
+                    for (size_t j = 0;
+                         j < inner_param->type_args.size() && j < inner_arg->type_args.size();
+                         ++j) {
+                        std::string type_arg_str = ast::type_to_string(*inner_param->type_args[j]);
+                        if (type_param_set.count(type_arg_str)) {
+                            auto it = inferred_types.find(type_arg_str);
+                            if (it == inferred_types.end()) {
+                                inferred_types[type_arg_str] = inner_arg->type_args[j];
+                                debug::tc::log(debug::tc::Id::Resolved,
+                                               "Inferred (from pointer) " + type_arg_str + " = " +
+                                                   ast::type_to_string(*inner_arg->type_args[j]),
+                                               debug::Level::Debug);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

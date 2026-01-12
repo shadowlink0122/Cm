@@ -1,0 +1,90 @@
+// 複合チェーンテスト
+// メソッドチェーン + フィールドアクセスの組み合わせを保証
+// 注: 配列フィールドを直接返すのはLLVMバックエンドに制限があるため回避
+
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+interface Transformable {
+    Point translate(int dx, int dy);
+    Point scale(int factor);
+}
+
+impl Point for Transformable {
+    Point translate(int dx, int dy) {
+        return Point { x: self.x + dx, y: self.y + dy };
+    }
+    
+    Point scale(int factor) {
+        return Point { x: self.x * factor, y: self.y * factor };
+    }
+}
+
+struct PointHolder {
+    Point point;
+}
+
+interface PointAccessor {
+    Point getPoint();
+}
+
+impl PointHolder for PointAccessor {
+    Point getPoint() {
+        return self.point;
+    }
+}
+
+int main() {
+    // 複合チェーンのテスト
+    Point p = Point { x: 5, y: 10 };
+    
+    // Test 1: translate -> scale -> field
+    int result1 = p.translate(5, 0).scale(2).x;
+    println("Test 1 (translate.scale.x): {result1}");
+    if (result1 != 20) {  // (5+5) * 2 = 20
+        println("FAIL: expected 20");
+        return 1;
+    }
+    
+    // Test 2: scale -> translate -> field
+    int result2 = p.scale(3).translate(10, 20).y;
+    println("Test 2 (scale.translate.y): {result2}");
+    if (result2 != 50) {  // 10*3 + 20 = 50
+        println("FAIL: expected 50");
+        return 1;
+    }
+    
+    // Test 3: PointHolderからのチェーン
+    PointHolder holder = PointHolder { point: Point { x: 1, y: 2 } };
+    
+    // getPoint().field
+    int px = holder.getPoint().x;
+    println("Test 3 (getPoint.field): {px}");
+    if (px != 1) {
+        println("FAIL: expected 1");
+        return 1;
+    }
+    
+    // Test 4: getPoint().method().field
+    int result4 = holder.getPoint().translate(10, 10).x;
+    println("Test 4 (getPoint.translate.x): {result4}");
+    if (result4 != 11) {  // 1 + 10 = 11
+        println("FAIL: expected 11");
+        return 1;
+    }
+    
+    // Test 5: 長いチェーン
+    int result5 = holder.getPoint().translate(5, 5).scale(2).translate(1, 1).x;
+    println("Test 5 (long chain): {result5}");
+    if (result5 != 13) {  // ((1+5)*2)+1 = 13
+        println("FAIL: expected 13");
+        return 1;
+    }
+    
+    println("All composite chain tests passed!");
+    return 0;
+}

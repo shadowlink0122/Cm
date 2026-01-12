@@ -1,0 +1,40 @@
+// borrowing.cm - 借用のデモ
+// 参照、const借用を示す
+
+int main() {
+    println("=== Borrowing ===");
+    
+    // 1. 不変借用（参照）
+    println("--- Immutable borrow ---");
+    const int value = 42;
+    const int* ref = &value;
+    println("value = {value}, *ref = {*ref}");
+    
+    // 2. 可変借用
+    println("");
+    println("--- Mutable borrow ---");
+    int x = 10;
+    int* px = &x;
+    *px = 20;  // ポインタ経由で変更
+    println("x after *px = 20: {x}");
+    
+    // 3. 借用中はmove禁止
+    println("");
+    println("--- Borrow safety ---");
+    int y = 100;
+    const int* py = &y;  // yを借用
+    // int z = move y;  // Error: Cannot move while borrowed
+    println("*py = {*py}");
+    
+    // 4. 借用中は変更禁止
+    println("");
+    println("--- No modification while borrowed ---");
+    int w = 50;
+    const int* pw = &w;
+    // w = 60;  // Error: Cannot assign while borrowed
+    // w++;     // Error: Cannot modify while borrowed
+    println("*pw = {*pw}");
+    
+    println("\n=== Done ===");
+    return 0;
+}

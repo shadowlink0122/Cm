@@ -1,3 +1,5 @@
+[English](wasm.en.html)
+
 # WASM Codegen 設計
 
 ## 概要

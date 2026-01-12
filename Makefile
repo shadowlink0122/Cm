@@ -67,14 +67,18 @@ help:
 	@echo "  make tla - test-llvm-all"
 	@echo "  make tj  - test-js"
 	@echo "  make tjp - test-js-parallel"
+	@echo "  make tjit - test-jit"
+	@echo "  make tjitp - test-jit-parallel"
 	@echo "  make ti0/ti1/ti2/ti3 - インタプリタ O0-O3（シリアル）"
 	@echo "  make tl0/tl1/tl2/tl3 - LLVM O0-O3（シリアル）"
 	@echo "  make tlw0/tlw1/tlw2/tlw3 - WASM O0-O3（シリアル）"
 	@echo "  make tj0/tj1/tj2/tj3 - JS O0-O3（シリアル）"
+	@echo "  make tjit0/tjit1/tjit2/tjit3 - JIT O0-O3（シリアル）"
 	@echo "  make tip0/tip1/tip2/tip3 - インタプリタ O0-O3（パラレル）"
 	@echo "  make tlp0/tlp1/tlp2/tlp3 - LLVM O0-O3（パラレル）"
 	@echo "  make tlwp0/tlwp1/tlwp2/tlwp3 - WASM O0-O3（パラレル）"
 	@echo "  make tjp0/tjp1/tjp2/tjp3 - JS O0-O3（パラレル）"
+	@echo "  make tjitp0/tjitp1/tjitp2/tjitp3 - JIT O0-O3（パラレル）"
 
 # ========================================
 # Build Commands
@@ -292,6 +296,81 @@ test-llvm-all-opts: test-llvm-o0-parallel test-llvm-o1-parallel test-llvm-o2-par
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All LLVM optimization level tests completed!"
+	@echo "=========================================="
+
+# ========================================
+# JIT Backend Test Commands
+# ========================================
+
+# JITテスト（デフォルトはO3）
+.PHONY: test-jit
+test-jit:
+	@echo "Running JIT tests (O3)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit
+
+# JITテスト（並列）
+.PHONY: test-jit-parallel
+test-jit-parallel:
+	@echo "Running JIT tests (parallel, O3)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -p
+
+# JIT最適化レベル別テスト（シリアル）
+.PHONY: test-jit-o0
+test-jit-o0:
+	@echo "Running JIT tests (O0, serial)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=0 tests/unified_test_runner.sh -b jit
+
+.PHONY: test-jit-o1
+test-jit-o1:
+	@echo "Running JIT tests (O1, serial)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=1 tests/unified_test_runner.sh -b jit
+
+.PHONY: test-jit-o2
+test-jit-o2:
+	@echo "Running JIT tests (O2, serial)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b jit
+
+.PHONY: test-jit-o3
+test-jit-o3:
+	@echo "Running JIT tests (O3, serial)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit
+
+# JIT最適化レベル別テスト（パラレル）
+.PHONY: test-jit-o0-parallel
+test-jit-o0-parallel:
+	@echo "Running JIT tests (O0, parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=0 tests/unified_test_runner.sh -b jit -p
+
+.PHONY: test-jit-o1-parallel
+test-jit-o1-parallel:
+	@echo "Running JIT tests (O1, parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=1 tests/unified_test_runner.sh -b jit -p
+
+.PHONY: test-jit-o2-parallel
+test-jit-o2-parallel:
+	@echo "Running JIT tests (O2, parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b jit -p
+
+.PHONY: test-jit-o3-parallel
+test-jit-o3-parallel:
+	@echo "Running JIT tests (O3, parallel)..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -p
+
+.PHONY: test-jit-all-opts
+test-jit-all-opts: test-jit-o0-parallel test-jit-o1-parallel test-jit-o2-parallel test-jit-o3-parallel
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All JIT optimization level tests completed!"
 	@echo "=========================================="
 
 # LLVM WebAssemblyテスト（デフォルトはO3）
@@ -547,34 +626,34 @@ tao: test-all-opts
 c: clean
 
 .PHONY: ti
-ti: test-interpreter
+ti: test-jit
 
 .PHONY: tip
-tip: test-interpreter-parallel
+tip: test-jit-parallel
 
 .PHONY: ti0
-ti0: test-interpreter-o0
+ti0: test-jit-o0
 
 .PHONY: ti1
-ti1: test-interpreter-o1
+ti1: test-jit-o1
 
 .PHONY: ti2
-ti2: test-interpreter-o2
+ti2: test-jit-o2
 
 .PHONY: ti3
-ti3: test-interpreter-o3
+ti3: test-jit-o3
 
 .PHONY: tip0
-tip0: test-interpreter-o0-parallel
+tip0: test-jit-o0-parallel
 
 .PHONY: tip1
-tip1: test-interpreter-o1-parallel
+tip1: test-jit-o1-parallel
 
 .PHONY: tip2
-tip2: test-interpreter-o2-parallel
+tip2: test-jit-o2-parallel
 
 .PHONY: tip3
-tip3: test-interpreter-o3-parallel
+tip3: test-jit-o3-parallel
 
 .PHONY: tl
 tl: test-llvm
@@ -668,6 +747,119 @@ tjp2: test-js-o2-parallel
 
 .PHONY: tjp3
 tjp3: test-js-o3-parallel
+
+# JIT shortcuts
+.PHONY: tjit
+tjit: test-jit
+
+.PHONY: tjitp
+tjitp: test-jit-parallel
+
+.PHONY: tjit0
+tjit0: test-jit-o0
+
+.PHONY: tjit1
+tjit1: test-jit-o1
+
+.PHONY: tjit2
+tjit2: test-jit-o2
+
+.PHONY: tjit3
+tjit3: test-jit-o3
+
+.PHONY: tjitp0
+tjitp0: test-jit-o0-parallel
+
+.PHONY: tjitp1
+tjitp1: test-jit-o1-parallel
+
+.PHONY: tjitp2
+tjitp2: test-jit-o2-parallel
+
+.PHONY: tjitp3
+tjitp3: test-jit-o3-parallel
+
+# ========================================
+# Benchmark Commands
+# ========================================
+
+# Run all benchmarks (compare with Python, C++, Rust)
+.PHONY: bench
+bench:
+	@echo "=========================================="
+	@echo "   Running Cm Language Benchmarks"
+	@echo "=========================================="
+	@chmod +x tests/bench_marks/run_individual_benchmarks.sh
+	@cd tests/bench_marks && ./run_individual_benchmarks.sh
+
+# Quick benchmark (prime numbers only)
+.PHONY: bench-prime
+bench-prime:
+	@echo "Running prime number benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/01_prime.cm -o /tmp/bench_prime
+	@time /tmp/bench_prime
+
+# Quick benchmark (fibonacci recursive)
+.PHONY: bench-fib
+bench-fib:
+	@echo "Running fibonacci recursive benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/02_fibonacci_recursive.cm -o /tmp/bench_fib
+	@time /tmp/bench_fib
+
+# Quick benchmark (array sort)
+.PHONY: bench-sort
+bench-sort:
+	@echo "Running array sort benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/04_array_sort.cm -o /tmp/bench_sort
+	@time /tmp/bench_sort
+
+# Quick benchmark (matrix multiply)
+.PHONY: bench-matrix
+bench-matrix:
+	@echo "Running matrix multiply benchmark..."
+	@./cm compile -O3 tests/bench_marks/cm/05_matrix_multiply.cm -o /tmp/bench_matrix
+	@time /tmp/bench_matrix
+
+# Run JIT benchmarks (faster than interpreter)
+.PHONY: bench-jit
+bench-jit:
+	@echo "Running JIT benchmarks..."
+	@for file in tests/bench_marks/cm/*.cm; do \
+		echo "Running $$file..."; \
+		time ./cm run --jit $$file; \
+		echo ""; \
+	done
+
+# Run interpreter benchmarks (slower, for comparison)
+.PHONY: bench-interpreter
+bench-interpreter:
+	@echo "Running interpreter benchmarks..."
+	@for file in tests/bench_marks/cm/*.cm; do \
+		echo "Running $$file..."; \
+		time ./cm run $$file; \
+		echo ""; \
+	done
+
+# Clean benchmark results
+.PHONY: bench-clean
+bench-clean:
+	@echo "Cleaning benchmark files..."
+	@rm -rf tests/bench_marks/results/*
+	@rm -f tests/bench_marks/cm/*_native
+	@rm -f tests/bench_marks/cpp/01_prime
+	@rm -f tests/bench_marks/cpp/02_fibonacci_recursive
+	@rm -f tests/bench_marks/cpp/03_fibonacci_iterative
+	@rm -f tests/bench_marks/cpp/04_array_sort
+	@rm -f tests/bench_marks/cpp/05_matrix_multiply
+	@rm -f tests/bench_marks/cpp/*.o
+	@rm -f tests/bench_marks/cpp/cpp_results.txt
+	@rm -f tests/bench_marks/python/*.pyc
+	@rm -rf tests/bench_marks/python/__pycache__
+	@rm -f tests/bench_marks/python/python_results.txt
+	@if [ -d tests/bench_marks/rust ]; then cd tests/bench_marks/rust && cargo clean 2>/dev/null || true; fi
+	@rm -f tests/bench_marks/rust/rust_results.txt
+	@rm -f /tmp/bench_*
+	@echo "✅ Benchmark cleanup complete!"
 
 # デフォルトファイル設定
 FILE ?=

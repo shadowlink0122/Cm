@@ -1,0 +1,131 @@
+// テスト: ジェネリックqueue<T>に構造体を使用
+// 目的: sizeof(T)の緊急修正が正しく動作することを確認
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+struct Item {
+    int value;
+    int priority;
+}
+
+struct Node<T> {
+    T data;
+    Node<T>* next;
+}
+
+// シンプルなqueueの実装
+struct Queue<T> {
+    Node<T>* front;
+    Node<T>* rear;
+    int size;
+}
+
+// Queueインターフェース定義
+interface QueueOps<T> {
+    void enqueue(T item);
+    T dequeue();
+    int get_size();
+}
+
+impl<T> Queue<T> for QueueOps<T> {
+    // 要素を追加
+    void enqueue(T item) {
+        // ここが重要: sizeof(Node<T>)が正しく計算される必要がある
+        void* mem = malloc(sizeof(Node<T>));
+        Node<T>* new_node = mem as Node<T>*;
+
+        new_node->data = item;
+        new_node->next = null as Node<T>*;
+
+        if (self.rear == null as Node<T>*) {
+            self.front = new_node;
+            self.rear = new_node;
+        } else {
+            self.rear->next = new_node;
+            self.rear = new_node;
+        }
+        self.size = self.size + 1;
+    }
+
+    // 要素を取り出し
+    T dequeue() {
+        // 空のキューチェック用にダミーを作成
+        T result = 0 as T;  // 初期化
+
+        if (self.size > 0) {
+            result = self.front->data;
+            Node<T>* temp = self.front;
+            self.front = self.front->next;
+
+            if (self.front == null as Node<T>*) {
+                self.rear = null as Node<T>*;
+            }
+
+            free(temp as void*);
+            self.size = self.size - 1;
+        }
+
+        return result;
+    }
+
+    // サイズを取得
+    int get_size() {
+        return self.size;
+    }
+}
+
+int main() {
+    Queue<Item> queue = {
+        front: null as Node<Item>*,
+        rear: null as Node<Item>*,
+        size: 0
+    };
+
+    // テスト1: 構造体をenqueue
+    Item item1 = {value: 42, priority: 1};
+    Item item2 = {value: 100, priority: 2};
+    Item item3 = {value: 7, priority: 3};
+
+    queue.enqueue(item1);
+    queue.enqueue(item2);
+    queue.enqueue(item3);
+
+    // サイズチェック
+    if (queue.get_size() != 3) {
+        print("Error: Queue size should be 3 but got ");
+        print(queue.get_size());
+        print("\n");
+        return 1;
+    }
+
+    // テスト2: dequeue して値を確認
+    Item dequeued1 = queue.dequeue();
+    if (dequeued1.value != 42 || dequeued1.priority != 1) {
+        print("Error: First dequeue failed\n");
+        return 1;
+    }
+
+    Item dequeued2 = queue.dequeue();
+    if (dequeued2.value != 100 || dequeued2.priority != 2) {
+        print("Error: Second dequeue failed\n");
+        return 1;
+    }
+
+    Item dequeued3 = queue.dequeue();
+    if (dequeued3.value != 7 || dequeued3.priority != 3) {
+        print("Error: Third dequeue failed\n");
+        return 1;
+    }
+
+    // サイズが0になっていることを確認
+    if (queue.get_size() != 0) {
+        print("Error: Queue should be empty\n");
+        return 1;
+    }
+
+    print("✓ All tests passed: queue<Item> works correctly!\n");
+    return 0;
+}

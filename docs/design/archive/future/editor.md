@@ -1,3 +1,5 @@
+[English](editor.en.html)
+
 # エディタ拡張・シンタックスハイライト
 
 ## 概要

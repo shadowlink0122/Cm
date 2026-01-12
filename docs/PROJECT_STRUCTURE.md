@@ -1,3 +1,10 @@
+---
+layout: default
+title: Project Structure
+---
+
+[English](PROJECT_STRUCTURE.en.html)
+
 # Cm言語 プロジェクト構造
 
 *最終更新: 2025年1月*
@@ -146,6 +153,6 @@ make tall
 
 ## 関連ドキュメント
 
-- [開発環境](DEVELOPMENT.md)
-- [クイックスタート](QUICKSTART.md)
-- [機能一覧](FEATURES.md)
+- [開発環境](DEVELOPMENT.html)
+- [クイックスタート](QUICKSTART.html)
+- [機能一覧](FEATURES.html)

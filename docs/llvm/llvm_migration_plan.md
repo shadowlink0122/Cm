@@ -1,3 +1,5 @@
+[English](llvm_migration_plan.en.html)
+
 # LLVM移行計画：Cmの統一バックエンド戦略
 
 ## 現状分析

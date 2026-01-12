@@ -1,0 +1,4 @@
+Range 0..5:
+sum: 10
+Range 10..0 step -2:
+sum: 30

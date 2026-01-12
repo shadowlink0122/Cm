@@ -31,7 +31,7 @@ bool TypeChecker::check(ast::Program& program) {
 
 bool TypeChecker::has_errors() const {
     for (const auto& d : diagnostics_) {
-        if (d.kind == DiagKind::Error)
+        if (d.severity == DiagKind::Error)
             return true;
     }
     return false;
@@ -288,6 +288,7 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
 
     std::string type_name = ast::type_to_string(*impl.target_type);
 
+    // コンストラクタ/デストラクタの登録（is_ctor_implの場合）
     if (impl.is_ctor_impl) {
         for (const auto& ctor : impl.constructors) {
             std::string mangled_name = type_name + "__ctor";
@@ -309,7 +310,7 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
             scopes_.global().define_function(mangled_name, std::move(param_types),
                                              ast::make_void());
         }
-        return;
+        // 早期リターンを削除: メソッドも登録を続行
     }
 
     if (!impl.interface_name.empty()) {
@@ -360,17 +361,22 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
                        debug::Level::Debug);
     }
 
+    // コンストラクタ/デストラクタのチェック
     if (impl.is_ctor_impl) {
         for (auto& ctor : impl.constructors) {
             scopes_.push();
             current_return_type_ = ast::make_void();
             scopes_.current().define("self", impl.target_type, false);
+            mark_variable_initialized("self");  // selfは常に初期化済み
             for (const auto& param : ctor->params) {
                 scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+                mark_variable_initialized(param.name);  // パラメータは常に初期化済み
             }
             for (auto& stmt : ctor->body) {
                 check_statement(*stmt);
             }
+            check_const_recommendations();
+            initialized_variables_.clear();
             scopes_.pop();
         }
 
@@ -378,14 +384,16 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
             scopes_.push();
             current_return_type_ = ast::make_void();
             scopes_.current().define("self", impl.target_type, false);
+            mark_variable_initialized("self");  // selfは常に初期化済み
             for (auto& stmt : impl.destructor->body) {
                 check_statement(*stmt);
             }
+            check_const_recommendations();
+            initialized_variables_.clear();
             scopes_.pop();
         }
 
-        current_return_type_ = nullptr;
-        return;
+        // 早期リターンを削除: メソッドのチェックも続行
     }
 
     current_impl_target_type_ = type_name;
@@ -394,12 +402,16 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
         scopes_.push();
         current_return_type_ = method->return_type;
         scopes_.current().define("self", impl.target_type, false);
+        mark_variable_initialized("self");  // selfは常に初期化済み
         for (const auto& param : method->params) {
             scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+            mark_variable_initialized(param.name);  // パラメータは常に初期化済み
         }
         for (auto& stmt : method->body) {
             check_statement(*stmt);
         }
+        check_const_recommendations();   // const推奨警告をチェック
+        initialized_variables_.clear();  // 次のメソッド用にクリア
         scopes_.pop();
     }
     current_return_type_ = nullptr;
@@ -485,11 +497,19 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
             resolved_type = param.type;
         }
         scopes_.current().define(param.name, resolved_type, param.qualifiers.is_const);
+        // パラメータは初期化されているとみなす
+        mark_variable_initialized(param.name);
     }
 
     for (auto& stmt : func.body) {
         check_statement(*stmt);
     }
+
+    // 関数終了時にconst推奨警告をチェック
+    check_const_recommendations();
+
+    // 初期化追跡をクリア（次の関数用）
+    initialized_variables_.clear();
 
     scopes_.pop();
     current_return_type_ = nullptr;

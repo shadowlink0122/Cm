@@ -1,4 +1,6 @@
-# 実装進捗レポート - 2024年12月13日 (最終版)
+[English](implementation_progress_2024_12_13_final.en.html)
+
+# 実装進捗レポート - 2025年12月13日 (最終版)
 
 ## エグゼクティブサマリー
 
@@ -180,5 +182,5 @@ src/mir/lowering/
 
 ---
 
-作成日時: 2024年12月13日
+作成日時: 2025年12月13日
 作成者: Claude Code Assistant

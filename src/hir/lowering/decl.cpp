@@ -184,7 +184,7 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         hir_impl->where_clauses.push_back(hir_clause);
     }
 
-    // コンストラクタ専用implの場合
+    // コンストラクタ専用implの場合、コンストラクタ/デストラクタをlower
     if (impl.is_ctor_impl) {
         for (auto& ctor : impl.constructors) {
             auto hir_func = std::make_unique<HirFunction>();
@@ -230,10 +230,10 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
             hir_impl->methods.push_back(std::move(hir_func));
         }
 
-        return std::make_unique<HirDecl>(std::move(hir_impl));
+        // 早期リターンを削除: メソッドも処理を続行
     }
 
-    // メソッド実装の場合
+    // メソッド実装の場合（is_ctor_impl時もメソッドがあれば処理）
     for (auto& method : impl.methods) {
         auto hir_func = std::make_unique<HirFunction>();
         hir_func->name = method->name;

@@ -51,10 +51,30 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                         place.projections.push_back(PlaceProjection::field(*field_idx));
 
                         // 次の型を取得
-                        if (ctx.struct_defs && ctx.struct_defs->count(inner_type->name)) {
-                            const auto* struct_def = ctx.struct_defs->at(inner_type->name);
+                        // ジェネリック構造体の場合はベース構造体名で検索し、
+                        // フィールド型がジェネリックパラメータなら置換する
+                        std::string lookup_name = inner_type->name;
+                        if (ctx.struct_defs && ctx.struct_defs->count(lookup_name)) {
+                            const auto* struct_def = ctx.struct_defs->at(lookup_name);
                             if (*field_idx < struct_def->fields.size()) {
-                                current_type = struct_def->fields[*field_idx].type;
+                                hir::TypePtr field_type = struct_def->fields[*field_idx].type;
+
+                                // フィールド型がジェネリックパラメータの場合、type_argsから置換
+                                // 例: Node<Item>のfield "data: T" → T=Item
+                                if (field_type && field_type->kind == hir::TypeKind::Generic &&
+                                    !inner_type->type_args.empty()) {
+                                    // ジェネリックパラメータ名を型引数にマッピング
+                                    for (size_t i = 0; i < struct_def->generic_params.size() &&
+                                                       i < inner_type->type_args.size();
+                                         ++i) {
+                                        if (struct_def->generic_params[i].name ==
+                                            field_type->name) {
+                                            field_type = inner_type->type_args[i];
+                                            break;
+                                        }
+                                    }
+                                }
+                                current_type = field_type;
                             }
                         }
                         return true;

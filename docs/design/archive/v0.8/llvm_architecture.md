@@ -1,3 +1,5 @@
+[English](llvm_architecture.en.html)
+
 # LLVM アーキテクチャ設計
 
 ## 全体構造

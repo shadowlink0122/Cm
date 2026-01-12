@@ -1,0 +1,39 @@
+[package]
+name = "cm-benchmark-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "01_prime"
+path = "01_prime.rs"
+
+[[bin]]
+name = "02_fibonacci_recursive"
+path = "02_fibonacci_recursive.rs"
+
+[[bin]]
+name = "03_fibonacci_iterative"
+path = "03_fibonacci_iterative.rs"
+
+[[bin]]
+name = "04_array_sort"
+path = "04_array_sort.rs"
+
+[[bin]]
+name = "05_matrix_multiply"
+path = "05_matrix_multiply.rs"
+
+[[bin]]
+name = "06_prime_sieve"
+path = "06_prime_sieve.rs"
+
+[[bin]]
+name = "07_fibonacci_memoized"
+path = "07_fibonacci_memoized.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

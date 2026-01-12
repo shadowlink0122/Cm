@@ -1,3 +1,5 @@
+[English](FEATURE_PRIORITY.en.html)
+
 # Cm言語 機能実装優先順位
 
 ## コア言語機能（実装順）
@@ -226,7 +228,7 @@ module DataStructures {
 
 ## 実装マイルストーン
 
-### M1: 基本コンパイラ（2024年12月）✅
+### M1: 基本コンパイラ（2025年12月）✅
 - [x] Lexer
 - [x] Parser（基本）
 - [x] AST

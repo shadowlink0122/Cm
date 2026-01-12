@@ -763,9 +763,10 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             } else if (elem_kind == hir::TypeKind::Long ||
                                                        elem_kind == hir::TypeKind::ULong) {
                                                 get_func = "cm_slice_get_i64";
-                                            } else if (elem_kind == hir::TypeKind::Double ||
-                                                       elem_kind == hir::TypeKind::Float) {
+                                            } else if (elem_kind == hir::TypeKind::Double) {
                                                 get_func = "cm_slice_get_f64";
+                                            } else if (elem_kind == hir::TypeKind::Float) {
+                                                get_func = "cm_slice_get_f32";
                                             } else if (elem_kind == hir::TypeKind::Pointer ||
                                                        elem_kind == hir::TypeKind::String ||
                                                        elem_kind == hir::TypeKind::Struct) {
@@ -1053,60 +1054,178 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 auto err_type = hir::make_error();
                                                 arg_locals.push_back(ctx.new_temp(err_type));
                                             }
-                                        } else {
+                                        } else if (obj_type &&
+                                                   obj_type->kind == hir::TypeKind::Struct) {
                                             // 構造体のメソッド呼び出し
-                                            // 関数名の形式: StructName__MethodName
-                                            std::string method_name_full =
-                                                obj_type->name + "__" + member_name;
+                                            // member_name
+                                            // にドットが含まれる場合、構造体フィールドのスライスメソッド
+                                            // 例: c.values.len() → member_name = "values.len"
+                                            size_t inner_dot = member_name.find('.');
+                                            if (inner_dot != std::string::npos) {
+                                                // 構造体フィールドへのスライスメソッド呼び出し
+                                                std::string field_name =
+                                                    member_name.substr(0, inner_dot);
+                                                std::string slice_method =
+                                                    member_name.substr(inner_dot + 1);
 
-                                            // メソッド呼び出しのための新しいブロックを作成
-                                            BlockId call_block = ctx.new_block();
-                                            BlockId after_call_block = ctx.new_block();
+                                                // フィールドインデックスを取得
+                                                auto field_idx =
+                                                    ctx.get_field_index(obj_type->name, field_name);
+                                                hir::TypePtr field_type = nullptr;
 
-                                            // 戻り値用の一時変数（メソッド名から型を推測）
-                                            hir::TypePtr return_type = hir::make_int();
-                                            if (member_name == "debug" ||
-                                                member_name == "toString" ||
-                                                member_name == "to_string" ||
-                                                member_name == "css") {
-                                                return_type = hir::make_string();
-                                            } else if (member_name == "isCss") {
-                                                return_type = hir::make_bool();
+                                                if (field_idx && ctx.struct_defs &&
+                                                    ctx.struct_defs->count(obj_type->name)) {
+                                                    const auto* struct_def =
+                                                        ctx.struct_defs->at(obj_type->name);
+                                                    if (*field_idx < struct_def->fields.size()) {
+                                                        field_type =
+                                                            struct_def->fields[*field_idx].type;
+                                                    }
+                                                }
+
+                                                // フィールドがスライスかどうかチェック
+                                                bool is_slice_field =
+                                                    field_type &&
+                                                    field_type->kind == hir::TypeKind::Array &&
+                                                    !field_type->array_size.has_value();
+
+                                                if (is_slice_field && field_idx) {
+                                                    // スライスフィールドをロード
+                                                    LocalId slice_local = ctx.new_temp(field_type);
+                                                    MirPlace field_place{*obj_id};
+                                                    field_place.projections.push_back(
+                                                        PlaceProjection::field(*field_idx));
+                                                    ctx.push_statement(MirStatement::assign(
+                                                        MirPlace{slice_local},
+                                                        MirRvalue::use(
+                                                            MirOperand::copy(field_place))));
+
+                                                    // スライスメソッドを呼び出す
+                                                    if (slice_method == "len" ||
+                                                        slice_method == "length" ||
+                                                        slice_method == "size") {
+                                                        LocalId result =
+                                                            ctx.new_temp(hir::make_uint());
+                                                        BlockId success_block = ctx.new_block();
+
+                                                        std::vector<MirOperandPtr> call_args;
+                                                        call_args.push_back(MirOperand::copy(
+                                                            MirPlace{slice_local}));
+
+                                                        auto call_term =
+                                                            std::make_unique<MirTerminator>();
+                                                        call_term->kind = MirTerminator::Call;
+                                                        call_term->data = MirTerminator::CallData{
+                                                            MirOperand::function_ref(
+                                                                "cm_slice_len"),
+                                                            std::move(call_args),
+                                                            MirPlace{result},
+                                                            success_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
+                                                        ctx.set_terminator(std::move(call_term));
+                                                        ctx.switch_to_block(success_block);
+
+                                                        arg_locals.push_back(result);
+                                                    } else if (slice_method == "cap" ||
+                                                               slice_method == "capacity") {
+                                                        LocalId result =
+                                                            ctx.new_temp(hir::make_uint());
+                                                        BlockId success_block = ctx.new_block();
+
+                                                        std::vector<MirOperandPtr> call_args;
+                                                        call_args.push_back(MirOperand::copy(
+                                                            MirPlace{slice_local}));
+
+                                                        auto call_term =
+                                                            std::make_unique<MirTerminator>();
+                                                        call_term->kind = MirTerminator::Call;
+                                                        call_term->data = MirTerminator::CallData{
+                                                            MirOperand::function_ref(
+                                                                "cm_slice_cap"),
+                                                            std::move(call_args),
+                                                            MirPlace{result},
+                                                            success_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
+                                                        ctx.set_terminator(std::move(call_term));
+                                                        ctx.switch_to_block(success_block);
+
+                                                        arg_locals.push_back(result);
+                                                    } else {
+                                                        // 未知のスライスメソッド
+                                                        auto err_type = hir::make_error();
+                                                        arg_locals.push_back(
+                                                            ctx.new_temp(err_type));
+                                                    }
+                                                } else {
+                                                    // フィールドがスライスでない場合はエラー
+                                                    auto err_type = hir::make_error();
+                                                    arg_locals.push_back(ctx.new_temp(err_type));
+                                                }
+                                            } else {
+                                                // 通常の構造体メソッド呼び出し
+                                                // 関数名の形式: StructName__MethodName
+                                                std::string method_name_full =
+                                                    obj_type->name + "__" + member_name;
+
+                                                // メソッド呼び出しのための新しいブロックを作成
+                                                BlockId call_block = ctx.new_block();
+                                                BlockId after_call_block = ctx.new_block();
+
+                                                // 戻り値用の一時変数（メソッド名から型を推測）
+                                                hir::TypePtr return_type = hir::make_int();
+                                                if (member_name == "debug" ||
+                                                    member_name == "toString" ||
+                                                    member_name == "to_string" ||
+                                                    member_name == "css") {
+                                                    return_type = hir::make_string();
+                                                } else if (member_name == "isCss") {
+                                                    return_type = hir::make_bool();
+                                                }
+                                                LocalId result = ctx.new_temp(return_type);
+
+                                                // 引数リスト（selfパラメータ）
+                                                std::vector<MirOperandPtr> method_args;
+                                                method_args.push_back(
+                                                    MirOperand::copy(MirPlace{*obj_id}));
+
+                                                // メソッド呼び出しのターミネータを作成
+                                                auto call_term = std::make_unique<MirTerminator>();
+                                                call_term->kind = MirTerminator::Call;
+                                                call_term->data = MirTerminator::CallData{
+                                                    MirOperand::function_ref(method_name_full),
+                                                    std::move(method_args),
+                                                    std::make_optional(MirPlace{result}),
+                                                    after_call_block,
+                                                    std::nullopt,  // unwindブロックなし
+                                                    "",            // interface_name
+                                                    member_name,   // method_name
+                                                    false  // is_virtual（自動生成メソッドは非仮想）
+                                                };
+
+                                                // 現在のブロックから呼び出しブロックへジャンプ
+                                                ctx.set_terminator(
+                                                    MirTerminator::goto_block(call_block));
+
+                                                // 呼び出しブロックを設定
+                                                ctx.switch_to_block(call_block);
+                                                ctx.get_current_block()->terminator =
+                                                    std::move(call_term);
+
+                                                // 呼び出し後のブロックに切り替え
+                                                ctx.switch_to_block(after_call_block);
+
+                                                arg_locals.push_back(result);
                                             }
-                                            LocalId result = ctx.new_temp(return_type);
-
-                                            // 引数リスト（selfパラメータ）
-                                            std::vector<MirOperandPtr> method_args;
-                                            method_args.push_back(
-                                                MirOperand::copy(MirPlace{*obj_id}));
-
-                                            // メソッド呼び出しのターミネータを作成
-                                            auto call_term = std::make_unique<MirTerminator>();
-                                            call_term->kind = MirTerminator::Call;
-                                            call_term->data = MirTerminator::CallData{
-                                                MirOperand::function_ref(method_name_full),
-                                                std::move(method_args),
-                                                std::make_optional(MirPlace{result}),
-                                                after_call_block,
-                                                std::nullopt,  // unwindブロックなし
-                                                "",            // interface_name
-                                                member_name,   // method_name
-                                                false  // is_virtual（自動生成メソッドは非仮想）
-                                            };
-
-                                            // 現在のブロックから呼び出しブロックへジャンプ
-                                            ctx.set_terminator(
-                                                MirTerminator::goto_block(call_block));
-
-                                            // 呼び出しブロックを設定
-                                            ctx.switch_to_block(call_block);
-                                            ctx.get_current_block()->terminator =
-                                                std::move(call_term);
-
-                                            // 呼び出し後のブロックに切り替え
-                                            ctx.switch_to_block(after_call_block);
-
-                                            arg_locals.push_back(result);
+                                        } else {
+                                            // その他の型のメソッド呼び出し
+                                            auto err_type = hir::make_error();
+                                            arg_locals.push_back(ctx.new_temp(err_type));
                                         }
                                     } else if (obj_type &&
                                                (obj_type->kind == hir::TypeKind::Struct ||
@@ -1211,13 +1330,153 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     PlaceProjection::field(*field_idx));
 
                                                 // 次のフィールドの型を取得
+                                                // ベース名を抽出（Pair__int -> Pair）
+                                                std::string struct_name_for_def =
+                                                    current_type->name;
+                                                size_t mangled_pos = struct_name_for_def.find("__");
+                                                std::string original_struct_name =
+                                                    struct_name_for_def;
+                                                if (mangled_pos != std::string::npos) {
+                                                    struct_name_for_def =
+                                                        struct_name_for_def.substr(0, mangled_pos);
+                                                }
+
                                                 if (ctx.struct_defs &&
-                                                    ctx.struct_defs->count(current_type->name)) {
+                                                    ctx.struct_defs->count(struct_name_for_def)) {
                                                     const auto* struct_def =
-                                                        ctx.struct_defs->at(current_type->name);
+                                                        ctx.struct_defs->at(struct_name_for_def);
                                                     if (*field_idx < struct_def->fields.size()) {
-                                                        current_type =
+                                                        hir::TypePtr field_type =
                                                             struct_def->fields[*field_idx].type;
+
+                                                        // フィールド型がジェネリックパラメータの場合、type_argsまたはマングリング名から具体型を取得
+                                                        bool has_type_args =
+                                                            !current_type->type_args.empty();
+                                                        if (field_type &&
+                                                            (has_type_args ||
+                                                             mangled_pos != std::string::npos)) {
+                                                            std::vector<std::string> extracted_args;
+
+                                                            // type_argsから直接取得
+                                                            if (has_type_args) {
+                                                                for (const auto& ta :
+                                                                     current_type->type_args) {
+                                                                    if (ta) {
+                                                                        std::string ta_name;
+                                                                        if (ta->name.empty()) {
+                                                                            if (ta->kind ==
+                                                                                hir::TypeKind::Int)
+                                                                                ta_name = "int";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         UInt)
+                                                                                ta_name = "uint";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Long)
+                                                                                ta_name = "long";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Double)
+                                                                                ta_name = "double";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Float)
+                                                                                ta_name = "float";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         Bool)
+                                                                                ta_name = "bool";
+                                                                            else if (ta->kind ==
+                                                                                     hir::TypeKind::
+                                                                                         String)
+                                                                                ta_name = "string";
+                                                                            else
+                                                                                ta_name =
+                                                                                    "int";  // default
+                                                                        } else {
+                                                                            ta_name = ta->name;
+                                                                        }
+                                                                        extracted_args.push_back(
+                                                                            ta_name);
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                // マングリング名から型引数を抽出
+                                                                std::string name =
+                                                                    original_struct_name;
+                                                                size_t pos = name.find("__");
+                                                                while (pos != std::string::npos) {
+                                                                    size_t next =
+                                                                        name.find("__", pos + 2);
+                                                                    if (next == std::string::npos) {
+                                                                        extracted_args.push_back(
+                                                                            name.substr(pos + 2));
+                                                                    } else {
+                                                                        extracted_args.push_back(
+                                                                            name.substr(
+                                                                                pos + 2,
+                                                                                next - pos - 2));
+                                                                    }
+                                                                    pos = next;
+                                                                }
+                                                            }
+
+                                                            // generic_paramsと照合して置換
+                                                            for (size_t j = 0;
+                                                                 j < struct_def->generic_params
+                                                                         .size() &&
+                                                                 j < extracted_args.size();
+                                                                 ++j) {
+                                                                if (struct_def->generic_params[j]
+                                                                        .name == field_type->name) {
+                                                                    const std::string& type_name =
+                                                                        extracted_args[j];
+                                                                    if (type_name == "int") {
+                                                                        field_type =
+                                                                            hir::make_int();
+                                                                    } else if (type_name ==
+                                                                               "uint") {
+                                                                        field_type =
+                                                                            hir::make_uint();
+                                                                    } else if (type_name ==
+                                                                               "long") {
+                                                                        field_type =
+                                                                            hir::make_long();
+                                                                    } else if (type_name ==
+                                                                               "ulong") {
+                                                                        field_type =
+                                                                            hir::make_ulong();
+                                                                    } else if (type_name ==
+                                                                               "double") {
+                                                                        field_type =
+                                                                            hir::make_double();
+                                                                    } else if (type_name ==
+                                                                               "float") {
+                                                                        field_type =
+                                                                            hir::make_float();
+                                                                    } else if (type_name ==
+                                                                               "bool") {
+                                                                        field_type =
+                                                                            hir::make_bool();
+                                                                    } else if (type_name ==
+                                                                               "string") {
+                                                                        field_type =
+                                                                            hir::make_string();
+                                                                    } else {
+                                                                        field_type =
+                                                                            std::make_shared<
+                                                                                hir::Type>(
+                                                                                hir::TypeKind::
+                                                                                    Struct);
+                                                                        field_type->name =
+                                                                            type_name;
+                                                                    }
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                        current_type = field_type;
                                                     } else {
                                                         current_type = hir::make_int();
                                                     }
@@ -1251,17 +1510,102 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                         MirRvalue::use(
                                                             MirOperand::constant(idx_const))));
 
-                                                    place.projections.push_back(
-                                                        PlaceProjection::index(idx_local));
-
-                                                    // 配列の要素型に更新
-                                                    if (current_type &&
+                                                    // スライス（動的配列）かどうか判定
+                                                    bool is_slice_type =
+                                                        current_type &&
                                                         current_type->kind ==
                                                             hir::TypeKind::Array &&
-                                                        current_type->element_type) {
-                                                        current_type = current_type->element_type;
+                                                        !current_type->array_size.has_value();
+
+                                                    if (is_slice_type) {
+                                                        // スライスの場合:
+                                                        // まずスライスポインタをロードし、cm_slice_get_*を呼び出す
+                                                        hir::TypePtr elem_type =
+                                                            current_type->element_type
+                                                                ? current_type->element_type
+                                                                : hir::make_int();
+
+                                                        // 現在のPlaceからスライスポインタをロード
+                                                        LocalId slice_ptr =
+                                                            ctx.new_temp(current_type);
+                                                        ctx.push_statement(MirStatement::assign(
+                                                            MirPlace{slice_ptr},
+                                                            MirRvalue::use(
+                                                                MirOperand::copy(place))));
+
+                                                        // cm_slice_get_*関数を決定
+                                                        std::string get_func = "cm_slice_get_i32";
+                                                        auto elem_kind = elem_type->kind;
+                                                        if (elem_kind == hir::TypeKind::Char ||
+                                                            elem_kind == hir::TypeKind::Bool ||
+                                                            elem_kind == hir::TypeKind::Tiny ||
+                                                            elem_kind == hir::TypeKind::UTiny) {
+                                                            get_func = "cm_slice_get_i8";
+                                                        } else if (elem_kind ==
+                                                                       hir::TypeKind::Long ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::ULong) {
+                                                            get_func = "cm_slice_get_i64";
+                                                        } else if (elem_kind ==
+                                                                   hir::TypeKind::Double) {
+                                                            get_func = "cm_slice_get_f64";
+                                                        } else if (elem_kind ==
+                                                                   hir::TypeKind::Float) {
+                                                            get_func = "cm_slice_get_f32";
+                                                        } else if (elem_kind ==
+                                                                       hir::TypeKind::Pointer ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::String ||
+                                                                   elem_kind ==
+                                                                       hir::TypeKind::Struct) {
+                                                            get_func = "cm_slice_get_ptr";
+                                                        }
+
+                                                        LocalId result = ctx.new_temp(elem_type);
+                                                        BlockId success_block = ctx.new_block();
+
+                                                        std::vector<MirOperandPtr> call_args;
+                                                        call_args.push_back(
+                                                            MirOperand::copy(MirPlace{slice_ptr}));
+                                                        call_args.push_back(
+                                                            MirOperand::copy(MirPlace{idx_local}));
+
+                                                        auto call_term =
+                                                            std::make_unique<MirTerminator>();
+                                                        call_term->kind = MirTerminator::Call;
+                                                        call_term->data = MirTerminator::CallData{
+                                                            MirOperand::function_ref(get_func),
+                                                            std::move(call_args),
+                                                            MirPlace{result},
+                                                            success_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
+                                                        ctx.set_terminator(std::move(call_term));
+                                                        ctx.switch_to_block(success_block);
+
+                                                        // 結果を追加
+                                                        arg_locals.push_back(result);
+                                                        current_type = elem_type;
+                                                        // スライスの場合、残りの処理をスキップ
+                                                        remaining.clear();
+                                                        continue;
                                                     } else {
-                                                        current_type = hir::make_int();
+                                                        // 静的配列の場合は従来のインデックスプロジェクション
+                                                        place.projections.push_back(
+                                                            PlaceProjection::index(idx_local));
+
+                                                        // 配列の要素型に更新
+                                                        if (current_type &&
+                                                            current_type->kind ==
+                                                                hir::TypeKind::Array &&
+                                                            current_type->element_type) {
+                                                            current_type =
+                                                                current_type->element_type;
+                                                        } else {
+                                                            current_type = hir::make_int();
+                                                        }
                                                     }
                                                 } catch (...) {
                                                     valid = false;
@@ -1915,9 +2259,16 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     } else if (elem_kind == hir::TypeKind::Long ||
                                elem_kind == hir::TypeKind::ULong) {
                         push_func = "cm_slice_push_i64";
-                    } else if (elem_kind == hir::TypeKind::Double ||
-                               elem_kind == hir::TypeKind::Float) {
+                    } else if (elem_kind == hir::TypeKind::Float) {
+                        push_func = "cm_slice_push_f32";
+                    } else if (elem_kind == hir::TypeKind::Double) {
                         push_func = "cm_slice_push_f64";
+                    } else if (elem_kind == hir::TypeKind::Array) {
+                        // 多次元スライス: 内側スライスはポインタとしてpush
+                        push_func = "cm_slice_push_slice";
+                    } else if (elem_kind == hir::TypeKind::Union) {
+                        // ユニオン型: blobとしてメモリコピー
+                        push_func = "cm_slice_push_blob";
                     } else if (elem_kind == hir::TypeKind::Pointer ||
                                elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {
@@ -1971,8 +2322,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                         } else if (elem_kind == hir::TypeKind::Long ||
                                    elem_kind == hir::TypeKind::ULong) {
                             pop_func = "cm_slice_pop_i64";
-                        } else if (elem_kind == hir::TypeKind::Double ||
-                                   elem_kind == hir::TypeKind::Float) {
+                        } else if (elem_kind == hir::TypeKind::Float) {
+                            pop_func = "cm_slice_pop_f32";
+                        } else if (elem_kind == hir::TypeKind::Double) {
                             pop_func = "cm_slice_pop_f64";
                         } else if (elem_kind == hir::TypeKind::Pointer ||
                                    elem_kind == hir::TypeKind::String ||
@@ -2088,21 +2440,41 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         const auto& arg = call.args[i];
-        LocalId arg_local = lower_expression(*arg, ctx);
 
-        // メソッド呼び出しの第1引数（self）はアドレスを渡す
+        // メソッド呼び出しの第1引数（self）は特別な処理が必要
+        // selfが変数参照の場合、コピーを避けて直接元の変数への参照を取る
         if (is_method_call && i == 0) {
             hir::TypePtr arg_type = arg->type;
+
             // 引数が構造体型の場合、アドレスを取得
             if (arg_type && arg_type->kind == hir::TypeKind::Struct) {
+                // 引数がHirVarRefかどうかチェック
+                if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
+                    const auto& var_ref = **var_ref_ptr;
+                    // 元の変数を直接参照（コピーを避ける）
+                    auto original_var_opt = ctx.resolve_variable(var_ref.name);
+                    if (original_var_opt) {
+                        LocalId original_var = *original_var_opt;
+                        LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{ref_temp}, MirRvalue::ref(MirPlace{original_var}, false)));
+                        args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                        continue;
+                    }
+                }
+
+                // フォールバック: 通常のlower_expressionを使用
+                LocalId arg_local = lower_expression(*arg, ctx);
                 LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
                 ctx.push_statement(MirStatement::assign(
                     MirPlace{ref_temp}, MirRvalue::ref(MirPlace{arg_local}, false)));
                 args.push_back(MirOperand::copy(MirPlace{ref_temp}));
             } else {
+                LocalId arg_local = lower_expression(*arg, ctx);
                 args.push_back(MirOperand::copy(MirPlace{arg_local}));
             }
         } else {
+            LocalId arg_local = lower_expression(*arg, ctx);
             args.push_back(MirOperand::copy(MirPlace{arg_local}));
         }
     }

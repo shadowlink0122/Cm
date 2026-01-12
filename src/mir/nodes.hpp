@@ -3,6 +3,7 @@
 #include "../common/span.hpp"
 #include "../hir/types.hpp"
 
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <optional>

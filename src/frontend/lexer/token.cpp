@@ -70,6 +70,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "match";
         case TokenKind::KwModule:
             return "module";
+        case TokenKind::KwMove:
+            return "move";
         case TokenKind::KwMutable:
             return "mutable";
         case TokenKind::KwNamespace:

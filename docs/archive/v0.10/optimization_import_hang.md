@@ -1,3 +1,5 @@
+[English](optimization_import_hang.en.html)
+
 # LLVM最適化時のインポート無限ループ問題
 
 ## ステータス: ✅ 解決済み (2026-01-04)

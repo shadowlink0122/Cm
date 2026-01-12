@@ -1,146 +1,73 @@
+[English](README.en.html)
+
 # Cm言語機能リファレンス
 
 このディレクトリには、Cm言語の各機能の詳細なドキュメントが含まれます。
 
 ## 📚 機能一覧
 
-### v0.9.0 実装済み
+### v0.10.0 実装済み
 
 | 機能 | チュートリアル | 状態 |
 |------|------------|------|
-| **配列** | [../tutorials/arrays.md](../tutorials/arrays.md) | ✅ 完全実装 |
-| **ポインタ** | [../tutorials/pointers.md](../tutorials/pointers.md) | ✅ 完全実装 |
-| **with自動実装** | [../tutorials/with-keyword.md](../tutorials/with-keyword.md) | ✅ LLVM完了 |
-| **match式** | match式（作成予定） | ✅ 完全実装 |
-| **Enum型** | Enum型（作成予定） | ✅ 完全実装 |
-| **typedef** | typedef（作成予定） | ✅ 完全実装 |
-| **文字列操作** | 文字列操作（作成予定） | ✅ 完全実装 |
-| **関数ポインタ** | 関数ポインタ（作成予定） | ✅ 完全実装 |
-| **デッドコード削除** | - | ✅ 完全実装 |
-| **型制約** | 型制約（作成予定） | ✅ AND/OR境界 |
+| **配列** | [基本: 配列](../tutorials/ja/basics/arrays.html) | ✅ 完全実装 |
+| **ポインタ** | [基本: ポインタ](../tutorials/ja/basics/pointers.html) | ✅ 完全実装 |
+| **with自動実装** | [高度: withキーワード](../tutorials/ja/advanced/with-keyword.html) | ✅ LLVM/WASM完了 |
+| **match式** | [高度: match式](../tutorials/ja/advanced/match.html) | ✅ 完全実装 |
+| **Enum型** | [型システム: Enum型](../tutorials/ja/types/enums.html) | ✅ 完全実装 |
+| **typedef** | [型システム: typedef](../tutorials/ja/types/typedef.html) | ✅ 完全実装 |
+| **typedef型ポインタ** | [型システム: typedef](../tutorials/ja/types/typedef.html) | ✅ v0.10.0完了 |
+| **文字列操作** | [高度: 文字列操作](../tutorials/ja/advanced/strings.html) | ✅ 完全実装 |
+| **関数ポインタ** | [高度: 関数ポインタ](../tutorials/ja/advanced/function-pointers.html) | ✅ 完全実装 |
+| **デッドコード削除** | [コンパイラ: 最適化](../tutorials/ja/compiler/optimization.html) | ✅ 完全実装 |
+| **型制約** | [型システム: 型制約](../tutorials/ja/types/constraints.html) | ✅ AND/OR境界 |
+| **ラムダ式** | [高度: ラムダ式](../tutorials/ja/advanced/lambda.html) | ✅ 完全実装 |
+| **スライス型** | [高度: スライス型](../tutorials/ja/advanced/slices.html) | ✅ 完全実装 |
 
-### v0.10.0 予定
+### v0.11.0 予定
 
 | 機能 | 優先度 | 説明 |
 |------|--------|------|
-| typedef型ポインタ（LLVM/WASM） | 🔴 高 | LLVMバックエンド対応 |
-| with自動実装（WASM） | 🔴 高 | WASMバックエンド対応 |
-| ラムダ式 | 🟡 中 | `\|args\| expr` 構文 |
-| 動的メモリ確保 | 🟡 中 | `new`/`delete` |
-| 配列スライス | 🟡 中 | `arr[a:b]` |
-| Debug/Display | 🟢 低 | 自動文字列変換 |
+| **C ABI互換性** | 🔴 最高 | 小さな構造体の値渡し対応 |
+| **安全なメモリ管理** | 🔴 高 | スライスの自動解放 (Leak修正) |
+| **配列境界チェック** | 🔴 高 | ランタイムパニックの導入 |
+| **Lint/Format基盤** | 🟡 中 | Trivia保持Lexerの導入 |
+| **型チェッカー堅牢化** | 🟡 中 | 循環参照型の再帰ガード |
 
 ## 🎯 機能別インデックス
 
 ### 基本機能
 
-- **[変数と型](../guides/type-system.md)** - プリミティブ型、構造体
-- **[制御構文](../guides/control-flow.md)** - if/while/for/switch
-- **[関数](../guides/functions.md)** - 関数定義、オーバーロード
+- **[変数と型](../tutorials/ja/basics/variables.html)** - プリミティブ型、構造体
+- **[制御構文](../tutorials/ja/basics/control-flow.html)** - if/while/for/switch
+- **[関数](../tutorials/ja/basics/functions.html)** - 関数定義、オーバーロード
 
 ### 型システム
 
-- **[ジェネリクス](../guides/generics.md)** - 型パラメータ、制約
-- **[インターフェース](../guides/interfaces.md)** - interface/impl
-- **[Enum型](../tutorials/enums.md)** - 列挙型（作成予定）
-- **[typedef](../tutorials/typedef.md)** - 型エイリアス（作成予定）
-- **[型制約](../tutorials/type-constraints.md)** - AND/OR境界（作成予定）
+- **[ジェネリクス](../tutorials/ja/types/generics.html)** - 型パラメータ、制約
+- **[インターフェース](../tutorials/ja/types/interfaces.html)** - interface/impl
+- **[Enum型](../tutorials/ja/types/enums.html)** - 列挙型
+- **[typedef](../tutorials/ja/types/typedef.html)** - 型エイリアス
+- **[型制約](../tutorials/ja/types/constraints.html)** - AND/OR境界
 
 ### メモリ管理
 
-- **[配列](../tutorials/arrays.md)** - 固定長配列
-- **[ポインタ](../tutorials/pointers.md)** - メモリアドレス操作
-- **[所有権](../guides/ownership.md)** - 所有権システム（v0.11.0予定）
+- **[配列](../tutorials/ja/basics/arrays.html)** - 固定長配列
+- **[ポインタ](../tutorials/ja/basics/pointers.html)** - メモリアドレス操作
+- **[スライス](../tutorials/ja/advanced/slices.html)** - 動的配列
 
 ### 高度な機能
 
-- **[match式](../tutorials/match-expression.md)** - パターンマッチング（作成予定）
-- **[with自動実装](../tutorials/with-keyword.md)** - トレイト自動導出
-- **[演算子オーバーロード](../guides/operators.md)** - カスタム演算子
+- **[match式](../tutorials/ja/advanced/match.html)** - パターンマッチング
+- **[with自動実装](../tutorials/ja/advanced/with-keyword.html)** - トレイト自動導出
+- **[演算子オーバーロード](../tutorials/ja/advanced/operators.html)** - カスタム演算子
+- **[ラムダ式](../tutorials/ja/advanced/lambda.html)** - 無名関数
 
 ### バックエンド
 
-- **[LLVMバックエンド](../guides/llvm-backend.md)** - ネイティブコンパイル
-- **[WASMバックエンド](../guides/wasm-backend.md)** - WebAssembly出力
-- **[最適化](../guides/optimization.md)** - デッドコード削除
-
-## 📖 クイックリファレンス
-
-### 配列
-
-```cm
-int[5] arr = {1, 2, 3, 4, 5};
-int size = arr.len();
-int first = arr[0];
-```
-
-### ポインタ
-
-```cm
-int x = 42;
-int* p = &x;
-*p = 100;
-```
-
-### with自動実装
-
-```cm
-struct Point with Eq + Clone {
-    int x;
-    int y;
-}
-```
-
-### match式
-
-```cm
-match (value) {
-    0 => println("zero"),
-    1 => println("one"),
-    _ => println("other"),
-}
-```
-
-### Enum
-
-```cm
-enum Status {
-    Ok = 0,
-    Error = -1
-}
-```
-
-## 🔍 機能の検索
-
-### データ型
-
-- プリミティブ型 → [type-system.md](../guides/type-system.md)
-- 配列 → [arrays.md](../tutorials/arrays.md)
-- ポインタ → [pointers.md](../tutorials/pointers.md)
-- 構造体 → [type-system.md](../guides/type-system.md#構造体)
-- Enum → [enums.md](../tutorials/enums.md)（作成予定）
-- ジェネリクス → [generics.md](../guides/generics.md)
-
-### 制御構文
-
-- if/else → [control-flow.md](../guides/control-flow.md)
-- while/for → [control-flow.md](../guides/control-flow.md)
-- match → [match-expression.md](../tutorials/match-expression.md)（作成予定）
-- switch → [control-flow.md](../guides/control-flow.md#switch文)
-
-### 関数
-
-- 関数定義 → [functions.md](../guides/functions.md)
-- オーバーロード → [functions.md](../guides/functions.md#オーバーロード)
-- 関数ポインタ → [function-pointers.md](../tutorials/function-pointers.md)（作成予定）
-- ジェネリック関数 → [generics.md](../guides/generics.md)
-
-### メソッド
-
-- インターフェース → [interfaces.md](../guides/interfaces.md)
-- impl構文 → [interfaces.md](../guides/interfaces.md#impl構文)
-- operator → [operators.md](../guides/operators.md)
-- with自動実装 → [with-keyword.md](../tutorials/with-keyword.md)
+- **[LLVMバックエンド](../tutorials/ja/compiler/llvm.html)** - ネイティブコンパイル
+- **[WASMバックエンド](../tutorials/ja/compiler/wasm.html)** - WebAssembly出力
+- **[最適化](../tutorials/ja/compiler/optimization.html)** - MIR最適化パス
 
 ## 📝 各機能の実装状況
 
@@ -150,22 +77,24 @@ enum Status {
 |------|------------|------|------|
 | 配列 | ✅ | ✅ | ✅ |
 | ポインタ | ✅ | ✅ | ✅ |
-| with Eq/Ord | ✅ | ✅ | ⚠️ |
+| with Eq/Ord | ✅ | ✅ | ✅ |
 | match式 | ✅ | ✅ | ✅ |
 | Enum | ✅ | ✅ | ✅ |
 | typedef | ✅ | ✅ | ✅ |
 | 文字列メソッド | ✅ | ✅ | ✅ |
 | 関数ポインタ | ✅ | ✅ | ✅ |
 | for-in | ✅ | ✅ | ✅ |
+| ラムダ式 | ✅ | ✅ | ✅ |
+| スライス型 | ✅ | ✅ | ✅ |
 | デッドコード削除 | - | ✅ | ✅ |
 
 ## 🔗 関連リンク
 
 - [言語ガイド](../guides/) - 包括的なガイド
-- [チュートリアル](../tutorials/) - ステップバイステップ
-- [正式言語仕様](../design/CANONICAL_SPEC.md) - 完全な仕様
+- [チュートリアル](../tutorials/ja/) - ステップバイステップ
+- [正式言語仕様](../design/CANONICAL_SPEC.html) - 完全な仕様
 - [サンプルコード](../../examples/) - 実用例
 
 ---
 
-**更新日:** 2024-12-16
+**最終更新:** 2026-01-06

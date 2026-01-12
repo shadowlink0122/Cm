@@ -1,3 +1,5 @@
+[English](incremental_compilation.en.html)
+
 # Cm言語 インクリメンタルコンパイル設計
 
 ## 概要
@@ -142,14 +144,14 @@ fn main() {
       "hash": "abc123...",
       "imports": ["std.io", "std.collections"],
       "exports": [],
-      "last_compiled": "2024-01-01T00:00:00Z"
+      "last_compiled": "2025-01-01T00:00:00Z"
     },
     "std.io": {
       "path": "std/io.cm",
       "hash": "def456...",
       "imports": ["std.core"],
       "exports": ["print", "println"],
-      "last_compiled": "2024-01-01T00:00:00Z"
+      "last_compiled": "2025-01-01T00:00:00Z"
     }
   },
   "build_order": ["std.core", "std.io", "main"]

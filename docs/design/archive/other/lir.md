@@ -1,3 +1,5 @@
+[English](lir.en.html)
+
 # LIR (Low-level Intermediate Representation) 設計
 
 ## 概要

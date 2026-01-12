@@ -10,6 +10,7 @@
 #include "../optimizations/pass_limiter.hpp"
 #include "../optimizations/recursion_limiter.hpp"
 #include "loop_detector.hpp"
+#include "pass_debugger.hpp"
 #include "target.hpp"
 
 #include <filesystem>
@@ -46,7 +47,7 @@ class LLVMCodeGen {
         bool debugInfo = false;
         bool verbose = false;
         bool verifyIR = true;
-        bool useCustomOptimizations = false;  // カスタム最適化を一時的に無効（デバッグ中）
+        bool useCustomOptimizations = false;  // カスタム最適化は無効（ハング発生のため要調査）
         std::string customTriple = "";  // カスタムターゲット
         std::string linkerScript = "";  // ベアメタル用
     };
@@ -249,16 +250,9 @@ class LLVMCodeGen {
             }
         }
 
-        // インポートがある場合の無限ループ回避（調整後のレベルも考慮）
-        // TODO: 根本的な修正 - インポート処理のLLVM最適化対応
-        if (hasImports && options.optimizationLevel > 0) {
-            // iter_closureパターンは検出済みでO0に調整されているはず
-            // その場合はすでにリターンしているので、ここには到達しない
-            cm::debug::codegen::log(
-                cm::debug::codegen::Id::LLVMOptimize,
-                "WARNING: Skipping O1-O3 optimization due to import infinite loop bug");
-            return;
-        }
+        // NOTE: 以前はimport使用時にO1制限を行っていたが、
+        // RecursionLimiterとOptimizationPassLimiterによる事前検証で
+        // 無限ループの根本原因が解消されたため、O2/O3を完全有効化
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
                                 "Level " + std::to_string(options.optimizationLevel));
@@ -341,6 +335,32 @@ class LLVMCodeGen {
                 break;  // サイズ
             default:
                 optLevel = llvm::OptimizationLevel::O2;
+        }
+
+        // O2/O3でverboseモードが有効な場合、個別パステストを実行
+        if (options.verbose && (options.optimizationLevel >= 2)) {
+            llvm::errs() << "[PASS_DEBUG] Running individual pass debugging for O"
+                         << options.optimizationLevel << "\n";
+
+            auto results = PassDebugger::runPassesWithTimeout(context->getModule(), passBuilder,
+                                                              optLevel, 5000);
+            cm::codegen::llvm_backend::PassDebugger::printResults(results);
+
+            // タイムアウトしたパスがある場合は、O1に下げて実行
+            bool hasTimeout = false;
+            for (const auto& result : results) {
+                if (result.timeout) {
+                    hasTimeout = true;
+                    llvm::errs() << "[PASS_DEBUG] Detected timeout in pass: " << result.passName
+                                 << "\n";
+                    llvm::errs() << "[PASS_DEBUG] Falling back to O1 optimization\n";
+                    break;
+                }
+            }
+
+            if (hasTimeout) {
+                optLevel = llvm::OptimizationLevel::O1;
+            }
         }
 
         // モジュールパスマネージャ

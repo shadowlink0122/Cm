@@ -5,12 +5,12 @@
 
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
+#include "codegen/llvm/jit/jit_engine.hpp"
 #include "codegen/llvm/monitoring/compilation_guard.hpp"
 #include "codegen/llvm/native/codegen.hpp"
 #endif
 
 // JavaScript codegen
-#include "codegen/interpreter/interpreter.hpp"
 #include "codegen/js/codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
@@ -69,6 +69,7 @@ struct Options {
     bool verbose = false;         // デフォルトは静かなモード
     std::string output_file;      // -o オプション
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
+    bool use_jit = true;          // JITコンパイラ使用（デフォルト）
 };
 
 // ヘルプメッセージを表示
@@ -77,7 +78,7 @@ void print_help(const char* program_name) {
     std::cout << "使用方法:\n";
     std::cout << "  " << program_name << " <コマンド> [オプション] <ファイル>\n\n";
     std::cout << "コマンド:\n";
-    std::cout << "  run <file>            プログラムを実行（インタプリタ）\n";
+    std::cout << "  run <file>            プログラムを実行（JIT、デフォルト）\n";
     std::cout << "  compile <file>        プログラムをコンパイル（LLVM）\n";
     std::cout << "  check <file>          構文と型チェックのみ実行\n";
     std::cout << "  help                  このヘルプを表示\n\n";
@@ -87,7 +88,8 @@ void print_help(const char* program_name) {
     std::cout << "  --verbose, -v         詳細な出力を表示\n";
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
-    std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n\n";
+    std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
+
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
     std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
@@ -386,7 +388,7 @@ int main(int argc, char* argv[]) {
             // 診断情報を表示
             for (const auto& diag : parser.diagnostics()) {
                 // エラーメッセージをフォーマットして表示
-                std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
                 std::cerr << loc_mgr.format_error_location(diag.span,
                                                            error_type + ": " + diag.message);
             }
@@ -399,7 +401,7 @@ int main(int argc, char* argv[]) {
         {
             Target active_target = Target::Native;
             if (opts.command == Command::Run) {
-                active_target = Target::Interpreter;
+                active_target = Target::Native;  // JIT uses native target
             } else if (!opts.target.empty()) {
                 active_target = string_to_target(opts.target);
             } else if (opts.emit_js) {
@@ -470,7 +472,7 @@ int main(int argc, char* argv[]) {
                     std::cerr << loc_mgr.format_error_with_source_map(
                         diag.span, diag.message, preprocess_result.source_map, file_contents);
                 } else {
-                    std::string error_type = (diag.kind == DiagKind::Error ? "エラー" : "警告");
+                    std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
                     std::cerr << loc_mgr.format_error_location(diag.span,
                                                                error_type + ": " + diag.message);
                 }
@@ -567,38 +569,31 @@ int main(int argc, char* argv[]) {
 
         // ========== Backend ==========
         if (opts.command == Command::Run) {
+#ifdef CM_LLVM_ENABLED
+            // JITコンパイラで実行
             if (opts.verbose) {
-                std::cout << "=== Interpreter ===\n";
+                std::cout << "=== JIT Compiler ===" << std::endl;
             }
-            mir::interp::Interpreter interpreter;
-            auto result = interpreter.execute(mir);
+            cm::codegen::jit::JITEngine jit;
+            // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+            auto result = jit.execute(mir, "main", opts.optimization_level);
 
             if (!result.success) {
-                std::cerr << "実行エラー: " << result.error_message << "\n";
+                std::cerr << "JIT実行エラー: " << result.errorMessage << std::endl;
                 return 1;
             }
 
-            // 戻り値がある場合
-            int exit_code = 0;
-            if (result.return_value.has_value()) {
-                if (result.return_value.type() == typeid(int64_t)) {
-                    exit_code = static_cast<int>(std::any_cast<int64_t>(result.return_value));
-                    if (opts.verbose) {
-                        std::cout << "プログラム終了コード: " << exit_code << "\n";
-                    }
-                } else if (result.return_value.type() == typeid(bool)) {
-                    exit_code = std::any_cast<bool>(result.return_value) ? 1 : 0;
-                    if (opts.verbose) {
-                        std::cout << "プログラム終了コード: " << exit_code << "\n";
-                    }
-                }
-            }
             if (opts.verbose) {
-                std::cout << "✓ 実行完了\n";
+                std::cout << "プログラム終了コード: " << result.exitCode << std::endl;
+                std::cout << "✓ JIT実行完了" << std::endl;
             }
 
-            // プログラムの戻り値を終了コードとして返す
-            return exit_code;
+            return result.exitCode;
+#else
+            std::cerr << "エラー: JITコンパイラが無効です。LLVM対応ビルドが必要です。" << std::endl;
+            return 1;
+#endif
         }
 
         // コンパイルコマンドの場合

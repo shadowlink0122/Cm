@@ -1,3 +1,5 @@
+[English](derive.en.html)
+
 # 自動実装 (with) 設計
 
 ## 概要
@@ -250,4 +252,3 @@ async, await, break, const, continue, delete, else, export, extern,
 false, for, if, impl, import, inline, interface, match, mutable, new,
 null, private, return, static, struct, this, true, void, volatile, while, with
 ```
-

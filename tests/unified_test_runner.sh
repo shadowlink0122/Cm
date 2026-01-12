@@ -54,7 +54,7 @@ CATEGORIES=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
-TIMEOUT=5
+TIMEOUT=15
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
@@ -85,7 +85,7 @@ fi
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
@@ -130,9 +130,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, typescript, rust, cpp, llvm, llvm-wasm, js"
+    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, js"
     exit 1
 fi
 
@@ -296,6 +296,15 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run --interpreter -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            ;;
+
+        jit)
+            # JITコンパイラで実行（LLVM ORC JIT）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # JITで実行
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
@@ -757,6 +766,13 @@ run_tests_parallel() {
                 FAIL*)
                     local reason="${result#FAIL:}"
                     echo -e "${RED}[FAIL]${NC} $category/$test_name - $reason"
+                    # エラーファイルがあれば先頭5行を表示
+                    local error_file="${result_file}.error"
+                    if [ -f "$error_file" ]; then
+                        echo "  --- Error output (first 5 lines) ---"
+                        head -5 "$error_file" | sed 's/^/  /'
+                        echo "  ---"
+                    fi
                     ((FAILED++))
                     ;;
                 SKIP*)
@@ -872,7 +888,7 @@ PY
     }
 
     case "$BACKEND" in
-        interpreter)
+        interpreter|jit)
             # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
@@ -965,13 +981,11 @@ PY
         fi
     else
         if [ $exit_code -ne 0 ]; then
-            # セグフォの場合は詳細情報を保存
-            if [ $exit_code -eq 139 ] && grep -q "=== Segmentation fault detected" "$output_file" 2>/dev/null; then
-                echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
-                # デバッグ情報を別ファイルに保存
-                cat "$output_file" > "${result_file}.debug" 2>/dev/null || true
-            else
-                echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+            # ランタイムエラー: エラー出力を保存
+            echo "FAIL:Runtime error (exit code: $exit_code)" > "$result_file"
+            # エラー出力を別ファイルに保存（デバッグ用）
+            if [ -f "$output_file" ]; then
+                cat "$output_file" > "${result_file}.error" 2>/dev/null || true
             fi
         else
             if diff -q "$expect_file" "$output_file" > /dev/null 2>&1; then

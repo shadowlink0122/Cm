@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # LLVMバックエンドドキュメント
 
 Cm言語のLLVMバックエンド実装に関するドキュメントです。
@@ -6,12 +8,12 @@ Cm言語のLLVMバックエンド実装に関するドキュメントです。
 
 | ドキュメント | 説明 |
 |------------|------|
-| [llvm_backend_implementation.md](llvm_backend_implementation.md) | LLVM実装の詳細とアーキテクチャ |
-| [LLVM_OPTIMIZATION.md](LLVM_OPTIMIZATION.md) | 最適化パイプラインとパス |
-| [LLVM_RUNTIME_LIBRARY.md](LLVM_RUNTIME_LIBRARY.md) | ランタイムライブラリのドキュメント |
-| [llvm_migration_plan.md](llvm_migration_plan.md) | LLVMへの移行計画 |
-| [llvm_multiplatform.md](llvm_multiplatform.md) | マルチプラットフォーム対応 |
-| [llvm_implementation_summary.md](llvm_implementation_summary.md) | 実装サマリー |
+| [llvm_backend_implementation.md](llvm_backend_implementation.html) | LLVM実装の詳細とアーキテクチャ |
+| [LLVM_OPTIMIZATION.md](LLVM_OPTIMIZATION.html) | 最適化パイプラインとパス |
+| [LLVM_RUNTIME_LIBRARY.md](LLVM_RUNTIME_LIBRARY.html) | ランタイムライブラリのドキュメント |
+| [llvm_migration_plan.md](llvm_migration_plan.html) | LLVMへの移行計画 |
+| [llvm_multiplatform.md](llvm_multiplatform.html) | マルチプラットフォーム対応 |
+| [llvm_implementation_summary.md](llvm_implementation_summary.html) | 実装サマリー |
 
 ## 🏗️ アーキテクチャ概要
 
@@ -72,7 +74,7 @@ LLVM IRへの型マッピング:
 - `cm_malloc` / `cm_free` - メモリ管理
 - `cm_format_*` - フォーマット関数
 
-詳細は [LLVM_RUNTIME_LIBRARY.md](LLVM_RUNTIME_LIBRARY.md) を参照。
+詳細は [LLVM_RUNTIME_LIBRARY.md](LLVM_RUNTIME_LIBRARY.html) を参照。
 
 ### 最適化
 
@@ -88,7 +90,7 @@ LLVMの最適化パス:
    - Global Dead Code Elimination
    - Tail Call Optimization
 
-詳細は [LLVM_OPTIMIZATION.md](LLVM_OPTIMIZATION.md) を参照。
+詳細は [LLVM_OPTIMIZATION.md](LLVM_OPTIMIZATION.html) を参照。
 
 ## 🔧 開発ガイド
 
@@ -149,7 +151,7 @@ fibonacci(40):
 - with自動実装のWASMサポートなし
 - 複雑なジェネリック制約の処理
 
-詳細は [../implementation/known_limitations.md](../implementation/known_limitations.md) を参照。
+詳細は [../implementation/known_limitations.md](../implementation/known_limitations.html) を参照。
 
 ## 🔗 関連リンク
 
@@ -159,4 +161,4 @@ fibonacci(40):
 
 ---
 
-**更新日:** 2024-12-15
+**更新日:** 2025-12-15

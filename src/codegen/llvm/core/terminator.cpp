@@ -31,6 +31,8 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             break;
         }
         case mir::MirTerminator::Return: {
+            // NOTE: ベアメタル対応 - スタック配列は関数終了時に自動解放
+
             if (currentMIRFunction->name == "main") {
                 // main関数は常にi32を返す
                 if (currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
@@ -760,11 +762,67 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         }
                         // プリミティブ型への借用self: ポインタ化
                         else if (expectedType->isPointerTy() && !actualType->isPointerTy()) {
-                            auto alloca =
-                                builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
-                            builder->CreateStore(args[i], alloca);
-                            // ポインタ型をexpectedType（ptr/i8*）に変換
-                            args[i] = builder->CreateBitCast(alloca, expectedType);
+                            // 配列型の場合、配列の先頭要素へのポインタを取得
+                            // （コピーを避けてバッファへのポインタを渡す）
+                            if (actualType->isArrayTy()) {
+                                // args[i]がLoadInstの場合、元のallocaからGEPを取得
+                                if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(args[i])) {
+                                    auto* sourcePtr = loadInst->getPointerOperand();
+                                    // 配列の先頭要素へのポインタを取得
+                                    auto* zero = llvm::ConstantInt::get(ctx.getContext(),
+                                                                        llvm::APInt(64, 0));
+                                    auto* elemPtr = builder->CreateGEP(actualType, sourcePtr,
+                                                                       {zero, zero}, "arr_ptr");
+                                    args[i] = builder->CreateBitCast(elemPtr, expectedType);
+                                } else if (auto* allocaInst =
+                                               llvm::dyn_cast<llvm::AllocaInst>(args[i])) {
+                                    // allocaの場合、直接GEPを使用
+                                    auto* zero = llvm::ConstantInt::get(ctx.getContext(),
+                                                                        llvm::APInt(64, 0));
+                                    auto* elemPtr = builder->CreateGEP(actualType, allocaInst,
+                                                                       {zero, zero}, "arr_ptr");
+                                    args[i] = builder->CreateBitCast(elemPtr, expectedType);
+                                } else {
+                                    // その他の場合は従来通りallocaを使用（フォールバック）
+                                    auto alloca =
+                                        builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
+                                    builder->CreateStore(args[i], alloca);
+                                    args[i] = builder->CreateBitCast(alloca, expectedType);
+                                }
+                            } else {
+                                // プリミティブ型の場合は従来通り
+                                auto alloca =
+                                    builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
+                                builder->CreateStore(args[i], alloca);
+                                // ポインタ型をexpectedType（ptr/i8*）に変換
+                                args[i] = builder->CreateBitCast(alloca, expectedType);
+                            }
+                        }
+                        // 構造体値渡し: ポインタから値型への変換（小さな構造体のC ABI対応）
+                        else if (!expectedType->isPointerTy() && actualType->isPointerTy() &&
+                                 (expectedType->isStructTy() || expectedType->isArrayTy())) {
+                            // ポインタから構造体値をロード
+                            auto ptrToStruct = args[i];
+                            // ポインタがAllocaInst（構造体ポインタ）の場合
+                            if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(ptrToStruct)) {
+                                auto allocatedType = allocaInst->getAllocatedType();
+                                if (allocatedType == expectedType) {
+                                    // 直接ロード
+                                    args[i] = builder->CreateLoad(expectedType, ptrToStruct,
+                                                                  "struct_load");
+                                } else {
+                                    // 型が異なる場合、ビットキャストしてロード
+                                    auto castPtr = builder->CreateBitCast(
+                                        ptrToStruct, llvm::PointerType::getUnqual(expectedType),
+                                        "struct_ptr_cast");
+                                    args[i] =
+                                        builder->CreateLoad(expectedType, castPtr, "struct_load");
+                                }
+                            } else {
+                                // その他のポインタ型からロード
+                                args[i] =
+                                    builder->CreateLoad(expectedType, ptrToStruct, "struct_load");
+                            }
                         }
                         // 整数型のサイズが異なる場合、変換
                         else if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
@@ -1036,8 +1094,10 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     auto& returnLocal =
                         currentMIRFunction->locals[currentMIRFunction->return_local];
                     if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
+                        // ベアメタル対応 - スタック配列は自動解放
                         builder->CreateRetVoid();
                     } else if (currentMIRFunction->name == "main") {
+                        // ベアメタル対応 - スタック配列は自動解放
                         // main関数はi32 0を返す
                         builder->CreateRet(llvm::ConstantInt::get(ctx.getI32Type(), 0));
                     } else {
@@ -1049,6 +1109,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                 retVal = builder->CreateLoad(allocaInst->getAllocatedType(), retVal,
                                                              "retval");
                             }
+                            // ベアメタル対応 - スタック配列は自動解放
                             builder->CreateRet(retVal);
                         } else {
                             builder->CreateUnreachable();

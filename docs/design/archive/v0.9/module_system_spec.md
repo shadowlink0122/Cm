@@ -1,3 +1,5 @@
+[English](module_system_spec.en.html)
+
 # Cm言語 モジュールシステム仕様書
 
 ## 概要

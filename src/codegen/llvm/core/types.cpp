@@ -76,12 +76,104 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
 
             // 構造体型を検索
-            auto it = structTypes.find(type->name);
+            std::string lookupName = type->name;
+
+            // ジェネリック構造体の場合、型引数を考慮した名前を生成
+            // 例: Node<int> -> Node__int
+            // 既にマングリング済み(__含む)の場合はスキップ
+            if (!type->type_args.empty() && lookupName.find("__") == std::string::npos) {
+                for (const auto& typeArg : type->type_args) {
+                    if (typeArg) {
+                        lookupName += "__";
+                        // 型名を正規化（Pointer<int>ならint*など）
+                        if (typeArg->kind == hir::TypeKind::Struct) {
+                            lookupName += typeArg->name;
+                        } else {
+                            // プリミティブ型の場合
+                            switch (typeArg->kind) {
+                                case hir::TypeKind::Int:
+                                    lookupName += "int";
+                                    break;
+                                case hir::TypeKind::UInt:
+                                    lookupName += "uint";
+                                    break;
+                                case hir::TypeKind::Long:
+                                    lookupName += "long";
+                                    break;
+                                case hir::TypeKind::ULong:
+                                    lookupName += "ulong";
+                                    break;
+                                case hir::TypeKind::Float:
+                                    lookupName += "float";
+                                    break;
+                                case hir::TypeKind::Double:
+                                    lookupName += "double";
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    lookupName += "bool";
+                                    break;
+                                case hir::TypeKind::Char:
+                                    lookupName += "char";
+                                    break;
+                                case hir::TypeKind::String:
+                                    lookupName += "string";
+                                    break;
+                                default:
+                                    // その他の型は型名をそのまま使用
+                                    if (!typeArg->name.empty()) {
+                                        lookupName += typeArg->name;
+                                    }
+                                    break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            auto it = structTypes.find(lookupName);
             if (it != structTypes.end()) {
                 return it->second;
             }
+
+            // フォールバック: 元の名前でも検索
+            if (lookupName != type->name) {
+                auto it2 = structTypes.find(type->name);
+                if (it2 != structTypes.end()) {
+                    return it2->second;
+                }
+            }
+
+            // 特殊化構造体が見つからない場合、structDefsも確認
+            auto defIt = structDefs.find(lookupName);
+            if (defIt != structDefs.end()) {
+                // 構造体定義が存在する場合、LLVM型を作成して登録
+                auto structType = llvm::StructType::create(ctx.getContext(), lookupName);
+                structTypes[lookupName] = structType;
+
+                // フィールド型を設定
+                std::vector<llvm::Type*> fieldTypes;
+                for (const auto& field : defIt->second->fields) {
+                    fieldTypes.push_back(convertType(field.type));
+                }
+                structType->setBody(fieldTypes);
+
+                // デバッグ情報
+                std::cerr << "[LLVM] Registered specialized struct: " << lookupName << " with "
+                          << fieldTypes.size() << " fields\n";
+
+                return structType;
+            }
+
+            // エラーログを追加
+            std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
+            std::cerr << "       Available types: ";
+            for (const auto& [name, _] : structTypes) {
+                std::cerr << name << " ";
+            }
+            std::cerr << "\n";
+
             // 見つからない場合は不透明型として扱う
-            return llvm::StructType::create(ctx.getContext(), type->name);
+            return llvm::StructType::create(ctx.getContext(), lookupName);
         }
         case hir::TypeKind::TypeAlias: {
             // typedefの実際の型がある場合は再帰的に変換
@@ -171,19 +263,14 @@ llvm::Type* MIRToLLVM::getPointeeType(const hir::TypePtr& ptrType) {
 
 // 定数変換
 llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
-    // debug_msg("MIR2LLVM", "Entering convertConstant");
-
     // std::variant を処理
     if (std::holds_alternative<bool>(constant.value)) {
-        // debug_msg("MIR2LLVM", "convertConstant: bool type");
         // bool定数はi8として生成（メモリ格納用）
         return llvm::ConstantInt::get(ctx.getI8Type(), std::get<bool>(constant.value));
     } else if (std::holds_alternative<char>(constant.value)) {
-        // debug_msg("MIR2LLVM", "convertConstant: char type");
         // 文字リテラルはi8として生成
         return llvm::ConstantInt::get(ctx.getI8Type(), std::get<char>(constant.value));
     } else if (std::holds_alternative<int64_t>(constant.value)) {
-        // debug_msg("MIR2LLVM", "convertConstant: int64_t type");
         int64_t val = std::get<int64_t>(constant.value);
         // std::cerr << "[MIR2LLVM]             convertConstant: val=" << val << "\n";
 
@@ -220,10 +307,8 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
                     break;
             }
         }
-        // debug_msg("MIR2LLVM", "convertConstant: returning i32 constant");
         return llvm::ConstantInt::get(ctx.getI32Type(), val);
     } else if (std::holds_alternative<double>(constant.value)) {
-        // debug_msg("MIR2LLVM", "convertConstant: double type");
         // 型情報がある場合、適切な浮動小数点型で生成
         if (constant.type && (constant.type->kind == hir::TypeKind::Float ||
                               constant.type->kind == hir::TypeKind::UFloat)) {

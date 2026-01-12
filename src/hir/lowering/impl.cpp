@@ -593,6 +593,48 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
         case ast::TypeKind::Void:
             return 0;
 
+        case ast::TypeKind::Generic: {
+            // ジェネリック型のサイズ計算
+            // 例: Node<T> や Node<Item>
+
+            // ジェネリック型引数がある場合、構造体定義を探して計算を試みる
+            if (!type->name.empty() && struct_defs_.count(type->name) > 0) {
+                // 構造体定義が見つかった場合、レイアウトを計算
+                const auto* struct_def = struct_defs_.at(type->name);
+                if (struct_def && struct_def->fields.empty()) {
+                    // 空の構造体は最小1バイト
+                    return 1;
+                }
+
+                // 型引数がある場合でも、最大サイズを見積もる
+                // 各フィールドをポインタサイズ（8バイト）として計算
+                int64_t estimated_size = 0;
+                int64_t max_align = 8;
+
+                if (struct_def) {
+                    for (const auto& field : struct_def->fields) {
+                        (void)field;  // 未使用警告を抑制（サイズはポインタサイズで見積もり）
+                        // ジェネリック型パラメータは最大でポインタサイズと仮定
+                        estimated_size += 8;
+                    }
+                    // アライメント調整
+                    if (estimated_size % max_align != 0) {
+                        estimated_size += max_align - (estimated_size % max_align);
+                    }
+                    return estimated_size > 0 ? estimated_size : 8;
+                }
+            }
+
+            // Phase 1: 緊急修正 - 安全側のサイズを返す
+            // TODO: Phase 2でモノモーフィゼーション後の実際のサイズを計算
+            // Generic type size requested for: + type->name;
+
+            // ジェネリック構造体の場合、暫定的に大きめのサイズを返す
+            // これにより、malloc時にメモリ不足によるクラッシュを防ぐ
+            // 256バイトは大抵の構造体に対して十分なサイズ
+            return 256;  // 暫定的な安全サイズ
+        }
+
         default:
             return 8;  // 不明な型はポインタサイズと仮定
     }

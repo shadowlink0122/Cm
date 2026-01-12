@@ -1,0 +1,18 @@
+// 借用とムーブの基本動作テスト
+
+int main() {
+    // 1. 借用（参照）の場合
+    const int a = 42;
+    const int* p = &a;
+    println("借用テスト:");
+    println("  a = {*p}");
+    
+    // 2. ムーブの場合
+    int x = 100;
+    int y = move x;
+    println("ムーブテスト:");
+    println("  y = {y}");
+    
+    println("完了");
+    return 0;
+}

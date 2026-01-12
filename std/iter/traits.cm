@@ -1,0 +1,51 @@
+// std::iter::traits - イテレータインターフェース定義
+// 
+// このファイルはイテレータシステムのコアインターフェースを定義します。
+// 現在はジェネリックインターフェースが未サポートのため、型別に定義しています。
+// 将来的にはIterator<T>のようなジェネリック版に統一する予定です。
+
+module std.iter.traits;
+
+// ============================================================
+// 基本イテレータインターフェース
+// ============================================================
+
+/// 基本的なイテレータインターフェース（int型専用）
+/// メソッド: has_next(), next(), peek()
+export interface IntIterator {
+    bool has_next();
+    int next();
+    int peek();
+}
+
+/// イテラブルインターフェース（int型専用）
+/// Iteratorを生成できる型が実装する
+export interface IntIterable {
+    IntIterator iter();
+}
+
+// ============================================================
+// 拡張イテレータインターフェース（将来実装）
+// ============================================================
+
+// TODO: ジェネリックインターフェースサポート後に実装
+// export interface Iterator<T> {
+//     bool has_next();
+//     T next();
+//     T peek();
+//     int size_hint();
+// }
+// 
+// export interface Iterable<T> {
+//     Iterator<T> iter();
+// }
+// 
+// export interface BidirectionalIterator<T> for Iterator<T> {
+//     bool has_prev();
+//     T prev();
+// }
+// 
+// export interface ExactSizeIterator<T> for Iterator<T> {
+//     int len();
+//     bool is_empty();
+// }

@@ -1,0 +1,45 @@
+import std::io::println;
+
+// イテレータベースのfor-inテスト
+// コンストラクタ呼び出しを避けた簡易版
+
+// RangeIterator構造体
+struct RangeIterator {
+    int current;
+    int end;
+    int step;
+}
+
+RangeIterator make_range_iter(int start, int end) {
+    RangeIterator it;
+    it.current = start;
+    it.end = end;
+    it.step = 1;
+    return it;
+}
+
+impl RangeIterator {
+    bool has_next() {
+        return self.current < self.end;
+    }
+    
+    int next() {
+        int value = self.current;
+        self.current = self.current + self.step;
+        return value;
+    }
+}
+
+int main() {
+    // ヘルパー関数でイテレータを作成
+    RangeIterator it = make_range_iter(1, 4);
+    
+    // while (it.has_next()) { ... } パターン
+    while (it.has_next()) {
+        int x = it.next();
+        println("{x}");
+    }
+    
+    println("done");
+    return 0;
+}

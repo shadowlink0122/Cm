@@ -1,3 +1,5 @@
+[English](mir_lowering_redesign.en.html)
+
 # MIRローダリング再設計仕様書
 
 ## 1. 現状の問題点

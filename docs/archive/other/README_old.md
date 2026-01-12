@@ -1,3 +1,5 @@
+[English](README_old.en.html)
+
 # Cm言語ドキュメント
 
 このディレクトリにはCm言語の設計文書、実装ガイド、チュートリアルが含まれます。
@@ -65,10 +67,10 @@ docs/
 │
 ├── releases/                # リリースノート
 │   ├── README.md
-│   └── v0.9.0.md
+│   └── v0.10.0.md
 │
 ├── progress/                # 開発進捗
-│   └── 2024-12-MIR-completion.md
+│   └── 2025-12-MIR-completion.md
 │
 ├── debug/                   # デバッグシステム
 │   └── DEBUG_SYSTEM_IMPROVEMENTS.md
@@ -84,21 +86,21 @@ docs/
 
 ### 1. 言語を学ぶ
 
-1. **[QUICKSTART.md](QUICKSTART.md)** - 5分でCm言語を学ぶ
-2. **[design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.md)** - 正式言語仕様（最も重要）
+1. **[QUICKSTART.md](QUICKSTART.html)** - 5分でCm言語を学ぶ
+2. **[design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.html)** - 正式言語仕様（最も重要）
 3. **[examples/](../examples/)** - サンプルコード
 
 ### 2. コンパイラを理解する
 
-1. **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - プロジェクト構造
-2. **[design/architecture.md](design/architecture.md)** - システム設計
-3. **[design/hir.md](design/hir.md)** と **[design/mir.md](design/mir.md)** - 中間表現
+1. **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.html)** - プロジェクト構造
+2. **[design/architecture.md](design/architecture.html)** - システム設計
+3. **[design/hir.md](design/hir.html)** と **[design/mir.md](design/mir.html)** - 中間表現
 
 ### 3. 開発に参加する
 
-1. **[CONTRIBUTING.md](../CONTRIBUTING.md)** - 貢献ガイド
-2. **[implementation/implementation_status.md](implementation/implementation_status.md)** - 実装状況
-3. **[ROADMAP.md](../ROADMAP.md)** - ロードマップ
+1. **[CONTRIBUTING.md](../CONTRIBUTING.html)** - 貢献ガイド
+2. **[implementation/implementation_status.md](implementation/implementation_status.html)** - 実装状況
+3. **[ROADMAP.md](../ROADMAP.html)** - ロードマップ
 
 ## 📖 重要なドキュメント
 
@@ -106,53 +108,53 @@ docs/
 
 | ドキュメント | 説明 |
 |------------|------|
-| [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.md) | **正式言語仕様**（最優先） |
-| [design/architecture.md](design/architecture.md) | システムアーキテクチャ |
-| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | プロジェクト構造 |
-| [QUICKSTART.md](QUICKSTART.md) | クイックスタート |
+| [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.html) | **正式言語仕様**（最優先） |
+| [design/architecture.md](design/architecture.html) | システムアーキテクチャ |
+| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.html) | プロジェクト構造 |
+| [QUICKSTART.md](QUICKSTART.html) | クイックスタート |
 
 ### 設計文書
 
 | ドキュメント | 説明 |
 |------------|------|
-| [design/type_system.md](design/type_system.md) | 型システムの設計 |
-| [design/memory_safety.md](design/memory_safety.md) | メモリ安全性 |
-| [design/module_system.md](design/module_system.md) | モジュールシステム |
-| [design/hir.md](design/hir.md) | HIR（高レベル中間表現） |
-| [design/mir.md](design/mir.md) | MIR（中レベル中間表現） |
+| [design/type_system.md](design/type_system.html) | 型システムの設計 |
+| [design/memory_safety.md](design/memory_safety.html) | メモリ安全性 |
+| [design/module_system.md](design/module_system.html) | モジュールシステム |
+| [design/hir.md](design/hir.html) | HIR（高レベル中間表現） |
+| [design/mir.md](design/mir.html) | MIR（中レベル中間表現） |
 
 ### LLVMバックエンド
 
 | ドキュメント | 説明 |
 |------------|------|
-| [llvm/llvm_backend_implementation.md](llvm/llvm_backend_implementation.md) | LLVM実装詳細 |
-| [llvm/LLVM_OPTIMIZATION.md](llvm/LLVM_OPTIMIZATION.md) | 最適化パイプライン |
-| [llvm/LLVM_RUNTIME_LIBRARY.md](llvm/LLVM_RUNTIME_LIBRARY.md) | ランタイムライブラリ |
+| [llvm/llvm_backend_implementation.md](llvm/llvm_backend_implementation.html) | LLVM実装詳細 |
+| [llvm/LLVM_OPTIMIZATION.md](llvm/LLVM_OPTIMIZATION.html) | 最適化パイプライン |
+| [llvm/LLVM_RUNTIME_LIBRARY.md](llvm/LLVM_RUNTIME_LIBRARY.html) | ランタイムライブラリ |
 
 ### 実装状況
 
 | ドキュメント | 説明 |
 |------------|------|
-| [PROJECT_STATUS.md](PROJECT_STATUS.md) | プロジェクトの現状 |
-| [implementation/implementation_status.md](implementation/implementation_status.md) | 機能実装状況 |
-| [implementation/known_limitations.md](implementation/known_limitations.md) | 既知の制限事項 |
+| [PROJECT_STATUS.md](PROJECT_STATUS.html) | プロジェクトの現状 |
+| [implementation/implementation_status.md](implementation/implementation_status.html) | 機能実装状況 |
+| [implementation/known_limitations.md](implementation/known_limitations.html) | 既知の制限事項 |
 
 ## 🔍 トピック別ガイド
 
 ### 型システム
 
-- [design/type_system.md](design/type_system.md) - 基本的な型システム
-- [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.md) - 正式仕様
+- [design/type_system.md](design/type_system.html) - 基本的な型システム
+- [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.html) - 正式仕様
 
 ### ジェネリクス
 
-- [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.md) - ジェネリクスの仕様
-- [design/generic_inference.md](design/generic_inference.md) - 型推論
+- [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.html) - ジェネリクスの仕様
+- [design/generic_inference.md](design/generic_inference.html) - 型推論
 
 ### メモリ管理
 
-- [design/memory_safety.md](design/memory_safety.md) - メモリ安全性
-- [spec/memory.md](spec/memory.md) - メモリモデル
+- [design/memory_safety.md](design/memory_safety.html) - メモリ安全性
+- [spec/memory.md](spec/memory.html) - メモリモデル
 
 ### コード生成
 
@@ -195,17 +197,17 @@ docs/
 
 ## 🔄 更新履歴
 
-- **2024-12-15**: v0.9.0リリースノート作成
-- **2024-12-15**: ドキュメント構造整理
-- **2024-12-14**: v0.8.0リリース
-- **2024-12-14**: CANONICAL_SPEC.md更新
+- **2025-12-15**: v0.10.0リリースノート作成
+- **2025-12-15**: ドキュメント構造整理
+- **2025-12-14**: v0.8.0リリース
+- **2025-12-14**: CANONICAL_SPEC.md更新
 
 ## 🆘 ヘルプ
 
 質問や問題がある場合:
 
-1. **[FAQ](design/README.md)** を確認
-2. **[既知の制限事項](implementation/known_limitations.md)** を確認
+1. **[FAQ](design/README.html)** を確認
+2. **[既知の制限事項](implementation/known_limitations.html)** を確認
 3. **[GitHubイシュー](https://github.com/your-repo/Cm/issues)** を検索
 4. 新しいイシューを作成
 

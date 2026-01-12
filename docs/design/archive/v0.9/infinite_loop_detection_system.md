@@ -1,3 +1,5 @@
+[English](infinite_loop_detection_system.en.html)
+
 # 無限ループ検出システム設計書
 
 ## 概要
@@ -502,7 +504,7 @@ cm compile main.cm
 詳細:
 - 関数名: optimize_loop
 - 生成回数: 11
-- 最後の生成: 2024-12-31 21:45:32
+- 最後の生成: 2025-12-31 21:45:32
 - 提案: 最適化レベルを下げるか、--max-function-generations オプションで上限を調整してください
 
 スタックトレース:

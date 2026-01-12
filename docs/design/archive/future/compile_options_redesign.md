@@ -1,3 +1,5 @@
+[English](compile_options_redesign.en.html)
+
 # コンパイルオプション再設計
 
 ## 現状の問題

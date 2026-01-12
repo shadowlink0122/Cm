@@ -1,0 +1,148 @@
+// dijkstra.cm - ダイクストラ法（PriorityQueueベース）
+// 全てmain内で完結
+
+// 状態型
+struct State {
+    int dist;
+    int node;
+}
+
+// 優先度付きキュー
+struct PQ {
+    State[100] data;
+    int size;
+}
+
+void pq_init(PQ* pq) {
+    pq->size = 0;
+}
+
+void pq_push(PQ* pq, int dist, int node) {
+    State s = {dist: dist, node: node};
+    pq->data[pq->size] = s;
+    int i = pq->size;
+    pq->size = pq->size + 1;
+    
+    while (i > 0) {
+        int parent = (i - 1) / 2;
+        if (pq->data[parent].dist <= pq->data[i].dist) {
+            break;
+        }
+        State temp = pq->data[i];
+        pq->data[i] = pq->data[parent];
+        pq->data[parent] = temp;
+        i = parent;
+    }
+}
+
+State pq_pop(PQ* pq) {
+    State result = pq->data[0];
+    pq->size = pq->size - 1;
+    if (pq->size > 0) {
+        pq->data[0] = pq->data[pq->size];
+        int i = 0;
+        while (true) {
+            int left = 2 * i + 1;
+            int right = 2 * i + 2;
+            int smallest = i;
+            if (left < pq->size && pq->data[left].dist < pq->data[smallest].dist) {
+                smallest = left;
+            }
+            if (right < pq->size && pq->data[right].dist < pq->data[smallest].dist) {
+                smallest = right;
+            }
+            if (smallest == i) { break; }
+            State temp = pq->data[i];
+            pq->data[i] = pq->data[smallest];
+            pq->data[smallest] = temp;
+            i = smallest;
+        }
+    }
+    return result;
+}
+
+bool pq_empty(PQ* pq) {
+    return pq->size == 0;
+}
+
+int main() {
+    println("=== Dijkstra Algorithm ===");
+    println("Graph: A-B-C / A-D-E-F");
+    println("");
+    
+    // 隣接行列（1D、36要素）
+    int[36] graph;
+    for (int i = 0; i < 36; i++) { graph[i] = 999; }
+    
+    // エッジ設定
+    graph[0*6+1] = 7; graph[1*6+0] = 7;  // A-B
+    graph[0*6+3] = 2; graph[3*6+0] = 2;  // A-D
+    graph[1*6+2] = 2; graph[2*6+1] = 2;  // B-C
+    graph[1*6+4] = 3; graph[4*6+1] = 3;  // B-E
+    graph[2*6+5] = 1; graph[5*6+2] = 1;  // C-F
+    graph[3*6+4] = 3; graph[4*6+3] = 3;  // D-E
+    graph[4*6+5] = 5; graph[5*6+4] = 5;  // E-F
+    
+    // ダイクストラ
+    int[6] dist;
+    int[6] prev;
+    bool[6] visited;
+    
+    for (int i = 0; i < 6; i++) {
+        dist[i] = 999;
+        prev[i] = -1;
+        visited[i] = false;
+    }
+    dist[0] = 0;
+    
+    PQ pq;
+    pq_init(&pq);
+    pq_push(&pq, 0, 0);
+    
+    while (!pq_empty(&pq)) {
+        State s = pq_pop(&pq);
+        int u = s.node;
+        if (visited[u]) { continue; }
+        visited[u] = true;
+        
+        for (int v = 0; v < 6; v++) {
+            int edge = graph[u*6+v];
+            if (edge < 999) {
+                int new_dist = dist[u] + edge;
+                if (new_dist < dist[v]) {
+                    dist[v] = new_dist;
+                    prev[v] = u;
+                    pq_push(&pq, new_dist, v);
+                }
+            }
+        }
+    }
+    
+    // 結果
+    println("Shortest from A:");
+    println("  A:{dist[0]} B:{dist[1]} C:{dist[2]} D:{dist[3]} E:{dist[4]} F:{dist[5]}");
+    
+    // 経路復元
+    print("Path A->F: ");
+    int[10] path;
+    int len = 0;
+    int cur = 5;
+    while (cur != -1) {
+        path[len] = cur;
+        len = len + 1;
+        cur = prev[cur];
+    }
+    for (int i = len-1; i >= 0; i--) {
+        int n = path[i];
+        if (n == 0) { print("A"); }
+        if (n == 1) { print("B"); }
+        if (n == 2) { print("C"); }
+        if (n == 3) { print("D"); }
+        if (n == 4) { print("E"); }
+        if (n == 5) { print("F"); }
+        if (i > 0) { print("->"); }
+    }
+    println("");
+    
+    return 0;
+}

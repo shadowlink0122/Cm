@@ -1,0 +1,48 @@
+// memoization_dp.cm - メモ化動的計画法のデモ
+// 再帰 + メモ化によるDP実装を示す
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+// メモ化フィボナッチ
+int fib(int n, int* memo) {
+    if (n <= 1) {
+        return n;
+    }
+    
+    if (memo[n] != -1) {
+        return memo[n];
+    }
+    
+    int result = fib(n - 1, memo) + fib(n - 2, memo);
+    memo[n] = result;
+    return result;
+}
+
+int main() {
+    println("=== Memoized Dynamic Programming ===");
+    
+    // メモテーブルを確保
+    const int size = 50;
+    int* memo = malloc(size * sizeof(int)) as int*;
+    
+    // -1で初期化（未計算マーカー）
+    for (int i = 0; i < size; i++) {
+        memo[i] = -1;
+    }
+    
+    // フィボナッチ数列を計算
+    println("Fibonacci sequence:");
+    for (int i = 0; i <= 20; i += 5) {
+        int result = fib(i, memo);
+        println("  fib({i}) = {result}");
+    }
+    
+    // メモリ解放
+    free(memo as void*);
+    
+    println("\n=== Done ===");
+    return 0;
+}

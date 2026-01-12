@@ -1,0 +1,43 @@
+// heap_allocation.cm - ヒープメモリ管理のデモ
+// FFIによるmalloc/freeを示す
+
+use libc {
+    void* malloc(ulong size);
+    void free(void* ptr);
+}
+
+int main() {
+    println("=== Heap Memory Management ===");
+    
+    // 1. 基本的なmalloc/free
+    println("--- Basic malloc/free ---");
+    int* raw = malloc(sizeof(int) * 5) as int*;
+    for (int i = 0; i < 5; i++) {
+        raw[i] = i * 10;
+    }
+    println("raw[0]={raw[0]}, raw[2]={raw[2]}, raw[4]={raw[4]}");
+    free(raw as void*);
+    println("Freed raw memory");
+    
+    // 2. 動的配列の確保
+    println("");
+    println("--- Dynamic array ---");
+    int* arr = malloc(sizeof(int) * 10) as int*;
+    
+    for (int i = 0; i < 10; i++) {
+        arr[i] = i * i;
+    }
+    
+    print("Array: ");
+    for (int i = 0; i < 10; i++) {
+        int val = arr[i];  // 一時変数経由
+        print("{val} ");
+    }
+    println("");
+    
+    free(arr as void*);
+    println("Array freed");
+    
+    println("\n=== Done ===");
+    return 0;
+}

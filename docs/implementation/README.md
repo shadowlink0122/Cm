@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # 実装ドキュメント
 
 Cm言語コンパイラの実装状況と進捗に関するドキュメントです。
@@ -6,14 +8,14 @@ Cm言語コンパイラの実装状況と進捗に関するドキュメントで
 
 | ドキュメント | 説明 |
 |------------|------|
-| [implementation_status.md](implementation_status.md) | 機能実装状況の詳細 |
-| [known_limitations.md](known_limitations.md) | 既知の制限事項と問題 |
-| [implementation_progress_2025_01_13.md](implementation_progress_2025_01_13.md) | 最新の実装進捗 |
-| [implementation_progress_2024_12_13_final.md](implementation_progress_2024_12_13_final.md) | 2024-12-13の進捗 |
-| [implementation_progress_2024_12_13.md](implementation_progress_2024_12_13.md) | 2024-12-13の進捗 |
-| [implementation_progress_2024_12_12.md](implementation_progress_2024_12_12.md) | 2024-12-12の進捗 |
+| [implementation_status.md](implementation_status.html) | 機能実装状況の詳細 |
+| [known_limitations.md](known_limitations.html) | 既知の制限事項と問題 |
+| [implementation_progress_2025_01_13.md](implementation_progress_2025_01_13.html) | 最新の実装進捗 |
+| [implementation_progress_2025_12_13_final.md](implementation_progress_2025_12_13_final.html) | 2025-12-13の進捗 |
+| [implementation_progress_2025_12_13.md](implementation_progress_2025_12_13.html) | 2025-12-13の進捗 |
+| [implementation_progress_2025_12_12.md](implementation_progress_2025_12_12.html) | 2025-12-12の進捗 |
 
-## 🎯 現在の実装状況（v0.9.0）
+## 🎯 現在の実装状況（v0.10.0）
 
 ### ✅ 完全実装済み
 
@@ -113,7 +115,7 @@ Cm言語コンパイラの実装状況と進捗に関するドキュメントで
 
 | バージョン | 主要機能 |
 |-----------|---------|
-| v0.9.0 | 配列・ポインタ、with自動実装、型制約統一 |
+| v0.10.0 | 配列・ポインタ、with自動実装、型制約統一 |
 | v0.8.0 | match式、パターンマッチング |
 | v0.7.0 | 高度なジェネリクス、WASMバックエンド |
 | v0.6.0 | 基本的なジェネリクス |
@@ -134,7 +136,7 @@ WASMテスト: CI統合済み
 
 ## 🐛 既知の制限事項
 
-詳細は [known_limitations.md](known_limitations.md) を参照。
+詳細は [known_limitations.md](known_limitations.html) を参照。
 
 ### 主要な制限
 
@@ -209,11 +211,11 @@ WASMテスト: CI統合済み
 
 ## 🔗 関連ドキュメント
 
-- [../design/CANONICAL_SPEC.md](../design/CANONICAL_SPEC.md) - 正式言語仕様
-- [../design/architecture.md](../design/architecture.md) - システム設計
+- [../design/CANONICAL_SPEC.md](../design/CANONICAL_SPEC.html) - 正式言語仕様
+- [../design/architecture.md](../design/architecture.html) - システム設計
 - [../llvm/](../llvm/) - LLVMバックエンド
 - [../releases/](../releases/) - リリースノート
 
 ---
 
-**更新日:** 2024-12-15
+**更新日:** 2025-12-15

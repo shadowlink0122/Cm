@@ -13,6 +13,67 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
+// System V ABI: 16バイト以下の構造体はレジスタで値渡し
+bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
+    if (!type || type->kind != hir::TypeKind::Struct) {
+        return false;
+    }
+
+    // 構造体定義を取得
+    auto it = structDefs.find(type->name);
+    if (it == structDefs.end()) {
+        return false;  // 定義が見つからない場合は安全のためポインタ渡し
+    }
+
+    const mir::MirStruct* structDef = it->second;
+
+    // フィールドのサイズを合計
+    size_t totalSize = 0;
+    for (const auto& field : structDef->fields) {
+        if (!field.type)
+            continue;
+
+        switch (field.type->kind) {
+            case hir::TypeKind::Bool:
+            case hir::TypeKind::Char:
+            case hir::TypeKind::Tiny:
+            case hir::TypeKind::UTiny:
+                totalSize += 1;
+                break;
+            case hir::TypeKind::Short:
+            case hir::TypeKind::UShort:
+                totalSize += 2;
+                break;
+            case hir::TypeKind::Int:
+            case hir::TypeKind::UInt:
+            case hir::TypeKind::Float:
+                totalSize += 4;
+                break;
+            case hir::TypeKind::Long:
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::Double:
+            case hir::TypeKind::Pointer:
+            case hir::TypeKind::String:
+                totalSize += 8;
+                break;
+            case hir::TypeKind::Struct:
+                // ネストした構造体は安全のためポインタ渡し
+                return false;
+            default:
+                totalSize += 8;  // デフォルトはポインタサイズ
+                break;
+        }
+
+        // 16バイトを超えたら即座にfalse
+        if (totalSize > 16) {
+            return false;
+        }
+    }
+
+    return totalSize <= 16;
+}
+
 // 関数の一意なIDを生成（オーバーロードを区別するため）
 std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
     // main関数は特別扱い
@@ -253,10 +314,15 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
                     paramTypes.push_back(fatPtrType);
                 } else {
                     auto llvmType = convertType(local.type);
-                    // 構造体はポインタとして渡す（opaque pointer）
+                    // 構造体の場合、ABIに従って値渡しかポインタ渡しを決定
                     if (local.type->kind == hir::TypeKind::Struct) {
-                        // LLVM 14+: opaque pointerを使用
-                        paramTypes.push_back(ctx.getPtrType());
+                        if (isSmallStruct(local.type)) {
+                            // 16バイト以下: 値渡し（System V ABI準拠）
+                            paramTypes.push_back(llvmType);
+                        } else {
+                            // 16バイト超: ポインタ渡し
+                            paramTypes.push_back(ctx.getPtrType());
+                        }
                     } else {
                         paramTypes.push_back(llvmType);
                     }
@@ -310,12 +376,13 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     }
 
-    // main関数にはoptnone属性を追加
-    // LLVMの最適化がcontrol flowを破壊するのを防ぐ
-    if (func.name == "main") {
-        llvmFunc->addFnAttr(llvm::Attribute::NoInline);
-        llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
-    }
+    // main関数には以前optnone属性を追加していたが、
+    // これはパフォーマンス上重大な問題を引き起こす（バブルソート1000要素が終わらない等）
+    // control flowの問題は別途対処する必要がある
+    // if (func.name == "main") {
+    //     llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+    //     llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
+    // }
 
     // パラメータ名設定
     size_t idx = 0;
@@ -338,13 +405,16 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     currentProgram = &program;
 
+    // ターゲット判定をキャッシュ（境界チェックで使用）
+    std::string triple = module->getTargetTriple();
+    isWasmTarget = triple.find("wasm") != std::string::npos;
+
     // インターフェース名を収集
     // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
     size_t iface_count = 0;
     const size_t MAX_INTERFACES = 10000;  // 無限ループ防止
     for (const auto& iface : program.interfaces) {
         if (++iface_count > MAX_INTERFACES) {
-            // debug_msg("MIR2LLVM", "ERROR: Too many interfaces, possible infinite loop");
             throw std::runtime_error("Too many interfaces in MIR program");
         }
         if (iface) {
@@ -457,13 +527,19 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // デバッグ用プログレス表示
         guard.show_progress("Function", 0, func.basic_blocks.size());
 
-        // ランタイム関数（cm_print_*, cm_println_*など）はスキップ
+        // ランタイム関数（cm_*）はスキップ
         // これらはランタイムライブラリで実装されている
         if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
             func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
-            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0) {
+            func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||
+            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0) {
+            return;
+        }
+
+        // 本体がない関数（extern関数）は宣言のみで本体を生成しない
+        if (func.basic_blocks.empty()) {
             return;
         }
 
@@ -478,6 +554,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         locals.clear();
         blocks.clear();
         allocatedLocals.clear();
+        // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
@@ -487,7 +564,45 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         size_t argIdx = 0;
         for (auto& arg : currentFunction->args()) {
             if (argIdx < func.arg_locals.size()) {
-                locals[func.arg_locals[argIdx]] = &arg;
+                auto localIdx = func.arg_locals[argIdx];
+                // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用
+                // （C ABIで16バイト以下の構造体はレジスタ渡しされる）
+                if (arg.getType()->isStructTy()) {
+                    auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                        "arg_" + std::to_string(argIdx) + "_stack");
+                    builder->CreateStore(&arg, alloca);
+                    locals[localIdx] = alloca;
+                    allocatedLocals.insert(localIdx);  // allocaを追跡
+                } else if (arg.getType()->isPointerTy() && argIdx == 0 &&
+                           localIdx < func.locals.size()) {
+                    // プリミティブ型implメソッドのself引数: i8*で渡されるがローカルはプリミティブ型
+                    // 例: int__abs(i8* %arg0) で selfはint型
+                    auto& localType = func.locals[localIdx].type;
+                    if (localType && (localType->kind == hir::TypeKind::Int ||
+                                      localType->kind == hir::TypeKind::UInt ||
+                                      localType->kind == hir::TypeKind::Long ||
+                                      localType->kind == hir::TypeKind::ULong ||
+                                      localType->kind == hir::TypeKind::Float ||
+                                      localType->kind == hir::TypeKind::Double ||
+                                      localType->kind == hir::TypeKind::Bool ||
+                                      localType->kind == hir::TypeKind::Char)) {
+                        // i8*をプリミティブ型のポインタにキャストしてload
+                        auto primType = convertType(localType);
+                        auto primPtrType = llvm::PointerType::get(primType, 0);
+                        auto castedPtr =
+                            builder->CreateBitCast(&arg, primPtrType, "prim_self_cast");
+                        auto loadedVal = builder->CreateLoad(primType, castedPtr, "prim_self_load");
+                        // allocaに格納
+                        auto alloca = builder->CreateAlloca(primType, nullptr, "prim_self");
+                        builder->CreateStore(loadedVal, alloca);
+                        locals[localIdx] = alloca;
+                        allocatedLocals.insert(localIdx);
+                    } else {
+                        locals[localIdx] = &arg;
+                    }
+                } else {
+                    locals[localIdx] = &arg;
+                }
             }
             argIdx++;
         }
@@ -566,12 +681,17 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // プリミティブ型へのポインタの場合、一時変数はプリミティブ型として扱う
                     // これは借用selfの値を格納するための一時変数のケース
                     // 注意: impl メソッド（関数名に__を含む）内でのみ適用
+                    // また、local_0（self引数）からコピーされる一時変数のみ適用
+                    // &result のような通常のアドレス取得には適用しない
                     hir::TypePtr allocType = local.type;
                     bool isPrimitiveImplMethod = (func.name.find("__") != std::string::npos);
                     // 名前が_tで始まる場合は一時変数
                     bool isTempVar =
                         (local.name.size() >= 2 && local.name[0] == '_' && local.name[1] == 't');
-                    if (isPrimitiveImplMethod && isTempVar &&
+                    // さらに、最初の数個のローカル変数（selfのコピー先として使われる）のみに適用
+                    // local_0はself引数、local_1/local_2が最初の一時変数として使われることが多い
+                    bool isSelfCopyTarget = (i <= 2);
+                    if (isPrimitiveImplMethod && isTempVar && isSelfCopyTarget &&
                         local.type->kind == hir::TypeKind::Pointer && local.type->element_type) {
                         auto elemKind = local.type->element_type->kind;
                         if (elemKind == hir::TypeKind::Int || elemKind == hir::TypeKind::UInt ||
@@ -584,6 +704,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
                     auto llvmType = convertType(allocType);
 
+                    // ベアメタル対応: すべての配列はスタックに割り当て（ヒープ不使用）
                     // static変数はグローバル変数として作成
                     if (local.is_static) {
                         std::string staticKey = func.name + "_" + local.name;
@@ -726,7 +847,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // std::cerr << "[MIR2LLVM]       Block has terminator type "
         // << static_cast<int>(block.terminator->kind) << "\n";
     } else {
-        // debug_msg("MIR2LLVM", "Block has no terminator");
     }
 
     // blocksはunordered_mapなので、countで存在確認
@@ -734,7 +854,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
     if (blocks.count(block.id) > 0) {
         // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
-        // debug_msg("MIR2LLVM", "Insert point set");
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
         // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
@@ -779,7 +898,6 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         // 問題のある12個目のステートメントの詳細ログ
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
-            // debug_msg("MIR2LLVM", "WARNING: This is statement 11 that causes infinite loop");
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
                 // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local << "\n";
@@ -809,13 +927,10 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
         if (stmt_idx == block.statements.size() - 1) {
-            // debug_msg("MIR2LLVM", "This was the LAST statement, about to exit loop");
             // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
         }
         // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx << "\n";
     }
-
-    // debug_msg("MIR2LLVM", "FOR LOOP EXITED - All statements processed, checking terminator...");
 
     // ターミネータ処理
     if (block.terminator) {
@@ -989,7 +1104,55 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     }
                                 } else if (proj.kind == mir::ProjectionKind::Field) {
                                     if (currentType->kind == hir::TypeKind::Struct) {
-                                        auto structIt = structDefs.find(currentType->name);
+                                        // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                                        std::string structLookupName = currentType->name;
+                                        if (!currentType->type_args.empty()) {
+                                            for (const auto& typeArg : currentType->type_args) {
+                                                if (typeArg) {
+                                                    structLookupName += "__";
+                                                    if (typeArg->kind == hir::TypeKind::Struct) {
+                                                        structLookupName += typeArg->name;
+                                                    } else {
+                                                        switch (typeArg->kind) {
+                                                            case hir::TypeKind::Int:
+                                                                structLookupName += "int";
+                                                                break;
+                                                            case hir::TypeKind::UInt:
+                                                                structLookupName += "uint";
+                                                                break;
+                                                            case hir::TypeKind::Long:
+                                                                structLookupName += "long";
+                                                                break;
+                                                            case hir::TypeKind::ULong:
+                                                                structLookupName += "ulong";
+                                                                break;
+                                                            case hir::TypeKind::Float:
+                                                                structLookupName += "float";
+                                                                break;
+                                                            case hir::TypeKind::Double:
+                                                                structLookupName += "double";
+                                                                break;
+                                                            case hir::TypeKind::Bool:
+                                                                structLookupName += "bool";
+                                                                break;
+                                                            case hir::TypeKind::Char:
+                                                                structLookupName += "char";
+                                                                break;
+                                                            case hir::TypeKind::String:
+                                                                structLookupName += "string";
+                                                                break;
+                                                            default:
+                                                                if (!typeArg->name.empty()) {
+                                                                    structLookupName +=
+                                                                        typeArg->name;
+                                                                }
+                                                                break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        auto structIt = structDefs.find(structLookupName);
                                         if (structIt != structDefs.end() &&
                                             proj.field_id < structIt->second->fields.size()) {
                                             currentType =
@@ -1011,6 +1174,25 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             if (sourceType->isPointerTy() && targetType->isStructTy()) {
                                 // ポインタからロードして構造体値を取得
                                 rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
+                                sourceType = rvalue->getType();
+                            }
+                            // sourceがポインタで、targetがプリミティブ整数型の場合
+                            // (プリミティブ型implメソッドのselfコピー: i8* -> i32)
+                            else if (sourceType->isPointerTy() && targetType->isIntegerTy() &&
+                                     targetType->getIntegerBitWidth() >= 8) {
+                                // i8*をtargetType*にキャストしてload
+                                auto targetPtrType = llvm::PointerType::get(targetType, 0);
+                                auto castedPtr =
+                                    builder->CreateBitCast(rvalue, targetPtrType, "prim_cast");
+                                rvalue = builder->CreateLoad(targetType, castedPtr, "prim_load");
+                                sourceType = rvalue->getType();
+                            }
+                            // sourceがポインタで、targetが浮動小数点型の場合
+                            else if (sourceType->isPointerTy() && targetType->isFloatingPointTy()) {
+                                auto targetPtrType = llvm::PointerType::get(targetType, 0);
+                                auto castedPtr =
+                                    builder->CreateBitCast(rvalue, targetPtrType, "float_cast");
+                                rvalue = builder->CreateLoad(targetType, castedPtr, "float_load");
                                 sourceType = rvalue->getType();
                             }
 
@@ -1084,8 +1266,61 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     switch (proj.kind) {
                                         case mir::ProjectionKind::Field:
                                             if (targetType->kind == hir::TypeKind::Struct) {
+                                                // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                                                std::string structLookupName = targetType->name;
+                                                if (!targetType->type_args.empty()) {
+                                                    for (const auto& typeArg :
+                                                         targetType->type_args) {
+                                                        if (typeArg) {
+                                                            structLookupName += "__";
+                                                            if (typeArg->kind ==
+                                                                hir::TypeKind::Struct) {
+                                                                structLookupName += typeArg->name;
+                                                            } else {
+                                                                switch (typeArg->kind) {
+                                                                    case hir::TypeKind::Int:
+                                                                        structLookupName += "int";
+                                                                        break;
+                                                                    case hir::TypeKind::UInt:
+                                                                        structLookupName += "uint";
+                                                                        break;
+                                                                    case hir::TypeKind::Long:
+                                                                        structLookupName += "long";
+                                                                        break;
+                                                                    case hir::TypeKind::ULong:
+                                                                        structLookupName += "ulong";
+                                                                        break;
+                                                                    case hir::TypeKind::Float:
+                                                                        structLookupName += "float";
+                                                                        break;
+                                                                    case hir::TypeKind::Double:
+                                                                        structLookupName +=
+                                                                            "double";
+                                                                        break;
+                                                                    case hir::TypeKind::Bool:
+                                                                        structLookupName += "bool";
+                                                                        break;
+                                                                    case hir::TypeKind::Char:
+                                                                        structLookupName += "char";
+                                                                        break;
+                                                                    case hir::TypeKind::String:
+                                                                        structLookupName +=
+                                                                            "string";
+                                                                        break;
+                                                                    default:
+                                                                        if (!typeArg->name
+                                                                                 .empty()) {
+                                                                            structLookupName +=
+                                                                                typeArg->name;
+                                                                        }
+                                                                        break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                                 auto structDefIt =
-                                                    structDefs.find(targetType->name);
+                                                    structDefs.find(structLookupName);
                                                 if (structDefIt != structDefs.end() &&
                                                     proj.field_id <
                                                         structDefIt->second->fields.size()) {
@@ -1159,25 +1394,17 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             // static_cast<int>(binop.op)
             // << "\n";
 
-            // debug_msg("MIR2LLVM", "Converting LHS operand...");
             auto lhs = convertOperand(*binop.lhs);
             if (!lhs) {
-                // debug_msg("MIR2LLVM", "ERROR: Failed to convert LHS operand");
                 return nullptr;
             }
-            // debug_msg("MIR2LLVM", "LHS operand converted successfully");
 
-            // debug_msg("MIR2LLVM", "Converting RHS operand...");
             auto rhs = convertOperand(*binop.rhs);
             if (!rhs) {
-                // debug_msg("MIR2LLVM", "ERROR: Failed to convert RHS operand");
                 return nullptr;
             }
-            // debug_msg("MIR2LLVM", "RHS operand converted successfully");
 
-            // debug_msg("MIR2LLVM", "Calling convertBinaryOp...");
             auto result = convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
-            // debug_msg("MIR2LLVM", "BinaryOp converted successfully");
             return result;
         }
         case mir::MirRvalue::UnaryOp: {
@@ -1241,7 +1468,54 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         // 既にGEPで移動している場合、現在の型を追跡
                         // フィールドアクセスでは元のローカル変数の型から辿る
                         if (structType && structType->kind == hir::TypeKind::Struct) {
-                            auto it = structTypes.find(structType->name);
+                            // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                            std::string structLookupName = structType->name;
+                            if (!structType->type_args.empty()) {
+                                for (const auto& typeArg : structType->type_args) {
+                                    if (typeArg) {
+                                        structLookupName += "__";
+                                        if (typeArg->kind == hir::TypeKind::Struct) {
+                                            structLookupName += typeArg->name;
+                                        } else {
+                                            switch (typeArg->kind) {
+                                                case hir::TypeKind::Int:
+                                                    structLookupName += "int";
+                                                    break;
+                                                case hir::TypeKind::UInt:
+                                                    structLookupName += "uint";
+                                                    break;
+                                                case hir::TypeKind::Long:
+                                                    structLookupName += "long";
+                                                    break;
+                                                case hir::TypeKind::ULong:
+                                                    structLookupName += "ulong";
+                                                    break;
+                                                case hir::TypeKind::Float:
+                                                    structLookupName += "float";
+                                                    break;
+                                                case hir::TypeKind::Double:
+                                                    structLookupName += "double";
+                                                    break;
+                                                case hir::TypeKind::Bool:
+                                                    structLookupName += "bool";
+                                                    break;
+                                                case hir::TypeKind::Char:
+                                                    structLookupName += "char";
+                                                    break;
+                                                case hir::TypeKind::String:
+                                                    structLookupName += "string";
+                                                    break;
+                                                default:
+                                                    if (!typeArg->name.empty()) {
+                                                        structLookupName += typeArg->name;
+                                                    }
+                                                    break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            auto it = structTypes.find(structLookupName);
                             if (it != structTypes.end()) {
                                 // LLVM 14: typed pointers require bitcast
 #if LLVM_VERSION_MAJOR < 15
@@ -1331,6 +1605,121 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             }
 
             return value;
+        }
+        case mir::MirRvalue::Aggregate: {
+            // 集約型（構造体、配列、タプル）の構築
+            auto& aggData = std::get<mir::MirRvalue::AggregateData>(rvalue.data);
+
+            if (aggData.kind.type == mir::AggregateKind::Type::Struct) {
+                // 構造体型を取得
+                std::string structName = aggData.kind.name;
+
+                // 型情報から型引数を取得してマングリング
+                if (aggData.kind.ty && !aggData.kind.ty->type_args.empty()) {
+                    for (const auto& typeArg : aggData.kind.ty->type_args) {
+                        if (typeArg) {
+                            structName += "__";
+                            switch (typeArg->kind) {
+                                case hir::TypeKind::Int:
+                                    structName += "int";
+                                    break;
+                                case hir::TypeKind::UInt:
+                                    structName += "uint";
+                                    break;
+                                case hir::TypeKind::Long:
+                                    structName += "long";
+                                    break;
+                                case hir::TypeKind::ULong:
+                                    structName += "ulong";
+                                    break;
+                                case hir::TypeKind::Float:
+                                    structName += "float";
+                                    break;
+                                case hir::TypeKind::Double:
+                                    structName += "double";
+                                    break;
+                                case hir::TypeKind::Bool:
+                                    structName += "bool";
+                                    break;
+                                case hir::TypeKind::Char:
+                                    structName += "char";
+                                    break;
+                                case hir::TypeKind::Struct:
+                                    structName += typeArg->name;
+                                    break;
+                                default:
+                                    structName += "unknown";
+                                    break;
+                            }
+                        }
+                    }
+                }
+
+                auto it = structTypes.find(structName);
+                if (it == structTypes.end()) {
+                    // マングリングなしでも試す
+                    it = structTypes.find(aggData.kind.name);
+                }
+
+                if (it == structTypes.end() || !it->second) {
+                    // 構造体型が見つからない
+                    return nullptr;
+                }
+
+                auto* structType = it->second;
+
+                // 一時変数を作成してフィールドを初期化
+                auto* alloca = builder->CreateAlloca(structType, nullptr, "agg_temp");
+
+                // 各フィールドを初期化
+                for (size_t i = 0; i < aggData.operands.size(); ++i) {
+                    if (aggData.operands[i]) {
+                        auto* fieldValue = convertOperand(*aggData.operands[i]);
+                        if (fieldValue) {
+                            auto* gep =
+                                builder->CreateStructGEP(structType, alloca, i, "agg_field");
+                            builder->CreateStore(fieldValue, gep);
+                        }
+                    }
+                }
+
+                // 構造体値をロードして返す
+                return builder->CreateLoad(structType, alloca, "agg_load");
+            } else if (aggData.kind.type == mir::AggregateKind::Type::Array) {
+                // 配列の処理
+                if (aggData.operands.empty() || !aggData.operands[0]) {
+                    return nullptr;
+                }
+
+                // 最初の要素から型を推定
+                auto* firstElem = convertOperand(*aggData.operands[0]);
+                if (!firstElem) {
+                    return nullptr;
+                }
+
+                auto* elemType = firstElem->getType();
+                auto* arrayType = llvm::ArrayType::get(elemType, aggData.operands.size());
+                auto* alloca = builder->CreateAlloca(arrayType, nullptr, "arr_temp");
+
+                // 各要素を初期化
+                for (size_t i = 0; i < aggData.operands.size(); ++i) {
+                    if (aggData.operands[i]) {
+                        auto* elemValue = convertOperand(*aggData.operands[i]);
+                        if (elemValue) {
+                            auto* gep =
+                                builder->CreateGEP(arrayType, alloca,
+                                                   {llvm::ConstantInt::get(ctx.getI32Type(), 0),
+                                                    llvm::ConstantInt::get(ctx.getI32Type(), i)},
+                                                   "arr_elem");
+                            builder->CreateStore(elemValue, gep);
+                        }
+                    }
+                }
+
+                return builder->CreateLoad(arrayType, alloca, "arr_load");
+            }
+
+            return nullptr;
         }
         default:
             return nullptr;
@@ -1437,7 +1826,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     // 循環参照の検出
     if (processing.count(&operand) > 0) {
-        // debug_msg("MIR2LLVM", "ERROR: Circular reference detected in convertOperand");
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";
         if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
@@ -1448,7 +1836,6 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
     }
 
     if (recursion_depth >= MAX_RECURSION_DEPTH) {
-        // debug_msg("MIR2LLVM", "ERROR: Maximum recursion depth exceeded in convertOperand");
         // std::cerr << "[MIR2LLVM]        Current depth: " << recursion_depth << "\n";
         // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
         // "\n";
@@ -1521,12 +1908,70 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                     auto& fields = structIt->second->fields;
                                     if (proj.field_id < fields.size()) {
                                         currentType = fields[proj.field_id].type;
+
+                                        // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
+                                        // 例: Box__intのvalue: T -> int
+                                        if (currentType && currentType->name.length() <= 2 &&
+                                            !currentType->name.empty()) {
+                                            // ベースローカルの型名からマングリング名を抽出
+                                            auto& baseLocal =
+                                                currentMIRFunction->locals[place.local].type;
+                                            std::string mangledName;
+                                            if (baseLocal) {
+                                                if (!baseLocal->type_args.empty() &&
+                                                    baseLocal->type_args[0]) {
+                                                    // type_argsがある場合は直接使用
+                                                    currentType = baseLocal->type_args[0];
+                                                } else if (baseLocal->name.find("__") !=
+                                                           std::string::npos) {
+                                                    // マングリング名から型引数を抽出 (Box__int ->
+                                                    // int)
+                                                    mangledName = baseLocal->name;
+                                                    size_t pos = mangledName.find("__");
+                                                    std::string typeArg =
+                                                        mangledName.substr(pos + 2);
+                                                    size_t nextPos = typeArg.find("__");
+                                                    if (nextPos != std::string::npos) {
+                                                        typeArg = typeArg.substr(0, nextPos);
+                                                    }
+                                                    if (!typeArg.empty()) {
+                                                        if (typeArg == "int")
+                                                            currentType = hir::make_int();
+                                                        else if (typeArg == "uint")
+                                                            currentType = hir::make_uint();
+                                                        else if (typeArg == "long")
+                                                            currentType = hir::make_long();
+                                                        else if (typeArg == "ulong")
+                                                            currentType = hir::make_ulong();
+                                                        else if (typeArg == "float")
+                                                            currentType = hir::make_float();
+                                                        else if (typeArg == "double")
+                                                            currentType = hir::make_double();
+                                                        else if (typeArg == "bool")
+                                                            currentType = hir::make_bool();
+                                                        else if (typeArg == "string")
+                                                            currentType = hir::make_string();
+                                                        else {
+                                                            auto st = std::make_shared<hir::Type>(
+                                                                hir::TypeKind::Struct);
+                                                            st->name = typeArg;
+                                                            currentType = st;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         } else if (proj.kind == mir::ProjectionKind::Index && currentType) {
+                            // 配列型またはポインタ型経由のインデックスアクセス
                             if (currentType->kind == hir::TypeKind::Array &&
                                 currentType->element_type) {
+                                currentType = currentType->element_type;
+                            } else if (currentType->kind == hir::TypeKind::Pointer &&
+                                       currentType->element_type) {
+                                // ポインタ型経由のインデックスアクセス (ptr[i])
                                 currentType = currentType->element_type;
                             }
                         } else if (proj.kind == mir::ProjectionKind::Deref && currentType) {
@@ -1585,6 +2030,17 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                         }
                     }
 
+                    // LLVM 14 typed pointers:
+                    // 構造体型をロードする場合、アドレスを正しい型にキャスト
+#if LLVM_VERSION_MAJOR < 15
+                    if (fieldType->isStructTy()) {
+                        auto expectedPtrType = llvm::PointerType::get(fieldType, 0);
+                        if (addr->getType() != expectedPtrType) {
+                            addr =
+                                builder->CreateBitCast(addr, expectedPtrType, "ptr_to_struct_cast");
+                        }
+                    }
+#endif
                     return builder->CreateLoad(fieldType, addr, "field_load");
                 }
                 return nullptr;
@@ -1611,6 +2067,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                               "Local " + std::to_string(local) + " is null when trying to copy!");
                 }
             }
+
             if (val && llvm::isa<llvm::AllocaInst>(val)) {
                 // アロケーションの場合
                 auto allocaInst = llvm::cast<llvm::AllocaInst>(val);
@@ -1627,22 +2084,55 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 bool isPrimitiveImplMethod =
                     currentMIRFunction &&
                     (currentMIRFunction->name.find("__") != std::string::npos);
+
                 if (isPrimitiveImplMethod && allocatedType->isPointerTy() && currentMIRFunction &&
                     local < currentMIRFunction->locals.size()) {
                     auto& localInfo = currentMIRFunction->locals[local];
-                    if (localInfo.type && localInfo.type->kind == hir::TypeKind::Pointer &&
-                        localInfo.type->element_type) {
-                        auto elemType = localInfo.type->element_type;
-                        auto elemKind = elemType->kind;
-                        if (elemKind == hir::TypeKind::Int || elemKind == hir::TypeKind::UInt ||
-                            elemKind == hir::TypeKind::Long || elemKind == hir::TypeKind::ULong ||
-                            elemKind == hir::TypeKind::Float || elemKind == hir::TypeKind::Double ||
-                            elemKind == hir::TypeKind::Bool || elemKind == hir::TypeKind::Char) {
-                            // まずポインタをロード
-                            auto ptrVal = builder->CreateLoad(allocatedType, val, "ptr_load");
-                            // 次にプリミティブ値をロード
-                            auto primType = convertType(elemType);
-                            return builder->CreateLoad(primType, ptrVal, "prim_load");
+                    // selfローカル（最初の引数ローカル）かどうかをチェック
+                    bool isSelfLocal = !currentMIRFunction->arg_locals.empty() &&
+                                       local == currentMIRFunction->arg_locals[0];
+                    // localNameが"self"の場合もチェック
+                    if (!isSelfLocal && localInfo.name == "self") {
+                        isSelfLocal = true;
+                    }
+
+                    if (isSelfLocal) {
+                        // プリミティブ型のimplメソッドか判定
+                        // 関数名が int__xxx, long__xxx 等の形式
+                        const std::string& funcName = currentMIRFunction->name;
+                        size_t dunderPos = funcName.find("__");
+                        if (dunderPos != std::string::npos) {
+                            std::string typeName = funcName.substr(0, dunderPos);
+                            bool isPrimitiveType = typeName == "int" || typeName == "uint" ||
+                                                   typeName == "long" || typeName == "ulong" ||
+                                                   typeName == "short" || typeName == "ushort" ||
+                                                   typeName == "float" || typeName == "double" ||
+                                                   typeName == "bool" || typeName == "char";
+
+                            if (isPrimitiveType) {
+                                // まずポインタをロード
+                                auto ptrVal =
+                                    builder->CreateLoad(allocatedType, val, "self_ptr_load");
+                                // 次にプリミティブ型を決定してロード
+                                llvm::Type* elemType = nullptr;
+                                if (typeName == "int" || typeName == "uint") {
+                                    elemType = ctx.getI32Type();
+                                } else if (typeName == "long" || typeName == "ulong") {
+                                    elemType = ctx.getI64Type();
+                                } else if (typeName == "short" || typeName == "ushort") {
+                                    elemType = ctx.getI16Type();
+                                } else if (typeName == "float") {
+                                    elemType = ctx.getF32Type();
+                                } else if (typeName == "double") {
+                                    elemType = ctx.getF64Type();
+                                } else if (typeName == "bool" || typeName == "char") {
+                                    elemType = ctx.getI8Type();
+                                }
+                                if (elemType) {
+                                    return builder->CreateLoad(elemType, ptrVal,
+                                                               "borrowed_self_prim_load");
+                                }
+                            }
                         }
                     }
                 }
@@ -1685,14 +2175,29 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                             }
                         }
                         auto typeKind = elemType->kind;
-                        // プリミティブ型の場合はロード
-                        if (typeKind == hir::TypeKind::Int || typeKind == hir::TypeKind::UInt ||
+
+                        // ローカル変数自体がポインタ型の場合はロードをスキップ
+                        // ポインタを格納するlocal_2のような変数はポインタ値をそのまま格納すべき
+                        if (localInfo.type->kind == hir::TypeKind::Pointer) {
+                            // ポインタ型のローカル変数へはポインタ値をそのまま返す
+                            return val;
+                        }
+
+                        // プリミティブ型または構造体型の場合はロード
+                        bool isPrimitive =
+                            typeKind == hir::TypeKind::Int || typeKind == hir::TypeKind::UInt ||
                             typeKind == hir::TypeKind::Long || typeKind == hir::TypeKind::ULong ||
                             typeKind == hir::TypeKind::Short || typeKind == hir::TypeKind::UShort ||
                             typeKind == hir::TypeKind::Float || typeKind == hir::TypeKind::Double ||
-                            typeKind == hir::TypeKind::Bool || typeKind == hir::TypeKind::Char) {
-                            auto primType = convertType(elemType);
-                            return builder->CreateLoad(primType, val, "borrowed_prim_load");
+                            typeKind == hir::TypeKind::Bool || typeKind == hir::TypeKind::Char;
+                        // 構造体型/ジェネリック型もロードが必要
+                        bool isStruct =
+                            typeKind == hir::TypeKind::Struct || typeKind == hir::TypeKind::Generic;
+                        if (isPrimitive || isStruct) {
+                            auto loadType = convertType(elemType);
+                            return builder->CreateLoad(
+                                loadType, val,
+                                isPrimitive ? "borrowed_prim_load" : "borrowed_struct_load");
                         }
                     }
                 }
@@ -1757,15 +2262,71 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 std::string structName;
 
                 // Generic型の場合も構造体として扱う（モノモーフィック化後の型）
-                if (currentType && (currentType->kind == hir::TypeKind::Struct ||
-                                    currentType->kind == hir::TypeKind::Generic)) {
-                    structName = currentType->name;
+                // ポインタ型の場合はelement_typeを使用
+                hir::TypePtr targetStructType = currentType;
+                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                    currentType->element_type) {
+                    targetStructType = currentType->element_type;
+                }
+                if (targetStructType && (targetStructType->kind == hir::TypeKind::Struct ||
+                                         targetStructType->kind == hir::TypeKind::Generic)) {
+                    structName = targetStructType->name;
+
+                    // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                    // 例: Node<int> -> Node__int
+                    // 既にマングリング済み(__含む)の場合はスキップ
+                    if (!targetStructType->type_args.empty() &&
+                        structName.find("__") == std::string::npos) {
+                        for (const auto& typeArg : targetStructType->type_args) {
+                            if (typeArg) {
+                                structName += "__";
+                                if (typeArg->kind == hir::TypeKind::Struct) {
+                                    structName += typeArg->name;
+                                } else {
+                                    switch (typeArg->kind) {
+                                        case hir::TypeKind::Int:
+                                            structName += "int";
+                                            break;
+                                        case hir::TypeKind::UInt:
+                                            structName += "uint";
+                                            break;
+                                        case hir::TypeKind::Long:
+                                            structName += "long";
+                                            break;
+                                        case hir::TypeKind::ULong:
+                                            structName += "ulong";
+                                            break;
+                                        case hir::TypeKind::Float:
+                                            structName += "float";
+                                            break;
+                                        case hir::TypeKind::Double:
+                                            structName += "double";
+                                            break;
+                                        case hir::TypeKind::Bool:
+                                            structName += "bool";
+                                            break;
+                                        case hir::TypeKind::Char:
+                                            structName += "char";
+                                            break;
+                                        case hir::TypeKind::String:
+                                            structName += "string";
+                                            break;
+                                        default:
+                                            if (!typeArg->name.empty()) {
+                                                structName += typeArg->name;
+                                            }
+                                            break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     auto it = structTypes.find(structName);
                     if (it != structTypes.end()) {
                         structType = it->second;
                     }
                 }
-
                 // フォールバック: 関数名から構造体名を推論
                 // Container__int__get → Container__int
                 if (!structType && currentMIRFunction) {
@@ -1894,29 +2455,95 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
-                // 配列の要素型を取得（currentTypeを使用）
+                // 配列またはポインタ型を処理
                 llvm::Type* arrayType = nullptr;
-                if (currentType && currentType->kind == hir::TypeKind::Array) {
-                    arrayType = convertType(currentType);
+                llvm::Type* elemType = nullptr;
+                bool isPointerAccess = false;
+
+                // まずcurrentTypeを確認
+                if (currentType) {
+                    if (currentType->kind == hir::TypeKind::Array) {
+                        arrayType = convertType(currentType);
+                        elemType = convertType(currentType->element_type);
+                    } else if (currentType->kind == hir::TypeKind::Pointer &&
+                               currentType->element_type) {
+                        // ポインタ型経由のインデックスアクセス (ptr[i])
+                        elemType = convertType(currentType->element_type);
+                        isPointerAccess = true;
+                    }
                 }
 
-                if (!arrayType) {
+                if (!arrayType && !isPointerAccess) {
                     // フォールバック: place.localの型を使用
                     if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
                         auto& local = currentMIRFunction->locals[place.local];
-                        if (local.type && local.type->kind == hir::TypeKind::Array) {
-                            arrayType = convertType(local.type);
+                        if (local.type) {
+                            if (local.type->kind == hir::TypeKind::Array) {
+                                arrayType = convertType(local.type);
+                                elemType = convertType(local.type->element_type);
+                            } else if (local.type->kind == hir::TypeKind::Pointer &&
+                                       local.type->element_type) {
+                                elemType = convertType(local.type->element_type);
+                                isPointerAccess = true;
+                            }
                         }
                     }
                 }
 
-                if (!arrayType) {
+                if (!arrayType && !isPointerAccess) {
                     // 型情報が取得できない場合は、allocaまたはGEPから推測
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
-                        arrayType = allocaInst->getAllocatedType();
+                        auto allocType = allocaInst->getAllocatedType();
+                        if (allocType->isArrayTy()) {
+                            arrayType = allocType;
+                            elemType = allocType->getArrayElementType();
+                        } else if (allocType->isPointerTy()) {
+                            // ポインタ型のallocaの場合
+                            isPointerAccess = true;
+                            elemType = allocType;  // opaque pointerの場合は型情報がない
+                        }
                     } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
-                        arrayType = gepInst->getResultElementType();
+                        auto resultType = gepInst->getResultElementType();
+                        if (resultType && resultType->isArrayTy()) {
+                            arrayType = resultType;
+                            elemType = resultType->getArrayElementType();
+                        }
                     }
+                }
+
+                // ポインタ経由のインデックスアクセス
+                if (isPointerAccess && elemType) {
+                    // ポインタ値をloadしてからGEPでインデックスアクセス
+                    llvm::Value* ptrVal = addr;
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                        // allocaからポインタ値をload
+                        // LLVM 14: typed pointerモードでは正しい型でloadする必要がある
+                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                        ptrVal = builder->CreateLoad(allocatedType, addr, "ptr_load");
+                    } else if (llvm::isa<llvm::Argument>(addr)) {
+                        // 関数引数の場合、すでにポインタ値なのでそのまま使用
+                        // loadは不要（SSA形式で渡されている）
+                        ptrVal = addr;
+                    } else if (addr->getType()->isPointerTy()) {
+                        // その他のポインタの場合
+                        ptrVal = builder->CreateLoad(llvm::PointerType::get(elemType, 0), addr,
+                                                     "ptr_load");
+                    }
+
+                    // LLVM 14: typed pointersモードではGEP前にポインタ型をelemTypeのポインタに変換
+                    llvm::Type* elemPtrType = llvm::PointerType::get(elemType, 0);
+                    if (ptrVal->getType() != elemPtrType) {
+                        ptrVal = builder->CreateBitCast(ptrVal, elemPtrType, "ptr_cast");
+                    }
+
+                    // GEPでptr + index*sizeof(elem)を計算
+                    addr = builder->CreateGEP(elemType, ptrVal, indexVal, "elem_ptr");
+
+                    // 次のプロジェクションのために型を更新
+                    if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                        currentType = currentType->element_type;
+                    }
+                    break;
                 }
 
                 if (!arrayType || !arrayType->isArrayTy()) {
@@ -1924,6 +2551,72 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                             "Cannot determine array type for index access",
                                             cm::debug::Level::Error);
                     return nullptr;
+                }
+
+                // 配列アクセスの場合
+                if (!elemType) {
+                    elemType = arrayType->getArrayElementType();
+                }
+
+                // 境界チェック: インデックスが配列サイズ未満かチェック
+                // 負のインデックスも符号なし比較で検出（負数は巨大な正数として扱われる）
+                uint64_t arraySize = arrayType->getArrayNumElements();
+                if (arraySize > 0) {
+                    // 配列サイズをi64で取得
+                    llvm::Value* sizeVal = llvm::ConstantInt::get(ctx.getI64Type(), arraySize);
+
+                    // インデックスをi64に変換（符号なし）
+                    llvm::Value* idxForCheck = indexVal;
+                    if (!indexVal->getType()->isIntegerTy(64)) {
+                        idxForCheck = builder->CreateZExt(indexVal, ctx.getI64Type(), "idx_zext");
+                    }
+
+                    // index < size のチェック（符号なし比較）
+                    llvm::Value* inBounds =
+                        builder->CreateICmpULT(idxForCheck, sizeVal, "bounds_check");
+
+                    // 条件分岐: 範囲内なら続行、範囲外ならパニック
+                    llvm::Function* func = builder->GetInsertBlock()->getParent();
+                    llvm::BasicBlock* continueBlock =
+                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_ok", func);
+                    llvm::BasicBlock* panicBlock =
+                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_fail", func);
+
+                    builder->CreateCondBr(inBounds, continueBlock, panicBlock);
+
+                    // パニックブロック: 境界外アクセスでパニック
+                    builder->SetInsertPoint(panicBlock);
+
+                    // WASMターゲットの場合はabortを呼び出さずunreachableのみ
+                    // （abortはWASMランタイムで未定義のため）
+                    // 注: isWasmTargetはconvert()で一度だけ計算されたキャッシュ値
+
+                    if (!isWasmTarget) {
+                        // ネイティブターゲット: cm_panic関数を呼び出し（ない場合はabortを使用）
+                        llvm::Function* panicFn = module->getFunction("cm_panic");
+                        if (!panicFn) {
+                            panicFn = module->getFunction("abort");
+                            if (!panicFn) {
+                                llvm::FunctionType* abortType = llvm::FunctionType::get(
+                                    llvm::Type::getVoidTy(ctx.getModule().getContext()), false);
+                                panicFn = llvm::Function::Create(
+                                    abortType, llvm::Function::ExternalLinkage, "abort", module);
+                            }
+                        }
+                        if (panicFn->getFunctionType()->getNumParams() > 0) {
+                            // cm_panicはメッセージを取る
+                            llvm::Value* msgPtr = builder->CreateGlobalStringPtr(
+                                "Array index out of bounds", "bounds_error_msg");
+                            builder->CreateCall(panicFn, {msgPtr});
+                        } else {
+                            builder->CreateCall(panicFn);
+                        }
+                    }
+                    // WASM/ネイティブ共通: unreachableで終了
+                    builder->CreateUnreachable();
+
+                    // 続行ブロックに移動
+                    builder->SetInsertPoint(continueBlock);
                 }
 
                 // GEPで配列要素のアドレスを取得

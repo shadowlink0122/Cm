@@ -1,3 +1,5 @@
+[English](mir.en.html)
+
 # MIR (Mid-level Intermediate Representation) 設計
 
 ## 概要

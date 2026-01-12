@@ -1,3 +1,5 @@
+[English](optimized_cpp_codegen.en.html)
+
 # 最適化されたC++コード生成設計
 
 ## 核心原則

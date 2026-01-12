@@ -64,6 +64,7 @@ if(CM_USE_LLVM)
         MC
         MCParser
         MCJIT
+        OrcJIT
         ExecutionEngine
         Target
 
@@ -172,12 +173,19 @@ set(CM_SOURCES
     # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
     src/mir/lowering/impl.cpp
-    src/mir/lowering/monomorphization_impl.cpp  # TODO: Fix compilation errors and re-enable
+    src/mir/lowering/monomorphization_impl.cpp
+    src/mir/lowering/monomorphization_utils.cpp
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt.cpp
     src/mir/lowering/expr_basic.cpp
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
+    # auto_impl (トレイト別自動実装)
+    src/mir/lowering/auto_impl/generator.cpp
+    src/mir/lowering/auto_impl/eq.cpp
+    src/mir/lowering/auto_impl/ord.cpp
+    src/mir/lowering/auto_impl/clone_hash.cpp
+    src/mir/lowering/auto_impl/debug_display_css.cpp
 )
 
 # Add LLVM sources if enabled
@@ -210,15 +218,24 @@ if(CM_USE_LLVM)
         src/codegen/js/control_flow.cpp
         src/codegen/js/emit_statements.cpp
         src/codegen/js/emit_expressions.cpp
+        # JIT backend
+        src/codegen/llvm/jit/jit_engine.cpp
     )
 endif()
 
 add_executable(cm ${CM_SOURCES})
-target_link_libraries(cm cm_frontend)
+target_link_libraries(cm PRIVATE cm_frontend)
 
 # Link LLVM backend if enabled
 if(CM_USE_LLVM)
-    target_link_libraries(cm cm_llvm_backend)
+    target_link_libraries(cm PRIVATE cm_llvm_backend)
+    
+    # Linux: JITがホストプロセスからシンボルを解決できるように
+    # ランタイムシンボル（cm_print_*, cm_format_*など）をエクスポート
+    if(UNIX AND NOT APPLE)
+        set_target_properties(cm PROPERTIES ENABLE_EXPORTS ON)
+        target_link_options(cm PRIVATE "-rdynamic")
+    endif()
     
     # LLVMのホストターゲットを取得
     execute_process(
@@ -231,14 +248,39 @@ if(CM_USE_LLVM)
     # ランタイムライブラリはUnix系でのみビルド（Windows/MSVCは未対応）
     if(NOT WIN32)
         # ランタイムライブラリ用のclangとターゲット設定
-        # 全プラットフォームで--target形式を使用（統一的でシンプル）
-        set(CM_RUNTIME_CLANG "clang")
+        # macOSではシステムclangを使用（Homebrew LLVMはSDK検出に問題がある）
+        if(APPLE)
+            set(CM_RUNTIME_CLANG "/usr/bin/clang")
+        else()
+            set(CM_RUNTIME_CLANG "clang")
+        endif()
         
         if(APPLE)
-            if(LLVM_HOST_TARGET MATCHES "x86_64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin")
-            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin")
+            # macOSではシステムclang（/usr/bin/clang）を使用する場合、
+            # -isysrootは不要（自動検出される）だが、-archフラグは必要
+            # Homebrew LLVMを使用する場合は--targetと-isysrootを明示的に設定
+            if(CM_RUNTIME_CLANG STREQUAL "/usr/bin/clang")
+                # システムclangはSDKを自動検出するので-isysroot不要
+                # ただしアーキテクチャは明示的に指定
+                if(LLVM_HOST_TARGET MATCHES "x86_64")
+                    set(CM_RUNTIME_ARCH_FLAG "-arch;x86_64")
+                elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                    set(CM_RUNTIME_ARCH_FLAG "-arch;arm64")
+                else()
+                    set(CM_RUNTIME_ARCH_FLAG "")
+                endif()
+            else()
+                # Homebrew LLVM clangを使用する場合はSDKパスを明示的に指定
+                execute_process(
+                    COMMAND xcrun --show-sdk-path
+                    OUTPUT_VARIABLE MACOS_SDK_PATH
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                )
+                if(LLVM_HOST_TARGET MATCHES "x86_64")
+                    set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin;-isysroot;${MACOS_SDK_PATH}")
+                elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                    set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin;-isysroot;${MACOS_SDK_PATH}")
+                endif()
             endif()
         else()
             # Linux
@@ -286,6 +328,10 @@ if(CM_USE_LLVM)
 
         add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
         add_dependencies(cm cm_runtime)
+        
+        # ランタイムライブラリをcm実行ファイルにリンク（JIT用）
+        # これによりランタイム関数がホストプロセスのシンボルテーブルに追加される
+        target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
         
         # ランタイムライブラリのパスをコンパイル時に埋め込む
         target_compile_definitions(cm PRIVATE
@@ -354,6 +400,7 @@ if(BUILD_TESTING)
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
+            src/mir/lowering/monomorphization_utils.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
@@ -376,6 +423,7 @@ if(BUILD_TESTING)
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
+            src/mir/lowering/monomorphization_utils.cpp
             src/mir/optimizations/optimization_pipeline.cpp
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})

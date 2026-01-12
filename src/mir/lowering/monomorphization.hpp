@@ -42,26 +42,62 @@ class Monomorphization : public MirLoweringBase {
             return;  // ジェネリック関数がなければ何もしない
         }
 
-        // 特殊化が必要な呼び出しを収集
-        // (関数名, 型引数リスト) -> 呼び出し箇所のリスト
-        std::map<std::pair<std::string, std::vector<std::string>>,
-                 std::vector<std::tuple<std::string, size_t>>>
-            needed;
+        // 反復処理：新しい特殊化が生成されなくなるまで繰り返す
+        // これにより、生成された特殊化関数内のジェネリック呼び出しも処理される
+        std::unordered_set<std::string> all_generated_specializations;
+        const int MAX_ITERATIONS = 10;  // 無限ループ防止
 
-        // 全関数の呼び出しをスキャンして特殊化が必要なものを見つける
-        for (auto& func : program.functions) {
-            if (func) {
-                scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
+        for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {
+            // 特殊化が必要な呼び出しを収集
+            // (関数名, 型引数リスト) -> 呼び出し箇所のリスト
+            std::map<std::pair<std::string, std::vector<std::string>>,
+                     std::vector<std::tuple<std::string, size_t>>>
+                needed;
+
+            // 全関数の呼び出しをスキャンして特殊化が必要なものを見つける
+            for (auto& func : program.functions) {
+                if (func) {
+                    scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
+                }
             }
+
+            // 既に生成済みの特殊化を除外
+            std::map<std::pair<std::string, std::vector<std::string>>,
+                     std::vector<std::tuple<std::string, size_t>>>
+                new_needed;
+            for (const auto& [key, call_sites] : needed) {
+                std::string specialized_name = make_specialized_name(key.first, key.second);
+                if (all_generated_specializations.count(specialized_name) == 0) {
+                    new_needed[key] = call_sites;
+                }
+            }
+
+            if (new_needed.empty()) {
+                debug_msg("MONO", "Iteration " + std::to_string(iteration) +
+                                      ": No new specializations needed");
+                break;  // 新しい特殊化が不要ならループ終了
+            }
+
+            debug_msg("MONO", "Iteration " + std::to_string(iteration) + ": Found " +
+                                  std::to_string(new_needed.size()) +
+                                  " new specializations needed");
+
+            // 特殊化関数を生成
+            generate_generic_specializations(program, hir_functions, new_needed);
+
+            // 生成済みの特殊化を記録
+            for (const auto& [key, _] : new_needed) {
+                std::string specialized_name = make_specialized_name(key.first, key.second);
+                all_generated_specializations.insert(specialized_name);
+            }
+
+            // 呼び出し箇所を書き換え
+            rewrite_generic_calls(program, new_needed);
         }
 
-        debug_msg("MONO", "Found " + std::to_string(needed.size()) + " specializations needed");
-
-        // 特殊化関数を生成
-        generate_generic_specializations(program, hir_functions, needed);
-
-        // 呼び出し箇所を書き換え（Container<int>__print -> Container__int__print）
-        rewrite_generic_calls(program, needed);
+        // ジェネリック関数モノモーフィック化後に再度構造体モノモーフィック化を実行
+        // （ジェネリック関数内で使用される Node<int> などを検出するため）
+        monomorphize_structs(program);
 
         // 構造体メソッド呼び出しのself引数を参照に変更
         // （構造体コピーではなく元の構造体アドレスを渡すように修正）

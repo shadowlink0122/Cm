@@ -1,3 +1,5 @@
+[English](DEVELOPMENT_PRIORITY.en.html)
+
 # Cm言語 開発優先順位とテスト計画
 
 ## 開発順序

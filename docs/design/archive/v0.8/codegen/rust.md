@@ -1,3 +1,5 @@
+[English](rust.en.html)
+
 # Rust Codegen 設計
 
 ## 概要

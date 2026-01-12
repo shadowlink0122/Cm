@@ -17,4 +17,4 @@ export {
     cross,
     normalize
     // magnitude は公開しない（内部使用のみ）
-}
+};

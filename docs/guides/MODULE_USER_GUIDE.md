@@ -1,3 +1,5 @@
+[English](MODULE_USER_GUIDE.en.html)
+
 # Cm言語 モジュールシステム ユーザーガイド
 
 ## 概要
@@ -354,9 +356,9 @@ import ./huge_library/*;  // 名前空間汚染の原因
 
 ## 参考情報
 
-- [モジュールシステム設計文書](../design/MODULE_SYSTEM_FINAL.md)
-- [実装状況](../design/MODULE_IMPLEMENTATION_STATUS.md)
-- [ロードマップ](../../ROADMAP.md)
+- [モジュールシステム設計文書](../design/MODULE_SYSTEM_FINAL.html)
+- [実装状況](../design/MODULE_IMPLEMENTATION_STATUS.html)
+- [ロードマップ](../../ROADMAP.html)
 
 ## 既知の制限
 

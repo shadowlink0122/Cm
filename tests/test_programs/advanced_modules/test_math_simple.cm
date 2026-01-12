@@ -1,0 +1,7 @@
+import std::io::println;
+import ./math;
+
+int main() {
+    println("PI = {math::PI}");
+    return 0;
+}

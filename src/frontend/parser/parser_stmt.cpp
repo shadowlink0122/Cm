@@ -500,7 +500,11 @@ bool Parser::is_type_start() {
                                 i++;
                             }
                         }
-                        if (tokens_[i].kind == TokenKind::Ident) {
+                        // ポインタ型をスキップ: Type<T>* name や Type<T>** name
+                        while (i < tokens_.size() && tokens_[i].kind == TokenKind::Star) {
+                            i++;
+                        }
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
                             return true;
                         }
                     }

@@ -1,0 +1,35 @@
+import std::io::println;
+
+// プリミティブ型へのimpl + メソッド呼び出しテスト
+// impl int for Interface { method() } が動作することを確認
+
+interface Printable {
+    void print();
+}
+
+impl int for Printable {
+    void print() {
+        println("value: {self}");
+    }
+}
+
+interface Addable {
+    int add_ten();
+}
+
+impl int for Addable {
+    int add_ten() {
+        return self + 10;
+    }
+}
+
+int main() {
+    const int x = 42;
+    x.print();  // メソッド呼び出し: "value: 42"
+    
+    const int y = 5;
+    const int result = y.add_ten();  // メソッド呼び出し: 15
+    println("5 + 10 = {result}");
+    
+    return 0;
+}

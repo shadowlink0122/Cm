@@ -1,3 +1,5 @@
+[English](OPTIMIZATION_STATUS.en.html)
+
 # Cm言語 最適化実装状況
 
 **最終更新**: 2026-01-04
@@ -127,10 +129,10 @@ WASMとJavaScriptについては、**基本的な最適化は既に実装済み*
 
 ## 参考資料
 
-- [WASM最適化完全ガイド](WASM_OPTIMIZATION_GUIDE.md) - **WASM最適化の詳細**
-- [プラットフォーム別最適化分析](platform_specific_optimization_analysis.md)
-- [Native/WASM DCE詳細](native_wasm_dce.md)
-- [無限ループ検出設計](infinite_loop_detection.md)
-- [最適化使用方法](usage_guide.md)
-- [ROADMAP.md](../../ROADMAP.md) - Version 1.1.0セクション
+- [WASM最適化完全ガイド](WASM_OPTIMIZATION_GUIDE.html) - **WASM最適化の詳細**
+- [プラットフォーム別最適化分析](platform_specific_optimization_analysis.html)
+- [Native/WASM DCE詳細](native_wasm_dce.html)
+- [無限ループ検出設計](infinite_loop_detection.html)
+- [最適化使用方法](usage_guide.html)
+- [ROADMAP.md](../../ROADMAP.html) - Version 1.1.0セクション
 - [アーカイブ済みドキュメント](archive/) - 実装完了した最適化の記録

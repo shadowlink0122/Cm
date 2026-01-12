@@ -1,3 +1,5 @@
+[English](mir_optimization_survey.en.html)
+
 # MIR最適化の調査メモ（共通最適化の前提）
 
 ## 目的

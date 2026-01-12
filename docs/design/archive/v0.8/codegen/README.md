@@ -1,3 +1,5 @@
+[English](README.en.html)
+
 # Codegen アーキテクチャ
 
 ## 概要
@@ -76,6 +78,6 @@ src/backend/
 
 | ファイル | 内容 |
 |----------|------|
-| [rust.md](rust.md) | Rust変換規則 |
-| [typescript.md](typescript.md) | TypeScript変換、React連携 |
-| [wasm.md](wasm.md) | WASM生成 |
+| [rust.md](rust.html) | Rust変換規則 |
+| [typescript.md](typescript.html) | TypeScript変換、React連携 |
+| [wasm.md](wasm.html) | WASM生成 |

@@ -1,3 +1,5 @@
+[English](STRING_INTERPOLATION_ARCHITECTURE.en.html)
+
 # String Interpolation Architecture Diagram
 
 ## Compilation Pipeline
@@ -363,4 +365,3 @@ std/
 │  Output: Value: 42                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
-

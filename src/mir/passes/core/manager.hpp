@@ -94,13 +94,13 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
             }
             break;
         case 2:
-            max_iterations = 10;  // -O2: 実用的（最大10回）
+            max_iterations = 5;  // -O2: 実用的（最大5回） - 10から削減
             if (debug) {
                 std::cout << "[OPT] -O2: 実用最適化（最大" << max_iterations << "回反復）\n";
             }
             break;
         case 3:
-            max_iterations = 20;  // -O3: 最大（最大20回）- 積極的な最適化
+            max_iterations = 7;  // -O3: 最大（最大7回） - 20から大幅削減
             if (debug) {
                 std::cout << "[OPT] -O3: 最大最適化（最大" << max_iterations << "回反復）\n";
             }

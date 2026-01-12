@@ -1,3 +1,5 @@
+[English](module_system_v4.en.html)
+
 # Cm言語 モジュールシステム v4 設計仕様
 
 ## 概要とv3からの変更点
@@ -398,7 +400,7 @@ class ModuleResolver {
         {"name": "dot", "type": "function", "signature": "float(Vector3, Vector3)"},
         {"name": "PI", "type": "const", "signature": "float", "value": "3.14159265359"}
     ],
-    "timestamp": "2024-01-01T00:00:00Z",
+    "timestamp": "2025-01-01T00:00:00Z",
     "hash": "sha256:..."
 }
 ```
