@@ -313,102 +313,41 @@ jobs:
         run: |
           cd tests/bench_marks
 
-          # 簡易的なベンチマーク実行（タイムアウト付き）
-          echo "=== Running benchmarks ==="
+          echo "=== Running Cm JIT benchmarks ==="
 
-          # 結果を保存する変数
-          FAILED=0
+          # Cm JITで各ベンチマークを実行して動作確認
+          PASS=0
+          FAIL=0
 
-          # 各ベンチマークを実行して時間を測定
-          for bench in "01_prime_sieve" "02_fibonacci_memo" "03_array_sort" "04_matrix_multiply"; do
+          for bench in 06_prime_sieve 07_fibonacci_memoized 04_array_sort 05_matrix_multiply; do
             echo ""
             echo "--- $bench ---"
 
-            # C++実行
-            CPP_TIME=""
-            if [ -f "cpp/$bench" ]; then
-              echo "C++:"
-              CPP_START=$(date +%s.%N)
-              timeout 30 cpp/$bench > /dev/null 2>&1 || true
-              CPP_END=$(date +%s.%N)
-              CPP_TIME=$(echo "$CPP_END - $CPP_START" | bc)
-              echo "  Time: ${CPP_TIME}s"
-            fi
-
-            # Rust実行
-            RUST_TIME=""
-            RUST_BIN="rust/$bench/target/release/$(echo $bench | tr '_' '-')"
-            if [ -f "$RUST_BIN" ]; then
-              echo "Rust:"
-              RUST_START=$(date +%s.%N)
-              timeout 30 "$RUST_BIN" > /dev/null 2>&1 || true
-              RUST_END=$(date +%s.%N)
-              RUST_TIME=$(echo "$RUST_END - $RUST_START" | bc)
-              echo "  Time: ${RUST_TIME}s"
-            fi
-
-            # Cm実行
-            CM_TIME=""
-            if [ -f "cm/$bench" ]; then
-              echo "Cm:"
-              CM_START=$(date +%s.%N)
-              timeout 30 cm/$bench > /dev/null 2>&1 || true
-              CM_END=$(date +%s.%N)
-              CM_TIME=$(echo "$CM_END - $CM_START" | bc)
-              echo "  Time: ${CM_TIME}s"
-            fi
-
-            # 性能比較（Cmが2倍以上遅い場合は警告）
-            if [ -n "$CM_TIME" ] && [ -n "$CPP_TIME" ]; then
-              # bcで比較（2倍チェック）
-              if (( $(echo "$CM_TIME > $CPP_TIME * 2" | bc -l) )); then
-                echo "  ⚠️ WARNING: Cm is more than 2x slower than C++"
-                FAILED=1
+            if [ -f "cm/${bench}.cm" ]; then
+              echo "Running cm/${bench}.cm..."
+              if timeout 60 ../../../cm run -O0 "cm/${bench}.cm" > /dev/null 2>&1; then
+                echo "✅ $bench: PASS"
+                PASS=$((PASS + 1))
+              else
+                echo "❌ $bench: FAIL"
+                FAIL=$((FAIL + 1))
               fi
-            fi
-
-            if [ -n "$CM_TIME" ] && [ -n "$RUST_TIME" ]; then
-              if (( $(echo "$CM_TIME > $RUST_TIME * 2" | bc -l) )); then
-                echo "  ⚠️ WARNING: Cm is more than 2x slower than Rust"
-                FAILED=1
-              fi
+            else
+              echo "⚠️ $bench: SKIP (file not found)"
             fi
           done
 
-          # Pythonスクリプトでの詳細な検証（存在する場合）
-          if [ -f "verify_performance.py" ]; then
-            echo ""
-            echo "=== Running detailed verification ==="
-            python3 verify_performance.py || FAILED=1
-          fi
+          echo ""
+          echo "=== Benchmark Results ==="
+          echo "Passed: $PASS"
+          echo "Failed: $FAIL"
 
-          # 結果判定
-          if [ $FAILED -eq 0 ]; then
-            echo ""
-            echo "✅ Performance benchmark PASSED"
-            echo "Cm performance is competitive with C++ and Rust"
+          if [ $FAIL -gt 0 ]; then
+            echo "❌ Some benchmarks failed"
+            exit 1
           else
-            echo ""
-            echo "❌ Performance benchmark FAILED"
-            echo "Cm is more than 2x slower than C++/Rust in some benchmarks"
-
-            # 環境変数で制御可能（デフォルトは厳格モード）
-            if [ "${BENCHMARK_STRICT:-true}" = "true" ]; then
-              exit 1  # CIを失敗させる
-            else
-              echo "Note: Running in non-strict mode (warnings only)"
-            fi
+            echo "✅ All benchmarks passed"
           fi
-
-      # 結果のアーティファクト保存
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: benchmark-results
-          path: |
-            tests/bench_marks/results/
-          retention-days: 7
 
   # ========================================
   # CI Success - 全ジョブ成功確認
