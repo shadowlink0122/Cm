@@ -14,4 +14,4 @@ services:
     command: >
       sh -c "apt-get update && apt-get install -y build-essential git &&
              bundle install &&
-             bundle exec jekyll serve --host 0.0.0.0 --livereload --force-polling --watch --incremental"
+             bundle exec jekyll serve --host 0.0.0.0 --livereload --force-polling --watch"
