@@ -881,7 +881,7 @@ PY
     }
 
     case "$BACKEND" in
-        interpreter)
+        interpreter|jit)
             # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"

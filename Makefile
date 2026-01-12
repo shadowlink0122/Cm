@@ -626,34 +626,34 @@ tao: test-all-opts
 c: clean
 
 .PHONY: ti
-ti: test-interpreter
+ti: test-jit
 
 .PHONY: tip
-tip: test-interpreter-parallel
+tip: test-jit-parallel
 
 .PHONY: ti0
-ti0: test-interpreter-o0
+ti0: test-jit-o0
 
 .PHONY: ti1
-ti1: test-interpreter-o1
+ti1: test-jit-o1
 
 .PHONY: ti2
-ti2: test-interpreter-o2
+ti2: test-jit-o2
 
 .PHONY: ti3
-ti3: test-interpreter-o3
+ti3: test-jit-o3
 
 .PHONY: tip0
-tip0: test-interpreter-o0-parallel
+tip0: test-jit-o0-parallel
 
 .PHONY: tip1
-tip1: test-interpreter-o1-parallel
+tip1: test-jit-o1-parallel
 
 .PHONY: tip2
-tip2: test-interpreter-o2-parallel
+tip2: test-jit-o2-parallel
 
 .PHONY: tip3
-tip3: test-interpreter-o3-parallel
+tip3: test-jit-o3-parallel
 
 .PHONY: tl
 tl: test-llvm

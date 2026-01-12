@@ -90,7 +90,7 @@ void print_help(const char* program_name) {
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
     std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
-    std::cout << "  --interpreter, -i     インタプリタで実行（JITの代わり）\n\n";
+
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
     std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
@@ -210,8 +210,6 @@ Options parse_options(int argc, char* argv[]) {
             opts.debug_level = arg.substr(3);
             debug::set_debug_mode(true);
             debug::set_level(debug::parse_level(opts.debug_level));
-        } else if (arg == "--interpreter" || arg == "-i") {
-            opts.use_jit = false;
         } else if (arg == "--lang=ja") {
             debug::set_lang(1);
         } else if (arg[0] != '-') {
@@ -573,62 +571,30 @@ int main(int argc, char* argv[]) {
         // ========== Backend ==========
         if (opts.command == Command::Run) {
 #ifdef CM_LLVM_ENABLED
-            // JITモードの場合
-            if (opts.use_jit) {
-                if (opts.verbose) {
-                    std::cout << "=== JIT Compiler ===\n";
-                }
-                cm::codegen::jit::JITEngine jit;
-                // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
-                std::setvbuf(stdout, nullptr, _IONBF, 0);
-                auto result = jit.execute(mir, "main", opts.optimization_level);
-
-                if (!result.success) {
-                    std::cerr << "JIT実行エラー: " << result.errorMessage << "\n";
-                    return 1;
-                }
-
-                if (opts.verbose) {
-                    std::cout << "プログラム終了コード: " << result.exitCode << "\n";
-                    std::cout << "✓ JIT実行完了\n";
-                }
-
-                return result.exitCode;
-            }
-#endif
-            // インタプリタモード
+            // JITコンパイラで実行
             if (opts.verbose) {
-                std::cout << "=== Interpreter ===\n";
+                std::cout << "=== JIT Compiler ===" << std::endl;
             }
-            mir::interp::Interpreter interpreter;
-            auto result = interpreter.execute(mir);
+            cm::codegen::jit::JITEngine jit;
+            // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+            auto result = jit.execute(mir, "main", opts.optimization_level);
 
             if (!result.success) {
-                std::cerr << "実行エラー: " << result.error_message << "\n";
+                std::cerr << "JIT実行エラー: " << result.errorMessage << std::endl;
                 return 1;
             }
 
-            // 戻り値がある場合
-            int exit_code = 0;
-            if (result.return_value.has_value()) {
-                if (result.return_value.type() == typeid(int64_t)) {
-                    exit_code = static_cast<int>(std::any_cast<int64_t>(result.return_value));
-                    if (opts.verbose) {
-                        std::cout << "プログラム終了コード: " << exit_code << "\n";
-                    }
-                } else if (result.return_value.type() == typeid(bool)) {
-                    exit_code = std::any_cast<bool>(result.return_value) ? 1 : 0;
-                    if (opts.verbose) {
-                        std::cout << "プログラム終了コード: " << exit_code << "\n";
-                    }
-                }
-            }
             if (opts.verbose) {
-                std::cout << "✓ 実行完了\n";
+                std::cout << "プログラム終了コード: " << result.exitCode << std::endl;
+                std::cout << "✓ JIT実行完了" << std::endl;
             }
 
-            // プログラムの戻り値を終了コードとして返す
-            return exit_code;
+            return result.exitCode;
+#else
+            std::cerr << "エラー: JITコンパイラが無効です。LLVM対応ビルドが必要です。" << std::endl;
+            return 1;
+#endif
         }
 
         // コンパイルコマンドの場合

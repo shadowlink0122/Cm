@@ -21,7 +21,7 @@ parent: Tutorials
 
 ## 基本的な使い方
 
-### インタプリタで実行
+### JITコンパイラで実行
 
 ```bash
 # 基本形
@@ -51,16 +51,16 @@ echo 'int main() { println("Hello"); return 0; }' | ./build/bin/cm run -
 
 ## サブコマンド
 
-### run - インタプリタで実行
+### run - JITコンパイラで実行
 
 ```bash
 cm run program.cm
 ```
 
 **特徴:**
-- ✅ すぐに実行できる
+- ✅ 高速なJIT実行
 - ✅ デバッグが簡単
-- ❌ 実行速度は遅い
+- ✅ LLVM最適化が効く
 
 ### compile - コンパイル
 
