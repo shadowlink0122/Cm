@@ -85,7 +85,7 @@ fi
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
@@ -130,9 +130,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, typescript, rust, cpp, llvm, llvm-wasm, js"
+    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, js"
     exit 1
 fi
 
@@ -296,6 +296,15 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run --interpreter -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            ;;
+
+        jit)
+            # JITコンパイラで実行（LLVM ORC JIT）
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # JITで実行
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 

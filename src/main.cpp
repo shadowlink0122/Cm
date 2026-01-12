@@ -5,6 +5,7 @@
 
 // LLVM codegen (if enabled)
 #ifdef CM_LLVM_ENABLED
+#include "codegen/llvm/jit/jit_engine.hpp"
 #include "codegen/llvm/monitoring/compilation_guard.hpp"
 #include "codegen/llvm/native/codegen.hpp"
 #endif
@@ -69,6 +70,7 @@ struct Options {
     bool verbose = false;         // デフォルトは静かなモード
     std::string output_file;      // -o オプション
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
+    bool use_jit = true;          // JITコンパイラ使用（デフォルト）
 };
 
 // ヘルプメッセージを表示
@@ -77,7 +79,7 @@ void print_help(const char* program_name) {
     std::cout << "使用方法:\n";
     std::cout << "  " << program_name << " <コマンド> [オプション] <ファイル>\n\n";
     std::cout << "コマンド:\n";
-    std::cout << "  run <file>            プログラムを実行（インタプリタ）\n";
+    std::cout << "  run <file>            プログラムを実行（JIT、デフォルト）\n";
     std::cout << "  compile <file>        プログラムをコンパイル（LLVM）\n";
     std::cout << "  check <file>          構文と型チェックのみ実行\n";
     std::cout << "  help                  このヘルプを表示\n\n";
@@ -87,7 +89,8 @@ void print_help(const char* program_name) {
     std::cout << "  --verbose, -v         詳細な出力を表示\n";
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
-    std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n\n";
+    std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
+    std::cout << "  --interpreter, -i     インタプリタで実行（JITの代わり）\n\n";
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
     std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
@@ -207,6 +210,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.debug_level = arg.substr(3);
             debug::set_debug_mode(true);
             debug::set_level(debug::parse_level(opts.debug_level));
+        } else if (arg == "--interpreter" || arg == "-i") {
+            opts.use_jit = false;
         } else if (arg == "--lang=ja") {
             debug::set_lang(1);
         } else if (arg[0] != '-') {
@@ -567,6 +572,31 @@ int main(int argc, char* argv[]) {
 
         // ========== Backend ==========
         if (opts.command == Command::Run) {
+#ifdef CM_LLVM_ENABLED
+            // JITモードの場合
+            if (opts.use_jit) {
+                if (opts.verbose) {
+                    std::cout << "=== JIT Compiler ===\n";
+                }
+                cm::codegen::jit::JITEngine jit;
+                // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
+                std::setvbuf(stdout, nullptr, _IONBF, 0);
+                auto result = jit.execute(mir, "main", opts.optimization_level);
+
+                if (!result.success) {
+                    std::cerr << "JIT実行エラー: " << result.errorMessage << "\n";
+                    return 1;
+                }
+
+                if (opts.verbose) {
+                    std::cout << "プログラム終了コード: " << result.exitCode << "\n";
+                    std::cout << "✓ JIT実行完了\n";
+                }
+
+                return result.exitCode;
+            }
+#endif
+            // インタプリタモード
             if (opts.verbose) {
                 std::cout << "=== Interpreter ===\n";
             }

@@ -64,6 +64,7 @@ if(CM_USE_LLVM)
         MC
         MCParser
         MCJIT
+        OrcJIT
         ExecutionEngine
         Target
 
@@ -217,15 +218,17 @@ if(CM_USE_LLVM)
         src/codegen/js/control_flow.cpp
         src/codegen/js/emit_statements.cpp
         src/codegen/js/emit_expressions.cpp
+        # JIT backend
+        src/codegen/llvm/jit/jit_engine.cpp
     )
 endif()
 
 add_executable(cm ${CM_SOURCES})
-target_link_libraries(cm cm_frontend)
+target_link_libraries(cm PRIVATE cm_frontend)
 
 # Link LLVM backend if enabled
 if(CM_USE_LLVM)
-    target_link_libraries(cm cm_llvm_backend)
+    target_link_libraries(cm PRIVATE cm_llvm_backend)
     
     # LLVMのホストターゲットを取得
     execute_process(
@@ -293,6 +296,10 @@ if(CM_USE_LLVM)
 
         add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
         add_dependencies(cm cm_runtime)
+        
+        # ランタイムライブラリをcm実行ファイルにリンク（JIT用）
+        # これによりランタイム関数がホストプロセスのシンボルテーブルに追加される
+        target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
         
         # ランタイムライブラリのパスをコンパイル時に埋め込む
         target_compile_definitions(cm PRIVATE

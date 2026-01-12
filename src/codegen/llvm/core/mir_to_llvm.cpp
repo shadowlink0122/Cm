@@ -376,12 +376,13 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     }
 
-    // main関数にはoptnone属性を追加
-    // LLVMの最適化がcontrol flowを破壊するのを防ぐ
-    if (func.name == "main") {
-        llvmFunc->addFnAttr(llvm::Attribute::NoInline);
-        llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
-    }
+    // main関数には以前optnone属性を追加していたが、
+    // これはパフォーマンス上重大な問題を引き起こす（バブルソート1000要素が終わらない等）
+    // control flowの問題は別途対処する必要がある
+    // if (func.name == "main") {
+    //     llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+    //     llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
+    // }
 
     // パラメータ名設定
     size_t idx = 0;
@@ -2517,6 +2518,10 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         // LLVM 14: typed pointerモードでは正しい型でloadする必要がある
                         llvm::Type* allocatedType = allocaInst->getAllocatedType();
                         ptrVal = builder->CreateLoad(allocatedType, addr, "ptr_load");
+                    } else if (llvm::isa<llvm::Argument>(addr)) {
+                        // 関数引数の場合、すでにポインタ値なのでそのまま使用
+                        // loadは不要（SSA形式で渡されている）
+                        ptrVal = addr;
                     } else if (addr->getType()->isPointerTy()) {
                         // その他のポインタの場合
                         ptrVal = builder->CreateLoad(llvm::PointerType::get(elemType, 0), addr,

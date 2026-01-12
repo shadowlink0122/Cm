@@ -31,7 +31,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 RESULT_FILE="$RESULTS_DIR/individual_results_${TIMESTAMP}.csv"
 
 # CSV ヘッダー
-echo "Algorithm,Python,Cm(Interp),C++,Rust,Cm(Native)" > "$RESULT_FILE"
+echo "Algorithm,Python,Cm(JIT),C++,Rust,Cm(Native)" > "$RESULT_FILE"
 
 # ベンチマーク名
 declare -a BENCHMARKS=(
@@ -129,7 +129,7 @@ run_benchmark() {
     echo -e "\n${CYAN}=== $display_name ===${NC}"
 
     local python_time="-"
-    local cm_interp_time="-"
+    local cm_jit_time="-"
     local cpp_time="-"
     local rust_time="-"
     local cm_native_time="-"
@@ -143,14 +143,14 @@ run_benchmark() {
         fi
     fi
 
-    # Cm Interpreter
+    # Cm JIT
     if [ -f "$SCRIPT_DIR/cm/${bench_name}.cm" ] && [ -f "$CM_ROOT/cm" ]; then
-        echo -n "Cm (Interp)...  "
-        cm_interp_time=$(measure_time "$CM_ROOT/cm" run "$SCRIPT_DIR/cm/${bench_name}.cm" 2>/dev/null)
-        if [ "$cm_interp_time" = "-" ]; then
+        echo -n "Cm (JIT)...     "
+        cm_jit_time=$(measure_time "$CM_ROOT/cm" run "$SCRIPT_DIR/cm/${bench_name}.cm" 2>/dev/null)
+        if [ "$cm_jit_time" = "-" ]; then
             echo "TIMEOUT"
         else
-            printf "%8.4f s\n" "$cm_interp_time"
+            printf "%8.4f s\n" "$cm_jit_time"
         fi
     fi
 
@@ -176,15 +176,15 @@ run_benchmark() {
     fi
 
     # CSV に記録
-    echo "$display_name,$python_time,$cm_interp_time,$cpp_time,$rust_time,$cm_native_time" >> "$RESULT_FILE"
+    echo "$display_name,$python_time,$cm_jit_time,$cpp_time,$rust_time,$cm_native_time" >> "$RESULT_FILE"
 
     # 速度比較
     echo -e "${GREEN}Speed comparison:${NC}"
 
-    # Python vs Cm Interpreter
-    if [ "$python_time" != "-" ] && [ "$cm_interp_time" != "-" ]; then
-        ratio=$(echo "scale=2; $python_time / $cm_interp_time" | bc)
-        echo "  Cm Interp vs Python: ${ratio}x"
+    # Python vs Cm JIT
+    if [ "$python_time" != "-" ] && [ "$cm_jit_time" != "-" ]; then
+        ratio=$(echo "scale=2; $python_time / $cm_jit_time" | bc)
+        echo "  Cm JIT vs Python: ${ratio}x"
     fi
 
     # C++ vs Cm Native
@@ -218,7 +218,7 @@ main() {
 
     # 結果テーブルの表示
     echo ""
-    echo "Algorithm                    | Python  | Cm(Int) | C++     | Rust    | Cm(Nat)"
+    echo "Algorithm                    | Python  | Cm(JIT) | C++     | Rust    | Cm(Nat)"
     echo "-----------------------------|---------|---------|---------|---------|--------"
 
     # CSVから読み込んで整形表示
@@ -235,9 +235,9 @@ main() {
     echo -e "${YELLOW}=== Performance Analysis ===${NC}"
     echo ""
 
-    echo "Interpreter Performance (vs Python):"
+    echo "JIT Performance (vs Python):"
     echo "  - Best case: Look for ratios > 1.0 (Cm faster)"
-    echo "  - Current focus: Functionality over speed"
+    echo "  - LLVM ORC JIT for fast startup"
     echo ""
 
     echo "Native Performance (vs C++/Rust):"

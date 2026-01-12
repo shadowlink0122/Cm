@@ -760,11 +760,41 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         }
                         // プリミティブ型への借用self: ポインタ化
                         else if (expectedType->isPointerTy() && !actualType->isPointerTy()) {
-                            auto alloca =
-                                builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
-                            builder->CreateStore(args[i], alloca);
-                            // ポインタ型をexpectedType（ptr/i8*）に変換
-                            args[i] = builder->CreateBitCast(alloca, expectedType);
+                            // 配列型の場合、配列の先頭要素へのポインタを取得
+                            // （コピーを避けてバッファへのポインタを渡す）
+                            if (actualType->isArrayTy()) {
+                                // args[i]がLoadInstの場合、元のallocaからGEPを取得
+                                if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(args[i])) {
+                                    auto* sourcePtr = loadInst->getPointerOperand();
+                                    // 配列の先頭要素へのポインタを取得
+                                    auto* zero = llvm::ConstantInt::get(ctx.getContext(),
+                                                                        llvm::APInt(64, 0));
+                                    auto* elemPtr = builder->CreateGEP(actualType, sourcePtr,
+                                                                       {zero, zero}, "arr_ptr");
+                                    args[i] = builder->CreateBitCast(elemPtr, expectedType);
+                                } else if (auto* allocaInst =
+                                               llvm::dyn_cast<llvm::AllocaInst>(args[i])) {
+                                    // allocaの場合、直接GEPを使用
+                                    auto* zero = llvm::ConstantInt::get(ctx.getContext(),
+                                                                        llvm::APInt(64, 0));
+                                    auto* elemPtr = builder->CreateGEP(actualType, allocaInst,
+                                                                       {zero, zero}, "arr_ptr");
+                                    args[i] = builder->CreateBitCast(elemPtr, expectedType);
+                                } else {
+                                    // その他の場合は従来通りallocaを使用（フォールバック）
+                                    auto alloca =
+                                        builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
+                                    builder->CreateStore(args[i], alloca);
+                                    args[i] = builder->CreateBitCast(alloca, expectedType);
+                                }
+                            } else {
+                                // プリミティブ型の場合は従来通り
+                                auto alloca =
+                                    builder->CreateAlloca(actualType, nullptr, "prim_arg_tmp");
+                                builder->CreateStore(args[i], alloca);
+                                // ポインタ型をexpectedType（ptr/i8*）に変換
+                                args[i] = builder->CreateBitCast(alloca, expectedType);
+                            }
                         }
                         // 構造体値渡し: ポインタから値型への変換（小さな構造体のC ABI対応）
                         else if (!expectedType->isPointerTy() && actualType->isPointerTy() &&
