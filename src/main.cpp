@@ -11,7 +11,6 @@
 #endif
 
 // JavaScript codegen
-#include "codegen/interpreter/interpreter.hpp"
 #include "codegen/js/codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
@@ -402,7 +401,7 @@ int main(int argc, char* argv[]) {
         {
             Target active_target = Target::Native;
             if (opts.command == Command::Run) {
-                active_target = Target::Interpreter;
+                active_target = Target::Native;  // JIT uses native target
             } else if (!opts.target.empty()) {
                 active_target = string_to_target(opts.target);
             } else if (opts.emit_js) {

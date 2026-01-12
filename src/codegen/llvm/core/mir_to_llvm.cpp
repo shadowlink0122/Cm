@@ -554,7 +554,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         locals.clear();
         blocks.clear();
         allocatedLocals.clear();
-        heapAllocatedLocals.clear();
+        // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
@@ -704,20 +704,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
                     auto llvmType = convertType(allocType);
 
-                    // 大きな固定長配列のヒープ割り当て判定
-                    bool useHeapAlloc = false;
-                    size_t arrayTotalSize = 0;
-                    if (allocType->kind == hir::TypeKind::Array &&
-                        allocType->array_size.has_value() && allocType->should_use_heap()) {
-                        useHeapAlloc = true;
-                        // 配列の総サイズを計算
-                        if (allocType->element_type) {
-                            auto elemInfo = allocType->element_type->info();
-                            size_t elemSize = elemInfo.size > 0 ? elemInfo.size : 8;
-                            arrayTotalSize = elemSize * allocType->array_size.value();
-                        }
-                    }
-
+                    // ベアメタル対応: すべての配列はスタックに割り当て（ヒープ不使用）
                     // static変数はグローバル変数として作成
                     if (local.is_static) {
                         std::string staticKey = func.name + "_" + local.name;
@@ -734,26 +721,6 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                             locals[i] = it->second;
                         }
                         allocatedLocals.insert(i);  // グローバル変数もallocated扱い
-                    } else if (useHeapAlloc) {
-                        // 大きな配列はヒープに割り当て
-                        auto mallocFunc = declareExternalFunction("malloc");
-                        auto sizeVal = llvm::ConstantInt::get(ctx.getI64Type(), arrayTotalSize);
-                        auto heapPtr = builder->CreateCall(mallocFunc, {sizeVal},
-                                                           "heap_array_" + std::to_string(i));
-
-                        // ポインタを格納するためのallocaを作成（不透明ポインタを使用）
-                        auto ptrAlloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
-                                                               "array_ref_" + std::to_string(i));
-                        builder->CreateStore(heapPtr, ptrAlloca);
-
-                        // ゼロ初期化
-                        auto memsetFunc = declareExternalFunction("memset");
-                        auto zeroVal = llvm::ConstantInt::get(ctx.getI32Type(), 0);
-                        builder->CreateCall(memsetFunc, {heapPtr, zeroVal, sizeVal});
-
-                        locals[i] = ptrAlloca;  // ポインタのallocaを保存
-                        allocatedLocals.insert(i);
-                        heapAllocatedLocals.insert(i);  // ヒープ割り当てを記録（後で解放のため）
                     } else {
                         auto alloca =
                             builder->CreateAlloca(llvmType, nullptr, "local_" + std::to_string(i));

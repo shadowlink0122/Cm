@@ -70,13 +70,13 @@ vendor/bundle/
 # Benchmark binaries and results
 tests/bench_marks/results/
 tests/bench_marks/cm/*_native
-tests/bench_marks/cpp/01_prime
-tests/bench_marks/cpp/02_fibonacci_recursive
-tests/bench_marks/cpp/03_fibonacci_iterative
-tests/bench_marks/cpp/04_array_sort
-tests/bench_marks/cpp/05_matrix_multiply
-tests/bench_marks/cpp/06_prime_sieve
-tests/bench_marks/cpp/07_fibonacci_memoized
+tests/bench_marks/cpp/01_*[!.cpp]
+tests/bench_marks/cpp/02_*[!.cpp]
+tests/bench_marks/cpp/03_*[!.cpp]
+tests/bench_marks/cpp/04_*[!.cpp]
+tests/bench_marks/cpp/05_*[!.cpp]
+tests/bench_marks/cpp/06_*[!.cpp]
+tests/bench_marks/cpp/07_*[!.cpp]
 tests/bench_marks/rust/target/
 tests/bench_marks/rust/Cargo.lock
 tests/bench_marks/python/__pycache__/

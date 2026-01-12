@@ -3,7 +3,7 @@
 
 namespace cm {
 
-enum class Target { Native, Wasm, JS, Web, Interpreter };
+enum class Target { Native, Wasm, JS, Web };
 
 inline Target string_to_target(const std::string& s) {
     if (s == "wasm")
@@ -12,8 +12,6 @@ inline Target string_to_target(const std::string& s) {
         return Target::JS;
     if (s == "web")
         return Target::Web;
-    if (s == "intr")
-        return Target::Interpreter;
     return Target::Native;
 }
 
@@ -25,8 +23,6 @@ inline std::string target_to_string(Target t) {
             return "js";
         case Target::Web:
             return "web";
-        case Target::Interpreter:
-            return "intr";
         default:
             return "native";
     }

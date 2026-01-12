@@ -31,8 +31,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             break;
         }
         case mir::MirTerminator::Return: {
-            // ヒープ割り当てされたローカル変数を解放
-            freeHeapAllocatedLocals();
+            // NOTE: ベアメタル対応 - スタック配列は関数終了時に自動解放
 
             if (currentMIRFunction->name == "main") {
                 // main関数は常にi32を返す
@@ -1095,12 +1094,10 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     auto& returnLocal =
                         currentMIRFunction->locals[currentMIRFunction->return_local];
                     if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
-                        // ヒープ割り当てされたローカル変数を解放
-                        freeHeapAllocatedLocals();
+                        // ベアメタル対応 - スタック配列は自動解放
                         builder->CreateRetVoid();
                     } else if (currentMIRFunction->name == "main") {
-                        // ヒープ割り当てされたローカル変数を解放
-                        freeHeapAllocatedLocals();
+                        // ベアメタル対応 - スタック配列は自動解放
                         // main関数はi32 0を返す
                         builder->CreateRet(llvm::ConstantInt::get(ctx.getI32Type(), 0));
                     } else {
@@ -1112,8 +1109,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                 retVal = builder->CreateLoad(allocaInst->getAllocatedType(), retVal,
                                                              "retval");
                             }
-                            // ヒープ割り当てされたローカル変数を解放
-                            freeHeapAllocatedLocals();
+                            // ベアメタル対応 - スタック配列は自動解放
                             builder->CreateRet(retVal);
                         } else {
                             builder->CreateUnreachable();

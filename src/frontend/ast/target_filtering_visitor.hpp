@@ -164,8 +164,6 @@ class TargetFilteringVisitor {
             return Target::JS;
         if (s == "web")
             return Target::Web;
-        if (s == "intr")
-            return Target::Interpreter;
         return Target::Native;
     }
 

@@ -126,6 +126,9 @@ struct Type {
     // 配列用: 定数パラメータによるサイズ指定（const N: intを使用）
     std::string size_param_name;
 
+    // 多次元配列用: 各次元のサイズ（例: int[10][20] → {10, 20}）
+    std::vector<uint32_t> dimensions;
+
     // ユーザー定義型/ジェネリック用: 型名
     std::string name;
 
@@ -172,6 +175,32 @@ struct Type {
         }
         // TODO: 構造体サイズ計算
         return {0, 1};
+    }
+
+    // 多次元配列かどうか判定
+    bool is_multidim_array() const { return kind == TypeKind::Array && dimensions.size() >= 2; }
+
+    // フラット化されたサイズを取得
+    uint32_t get_flattened_size() const {
+        if (!dimensions.empty()) {
+            uint32_t total = 1;
+            for (auto d : dimensions) {
+                total *= d;
+            }
+            return total;
+        }
+        return array_size.value_or(1);
+    }
+
+    // 最終要素型を取得（多次元配列の基底要素型）
+    TypePtr get_base_element_type() const {
+        if (kind != TypeKind::Array)
+            return nullptr;
+        TypePtr current = element_type;
+        while (current && current->kind == TypeKind::Array && current->element_type) {
+            current = current->element_type;
+        }
+        return current;
     }
 };
 
