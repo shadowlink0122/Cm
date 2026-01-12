@@ -1,3 +1,8 @@
+---
+layout: default
+title: Contributing
+---
+
 [English](CONTRIBUTING.en.html)
 
 # Contributing to Cm

@@ -1,3 +1,8 @@
+---
+layout: default
+title: Quick Start
+---
+
 [English](QUICKSTART.en.html)
 
 # Cm言語コンパイラ - クイックスタート

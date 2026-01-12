@@ -52,8 +52,8 @@ int main() {
 | **Clone** | Deep Copy | `.clone()` | ✅ Complete |
 | **Hash** | Hashing | `.hash()` | ✅ Complete |
 | **Copy** | Bitwise Copy | (Implicit copy) | ✅ Marker |
-| **Debug** | Debug Output | `.debug()` | ⬜ v0.10.0 |
-| **Display** | Stringify | `.toString()` | ⬜ v0.10.0 |
+| **Debug** | Debug Output | `.debug()` | ⬜ Future |
+| **Display** | Stringify | `.toString()` | ⬜ Future |
 
 ---
 

@@ -195,8 +195,8 @@ int main() {
 
 ## 関連リンク
 
-- [switch文](../../basics/control-flow.html)
-- [match式](../../advanced/match.html)
+- [switch文](../basics/control-flow.html)
+- [match式](../advanced/match.html)
 - [構造体](structs.html)
 
 ---

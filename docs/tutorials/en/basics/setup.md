@@ -319,7 +319,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 ## Related Links
 
-- [Project Structure](../../../PROJECT_STRUCTURE.html)
+- [Project Structure](../../PROJECT_STRUCTURE.html)
 - [Compiler Usage](../compiler/usage.html)
 
 ---

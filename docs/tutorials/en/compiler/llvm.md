@@ -17,7 +17,7 @@ parent: Tutorials
 - Advanced optimization
 - Debug information generation
 
-## Support Status (v0.10.0)
+## Support Status
 
 | Feature | Status |
 |---------|--------|
@@ -29,7 +29,7 @@ parent: Tutorials
 | Interfaces | ✅ Complete |
 | match | ✅ Complete |
 | with | ✅ Complete |
-| typedef pointers | ⚠️ Planned v0.10.0 |
+| typedef pointers | ⚠️ Future implementation |
 
 ## Compilation Examples
 

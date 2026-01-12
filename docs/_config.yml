@@ -20,6 +20,8 @@ include:
   - README.md
   - tutorials
   - releases
+  - tutorials/**/*.md
+  - tutorials/**/*.html
 
 # Exclude files
 exclude:
@@ -57,6 +59,14 @@ titles_from_headings:
 readme_index:
   enabled: true
   remove_originals: false
+
+# Watch for changes
+watch: true
+livereload: true
+livereload_port: 35729
+livereload_ignore:
+  - .git
+  - node_modules
 
 # Defaults
 defaults:

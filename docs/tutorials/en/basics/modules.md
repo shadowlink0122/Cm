@@ -217,7 +217,7 @@ import ./utils::internal_helper;
 
 ## Related Links
 
-- [Project Structure](../../../PROJECT_STRUCTURE.html)
+- [Project Structure](../../PROJECT_STRUCTURE.html)
 - FFI (Japanese only)
 
 ---

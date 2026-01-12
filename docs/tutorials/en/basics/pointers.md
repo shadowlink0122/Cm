@@ -307,7 +307,7 @@ int main() {
 ## Related Links
 
 - [Arrays](arrays.html)
-- [Memory Management](../../../guides/memory.html)
+- [Memory Management](../../guides/memory.html)
 
 ---
 

@@ -1,3 +1,8 @@
+---
+layout: default
+title: Project Structure
+---
+
 [English](PROJECT_STRUCTURE.en.html)
 
 # Cm言語 プロジェクト構造

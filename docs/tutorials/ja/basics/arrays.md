@@ -253,7 +253,7 @@ matrix[i][j] = value;
 ## 関連ドキュメント
 
 - [ポインタ](pointers.html) - ポインタ操作
-- [for-in構文](../../../guides/control-flow.html) - 範囲ベースループ
+- [for-in構文](../../guides/control-flow.html) - 範囲ベースループ
 - メソッド一覧 - 配列メソッド詳細
 
 ---

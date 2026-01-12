@@ -50,8 +50,8 @@ int main() {
 | **Clone** | 深いコピー | `.clone()` | ✅ 完全実装 |
 | **Hash** | ハッシュ計算 | `.hash()` | ✅ 完全実装 |
 | **Copy** | ビット単位コピー | （暗黙コピー） | ✅ マーカー |
-| **Debug** | デバッグ出力 | `.debug()` | ⬜ v0.10.0予定 |
-| **Display** | 文字列化 | `.toString()` | ⬜ v0.10.0予定 |
+| **Debug** | デバッグ出力 | `.debug()` | ⬜ 今後の実装予定 |
+| **Display** | 文字列化 | `.toString()` | ⬜ 今後の実装予定 |
 
 ## Eq - 等価比較
 
@@ -369,8 +369,8 @@ impl Person for Eq {
 | Ord | ✅ | ✅ | ✅ |
 | Clone | ✅ | ✅ | ✅ |
 | Hash | ✅ | ✅ | ✅ |
-| Debug | ⬜ v0.10.0 | ⬜ v0.10.0 | ⬜ v0.10.0 |
-| Display | ⬜ v0.10.0 | ⬜ v0.10.0 | ⬜ v0.10.0 |
+| Debug | ⬜ 未実装 | ⬜ 未実装 | ⬜ 未実装 |
+| Display | ⬜ 未実装 | ⬜ 未実装 | ⬜ 未実装 |
 
 ## サンプルコード
 
@@ -384,7 +384,7 @@ impl Person for Eq {
 
 - [インターフェース](../types/interfaces.html) - interface/impl構文
 - [演算子オーバーロード](../advanced/operators.html) - operator実装
-- [正式言語仕様](../../../design/CANONICAL_SPEC.html) - with構文の仕様
+- [正式言語仕様](../../design/CANONICAL_SPEC.html) - with構文の仕様
 
 ---
 

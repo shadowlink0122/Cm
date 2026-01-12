@@ -16,7 +16,7 @@ parent: Tutorials
 - Browser execution
 - Serverless environment support
 
-## Support Status (v0.10.0)
+## Support Status
 
 | Feature | Status |
 |---------|--------|

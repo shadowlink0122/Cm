@@ -57,6 +57,7 @@ pinned->method();        // -> 演算子
 ### 4. マクロ構文の簡略化 ✅
 
 **改訂前（Rust風）:**
+{% raw %}
 ```rust
 macro_rules! vec {
     () => { Vec::new() };
@@ -67,8 +68,10 @@ macro_rules! vec {
     }};
 }
 ```
+{% endraw %}
 
 **改訂後（Cm風）:**
+{% raw %}
 ```cm
 macro vec {
     () => { Vector<int>() };
@@ -80,6 +83,7 @@ macro vec {
     }};
 }
 ```
+{% endraw %}
 
 ## 設計改善のポイント
 

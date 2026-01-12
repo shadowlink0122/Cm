@@ -1,3 +1,8 @@
+---
+layout: default
+title: Development
+---
+
 [English](DEVELOPMENT.en.html)
 
 # 開発環境ガイド

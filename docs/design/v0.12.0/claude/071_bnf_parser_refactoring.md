@@ -746,10 +746,10 @@ def generate_parser(bnf_file, output_file):
 
 def generate_parse_function(rule):
     return f"""
-    ASTNodePtr parse_{rule.name}() {{
+    ASTNodePtr parse_{rule.name}() {
         // Generated from: {rule.definition}
         {generate_parsing_code(rule)}
-    }}
+    }
     """
 ```
 

@@ -205,9 +205,9 @@ match (status) {
 
 ## 関連リンク
 
-- [正式言語仕様](../../../design/CANONICAL_SPEC.html)
+- [正式言語仕様](../../design/CANONICAL_SPEC.html)
 - [ロードマップ](https://github.com/shadowlink0122/Cm/blob/main/ROADMAP.md)
-- [リリースノート](../../../releases/v0.10.0.html)
+- [リリースノート](../../releases/v0.10.0.html)
 
 ---
 
