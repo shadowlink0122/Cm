@@ -245,10 +245,18 @@ if(CM_USE_LLVM)
         set(CM_RUNTIME_CLANG "clang")
         
         if(APPLE)
+            # macOSではSDKパスを検出してsysrootを設定（Homebrew LLVMに必要）
+            execute_process(
+                COMMAND xcrun --show-sdk-path
+                OUTPUT_VARIABLE MACOS_SDK_PATH
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+            set(CM_RUNTIME_SYSROOT_FLAG "-isysroot ${MACOS_SDK_PATH}")
+            
             if(LLVM_HOST_TARGET MATCHES "x86_64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin")
+                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin ${CM_RUNTIME_SYSROOT_FLAG}")
             elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin")
+                set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin ${CM_RUNTIME_SYSROOT_FLAG}")
             endif()
         else()
             # Linux
