@@ -256,18 +256,31 @@ if(CM_USE_LLVM)
         endif()
         
         if(APPLE)
-            # macOSではSDKパスを検出してsysrootを設定（Homebrew LLVMに必要）
-            execute_process(
-                COMMAND xcrun --show-sdk-path
-                OUTPUT_VARIABLE MACOS_SDK_PATH
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-            set(CM_RUNTIME_SYSROOT_FLAG "-isysroot ${MACOS_SDK_PATH}")
-            
-            if(LLVM_HOST_TARGET MATCHES "x86_64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin ${CM_RUNTIME_SYSROOT_FLAG}")
-            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin ${CM_RUNTIME_SYSROOT_FLAG}")
+            # macOSではシステムclang（/usr/bin/clang）を使用する場合、
+            # -isysrootは不要（自動検出される）だが、-archフラグは必要
+            # Homebrew LLVMを使用する場合は--targetと-isysrootを明示的に設定
+            if(CM_RUNTIME_CLANG STREQUAL "/usr/bin/clang")
+                # システムclangはSDKを自動検出するので-isysroot不要
+                # ただしアーキテクチャは明示的に指定
+                if(LLVM_HOST_TARGET MATCHES "x86_64")
+                    set(CM_RUNTIME_ARCH_FLAG "-arch;x86_64")
+                elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                    set(CM_RUNTIME_ARCH_FLAG "-arch;arm64")
+                else()
+                    set(CM_RUNTIME_ARCH_FLAG "")
+                endif()
+            else()
+                # Homebrew LLVM clangを使用する場合はSDKパスを明示的に指定
+                execute_process(
+                    COMMAND xcrun --show-sdk-path
+                    OUTPUT_VARIABLE MACOS_SDK_PATH
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                )
+                if(LLVM_HOST_TARGET MATCHES "x86_64")
+                    set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin;-isysroot;${MACOS_SDK_PATH}")
+                elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                    set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin;-isysroot;${MACOS_SDK_PATH}")
+                endif()
             endif()
         else()
             # Linux

@@ -1,0 +1,34 @@
+// 構造体スライスフィールドのテスト
+// - 構造体リテラル内の配列リテラル初期化
+// - 構造体メンバースライスへのメソッドチェーン
+
+struct Container {
+    int[] values;
+    string name;
+}
+
+int main() {
+    println("=== Struct Slice Test ===");
+    
+    // テスト1: 構造体リテラル内の配列リテラル初期化
+    Container c = Container{values: [10, 20, 30], name: "test"};
+    println("c.name = {c.name}");
+    println("c.values[0] = {c.values[0]}");
+    println("c.values[1] = {c.values[1]}");
+    println("c.values[2] = {c.values[2]}");
+    
+    // テスト2: 構造体メンバースライスのlen()（補間内で直接呼び出し）
+    println("c.values.len() = {c.values.len()}");
+    
+    // テスト3: 構造体メンバースライスへのpush
+    c.values.push(40);
+    println("After push: c.values.len() = {c.values.len()}");
+    println("c.values[3] = {c.values[3]}");
+    
+    // テスト4: ローカル変数経由でのアクセス
+    int[] v = c.values;
+    println("v.len() = {v.len()}");
+    
+    println("=== All Tests Passed ===");
+    return 0;
+}

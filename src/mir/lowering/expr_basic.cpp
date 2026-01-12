@@ -804,16 +804,136 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
 
     // 各フィールドを初期化（名前付き初期化のみ）
     for (const auto& field : lit.fields) {
-        // フィールド値をlower
-        LocalId field_value = lower_expression(*field.value, ctx);
-
         // フィールドインデックスを名前から検索
         size_t field_idx = 0;
+        hir::TypePtr field_type = nullptr;
         if (struct_def) {
             auto idx = ctx.get_field_index(lit.type_name, field.name);
             if (idx) {
                 field_idx = *idx;
+                if (*idx < struct_def->fields.size()) {
+                    field_type = struct_def->fields[*idx].type;
+                }
             }
+        }
+
+        // スライスフィールドへの配列リテラル代入をチェック
+        bool is_slice_field = field_type && field_type->kind == hir::TypeKind::Array &&
+                              !field_type->array_size.has_value();
+
+        bool is_array_literal = false;
+        const hir::HirArrayLiteral* arr_lit = nullptr;
+        if (auto* arr_lit_ptr =
+                std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&field.value->kind)) {
+            if (*arr_lit_ptr) {
+                is_array_literal = true;
+                arr_lit = arr_lit_ptr->get();
+            }
+        }
+
+        LocalId field_value;
+
+        if (is_slice_field && is_array_literal && arr_lit) {
+            // 配列リテラルからスライスを作成
+            hir::TypePtr elem_type =
+                field_type->element_type ? field_type->element_type : hir::make_int();
+
+            // 要素サイズを取得
+            int64_t elem_size = 4;  // デフォルトはint
+            auto elem_kind = elem_type->kind;
+            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                elem_size = 1;
+            } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
+                elem_size = 2;
+            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
+                       elem_kind == hir::TypeKind::Double) {
+                elem_size = 8;
+            } else if (elem_kind == hir::TypeKind::Float) {
+                elem_size = 4;
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
+                       elem_kind == hir::TypeKind::Struct) {
+                elem_size = 8;
+            }
+
+            // スライス用の一時変数を作成
+            field_value = ctx.new_temp(field_type);
+
+            // cm_slice_new(elem_size, initial_capacity) を呼び出し
+            LocalId elem_size_local = ctx.new_temp(hir::make_long());
+            MirConstant elem_size_const;
+            elem_size_const.value = static_cast<int64_t>(elem_size);
+            elem_size_const.type = hir::make_long();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{elem_size_local}, MirRvalue::use(MirOperand::constant(elem_size_const))));
+
+            LocalId init_cap_local = ctx.new_temp(hir::make_long());
+            MirConstant init_cap_const;
+            init_cap_const.value = static_cast<int64_t>(arr_lit->elements.size());
+            init_cap_const.type = hir::make_long();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{init_cap_local}, MirRvalue::use(MirOperand::constant(init_cap_const))));
+
+            // cm_slice_new呼び出し
+            BlockId new_block = ctx.new_block();
+            std::vector<MirOperandPtr> new_args;
+            new_args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
+            new_args.push_back(MirOperand::copy(MirPlace{init_cap_local}));
+
+            auto new_term = std::make_unique<MirTerminator>();
+            new_term->kind = MirTerminator::Call;
+            new_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
+                                                     std::move(new_args),
+                                                     MirPlace{field_value},
+                                                     new_block,
+                                                     std::nullopt,
+                                                     "",
+                                                     "",
+                                                     false};
+            ctx.set_terminator(std::move(new_term));
+            ctx.switch_to_block(new_block);
+
+            // push関数名を決定
+            std::string push_func = "cm_slice_push_i32";
+            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
+                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
+                push_func = "cm_slice_push_i8";
+            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
+                push_func = "cm_slice_push_i64";
+            } else if (elem_kind == hir::TypeKind::Double) {
+                push_func = "cm_slice_push_f64";
+            } else if (elem_kind == hir::TypeKind::Float) {
+                push_func = "cm_slice_push_f32";
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
+                       elem_kind == hir::TypeKind::Struct) {
+                push_func = "cm_slice_push_ptr";
+            }
+
+            // 各要素をpushで追加
+            for (const auto& elem : arr_lit->elements) {
+                LocalId elem_value = lower_expression(*elem, ctx);
+
+                BlockId success_block = ctx.new_block();
+                std::vector<MirOperandPtr> push_args;
+                push_args.push_back(MirOperand::copy(MirPlace{field_value}));
+                push_args.push_back(MirOperand::copy(MirPlace{elem_value}));
+
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(push_func),
+                                                          std::move(push_args),
+                                                          std::nullopt,
+                                                          success_block,
+                                                          std::nullopt,
+                                                          "",
+                                                          "",
+                                                          false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success_block);
+            }
+        } else {
+            // 通常の処理
+            field_value = lower_expression(*field.value, ctx);
         }
 
         // フィールドへの代入を生成
