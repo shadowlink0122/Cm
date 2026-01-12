@@ -44,7 +44,7 @@ jobs:
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@${{ matrix.llvm_version }}
+          brew install llvm@${{ matrix.llvm_version }} coreutils
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
           echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
           echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
@@ -113,6 +113,13 @@ jobs:
       # ベンチマーク実行
       - name: Run benchmarks
         run: |
+          # タイムアウトコマンドの設定（macOSではgtimeoutを使用）
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            TIMEOUT_CMD="gtimeout"
+          else
+            TIMEOUT_CMD="timeout"
+          fi
+
           cd tests/bench_marks
           mkdir -p results
 
@@ -121,31 +128,31 @@ jobs:
 
           # 素数判定
           echo "--- Prime Sieve (10000) ---"
-          timeout 5 python/01_prime_sieve.py || true
-          timeout 5 cpp/01_prime_sieve || true
-          timeout 5 rust/01_prime_sieve/target/release/prime_sieve || true
-          timeout 5 cm/01_prime_sieve || true
+          $TIMEOUT_CMD 5 python/01_prime_sieve.py || true
+          $TIMEOUT_CMD 5 cpp/01_prime_sieve || true
+          $TIMEOUT_CMD 5 rust/01_prime_sieve/target/release/prime_sieve || true
+          $TIMEOUT_CMD 5 cm/01_prime_sieve || true
 
           # フィボナッチ
           echo "--- Fibonacci Memoized (40) ---"
-          timeout 5 python/02_fibonacci_memo.py || true
-          timeout 5 cpp/02_fibonacci_memo || true
-          timeout 5 rust/02_fibonacci_memo/target/release/fibonacci_memo || true
-          timeout 5 cm/02_fibonacci_memo || true
+          $TIMEOUT_CMD 5 python/02_fibonacci_memo.py || true
+          $TIMEOUT_CMD 5 cpp/02_fibonacci_memo || true
+          $TIMEOUT_CMD 5 rust/02_fibonacci_memo/target/release/fibonacci_memo || true
+          $TIMEOUT_CMD 5 cm/02_fibonacci_memo || true
 
           # 配列ソート
           echo "--- Array Sort (1000) ---"
-          timeout 5 python/03_array_sort.py || true
-          timeout 5 cpp/03_array_sort || true
-          timeout 5 rust/03_array_sort/target/release/array_sort || true
-          timeout 5 cm/03_array_sort || true
+          $TIMEOUT_CMD 5 python/03_array_sort.py || true
+          $TIMEOUT_CMD 5 cpp/03_array_sort || true
+          $TIMEOUT_CMD 5 rust/03_array_sort/target/release/array_sort || true
+          $TIMEOUT_CMD 5 cm/03_array_sort || true
 
           # 行列乗算
           echo "--- Matrix Multiply (500x500) ---"
-          timeout 30 python/04_matrix_multiply.py || true
-          timeout 30 cpp/04_matrix_multiply || true
-          timeout 30 rust/04_matrix_multiply/target/release/matrix_multiply || true
-          timeout 30 cm/04_matrix_multiply || true
+          $TIMEOUT_CMD 30 python/04_matrix_multiply.py || true
+          $TIMEOUT_CMD 30 cpp/04_matrix_multiply || true
+          $TIMEOUT_CMD 30 rust/04_matrix_multiply/target/release/matrix_multiply || true
+          $TIMEOUT_CMD 30 cm/04_matrix_multiply || true
 
       # パフォーマンス検証スクリプト
       - name: Create performance verification script
