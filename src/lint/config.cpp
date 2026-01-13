@@ -67,10 +67,60 @@ RuleLevel ConfigLoader::get_level(const std::string& rule_id) const {
     return RuleLevel::Warning;  // デフォルト
 }
 
+void ConfigLoader::apply_preset(Preset preset) {
+    current_preset_ = preset;
+
+    // プリセットに基づいてルールを設定
+    switch (preset) {
+        case Preset::Minimal:
+            // すべて無効
+            rules_["W001"] = {RuleLevel::Disabled};
+            rules_["L100"] = {RuleLevel::Disabled};
+            rules_["L101"] = {RuleLevel::Disabled};
+            rules_["L102"] = {RuleLevel::Disabled};
+            rules_["L103"] = {RuleLevel::Disabled};
+            break;
+
+        case Preset::Recommended:
+            // すべてwarning（デフォルト）
+            rules_["W001"] = {RuleLevel::Warning};
+            rules_["L100"] = {RuleLevel::Warning};
+            rules_["L101"] = {RuleLevel::Warning};
+            rules_["L102"] = {RuleLevel::Warning};
+            rules_["L103"] = {RuleLevel::Warning};
+            break;
+
+        case Preset::Strict:
+            // W001はwarning、L100-L103はerror
+            rules_["W001"] = {RuleLevel::Warning};
+            rules_["L100"] = {RuleLevel::Error};
+            rules_["L101"] = {RuleLevel::Error};
+            rules_["L102"] = {RuleLevel::Error};
+            rules_["L103"] = {RuleLevel::Error};
+            break;
+
+        case Preset::None:
+        default:
+            // 何もしない
+            break;
+    }
+}
+
+Preset ConfigLoader::parse_preset(const std::string& preset_str) {
+    if (preset_str == "minimal")
+        return Preset::Minimal;
+    if (preset_str == "recommended")
+        return Preset::Recommended;
+    if (preset_str == "strict")
+        return Preset::Strict;
+    return Preset::None;
+}
+
 bool ConfigLoader::parse_yaml(const std::string& content) {
     // 簡易YAMLパーサー
     // サポート形式:
     // lint:
+    //   preset: recommended
     //   rules:
     //     W001: disabled
     //     L100: error
@@ -104,6 +154,14 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
             in_lint_section = (trimmed == "lint:" || trimmed.substr(0, 5) == "lint:");
             in_rules_section = false;
         } else if (in_lint_section && indent >= 2 && indent < 4) {
+            // preset: の処理
+            if (trimmed.substr(0, 7) == "preset:") {
+                std::string preset_str = trim(trimmed.substr(7));
+                Preset preset = parse_preset(preset_str);
+                if (preset != Preset::None) {
+                    apply_preset(preset);
+                }
+            }
             in_rules_section = (trimmed == "rules:" || trimmed.substr(0, 6) == "rules:");
         } else if (in_rules_section && indent >= 4) {
             // ルール設定を解析: "W001: disabled"
@@ -115,7 +173,7 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
                 if (!rule_id.empty() && !level_str.empty()) {
                     RuleConfig config;
                     config.level = parse_level(level_str);
-                    rules_[rule_id] = config;
+                    rules_[rule_id] = config;  // プリセットを上書き
                 }
             }
         }
@@ -142,6 +200,86 @@ std::string ConfigLoader::trim(const std::string& str) {
         return "";
     size_t end = str.find_last_not_of(" \t\r\n");
     return str.substr(start, end - start + 1);
+}
+
+void ConfigLoader::parse_disable_comments(const std::string& source) {
+    // コメントを解析して無効化行を登録
+    // 対応形式:
+    // // @cm-disable-next-line W001
+    // // @cm-disable-next-line W001, L100
+    // // @cm-disable-next-line  (全ルール)
+    // // @cm-disable-line W001  (現在行)
+
+    std::istringstream stream(source);
+    std::string line;
+    uint32_t line_num = 0;
+
+    while (std::getline(stream, line)) {
+        line_num++;
+
+        // コメントを検索
+        size_t comment_pos = line.find("//");
+        if (comment_pos == std::string::npos) {
+            continue;
+        }
+
+        std::string comment = line.substr(comment_pos + 2);
+        std::string trimmed = trim(comment);
+
+        // @cm-disable-next-line を検索
+        const std::string DISABLE_NEXT = "@cm-disable-next-line";
+        const std::string DISABLE_LINE = "@cm-disable-line";
+
+        uint32_t target_line = 0;
+        std::string rule_part;
+
+        if (trimmed.substr(0, DISABLE_NEXT.length()) == DISABLE_NEXT) {
+            target_line = line_num + 1;  // 次の行を無効化
+            rule_part = trim(trimmed.substr(DISABLE_NEXT.length()));
+        } else if (trimmed.substr(0, DISABLE_LINE.length()) == DISABLE_LINE) {
+            target_line = line_num;  // 現在行を無効化
+            rule_part = trim(trimmed.substr(DISABLE_LINE.length()));
+        } else {
+            continue;
+        }
+
+        // ルールIDを解析
+        std::set<std::string> rules;
+        if (rule_part.empty()) {
+            // ルールID指定なし → 全ルール無効化
+            rules.insert("*");
+        } else {
+            // カンマ区切りでルールIDを分割
+            std::istringstream rule_stream(rule_part);
+            std::string rule_id;
+            while (std::getline(rule_stream, rule_id, ',')) {
+                std::string trimmed_rule = trim(rule_id);
+                if (!trimmed_rule.empty()) {
+                    rules.insert(trimmed_rule);
+                }
+            }
+        }
+
+        // 無効化行に追加
+        if (!rules.empty()) {
+            auto& existing = disabled_lines_[target_line];
+            existing.insert(rules.begin(), rules.end());
+        }
+    }
+}
+
+bool ConfigLoader::is_line_disabled(uint32_t line, const std::string& rule_id) const {
+    auto it = disabled_lines_.find(line);
+    if (it == disabled_lines_.end()) {
+        return false;
+    }
+
+    const auto& rules = it->second;
+    // "*" は全ルール無効化
+    if (rules.count("*") > 0) {
+        return true;
+    }
+    return rules.count(rule_id) > 0;
 }
 
 }  // namespace lint

@@ -3,7 +3,8 @@
 # Cm言語個別ベンチマーク実行スクリプト
 # 各アルゴリズムを個別に測定し、ボトルネックを特定
 
-set -e
+# エラーがあっても継続（ベンチマークの一部が失敗しても他を実行）
+set +e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 RESULTS_DIR="$SCRIPT_DIR/results"
@@ -100,7 +101,7 @@ build_all() {
         echo "Building C++ benchmarks..."
         cd "$SCRIPT_DIR/cpp"
         make clean > /dev/null 2>&1
-        make all > /dev/null 2>&1
+        make all > /dev/null 2>&1 || true
     fi
 
     # Rust
@@ -255,3 +256,4 @@ main() {
 
 # 実行
 main "$@"
+exit 0

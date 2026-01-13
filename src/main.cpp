@@ -484,6 +484,11 @@ int main(int argc, char* argv[]) {
 
                 // 診断情報を表示
                 SourceLocationManager loc_mgr(code, file);
+
+                // インラインコメントによる無効化を解析
+                config.clear_line_disables();
+                config.parse_disable_comments(code);
+
                 for (const auto& diag : checker.diagnostics()) {
                     // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)
                     std::string rule_id;
@@ -499,10 +504,45 @@ int main(int argc, char* argv[]) {
                         continue;
                     }
 
-                    std::string prefix = (diag.severity == DiagKind::Error) ? "error" : "warning";
+                    // インラインコメントで無効化されている行はスキップ
+                    if (!rule_id.empty()) {
+                        auto line_col = loc_mgr.get_line_column(diag.span.start);
+                        if (config.is_line_disabled(line_col.line, rule_id)) {
+                            continue;
+                        }
+                    }
+
+                    // 設定されたレベルに基づいて表示を決定
+                    std::string prefix;
+                    bool count_as_error = false;
+
+                    if (!rule_id.empty()) {
+                        // 設定ファイルでレベルが指定されている場合
+                        auto level = config.get_level(rule_id);
+                        switch (level) {
+                            case lint::RuleLevel::Error:
+                                prefix = "error";
+                                count_as_error = true;
+                                break;
+                            case lint::RuleLevel::Warning:
+                                prefix = "warning";
+                                break;
+                            case lint::RuleLevel::Hint:
+                                prefix = "hint";
+                                break;
+                            default:
+                                prefix = "warning";
+                                break;
+                        }
+                    } else {
+                        // ルールIDがない場合は元の診断レベルを使用
+                        prefix = (diag.severity == DiagKind::Error) ? "error" : "warning";
+                        count_as_error = (diag.severity == DiagKind::Error);
+                    }
+
                     std::cerr << loc_mgr.format_error_location(diag.span,
                                                                prefix + ": " + diag.message);
-                    if (diag.severity == DiagKind::Error) {
+                    if (count_as_error) {
                         total_errors++;
                     } else {
                         total_warnings++;
