@@ -10,8 +10,9 @@ namespace cm::ast {
 // ============================================================
 struct LetStmt {
     std::string name;
-    TypePtr type;  // nullならauto推論
-    ExprPtr init;  // 初期化式（省略可）
+    Span name_span;  // 名前の位置（Lintエラー表示用）
+    TypePtr type;    // nullならauto推論
+    ExprPtr init;    // 初期化式（省略可）
     bool is_const = false;
     bool is_static = false;  // static変数（関数内で値が保持される）
 

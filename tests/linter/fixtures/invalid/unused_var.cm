@@ -1,0 +1,9 @@
+// テスト: 未使用変数 (W001)
+// 期待: Variable 'unused' is never used [W001]
+
+int main() {
+    int unused = 10;  // W001: 未使用
+    int used = 20;
+    println(used);
+    return 0;
+}

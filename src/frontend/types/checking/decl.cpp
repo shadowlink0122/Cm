@@ -180,8 +180,9 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         // main関数とネームスペース付き関数は除外
         if (func->name != "main" && func->name.find("::") == std::string::npos) {
             if (!is_snake_case(func->name)) {
-                warning(decl.span,
-                        "Function name '" + func->name + "' should be snake_case [L100]");
+                // name_spanが設定されていればそれを使用、なければdecl.span
+                Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
+                warning(name_pos, "Function name '" + func->name + "' should be snake_case [L100]");
             }
         }
     } else if (auto* st = decl.as<ast::StructDecl>()) {
@@ -198,7 +199,9 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
         // L103: 型名はPascalCaseであるべき
         if (!is_pascal_case(st->name)) {
-            warning(decl.span, "Type name '" + st->name + "' should be PascalCase [L103]");
+            // name_spanが設定されていればそれを使用、なければdecl.span
+            Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
+            warning(name_pos, "Type name '" + st->name + "' should be PascalCase [L103]");
         }
 
         for (const auto& iface_name : st->auto_impls) {

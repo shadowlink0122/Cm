@@ -301,7 +301,10 @@ ast::StmtPtr Parser::parse_stmt() {
         // C++スタイルの配列宣言をチェック: T[N] name;
         type = check_array_suffix(std::move(type));
 
+        // 名前のスパンを記録（Lint警告用）
+        uint32_t name_start = current().start;
         std::string name = expect_ident();
+        uint32_t name_end = previous().end;
         debug::par::log(debug::par::Id::VarName, "Variable name: " + name, debug::Level::Debug);
 
         ast::ExprPtr init;
@@ -343,6 +346,11 @@ ast::StmtPtr Parser::parse_stmt() {
 
         auto let_stmt = ast::make_let(std::move(name), std::move(type), std::move(init), is_const,
                                       Span{start_pos, previous().end}, is_static_var);
+
+        // 名前のスパンを設定
+        if (auto* let = let_stmt->as<ast::LetStmt>()) {
+            let->name_span = Span{name_start, name_end};
+        }
 
         // コンストラクタ引数を設定
         if (has_ctor_call) {
