@@ -135,6 +135,24 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.init) {
         mark_variable_initialized(let.name);
     }
+
+    // 命名規則チェック
+    // _ で始まる変数は意図的に命名規則を無視（unused placeholder等）
+    if (!let.name.empty() && let.name[0] != '_') {
+        if (let.is_const) {
+            // L102: 定数はUPPER_SNAKE_CASE（ただし小文字snake_caseも許容）
+            // 厳密なチェックは設定可能にする予定
+            if (!is_snake_case(let.name) && !is_upper_snake_case(let.name)) {
+                warning(stmt_span, "Constant name '" + let.name +
+                                       "' should be UPPER_SNAKE_CASE or snake_case [L102]");
+            }
+        } else {
+            // L101: 変数はsnake_case
+            if (!is_snake_case(let.name)) {
+                warning(stmt_span, "Variable name '" + let.name + "' should be snake_case [L101]");
+            }
+        }
+    }
 }
 
 void TypeChecker::check_return(ast::ReturnStmt& ret) {

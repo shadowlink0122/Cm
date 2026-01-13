@@ -201,6 +201,9 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
         return ast::make_error();
     }
 
+    // 変数使用をマーク（未使用変数検出用 W001）
+    scopes_.current().mark_used(ident.name);
+
     // 初期化前使用のチェック
     check_uninitialized_use(ident.name, current_span_);
 

@@ -134,6 +134,15 @@ class TypeChecker {
     void mark_variable_modified(const std::string& name);
     void check_const_recommendations();
 
+    // 未使用変数チェック (W001)
+    void check_unused_variables();
+
+    // 命名規則チェック (L100-L103)
+    static bool is_snake_case(const std::string& name);
+    static bool is_pascal_case(const std::string& name);
+    static bool is_upper_snake_case(const std::string& name);
+    void check_naming_conventions();
+
     // match式のヘルパー
     void check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr expected_type);
     void check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr scrutinee_type);

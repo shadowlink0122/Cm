@@ -5,6 +5,7 @@
 #include "../type_checker.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <regex>
 
 namespace cm {
@@ -248,6 +249,85 @@ void TypeChecker::check_const_recommendations() {
     // 次の関数用にクリア
     modified_variables_.clear();
     non_const_variable_spans_.clear();
+}
+
+// 未使用変数チェック (W001)
+void TypeChecker::check_unused_variables() {
+    // 現在のスコープから未使用シンボルを取得
+    auto unused_symbols = scopes_.current().get_unused_symbols();
+
+    for (const auto& sym : unused_symbols) {
+        // パラメータ名がアンダースコアで始まる場合は警告しない（意図的な未使用）
+        if (!sym.name.empty() && sym.name[0] == '_') {
+            continue;
+        }
+        // self は常に警告しない
+        if (sym.name == "self") {
+            continue;
+        }
+
+        warning(current_span_, "Variable '" + sym.name + "' is never used [W001]");
+    }
+}
+
+// ============================================================
+// 命名規則チェック (L100-L103)
+// ============================================================
+
+// snake_case判定: 小文字、数字、アンダースコアのみ、先頭は小文字またはアンダースコア
+bool TypeChecker::is_snake_case(const std::string& name) {
+    if (name.empty())
+        return true;
+
+    // 先頭は小文字またはアンダースコア
+    if (!std::islower(name[0]) && name[0] != '_') {
+        return false;
+    }
+
+    for (char c : name) {
+        if (!std::islower(c) && !std::isdigit(c) && c != '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// PascalCase判定: 先頭が大文字、アンダースコアなし
+bool TypeChecker::is_pascal_case(const std::string& name) {
+    if (name.empty())
+        return true;
+
+    // 先頭は大文字
+    if (!std::isupper(name[0])) {
+        return false;
+    }
+
+    // アンダースコアは禁止
+    for (char c : name) {
+        if (c == '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// UPPER_SNAKE_CASE判定: 大文字、数字、アンダースコアのみ
+bool TypeChecker::is_upper_snake_case(const std::string& name) {
+    if (name.empty())
+        return true;
+
+    for (char c : name) {
+        if (!std::isupper(c) && !std::isdigit(c) && c != '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 命名規則をチェック（関数終了時に呼び出す）
+void TypeChecker::check_naming_conventions() {
+    // 現在のスコープの変数をチェック
+    // Note: 関数名や構造体名のチェックはregister_declaration時に行う
 }
 
 bool TypeChecker::type_implements_interface(const std::string& type_name,

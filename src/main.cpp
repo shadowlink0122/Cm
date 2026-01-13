@@ -20,6 +20,7 @@
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
 #include "hir/lowering/lowering.hpp"
+#include "lint/config.hpp"
 #include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
 #include "mir/passes/core/manager.hpp"
@@ -28,6 +29,7 @@
 #include "preprocessor/import.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -36,6 +38,8 @@
 #include <string>
 #include <sys/wait.h>
 #include <vector>
+
+namespace fs = std::filesystem;
 
 namespace cm {
 
@@ -56,7 +60,10 @@ enum class Command { None, Run, Compile, Check, Lint, Fmt, Help };
 
 struct Options {
     Command command = Command::None;
-    std::string input_file;
+    std::string input_file;                     // 単一ファイル (run/compile用)
+    std::vector<std::string> input_files;       // 複数ファイル (check/lint用)
+    bool recursive = false;                     // -r オプション
+    std::vector<std::string> exclude_patterns;  // --exclude パターン
     bool show_ast = false;
     bool show_hir = false;
     bool show_mir = false;
@@ -219,12 +226,24 @@ Options parse_options(int argc, char* argv[]) {
             debug::set_level(debug::parse_level(opts.debug_level));
         } else if (arg == "--lang=ja") {
             debug::set_lang(1);
+        } else if (arg == "-r" || arg == "--recursive") {
+            // -r オプション: 再帰的にディレクトリをチェック
+            opts.recursive = true;
+        } else if (arg.substr(0, 10) == "--exclude=") {
+            // --exclude=PATTERN: 除外パターン
+            opts.exclude_patterns.push_back(arg.substr(10));
         } else if (arg[0] != '-') {
-            if (opts.input_file.empty()) {
-                opts.input_file = arg;
+            // check/lintコマンドでは複数ファイルを許可
+            if (opts.command == Command::Check || opts.command == Command::Lint) {
+                opts.input_files.push_back(arg);
             } else {
-                std::cerr << "複数の入力ファイルは指定できません\n";
-                std::exit(1);
+                // run/compileは単一ファイルのみ
+                if (opts.input_file.empty()) {
+                    opts.input_file = arg;
+                } else {
+                    std::cerr << "複数の入力ファイルは指定できません\n";
+                    std::exit(1);
+                }
             }
         } else {
             std::cerr << "不明なオプション: " << arg << "\n";
@@ -247,6 +266,82 @@ std::string read_file(const std::string& filename) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
+}
+
+// 除外パターンにマッチするか判定
+bool matches_exclude_pattern(const std::string& filepath,
+                             const std::vector<std::string>& patterns) {
+    for (const auto& pattern : patterns) {
+        // シンプルなワイルドカードマッチ（*.test.cm対応）
+        if (pattern.find('*') != std::string::npos) {
+            // *.xxx形式のサフィックスマッチ
+            if (pattern[0] == '*') {
+                std::string suffix = pattern.substr(1);
+                if (filepath.size() >= suffix.size() &&
+                    filepath.compare(filepath.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                    return true;
+                }
+            }
+        } else {
+            // 完全一致または部分一致
+            if (filepath.find(pattern) != std::string::npos) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// .cmファイルを収集（再帰オプション対応）
+std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths, bool recursive,
+                                          const std::vector<std::string>& excludes) {
+    std::vector<std::string> result;
+
+    for (const auto& path : paths) {
+        fs::path p(path);
+
+        if (!fs::exists(p)) {
+            std::cerr << "エラー: パスが存在しません: " << path << "\n";
+            continue;
+        }
+
+        if (fs::is_regular_file(p)) {
+            // ファイルの場合、.cm拡張子チェック
+            if (p.extension() == ".cm") {
+                std::string filepath = p.string();
+                if (!matches_exclude_pattern(filepath, excludes)) {
+                    result.push_back(filepath);
+                }
+            }
+        } else if (fs::is_directory(p)) {
+            // ディレクトリの場合
+            if (recursive) {
+                // 再帰的に走査
+                for (const auto& entry : fs::recursive_directory_iterator(p)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".cm") {
+                        std::string filepath = entry.path().string();
+                        if (!matches_exclude_pattern(filepath, excludes)) {
+                            result.push_back(filepath);
+                        }
+                    }
+                }
+            } else {
+                // 非再帰: ディレクトリ直下のみ
+                for (const auto& entry : fs::directory_iterator(p)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".cm") {
+                        std::string filepath = entry.path().string();
+                        if (!matches_exclude_pattern(filepath, excludes)) {
+                            result.push_back(filepath);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ソートして一貫性を保つ
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 // ASTを表示
@@ -308,6 +403,129 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // Check/Lintコマンドの複数ファイル処理
+    if (opts.command == Command::Check || opts.command == Command::Lint) {
+        if (opts.input_files.empty()) {
+            std::cerr << "エラー: 入力ファイルまたはディレクトリが指定されていません\n";
+            return 1;
+        }
+
+        // ファイルを収集
+        auto cm_files = collect_cm_files(opts.input_files, opts.recursive, opts.exclude_patterns);
+
+        if (cm_files.empty()) {
+            std::cerr << "エラー: チェック対象の.cmファイルが見つかりません\n";
+            return 1;
+        }
+
+        if (opts.verbose) {
+            std::cout << "チェック対象: " << cm_files.size() << " ファイル\n";
+            for (const auto& f : cm_files) {
+                std::cout << "  - " << f << "\n";
+            }
+            std::cout << "\n";
+        }
+
+        // 設定ファイルを読み込み
+        lint::ConfigLoader config;
+        if (config.find_and_load(".")) {
+            if (opts.verbose) {
+                std::cout << "設定ファイル: " << config.config_path() << "\n\n";
+            }
+        }
+
+        // 各ファイルをチェック
+        int total_errors = 0;
+        int total_warnings = 0;
+        int files_checked = 0;
+
+        for (const auto& file : cm_files) {
+            try {
+                std::string code = read_file(file);
+
+                // モジュールリゾルバ初期化
+                module::initialize_module_resolver();
+
+                // Import処理
+                preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
+                auto preprocess_result = import_preprocessor.process(code, file);
+
+                if (!preprocess_result.success) {
+                    std::cerr << file
+                              << ": プリプロセッサエラー: " << preprocess_result.error_message
+                              << "\n";
+                    total_errors++;
+                    continue;
+                }
+
+                code = preprocess_result.processed_source;
+
+                // パース
+                Lexer lexer(code);
+                auto tokens = lexer.tokenize();
+                Parser parser(std::move(tokens));
+                auto program = parser.parse();
+
+                if (parser.has_errors()) {
+                    SourceLocationManager loc_mgr(code, file);
+                    for (const auto& diag : parser.diagnostics()) {
+                        std::string error_type =
+                            (diag.severity == DiagKind::Error ? "error" : "warning");
+                        std::cerr << loc_mgr.format_error_location(
+                            diag.span, error_type + ": " + diag.message);
+                    }
+                    total_errors += parser.diagnostics().size();
+                    continue;
+                }
+
+                // 型チェック
+                TypeChecker checker;
+                bool type_check_ok = checker.check(program);
+
+                // 診断情報を表示
+                SourceLocationManager loc_mgr(code, file);
+                for (const auto& diag : checker.diagnostics()) {
+                    // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)
+                    std::string rule_id;
+                    auto bracket_pos = diag.message.rfind('[');
+                    auto close_pos = diag.message.rfind(']');
+                    if (bracket_pos != std::string::npos && close_pos != std::string::npos &&
+                        close_pos > bracket_pos) {
+                        rule_id = diag.message.substr(bracket_pos + 1, close_pos - bracket_pos - 1);
+                    }
+
+                    // 設定で無効化されているルールはスキップ
+                    if (!rule_id.empty() && config.is_disabled(rule_id)) {
+                        continue;
+                    }
+
+                    std::string prefix = (diag.severity == DiagKind::Error) ? "error" : "warning";
+                    std::cerr << loc_mgr.format_error_location(diag.span,
+                                                               prefix + ": " + diag.message);
+                    if (diag.severity == DiagKind::Error) {
+                        total_errors++;
+                    } else {
+                        total_warnings++;
+                    }
+                }
+
+                files_checked++;
+
+            } catch (const std::exception& e) {
+                std::cerr << file << ": 例外: " << e.what() << "\n";
+                total_errors++;
+            }
+        }
+
+        // サマリー表示
+        std::cout << "\n=== チェック完了 ===\n";
+        std::cout << "ファイル数: " << files_checked << "/" << cm_files.size() << "\n";
+        std::cout << "エラー: " << total_errors << ", 警告: " << total_warnings << "\n";
+
+        return (total_errors > 0) ? 1 : 0;
+    }
+
+    // run/compileコマンドは単一ファイル
     if (opts.command == Command::None || opts.input_file.empty()) {
         if (argc == 1) {
             std::cerr << "エラー: コマンドが指定されていません\n";
@@ -431,7 +649,10 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Type Checker ===\n";
         TypeChecker checker;
-        if (!checker.check(program)) {
+        bool type_check_ok = checker.check(program);
+
+        // 診断情報（エラー・警告）を表示
+        if (!checker.diagnostics().empty()) {
             // ソース位置管理を作成
             SourceLocationManager loc_mgr(code, opts.input_file);
 
@@ -485,6 +706,10 @@ int main(int argc, char* argv[]) {
                                                                error_type + ": " + diag.message);
                 }
             }
+        }
+
+        // エラーがあった場合は終了
+        if (!type_check_ok) {
             return 1;
         }
         if (opts.debug)
