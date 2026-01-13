@@ -88,6 +88,11 @@ ast::StmtPtr Parser::parse_stmt() {
                 cases.emplace_back(nullptr, std::move(stmts));
             } else {
                 error("switch文内にはcaseまたはelseが必要です");
+                // エラー回復: 次のcase/else/}まで進める
+                while (!check(TokenKind::KwCase) && !check(TokenKind::KwElse) &&
+                       !check(TokenKind::RBrace) && !is_at_end()) {
+                    advance();
+                }
             }
         }
 

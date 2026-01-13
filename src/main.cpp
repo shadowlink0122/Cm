@@ -14,11 +14,13 @@
 #include "codegen/js/codegen.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
+#include "fmt/formatter.hpp"
 #include "frontend/ast/target_filtering_visitor.hpp"
 #include "frontend/lexer/lexer.hpp"
 #include "frontend/parser/parser.hpp"
 #include "frontend/types/type_checker.hpp"
 #include "hir/lowering/lowering.hpp"
+#include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
 #include "mir/passes/core/manager.hpp"
 #include "mir/printer.hpp"
@@ -50,7 +52,7 @@ std::string get_version() {
 }
 
 // コマンドラインオプション
-enum class Command { None, Run, Compile, Check, Help };
+enum class Command { None, Run, Compile, Check, Lint, Fmt, Help };
 
 struct Options {
     Command command = Command::None;
@@ -81,6 +83,8 @@ void print_help(const char* program_name) {
     std::cout << "  run <file>            プログラムを実行（JIT、デフォルト）\n";
     std::cout << "  compile <file>        プログラムをコンパイル（LLVM）\n";
     std::cout << "  check <file>          構文と型チェックのみ実行\n";
+    std::cout << "  lint <file>           静的解析を実行\n";
+    std::cout << "  fmt <file>            コードフォーマット\n";
     std::cout << "  help                  このヘルプを表示\n\n";
     std::cout << "オプション:\n";
     std::cout << "  -o <file>             出力ファイル名を指定\n";
@@ -132,6 +136,10 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Compile;
     } else if (cmd == "check") {
         opts.command = Command::Check;
+    } else if (cmd == "lint") {
+        opts.command = Command::Lint;
+    } else if (cmd == "fmt") {
+        opts.command = Command::Fmt;
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
@@ -487,6 +495,54 @@ int main(int argc, char* argv[]) {
             if (opts.verbose) {
                 std::cout << "✓ 構文と型チェックが成功しました\n";
             }
+            return 0;
+        }
+
+        // ========== Lint Command ==========
+        if (opts.command == Command::Lint) {
+            if (opts.debug)
+                std::cout << "=== Lint ===\n";
+
+            // LintRunnerを作成
+            lint::LintRunner runner;
+
+            // Lintを実行
+            auto result = runner.run(program);
+
+            // 結果を表示
+            Source source(code, opts.input_file);
+            runner.print(source);
+
+            if (opts.verbose) {
+                std::cout << "✓ Lint完了\n";
+            }
+
+            return (result.error_count > 0) ? 1 : 0;
+        }
+
+        // ========== Fmt Command ==========
+        if (opts.command == Command::Fmt) {
+            if (opts.debug)
+                std::cout << "=== Fmt ===\n";
+
+            // Formatterを作成
+            fmt::Formatter formatter;
+
+            // フォーマット実行
+            auto result = formatter.format(program, code);
+
+            // 結果を表示
+            Source source(code, opts.input_file);
+            formatter.print(source);
+
+            // 変更があればファイルを上書き
+            if (result.modified) {
+                formatter.format_file(opts.input_file, program, code);
+                if (opts.verbose) {
+                    std::cout << "✓ フォーマット完了\n";
+                }
+            }
+
             return 0;
         }
 

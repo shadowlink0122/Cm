@@ -25,7 +25,7 @@ using DiagKind = Severity;
 // ============================================================
 class Parser {
    public:
-    Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)), pos_(0) {}
+    Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)), pos_(0), last_error_line_(0) {}
 
     // プログラム全体を解析
     ast::Program parse() {
@@ -1442,6 +1442,15 @@ class Parser {
     }
 
     void error(const std::string& msg) {
+        // 同じ行で連続したエラーを抑制
+        uint32_t current_line =
+            current().start;  // Spanはバイトオフセットだが、行単位で簡易チェック
+        if (current_line == last_error_line_ && !diagnostics_.empty()) {
+            // 同じ位置での連続エラーを無視
+            return;
+        }
+        last_error_line_ = current_line;
+
         debug::par::log(debug::par::Id::Error, msg, debug::Level::Error);
         diagnostics_.emplace_back(DiagKind::Error, Span{current().start, current().end}, msg);
     }
@@ -1502,6 +1511,7 @@ class Parser {
     std::vector<Token> tokens_;
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
+    uint32_t last_error_line_ = 0;  // 連続エラー抑制用
 };
 
 }  // namespace cm

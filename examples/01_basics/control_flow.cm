@@ -28,13 +28,13 @@ int main() {
     }
     println("");
     
-    // 4. switch
+    // 4. switch (Cm言語構文)
     const int day = 3;
     switch (day) {
-        case 1: println("Monday"); break;
-        case 2: println("Tuesday"); break;
-        case 3: println("Wednesday"); break;
-        default: println("Other"); break;
+        case(1) { println("Monday"); }
+        case(2) { println("Tuesday"); }
+        case(3) { println("Wednesday"); }
+        else { println("Other"); }
     }
     
     return 0;
