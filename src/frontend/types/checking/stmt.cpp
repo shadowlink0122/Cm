@@ -84,7 +84,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.type && let.type->kind == ast::TypeKind::Inferred) {
         if (init_type) {
             let.type = init_type;
-            scopes_.current().define(let.name, init_type, let.is_const, let.is_static);
+            scopes_.current().define(let.name, init_type, let.is_const, let.is_static, stmt_span);
             debug::tc::log(debug::tc::Id::TypeInfer,
                            "auto " + let.name + " : " + ast::type_to_string(*init_type),
                            debug::Level::Trace);
@@ -116,10 +116,10 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                  "', got '" + ast::type_to_string(*init_type) + "'");
         }
         let.type = resolved_type;
-        scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static);
+        scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static, stmt_span);
     } else if (init_type) {
         let.type = init_type;
-        scopes_.current().define(let.name, init_type, let.is_const, let.is_static);
+        scopes_.current().define(let.name, init_type, let.is_const, let.is_static, stmt_span);
         debug::tc::log(debug::tc::Id::TypeInfer, let.name + " : " + ast::type_to_string(*init_type),
                        debug::Level::Trace);
     } else {

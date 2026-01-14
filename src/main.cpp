@@ -233,8 +233,9 @@ Options parse_options(int argc, char* argv[]) {
             // --exclude=PATTERN: 除外パターン
             opts.exclude_patterns.push_back(arg.substr(10));
         } else if (arg[0] != '-') {
-            // check/lintコマンドでは複数ファイルを許可
-            if (opts.command == Command::Check || opts.command == Command::Lint) {
+            // check/lint/fmtコマンドでは複数ファイルを許可
+            if (opts.command == Command::Check || opts.command == Command::Lint ||
+                opts.command == Command::Fmt) {
                 opts.input_files.push_back(arg);
             } else {
                 // run/compileは単一ファイルのみ
@@ -565,6 +566,65 @@ int main(int argc, char* argv[]) {
         return (total_errors > 0) ? 1 : 0;
     }
 
+    // Fmtコマンドの複数ファイル処理
+    if (opts.command == Command::Fmt) {
+        if (opts.input_files.empty()) {
+            std::cerr << "エラー: 入力ファイルまたはディレクトリが指定されていません\n";
+            return 1;
+        }
+
+        // ファイルを収集
+        auto cm_files = collect_cm_files(opts.input_files, opts.recursive, opts.exclude_patterns);
+
+        if (cm_files.empty()) {
+            std::cerr << "エラー: フォーマット対象の.cmファイルが見つかりません\n";
+            return 1;
+        }
+
+        if (opts.verbose) {
+            std::cout << "フォーマット対象: " << cm_files.size() << " ファイル\n";
+        }
+
+        // 各ファイルをフォーマット
+        size_t total_changes = 0;
+        size_t files_modified = 0;
+
+        fmt::Formatter formatter;
+
+        for (const auto& file : cm_files) {
+            try {
+                std::string code = read_file(file);
+
+                // フォーマット実行
+                auto result = formatter.format(code);
+
+                // 変更があればファイルを上書き
+                if (result.modified) {
+                    std::ofstream ofs(file);
+                    if (ofs) {
+                        ofs << result.formatted_code;
+                        files_modified++;
+                        total_changes += result.changes_applied;
+
+                        if (opts.verbose) {
+                            std::cout << file << ": " << result.changes_applied << " 箇所の整形\n";
+                        }
+                    }
+                }
+
+            } catch (const std::exception& e) {
+                // エラーはスキップ
+            }
+        }
+
+        // サマリー表示
+        std::cout << "\n=== フォーマット完了 ===\n";
+        std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
+        std::cout << "整形箇所: " << total_changes << " 箇所\n";
+
+        return 0;
+    }
+
     // run/compileコマンドは単一ファイル
     if (opts.command == Command::None || opts.input_file.empty()) {
         if (argc == 1) {
@@ -790,24 +850,22 @@ int main(int argc, char* argv[]) {
             if (opts.debug)
                 std::cout << "=== Fmt ===\n";
 
-            // 設定ファイルを読み込み
-            lint::ConfigLoader config;
-            config.find_and_load(opts.input_file);
-
             // Formatterを作成
             fmt::Formatter formatter;
-            formatter.set_config(&config);
 
             // フォーマット実行
-            auto result = formatter.format(program, code);
+            auto result = formatter.format(code);
 
             // 変更があればファイルを上書き
             if (result.modified) {
-                formatter.format_file(opts.input_file, program, code);
-                formatter.print_summary(result);
+                std::ofstream ofs(opts.input_file);
+                if (ofs) {
+                    ofs << result.formatted_code;
+                    formatter.print_summary(result);
+                }
             } else {
                 if (opts.verbose) {
-                    std::cout << "✓ 修正は不要です\n";
+                    std::cout << "✓ 整形不要\n";
                 }
             }
 

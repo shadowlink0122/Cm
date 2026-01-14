@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../common/span.hpp"
 #include "../ast/types.hpp"
 
 #include <memory>
@@ -24,6 +25,7 @@ struct Symbol {
     size_t borrow_count = 0;   // 借用回数（借用安全性）
     size_t use_count = 0;      // 使用回数（未使用変数検出用）
     int scope_level = 0;       // スコープレベル（ライフタイム追跡）
+    Span span;                 // 宣言位置（警告の正確な行番号用）
 
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
@@ -43,12 +45,17 @@ class Scope {
 
     // シンボル登録
     bool define(const std::string& name, ast::TypePtr type, bool is_const = false,
-                bool is_static = false) {
+                bool is_static = false, Span span = Span{}) {
         if (symbols_.count(name))
             return false;  // 既存
-        symbols_[name] =
-            Symbol{name, std::move(type), is_const, false,   false, false, is_static, 0,
-                   0,    level_,          {},       nullptr, 0};
+        Symbol sym;
+        sym.name = name;
+        sym.type = std::move(type);
+        sym.is_const = is_const;
+        sym.is_static = is_static;
+        sym.scope_level = level_;
+        sym.span = span;
+        symbols_[name] = std::move(sym);
         return true;
     }
 
@@ -106,7 +113,8 @@ class Scope {
         std::vector<Symbol> unused;
         for (const auto& [name, sym] : symbols_) {
             // 関数は除外、変数のみチェック
-            if (!sym.is_function && sym.use_count == 0) {
+            // 空のspanを持つシンボル（ビルトイン）も除外
+            if (!sym.is_function && sym.use_count == 0 && !sym.span.is_empty()) {
                 unused.push_back(sym);
             }
         }

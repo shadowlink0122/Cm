@@ -1,98 +1,80 @@
 #pragma once
 
 // ============================================================
-// Formatter - 命名規則違反の自動修正
+// Formatter - コスメティック整形
 // ============================================================
+// K&Rスタイル、インデント正規化、空白整理
 
-#include "common/source.hpp"
-#include "common/span.hpp"
-#include "frontend/ast/decl.hpp"
-#include "frontend/ast/nodes.hpp"
-#include "frontend/ast/stmt.hpp"
-#include "lint/config.hpp"
-#include "lint/naming.hpp"
-
+#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <map>
-#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
 namespace cm {
 namespace fmt {
 
-/// 修正情報
-struct Fix {
-    Span span;                // 修正対象の位置
-    std::string original;     // 元の名前
-    std::string replacement;  // 修正後の名前
-    std::string rule_id;      // 適用ルール
-};
-
 /// フォーマット結果
 struct FormatResult {
     std::string formatted_code;
     bool modified = false;
-    size_t fixes_applied = 0;
-    std::vector<Fix> fixes;  // 適用された修正
+    size_t changes_applied = 0;
 };
 
-/// Formatter - 命名規則違反を自動修正
+/// Formatter - コスメティック整形（K&Rスタイル）
 class Formatter {
    public:
     Formatter() = default;
 
-    /// 設定をセット
-    void set_config(lint::ConfigLoader* config) { config_ = config; }
+    /// インデント幅を設定
+    void set_indent_width(int width) { indent_width_ = width; }
 
-    /// コードをフォーマット（修正情報を収集して適用）
-    FormatResult format(const ast::Program& program, const std::string& original_code) {
+    /// コードをフォーマット
+    FormatResult format(const std::string& original_code) {
         FormatResult result;
-        result.formatted_code = original_code;
-        fixes_.clear();
-
-        // ASTを走査して修正対象を収集
-        collect_fixes(program);
-
-        // 修正がなければそのまま返す
-        if (fixes_.empty()) {
-            return result;
-        }
-
-        // 修正を適用（後ろから適用してオフセットがずれないように）
-        std::sort(fixes_.begin(), fixes_.end(),
-                  [](const Fix& a, const Fix& b) { return a.span.start > b.span.start; });
-
         std::string code = original_code;
-        for (const auto& fix : fixes_) {
-            // 範囲チェック
-            if (fix.span.start >= code.size() || fix.span.end > code.size()) {
-                continue;
-            }
+        size_t changes = 0;
 
-            // 元の文字列が一致するか確認
-            std::string existing = code.substr(fix.span.start, fix.span.end - fix.span.start);
-            if (existing != fix.original) {
-                continue;  // 不一致ならスキップ
-            }
+        // 1. 行末の空白を削除
+        code = trim_trailing_whitespace(code, changes);
 
-            // 置換
-            code = code.substr(0, fix.span.start) + fix.replacement + code.substr(fix.span.end);
-            result.fixes.push_back(fix);
-            result.fixes_applied++;
-        }
+        // 2. タブをスペースに変換
+        code = tabs_to_spaces(code, changes);
+
+        // 3. 連続空行を1行に制限
+        code = normalize_blank_lines(code, changes);
+
+        // 4. K&Rスタイル: 開き波括弧を同一行に
+        code = enforce_kr_braces(code, changes);
+
+        // 5. インデント正規化
+        code = normalize_indentation(code, changes);
+
+        // 6. 演算子周りの空白
+        code = normalize_operator_spacing(code, changes);
 
         result.formatted_code = code;
-        result.modified = (result.fixes_applied > 0);
+        result.modified = (code != original_code);
+        result.changes_applied = changes;
 
         return result;
     }
 
     /// ファイルをフォーマットして上書き
-    bool format_file(const std::string& filepath, const ast::Program& program,
-                     const std::string& code) {
-        auto result = format(program, code);
+    bool format_file(const std::string& filepath) {
+        std::ifstream ifs(filepath);
+        if (!ifs) {
+            std::cerr << "エラー: ファイルを読み込めません: " << filepath << "\n";
+            return false;
+        }
+
+        std::stringstream buffer;
+        buffer << ifs.rdbuf();
+        std::string original = buffer.str();
+        ifs.close();
+
+        auto result = format(original);
 
         if (result.modified) {
             std::ofstream ofs(filepath);
@@ -101,141 +83,207 @@ class Formatter {
                 return false;
             }
             ofs << result.formatted_code;
+            return true;
         }
 
-        return true;
-    }
-
-    /// チェックのみ（修正せずに差分を表示）
-    bool check(const ast::Program& program, const std::string& code) {
-        auto result = format(program, code);
-        return result.formatted_code == code;
+        return false;  // 変更なし
     }
 
     /// 修正サマリーを表示
     void print_summary(const FormatResult& result, std::ostream& out = std::cout) const {
-        if (result.fixes_applied > 0) {
-            out << "✓ " << result.fixes_applied << " 件の修正を適用しました\n";
-            for (const auto& fix : result.fixes) {
-                out << "  [" << fix.rule_id << "] " << fix.original << " → " << fix.replacement
-                    << "\n";
-            }
+        if (result.changes_applied > 0) {
+            out << "✓ " << result.changes_applied << " 箇所のフォーマット修正\n";
         }
     }
 
    private:
-    lint::ConfigLoader* config_ = nullptr;
-    std::vector<Fix> fixes_;
+    int indent_width_ = 4;
 
-    /// ルールが有効かチェック
-    bool is_rule_enabled(const std::string& rule_id) const {
-        if (!config_)
-            return true;  // 設定なしなら全て有効
-        return !config_->is_disabled(rule_id);
-    }
+    /// 行末の空白を削除
+    std::string trim_trailing_whitespace(const std::string& code, size_t& changes) {
+        std::istringstream stream(code);
+        std::ostringstream result;
+        std::string line;
+        bool first = true;
 
-    /// ASTを走査して修正対象を収集
-    void collect_fixes(const ast::Program& program) {
-        for (const auto& decl : program.declarations) {
-            visit_decl(*decl);
-        }
-    }
+        while (std::getline(stream, line)) {
+            if (!first)
+                result << '\n';
+            first = false;
 
-    /// 宣言を訪問
-    void visit_decl(ast::Decl& decl) {
-        // 関数宣言
-        if (auto* func = decl.as<ast::FunctionDecl>()) {
-            // L100: 関数名は snake_case
-            if (is_rule_enabled("L100") && !lint::is_snake_case(func->name)) {
-                if (!func->name_span.is_empty()) {
-                    Fix fix;
-                    fix.span = func->name_span;
-                    fix.original = func->name;
-                    fix.replacement = lint::to_snake_case(func->name);
-                    fix.rule_id = "L100";
-                    fixes_.push_back(fix);
+            // 行末の空白を削除
+            size_t end = line.find_last_not_of(" \t\r");
+            if (end != std::string::npos) {
+                std::string trimmed = line.substr(0, end + 1);
+                if (trimmed != line) {
+                    changes++;
                 }
+                result << trimmed;
+            } else if (!line.empty()) {
+                // 空白のみの行
+                changes++;
             }
+        }
 
-            // 関数本体を訪問
-            for (auto& s : func->body) {
-                visit_stmt(*s);
-            }
-        }
-        // 構造体宣言
-        else if (auto* st = decl.as<ast::StructDecl>()) {
-            // L103: 型名は PascalCase
-            if (is_rule_enabled("L103") && !lint::is_pascal_case(st->name)) {
-                if (!st->name_span.is_empty()) {
-                    Fix fix;
-                    fix.span = st->name_span;
-                    fix.original = st->name;
-                    fix.replacement = lint::to_pascal_case(st->name);
-                    fix.rule_id = "L103";
-                    fixes_.push_back(fix);
-                }
-            }
-        }
+        return result.str();
     }
 
-    /// 文を訪問
-    void visit_stmt(ast::Stmt& stmt) {
-        // ブロック文
-        if (auto* block = stmt.as<ast::BlockStmt>()) {
-            for (auto& s : block->stmts) {
-                visit_stmt(*s);
+    /// タブをスペースに変換
+    std::string tabs_to_spaces(const std::string& code, size_t& changes) {
+        std::string result;
+        result.reserve(code.size());
+
+        for (char c : code) {
+            if (c == '\t') {
+                result += std::string(indent_width_, ' ');
+                changes++;
+            } else {
+                result += c;
             }
         }
-        // Let文
-        else if (auto* let = stmt.as<ast::LetStmt>()) {
-            if (let->is_const) {
-                // L102: 定数名は UPPER_SNAKE_CASE（snake_caseも許容）
-                if (is_rule_enabled("L102") && !lint::is_upper_snake_case(let->name) &&
-                    !lint::is_snake_case(let->name)) {
-                    if (!let->name_span.is_empty()) {
-                        Fix fix;
-                        fix.span = let->name_span;
-                        fix.original = let->name;
-                        fix.replacement = lint::to_upper_snake_case(let->name);
-                        fix.rule_id = "L102";
-                        fixes_.push_back(fix);
-                    }
+
+        return result;
+    }
+
+    /// 連続空行を1行に制限
+    std::string normalize_blank_lines(const std::string& code, size_t& changes) {
+        std::istringstream stream(code);
+        std::ostringstream result;
+        std::string line;
+        int blank_count = 0;
+        bool first = true;
+
+        while (std::getline(stream, line)) {
+            bool is_blank = line.find_first_not_of(" \t\r") == std::string::npos;
+
+            if (is_blank) {
+                blank_count++;
+                if (blank_count <= 1) {
+                    if (!first)
+                        result << '\n';
+                    first = false;
+                    result << "";
+                } else {
+                    changes++;  // 余分な空行を削除
                 }
             } else {
-                // L101: 変数名は snake_case
-                if (is_rule_enabled("L101") && !lint::is_snake_case(let->name)) {
-                    if (!let->name_span.is_empty()) {
-                        Fix fix;
-                        fix.span = let->name_span;
-                        fix.original = let->name;
-                        fix.replacement = lint::to_snake_case(let->name);
-                        fix.rule_id = "L101";
-                        fixes_.push_back(fix);
+                blank_count = 0;
+                if (!first)
+                    result << '\n';
+                first = false;
+                result << line;
+            }
+        }
+
+        return result.str();
+    }
+
+    /// K&Rスタイル: 開き波括弧を同一行に
+    std::string enforce_kr_braces(const std::string& code, size_t& changes) {
+        std::istringstream stream(code);
+        std::vector<std::string> lines;
+        std::string line;
+
+        // 全行を読み込み
+        while (std::getline(stream, line)) {
+            lines.push_back(line);
+        }
+
+        std::ostringstream result;
+
+        for (size_t i = 0; i < lines.size(); ++i) {
+            std::string& curr = lines[i];
+
+            // 次の行が "{" のみかチェック
+            if (i + 1 < lines.size()) {
+                std::string next_trimmed = lines[i + 1];
+                size_t start = next_trimmed.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    next_trimmed = next_trimmed.substr(start);
+                }
+
+                // 次の行が "{" のみで、現在行が空でない場合
+                if (next_trimmed == "{") {
+                    // 現在行の末尾の空白を削除
+                    size_t end = curr.find_last_not_of(" \t\r");
+                    if (end != std::string::npos) {
+                        curr = curr.substr(0, end + 1);
                     }
+
+                    // 現在行に " {" を追加
+                    result << curr << " {\n";
+                    changes++;
+                    i++;  // 次の行をスキップ
+                    continue;
                 }
             }
-        }
-        // If文
-        else if (auto* if_stmt = stmt.as<ast::IfStmt>()) {
-            for (auto& s : if_stmt->then_block) {
-                visit_stmt(*s);
-            }
-            for (auto& s : if_stmt->else_block) {
-                visit_stmt(*s);
+
+            // 通常の行を出力
+            result << curr;
+            if (i + 1 < lines.size()) {
+                result << '\n';
             }
         }
-        // While文
-        else if (auto* while_stmt = stmt.as<ast::WhileStmt>()) {
-            for (auto& s : while_stmt->body) {
-                visit_stmt(*s);
+
+        return result.str();
+    }
+
+    /// インデント正規化（4スペース単位）
+    std::string normalize_indentation(const std::string& code, size_t& changes) {
+        std::istringstream stream(code);
+        std::ostringstream result;
+        std::string line;
+        bool first = true;
+
+        while (std::getline(stream, line)) {
+            if (!first)
+                result << '\n';
+            first = false;
+
+            // 空行はそのまま
+            if (line.find_first_not_of(" \t") == std::string::npos) {
+                result << "";
+                continue;
             }
-        }
-        // For文
-        else if (auto* for_stmt = stmt.as<ast::ForStmt>()) {
-            for (auto& s : for_stmt->body) {
-                visit_stmt(*s);
+
+            // 現在のインデントを計算
+            size_t indent = 0;
+            for (char c : line) {
+                if (c == ' ')
+                    indent++;
+                else if (c == '\t')
+                    indent += indent_width_;
+                else
+                    break;
             }
+
+            // インデントレベルを計算（4スペース単位に丸める）
+            size_t level = indent / indent_width_;
+            size_t normalized_indent = level * indent_width_;
+
+            // 行の内容を取得
+            size_t content_start = line.find_first_not_of(" \t");
+            std::string content =
+                (content_start != std::string::npos) ? line.substr(content_start) : "";
+
+            // 正規化されたインデントで出力
+            std::string new_line = std::string(normalized_indent, ' ') + content;
+            if (new_line != line) {
+                changes++;
+            }
+            result << new_line;
         }
+
+        return result.str();
+    }
+
+    /// 演算子周りの空白正規化
+    std::string normalize_operator_spacing(const std::string& code, size_t& changes) {
+        // シンプルな実装: 基本的な演算子のみ
+        // より複雑な実装は文字列リテラルやコメントを考慮する必要がある
+        // 現時点ではスキップ（安全のため）
+        (void)changes;
+        return code;
     }
 };
 

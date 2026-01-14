@@ -266,7 +266,7 @@ void TypeChecker::check_unused_variables() {
             continue;
         }
 
-        warning(current_span_, "Variable '" + sym.name + "' is never used [W001]");
+        warning(sym.span, "Variable '" + sym.name + "' is never used [W001]");
     }
 }
 
