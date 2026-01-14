@@ -790,21 +790,24 @@ int main(int argc, char* argv[]) {
             if (opts.debug)
                 std::cout << "=== Fmt ===\n";
 
+            // 設定ファイルを読み込み
+            lint::ConfigLoader config;
+            config.find_and_load(opts.input_file);
+
             // Formatterを作成
             fmt::Formatter formatter;
+            formatter.set_config(&config);
 
             // フォーマット実行
             auto result = formatter.format(program, code);
 
-            // 結果を表示
-            Source source(code, opts.input_file);
-            formatter.print(source);
-
             // 変更があればファイルを上書き
             if (result.modified) {
                 formatter.format_file(opts.input_file, program, code);
+                formatter.print_summary(result);
+            } else {
                 if (opts.verbose) {
-                    std::cout << "✓ フォーマット完了\n";
+                    std::cout << "✓ 修正は不要です\n";
                 }
             }
 
