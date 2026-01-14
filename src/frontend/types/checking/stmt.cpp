@@ -144,13 +144,14 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         if (let.is_const) {
             // L102: 定数はUPPER_SNAKE_CASE（ただし小文字snake_caseも許容）
             // 厳密なチェックは設定可能にする予定
-            if (!is_snake_case(let.name) && !is_upper_snake_case(let.name)) {
+            if (enable_lint_warnings_ && !is_snake_case(let.name) &&
+                !is_upper_snake_case(let.name)) {
                 warning(name_pos, "Constant name '" + let.name +
                                       "' should be UPPER_SNAKE_CASE or snake_case [L102]");
             }
         } else {
             // L101: 変数はsnake_case
-            if (!is_snake_case(let.name)) {
+            if (enable_lint_warnings_ && !is_snake_case(let.name)) {
                 warning(name_pos, "Variable name '" + let.name + "' should be snake_case [L101]");
             }
         }

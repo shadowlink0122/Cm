@@ -39,13 +39,13 @@ int main() {
     o.inner.value = 42;
     o.arr = [100, 200, 300];
     o.z = 999;
-    
+
     // 1. 複合メソッド呼び出し（o.inner.method()）
     int v = o.inner.get_value();
     println("inner.get_value(): {v}");
-    
+
     // 2. self経由のネストアクセス（impl内）
     o.print();
-    
+
     return 0;
 }

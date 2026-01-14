@@ -3,44 +3,44 @@ import std::io::println;
 
 int main() {
     // ===== 符号付き整数 =====
-    
+
     // tiny (8bit signed: -128 to 127)
     tiny t_min = -128;
     tiny t_max = 127;
     println("tiny min: {t_min}");
     println("tiny max: {t_max}");
-    
+
     // short (16bit signed: -32768 to 32767)
     short s_min = -32768;
     short s_max = 32767;
     println("short min: {s_min}");
     println("short max: {s_max}");
-    
+
     // int (32bit signed: -2147483648 to 2147483647)
     int i_min = -2147483648;
     int i_max = 2147483647;
     println("int min: {i_min}");
     println("int max: {i_max}");
-    
+
     // ===== 符号なし整数 =====
-    
+
     // utiny (8bit unsigned: 0 to 255)
     utiny ut_min = 0;
     utiny ut_max = 255;
     println("utiny min: {ut_min}");
     println("utiny max: {ut_max}");
-    
+
     // ushort (16bit unsigned: 0 to 65535)
     ushort us_min = 0;
     ushort us_max = 65535;
     println("ushort min: {us_min}");
     println("ushort max: {us_max}");
-    
+
     // uint (32bit unsigned: 0 to 4294967295)
     uint ui_min = 0;
     uint ui_max = 4294967295;
     println("uint min: {ui_min}");
     println("uint max: {ui_max}");
-    
+
     return 0;
 }

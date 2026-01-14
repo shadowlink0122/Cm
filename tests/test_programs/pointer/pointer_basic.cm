@@ -4,22 +4,22 @@ import std::io::println;
 int main() {
     int x = 42;
     int* p = &x;
-    
+
     // デリファレンスで読み出し
     int v = *p;
     println("x = {x}");
     println("*p = {v}");
-    
+
     // デリファレンスで書き込み
     *p = 100;
     println("after *p = 100: x = {x}");
-    
+
     // 別の変数へのポインタ
     int y = 200;
     p = &y;
     int v2 = *p;
     println("y = {y}");
     println("*p (after p = &y) = {v2}");
-    
+
     return 0;
 }

@@ -9,19 +9,19 @@ struct Point {
 int main() {
     // 構造体配列
     Point[4] points;
-    
+
     // size()を取得
     uint s = points.size();
     println("points.size() = {s}");
-    
+
     // 値を設定してから再度確認（サイズは変わらない）
     Point p0;
     p0.x = 1;
     p0.y = 2;
     points[0] = p0;
-    
+
     uint s2 = points.size();
     println("points.size() after assignment = {s2}");
-    
+
     return 0;
 }

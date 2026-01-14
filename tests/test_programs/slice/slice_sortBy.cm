@@ -2,22 +2,24 @@
 import std::io::println;
 
 int compare_desc(int a, int b) {
-    if (a > b) { return -1; }
-    if (a < b) { return 1; }
+    if (a > b) { return -1;
+    }
+    if (a < b) { return 1;
+    }
     return 0;
 }
 
 int main() {
     int[5] arr = [3, 1, 4, 1, 5];
-    
+
     // 降順ソート
     int[] sorted = arr.sortBy(compare_desc);
-    
+
     println("sorted[0]: {sorted[0]}");
     println("sorted[1]: {sorted[1]}");
     println("sorted[2]: {sorted[2]}");
     println("sorted[3]: {sorted[3]}");
     println("sorted[4]: {sorted[4]}");
-    
+
     return 0;
 }

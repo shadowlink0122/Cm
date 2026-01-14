@@ -5,27 +5,27 @@ typedef Value = int | float | string;
 
 int main() {
     println("=== Union Slice Test ===");
-    
+
     // ユニオン型スライスの作成
     Value[] values = [];
     println("Empty slice created: len = {values.len()}");
-    
+
     // ユニオン型の値をpush
     // 注意: 現在のCm言語ではユニオン型の値を直接リテラルで作成する構文がないため、
     // 個々の型として扱われる
-    
+
     // 整数
     int i = 42;
     println("int value: {i}");
-    
+
     // 浮動小数点
     float f = 3.14;
     println("float value: {f}");
-    
+
     // 文字列
     string s = "hello";
     println("string value: {s}");
-    
+
     println("=== Test Passed ===");
     return 0;
 }

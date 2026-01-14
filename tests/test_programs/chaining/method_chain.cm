@@ -25,13 +25,13 @@ void Chain__print(Chain c) {
 int main() {
     println("Start");
     const Chain c = Chain { value: 1 };
-    
+
     // チェーンを分解: c.add(2).mul(3).print()
     const Chain c1 = Chain__add(c, 2);
     const Chain c2 = Chain__mul(c1, 3);
     Chain__print(c2);
-    
+
     println("End");
-    
+
     return 0;
 }

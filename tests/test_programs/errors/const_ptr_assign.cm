@@ -3,6 +3,7 @@
 int main() {
     int x = 42;
     const int* p = &x;
-    int* a = p;  // エラー: const外し禁止
+    int* a = p;
+    // エラー: const外し禁止
     return 0;
 }

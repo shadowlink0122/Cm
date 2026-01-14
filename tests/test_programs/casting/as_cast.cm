@@ -14,7 +14,7 @@ void main() {
     string td = typeof(d);
     println("  typeof(i) = {ti}");
     println("  typeof(d) = {td}");
-    
+
     // double -> int キャスト
     double pi = 3.14159;
     int pi_int = pi as int;
@@ -23,7 +23,7 @@ void main() {
     string tpi_int = typeof(pi_int);
     println("  typeof(pi) = {tpi}");
     println("  typeof(pi_int) = {tpi_int}");
-    
+
     // bool -> int キャスト
     bool flag = true;
     int b = flag as int;
@@ -32,7 +32,7 @@ void main() {
     string tb = typeof(b);
     println("  typeof(flag) = {tflag}");
     println("  typeof(b) = {tb}");
-    
+
     // char -> int キャスト
     char c = 'A';
     int c_int = c as int;
@@ -41,22 +41,22 @@ void main() {
     string tc_int = typeof(c_int);
     println("  typeof(c) = {tc}");
     println("  typeof(c_int) = {tc_int}");
-    
+
     // 連鎖キャスト
     double x = 10.5;
     int y = x as int;
     double z = y as double;
     println("chain cast: {z}");
-    
+
     // 構造体の型名
     Point pt = Point{x: 10, y: 20};
     string tpt = typeof(pt);
     println("struct type: {tpt}");
-    
+
     // ポインタの型名
     int* pi_ptr = &i;
     string tptr = typeof(pi_ptr);
     println("pointer type: {tptr}");
-    
+
     println("All cast tests passed!");
 }

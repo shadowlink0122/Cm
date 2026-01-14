@@ -11,14 +11,14 @@ bool is_negative(int x) {
 
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // 偶数が存在するか
     bool has_even = arr.some(is_even);
     println("has_even: {has_even}");
-    
+
     // 負の数が存在するか
     bool has_negative = arr.some(is_negative);
     println("has_negative: {has_negative}");
-    
+
     return 0;
 }

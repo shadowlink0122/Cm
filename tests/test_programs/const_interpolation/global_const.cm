@@ -10,10 +10,10 @@ int testGlobalConst() {
 
     // 結果を表示
     println(msg);
-    
+
     // 検証: グローバルconst変数が正しく展開されたか
     // VERSION=1, MAJOR=2, MINOR=3が含まれていることを確認
-    
+
     // 簡易チェック: プレースホルダーが残っていないか
     if (msg == "Version: {}, Release: {}.{}") {
         println("FAIL: Global const variables are not interpolated");

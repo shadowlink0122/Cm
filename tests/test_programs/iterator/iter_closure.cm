@@ -3,24 +3,26 @@ import std::io::println;
 // クロージャを使った配列の高階関数テスト
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // クロージャでmultiplierをキャプチャ
     int multiplier = 10;
-    int*(int) scale = (int x) => { return x * multiplier; };
+    int*(int) scale = (int x) => { return x * multiplier;
+    };
     int[] scaled = arr.map(scale);
-    
+
     // 結果を確認
     int first = scaled.first();
     int last = scaled.last();
     println("scaled[0]: {first}");
     println("scaled[4]: {last}");
-    
+
     // クロージャでthresholdをキャプチャ
     int threshold = 3;
-    bool*(int) above_threshold = (int x) => { return x > threshold; };
+    bool*(int) above_threshold = (int x) => { return x > threshold;
+    };
     int[] filtered = arr.filter(above_threshold);
     int filtered_len = filtered.len();
     println("filtered.len(): {filtered_len}");
-    
+
     return 0;
 }

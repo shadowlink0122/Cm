@@ -240,6 +240,13 @@ void TypeChecker::mark_variable_modified(const std::string& name) {
 
 // const推奨警告をチェック（関数終了時に呼び出す）
 void TypeChecker::check_const_recommendations() {
+    // Lint警告が無効な場合はスキップ（クリアのみ実行）
+    if (!enable_lint_warnings_) {
+        modified_variables_.clear();
+        non_const_variable_spans_.clear();
+        return;
+    }
+
     for (const auto& [name, span] : non_const_variable_spans_) {
         // 変更されていない変数に対してconst推奨警告
         if (modified_variables_.count(name) == 0) {
@@ -396,6 +403,11 @@ void TypeChecker::mark_variable_initialized(const std::string& name) {
 }
 
 void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
+    // Lint警告が無効な場合はスキップ
+    if (!enable_lint_warnings_) {
+        return;
+    }
+
     // 初期化されていない変数の使用を検出
     // 注: 関数パラメータは常に初期化されているとみなす
     auto sym = scopes_.current().lookup(name);

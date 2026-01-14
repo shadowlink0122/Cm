@@ -9,7 +9,7 @@ impl Obj {
         self.id = i;
         println("C{self.id}");
     }
-    
+
     ~self() {
         println("D{self.id}");
     }
@@ -22,6 +22,6 @@ int main() {
         {
             Obj c(3);
         }  // D3
-    }  // D2
+    }      // D2
     return 0;
 }  // D1

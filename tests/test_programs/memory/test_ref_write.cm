@@ -10,14 +10,14 @@ void set_value(int* ptr, int value) {
 
 int main() {
     println("=== Pointer to local test ===");
-    
+
     int result = 0;
     println("result before: {result}");
-    
+
     set_value(&result, 42);
-    
+
     println("result after: {result}");
-    
+
     println("=== Done ===");
     return 0;
 }

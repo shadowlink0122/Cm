@@ -9,16 +9,16 @@ struct Point {
 int main() {
     Point p = {x: 10, y: 20};
     Point* ptr = &p;
-    
+
     // (*ptr).member で読み取り
     println("(*ptr).x = {(*ptr).x}");
     println("(*ptr).y = {(*ptr).y}");
-    
+
     // (*ptr).member で書き込み
     (*ptr).x = 100;
     (*ptr).y = 200;
     println("after modify: p.x = {p.x}");
     println("after modify: p.y = {p.y}");
-    
+
     return 0;
 }

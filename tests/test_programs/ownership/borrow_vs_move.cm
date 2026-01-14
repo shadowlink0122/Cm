@@ -6,13 +6,13 @@ int main() {
     const int* p = &a;
     println("借用テスト:");
     println("  a = {*p}");
-    
+
     // 2. ムーブの場合
     int x = 100;
     int y = move x;
     println("ムーブテスト:");
     println("  y = {y}");
-    
+
     println("完了");
     return 0;
 }

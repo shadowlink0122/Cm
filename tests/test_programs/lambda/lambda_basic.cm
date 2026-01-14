@@ -6,10 +6,10 @@ int main() {
     int*(int) double_it = (int x) => {
         return x * 2;
     };
-    
+
     int result = double_it(5);
     println("double_it(5) = {result}");
-    
+
     if (result == 10) {
         return 0;
     }

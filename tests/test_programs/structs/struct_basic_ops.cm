@@ -17,14 +17,18 @@ int main() {
     println("Initial: x={p.x}, y={p.y}");
 
     // メンバー値の再代入（演算を含む）
-    p.x = p.x + 5;  // 15
-    p.y = p.y * 2;  // 40
+    p.x = p.x + 5;
+    // 15
+    p.y = p.y * 2;
+    // 40
 
     println("After operations: x={p.x}, y={p.y}");
 
     // メンバー間の演算
-    int sum = p.x + p.y;  // 15 + 40 = 55
-    int product = p.x * p.y;  // 15 * 40 = 600
+    int sum = p.x + p.y;
+    // 15 + 40 = 55
+    int product = p.x * p.y;
+    // 15 * 40 = 600
 
     println("Sum: {sum}");
     println("Product: {product}");

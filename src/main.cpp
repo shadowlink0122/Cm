@@ -749,6 +749,10 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Type Checker ===\n";
         TypeChecker checker;
+        // Check/Lintコマンドの場合のみLint警告を有効化
+        if (opts.command == Command::Check) {
+            checker.set_enable_lint_warnings(true);
+        }
         bool type_check_ok = checker.check(program);
 
         // 診断情報（エラー・警告）を表示

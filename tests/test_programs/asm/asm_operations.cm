@@ -65,14 +65,17 @@ int main() {
     int x = 10;
     int y = 20;
     println("Before swap: x={x}, y={y}");
-    xorSwap(&x, &y);  // ポインタ演算が必要なためコメントアウト
+    xorSwap(&x, &y);
+    // ポインタ演算が必要なためコメントアウト
     println("After swap: x={x}, y={y}");
 
     // ビットカウントのテスト
-    int bits = countBits(0xFF);  // 8ビット全て1
+    int bits = countBits(0xFF);
+    // 8ビット全て1
     println("Bits in 0xFF = {bits}");
 
-    int bits2 = countBits(0x55);  // 01010101 = 4ビット
+    int bits2 = countBits(0x55);
+    // 01010101 = 4ビット
     println("Bits in 0x55 = {bits2}");
 
     return 0;

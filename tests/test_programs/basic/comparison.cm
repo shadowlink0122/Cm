@@ -8,38 +8,50 @@ int main() {
     // 等価
     bool eq1 = a == b;
     bool eq2 = a == c;
-    println(eq1);  // false (0)
-    println(eq2);  // true (1)
+    println(eq1);
+    // false (0)
+    println(eq2);
+    // true (1)
 
     // 非等価
     bool ne1 = a != b;
     bool ne2 = a != c;
-    println(ne1);  // true (1)
-    println(ne2);  // false (0)
+    println(ne1);
+    // true (1)
+    println(ne2);
+    // false (0)
 
     // 小なり
     bool lt1 = a < b;
     bool lt2 = a < c;
-    println(lt1);  // true (1)
-    println(lt2);  // false (0)
+    println(lt1);
+    // true (1)
+    println(lt2);
+    // false (0)
 
     // 小なりイコール
     bool le1 = a <= b;
     bool le2 = a <= c;
-    println(le1);  // true (1)
-    println(le2);  // true (1)
+    println(le1);
+    // true (1)
+    println(le2);
+    // true (1)
 
     // 大なり
     bool gt1 = a > b;
     bool gt2 = b > a;
-    println(gt1);  // false (0)
-    println(gt2);  // true (1)
+    println(gt1);
+    // false (0)
+    println(gt2);
+    // true (1)
 
     // 大なりイコール
     bool ge1 = a >= b;
     bool ge2 = a >= c;
-    println(ge1);  // false (0)
-    println(ge2);  // true (1)
+    println(ge1);
+    // false (0)
+    println(ge2);
+    // true (1)
 
     return 0;
 }

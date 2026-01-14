@@ -6,20 +6,20 @@ int main() {
     int[3] a = [1, 2, 3];
     int[3] b = [1, 2, 3];
     int[3] c = [1, 2, 4];
-    
+
     if (a == b) {
         println("a == b: true");
     }
     if (a != c) {
         println("a != c: true");
     }
-    
+
     // 動的スライスの比較
     int[] s1 = [1, 2, 3];
     int[] s2 = [1, 2, 3];
     int[] s3 = [1, 2, 4];
     int[] s4 = [1, 2];
-    
+
     if (s1 == s2) {
         println("s1 == s2: true");
     }
@@ -29,6 +29,6 @@ int main() {
     if (s1 != s4) {
         println("s1 != s4: true (different length)");
     }
-    
+
     return 0;
 }

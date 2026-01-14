@@ -9,14 +9,15 @@ impl Resource {
         self.id = 42;
         println("C");
     }
-    
+
     ~self() {
         println("D");
     }
 }
 
 int main() {
-    Resource r;  // ()なしでもコンストラクタが呼ばれる
+    Resource r;
+    // ()なしでもコンストラクタが呼ばれる
     println("M");
     return 0;
 }

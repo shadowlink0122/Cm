@@ -8,7 +8,7 @@ int main() {
     arr[2] = 30;
     arr[3] = 40;
     arr[4] = 50;
-    
+
     // for-in構文（型指定あり）
     int sum = 0;
     for (int val in arr) {
@@ -16,6 +16,6 @@ int main() {
         sum = sum + val;
     }
     println("sum = {sum}");
-    
+
     return 0;
 }

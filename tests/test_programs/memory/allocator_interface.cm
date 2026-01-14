@@ -7,45 +7,45 @@ int main() {
     // 直接FFI使用 - 単一int
     void* raw1 = malloc(sizeof(int));
     int* p1 = raw1 as int*;
-    
+
     *p1 = 42;
     int v1 = *p1;
-    
+
     if (v1 == 42) {
         print("malloc single int: ok\n");
     } else {
         print("malloc single int: FAILED\n");
     }
     free(raw1);
-    
+
     // DefaultAllocator使用
     DefaultAllocator alloc = DefaultAllocator{};
-    
+
     void* raw2 = alloc.alloc(sizeof(int));
     int* p2 = raw2 as int*;
     *p2 = 100;
     int v2 = *p2;
-    
+
     if (v2 == 100) {
         print("alloc single int: ok\n");
     } else {
         print("alloc single int: FAILED\n");
     }
-    
+
     // reallocateテスト
     void* raw3 = alloc.reallocate(raw2, sizeof(int) * 2);
     int* p3 = raw3 as int*;
     *p3 = 200;
     int v3 = *p3;
-    
+
     if (v3 == 200) {
         print("reallocate: ok\n");
     } else {
         print("reallocate: FAILED\n");
     }
-    
+
     alloc.dealloc(raw3);
     print("dealloc: ok\n");
-    
+
     return 0;
 }

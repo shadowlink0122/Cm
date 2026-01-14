@@ -3,20 +3,22 @@ import std::io::println;
 // 配列の高階関数テスト（map, filter）
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // map: 各要素を2倍
-    int*(int) double_it = (int x) => { return x * 2; };
+    int*(int) double_it = (int x) => { return x * 2;
+    };
     int[] doubled = arr.map(double_it);
-    
+
     // 最初の要素を確認
     int first = doubled.first();
     println("doubled[0]: {first}");
-    
+
     // filter: 偶数のみ
-    bool*(int) is_even = (int x) => { return x % 2 == 0; };
+    bool*(int) is_even = (int x) => { return x % 2 == 0;
+    };
     int[] evens = arr.filter(is_even);
     int even_len = evens.len();
     println("evens.len(): {even_len}");
-    
+
     return 0;
 }

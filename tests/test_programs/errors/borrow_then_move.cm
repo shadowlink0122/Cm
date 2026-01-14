@@ -2,7 +2,9 @@
 // 期待: コンパイルエラー "Cannot move 'x' while it is borrowed"
 int main() {
     int x = 42;
-    int* p = &x;  // xを借用
-    int y = move x;  // エラー: xは借用中
+    int* p = &x;
+    // xを借用
+    int y = move x;
+    // エラー: xは借用中
     return 0;
 }

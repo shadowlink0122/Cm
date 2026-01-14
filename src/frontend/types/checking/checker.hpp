@@ -39,6 +39,9 @@ class TypeChecker {
         return struct_defs_;
     }
 
+    // Lint警告の有効/無効を設定
+    void set_enable_lint_warnings(bool enable) { enable_lint_warnings_ = enable; }
+
    private:
     // ============================================================
     // 宣言の登録・チェック (decl.cpp)
@@ -154,6 +157,9 @@ class TypeChecker {
     ast::TypePtr current_return_type_;
     std::vector<Diagnostic> diagnostics_;
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
+
+    // Lint警告の有効/無効（デフォルト: false = 警告なし）
+    bool enable_lint_warnings_ = false;
 
     // 現在チェック中の文/式のSpan（エラー表示用）
     Span current_span_;

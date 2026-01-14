@@ -48,7 +48,7 @@ struct SimpleQueue<T> {
 // 末尾に追加（シンプル版）
 <T> void queue_push(SimpleQueue<T>* q, T data) {
     Node<T>* new_node_ptr = new_node(data);
-    
+
     if (q->head == null) {
         q->head = new_node_ptr;
     } else {
@@ -86,28 +86,28 @@ struct SimpleQueue<T> {
 // ============================================================
 int main() {
     println("=== Simple Generic Queue Test ===");
-    
+
     // Item構造体を使用するキュー
     SimpleQueue<Item> q = {head: null as Node<Item>*, size: 0};
-    
+
     // 要素を追加
     println("\nPushing items:");
-    
+
     Item item1 = {value: 100, priority: 1};
     queue_push(&q, item1);
     println("  push(value=100, priority=1)");
-    
+
     Item item2 = {value: 200, priority: 2};
     queue_push(&q, item2);
     println("  push(value=200, priority=2)");
-    
+
     Item item3 = {value: 300, priority: 3};
     queue_push(&q, item3);
     println("  push(value=300, priority=3)");
-    
+
     int size = queue_len(&q);
     println("\nQueue size: {size}");
-    
+
     // 要素を取り出し
     println("\nPopping items:");
     while (!queue_is_empty(&q)) {
@@ -116,7 +116,7 @@ int main() {
         int p = popped.priority;
         println("  pop() = value={v}, priority={p}");
     }
-    
+
     println("\n=== Done ===");
     return 0;
 }
