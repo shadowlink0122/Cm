@@ -406,7 +406,7 @@ class Formatter {
         return result;
     }
 
-    /// セミコロン後に改行を強制（括弧内は除外）
+    /// セミコロン後に改行を強制（括弧内・波括弧内は除外）
     std::string enforce_semicolon_newline(const std::string& code, size_t& changes) {
         std::string result;
         result.reserve(code.size() + 100);
@@ -415,6 +415,7 @@ class Formatter {
         bool in_char = false;
         bool in_line_comment = false;
         int paren_depth = 0;  // ()の深さ
+        int brace_depth = 0;  // {}の深さ（1行クロージャ対応）
         char prev_char = 0;
 
         for (size_t i = 0; i < code.size(); ++i) {
@@ -435,6 +436,8 @@ class Formatter {
             }
             if (c == '\n') {
                 in_line_comment = false;
+                // 改行でbrace_depthをリセット（1行クロージャのみ対象）
+                brace_depth = 0;
             }
 
             // リテラルやコメント内は変更しない
@@ -444,14 +447,19 @@ class Formatter {
                 continue;
             }
 
-            // 括弧の深さを追跡
+            // 括弧・波括弧の深さを追跡
             if (c == '(')
                 paren_depth++;
             if (c == ')')
                 paren_depth--;
+            if (c == '{')
+                brace_depth++;
+            if (c == '}')
+                brace_depth--;
 
-            // セミコロンの後に改行を強制（括弧内は除外）
-            if (c == ';' && paren_depth == 0) {
+            // セミコロンの後に改行を強制（括弧内・波括弧内は除外）
+            // brace_depth > 0 は1行クロージャ内のセミコロン
+            if (c == ';' && paren_depth == 0 && brace_depth <= 0) {
                 result += c;
                 // 次の文字が改行でなく、空白または文字の場合は改行を追加
                 if (next_char != '\n' && next_char != '\r' && next_char != 0) {

@@ -6,8 +6,7 @@ int main() {
 
     // クロージャでmultiplierをキャプチャ
     int multiplier = 10;
-    int*(int) scale = (int x) => { return x * multiplier;
-    };
+    int*(int) scale = (int x) => { return x * multiplier; };
     int[] scaled = arr.map(scale);
 
     // 結果を確認
