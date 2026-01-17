@@ -82,22 +82,38 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                 }
                 return false;
             } else if (auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&expr->kind)) {
-                // インデックスアクセス: object[index]
+                // インデックスアクセス: object[index] または object[i][j][k]...（多次元）
                 hir::TypePtr inner_type;
                 if (!build_lvalue_place((*index)->object.get(), place, inner_type)) {
                     return false;
                 }
 
-                // インデックスを評価
-                LocalId idx = lower_expression(*(*index)->index, ctx);
-
-                // インデックスプロジェクションを追加
-                place.projections.push_back(PlaceProjection::index(idx));
-
-                // 次の型を取得（配列の要素型）
-                if (inner_type && inner_type->kind == hir::TypeKind::Array &&
-                    inner_type->element_type) {
-                    current_type = inner_type->element_type;
+                // 多次元配列最適化: indices が設定されている場合、全インデックスを処理
+                if (!(*index)->indices.empty()) {
+                    // 多次元: 全インデックスをプロジェクションとして追加
+                    for (const auto& idx_expr : (*index)->indices) {
+                        LocalId idx = lower_expression(*idx_expr, ctx);
+                        place.projections.push_back(PlaceProjection::index(idx));
+                        // 型を更新（配列またはポインタの要素型）
+                        if (inner_type && inner_type->element_type) {
+                            if (inner_type->kind == hir::TypeKind::Array ||
+                                inner_type->kind == hir::TypeKind::Pointer) {
+                                inner_type = inner_type->element_type;
+                            }
+                        }
+                    }
+                    current_type = inner_type;
+                } else {
+                    // 単一インデックス（後方互換性）
+                    LocalId idx = lower_expression(*(*index)->index, ctx);
+                    place.projections.push_back(PlaceProjection::index(idx));
+                    // 次の型を取得（配列またはポインタの要素型）
+                    if (inner_type && inner_type->element_type) {
+                        if (inner_type->kind == hir::TypeKind::Array ||
+                            inner_type->kind == hir::TypeKind::Pointer) {
+                            current_type = inner_type->element_type;
+                        }
+                    }
                 }
                 return true;
             } else if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&expr->kind)) {

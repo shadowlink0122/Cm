@@ -149,6 +149,9 @@ class TargetManager {
         initialized = true;
     }
 
+    /// TargetMachine取得（PassBuilder用）
+    llvm::TargetMachine* getTargetMachine() const { return targetMachine; }
+
     /// モジュール設定
     void configureModule(llvm::Module& module) {
         module.setTargetTriple(config.triple);
@@ -348,11 +351,23 @@ inline TargetConfig TargetConfig::getNative() {
     auto triple = llvm::sys::getDefaultTargetTriple();
     auto cpu = llvm::sys::getHostCPUName().str();
 
+    // CPUの機能フラグを取得（SSE, AVX, NEON等）してSIMDベクトル化を有効にする
+    llvm::StringMap<bool> features;
+    llvm::sys::getHostCPUFeatures(features);
+    std::string featureStr;
+    for (const auto& feature : features) {
+        if (feature.second) {  // 機能が有効な場合
+            if (!featureStr.empty())
+                featureStr += ",";
+            featureStr += "+" + feature.first().str();
+        }
+    }
+
     TargetConfig config;
     config.target = BuildTarget::Native;
     config.triple = triple;
     config.cpu = cpu;
-    config.features = "";  // 自動検出
+    config.features = featureStr;  // CPU機能を有効化
     config.noStd = false;
     config.noMain = false;
     config.optLevel = 2;

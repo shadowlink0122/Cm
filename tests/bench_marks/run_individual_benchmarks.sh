@@ -42,7 +42,8 @@ declare -a BENCHMARKS=(
     "07_fibonacci_memoized:Fibonacci (45) - Dynamic Programming"
     "03_fibonacci_iterative:Fibonacci Iterative (1M)"
     "04_array_sort:Array Sort (1k)"
-    "05_matrix_multiply:Matrix Multiply (500x500)"
+    "05_matrix_multiply:Matrix Multiply (300x300) - 1D Array SIMD"
+    "05b_matrix_multiply_2d:Matrix Multiply (300x300) - 2D Array"
 )
 
 # 実行時間測定関数（タイムアウト付き）

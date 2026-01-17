@@ -302,8 +302,9 @@ class LLVMCodeGen {
             }
         }
 
-        // PassBuilder設定
-        llvm::PassBuilder passBuilder;
+        // PassBuilder設定（TargetMachineでCPU固有のベクトル化を有効化）
+        llvm::TargetMachine* TM = targetManager ? targetManager->getTargetMachine() : nullptr;
+        llvm::PassBuilder passBuilder(TM);
 
         // 解析マネージャ
         llvm::LoopAnalysisManager LAM;

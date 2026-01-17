@@ -32,10 +32,28 @@ TargetConfig TargetConfig::getDefault(BuildTarget target) {
 
 // ネイティブターゲット設定
 TargetConfig TargetConfig::getNative() {
+    // ホストCPUの機能を検出してSIMDベクトル化を有効にする
+    std::string cpu = llvm::sys::getHostCPUName().str();
+    if (cpu.empty() || cpu == "generic") {
+        cpu = "native";  // フォールバック
+    }
+
+    // CPUの機能フラグを取得（SSE, AVX, NEON等）
+    llvm::StringMap<bool> features;
+    llvm::sys::getHostCPUFeatures(features);
+    std::string featureStr;
+    for (const auto& feature : features) {
+        if (feature.second) {  // 機能が有効な場合
+            if (!featureStr.empty())
+                featureStr += ",";
+            featureStr += "+" + feature.first().str();
+        }
+    }
+
     return {.target = BuildTarget::Native,
             .triple = llvm::sys::getDefaultTargetTriple(),
-            .cpu = "generic",
-            .features = "",
+            .cpu = cpu,
+            .features = featureStr,
             .dataLayout = "",  // 後で設定
             .noStd = false,
             .noMain = false,

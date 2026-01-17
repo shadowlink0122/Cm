@@ -1,0 +1,45 @@
+// ベンチマーク5b: 行列乗算（2D配列版）
+// 300x300の行列同士を乗算
+// 2D配列を使用（ベクトル化は制限される場合あり）
+
+import std::io;
+
+void matrix_multiply_2d(int n) {
+    // 2D配列として行列を格納
+    int[300][300] a;
+    int[300][300] b;
+    int[300][300] c;
+
+    // 行列初期化
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            a[i][j] = (i + j) % 100;
+            b[i][j] = (i - j + 100) % 100;
+            c[i][j] = 0;
+        }
+    }
+
+    // 行列乗算（キャッシュ効率的なIKJ順）
+    for (int i = 0; i < n; i++) {
+        for (int k = 0; k < n; k++) {
+            int a_ik = a[i][k];
+            for (int j = 0; j < n; j++) {
+                c[i][j] = c[i][j] + a_ik * b[k][j];
+            }
+        }
+    }
+
+    // 結果の一部を表示（検証用）
+    println("Result c[0][0] = {c[0][0]}");
+    println("Result c[n-1][n-1] = {c[n-1][n-1]}");
+}
+
+int main() {
+    int n = 300;
+    println("Multiplying {n}x{n} matrices (2D array)...");
+
+    matrix_multiply_2d(n);
+
+    println("Matrix multiplication completed");
+    return 0;
+}

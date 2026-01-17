@@ -104,7 +104,9 @@ struct HirCall {
 // 配列アクセス
 struct HirIndex {
     HirExprPtr object;
-    HirExprPtr index;
+    HirExprPtr index;                 // 単一インデックス（後方互換性）
+    std::vector<HirExprPtr> indices;  // 多次元配列用の複数インデックス
+    // indices が空でない場合、index は無視される
 };
 
 // メンバアクセス

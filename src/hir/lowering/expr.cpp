@@ -447,25 +447,56 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
 HirExprPtr HirLowering::lower_index(ast::IndexExpr& idx, TypePtr type) {
     debug::hir::log(debug::hir::Id::IndexLower, "", debug::Level::Debug);
 
-    auto obj_hir = lower_expr(*idx.object);
+    // 多次元配列最適化: 連鎖するIndexExprを検出して単一のHirIndexに統合
+    // a[i][j][k] → HirIndex { object: a, indices: [i, j, k] }
+    // これにより一時変数の生成を回避し、LLVMのベクトル化が可能になる
+
+    std::vector<ast::Expr*> index_chain;
+    ast::Expr* base_obj = idx.object.get();
+
+    // 現在の IndexExpr のインデックスを追加
+    index_chain.push_back(idx.index.get());
+
+    // IndexExprの連鎖を逆順に収集（object側に辿る）
+    while (auto* inner_idx = base_obj->as<ast::IndexExpr>()) {
+        index_chain.push_back(inner_idx->index.get());
+        base_obj = inner_idx->object.get();
+    }
+
+    // チェーンを正順に戻す（a[i][j] では i が先）
+    std::reverse(index_chain.begin(), index_chain.end());
+
+    auto obj_hir = lower_expr(*base_obj);
     TypePtr obj_type = obj_hir->type;
 
-    // 文字列インデックスの場合
-    if (obj_type && obj_type->kind == ast::TypeKind::String) {
+    // 文字列インデックスの場合（連鎖は想定しない）
+    if (obj_type && obj_type->kind == ast::TypeKind::String && index_chain.size() == 1) {
         debug::hir::log(debug::hir::Id::IndexLower, "String index access", debug::Level::Debug);
         auto hir = std::make_unique<HirCall>();
         hir->func_name = "__builtin_string_charAt";
         hir->args.push_back(std::move(obj_hir));
-        hir->args.push_back(lower_expr(*idx.index));
+        hir->args.push_back(lower_expr(*index_chain[0]));
         return std::make_unique<HirExpr>(std::move(hir), ast::make_char());
     }
 
-    // 通常の配列/ポインタインデックス
+    // 配列/ポインタインデックス
     auto hir = std::make_unique<HirIndex>();
     debug::hir::log(debug::hir::Id::IndexBase, "Evaluating base", debug::Level::Trace);
     hir->object = std::move(obj_hir);
-    debug::hir::log(debug::hir::Id::IndexValue, "Evaluating index", debug::Level::Trace);
-    hir->index = lower_expr(*idx.index);
+
+    if (index_chain.size() == 1) {
+        // 単一インデックス（後方互換性）
+        debug::hir::log(debug::hir::Id::IndexValue, "Single index", debug::Level::Trace);
+        hir->index = lower_expr(*index_chain[0]);
+    } else {
+        // 多次元配列: 全インデックスを収集
+        debug::hir::log(debug::hir::Id::IndexValue,
+                        "Multi-dim index: " + std::to_string(index_chain.size()) + " indices",
+                        debug::Level::Trace);
+        for (auto* idx_expr : index_chain) {
+            hir->indices.push_back(lower_expr(*idx_expr));
+        }
+    }
     return std::make_unique<HirExpr>(std::move(hir), type);
 }
 

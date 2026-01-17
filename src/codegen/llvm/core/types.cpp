@@ -59,21 +59,11 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 return ctx.getPtrType();
             }
 
-            // 多次元配列を1D配列にフラット化
-            // int[D1][D2]...[Dn] → [D1*D2*...*Dn x InnerType]
-            size_t totalSize = type->array_size.value();
-            hir::TypePtr innerType = type->element_type;
-
-            // ネストした配列の次元を全て乗算
-            while (innerType && innerType->kind == hir::TypeKind::Array &&
-                   innerType->array_size.has_value()) {
-                totalSize *= innerType->array_size.value();
-                innerType = innerType->element_type;
-            }
-
-            // 最内側の要素型を変換
-            auto elemType = convertType(innerType);
-            return llvm::ArrayType::get(elemType, totalSize);
+            // Clang準拠: 多次元配列はネスト構造を保持
+            // int[D1][D2] → [D1 x [D2 x int]]
+            // これによりGEPで複数インデックスを使用でき、LLVMのベクトル化が効く
+            auto elemType = convertType(type->element_type);
+            return llvm::ArrayType::get(elemType, type->array_size.value());
         }
         case hir::TypeKind::Struct: {
             // まずインターフェース型かチェック

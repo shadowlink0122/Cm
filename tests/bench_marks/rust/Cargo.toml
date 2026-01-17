@@ -33,6 +33,10 @@ path = "06_prime_sieve.rs"
 name = "07_fibonacci_memoized"
 path = "07_fibonacci_memoized.rs"
 
+[[bin]]
+name = "05b_matrix_multiply_2d"
+path = "05b_matrix_multiply_2d.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

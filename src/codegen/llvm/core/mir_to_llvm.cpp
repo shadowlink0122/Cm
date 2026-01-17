@@ -2625,31 +2625,43 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     elemType = ctx.getI32Type();  // デフォルト
                 }
 
-                // フラット化された1次元配列としてGEP
-                // 元の多次元配列は連続メモリ上に配置されているため、
-                // 線形インデックスで直接アクセス可能
-                llvm::Value* basePtr = addr;
+                // Clang準拠: 多次元GEPを生成
+                // フラット化せず、配列の配列として複数インデックスでアクセス
+                // gep inbounds [300 x [300 x i32]], ptr %arr, i64 0, i64 %i, i64 %j
+                if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                    auto allocType = allocaInst->getAllocatedType();
+                    if (allocType->isArrayTy() && indexValues.size() > 0) {
+                        // 多次元GEP用インデックスを構築
+                        std::vector<llvm::Value*> gepIndices;
+                        // 最初のインデックスは常に0（ポインタから配列への変換）
+                        gepIndices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));
+                        // 各次元のインデックスを追加
+                        for (auto* idx : indexValues) {
+                            gepIndices.push_back(idx);
+                        }
+                        // 多次元GEPを生成
+                        addr = builder->CreateInBoundsGEP(allocType, addr, gepIndices, "elem_ptr");
+                        currentType = arrayTypeInfo;
+                        break;
+                    }
+                }
 
-                // 配列の先頭要素へのポインタを取得
+                // フォールバック: 多次元GEPが使えない場合はフラット化
+                llvm::Value* basePtr = addr;
                 if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                     auto allocType = allocaInst->getAllocatedType();
                     if (allocType->isArrayTy()) {
                         // 多次元配列の場合、要素型へのポインタに変換
                         std::vector<llvm::Value*> zeroIndices;
                         zeroIndices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));
-
-                        // 各次元を0でインデックスして最内側の配列ポインタを取得
                         llvm::Type* currentArrayType = allocType;
                         while (currentArrayType->isArrayTy()) {
                             zeroIndices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));
                             currentArrayType = currentArrayType->getArrayElementType();
                         }
-
                         basePtr = builder->CreateGEP(allocType, addr, zeroIndices, "flat_base");
                     }
                 }
-
-                // 線形インデックスでアクセス
                 addr = builder->CreateGEP(elemType, basePtr, linearIndex, "flat_elem_ptr");
 
                 // 型情報を更新
