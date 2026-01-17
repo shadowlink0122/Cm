@@ -2476,9 +2476,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         } else {
             hir::TypePtr arg_type = arg->type;
 
-            // 配列型の変数参照をポインタに自動変換（array decay）
+            // 固定サイズ配列の変数参照をポインタに自動変換（array decay）
             // C言語セマンティクス: 配列を関数に渡すとポインタにdecayする
-            if (arg_type && arg_type->kind == hir::TypeKind::Array) {
+            // 注意: スライス（動的配列、array_sizeなし）はすでに参照型なのでdecay不要
+            if (arg_type && arg_type->kind == hir::TypeKind::Array &&
+                arg_type->array_size.has_value()) {
                 // 変数参照の場合、アドレスを取得
                 if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
                     const auto& var_ref = **var_ref_ptr;
