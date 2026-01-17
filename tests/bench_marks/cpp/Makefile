@@ -1,4 +1,4 @@
-CXX = clang++
+CXX = /usr/bin/clang++
 CXXFLAGS = -std=c++17 -O3 -march=native -Wall
 
 # 個別のベンチマーク
