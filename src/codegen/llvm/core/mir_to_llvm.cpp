@@ -2426,6 +2426,59 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
+                // ポインタ型の場合は単純なポインタ演算（フラット化不要）
+                if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                    // インデックス値を取得
+                    llvm::Value* indexVal = nullptr;
+                    auto idx_it = locals.find(proj.index_local);
+                    if (idx_it != locals.end()) {
+                        indexVal = idx_it->second;
+                        if (allocatedLocals.count(proj.index_local)) {
+                            llvm::Type* idxType = ctx.getI64Type();
+                            if (currentMIRFunction &&
+                                proj.index_local < currentMIRFunction->locals.size()) {
+                                auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                                idxType = convertType(idxLocal.type);
+                            }
+                            indexVal = builder->CreateLoad(idxType, indexVal, "idx_load");
+                            if (idxType->isIntegerTy(32)) {
+                                indexVal =
+                                    builder->CreateSExt(indexVal, ctx.getI64Type(), "idx_ext");
+                            }
+                        }
+                    }
+
+                    if (!indexVal) {
+                        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                                "Cannot get index value for pointer access",
+                                                cm::debug::Level::Error);
+                        return nullptr;
+                    }
+
+                    // ポインタが指す要素の型を取得
+                    llvm::Type* elemType = ctx.getI32Type();  // デフォルト
+                    if (currentType->element_type) {
+                        elemType = convertType(currentType->element_type);
+                    }
+
+                    // addrがポインタ変数のallocaの場合、まずポインタ値をロード
+                    llvm::Value* ptrVal = addr;
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                        auto allocType = allocaInst->getAllocatedType();
+                        // allocaがポインタ型を格納している場合、ポインタ値をロード
+                        if (allocType->isPointerTy() || allocType == ctx.getPtrType()) {
+                            ptrVal = builder->CreateLoad(ctx.getPtrType(), addr, "ptr_load");
+                        }
+                    }
+
+                    // ポインタ + オフセット
+                    addr = builder->CreateGEP(elemType, ptrVal, indexVal, "ptr_elem");
+
+                    // 型情報を更新
+                    currentType = currentType->element_type;
+                    break;
+                }
+
                 // 連続するIndexプロジェクションを収集（多次元配列のフラット化）
                 std::vector<llvm::Value*> indexValues;
                 std::vector<uint64_t> dimensions;
