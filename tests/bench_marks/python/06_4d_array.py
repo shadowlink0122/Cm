@@ -1,25 +1,25 @@
-# 4D Array Benchmark
+# 4D Array Benchmark (Large Scale)
 import time
 
 def main():
-    # 4D array: 10x10x10x10 = 10000 elements
-    arr4d = [[[[0 for _ in range(10)] for _ in range(10)] for _ in range(10)] for _ in range(10)]
+    # 4D array: 30x30x30x30 = 810,000 elements
+    arr4d = [[[[0 for _ in range(30)] for _ in range(30)] for _ in range(30)] for _ in range(30)]
     
     # Initialize
-    for i in range(10):
-        for j in range(10):
-            for k in range(10):
-                for l in range(10):
-                    arr4d[i][j][k][l] = i * 1000 + j * 100 + k * 10 + l
+    for i in range(30):
+        for j in range(30):
+            for k in range(30):
+                for l in range(30):
+                    arr4d[i][j][k][l] = i + j + k + l
     
-    # Sum 10 times
+    # Sum 5 times
     total = 0
-    for _ in range(10):
+    for _ in range(5):
         s = 0
-        for i in range(10):
-            for j in range(10):
-                for k in range(10):
-                    for l in range(10):
+        for i in range(30):
+            for j in range(30):
+                for k in range(30):
+                    for l in range(30):
                         s += arr4d[i][j][k][l]
         total += s
     

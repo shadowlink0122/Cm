@@ -1,29 +1,29 @@
-// 4D Array Benchmark - C++
+// 4D Array Benchmark - C++ (Large Scale)
 #include <iostream>
 
 int main() {
-    // 4D array: 10x10x10x10 = 10000 elements
-    int arr4d[10][10][10][10];
+    // 4D array: 30x30x30x30 = 810,000 elements
+    static int arr4d[30][30][30][30];
     
     // Initialize
-    for (int i = 0; i < 10; i++) {
-        for (int j = 0; j < 10; j++) {
-            for (int k = 0; k < 10; k++) {
-                for (int l = 0; l < 10; l++) {
-                    arr4d[i][j][k][l] = i * 1000 + j * 100 + k * 10 + l;
+    for (int i = 0; i < 30; i++) {
+        for (int j = 0; j < 30; j++) {
+            for (int k = 0; k < 30; k++) {
+                for (int l = 0; l < 30; l++) {
+                    arr4d[i][j][k][l] = i + j + k + l;
                 }
             }
         }
     }
     
-    // Sum 10 times
+    // Sum 5 times
     long long total = 0;
-    for (int iter = 0; iter < 10; iter++) {
+    for (int iter = 0; iter < 5; iter++) {
         long long sum = 0;
-        for (int i = 0; i < 10; i++) {
-            for (int j = 0; j < 10; j++) {
-                for (int k = 0; k < 10; k++) {
-                    for (int l = 0; l < 10; l++) {
+        for (int i = 0; i < 30; i++) {
+            for (int j = 0; j < 30; j++) {
+                for (int k = 0; k < 30; k++) {
+                    for (int l = 0; l < 30; l++) {
                         sum += arr4d[i][j][k][l];
                     }
                 }
