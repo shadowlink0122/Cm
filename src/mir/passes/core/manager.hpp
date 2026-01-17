@@ -46,7 +46,8 @@ inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
     // Phase 4: 制御フロー最適化
     passes.push_back(std::make_unique<SimplifyControlFlow>());
     passes.push_back(std::make_unique<FunctionInlining>());
-    // TODO: TCE causes infinite loop in optimization pipeline, needs investigation
+    // TODO: TCE causes CFG corruption (entry block loses terminator)
+    // Needs investigation: transform_to_loop + other passes interaction
     // passes.push_back(std::make_unique<TailCallElimination>());
 
     // Phase 5: ループ最適化

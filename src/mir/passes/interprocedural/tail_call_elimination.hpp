@@ -35,10 +35,19 @@ namespace cm::mir::opt {
 // ============================================================
 
 class TailCallElimination : public OptimizationPass {
+   private:
+    // 変換済み関数を追跡して再変換を防ぐ
+    std::unordered_set<std::string> transformed_functions;
+
    public:
     std::string name() const override { return "TailCallElimination"; }
 
     bool run(MirFunction& func) override {
+        // 既に変換済みの関数はスキップ（無限ループ防止）
+        if (transformed_functions.count(func.name) > 0) {
+            return false;
+        }
+
         bool changed = false;
 
         // 各基本ブロックを検査
@@ -61,7 +70,12 @@ class TailCallElimination : public OptimizationPass {
                 continue;
 
             // 末尾再帰をループに変換
-            changed |= transform_to_loop(func, *block, call_data);
+            if (transform_to_loop(func, *block, call_data)) {
+                changed = true;
+                // 変換成功したら関数をマーク（再変換防止）
+                transformed_functions.insert(func.name);
+                break;  // 1回の変換で終了（CFGが変わるため再走査が必要）
+            }
         }
 
         if (changed) {
