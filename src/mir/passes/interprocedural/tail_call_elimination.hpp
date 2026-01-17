@@ -4,7 +4,6 @@
 #include "../core/base.hpp"
 
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace cm::mir::opt {
@@ -35,22 +34,13 @@ namespace cm::mir::opt {
 // ============================================================
 
 class TailCallElimination : public OptimizationPass {
-   private:
-    // 変換済み関数を追跡して再変換を防ぐ
-    std::unordered_set<std::string> transformed_functions;
-
    public:
     std::string name() const override { return "TailCallElimination"; }
 
     bool run(MirFunction& func) override {
-        // 既に変換済みの関数はスキップ（無限ループ防止）
-        if (transformed_functions.count(func.name) > 0) {
-            return false;
-        }
-
         bool changed = false;
 
-        // 各基本ブロックを検査
+        // 各基本ブロックを検査して末尾呼び出しをマーク
         for (auto& block : func.basic_blocks) {
             if (!block || !block->terminator)
                 continue;
@@ -61,6 +51,10 @@ class TailCallElimination : public OptimizationPass {
 
             auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
 
+            // 既にマーク済みならスキップ
+            if (call_data.is_tail_call)
+                continue;
+
             // 自己呼び出しかチェック
             if (!is_self_call(func, call_data))
                 continue;
@@ -69,17 +63,9 @@ class TailCallElimination : public OptimizationPass {
             if (!is_tail_position(func, call_data))
                 continue;
 
-            // 末尾再帰をループに変換
-            if (transform_to_loop(func, *block, call_data)) {
-                changed = true;
-                // 変換成功したら関数をマーク（再変換防止）
-                transformed_functions.insert(func.name);
-                break;  // 1回の変換で終了（CFGが変わるため再走査が必要）
-            }
-        }
-
-        if (changed) {
-            func.build_cfg();
+            // 末尾呼び出しとしてマーク（LLVMで tail call 属性を設定するため）
+            call_data.is_tail_call = true;
+            changed = true;
         }
 
         return changed;
@@ -136,12 +122,34 @@ class TailCallElimination : public OptimizationPass {
     }
 
     // 末尾再帰をループに変換
+    // 新しいループヘッダーブロックを作成し、CFG整合性を維持
     bool transform_to_loop(MirFunction& func, BasicBlock& call_block,
                            MirTerminator::CallData& call_data) {
         // 引数の数が一致しているか確認
         if (call_data.args.size() != func.arg_locals.size()) {
             return false;
         }
+
+        // エントリブロックを取得
+        if (func.entry_block >= func.basic_blocks.size() || !func.basic_blocks[func.entry_block]) {
+            return false;
+        }
+        BasicBlock* entry = func.basic_blocks[func.entry_block].get();
+        if (!entry->terminator) {
+            return false;  // エントリブロックに終端子がない場合はスキップ
+        }
+
+        // ループヘッダー用の新しいブロックを作成
+        BlockId loop_header_id = func.add_block();
+        BasicBlock* loop_header = func.basic_blocks[loop_header_id].get();
+
+        // エントリブロックの内容をループヘッダーに移動
+        loop_header->statements = std::move(entry->statements);
+        loop_header->terminator = std::move(entry->terminator);
+        entry->statements.clear();
+
+        // エントリブロックからループヘッダーへのGotoを設定
+        entry->terminator = MirTerminator::goto_block(loop_header_id);
 
         // 引数を更新する文を生成
         std::vector<MirStatementPtr> update_stmts;
@@ -177,13 +185,13 @@ class TailCallElimination : public OptimizationPass {
             update_stmts.push_back(std::move(assign_stmt));
         }
 
-        // 既存の文を保持し、新しい文を追加
+        // call_blockに引数更新文を追加
         for (auto& stmt : update_stmts) {
             call_block.statements.push_back(std::move(stmt));
         }
 
-        // 終端子をGoto(エントリブロック)に変更
-        call_block.terminator = MirTerminator::goto_block(func.entry_block);
+        // call_blockの終端子をループヘッダーへのGotoに変更（エントリではなく）
+        call_block.terminator = MirTerminator::goto_block(loop_header_id);
 
         return true;
     }

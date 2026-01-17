@@ -46,9 +46,8 @@ inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
     // Phase 4: 制御フロー最適化
     passes.push_back(std::make_unique<SimplifyControlFlow>());
     passes.push_back(std::make_unique<FunctionInlining>());
-    // TODO: TCE causes CFG corruption (entry block loses terminator)
-    // Needs investigation: transform_to_loop + other passes interaction
-    // passes.push_back(std::make_unique<TailCallElimination>());
+    // 末尾呼び出し最適化（LLVM tail call属性を設定するためのフラグ付け）
+    passes.push_back(std::make_unique<TailCallElimination>());
 
     // Phase 5: ループ最適化
     passes.push_back(std::make_unique<LoopInvariantCodeMotion>());
