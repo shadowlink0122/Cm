@@ -44,6 +44,8 @@ declare -a BENCHMARKS=(
     "04_array_sort:Array Sort (1k)"
     "05_matrix_multiply:Matrix Multiply (300x300) - 1D Array SIMD"
     "05b_matrix_multiply_2d:Matrix Multiply (300x300) - 2D Array"
+    "06_4d_array:4D Array (10x10x10x10) - Sum"
+    "07_struct_array:Struct Array (1000) - Point Distance"
 )
 
 # 実行時間測定関数（タイムアウト付き）

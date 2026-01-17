@@ -1,0 +1,38 @@
+// Struct Array Benchmark - Point operations
+import std::io;
+
+struct Point {
+    int x;
+    int y;
+    int z;
+}
+
+int main() {
+    // 構造体配列: 1000要素
+    Point[1000] points;
+    
+    // 初期化
+    for (int i = 0; i < 1000; i++) {
+        points[i].x = i;
+        points[i].y = i * 2;
+        points[i].z = i * 3;
+    }
+    
+    // 距離の二乗の合計を10回計算（ベンチマーク用）
+    int total = 0;
+    for (int iter = 0; iter < 10; iter++) {
+        int sum = 0;
+        for (int i = 0; i < 1000; i++) {
+            int x = points[i].x;
+            int y = points[i].y;
+            int z = points[i].z;
+            sum = sum + (x * x + y * y + z * z);
+        }
+        total = total + sum;
+    }
+    
+    println("Struct array benchmark completed");
+    println("Total: {total}");
+    
+    return 0;
+}

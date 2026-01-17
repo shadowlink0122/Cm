@@ -1,0 +1,39 @@
+// 4D Array Benchmark - Sum and Access
+import std::io;
+
+int main() {
+    // 4D配列: 10x10x10x10 = 10000 要素
+    int[10][10][10][10] arr4d;
+    
+    // 初期化
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            for (int k = 0; k < 10; k++) {
+                for (int l = 0; l < 10; l++) {
+                    arr4d[i][j][k][l] = i * 1000 + j * 100 + k * 10 + l;
+                }
+            }
+        }
+    }
+    
+    // 合計を10回計算（ベンチマーク用）
+    int total = 0;
+    for (int iter = 0; iter < 10; iter++) {
+        int sum = 0;
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                for (int k = 0; k < 10; k++) {
+                    for (int l = 0; l < 10; l++) {
+                        sum = sum + arr4d[i][j][k][l];
+                    }
+                }
+            }
+        }
+        total = total + sum;
+    }
+    
+    println("4D array benchmark completed");
+    println("Total: {total}");
+    
+    return 0;
+}
