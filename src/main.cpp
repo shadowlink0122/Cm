@@ -22,7 +22,6 @@
 #include "hir/lowering/lowering.hpp"
 #include "lint/config.hpp"
 #include "lint/lint_runner.hpp"
-#include "lsp/lsp_server.hpp"
 #include "mir/lowering/lowering.hpp"
 #include "mir/passes/core/manager.hpp"
 #include "mir/printer.hpp"
@@ -57,7 +56,7 @@ std::string get_version() {
 }
 
 // コマンドラインオプション
-enum class Command { None, Run, Compile, Check, Lint, Fmt, Lsp, Help };
+enum class Command { None, Run, Compile, Check, Lint, Fmt, Help };
 
 struct Options {
     Command command = Command::None;
@@ -93,7 +92,7 @@ void print_help(const char* program_name) {
     std::cout << "  check <file>          構文と型チェックのみ実行\n";
     std::cout << "  lint <file>           静的解析を実行\n";
     std::cout << "  fmt <file>            コードフォーマット\n";
-    std::cout << "  lsp                   LSPサーバーモードで起動\n";
+
     std::cout << "  help                  このヘルプを表示\n\n";
     std::cout << "オプション:\n";
     std::cout << "  -o <file>             出力ファイル名を指定\n";
@@ -149,9 +148,7 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Lint;
     } else if (cmd == "fmt") {
         opts.command = Command::Fmt;
-    } else if (cmd == "lsp") {
-        opts.command = Command::Lsp;
-        return opts;  // lspはオプションなし
+
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
@@ -406,13 +403,6 @@ int main(int argc, char* argv[]) {
     // コマンドの処理
     if (opts.command == Command::Help) {
         print_help(argv[0]);
-        return 0;
-    }
-
-    // LSPサーバーモード
-    if (opts.command == Command::Lsp) {
-        lsp::LspServer server;
-        server.run();
         return 0;
     }
 

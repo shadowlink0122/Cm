@@ -6,6 +6,7 @@
 #include "../cleanup/program_dce.hpp"
 #include "../convergence/manager.hpp"  // 収束管理
 #include "../interprocedural/inlining.hpp"
+#include "../interprocedural/tail_call_elimination.hpp"
 #include "../loop/licm.hpp"
 #include "../redundancy/gvn.hpp"
 #include "../scalar/folding.hpp"
@@ -45,6 +46,8 @@ inline std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
     // Phase 4: 制御フロー最適化
     passes.push_back(std::make_unique<SimplifyControlFlow>());
     passes.push_back(std::make_unique<FunctionInlining>());
+    // TODO: TCE causes infinite loop in optimization pipeline, needs investigation
+    // passes.push_back(std::make_unique<TailCallElimination>());
 
     // Phase 5: ループ最適化
     passes.push_back(std::make_unique<LoopInvariantCodeMotion>());

@@ -489,9 +489,10 @@ class LLVMCodeGen {
             std::string runtimePath = findRuntimeLibrary();
 
 #ifdef __APPLE__
-            // macOSではclangを使用してリンク
+            // macOSではシステムのclangを使用してリンク
+            // Homebrew LLVMのclangはSDKパスを認識しないため、/usr/bin/clangを使用
             // -dead_strip: 未使用関数を削除
-            linkCmd = "clang -Wl,-dead_strip ";
+            linkCmd = "/usr/bin/clang -Wl,-dead_strip ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }

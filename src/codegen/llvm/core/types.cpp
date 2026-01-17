@@ -58,10 +58,22 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             if (!type->array_size.has_value()) {
                 return ctx.getPtrType();
             }
-            // 静的配列の場合は配列型を返す
-            auto elemType = convertType(type->element_type);
-            size_t size = type->array_size.value();
-            return llvm::ArrayType::get(elemType, size);
+
+            // 多次元配列を1D配列にフラット化
+            // int[D1][D2]...[Dn] → [D1*D2*...*Dn x InnerType]
+            size_t totalSize = type->array_size.value();
+            hir::TypePtr innerType = type->element_type;
+
+            // ネストした配列の次元を全て乗算
+            while (innerType && innerType->kind == hir::TypeKind::Array &&
+                   innerType->array_size.has_value()) {
+                totalSize *= innerType->array_size.value();
+                innerType = innerType->element_type;
+            }
+
+            // 最内側の要素型を変換
+            auto elemType = convertType(innerType);
+            return llvm::ArrayType::get(elemType, totalSize);
         }
         case hir::TypeKind::Struct: {
             // まずインターフェース型かチェック
