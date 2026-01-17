@@ -2,7 +2,7 @@ CXX = clang++
 CXXFLAGS = -std=c++17 -O3 -march=native -Wall
 
 # 個別のベンチマーク
-BENCHMARKS = 01_prime 02_fibonacci_recursive 03_fibonacci_iterative 04_array_sort 05_matrix_multiply 06_prime_sieve 07_fibonacci_memoized
+BENCHMARKS = 01_prime 02_fibonacci_recursive 03_fibonacci_iterative 04_array_sort 05_matrix_multiply 06_prime_sieve 07_fibonacci_memoized 06_4d_array 07_struct_array
 
 all: $(BENCHMARKS)
 
@@ -25,6 +25,12 @@ all: $(BENCHMARKS)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 07_fibonacci_memoized: 07_fibonacci_memoized.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+06_4d_array: 06_4d_array.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+07_struct_array: 07_struct_array.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 clean:
