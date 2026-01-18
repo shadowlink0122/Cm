@@ -22,7 +22,7 @@ impl int[] for Summable {
 
 int main() {
     const int[5] arr = [1, 2, 3, 4, 5];  // 固定長配列
-    const int s = arr.sum();  // 直接呼び出し
+    const int s = arr.sum();             // 直接呼び出し
     println("sum: {s}");
     return 0;
 }

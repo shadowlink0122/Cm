@@ -4,14 +4,14 @@ import std::io::println;
 int main() {
     int x = 1;
     println(x);
-    
+
     defer println(100);
     defer println(200);
     defer println(300);
-    
+
     int y = 2;
     println(y);
-    
+
     int z = 3;
     println(z);
     return 0;

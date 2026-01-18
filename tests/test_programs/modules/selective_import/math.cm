@@ -1,16 +1,16 @@
 // math.cm - 選択的インポートテスト用モジュール
 module math;
 
-export int add(int a, int b) { 
-    return a + b; 
+export int add(int a, int b) {
+    return a + b;
 }
 
-export int multiply(int a, int b) { 
-    return a * b; 
+export int multiply(int a, int b) {
+    return a * b;
 }
 
-export int subtract(int a, int b) { 
-    return a - b; 
+export int subtract(int a, int b) {
+    return a - b;
 }
 
 export int divide(int a, int b) {

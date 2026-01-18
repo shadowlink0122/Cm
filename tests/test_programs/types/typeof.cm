@@ -13,38 +13,38 @@ int main() {
     double d = 3.14;
     char c = 'a';
     bool b = true;
-    
+
     // typeof は sizeof と組み合わせて使用できる
     // sizeof(typeof(x)) は sizeof(x) と同じ結果を返すべき
-    
+
     // 整数型
     int si = sizeof(i);
     int sl = sizeof(l);
     int sd = sizeof(d);
     int sc = sizeof(c);
     int sb = sizeof(b);
-    
+
     println("sizeof(i) = {si}");
     println("sizeof(l) = {sl}");
     println("sizeof(d) = {sd}");
     println("sizeof(c) = {sc}");
     println("sizeof(b) = {sb}");
-    
+
     // 構造体
     Point pt = Point{x: 10, y: 20};
     int spt = sizeof(pt);
     println("sizeof(pt) = {spt}");
-    
+
     // 配列
     int[5] arr;
     int sarr = sizeof(arr);
     println("sizeof(arr) = {sarr}");
-    
+
     // ポインタ
     int x = 0;
     int* pi = &x;
     int spi = sizeof(pi);
     println("sizeof(pi) = {spi}");
-    
+
     return 0;
 }

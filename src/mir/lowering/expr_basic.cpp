@@ -649,7 +649,7 @@ bool ExprLowering::get_member_place(const hir::HirMember& member, LoweringContex
 
 // 配列インデックスのlowering
 LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringContext& ctx) {
-    // オブジェクトとインデックスをlowering
+    // オブジェクトをlowering
     LocalId array;
 
     // objectが変数参照の場合は直接その変数を使用（配列のコピーを防ぐ）
@@ -664,42 +664,90 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         array = lower_expression(*index_expr.object, ctx);
     }
 
-    LocalId index = lower_expression(*index_expr.index, ctx);
+    // 多次元配列最適化: indices が設定されている場合、複数のIndex projectionを生成
+    // これにより一時変数（行コピー）を回避し、LLVMのベクトル化が可能になる
+    bool is_multi_dim = !index_expr.indices.empty();
 
-    // 要素型を取得
+    // インデックスをlowering
+    std::vector<LocalId> index_locals;
+    if (is_multi_dim) {
+        // 多次元: 全インデックスを収集
+        for (const auto& idx_expr : index_expr.indices) {
+            index_locals.push_back(lower_expression(*idx_expr, ctx));
+        }
+    } else {
+        // 単一インデックス（後方互換性）
+        index_locals.push_back(lower_expression(*index_expr.index, ctx));
+    }
+
+    // 要素型を取得（最内側の要素型まで辿る）
     hir::TypePtr elem_type = hir::make_int();  // デフォルト
     bool is_slice = false;
+    hir::TypePtr current_type = nullptr;
+
     if (index_expr.object && index_expr.object->type) {
-        if (index_expr.object->type->kind == hir::TypeKind::Array) {
-            if (index_expr.object->type->element_type) {
-                elem_type = index_expr.object->type->element_type;
+        current_type = index_expr.object->type;
+        // 多次元配列またはポインタの場合、インデックス数の深さまで要素型を辿る
+        for (size_t i = 0; i < index_locals.size() && current_type; ++i) {
+            if (current_type->kind == hir::TypeKind::Array) {
+                is_slice = !current_type->array_size.has_value();
+                if (current_type->element_type) {
+                    current_type = current_type->element_type;
+                } else {
+                    break;
+                }
+            } else if (current_type->kind == hir::TypeKind::Pointer) {
+                // ポインタ型の場合も要素型を取得（ptr[i]アクセス）
+                if (current_type->element_type) {
+                    current_type = current_type->element_type;
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
-            // 動的配列（スライス）かどうかを判定
-            is_slice = !index_expr.object->type->array_size.has_value();
         }
+        elem_type = current_type ? current_type : hir::make_int();
     }
+
     // フォールバック: HIR型情報がnullの場合、MIRローカル変数の型から判定
-    // これは構造体フィールドへのインデックスアクセス（c.values[0]など）で必要
     if (!is_slice && array < ctx.func->locals.size()) {
         hir::TypePtr array_type = ctx.func->locals[array].type;
-        if (array_type && array_type->kind == hir::TypeKind::Array) {
-            if (array_type->element_type) {
-                elem_type = array_type->element_type;
+        if (array_type && (array_type->kind == hir::TypeKind::Array ||
+                           array_type->kind == hir::TypeKind::Pointer)) {
+            current_type = array_type;
+            for (size_t i = 0; i < index_locals.size() && current_type; ++i) {
+                if (current_type->kind == hir::TypeKind::Array) {
+                    is_slice = !current_type->array_size.has_value();
+                    if (current_type->element_type) {
+                        current_type = current_type->element_type;
+                    } else {
+                        break;
+                    }
+                } else if (current_type->kind == hir::TypeKind::Pointer) {
+                    // ポインタ型の場合も要素型を取得
+                    if (current_type->element_type) {
+                        current_type = current_type->element_type;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
-            is_slice = !array_type->array_size.has_value();
+            elem_type = current_type ? current_type : hir::make_int();
         }
     }
 
     LocalId result = ctx.new_temp(elem_type);
 
-    // スライスの場合は関数呼び出しを生成
-    if (is_slice) {
+    // スライスの場合は関数呼び出しを生成（多次元は非対応）
+    if (is_slice && index_locals.size() == 1) {
         // 要素型が配列の場合（多次元スライス）はサブスライスを取得
         bool is_multidim = elem_type && elem_type->kind == hir::TypeKind::Array;
 
         std::string get_func = "cm_slice_get_i32";
         if (is_multidim) {
-            // 多次元スライスの場合はサブスライスを取得（CmSlice*を返す）
             get_func = "cm_slice_get_subslice";
         } else if (elem_type) {
             auto elem_kind = elem_type->kind;
@@ -721,7 +769,7 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         BlockId success_block = ctx.new_block();
         std::vector<MirOperandPtr> args;
         args.push_back(MirOperand::copy(MirPlace{array}));
-        args.push_back(MirOperand::copy(MirPlace{index}));
+        args.push_back(MirOperand::copy(MirPlace{index_locals[0]}));
 
         auto call_term = std::make_unique<MirTerminator>();
         call_term->kind = MirTerminator::Call;
@@ -739,9 +787,13 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         return result;
     }
 
-    // 通常の配列インデックス
+    // 通常の配列インデックス（単一または多次元）
+    // 多次元配列最適化: 連続するIndex projectionを生成
+    // a[i][j][k] → place.projections = [Index(i), Index(j), Index(k)]
     MirPlace place{array};
-    place.projections.push_back(PlaceProjection::index(index));
+    for (LocalId idx_local : index_locals) {
+        place.projections.push_back(PlaceProjection::index(idx_local));
+    }
 
     ctx.push_statement(
         MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(place))));

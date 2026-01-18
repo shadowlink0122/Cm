@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="256"
+   height="256"
+   viewBox="0 0 256 256"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink">
+
+  <!-- SVG Icon for Cm Programming Language -->
+  <!-- Design: Modern, clean logo combining 'C' and 'm' -->
+
+  <defs>
+    <!-- Gradient definitions -->
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7B68EE;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="shadowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#000000;stop-opacity:0.2" />
+      <stop offset="100%" style="stop-color:#000000;stop-opacity:0.05" />
+    </linearGradient>
+
+    <!-- Shadow filter -->
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="2" dy="2" result="offsetblur"/>
+      <feFlood flood-color="#000000" flood-opacity="0.2"/>
+      <feComposite in2="offsetblur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle
+     cx="128"
+     cy="128"
+     r="120"
+     fill="url(#primaryGradient)"
+     filter="url(#shadow)" />
+
+  <!-- Inner circle for depth -->
+  <circle
+     cx="128"
+     cy="128"
+     r="110"
+     fill="none"
+     stroke="#ffffff"
+     stroke-width="2"
+     opacity="0.3" />
+
+  <!-- Main 'C' shape -->
+  <path
+     d="M 180 128
+        A 60 60 0 1 0 128 68
+        L 128 88
+        A 40 40 0 1 1 160 128"
+     fill="none"
+     stroke="#ffffff"
+     stroke-width="16"
+     stroke-linecap="round" />
+
+  <!-- 'm' shape integrated -->
+  <g transform="translate(128, 128)">
+    <!-- First arc of 'm' -->
+    <path
+       d="M -20 20
+          L -20 -10
+          Q -10 -20, 0 -10
+          L 0 20"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="12"
+       stroke-linecap="round"
+       stroke-linejoin="round" />
+
+    <!-- Second arc of 'm' -->
+    <path
+       d="M 0 -10
+          Q 10 -20, 20 -10
+          L 20 20"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="12"
+       stroke-linecap="round"
+       stroke-linejoin="round" />
+  </g>
+
+  <!-- Accent dots for modern feel -->
+  <circle cx="200" cy="80" r="6" fill="#ffffff" opacity="0.8" />
+  <circle cx="210" cy="95" r="4" fill="#ffffff" opacity="0.6" />
+  <circle cx="215" cy="110" r="3" fill="#ffffff" opacity="0.4" />
+</svg>

@@ -3,5 +3,6 @@ import std::io::println;
 
 int main() {
     println("Testing error: non-zero exit code");
-    return 42;  // 0以外の終了コード
+    return 42;
+    // 0以外の終了コード
 }

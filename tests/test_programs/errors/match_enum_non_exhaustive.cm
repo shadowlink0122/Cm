@@ -9,13 +9,13 @@ enum Color {
 
 int main() {
     int c = Color::Red;
-    
+
     // Blueがないため非網羅的
     string name = match (c) {
         Color::Red => "赤",
         Color::Green => "緑",
     };
-    
+
     println("color = {name}");
     return 0;
 }

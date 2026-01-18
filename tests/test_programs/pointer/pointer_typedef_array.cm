@@ -5,12 +5,12 @@ typedef IntPtr = int*;
 
 int main() {
     int[3] vals = [100, 200, 300];
-    
+
     IntPtr[3] arr;
     arr[0] = &vals[0];
     arr[1] = &vals[1];
     arr[2] = &vals[2];
-    
+
     // アドレスが一致することを確認
     if (arr[0] == &vals[0]) {
         println("addr0: match");
@@ -21,16 +21,16 @@ int main() {
     if (arr[2] == &vals[2]) {
         println("addr2: match");
     }
-    
+
     // 直接デリファレンス
     int v0 = *arr[0];
     int v1 = *arr[1];
     int v2 = *arr[2];
     println("v0 = {v0}, v1 = {v1}, v2 = {v2}");
-    
+
     // 直接デリファレンスで合計
     int sum = *arr[0] + *arr[1] + *arr[2];
     println("sum = {sum}");
-    
+
     return 0;
 }

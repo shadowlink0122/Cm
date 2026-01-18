@@ -9,7 +9,7 @@ impl Resource {
         self.value = 0;
         println("D0");
     }
-    
+
     overload self(int v) {
         self.value = v;
         println("P{self.value}");

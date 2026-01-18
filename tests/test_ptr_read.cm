@@ -1,0 +1,16 @@
+// Test: Read through pointer index
+import std::io;
+
+int read_first(int* arr) {
+    return arr[0];  // Read through pointer
+}
+
+int main() {
+    int[2] data = [10, 20];
+    println("data[0] = {data[0]}");
+    
+    int val = read_first(data);
+    println("read_first = {val}");
+    
+    return 0;
+}

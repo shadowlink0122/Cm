@@ -13,15 +13,18 @@ struct Point {
 
 impl Point for Getter {
     int get_x() {
-        return x;  // 暗黙的this
+        return x;
+        // 暗黙的this
     }
-    
+
     int get_y() {
-        return y;  // 暗黙的this
+        return y;
+        // 暗黙的this
     }
-    
+
     int get_sum() {
-        return x + y;  // 暗黙的this
+        return x + y;
+        // 暗黙的this
     }
 }
 
@@ -29,14 +32,14 @@ int main() {
     Point p;
     p.x = 10;
     p.y = 20;
-    
+
     int vx = p.get_x();
     int vy = p.get_y();
     int vsum = p.get_sum();
-    
+
     println("x: {vx}");
     println("y: {vy}");
     println("sum: {vsum}");
-    
+
     return 0;
 }

@@ -165,6 +165,8 @@ set(CM_SOURCES
     src/frontend/types/checking/utils.cpp
     src/preprocessor/import.cpp
     src/module/resolver.cpp
+    # Lint configuration
+    src/lint/config.cpp
     # HIR lowering (AST -> HIR)
     src/hir/lowering/impl.cpp
     src/hir/lowering/decl.cpp

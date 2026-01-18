@@ -43,22 +43,22 @@ int main() {
     Option<int> some_val = some(42);
     int v1 = unwrap_or_match(some_val, 0);
     println("unwrap_or_match(Some(42), 0) = {v1}");
-    
+
     // None値のテスト
     Option<int> none_val = none_like(0);
     int v2 = unwrap_or_match(none_val, -1);
     println("unwrap_or_match(None, -1) = {v2}");
-    
+
     // option_to_intのテスト
     int code1 = option_to_int(some_val, 0);
     int code2 = option_to_int(none_val, 0);
     println("option_to_int(Some) = {code1}");
     println("option_to_int(None) = {code2}");
-    
+
     // 複数のOptionを組み合わせたテスト
     Option<int> a = some(10);
     Option<int> b = some(20);
-    
+
     // 両方Someの場合のみ計算
     int sum = match (a.is_some) {
         true => match (b.is_some) {
@@ -68,6 +68,6 @@ int main() {
         false => 0,
     };
     println("sum(Some(10), Some(20)) = {sum}");
-    
+
     return 0;
 }

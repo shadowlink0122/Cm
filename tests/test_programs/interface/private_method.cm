@@ -27,7 +27,8 @@ int main() {
     MyCalc c;
     c.multiplier = 10;
 
-    int result = c.calculate(5);  // doubleValue(5) + 10 = 10 + 10 = 20
+    int result = c.calculate(5);
+    // doubleValue(5) + 10 = 10 + 10 = 20
 
     println("Result: {result}");
 

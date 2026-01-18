@@ -20,18 +20,18 @@ int main() {
     // 1. 基本的な名前付き初期化（型は推論）
     Point p1 = {x: 10, y: 20};
     println("p1: ({p1.x}, {p1.y})");
-    
+
     // 2. フィールド順を入れ替えても動作
     Point p2 = {y: 40, x: 30};
     println("p2: ({p2.x}, {p2.y})");
-    
+
     // 3. ネストした構造体リテラル
     Outer o = {inner: {a: 100, b: 200}, c: 300};
     println("o: inner=({o.inner.a}, {o.inner.b}), c={o.c}");
-    
+
     // 4. 部分代入（ネストしたフィールドにリテラル代入）
     o.inner = {a: 1000, b: 2000};
     println("o after: inner=({o.inner.a}, {o.inner.b}), c={o.c}");
-    
+
     return 0;
 }

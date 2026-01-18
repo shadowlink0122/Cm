@@ -32,27 +32,33 @@ int main() {
     // 基本的な関数ポインタ
     int*(int, int) add_ptr = &add;
     int result = add_ptr(10, 5);
-    println("{result}");  // 15
-    
+    println("{result}");
+    // 15
+
     // 別の関数を代入
     add_ptr = &sub;
     result = add_ptr(10, 5);
-    println("{result}");  // 5
-    
+    println("{result}");
+    // 5
+
     // 高階関数のテスト
     result = apply(&add, 20, 10);
-    println("{result}");  // 30
-    
+    println("{result}");
+    // 30
+
     result = apply(&mul, 6, 7);
-    println("{result}");  // 42
-    
+    println("{result}");
+    // 42
+
     // 引数なし関数ポインタ
     int*() getter = &get_value;
-    println("{getter()}");  // 42
-    
+    println("{getter()}");
+    // 42
+
     // void戻り値の関数ポインタ
     void*(int) printer = &print_int;
-    printer(100);  // 100
-    
+    printer(100);
+    // 100
+
     return 0;
 }

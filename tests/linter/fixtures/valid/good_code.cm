@@ -1,0 +1,19 @@
+// テスト: 正しいコード（lint警告なし）
+// 期待: W001, L100-L103 ゼロ
+
+struct GoodStruct {
+    int id;
+}
+
+int calculate_sum(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    int good_variable = 10;
+    const int GOOD_CONSTANT = 100;
+    
+    int result = calculate_sum(good_variable, GOOD_CONSTANT);
+    println(result);
+    return 0;
+}

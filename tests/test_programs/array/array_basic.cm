@@ -4,30 +4,30 @@ import std::io::println;
 int main() {
     // 固定サイズ配列の宣言
     int[5] arr;
-    
+
     // 配列への代入
     arr[0] = 10;
     arr[1] = 20;
     arr[2] = 30;
     arr[3] = 40;
     arr[4] = 50;
-    
+
     // 配列からの読み出し
     int v0 = arr[0];
     int v1 = arr[1];
     int v2 = arr[2];
     int v3 = arr[3];
     int v4 = arr[4];
-    
+
     println("arr[0] = {v0}");
     println("arr[1] = {v1}");
     println("arr[2] = {v2}");
     println("arr[3] = {v3}");
     println("arr[4] = {v4}");
-    
+
     // 配列の合計
     int sum = arr[0] + arr[1] + arr[2] + arr[3] + arr[4];
     println("sum = {sum}");
-    
+
     return 0;
 }

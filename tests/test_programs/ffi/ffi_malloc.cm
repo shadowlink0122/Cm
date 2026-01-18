@@ -10,14 +10,15 @@ int main() {
     void* ptr = malloc(size);
     int* p = ptr;
     *p = 12345;
-    
+
     int value = *p;
     println("Allocated: {value}");
-    
+
     // メモリ解放
     free(ptr);
-    
-    return value - 12345;  // 0を返すべき
+
+    return value - 12345;
+    // 0を返すべき
 }
 // EXPECT: 0
 // EXPECT_OUTPUT: Allocated: 12345

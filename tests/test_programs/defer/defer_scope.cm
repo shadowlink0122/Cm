@@ -3,17 +3,16 @@ import std::io::println;
 
 int main() {
     println(1);
-    
     {
         println(10);
         defer println(100);
         println(20);
     }
-    
+
     println(2);
-    
+
     defer println(200);
-    
+
     println(3);
     return 0;
 }

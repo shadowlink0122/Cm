@@ -26,69 +26,69 @@ int main() {
     Point p1;
     p1.x = 10;
     p1.y = 20;
-    
+
     Point p2;
     p2.x = 10;
     p2.y = 20;
-    
+
     Point p3;
     p3.x = 5;
     p3.y = 10;
-    
+
     if (p1 == p2) {
         println("Point: p1 == p2");
     } else {
         println("Point: p1 != p2");
     }
-    
+
     if (p1 == p3) {
         println("Point: p1 == p3");
     } else {
         println("Point: p1 != p3");
     }
-    
+
     // Color のテスト
     Color c1;
     c1.r = 255;
     c1.g = 128;
     c1.b = 64;
-    
+
     Color c2;
     c2.r = 255;
     c2.g = 128;
     c2.b = 64;
-    
+
     Color c3;
     c3.r = 0;
     c3.g = 0;
     c3.b = 0;
-    
+
     if (c1 == c2) {
         println("Color: c1 == c2");
     } else {
         println("Color: c1 != c2");
     }
-    
+
     if (c1 == c3) {
         println("Color: c1 == c3");
     } else {
         println("Color: c1 != c3");
     }
-    
+
     // Size のテスト
     Size s1;
     s1.width = 100;
     s1.height = 200;
-    
+
     Size s2;
     s2.width = 100;
     s2.height = 200;
-    
+
     if (s1 == s2) {
         println("Size: s1 == s2");
     } else {
         println("Size: s1 != s2");
     }
-    
+
     return 0;
 }

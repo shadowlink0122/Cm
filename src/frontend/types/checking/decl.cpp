@@ -175,6 +175,17 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         }
         scopes_.global().define_function(func->name, std::move(param_types), func->return_type,
                                          required_params);
+
+        // L100: 関数名はsnake_caseであるべき
+        // main関数とネームスペース付き関数は除外
+        if (enable_lint_warnings_ && func->name != "main" &&
+            func->name.find("::") == std::string::npos) {
+            if (!is_snake_case(func->name)) {
+                // name_spanが設定されていればそれを使用、なければdecl.span
+                Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
+                warning(name_pos, "Function name '" + func->name + "' should be snake_case [L100]");
+            }
+        }
     } else if (auto* st = decl.as<ast::StructDecl>()) {
         if (!st->generic_params.empty()) {
             generic_structs_[st->name] = st->generic_params;
@@ -186,6 +197,13 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
         scopes_.global().define(st->name, ast::make_named(st->name));
         register_struct(st->name, *st);
+
+        // L103: 型名はPascalCaseであるべき
+        if (enable_lint_warnings_ && !is_pascal_case(st->name)) {
+            // name_spanが設定されていればそれを使用、なければdecl.span
+            Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
+            warning(name_pos, "Type name '" + st->name + "' should be PascalCase [L103]");
+        }
 
         for (const auto& iface_name : st->auto_impls) {
             register_auto_impl(*st, iface_name);
@@ -505,8 +523,14 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
         check_statement(*stmt);
     }
 
-    // 関数終了時にconst推奨警告をチェック
-    check_const_recommendations();
+    // Lint警告が有効な場合のみチェック
+    if (enable_lint_warnings_) {
+        // 関数終了時にconst推奨警告をチェック
+        check_const_recommendations();
+
+        // 未使用変数チェック (W001)
+        check_unused_variables();
+    }
 
     // 初期化追跡をクリア（次の関数用）
     initialized_variables_.clear();

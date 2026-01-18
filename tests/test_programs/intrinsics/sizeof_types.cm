@@ -28,28 +28,50 @@ int main() {
     int s_long = __sizeof__(long);
     int s_float = __sizeof__(float);
     int s_double = __sizeof__(double);
-    
-    if (s_char != 1) { println("FAIL: sizeof(char)"); return 1; }
-    if (s_tiny != 1) { println("FAIL: sizeof(tiny)"); return 1; }
-    if (s_short != 2) { println("FAIL: sizeof(short)"); return 1; }
-    if (s_int != 4) { println("FAIL: sizeof(int)"); return 1; }
-    if (s_long != 8) { println("FAIL: sizeof(long)"); return 1; }
-    if (s_float != 4) { println("FAIL: sizeof(float)"); return 1; }
-    if (s_double != 8) { println("FAIL: sizeof(double)"); return 1; }
-    
+
+    if (s_char != 1) { println("FAIL: sizeof(char)");
+        return 1;
+    }
+    if (s_tiny != 1) { println("FAIL: sizeof(tiny)");
+        return 1;
+    }
+    if (s_short != 2) { println("FAIL: sizeof(short)");
+        return 1;
+    }
+    if (s_int != 4) { println("FAIL: sizeof(int)");
+        return 1;
+    }
+    if (s_long != 8) { println("FAIL: sizeof(long)");
+        return 1;
+    }
+    if (s_float != 4) { println("FAIL: sizeof(float)");
+        return 1;
+    }
+    if (s_double != 8) { println("FAIL: sizeof(double)");
+        return 1;
+    }
+
     // 構造体
     int s_empty = __sizeof__(Empty);
     int s_single = __sizeof__(Single);
     int s_mixed = __sizeof__(Mixed);
     int s_nested = __sizeof__(Nested);
-    
-    if (s_empty != 1) { println("FAIL: sizeof(Empty) = {s_empty}"); return 1; }
-    if (s_single != 4) { println("FAIL: sizeof(Single) = {s_single}"); return 1; }
+
+    if (s_empty != 1) { println("FAIL: sizeof(Empty) = {s_empty}");
+        return 1;
+    }
+    if (s_single != 4) { println("FAIL: sizeof(Single) = {s_single}");
+        return 1;
+    }
     // Mixed: char(1) + pad(3) + int(4) + char(1) + pad(3) = 12
-    if (s_mixed != 12) { println("FAIL: sizeof(Mixed) = {s_mixed}"); return 1; }
+    if (s_mixed != 12) { println("FAIL: sizeof(Mixed) = {s_mixed}");
+        return 1;
+    }
     // Nested: Single(4) + int(4) = 8
-    if (s_nested != 8) { println("FAIL: sizeof(Nested) = {s_nested}"); return 1; }
-    
+    if (s_nested != 8) { println("FAIL: sizeof(Nested) = {s_nested}");
+        return 1;
+    }
+
     println("All intrinsic tests passed!");
     return 0;
 }

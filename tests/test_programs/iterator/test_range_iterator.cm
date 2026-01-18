@@ -21,7 +21,7 @@ impl RangeIterator {
         self.end = end;
         self.step = step;
     }
-    
+
     bool has_next() {
         if (self.step > 0) {
             return self.current < self.end;
@@ -29,13 +29,13 @@ impl RangeIterator {
             return self.current > self.end;
         }
     }
-    
+
     int next() {
         int value = self.current;
         self.current = self.current + self.step;
         return value;
     }
-    
+
     int peek() {
         return self.current;
     }
@@ -44,7 +44,7 @@ impl RangeIterator {
 int main() {
     // 0..5 の範囲をイテレート
     RangeIterator iter = RangeIterator(0, 5, 1);
-    
+
     println("Range 0..5:");
     int sum = 0;
     while (iter.has_next()) {
@@ -52,10 +52,10 @@ int main() {
         sum = sum + val;
     }
     println("sum: {sum}");
-    
+
     // 10..0 step -2 の範囲をイテレート
     RangeIterator iter2 = RangeIterator(10, 0, -2);
-    
+
     println("Range 10..0 step -2:");
     int sum2 = 0;
     while (iter2.has_next()) {
@@ -63,6 +63,6 @@ int main() {
         sum2 = sum2 + val;
     }
     println("sum: {sum2}");
-    
+
     return 0;
 }

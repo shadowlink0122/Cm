@@ -12,10 +12,10 @@ int main() {
     // これはエラーになるべき: string型をint変数に代入
     int result = getString();
     println("result = {result}");
-    
+
     // これもエラーになるべき: int型をstring変数に代入
     string text = getInt();
     println("text = {text}");
-    
+
     return 0;
 }

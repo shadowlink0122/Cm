@@ -15,7 +15,7 @@ int main() {
         sum1 = sum1 + x;
     }
     println("1D array sum: {sum1}");
-    
+
     // 1次元スライス with auto
     int[] slice1d = [10, 20, 30];
     int sum2 = 0;
@@ -23,7 +23,7 @@ int main() {
         sum2 = sum2 + x;
     }
     println("1D slice sum: {sum2}");
-    
+
     // 2次元固定配列 with auto（各行は配列）
     int[3][2] arr2d = [[1, 2, 3], [4, 5, 6]];
     int row_count = 0;
@@ -32,19 +32,19 @@ int main() {
         println("row {row_count} first: {first}");
         row_count = row_count + 1;
     }
-    
+
     // 構造体配列 with auto
     Point[3] points = [
-        Point{x: 1, y: 2},
-        Point{x: 3, y: 4},
-        Point{x: 5, y: 6}
+    Point{x: 1, y: 2},
+    Point{x: 3, y: 4},
+    Point{x: 5, y: 6}
     ];
     int point_sum = 0;
     for (auto p in points) {
         point_sum = point_sum + p.x + p.y;
     }
     println("point sum: {point_sum}");
-    
+
     // 空のスライス（ループが実行されないことを確認）
     int[] empty = [];
     int empty_count = 0;
@@ -52,7 +52,7 @@ int main() {
         empty_count = empty_count + 1;
     }
     println("empty count: {empty_count}");
-    
+
     // 文字列配列 with auto
     string[3] names = ["Alice", "Bob", "Charlie"];
     int name_count = 0;
@@ -60,6 +60,6 @@ int main() {
         name_count = name_count + 1;
     }
     println("name count: {name_count}");
-    
+
     return 0;
 }

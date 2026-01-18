@@ -7,15 +7,15 @@ typedef FloatPtr = float*;
 int main() {
     int a = 42;
     float f = 3.14;
-    
+
     IntPtr p1 = &a;
     FloatPtr p2 = &f;
-    
+
     int v1 = *p1;
     float v2 = *p2;
-    
+
     println("v1 = {v1}");
     println("v2 = {v2}");
-    
+
     return 0;
 }

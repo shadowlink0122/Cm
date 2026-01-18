@@ -9,26 +9,28 @@ int main() {
     arr[2] = 30;
     arr[3] = 40;
     arr[4] = 50;
-    
+
     // 2. 配列からの読み出し
     println("arr = [{arr[0]}, {arr[1]}, {arr[2]}, {arr[3]}, {arr[4]}]");
-    
+
     // 3. 配列リテラル初期化
     int[3] lit = [100, 200, 300];
     println("lit = [{lit[0]}, {lit[1]}, {lit[2]}]");
-    
+
     // 4. size()/len()メソッド（戻り値をint型に代入するため配列サイズを直接使用）
-    int s = 5;  // arr.size() は 5
-    int l = 3;  // lit.len() は 3
+    int s = 5;
+    // arr.size() は 5
+    int l = 3;
+    // lit.len() は 3
     println("arr.size() = {s}");
     println("lit.len() = {l}");
-    
+
     // 5. forループでイテレート
     int sum = 0;
     for (int i = 0; i < 5; i = i + 1) {
         sum = sum + arr[i];
     }
     println("sum = {sum}");
-    
+
     return 0;
 }

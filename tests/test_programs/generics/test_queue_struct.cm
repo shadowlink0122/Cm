@@ -53,7 +53,8 @@ impl<T> Queue<T> for QueueOps<T> {
     // 要素を取り出し
     T dequeue() {
         // 空のキューチェック用にダミーを作成
-        T result = 0 as T;  // 初期化
+        T result = 0 as T;
+        // 初期化
 
         if (self.size > 0) {
             result = self.front->data;

@@ -3,7 +3,7 @@ import std::io::println;
 
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // some: いずれかの要素が条件を満たすか
     bool has_even = arr.some((int x) => { return x % 2 == 0; });
     if (has_even) {
@@ -11,7 +11,7 @@ int main() {
     } else {
         println("has_even: false");
     }
-    
+
     // every: すべての要素が条件を満たすか
     bool all_positive = arr.every((int x) => { return x > 0; });
     if (all_positive) {
@@ -19,10 +19,10 @@ int main() {
     } else {
         println("all_positive: false");
     }
-    
+
     // findIndex: 条件を満たす最初の要素のインデックス
     int idx = arr.findIndex((int x) => { return x > 3; });
     println("first > 3 at index: {idx}");
-    
+
     return 0;
 }

@@ -1,0 +1,12 @@
+import std::io;
+int main() {
+    int[300][300] a;
+    // 初期化のみ
+    for (int i = 0; i < 300; i++) {
+        for (int j = 0; j < 300; j++) {
+            a[i][j] = i + j;
+        }
+    }
+    println("done {a[150][150]}");
+    return 0;
+}

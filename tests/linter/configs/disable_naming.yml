@@ -1,0 +1,7 @@
+# 設定テスト: 命名規則を無効化
+lint:
+  rules:
+    L100: disabled
+    L101: disabled
+    L102: disabled
+    L103: disabled

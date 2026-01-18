@@ -5,7 +5,7 @@ import std::mem::{malloc, free};
 
 int main() {
     print("=== Pointer Cast Test ===\n");
-    
+
     // Test 1: void* -> int*
     print("Test 1: void* -> int*\n");
     void* raw1 = malloc(sizeof(int));
@@ -18,7 +18,7 @@ int main() {
         print("  int cast: FAIL\n");
     }
     free(raw1);
-    
+
     // Test 2: void* -> double*
     print("Test 2: void* -> double*\n");
     void* raw2 = malloc(sizeof(double));
@@ -31,7 +31,7 @@ int main() {
         print("  double cast: FAIL\n");
     }
     free(raw2);
-    
+
     // Test 3: void* -> bool*
     print("Test 3: void* -> bool*\n");
     void* raw3 = malloc(sizeof(bool));
@@ -44,7 +44,7 @@ int main() {
         print("  bool cast: FAIL\n");
     }
     free(raw3);
-    
+
     // Test 4: void* -> char*
     print("Test 4: void* -> char*\n");
     void* raw4 = malloc(sizeof(char));
@@ -57,7 +57,7 @@ int main() {
         print("  char cast: FAIL\n");
     }
     free(raw4);
-    
+
     // Test 5: 複数回の確保と解放
     print("Test 5: Multiple allocations\n");
     void* a = malloc(sizeof(int));
@@ -75,7 +75,7 @@ int main() {
     }
     free(a);
     free(b);
-    
+
     print("\nAll pointer cast tests completed!\n");
     return 0;
 }

@@ -11,7 +11,8 @@ int main() {
     // 条件が最初からfalseの場合
     int j = 10;
     while (j < 5) {
-        println(999);  // 実行されない
+        println(999);
+        // 実行されない
     }
 
     // ネストされたループ

@@ -15,7 +15,8 @@ export drawing2d {
     int distance(Point2D a, Point2D b) {
         int dx = b.x - a.x;
         int dy = b.y - a.y;
-        return dx * dx + dy * dy;  // 距離の二乗
+        return dx * dx + dy * dy;
+        // 距離の二乗
     }
 }
 

@@ -21,7 +21,7 @@ impl RangeIterator {
     bool has_next() {
         return self.current < self.end;
     }
-    
+
     int next() {
         int value = self.current;
         self.current = self.current + self.step;
@@ -51,12 +51,12 @@ Range range(int start, int end) {
 
 int main() {
     Range r = range(1, 5);
-    
+
     // for-in + イテレータ: 自動的にiter()/has_next()/next()パターンで展開
     for (int x in r) {
         println("{x}");
     }
-    
+
     println("done");
     return 0;
 }

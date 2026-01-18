@@ -67,17 +67,17 @@ int main() {
     println("is_ok(10/2) = {b1}");
     int v1 = unwrap_result(ok_result);
     println("unwrap(10/2) = {v1}");
-    
+
     // Err値のテスト
     Result<int, string> err_result = safe_divide(10, 0);
     bool b2 = is_err(err_result);
     println("is_err(10/0) = {b2}");
     string e1 = unwrap_err(err_result);
     println("unwrap_err(10/0) = {e1}");
-    
+
     // unwrap_orのテスト
     int v2 = unwrap_or_result(err_result, -1);
     println("unwrap_or(10/0, -1) = {v2}");
-    
+
     return 0;
 }

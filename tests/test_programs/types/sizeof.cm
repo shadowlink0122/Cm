@@ -71,7 +71,7 @@ int main() {
     int s_ulong = sizeof(ulong);
     int s_float = sizeof(float);
     int s_double = sizeof(double);
-    
+
     println("sizeof(bool) = {s_bool}");
     println("sizeof(char) = {s_char}");
     println("sizeof(tiny) = {s_tiny}");
@@ -84,7 +84,7 @@ int main() {
     println("sizeof(ulong) = {s_ulong}");
     println("sizeof(float) = {s_float}");
     println("sizeof(double) = {s_double}");
-    
+
     // =====================================
     // ポインタ型
     // =====================================
@@ -97,7 +97,7 @@ int main() {
     println("sizeof(char*) = {s_charp}");
     println("sizeof(Point*) = {s_pointp}");
     println("sizeof(int**) = {s_intpp}");
-    
+
     // =====================================
     // 配列型
     // =====================================
@@ -114,7 +114,7 @@ int main() {
     println("sizeof(char[100]) = {s_carr100}");
     println("sizeof(long[3]) = {s_larr3}");
     println("sizeof(Point[2]) = {s_parr2}");
-    
+
     // =====================================
     // 構造体型
     // =====================================
@@ -127,7 +127,7 @@ int main() {
     println("sizeof(Empty) = {s_empty}");
     println("sizeof(Nested) = {s_nested}");
     println("sizeof(AllTypes) = {s_alltypes}");
-    
+
     // =====================================
     // アラインメント
     // =====================================
@@ -140,7 +140,7 @@ int main() {
     println("sizeof(Aligned2) = {s_a2}");
     println("sizeof(Aligned3) = {s_a3}");
     println("sizeof(Aligned4) = {s_a4}");
-    
+
     // =====================================
     // typedef型
     // =====================================
@@ -153,7 +153,7 @@ int main() {
     println("sizeof(MyPoint) = {s_mypoint}");
     println("sizeof(IntPtr) = {s_intptr}");
     println("sizeof(IntArray) = {s_intarr}");
-    
+
     // =====================================
     // 変数に対するsizeof
     // =====================================
@@ -166,7 +166,7 @@ int main() {
     long vl = 1000;
     float vf = 3.14;
     double vd = 2.718;
-    
+
     int sv_b = sizeof(vb);
     int sv_c = sizeof(vc);
     int sv_t = sizeof(vt);
@@ -175,7 +175,7 @@ int main() {
     int sv_l = sizeof(vl);
     int sv_f = sizeof(vf);
     int sv_d = sizeof(vd);
-    
+
     println("sizeof(vb) = {sv_b}");
     println("sizeof(vc) = {sv_c}");
     println("sizeof(vt) = {sv_t}");
@@ -184,7 +184,7 @@ int main() {
     println("sizeof(vl) = {sv_l}");
     println("sizeof(vf) = {sv_f}");
     println("sizeof(vd) = {sv_d}");
-    
+
     // 構造体変数
     Point pt = Point{x: 10, y: 20};
     Nested nested = Nested{p: Point{x: 1, y: 2}, z: 3};
@@ -192,7 +192,7 @@ int main() {
     int sv_nested = sizeof(nested);
     println("sizeof(pt) = {sv_pt}");
     println("sizeof(nested) = {sv_nested}");
-    
+
     // 配列変数
     int[5] arr;
     char[10] carr;
@@ -200,13 +200,13 @@ int main() {
     int sv_carr = sizeof(carr);
     println("sizeof(arr) = {sv_arr}");
     println("sizeof(carr) = {sv_carr}");
-    
+
     // ポインタ変数
     int x2 = 0;
     int* pi = &x2;
     int sv_pi = sizeof(pi);
     println("sizeof(pi) = {sv_pi}");
-    
+
     // =====================================
     // リテラルに対するsizeof
     // =====================================
@@ -219,6 +219,6 @@ int main() {
     println("sizeof(3.14) = {sl_double}");
     println("sizeof('x') = {sl_char}");
     println("sizeof(true) = {sl_bool}");
-    
+
     return 0;
 }

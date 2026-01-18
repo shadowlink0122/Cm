@@ -3,9 +3,9 @@ import std::mem::{Allocator, DefaultAllocator};
 
 int main() {
     print("=== Allocator Cast Test ===\n");
-    
+
     DefaultAllocator alloc = DefaultAllocator{};
-    
+
     // int型の確保とキャスト
     print("Test: int via allocator\n");
     void* raw1 = alloc.alloc(sizeof(int));
@@ -18,7 +18,7 @@ int main() {
         print("  int value: FAIL\n");
     }
     alloc.dealloc(raw1);
-    
+
     // double型の確保とキャスト
     print("Test: double via allocator\n");
     void* raw2 = alloc.alloc(sizeof(double));
@@ -31,13 +31,13 @@ int main() {
         print("  double value: FAIL\n");
     }
     alloc.dealloc(raw2);
-    
+
     // reallocateのテスト
     print("Test: reallocate\n");
     void* raw3 = alloc.alloc(sizeof(int));
     int* p3 = raw3 as int*;
     *p3 = 123;
-    
+
     void* raw4 = alloc.reallocate(raw3, sizeof(int) * 2);
     int* p4 = raw4 as int*;
     *p4 = 456;
@@ -48,7 +48,7 @@ int main() {
         print("  reallocate: FAIL\n");
     }
     alloc.dealloc(raw4);
-    
+
     print("\nAllocator cast tests passed!\n");
     return 0;
 }

@@ -39,6 +39,9 @@ class TypeChecker {
         return struct_defs_;
     }
 
+    // Lint警告の有効/無効を設定
+    void set_enable_lint_warnings(bool enable) { enable_lint_warnings_ = enable; }
+
    private:
     // ============================================================
     // 宣言の登録・チェック (decl.cpp)
@@ -134,6 +137,15 @@ class TypeChecker {
     void mark_variable_modified(const std::string& name);
     void check_const_recommendations();
 
+    // 未使用変数チェック (W001)
+    void check_unused_variables();
+
+    // 命名規則チェック (L100-L103)
+    static bool is_snake_case(const std::string& name);
+    static bool is_pascal_case(const std::string& name);
+    static bool is_upper_snake_case(const std::string& name);
+    void check_naming_conventions();
+
     // match式のヘルパー
     void check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr expected_type);
     void check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr scrutinee_type);
@@ -145,6 +157,9 @@ class TypeChecker {
     ast::TypePtr current_return_type_;
     std::vector<Diagnostic> diagnostics_;
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
+
+    // Lint警告の有効/無効（デフォルト: false = 警告なし）
+    bool enable_lint_warnings_ = false;
 
     // 現在チェック中の文/式のSpan（エラー表示用）
     Span current_span_;

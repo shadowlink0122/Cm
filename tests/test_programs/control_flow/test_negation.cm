@@ -61,8 +61,10 @@ int main() {
     println("!(a || b) = {not_a_or_b}");
 
     // De Morganの法則
-    println("!a || !b = {not_a_or_not_b}");  // !(a && b)と同じ
-    println("!a && !b = {not_a_and_not_b}");  // !(a || b)と同じ
+    println("!a || !b = {not_a_or_not_b}");
+    // !(a && b)と同じ
+    println("!a && !b = {not_a_and_not_b}");
+    // !(a || b)と同じ
 
     return 0;
 }

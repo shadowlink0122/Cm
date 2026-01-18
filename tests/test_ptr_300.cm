@@ -1,0 +1,27 @@
+import std::io;
+use libc { void* malloc(ulong size); void free(void* ptr); }
+void matrix_multiply(int n) {
+    ulong size = n * n * sizeof(int);
+    int* a = malloc(size) as int*;
+    int* b = malloc(size) as int*;
+    int* c = malloc(size) as int*;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            int idx = i * n + j;
+            a[idx] = (i + j) % 100;
+            b[idx] = (i - j + 100) % 100;
+            c[idx] = 0;
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        for (int k = 0; k < n; k++) {
+            int a_ik = a[i * n + k];
+            for (int j = 0; j < n; j++) {
+                c[i * n + j] = c[i * n + j] + a_ik * b[k * n + j];
+            }
+        }
+    }
+    println("c[0][0] = {c[0]}");
+    free(a as void*); free(b as void*); free(c as void*);
+}
+int main() { matrix_multiply(300); return 0; }

@@ -10,11 +10,11 @@ int main() {
     // メモリ確保（FFI経由）
     int size = 8;
     void* ptr = malloc(size);
-    
+
     // メモリ解放
     free(ptr);
-    
+
     println("malloc/free test passed");
-    
+
     return 0;
 }

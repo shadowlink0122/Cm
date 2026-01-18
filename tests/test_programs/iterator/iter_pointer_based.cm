@@ -5,8 +5,10 @@ import std::io::println;
 
 // イテレータ構造体（intに特化）
 struct IntIterator {
-    int* current;  // 現在の要素へのポインタ
-    int* end;      // 終端へのポインタ
+    int* current;
+    // 現在の要素へのポインタ
+    int* end;
+    // 終端へのポインタ
 }
 
 impl IntIterator {
@@ -45,14 +47,14 @@ int remaining(IntIterator* iter) {
 
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // イテレータを作成
     IntIterator iter = IntIterator(&arr[0], 5);
-    
+
     // 残り要素数を確認
     int rem = remaining(&iter);
     println("remaining: {rem}");
-    
+
     // イテレータで走査
     int sum = 0;
     while (has_next(&iter)) {
@@ -60,10 +62,10 @@ int main() {
         sum = sum + val;
     }
     println("sum: {sum}");
-    
+
     // 走査後は残り0
     int rem_after = remaining(&iter);
     println("remaining after: {rem_after}");
-    
+
     return 0;
 }

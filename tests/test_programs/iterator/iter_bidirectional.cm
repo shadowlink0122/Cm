@@ -4,9 +4,12 @@ import std::io::println;
 // ドキュメント023 BidirectionalIteratorの設計確認
 
 struct BiIter {
-    int* begin;    // 開始位置
-    int* current;  // 現在位置
-    int* end;      // 終端位置
+    int* begin;
+    // 開始位置
+    int* current;
+    // 現在位置
+    int* end;
+    // 終端位置
 }
 
 impl BiIter {
@@ -55,28 +58,28 @@ int position(BiIter* iter) {
 int main() {
     int[5] arr = [10, 20, 30, 40, 50];
     BiIter iter = BiIter(&arr[0], 5);
-    
+
     // 前方向に走査
     println("Forward:");
     while (has_next(&iter)) {
         int v = next(&iter);
         println("  {v}");
     }
-    
+
     // 現在位置は終端
     int pos1 = position(&iter);
     println("position: {pos1}");
-    
+
     // 後方向に走査
     println("Backward:");
     while (has_prev(&iter)) {
         int v = prev(&iter);
         println("  {v}");
     }
-    
+
     // 現在位置は先頭
     int pos2 = position(&iter);
     println("position: {pos2}");
-    
+
     return 0;
 }

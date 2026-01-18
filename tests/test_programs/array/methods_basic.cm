@@ -3,28 +3,29 @@ import std::io::println;
 
 int main() {
     int[5] arr = [3, 1, 4, 1, 5];
-    
+
     // first/last on fixed array
     int f = arr.first();
     int l = arr.last();
     println("first: {f}, last: {l}");
-    
+
     // reverse - スライスを返す
     int[] rev = arr.reverse();
     int rev_first = rev.first();
     int rev_last = rev.last();
     println("reverse first: {rev_first}, last: {rev_last}");
-    
+
     // sort（昇順）- スライスを返す
     int[] sorted = arr.sort();
     int sort_first = sorted.first();
     int sort_last = sorted.last();
     println("sort first: {sort_first}, last: {sort_last}");
-    
+
     // find
-    bool*(int) gt3 = (int x) => { return x > 3; };
+    bool*(int) gt3 = (int x) => { return x > 3;
+    };
     int found = arr.find(gt3);
     println("find(>3): {found}");
-    
+
     return 0;
 }

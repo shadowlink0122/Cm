@@ -3,36 +3,42 @@ import std::io::println;
 
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // 基本的なスライス
-    int[] slice1 = arr[1:4];  // [2, 3, 4]
+    int[] slice1 = arr[1:4];
+    // [2, 3, 4]
     uint len1 = slice1.len();
     println("arr[1:4].len() = {len1}");
-    
+
     // 最初から指定位置まで
-    int[] slice2 = arr[:3];  // [1, 2, 3]
+    int[] slice2 = arr[:3];
+    // [1, 2, 3]
     uint len2 = slice2.len();
     println("arr[:3].len() = {len2}");
-    
+
     // 指定位置から最後まで
-    int[] slice3 = arr[2:];  // [3, 4, 5]
+    int[] slice3 = arr[2:];
+    // [3, 4, 5]
     uint len3 = slice3.len();
     println("arr[2:].len() = {len3}");
-    
+
     // 負のインデックス（最後の1つを除く）
-    int[] slice4 = arr[:-1];  // [1, 2, 3, 4]
+    int[] slice4 = arr[:-1];
+    // [1, 2, 3, 4]
     uint len4 = slice4.len();
     println("arr[:-1].len() = {len4}");
-    
+
     // 負のインデックス（最後の2つ）
-    int[] slice5 = arr[-2:];  // [4, 5]
+    int[] slice5 = arr[-2:];
+    // [4, 5]
     uint len5 = slice5.len();
     println("arr[-2:].len() = {len5}");
-    
+
     // 負のインデックス両方
-    int[] slice6 = arr[-3:-1];  // [3, 4]
+    int[] slice6 = arr[-3:-1];
+    // [3, 4]
     uint len6 = slice6.len();
     println("arr[-3:-1].len() = {len6}");
-    
+
     return 0;
 }

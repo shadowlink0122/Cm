@@ -3,17 +3,18 @@ import std::io::println;
 
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // ラムダ式で各要素を2倍にする
-    int*(int) double_it = (int x) => { return x * 2; };
-    
+    int*(int) double_it = (int x) => { return x * 2;
+    };
+
     // map呼び出し
     int[] doubled = arr.map(double_it);
-    
+
     // 結果の長さを確認
     uint len = doubled.len();
     println("Map result length: {len}");
-    
+
     if (len == 5) {
         println("PASS");
         return 0;

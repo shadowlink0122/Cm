@@ -14,10 +14,10 @@ int main() {
     // intはOrdを実装している - OK
     int m1 = min(10, 5);
     println("min(10, 5) = {m1}");
-    
+
     // stringはOrdを実装していない - エラー
     string s = min("hello", "world");
     println("min(hello, world) = {s}");
-    
+
     return 0;
 }

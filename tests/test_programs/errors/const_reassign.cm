@@ -3,6 +3,7 @@ import std::io::println;
 
 int main() {
     const int VALUE = 42;
-    VALUE = 100;  // エラー: const変数への再代入
+    VALUE = 100;
+    // エラー: const変数への再代入
     return 0;
 }

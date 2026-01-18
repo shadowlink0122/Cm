@@ -1,0 +1,18 @@
+// Test: Direct pointer array assignment
+import std::io;
+
+void modify_array(int* arr) {
+    arr[0] = 100;
+    arr[1] = 200;
+    arr[2] = 300;
+}
+
+int main() {
+    int[3] data = [1, 2, 3];
+    println("Before: {data[0]}, {data[1]}, {data[2]}");
+    
+    modify_array(data);
+    
+    println("After: {data[0]}, {data[1]}, {data[2]}");
+    return 0;
+}

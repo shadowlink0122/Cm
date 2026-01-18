@@ -51,18 +51,18 @@ int main() {
     println("is_some(some_int) = {b1}");
     int v1 = unwrap(some_int);
     println("unwrap(some_int) = {v1}");
-    
+
     // None値のテスト（0から型推論）
     Option<int> none_int = make_none_like(0);
     bool b2 = is_none(none_int);
     println("is_none(none_int) = {b2}");
     int v2 = unwrap_or(none_int, 0);
     println("unwrap_or(none_int, 0) = {v2}");
-    
+
     // 文字列オプション
     Option<string> some_str = make_some("Hello");
     string v3 = unwrap(some_str);
     println("unwrap(some_str) = {v3}");
-    
+
     return 0;
 }

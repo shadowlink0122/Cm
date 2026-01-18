@@ -17,11 +17,11 @@ int[] double_values(int[] input) {
 int main() {
     int[] s = make_slice();
     println(s.len());
-    
+
     int[] doubled = double_values(s);
     for (auto x in doubled) {
         println(x);
     }
-    
+
     return 0;
 }

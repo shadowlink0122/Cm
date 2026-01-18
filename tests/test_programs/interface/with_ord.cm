@@ -9,35 +9,35 @@ int main() {
     Point p1;
     p1.x = 10;
     p1.y = 20;
-    
+
     Point p2;
     p2.x = 20;
     p2.y = 20;
-    
+
     Point p3;
     p3.x = 10;
     p3.y = 30;
-    
+
     // p1 < p2 (x: 10 < 20)
     if (p1 < p2) {
         println("p1 < p2: true");
     } else {
         println("p1 < p2: false");
     }
-    
+
     // p2 < p1
     if (p2 < p1) {
         println("p2 < p1: true");
     } else {
         println("p2 < p1: false");
     }
-    
+
     // p1 < p3 (x: 同じ, y: 20 < 30)
     if (p1 < p3) {
         println("p1 < p3: true");
     } else {
         println("p1 < p3: false");
     }
-    
+
     return 0;
 }

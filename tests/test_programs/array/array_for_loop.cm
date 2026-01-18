@@ -8,7 +8,7 @@ int main() {
     arr[2] = 30;
     arr[3] = 40;
     arr[4] = 50;
-    
+
     // インデックスベースのforループ
     int sum = 0;
     for (int i = 0; i < 5; i = i + 1) {
@@ -17,7 +17,7 @@ int main() {
         sum = sum + arr[i];
     }
     println("sum = {sum}");
-    
+
     // size()を使ったforループ
     int sum2 = 0;
     uint size = arr.size();
@@ -25,6 +25,6 @@ int main() {
         sum2 = sum2 + arr[j];
     }
     println("sum2 = {sum2}");
-    
+
     return 0;
 }

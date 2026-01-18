@@ -15,7 +15,7 @@ impl Rectangle for Geometry {
     int area() {
         return self.width * self.height;
     }
-    
+
     int perimeter() {
         return 2 * (self.width + self.height);
     }
@@ -25,11 +25,11 @@ int main() {
     Rectangle r;
     r.width = 10;
     r.height = 5;
-    
+
     int a = r.area();
     int p = r.perimeter();
     println("Area: {a}");
     println("Perimeter: {p}");
-    
+
     return 0;
 }

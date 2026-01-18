@@ -18,7 +18,7 @@ impl Point for Transformable {
     Point translate(int dx, int dy) {
         return Point { x: self.x + dx, y: self.y + dy };
     }
-    
+
     Point scale(int factor) {
         return Point { x: self.x * factor, y: self.y * factor };
     }
@@ -41,7 +41,7 @@ impl PointHolder for PointAccessor {
 int main() {
     // 複合チェーンのテスト
     Point p = Point { x: 5, y: 10 };
-    
+
     // Test 1: translate -> scale -> field
     int result1 = p.translate(5, 0).scale(2).x;
     println("Test 1 (translate.scale.x): {result1}");
@@ -49,7 +49,7 @@ int main() {
         println("FAIL: expected 20");
         return 1;
     }
-    
+
     // Test 2: scale -> translate -> field
     int result2 = p.scale(3).translate(10, 20).y;
     println("Test 2 (scale.translate.y): {result2}");
@@ -57,10 +57,10 @@ int main() {
         println("FAIL: expected 50");
         return 1;
     }
-    
+
     // Test 3: PointHolderからのチェーン
     PointHolder holder = PointHolder { point: Point { x: 1, y: 2 } };
-    
+
     // getPoint().field
     int px = holder.getPoint().x;
     println("Test 3 (getPoint.field): {px}");
@@ -68,7 +68,7 @@ int main() {
         println("FAIL: expected 1");
         return 1;
     }
-    
+
     // Test 4: getPoint().method().field
     int result4 = holder.getPoint().translate(10, 10).x;
     println("Test 4 (getPoint.translate.x): {result4}");
@@ -76,7 +76,7 @@ int main() {
         println("FAIL: expected 11");
         return 1;
     }
-    
+
     // Test 5: 長いチェーン
     int result5 = holder.getPoint().translate(5, 5).scale(2).translate(1, 1).x;
     println("Test 5 (long chain): {result5}");
@@ -84,7 +84,7 @@ int main() {
         println("FAIL: expected 13");
         return 1;
     }
-    
+
     println("All composite chain tests passed!");
     return 0;
 }

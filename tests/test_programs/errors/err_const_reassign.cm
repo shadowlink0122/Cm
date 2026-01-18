@@ -1,6 +1,7 @@
 // エラーケース: const変数への再代入
 int main() {
     const int MAX = 100;
-    MAX = 200;  // エラー: const変数への再代入
+    MAX = 200;
+    // エラー: const変数への再代入
     return 0;
 }

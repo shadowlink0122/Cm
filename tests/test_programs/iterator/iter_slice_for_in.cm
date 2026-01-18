@@ -6,26 +6,27 @@ import std::io::println;
 int main() {
     // 固定長配列からスライスを作成
     int[6] arr = [1, 2, 3, 4, 5, 6];
-    
+
     // 配列全体をスライスに変換
     int[] slice = arr[0:6];
-    
+
     // スライスに対するfor-in
     println("Slice iteration:");
     for (int x in slice) {
         println("  {x}");
     }
-    
+
     // 部分スライス
-    int[] sub_slice = arr[2:5];  // [3, 4, 5]
+    int[] sub_slice = arr[2:5];
+    // [3, 4, 5]
     println("Sub-slice iteration:");
     for (int x in sub_slice) {
         println("  {x}");
     }
-    
+
     // 空スライス
     int[] empty = arr[3:3];
     println("Empty slice len: {empty.len()}");
-    
+
     return 0;
 }

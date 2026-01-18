@@ -17,7 +17,7 @@ int main() {
         _ => 0,
     };
     println("match(3) = {result1}");
-    
+
     // enum値マッチ（整数結果）
     int status = Status::Error;
     int code = match (status) {
@@ -27,7 +27,7 @@ int main() {
         _ => -99,
     };
     println("status code = {code}");
-    
+
     // ワイルドカードパターン
     int y = 99;
     int result2 = match (y) {
@@ -36,6 +36,6 @@ int main() {
         _ => 999,
     };
     println("match(99) = {result2}");
-    
+
     return 0;
 }

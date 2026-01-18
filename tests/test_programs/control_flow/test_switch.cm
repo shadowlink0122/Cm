@@ -20,7 +20,8 @@ int main() {
         }
     }
 
-    println(result);  // Should print 20
+    println(result);
+    // Should print 20
 
     // Test with else case
     int y = 5;
@@ -38,7 +39,8 @@ int main() {
         }
     }
 
-    println(result2);  // Should print 99
+    println(result2);
+    // Should print 99
 
     return 0;
 }

@@ -584,6 +584,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 }
 
                 auto result = builder->CreateCall(callee, args);
+
+                // 末尾呼び出し最適化: LLVMにtail属性を設定
+                if (callData.is_tail_call) {
+                    result->setTailCall(true);
+                }
+
                 if (callData.destination) {
                     auto destLocal = callData.destination->local;
                     llvm::Value* resultToStore = result;

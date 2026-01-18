@@ -28,7 +28,8 @@ func main() -> void {
     println(s);
 
     // Array
-    let arr: [int; 3] = [1, 2, 3];
+    let arr: [int;
+    3] = [1, 2, 3];
     println(arr[0]);
 
     // Slice

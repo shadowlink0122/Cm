@@ -23,6 +23,7 @@ int main() {
     Point pt;
     pt.x = 10;
     pt.y = 20;
-    print_it(pt);  // Pointをprintable引数に渡す
+    print_it(pt);
+    // Pointをprintable引数に渡す
     return 0;
 }

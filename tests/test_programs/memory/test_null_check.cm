@@ -22,10 +22,10 @@ void check_ptr(Node* ptr) {
 
 int main() {
     println("=== Null Check Test ===");
-    
+
     // nullポinterを作成
     Node* null_ptr = null as Node*;
-    
+
     // 直接比較
     println("\nDirect null check:");
     if (null_ptr == null) {
@@ -33,19 +33,19 @@ int main() {
     } else {
         println("  null_ptr is NOT null (direct) - BUG!");
     }
-    
+
     // 関数に渡す
     println("\nFunction null check:");
     check_ptr(null_ptr);
-    
+
     // mallocで確保したポinter
     println("\nMalloc pointer check:");
     void* mem = malloc(sizeof(Node));
     Node* valid_ptr = mem as Node*;
     check_ptr(valid_ptr);
-    
+
     free(mem);
-    
+
     println("\n=== Done ===");
     return 0;
 }

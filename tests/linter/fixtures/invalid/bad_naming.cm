@@ -1,0 +1,24 @@
+// テスト: 命名規則違反 (L100-L103)
+// 期待: L100, L101, L102, L103 各種警告
+
+// L103違反: 構造体名がsnake_case
+struct bad_struct {
+    int id;
+}
+
+// L100違反: 関数名がPascalCase
+int CalculateSum(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    // L101違反: 変数名がcamelCase
+    int camelCase = 10;
+    
+    // L102違反: 定数名がcamelCase
+    const int badConstant = 100;
+    
+    int result = camelCase + badConstant;
+    println(result);
+    return 0;
+}

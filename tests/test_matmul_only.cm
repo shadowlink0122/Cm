@@ -1,0 +1,25 @@
+import std::io;
+int main() {
+    int[300][300] a;
+    int[300][300] b;
+    int[300][300] c;
+    // 簡易初期化
+    for (int i = 0; i < 300; i++) {
+        for (int j = 0; j < 300; j++) {
+            a[i][j] = 1;
+            b[i][j] = 1;
+            c[i][j] = 0;
+        }
+    }
+    // 行列乗算カーネル
+    for (int i = 0; i < 300; i++) {
+        for (int k = 0; k < 300; k++) {
+            int a_ik = a[i][k];
+            for (int j = 0; j < 300; j++) {
+                c[i][j] = c[i][j] + a_ik * b[k][j];
+            }
+        }
+    }
+    println("done {c[0][0]}");
+    return 0;
+}

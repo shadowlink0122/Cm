@@ -30,9 +30,9 @@ impl Message for Printable {
 
 int main() {
     Message msg = Message("Hello World");
-    
+
     // ジェネリック関数呼び出し
     print_item(msg);
-    
+
     return 0;
 }

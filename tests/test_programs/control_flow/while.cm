@@ -18,10 +18,12 @@ int main() {
     // 条件が最初から偽
     int k = 10;
     while (k < 5) {
-        println(999);  // 実行されない
+        println(999);
+        // 実行されない
     }
 
-    println(100);  // ループ後の処理
+    println(100);
+    // ループ後の処理
 
     return 0;
 }

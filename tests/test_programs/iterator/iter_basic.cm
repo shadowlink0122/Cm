@@ -3,13 +3,13 @@ import std::io::println;
 // for-inループの基本テスト（既存機能の確認）
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // 配列のイテレーション
     int sum = 0;
     for (int x in arr) {
         sum = sum + x;
     }
     println("sum: {sum}");
-    
+
     return 0;
 }

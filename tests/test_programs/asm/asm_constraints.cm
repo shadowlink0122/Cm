@@ -67,8 +67,10 @@ bool compareValues(int a, int b) {
 
     // 比較してフラグを設定
     asm("cmp {&b}, {&a}");
-    asm("sete %al");  // equal フラグをalレジスタに設定
-    asm("movzbl %al, {&result:x}");  // ゼロ拡張してresultに格納
+    asm("sete %al");
+    // equal フラグをalレジスタに設定
+    asm("movzbl %al, {&result:x}");
+    // ゼロ拡張してresultに格納
 
     return result;
 }

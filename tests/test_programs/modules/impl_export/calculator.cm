@@ -1,4 +1,4 @@
-// calculator.cm - impl エクスポートテスト用モジュール  
+// calculator.cm - impl エクスポートテスト用モジュール
 module calculator;
 
 export struct Doubler {

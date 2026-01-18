@@ -1,10 +1,10 @@
 import std::io::println;
 // オートインクリメントenum
 enum Priority {
-    Low,        // 0
-    Medium,     // 1  
-    High,       // 2
-    Critical    // 3
+    Low,      // 0
+    Medium,   // 1
+    High,     // 2
+    Critical  // 3
 }
 
 int main() {

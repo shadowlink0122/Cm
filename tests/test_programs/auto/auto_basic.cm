@@ -5,20 +5,20 @@ int main() {
     // 整数
     auto x = 42;
     println("x = {x}");
-    
+
     // 浮動小数点
     auto pi = 3.14159;
     println("pi = {pi}");
-    
+
     // 文字列
     auto msg = "Hello, auto!";
     println("msg = {msg}");
-    
+
     // bool
     auto flag = true;
     if (flag) {
         println("flag is true");
     }
-    
+
     return 0;
 }

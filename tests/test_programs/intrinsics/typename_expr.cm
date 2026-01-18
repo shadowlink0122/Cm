@@ -17,22 +17,22 @@ int main() {
     double d = 3.14;
     bool b = true;
     char c = 'A';
-    
+
     string ti = typeof(i);
     string td = typeof(d);
     string tb = typeof(b);
     string tc = typeof(c);
-    
+
     println("int: {ti}");
     println("double: {td}");
     println("bool: {tb}");
     println("char: {tc}");
-    
+
     // 構造体
     Point pt = Point{x: 10, y: 20};
     string tpt = typeof(pt);
     println("struct: {tpt}");
-    
+
     // ポインタ
     int* pi = &i;
     int** ppi = &pi;
@@ -40,18 +40,18 @@ int main() {
     string tppi = typeof(ppi);
     println("pointer: {tpi}");
     println("pointer to pointer: {tppi}");
-    
+
     // 配列
     int[5] arr;
     string tarr = typeof(arr);
     println("array: {tarr}");
-    
+
     // ジェネリクス構造体
     Pair<int> pair_int;
     pair_int.first = 1;
     pair_int.second = 2;
     string tpair = typeof(pair_int);
     println("generic: {tpair}");
-    
+
     return 0;
 }

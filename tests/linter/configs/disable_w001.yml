@@ -1,0 +1,4 @@
+# 設定テスト: W001を無効化
+lint:
+  rules:
+    W001: disabled

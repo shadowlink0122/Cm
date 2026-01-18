@@ -8,7 +8,7 @@ int main() {
     // インポートした関数を使用
     print("Hello from std::io: ");
     println("test");
-    
+
     println("std::io module test passed!");
     return 0;
 }

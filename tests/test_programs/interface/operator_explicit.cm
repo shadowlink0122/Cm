@@ -11,8 +11,10 @@ impl Vector2 for Eq {
         // 浮動小数点の誤差を考慮した比較
         float dx = self.x - other.x;
         float dy = self.y - other.y;
-        if (dx < 0.0) { dx = -dx; }
-        if (dy < 0.0) { dy = -dy; }
+        if (dx < 0.0) { dx = -dx;
+        }
+        if (dy < 0.0) { dy = -dy;
+        }
         return dx < 0.001 && dy < 0.001;
     }
 }
@@ -21,26 +23,26 @@ int main() {
     Vector2 v1;
     v1.x = 1.0;
     v1.y = 2.0;
-    
+
     Vector2 v2;
     v2.x = 1.0;
     v2.y = 2.0;
-    
+
     Vector2 v3;
     v3.x = 1.5;
     v3.y = 2.0;
-    
+
     if (v1 == v2) {
         println("v1 == v2: true");
     } else {
         println("v1 == v2: false");
     }
-    
+
     if (v1 == v3) {
         println("v1 == v3: true");
     } else {
         println("v1 == v3: false");
     }
-    
+
     return 0;
 }

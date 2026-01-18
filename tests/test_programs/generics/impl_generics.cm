@@ -28,7 +28,7 @@ impl<T> Container<T> for ValueHolder<T> {
     T get() {
         return self.value;
     }
-    
+
     void set(T val) {
         self.value = val;
     }
@@ -38,18 +38,18 @@ int main() {
     Container<int> c;
     c.value = 42;
     c.print();
-    
+
     // ジェネリックメソッドの呼び出し
     c.set(100);
     int v = c.get();
     println("c.get() = {v}");
-    
+
     Container<string> cs;
     cs.value = "Hello";
     cs.print();
     cs.set("World");
     string sv = cs.get();
     println("cs.get() = {sv}");
-    
+
     return 0;
 }

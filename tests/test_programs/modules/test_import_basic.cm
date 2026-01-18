@@ -16,11 +16,11 @@ int main() {
     int prod = multiply(3, 4);
     println("add(10,20) = {sum}");
     println("multiply(3,4) = {prod}");
-    
+
     // 2. 定数インポートのテスト
     println("MAGIC_NUMBER = {MAGIC_NUMBER}");
     println("SIMPLE_PI = {SIMPLE_PI}");
-    
+
     // 3. オーバーロードインポートのテスト
     int isum = add_int(100, 200);
     double dsum = add_double(1.5, 2.5);
@@ -28,6 +28,6 @@ int main() {
     println("add_int(100,200) = {isum}");
     println("add_double(1.5,2.5) = {dsum}");
     println("multiply_int(6,7) = {iprod}");
-    
+
     return 0;
 }

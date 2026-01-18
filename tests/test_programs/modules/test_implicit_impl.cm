@@ -6,8 +6,9 @@ int main() {
     shapes::Point p;
     p.x = 10;
     p.y = 20;
-    p.print();  // 暗黙的にエクスポートされたimplのメソッド
-    
+    p.print();
+    // 暗黙的にエクスポートされたimplのメソッド
+
     int val = shapes::get_value();
     println("Value: {val}");
     return 0;

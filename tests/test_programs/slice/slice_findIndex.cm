@@ -11,14 +11,14 @@ bool is_gt_100(int x) {
 
 int main() {
     int[5] arr = [1, 3, 4, 7, 9];
-    
+
     // 最初の偶数のインデックス
     int idx = arr.findIndex(is_even);
     println("first even index: {idx}");
-    
+
     // 100より大きい要素のインデックス（存在しない）
     int idx2 = arr.findIndex(is_gt_100);
     println("gt_100 index: {idx2}");
-    
+
     return 0;
 }

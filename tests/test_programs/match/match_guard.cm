@@ -23,10 +23,10 @@ int main() {
     println("sign(10) = {sign(10)}");
     println("sign(-5) = {sign(-5)}");
     println("sign(0) = {sign(0)}");
-    
+
     println("grade_to_points(95) = {grade_to_points(95)}");
     println("grade_to_points(75) = {grade_to_points(75)}");
     println("grade_to_points(50) = {grade_to_points(50)}");
-    
+
     return 0;
 }

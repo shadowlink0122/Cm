@@ -2418,7 +2418,7 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 break;
             }
             case mir::ProjectionKind::Index: {
-                // 配列インデックスアクセス
+                // 配列インデックスアクセス（多次元配列フラット化対応）
                 if (!addr) {
                     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
                                             "Index projection on null address",
@@ -2426,22 +2426,77 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
-                // インデックス値を取得
+                // ポインタ型の場合は単純なポインタ演算（フラット化不要）
+                if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                    // インデックス値を取得
+                    llvm::Value* indexVal = nullptr;
+                    auto idx_it = locals.find(proj.index_local);
+                    if (idx_it != locals.end()) {
+                        indexVal = idx_it->second;
+                        if (allocatedLocals.count(proj.index_local)) {
+                            llvm::Type* idxType = ctx.getI64Type();
+                            if (currentMIRFunction &&
+                                proj.index_local < currentMIRFunction->locals.size()) {
+                                auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                                idxType = convertType(idxLocal.type);
+                            }
+                            indexVal = builder->CreateLoad(idxType, indexVal, "idx_load");
+                            if (idxType->isIntegerTy(32)) {
+                                indexVal =
+                                    builder->CreateSExt(indexVal, ctx.getI64Type(), "idx_ext");
+                            }
+                        }
+                    }
+
+                    if (!indexVal) {
+                        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                                "Cannot get index value for pointer access",
+                                                cm::debug::Level::Error);
+                        return nullptr;
+                    }
+
+                    // ポインタが指す要素の型を取得
+                    llvm::Type* elemType = ctx.getI32Type();  // デフォルト
+                    if (currentType->element_type) {
+                        elemType = convertType(currentType->element_type);
+                    }
+
+                    // addrがポインタ変数のallocaの場合、まずポインタ値をロード
+                    llvm::Value* ptrVal = addr;
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                        auto allocType = allocaInst->getAllocatedType();
+                        // allocaがポインタ型を格納している場合、ポインタ値をロード
+                        if (allocType->isPointerTy() || allocType == ctx.getPtrType()) {
+                            ptrVal = builder->CreateLoad(ctx.getPtrType(), addr, "ptr_load");
+                        }
+                    }
+
+                    // ポインタ + オフセット
+                    addr = builder->CreateGEP(elemType, ptrVal, indexVal, "ptr_elem");
+
+                    // 型情報を更新
+                    currentType = currentType->element_type;
+                    break;
+                }
+
+                // 連続するIndexプロジェクションを収集（多次元配列のフラット化）
+                std::vector<llvm::Value*> indexValues;
+                std::vector<uint64_t> dimensions;
+                hir::TypePtr arrayTypeInfo = currentType;
+
+                // 現在のインデックスを取得
                 llvm::Value* indexVal = nullptr;
                 auto idx_it = locals.find(proj.index_local);
                 if (idx_it != locals.end()) {
                     indexVal = idx_it->second;
-                    // allocaの場合はloadする
                     if (allocatedLocals.count(proj.index_local)) {
-                        // 実際の型を取得してloadする
-                        llvm::Type* idxType = ctx.getI64Type();  // デフォルト
+                        llvm::Type* idxType = ctx.getI64Type();
                         if (currentMIRFunction &&
                             proj.index_local < currentMIRFunction->locals.size()) {
                             auto& idxLocal = currentMIRFunction->locals[proj.index_local];
                             idxType = convertType(idxLocal.type);
                         }
                         indexVal = builder->CreateLoad(idxType, indexVal, "idx_load");
-                        // i32の場合はi64に拡張（GEPはi64を期待）
                         if (idxType->isIntegerTy(32)) {
                             indexVal = builder->CreateSExt(indexVal, ctx.getI64Type(), "idx_ext");
                         }
@@ -2455,182 +2510,162 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
-                // 配列またはポインタ型を処理
-                llvm::Type* arrayType = nullptr;
-                llvm::Type* elemType = nullptr;
-                bool isPointerAccess = false;
+                indexValues.push_back(indexVal);
 
-                // まずcurrentTypeを確認
-                if (currentType) {
-                    if (currentType->kind == hir::TypeKind::Array) {
-                        arrayType = convertType(currentType);
-                        elemType = convertType(currentType->element_type);
-                    } else if (currentType->kind == hir::TypeKind::Pointer &&
-                               currentType->element_type) {
-                        // ポインタ型経由のインデックスアクセス (ptr[i])
-                        elemType = convertType(currentType->element_type);
-                        isPointerAccess = true;
+                // 配列の次元サイズを収集
+                if (arrayTypeInfo && arrayTypeInfo->kind == hir::TypeKind::Array) {
+                    if (arrayTypeInfo->array_size.has_value()) {
+                        dimensions.push_back(*arrayTypeInfo->array_size);
                     }
+                    arrayTypeInfo = arrayTypeInfo->element_type;
                 }
 
-                if (!arrayType && !isPointerAccess) {
-                    // フォールバック: place.localの型を使用
-                    if (currentMIRFunction && place.local < currentMIRFunction->locals.size()) {
-                        auto& local = currentMIRFunction->locals[place.local];
-                        if (local.type) {
-                            if (local.type->kind == hir::TypeKind::Array) {
-                                arrayType = convertType(local.type);
-                                elemType = convertType(local.type->element_type);
-                            } else if (local.type->kind == hir::TypeKind::Pointer &&
-                                       local.type->element_type) {
-                                elemType = convertType(local.type->element_type);
-                                isPointerAccess = true;
+                // 連続するIndexプロジェクションを先読み
+                size_t consumedProjections = 0;
+                for (size_t nextIdx = projIdx + 1; nextIdx < place.projections.size(); ++nextIdx) {
+                    const auto& nextProj = place.projections[nextIdx];
+                    if (nextProj.kind != mir::ProjectionKind::Index)
+                        break;
+                    if (!arrayTypeInfo || arrayTypeInfo->kind != hir::TypeKind::Array)
+                        break;
+
+                    // 次のインデックス値を取得
+                    llvm::Value* nextIndexVal = nullptr;
+                    auto next_idx_it = locals.find(nextProj.index_local);
+                    if (next_idx_it != locals.end()) {
+                        nextIndexVal = next_idx_it->second;
+                        if (allocatedLocals.count(nextProj.index_local)) {
+                            llvm::Type* idxType = ctx.getI64Type();
+                            if (currentMIRFunction &&
+                                nextProj.index_local < currentMIRFunction->locals.size()) {
+                                auto& idxLocal = currentMIRFunction->locals[nextProj.index_local];
+                                idxType = convertType(idxLocal.type);
+                            }
+                            nextIndexVal = builder->CreateLoad(idxType, nextIndexVal, "idx_load");
+                            if (idxType->isIntegerTy(32)) {
+                                nextIndexVal =
+                                    builder->CreateSExt(nextIndexVal, ctx.getI64Type(), "idx_ext");
                             }
                         }
                     }
+
+                    if (!nextIndexVal)
+                        break;
+
+                    indexValues.push_back(nextIndexVal);
+                    if (arrayTypeInfo->array_size.has_value()) {
+                        dimensions.push_back(*arrayTypeInfo->array_size);
+                    }
+                    arrayTypeInfo = arrayTypeInfo->element_type;
+                    consumedProjections++;
                 }
 
-                if (!arrayType && !isPointerAccess) {
-                    // 型情報が取得できない場合は、allocaまたはGEPから推測
+                // 線形インデックスを計算: linear = i0*D1*D2*... + i1*D2*D3*... + ... + iN
+                llvm::Value* linearIndex = nullptr;
+                if (indexValues.size() > 1 && dimensions.size() == indexValues.size()) {
+                    // 多次元配列の場合、線形インデックスを計算
+                    linearIndex = llvm::ConstantInt::get(ctx.getI64Type(), 0);
+
+                    for (size_t i = 0; i < indexValues.size(); ++i) {
+                        llvm::Value* idx = indexValues[i];
+
+                        // 後続の全次元のサイズを乗算
+                        uint64_t stride = 1;
+                        for (size_t j = i + 1; j < dimensions.size(); ++j) {
+                            stride *= dimensions[j];
+                        }
+
+                        if (stride > 1) {
+                            llvm::Value* strideVal =
+                                llvm::ConstantInt::get(ctx.getI64Type(), stride);
+                            idx = builder->CreateMul(idx, strideVal, "stride_mul");
+                        }
+
+                        linearIndex = builder->CreateAdd(linearIndex, idx, "linear_add");
+                    }
+                } else {
+                    // 1次元配列の場合
+                    linearIndex = indexValues[0];
+                }
+
+                // 消費したプロジェクションをスキップ
+                projIdx += consumedProjections;
+
+                // 最終的な要素型を取得
+                llvm::Type* elemType = nullptr;
+                if (arrayTypeInfo) {
+                    elemType = convertType(arrayTypeInfo);
+                } else if (currentType && currentType->kind == hir::TypeKind::Array) {
+                    // フォールバック: フラット化後の要素型を計算
+                    hir::TypePtr elemTypeInfo = currentType;
+                    for (size_t i = 0; i < indexValues.size() && elemTypeInfo; ++i) {
+                        if (elemTypeInfo->kind == hir::TypeKind::Array) {
+                            elemTypeInfo = elemTypeInfo->element_type;
+                        }
+                    }
+                    if (elemTypeInfo) {
+                        elemType = convertType(elemTypeInfo);
+                    }
+                }
+
+                if (!elemType) {
+                    // 最終フォールバック: allocaから型を推測
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         auto allocType = allocaInst->getAllocatedType();
                         if (allocType->isArrayTy()) {
-                            arrayType = allocType;
-                            elemType = allocType->getArrayElementType();
-                        } else if (allocType->isPointerTy()) {
-                            // ポインタ型のallocaの場合
-                            isPointerAccess = true;
-                            elemType = allocType;  // opaque pointerの場合は型情報がない
-                        }
-                    } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
-                        auto resultType = gepInst->getResultElementType();
-                        if (resultType && resultType->isArrayTy()) {
-                            arrayType = resultType;
-                            elemType = resultType->getArrayElementType();
-                        }
-                    }
-                }
-
-                // ポインタ経由のインデックスアクセス
-                if (isPointerAccess && elemType) {
-                    // ポインタ値をloadしてからGEPでインデックスアクセス
-                    llvm::Value* ptrVal = addr;
-                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
-                        // allocaからポインタ値をload
-                        // LLVM 14: typed pointerモードでは正しい型でloadする必要がある
-                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
-                        ptrVal = builder->CreateLoad(allocatedType, addr, "ptr_load");
-                    } else if (llvm::isa<llvm::Argument>(addr)) {
-                        // 関数引数の場合、すでにポインタ値なのでそのまま使用
-                        // loadは不要（SSA形式で渡されている）
-                        ptrVal = addr;
-                    } else if (addr->getType()->isPointerTy()) {
-                        // その他のポインタの場合
-                        ptrVal = builder->CreateLoad(llvm::PointerType::get(elemType, 0), addr,
-                                                     "ptr_load");
-                    }
-
-                    // LLVM 14: typed pointersモードではGEP前にポインタ型をelemTypeのポインタに変換
-                    llvm::Type* elemPtrType = llvm::PointerType::get(elemType, 0);
-                    if (ptrVal->getType() != elemPtrType) {
-                        ptrVal = builder->CreateBitCast(ptrVal, elemPtrType, "ptr_cast");
-                    }
-
-                    // GEPでptr + index*sizeof(elem)を計算
-                    addr = builder->CreateGEP(elemType, ptrVal, indexVal, "elem_ptr");
-
-                    // 次のプロジェクションのために型を更新
-                    if (currentType && currentType->kind == hir::TypeKind::Pointer) {
-                        currentType = currentType->element_type;
-                    }
-                    break;
-                }
-
-                if (!arrayType || !arrayType->isArrayTy()) {
-                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
-                                            "Cannot determine array type for index access",
-                                            cm::debug::Level::Error);
-                    return nullptr;
-                }
-
-                // 配列アクセスの場合
-                if (!elemType) {
-                    elemType = arrayType->getArrayElementType();
-                }
-
-                // 境界チェック: インデックスが配列サイズ未満かチェック
-                // 負のインデックスも符号なし比較で検出（負数は巨大な正数として扱われる）
-                uint64_t arraySize = arrayType->getArrayNumElements();
-                if (arraySize > 0) {
-                    // 配列サイズをi64で取得
-                    llvm::Value* sizeVal = llvm::ConstantInt::get(ctx.getI64Type(), arraySize);
-
-                    // インデックスをi64に変換（符号なし）
-                    llvm::Value* idxForCheck = indexVal;
-                    if (!indexVal->getType()->isIntegerTy(64)) {
-                        idxForCheck = builder->CreateZExt(indexVal, ctx.getI64Type(), "idx_zext");
-                    }
-
-                    // index < size のチェック（符号なし比較）
-                    llvm::Value* inBounds =
-                        builder->CreateICmpULT(idxForCheck, sizeVal, "bounds_check");
-
-                    // 条件分岐: 範囲内なら続行、範囲外ならパニック
-                    llvm::Function* func = builder->GetInsertBlock()->getParent();
-                    llvm::BasicBlock* continueBlock =
-                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_ok", func);
-                    llvm::BasicBlock* panicBlock =
-                        llvm::BasicBlock::Create(ctx.getModule().getContext(), "bounds_fail", func);
-
-                    builder->CreateCondBr(inBounds, continueBlock, panicBlock);
-
-                    // パニックブロック: 境界外アクセスでパニック
-                    builder->SetInsertPoint(panicBlock);
-
-                    // WASMターゲットの場合はabortを呼び出さずunreachableのみ
-                    // （abortはWASMランタイムで未定義のため）
-                    // 注: isWasmTargetはconvert()で一度だけ計算されたキャッシュ値
-
-                    if (!isWasmTarget) {
-                        // ネイティブターゲット: cm_panic関数を呼び出し（ない場合はabortを使用）
-                        llvm::Function* panicFn = module->getFunction("cm_panic");
-                        if (!panicFn) {
-                            panicFn = module->getFunction("abort");
-                            if (!panicFn) {
-                                llvm::FunctionType* abortType = llvm::FunctionType::get(
-                                    llvm::Type::getVoidTy(ctx.getModule().getContext()), false);
-                                panicFn = llvm::Function::Create(
-                                    abortType, llvm::Function::ExternalLinkage, "abort", module);
+                            elemType = allocType;
+                            while (elemType->isArrayTy()) {
+                                elemType = elemType->getArrayElementType();
                             }
                         }
-                        if (panicFn->getFunctionType()->getNumParams() > 0) {
-                            // cm_panicはメッセージを取る
-                            llvm::Value* msgPtr = builder->CreateGlobalStringPtr(
-                                "Array index out of bounds", "bounds_error_msg");
-                            builder->CreateCall(panicFn, {msgPtr});
-                        } else {
-                            builder->CreateCall(panicFn);
-                        }
                     }
-                    // WASM/ネイティブ共通: unreachableで終了
-                    builder->CreateUnreachable();
-
-                    // 続行ブロックに移動
-                    builder->SetInsertPoint(continueBlock);
                 }
 
-                // GEPで配列要素のアドレスを取得
-                std::vector<llvm::Value*> indices;
-                indices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));  // 配列ベース
-                indices.push_back(indexVal);  // 要素インデックス
-
-                addr = builder->CreateGEP(arrayType, addr, indices, "elem_ptr");
-
-                // 次のプロジェクションのために型を更新
-                if (currentType && currentType->kind == hir::TypeKind::Array &&
-                    currentType->element_type) {
-                    currentType = currentType->element_type;
+                if (!elemType) {
+                    elemType = ctx.getI32Type();  // デフォルト
                 }
+
+                // Clang準拠: 多次元GEPを生成
+                // フラット化せず、配列の配列として複数インデックスでアクセス
+                // gep inbounds [300 x [300 x i32]], ptr %arr, i64 0, i64 %i, i64 %j
+                if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                    auto allocType = allocaInst->getAllocatedType();
+                    if (allocType->isArrayTy() && indexValues.size() > 0) {
+                        // 多次元GEP用インデックスを構築
+                        std::vector<llvm::Value*> gepIndices;
+                        // 最初のインデックスは常に0（ポインタから配列への変換）
+                        gepIndices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));
+                        // 各次元のインデックスを追加
+                        for (auto* idx : indexValues) {
+                            gepIndices.push_back(idx);
+                        }
+                        // 多次元GEPを生成
+                        addr = builder->CreateInBoundsGEP(allocType, addr, gepIndices, "elem_ptr");
+                        currentType = arrayTypeInfo;
+                        break;
+                    }
+                }
+
+                // フォールバック: 多次元GEPが使えない場合はフラット化
+                llvm::Value* basePtr = addr;
+                if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
+                    auto allocType = allocaInst->getAllocatedType();
+                    if (allocType->isArrayTy()) {
+                        // 多次元配列の場合、要素型へのポインタに変換
+                        std::vector<llvm::Value*> zeroIndices;
+                        zeroIndices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));
+                        llvm::Type* currentArrayType = allocType;
+                        while (currentArrayType->isArrayTy()) {
+                            zeroIndices.push_back(llvm::ConstantInt::get(ctx.getI64Type(), 0));
+                            currentArrayType = currentArrayType->getArrayElementType();
+                        }
+                        basePtr = builder->CreateGEP(allocType, addr, zeroIndices, "flat_base");
+                    }
+                }
+                addr = builder->CreateGEP(elemType, basePtr, linearIndex, "flat_elem_ptr");
+
+                // 型情報を更新
+                currentType = arrayTypeInfo;
                 break;
             }
             case mir::ProjectionKind::Deref: {

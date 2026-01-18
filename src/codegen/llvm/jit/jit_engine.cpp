@@ -48,8 +48,16 @@ JITEngine::JITEngine() {
 JITEngine::~JITEngine() = default;
 
 llvm::Error JITEngine::initializeJIT() {
-    // LLJITビルダーでJIT作成
+    // ホストCPUの機能を検出してSIMDベクトル化を有効にする
+    // detectHost()はホストのCPU名と機能フラグを自動検出する
+    auto jtmb = llvm::orc::JITTargetMachineBuilder::detectHost();
+    if (!jtmb) {
+        return jtmb.takeError();
+    }
+
+    // LLJITビルダーでJIT作成（ホストCPU機能付き）
     auto jitBuilder = llvm::orc::LLJITBuilder();
+    jitBuilder.setJITTargetMachineBuilder(std::move(*jtmb));
 
     // JIT作成
     auto jitExpected = jitBuilder.create();
@@ -122,13 +130,23 @@ void JITEngine::optimizeModule(llvm::Module& module, int optLevel) {
     // モジュールパス実行
     pm.run(module);
 #else
-    // LLVM 17+: 新PassBuilder を使用
+    // LLVM 17+: 新PassBuilder を使用（TargetMachineでCPU固有のベクトル化を有効化）
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;
     llvm::ModuleAnalysisManager MAM;
 
-    llvm::PassBuilder PB;
+    // ホストCPU用のTargetMachineを作成してベクトル化を有効にする
+    auto jtmb = llvm::orc::JITTargetMachineBuilder::detectHost();
+    llvm::TargetMachine* TM = nullptr;
+    if (jtmb) {
+        auto tmOrErr = jtmb->createTargetMachine();
+        if (tmOrErr) {
+            TM = tmOrErr->release();
+        }
+    }
+
+    llvm::PassBuilder PB(TM);
 
     // 分析マネージャーを登録
     PB.registerModuleAnalyses(MAM);

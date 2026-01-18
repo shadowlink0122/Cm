@@ -19,5 +19,6 @@ int main() {
     asm("mfence");
     println("asm: mfence");
 
-    return 0;  // 成功
+    return 0;
+    // 成功
 }

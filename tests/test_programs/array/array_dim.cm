@@ -6,16 +6,16 @@ int main() {
     int[3] arr1 = [1, 2, 3];
     int d1 = arr1.dim();
     println(d1);
-    
+
     // 2次元配列
     int[2][3] arr2 = [[1, 2], [3, 4], [5, 6]];
     int d2 = arr2.dim();
     println(d2);
-    
+
     // 動的スライス
     int[] slice = [1, 2, 3];
     int d3 = slice.dim();
     println(d3);
-    
+
     return 0;
 }

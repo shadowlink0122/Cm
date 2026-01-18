@@ -44,48 +44,48 @@ Wrapper Wrapper__clone(Wrapper w) {
 
 int main() {
     println("=== Method Chaining Test ===");
-    
+
     // 1. シンプルなチェーン（外部関数経由）
     Point p = Point(10, 20);
     println("p: ({p.x}, {p.y})");
-    
+
     // チェーンを分解: p.move(5, 5).get_sum()
     Point moved = Point__move(p, 5, 5);
     int sum = Point__get_sum(moved);
     println("After move(5,5): ({moved.x}, {moved.y})");
     println("Sum: {sum}");
-    
+
     if (sum == 40) {
         println("Test 1: PASS");
     } else {
         println("Test 1: FAIL (Got {sum})");
     }
-    
+
     // 2. Wrapper経由
     Wrapper w = Wrapper { p: Point { x: 1, y: 2 } };
     Wrapper cloned = Wrapper__clone(w);
     Point wp = Wrapper__get_point(cloned);
     println("Cloned point: ({wp.x}, {wp.y})");
-    
+
     if (wp.x == 1) {
         println("Test 2: PASS");
     } else {
         println("Test 2: FAIL (Got {wp.x})");
     }
-    
+
     // 3. 多重チェーン
     Wrapper w2 = Wrapper__clone(Wrapper__clone(w));
     Point wp2 = Wrapper__get_point(w2);
     Point moved2 = Point__move(wp2, 10, 10);
     int val = Point__get_sum(moved2);
     println("Multiple chain result: {val}");
-    
+
     if (val == 23) {
         println("Test 3: PASS");
     } else {
         println("Test 3: FAIL (Got {val})");
     }
-    
+
     println("=== Test Completed ===");
     return 0;
 }

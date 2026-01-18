@@ -5,18 +5,19 @@ import std::io::println;
 
 int main() {
     int x = 10;
-    
+
     // 通常のポインタ - 読み書き可能
     int* p1 = &x;
-    *p1 = 20;  // OK: 書き込み可能
-    
+    *p1 = 20;
+    // OK: 書き込み可能
+
     println("x after *p1 = 20: {x}");
-    
+
     // constポインタ - 読み取りのみ
     // 注意: *p2 = value はエラーになる
     // "Cannot assign through pointer to const"
     // const int* p2 = &x;
     // *p2 = 30;  // エラー！
-    
+
     return 0;
 }
