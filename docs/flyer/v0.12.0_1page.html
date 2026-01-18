@@ -1,607 +1,292 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="device-width, initial-scale=1.0">
-    <title>Cb言語紹介チラシ v0.10.0 (白黒版)</title>
-    <style>
-        @page {
-            size: A4;
-            margin: 15mm;
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
-            font-size: 10pt;
-            line-height: 1.35;
-            color: #000000;
-            background: white;
-        }
-        
-        .page {
-            width: 210mm;
-            height: 297mm;
-            padding: 12mm;
-            margin: 0 auto 20px;
-            background: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            page-break-after: always;
-        }
-        
-        .two-column {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8mm;
-            height: 100%;
-        }
-        
-        .column {
-            display: flex;
-            flex-direction: column;
-        }
-        
-        h1 {
-            font-size: 24pt;
-            font-weight: bold;
-            color: #000000;
-            margin-bottom: 5px;
-            text-align: center;
-        }
-        
-        .event-info {
-            text-align: center;
-            font-size: 11pt;
-            color: #000000;
-            font-weight: bold;
-            margin-bottom: 8px;
-            padding: 5px;
-            background: #FFFFFF;
-            border: 2px solid #000000;
-            border-radius: 5px;
-        }
-        
-        h2 {
-            font-size: 14pt;
-            font-weight: bold;
-            color: #000000;
-            margin: 8px 0 4px 0;
-            padding-bottom: 2px;
-            border-bottom: 2px solid #000000;
-        }
-        
-        h3 {
-            font-size: 11pt;
-            font-weight: bold;
-            color: #000000;
-            margin: 6px 0 3px 0;
-        }
-        
-        h4 {
-            font-size: 10pt;
-            font-weight: bold;
-            color: #000000;
-            margin: 5px 0 2px 0;
-        }
-        
-        p {
-            margin-bottom: 3px;
-        }
-        
-        ul, ol {
-            margin-left: 15px;
-            margin-bottom: 4px;
-        }
-        
-        li {
-            margin-bottom: 1px;
-        }
-        
-        .highlight-box {
-            background-color: #F5F5F5;
-            border: 2px solid #000000;
-            border-radius: 5px;
-            padding: 5px;
-            margin: 4px 0;
-        }
-        
-        .code-block {
-            background-color: #FFFFFF;
-            color: #000000;
-            border: 2px solid #000000;
-            border-radius: 3px;
-            padding: 6px;
-            font-family: 'Courier New', 'Monaco', monospace;
-            font-size: 8pt;
-            line-height: 1.25;
-            overflow-x: auto;
-            white-space: pre;
-            margin: 4px 0;
-        }
-        
-        .terminal-block {
-            background-color: #000000;
-            color: #FFFFFF;
-            border: 2px solid #000000;
-            border-radius: 3px;
-            padding: 6px;
-            font-family: 'Courier New', 'Monaco', monospace;
-            font-size: 8pt;
-            line-height: 1.25;
-            overflow-x: auto;
-            white-space: pre;
-            margin: 4px 0;
-        }
-        
-        .terminal-block .comment {
-            color: #CCCCCC;
-        }
-        
-        .keyword {
-            font-weight: bold;
-            color: #000000;
-        }
-        
-        .type {
-            color: #000000;
-            font-weight: 500;
-        }
-        
-        .comment {
-            font-style: italic;
-            color: #666666;
-        }
-        
-        .string {
-            color: #000000;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 5px 0;
-            font-size: 9pt;
-        }
-        
-        table th {
-            background: #CCCCCC;
-            color: #000000;
-            padding: 4px;
-            border: 1px solid #000000;
-            font-weight: bold;
-        }
-        
-        table td {
-            padding: 4px;
-            border: 1px solid #000000;
-        }
-        
-        table tr:nth-child(even) {
-            background: #F5F5F5;
-        }
-        
-        .point-box {
-            background: #F5F5F5;
-            border: 2px solid #000000;
-            border-radius: 5px;
-            padding: 5px;
-            margin: 4px 0;
-            font-size: 8.5pt;
-        }
-        
-        .output-box {
-            background: #F5F5F5;
-            border: 1px solid #000000;
-            border-radius: 3px;
-            padding: 5px;
-            margin: 4px 0;
-            font-family: 'Menlo', 'Monaco', monospace;
-            font-size: 7.5pt;
-        }
-        
-        .footer-box {
-            background: #DDDDDD;
-            color: #000000;
-            padding: 6px;
-            text-align: center;
-            border-radius: 5px;
-            border: 2px solid #000000;
-            margin-top: 6px;
-            font-weight: bold;
-            font-size: 9pt;
-        }
-        
-        .origin-box {
-            background-color: #F5F5F5;
-            border: 2px dashed #666666;
-            border-radius: 5px;
-            padding: 6px;
-            margin: 6px 0;
-            font-size: 9pt;
-        }
-        
-        .principles-box {
-            background-color: #F5F5F5;
-            border: 2px dashed #000000;
-            border-radius: 5px;
-            padding: 5px;
-            margin: 4px 0;
-        }
-        
-        @media print {
-            .page {
-                box-shadow: none;
-                margin: 0;
-            }
-            
-            /* PDF出力時に背景色を確実に印刷 */
-            * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .terminal-block {
-                background-color: #000000 !important;
-                color: #FFFFFF !important;
-            }
-            
-            .highlight-box[style*="background: #000000"] {
-                background: #000000 !important;
-                color: white !important;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="device-width, initial-scale=1.0">
+<title>Cm言語紹介チラシ v0.12.0</title>
+<link rel="stylesheet" href="flyer.css">
 </head>
 <body>
 
 <!-- ========== 表面 ========== -->
 <div class="page">
-    <h1>Cb <span style="font-size: 18pt;">(シーフラット)</span> プログラミング言語 <span style="font-size: 14pt; font-weight: normal; color: #666666;">v0.10.0</span></h1>
-    <div class="event-info">2025/10/25 OSSカンファレンス Tokyo/Fall で展示</div>
-    
-    <div class="two-column">
-        <!-- 左列 -->
-        <div class="column">
-            <h2>Cbとは？</h2>
-            
-            <div class="origin-box">
-                <strong>名前の由来:</strong> C → C++ → C# と、どんどん+が増えていくので、あえて逆の命名にしてみました。「Cより弱くなってしまった...」というユーモアを込めています。
-            </div>
-            
-            <h3>なぜCbを作ったのか？</h3>
-            <div style="background: #EEEEEE; border-left: 4px solid #000000; padding: 8px; margin: 6px 0; border-radius: 4px;">
-                <p style="font-size: 11pt; font-weight: bold; color: #000000; margin: 0;">「使いやすく、安全で、高速な言語」を作りたかった</p>
-            </div>
-            
-            <p style="font-size: 9.5pt; line-height: 1.4;">プログラミング言語の設計には常にトレードオフが存在します。C++の強力さ、Rustの安全性、TypeScriptの使いやすさ——これらを統合した言語を目指しました。</p>
-            
-            <div class="highlight-box">
-                <h4>既存言語の課題</h4>
-                <ul style="font-size: 9pt;">
-                    <li><strong>C/C++</strong>: 強力だが型安全性が弱く、メモリ管理が複雑</li>
-                    <li><strong>TypeScript</strong>: 優れた型システムだがランタイムオーバーヘッドが大</li>
-                    <li><strong>Rust</strong>: 最高の安全性だが学習曲線が非常に高い</li>
-                </ul>
-            </div>
-            
-            <h4>Cbが目指す3つの柱</h4>
-            <ol style="font-size: 9.5pt;">
-                <li><strong>実用性重視</strong><br>実際に使える機能を段階的に追加。理論より実践を優先</li>
-                <li><strong>型安全性</strong><br>コンパイル時の厳密な型チェックで実行時エラーを防ぐ</li>
-                <li><strong>学習しやすさ</strong><br>C/C++経験者がすぐに書ける親しみやすい構文</li>
-            </ol>
-            
-            <h4>開発者の視点</h4>
-            <p style="font-size: 9pt; line-height: 1.3;">個人開発だからこそ、実験的な機能を迅速に試し、フィードバックを即座に反映できます。大規模言語にはない柔軟性と進化の速さが強みです。</p>
-            
-            <h3>開発スタイル</h3>
-            <ul style="font-size: 8.5pt; margin-bottom: 6px;">
-                <li><strong>AIを使ったバイブコーディング</strong>で開発中</li>
-                <li><strong>開発期間:</strong> 2〜3ヶ月程度で主要機能を実装</li>
-                <li><strong>現在:</strong> インタープリタとして動作</li>
-                <li>osdev-jp コミュニティで開発中</li>
-            </ul>
-            
-            <h3>設計原則</h3>
-            <div class="principles-box">
-                <ul style="font-size: 8pt; margin: 3px 0 3px 20px;">
-                    <li><strong>ゼロコスト抽象化</strong> - 最小オーバーヘッド</li>
-                    <li><strong>明示的メモリ管理</strong> - GCなし、RAII</li>
-                    <li><strong>段階的学習</strong> - 基本→高度な機能</li>
-                    <li><strong>実用性重視</strong> - 使いやすさを優先</li>
-                </ul>
-            </div>
-            
-            <h3>技術スタック</h3>
-            <table style="font-size: 7.5pt;">
-                <tr>
-                    <td><strong>実装言語</strong></td><td>C++17</td>
-                </tr>
-                <tr>
-                    <td><strong>実行方式</strong></td><td>インタープリタ</td>
-                </tr>
-                <tr>
-                    <td><strong>ビルド</strong></td><td>Make (macOS/Linux)</td>
-                </tr>
-            </table>
-        </div>
-        
-        <!-- 右列 -->
-        <div class="column">
-            <h2>Cbの特徴</h2>
-            
-            <h3>1. ムーブセマンティクス</h3>
-            <p style="font-size: 10pt;"><strong>ゼロコストの所有権移動</strong> (move()関数は今後実装予定)</p>
-            
-            <div class="code-block"><span class="keyword">struct</span> <span class="type">Resource</span> {
-    <span class="keyword">int</span>* data;
-    <span class="keyword">int</span> size;
+<h1>Cm <span style="font-size: 18pt;">(シーマイナー)</span> プログラミング言語 <span style="font-size: 14pt; font-weight: normal; color: #666666;">v0.12.0</span></h1>
+<div class="event-info">2026/01 OSSカンファレンス向け展示</div>
+
+<div class="two-column">
+<!-- 左列 -->
+<div class="column">
+<h2>Cmとは？</h2>
+
+<div class="origin-box">
+<strong>名前の由来:</strong> C → C++ → C# と+が増えていくので逆の命名に。機能的にはC++のモダン版を目指しています。
+</div>
+
+<div class="change-box">
+<strong>📢 Cbからの変更点:</strong>
+<ul style="font-size: 8.5pt; margin: 3px 0 0 15px;">
+<li><strong>言語名変更</strong>: Cb → Cm（シーマイナー）</li>
+<li><strong>コンパイラ化</strong>: インタープリタ→LLVM JIT</li>
+<li><strong>マルチバックエンド</strong>: Native/WASM/JS対応</li>
+<li><strong>本格的ジェネリクス</strong>: 型制約・モノモーフィゼーション</li>
+</ul>
+</div>
+
+<h3>なぜCmを作ったのか？</h3>
+<div style="background: #EEEEEE; border-left: 4px solid #000000; padding: 8px; margin: 6px 0; border-radius: 4px;">
+<p style="font-size: 10pt; font-weight: bold; color: #000000; margin: 0 0 4px 0;">「使いやすく、安全で、高速な言語」を作りたかった</p>
+<p style="font-size: 9pt; color: #333; margin: 0;">OS開発からWebアプリまで、1つの言語で全てをカバー。低レベルな制御とモダンな書き方を両立。</p>
+</div>
+
+<h4>Cmが目指す3つの柱</h4>
+<ol style="font-size: 9pt;">
+<li><strong>実用性重視</strong> - 理論より実践を優先</li>
+<li><strong>型安全性</strong> - コンパイル時の厳密な型チェック</li>
+<li><strong>高速実行</strong> - LLVM最適化でC++並みの速度</li>
+</ol>
+
+<h3>技術スタック</h3>
+<table style="font-size: 8pt;">
+<tr><td><strong>実装言語</strong></td><td>C++17</td></tr>
+<tr><td><strong>バックエンド</strong></td><td>LLVM 17</td></tr>
+<tr><td><strong>実行方式</strong></td><td>JIT / Native / WASM / JS</td></tr>
+<tr><td><strong>ビルド</strong></td><td>CMake (macOS/Linux)</td></tr>
+</table>
+
+<h3>ベンチマーク（行列乗算 300x300）</h3>
+<table style="font-size: 8pt;">
+<tr><th>言語</th><th>実行時間</th><th>比率</th></tr>
+<tr><td><strong>Cm (JIT)</strong></td><td>0.31s</td><td>1.0x</td></tr>
+<tr><td>C++ (clang -O3)</td><td>0.01s</td><td>0.03x</td></tr>
+<tr><td>Rust (release)</td><td>0.01s</td><td>0.03x</td></tr>
+<tr><td>Python</td><td>23.4s</td><td>75x</td></tr>
+</table>
+<p style="font-size: 7pt; color: #666;">※JIT時間を含む。Cm Nativeは更に高速</p>
+
+<h3>主な機能</h3>
+<div style="font-size: 8.5pt; column-count: 2; column-gap: 10px;">
+<ul style="margin: 0; padding-left: 14px;">
+<li>interface/impl</li>
+<li>ジェネリクス</li>
+<li>match式</li>
+<li>ラムダ/クロージャ</li>
+<li>構造体/enum</li>
+</ul>
+<ul style="margin: 0; padding-left: 14px;">
+<li>ポインタ/配列</li>
+<li>defer文</li>
+<li>モジュール/FFI</li>
+<li>RAII</li>
+<li>with自動実装</li>
+</ul>
+</div>
+</div>
+
+<!-- 右列 -->
+<div class="column">
+<h2>Cmの特徴</h2>
+
+<div class="strength-box">
+<strong>🚀 Cmの強み:</strong>
+<ul style="font-size: 8.5pt; margin: 3px 0 0 15px;">
+<li><strong>C++並みの速度</strong>: LLVMネイティブコンパイル</li>
+<li><strong>モダン構文</strong>: Rust/TS風の直感的な書き方</li>
+<li><strong>マルチターゲット</strong>: 1ソースで複数環境に出力</li>
+</ul>
+</div>
+
+<h3>1. Rust風Interface/Impl + with自動実装</h3>
+<div class="code-block" style="font-size: 8.5pt;">interface Printable {
+    void print();
 }
 
-<span class="keyword">impl</span> <span class="type">Resource</span> {
-    <span class="comment">// ムーブコンストラクタ</span>
-    <span class="keyword">self</span>(<span class="type">Resource</span>&& other) {
-        self.data = other.data;
-        self.size = other.size;
-        other.data = <span class="keyword">nullptr</span>;  <span class="comment">// 元を無効化</span>
-        other.size = <span class="keyword">0</span>;
-    }
-    
-    ~<span class="keyword">self</span>() {
-        <span class="keyword">if</span> (self.data != <span class="keyword">nullptr</span>) {
-            <span class="comment">// リソース解放</span>
-            free(self.data);
-        }
-    }
-}</div>
-            
-            <h3>2. TypeScript風Union型</h3>
-            <div class="code-block"><span class="keyword">typedef</span> <span class="type">Status</span> = 200 | 404 | 500;
-<span class="keyword">typedef</span> <span class="type">Value</span> = <span class="keyword">int</span> | <span class="keyword">string</span>;
-
-<span class="type">Status</span> code = 200;
-<span class="type">Value</span> data = 42;
-data = <span class="string">"Hello"</span>;  <span class="comment">// 型変更OK</span></div>
-            
-            <h3>3. Rust風Interface/Impl</h3>
-            <div class="code-block"><span class="keyword">interface</span> <span class="type">Drawable</span> {
-    <strong><span class="keyword">void</span></strong> draw();
+// with: デフォルト実装を自動適用
+struct Point with Printable {
+    int x; int y;
 }
 
-<span class="keyword">struct</span> <span class="type">Circle</span> {
-    <span class="keyword">int</span> radius;
+impl Printable for Point {
+    void print() {
+        println("({self.x}, {self.y})");
+    }
 }
 
-<span class="keyword">impl</span> <span class="type">Drawable</span> <span class="keyword">for</span> <span class="type">Circle</span> {
-    <strong><span class="keyword">void</span></strong> draw() {
-        println(<span class="string">"Circle"</span>, self.radius);
-    }
+int main() {
+    Point p = Point{10, 20};
+    p.print(); // (10, 20)
 }</div>
 
-            <h3>4. 関数ポインタ</h3>
-            <div class="code-block"><strong><span class="keyword">int</span></strong> add(<span class="keyword">int</span> a, <span class="keyword">int</span> b) {
-    <span class="keyword">return</span> a + b;
+<h3>2. ジェネリクス + Match式</h3>
+<div class="code-block" style="font-size: 8.5pt;">enum OptionTag { Some, None }
+
+struct Option&lt;T&gt; { OptionTag tag; T value; }
+
+&lt;T&gt; Option&lt;T&gt; some(T v) {
+    return Option&lt;T&gt;{OptionTag::Some, v};
 }
-<strong><span class="keyword">int</span></strong> main() {
-    <span class="type">int</span>* op = &amp;add;
-    println(op(5, 3));  <span class="comment">// 8</span>
+
+int main() {
+    Option&lt;int&gt; opt = some(42);
+    match (opt.tag) {
+        OptionTag::Some =&gt; println(opt.value),
+        _ =&gt; println("None")
+    }
 }</div>
-        </div>
-    </div>
+
+<h3>3. ポインタ・配列（C++互換）</h3>
+<div class="code-block" style="font-size: 8.5pt;">int[10] arr;
+for (int i = 0; i &lt; 10; i++) {
+    arr[i] = i * 2;
+}
+int* p = &amp;arr[0];
+println(*p); // 0</div>
+</div>
+</div>
 </div>
 
 <!-- ========== 裏面 ========== -->
 <div class="page">
-    <div class="two-column">
-        <!-- 左列 -->
-        <div class="column">
-            <h2>他の言語との比較</h2>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>特徴</th>
-                        <th><strong>Cb</strong></th>
-                        <th>C++</th>
-                        <th>TS</th>
-                        <th>Rust</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>型安全性</td>
-                        <td>強</td>
-                        <td>弱</td>
-                        <td>強</td>
-                        <td>最強</td>
-                    </tr>
-                    <tr>
-                        <td>メモリ管理</td>
-                        <td>RAII</td>
-                        <td>RAII</td>
-                        <td>GC</td>
-                        <td>所有権</td>
-                    </tr>
-                    <tr>
-                        <td>ムーブ</td>
-                        <td>○</td>
-                        <td>○</td>
-                        <td>×</td>
-                        <td>○</td>
-                    </tr>
-                    <tr>
-                        <td>学習コスト</td>
-                        <td>低</td>
-                        <td>高</td>
-                        <td>低</td>
-                        <td>高</td>
-                    </tr>
-                    <tr>
-                        <td>実行速度</td>
-                        <td>中</td>
-                        <td>高</td>
-                        <td>遅</td>
-                        <td>高</td>
-                    </tr>
-                    <tr>
-                        <td>Union型</td>
-                        <td>○</td>
-                        <td>×</td>
-                        <td>○</td>
-                        <td>×</td>
-                    </tr>
-                    <tr>
-                        <td>Interface</td>
-                        <td>○</td>
-                        <td>×</td>
-                        <td>○</td>
-                        <td>○</td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <h3>Cbが優れている点</h3>
-            <ul style="font-size: 10pt;">
-                <li><strong>低い学習コスト</strong> - C/C++に似た構文</li>
-                <li><strong>型安全性</strong> - TypeScript風Union型、Interface/Impl</li>
-                <li><strong>実用的</strong> - 関数ポインタ、ムーブセマンティクス</li>
-                <li><strong>開発が容易</strong> - シンプルなビルド、明確なエラー</li>
-            </ul>
-            
-            <p style="font-size: 8pt; margin-top: 4px; color: #666666;">
-                <strong>※</strong> Union型: TypeScript風の型合成（int | string等）。C++のunion、Rustのenumとは別機能
-            </p>
-            
-            <h2>ロードマップ</h2>
-            
-            <h3>Phase 1: 基礎完成 (完了) (v0.1-v0.10.0)</h3>
-            <ul style="font-size: 10pt;">
-                <li>基本型、配列、構造体、ポインタ</li>
-                <li>コンストラクタ/デストラクタ</li>
-                <li>ムーブセマンティクス、完全なRAII</li>
-            </ul>
-            
-            <h3>Phase 2: 高度な機能 (開発中) (v0.11-v1.0)</h3>
-            <ul style="font-size: 10pt;">
-                <li>ジェネリクス/テンプレート</li>
-                <li>スマートポインタ（unique_ptr, shared_ptr）</li>
-                <li>Result型エラーハンドリング</li>
-                <li>標準ライブラリ拡充</li>
-            </ul>
-            
-            <h3>Phase 3: コンパイラ化・最適化 (計画中) (v1.1+)</h3>
-            <ul style="font-size: 10pt;">
-                <li><strong>インタープリタ→コンパイラへ移行</strong></li>
-                <li>LLVMバックエンド（ネイティブコンパイル）</li>
-                <li>VSCode拡張、パッケージマネージャー</li>
-                <li>静的解析、デバッガー統合</li>
-            </ul>
-            
-            <div class="highlight-box" style="background: #000000; color: white; text-align: center; margin-top: 10px; border: 3px solid #000000;">
-                <strong style="font-size: 13pt;">"使いやすく、安全で、高速な言語"</strong>
-            </div>
-            
-            <h2>品質指標</h2>
-            
-            <table style="font-size: 10pt;">
-                <tr>
-                    <td><strong>統合テスト</strong></td>
-                    <td>2,924個（100%成功）</td>
-                </tr>
-                <tr>
-                    <td><strong>ユニットテスト</strong></td>
-                    <td>30個（100%成功）</td>
-                </tr>
-                <tr>
-                    <td><strong>総テスト数</strong></td>
-                    <td>2,954個（100%成功）</td>
-                </tr>
-                <tr>
-                    <td><strong>コード行数</strong></td>
-                    <td>約50,000行</td>
-                </tr>
-            </table>
-        </div>
-        
-        <!-- 右列 -->
-        <div class="column">
-            <h2>サンプルプログラム</h2>
-            
-            <h4>例1: FizzBuzz（Interface活用）</h4>
-            <div class="code-block"><span class="keyword">interface</span> <span class="type">IFizzbuzz</span> { <strong><span class="keyword">void</span></strong> fizzbuzz(); }
+<div class="two-column">
+<!-- 左列 -->
+<div class="column">
+<h2>他の言語との比較</h2>
 
-<span class="keyword">impl</span> <span class="type">IFizzbuzz</span> <span class="keyword">for</span> <span class="keyword">int</span> {
-    <strong><span class="keyword">void</span></strong> fizzbuzz() {
-        <span class="keyword">if</span> (self % 15 == 0) println(<span class="string">"FizzBuzz"</span>);
-        <span class="keyword">else if</span> (self % 3 == 0) println(<span class="string">"Fizz"</span>);
-        <span class="keyword">else if</span> (self % 5 == 0) println(<span class="string">"Buzz"</span>);
-        <span class="keyword">else</span> println(self);
+<table>
+<thead>
+<tr><th>特徴</th><th><strong>Cm</strong></th><th>C++</th><th>Rust</th><th>Python</th></tr>
+</thead>
+<tbody>
+<tr><td>型安全性</td><td>強</td><td>弱</td><td>最強</td><td>弱</td></tr>
+<tr><td>メモリ管理</td><td>RAII</td><td>RAII</td><td>所有権</td><td>GC</td></tr>
+<tr><td>学習コスト</td><td>低</td><td>高</td><td>高</td><td>低</td></tr>
+<tr><td>実行速度</td><td>高</td><td>高</td><td>高</td><td>低</td></tr>
+<tr><td>ジェネリクス</td><td>○</td><td>○</td><td>○</td><td>△</td></tr>
+<tr><td>Match式</td><td>○</td><td>×</td><td>○</td><td>○</td></tr>
+<tr><td>Interface</td><td>○</td><td>×</td><td>○</td><td>△</td></tr>
+<tr><td>WASM出力</td><td>○</td><td>△</td><td>○</td><td>×</td></tr>
+</tbody>
+</table>
+
+<h3>Cmが優れている点</h3>
+<ul style="font-size: 9pt;">
+<li><strong>低い学習コスト</strong> - C/C++に似た構文</li>
+<li><strong>高速</strong> - LLVMネイティブコンパイル</li>
+<li><strong>マルチターゲット</strong> - Native/WASM/JS</li>
+<li><strong>モダン機能</strong> - Match式、ジェネリクス</li>
+</ul>
+
+<h2>ロードマップ</h2>
+
+<h3>Phase 1: 基礎完成 ✅ (v0.1-v0.10)</h3>
+<ul style="font-size: 9pt;">
+<li>基本型、配列、構造体、ポインタ</li>
+<li>インターフェース/Impl、ジェネリクス</li>
+<li>match式、モジュールシステム、FFI</li>
+</ul>
+
+<h3>Phase 2: コンパイラ化 ✅ (v0.11-v0.12)</h3>
+<ul style="font-size: 9pt;">
+<li>LLVM JITコンパイラ（デフォルト）</li>
+<li>ネイティブバイナリ出力</li>
+<li>JavaScript/WebAssembly出力</li>
+</ul>
+
+<h3>Phase 3: エコシステム 🔄 (v0.13+)</h3>
+<ul style="font-size: 9pt;">
+<li>VSCode拡張、LSP対応</li>
+<li>所有権/借用システム</li>
+<li>標準ライブラリ拡充</li>
+</ul>
+
+<div class="highlight-box" style="background: #000000; color: white; text-align: center; margin-top: 8px; border: 3px solid #000000;">
+<strong style="font-size: 12pt;">"OS開発からWebアプリまで、1つの言語で"</strong>
+</div>
+
+<h2>品質指標</h2>
+<table style="font-size: 9pt;">
+<tr><td><strong>JITテスト</strong></td><td>283/311 PASS (91%)</td></tr>
+<tr><td><strong>JSテスト</strong></td><td>170/259 PASS (66%)</td></tr>
+<tr><td><strong>コード行数</strong></td><td>約80,000行</td></tr>
+</table>
+
+<h3>開発スタイル</h3>
+<ul style="font-size: 9pt;">
+<li><strong>AIバイブコーディング</strong>で開発中</li>
+<li><strong>開発期間:</strong> 約半年（2025年夏～）</li>
+<li>osdev-jp コミュニティで公開</li>
+</ul>
+</div>
+
+<!-- 右列 -->
+<div class="column">
+<h2>サンプルプログラム</h2>
+
+<h4>例1: FizzBuzz（Interface活用）</h4>
+<div class="code-block" style="font-size: 8.5pt;">interface IFizzbuzz { void fizzbuzz(); }
+
+impl IFizzbuzz for int {
+    void fizzbuzz() {
+        if (self % 15 == 0) println("FizzBuzz");
+        else if (self % 3 == 0) println("Fizz");
+        else if (self % 5 == 0) println("Buzz");
+        else println(self);
     }
 }
-<strong><span class="keyword">int</span></strong> main() {
-    <span class="keyword">for</span> (<span class="keyword">int</span> i = 1; i &lt;= 100; i++) {
-        i.fizzbuzz();  <span class="comment">// メソッド呼び出し！</span>
-    }
-}</div>
-            
-            <div class="point-box">
-                <strong>ポイント:</strong> プリミティブ型（int）にメソッド追加、selfで現在の値を参照
-            </div>
-            
-            <h4>例2: リソース管理（RAII）</h4>
-            <div class="code-block"><span class="keyword">struct</span> <span class="type">File</span> { <span class="keyword">string</span> name; <span class="keyword">bool</span> is_open; }
 
-<span class="keyword">impl</span> <span class="type">File</span> {
-    <span class="keyword">self</span>(<span class="keyword">string</span> fn) {
-        self.name = fn; self.is_open = <span class="keyword">true</span>;
-        println(<span class="string">"File opened:"</span>, fn);
+int main() {
+    for (int i = 1; i &lt;= 100; i++) {
+        i.fizzbuzz();
     }
-    ~<span class="keyword">self</span>() {
-        <span class="keyword">if</span> (self.is_open)
-            println(<span class="string">"File closed:"</span>, self.name);
-    }
-}
-<strong><span class="keyword">int</span></strong> main() {
-    <span class="type">File</span> f(<span class="string">"data.txt"</span>);
-    <span class="comment">// スコープ終了時にデストラクタ実行</span>
-    <span class="comment">// 注: {}スコープは未対応(修正予定)</span>
 }</div>
-            
-            <div class="output-box"><strong>出力:</strong> File opened: data.txt → File closed: data.txt</div>
-            
-            <h2>クイックスタート</h2>
-            
-            <div class="terminal-block">git clone https://github.com/shadowlink0122/Cb.git
-cd Cb &amp;&amp; make
-./main sample/fizzbuzz.cb  <span class="comment"># サンプル実行</span></div>
-            
-            <h2>詳細情報・コミュニティ</h2>
-            <p style="font-size: 9pt; margin-bottom: 3px;">
-                <img src="github-icon.svg" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;">
-                <strong>GitHub:</strong> github.com/shadowlink0122/Cb
-            </p>
-            <p style="font-size: 9pt; margin-bottom: 3px;">
-                <img src="x-icon.svg" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;">
-                <strong>(旧Twitter):</strong> @sl_0122
-            </p>
-            <p style="font-size: 9pt; margin-bottom: 3px;"><strong>コミュニティ:</strong> osdev-jp (https://osdev.jp/)</p>
-            <p style="font-size: 9pt; margin-bottom: 3px;"><strong>Discord:</strong> osdev-jpサーバーで開発中</p>
-            <p style="font-size: 9pt; margin-bottom: 3px;"><strong>ドキュメント:</strong> docs/spec.md, docs/tutorial/</p>
-            <p style="font-size: 9pt; margin-bottom: 8px;"><strong>リリースノート:</strong> release_notes/v0.10.0.md</p>
-            
-            <div class="footer-box" style="margin-top: 8px;">
-                <strong style="font-size: 10pt;">Cb言語 v0.10.0</strong><br>
-                <span style="font-size: 8.5pt;">C++の表現力とTypeScriptの型安全性を融合</span><br>
-                <span style="font-size: 7.5pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2025/10/12</span>
-            </div>
-        </div>
-    </div>
+
+<div class="point-box">
+<strong>ポイント:</strong> プリミティブ型（int）にメソッド追加可能
+</div>
+
+<h4>例2: ラムダ・クロージャ</h4>
+<div class="code-block" style="font-size: 8.5pt;">int[5] nums = [1, 2, 3, 4, 5];
+int sum = nums.reduce(0, (a, b) =&gt; a + b);
+println(sum); // 15
+
+// クロージャで外部変数をキャプチャ
+int multiplier = 3;
+int[5] result = nums.map(x =&gt; x * multiplier);</div>
+
+<h2>クイックスタート</h2>
+<div class="terminal-block">git clone https://github.com/shadowlink0122/Cm.git
+cd Cm && mkdir build && cd build
+cmake .. && make
+./cm run sample/hello.cm       # JIT実行
+./cm compile hello.cm -o hello # Native
+./cm run --target=js hello.cm  # JS出力</div>
+
+<h2>詳細情報・コミュニティ</h2>
+<div style="display: flex; align-items: flex-start; gap: 10px;">
+<div style="flex: 1;">
+<p style="font-size: 9pt; margin-bottom: 3px;">
+<img src="github-icon.svg" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;">
+<strong>GitHub:</strong> github.com/shadowlink0122/Cm
+</p>
+<p style="font-size: 9pt; margin-bottom: 3px;">
+<img src="x-icon.svg" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;">
+<strong>X:</strong> @sl_0122
+</p>
+<p style="font-size: 9pt; margin-bottom: 3px;"><strong>コミュニティ:</strong> osdev-jp</p>
+<p style="font-size: 8pt; color: #666;">ドキュメント: shadowlink0122.github.io/Cm/</p>
+</div>
+<div style="text-align: center;">
+<img src="docs-qr.png" style="width: 65px; height: 65px; border: 1px solid #ccc;">
+<p style="font-size: 7pt; margin: 2px 0 0 0;">Docs</p>
+</div>
+</div>
+
+<div class="footer-box" style="margin-top: 6px;">
+<strong style="font-size: 10pt;">Cm言語 v0.12.0</strong><br>
+<span style="font-size: 8.5pt;">C++の速度とモダン言語の使いやすさを融合</span><br>
+<span style="font-size: 7.5pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2026/01/18</span>
+</div>
+</div>
+</div>
 </div>
 
 </body>

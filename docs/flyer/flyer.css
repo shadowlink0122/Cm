@@ -1,0 +1,272 @@
+/* Cm言語フライヤー用CSS (A4両面印刷対応) */
+
+@page {
+    size: A4;
+    margin: 15mm;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+    font-size: 10pt;
+    line-height: 1.35;
+    color: #000000;
+    background: white;
+}
+
+.page {
+    width: 210mm;
+    height: 297mm;
+    padding: 12mm;
+    margin: 0 auto 20px;
+    background: white;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    page-break-after: always;
+}
+
+.two-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    height: 100%;
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+}
+
+h1 {
+    font-size: 24pt;
+    font-weight: bold;
+    color: #000000;
+    margin-bottom: 5px;
+    text-align: center;
+}
+
+.event-info {
+    text-align: center;
+    font-size: 11pt;
+    color: #000000;
+    font-weight: bold;
+    margin-bottom: 8px;
+    padding: 5px;
+    background: #FFFFFF;
+    border: 2px solid #000000;
+    border-radius: 5px;
+}
+
+h2 {
+    font-size: 14pt;
+    font-weight: bold;
+    color: #000000;
+    margin: 8px 0 4px 0;
+    padding-bottom: 2px;
+    border-bottom: 2px solid #000000;
+}
+
+h3 {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #000000;
+    margin: 6px 0 3px 0;
+}
+
+h4 {
+    font-size: 10pt;
+    font-weight: bold;
+    color: #000000;
+    margin: 5px 0 2px 0;
+}
+
+p {
+    margin-bottom: 3px;
+}
+
+ul,
+ol {
+    margin-left: 15px;
+    margin-bottom: 4px;
+}
+
+li {
+    margin-bottom: 1px;
+}
+
+.highlight-box {
+    background-color: #F5F5F5;
+    border: 2px solid #000000;
+    border-radius: 5px;
+    padding: 5px;
+    margin: 4px 0;
+}
+
+.code-block {
+    background-color: #FFFFFF;
+    color: #000000;
+    border: 2px solid #000000;
+    border-radius: 3px;
+    padding: 6px;
+    font-family: 'Courier New', 'Monaco', monospace;
+    font-size: 8pt;
+    line-height: 1.25;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 4px 0;
+}
+
+.terminal-block {
+    background-color: #000000;
+    color: #FFFFFF;
+    border: 2px solid #000000;
+    border-radius: 3px;
+    padding: 6px;
+    font-family: 'Courier New', 'Monaco', monospace;
+    font-size: 8pt;
+    line-height: 1.25;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 4px 0;
+}
+
+.terminal-block .comment {
+    color: #CCCCCC;
+}
+
+.keyword {
+    font-weight: bold;
+    color: #000000;
+}
+
+.type {
+    color: #000000;
+    font-weight: 500;
+}
+
+.comment {
+    font-style: italic;
+    color: #666666;
+}
+
+.string {
+    color: #000000;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 5px 0;
+    font-size: 9pt;
+}
+
+table th {
+    background: #CCCCCC;
+    color: #000000;
+    padding: 4px;
+    border: 1px solid #000000;
+    font-weight: bold;
+}
+
+table td {
+    padding: 4px;
+    border: 1px solid #000000;
+}
+
+table tr:nth-child(even) {
+    background: #F5F5F5;
+}
+
+.point-box {
+    background: #F5F5F5;
+    border: 2px solid #000000;
+    border-radius: 5px;
+    padding: 5px;
+    margin: 4px 0;
+    font-size: 8.5pt;
+}
+
+.output-box {
+    background: #F5F5F5;
+    border: 1px solid #000000;
+    border-radius: 3px;
+    padding: 5px;
+    margin: 4px 0;
+    font-family: 'Menlo', 'Monaco', monospace;
+    font-size: 7.5pt;
+}
+
+.footer-box {
+    background: #DDDDDD;
+    color: #000000;
+    padding: 6px;
+    text-align: center;
+    border-radius: 5px;
+    border: 2px solid #000000;
+    margin-top: 6px;
+    font-weight: bold;
+    font-size: 9pt;
+}
+
+.origin-box {
+    background-color: #F5F5F5;
+    border: 2px dashed #666666;
+    border-radius: 5px;
+    padding: 6px;
+    margin: 6px 0;
+    font-size: 9pt;
+}
+
+.principles-box {
+    background-color: #F5F5F5;
+    border: 2px dashed #000000;
+    border-radius: 5px;
+    padding: 5px;
+    margin: 4px 0;
+}
+
+.change-box {
+    background-color: #FFFACD;
+    border: 2px solid #DAA520;
+    border-radius: 5px;
+    padding: 5px;
+    margin: 4px 0;
+    font-size: 9pt;
+}
+
+.strength-box {
+    background-color: #E6F3FF;
+    border: 2px solid #4169E1;
+    border-radius: 5px;
+    padding: 5px;
+    margin: 4px 0;
+    font-size: 9pt;
+}
+
+@media print {
+    .page {
+        box-shadow: none;
+        margin: 0;
+    }
+
+    /* PDF出力時に背景色を確実に印刷 */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    .terminal-block {
+        background-color: #000000 !important;
+        color: #FFFFFF !important;
+    }
+
+    .highlight-box[style*="background: #000000"] {
+        background: #000000 !important;
+        color: white !important;
+    }
+}
