@@ -1,4 +1,4 @@
-/* Cm言語フライヤー用CSS (A4両面印刷対応) */
+/* Cm言語フライヤー用CSS (A4両面印刷対応) - 白黒版 */
 
 @page {
     size: A4;
@@ -117,10 +117,10 @@ li {
     padding: 6px;
     font-family: 'Courier New', 'Monaco', monospace;
     font-size: 8pt;
-    line-height: 1.25;
-    overflow-x: auto;
+    line-height: 1.2;
     white-space: pre;
     margin: 4px 0;
+    overflow: hidden;
 }
 
 .terminal-block {
@@ -131,14 +131,10 @@ li {
     padding: 6px;
     font-family: 'Courier New', 'Monaco', monospace;
     font-size: 8pt;
-    line-height: 1.25;
-    overflow-x: auto;
+    line-height: 1.2;
     white-space: pre;
     margin: 4px 0;
-}
-
-.terminal-block .comment {
-    color: #CCCCCC;
+    overflow: hidden;
 }
 
 .keyword {
@@ -232,18 +228,20 @@ table tr:nth-child(even) {
     margin: 4px 0;
 }
 
+/* 白黒版: change-box */
 .change-box {
-    background-color: #FFFACD;
-    border: 2px solid #DAA520;
+    background-color: #F5F5F5;
+    border: 2px solid #000000;
     border-radius: 5px;
     padding: 5px;
     margin: 4px 0;
     font-size: 9pt;
 }
 
+/* 白黒版: strength-box */
 .strength-box {
-    background-color: #E6F3FF;
-    border: 2px solid #4169E1;
+    background-color: #F5F5F5;
+    border: 2px solid #000000;
     border-radius: 5px;
     padding: 5px;
     margin: 4px 0;

@@ -36,8 +36,7 @@
                 </div>
 
                 <h3>なぜCmを作ったのか？</h3>
-                <div
-                    style="background: #EEEEEE; border-left: 4px solid #000000; padding: 10px; margin: 8px 0; border-radius: 4px;">
+                <div style="background: #EEEEEE; border-left: 4px solid #000000; padding: 10px; margin: 8px 0; border-radius: 4px;">
                     <p style="font-size: 11pt; font-weight: bold; color: #000000; margin: 0 0 5px 0;">
                         「使いやすく、安全で、高速な言語」を作りたかった</p>
                     <p style="font-size: 10pt; color: #333; margin: 0;">OS開発からWebアプリまで、1つの言語で全てをカバー。低レベルな制御とモダンな書き方を両立。
@@ -53,51 +52,19 @@
 
                 <h3>技術スタック</h3>
                 <table style="font-size: 9pt;">
-                    <tr>
-                        <td><strong>実装言語</strong></td>
-                        <td>C++17</td>
-                    </tr>
-                    <tr>
-                        <td><strong>バックエンド</strong></td>
-                        <td>LLVM 17</td>
-                    </tr>
-                    <tr>
-                        <td><strong>実行方式</strong></td>
-                        <td>JIT / Native / WASM / JS</td>
-                    </tr>
-                    <tr>
-                        <td><strong>ビルド</strong></td>
-                        <td>CMake (macOS/Linux)</td>
-                    </tr>
+                    <tr><td><strong>実装言語</strong></td><td>C++17</td></tr>
+                    <tr><td><strong>バックエンド</strong></td><td>LLVM 17</td></tr>
+                    <tr><td><strong>実行方式</strong></td><td>JIT / Native / WASM / JS</td></tr>
+                    <tr><td><strong>ビルド</strong></td><td>CMake (macOS/Linux)</td></tr>
                 </table>
 
                 <h3>ベンチマーク（行列乗算 300x300）</h3>
                 <table style="font-size: 9pt;">
-                    <tr>
-                        <th>言語</th>
-                        <th>実行時間</th>
-                        <th>比率</th>
-                    </tr>
-                    <tr>
-                        <td><strong>Cm (JIT)</strong></td>
-                        <td>0.31s</td>
-                        <td>1.0x</td>
-                    </tr>
-                    <tr>
-                        <td>C++ (clang -O3)</td>
-                        <td>0.28s</td>
-                        <td>0.9x</td>
-                    </tr>
-                    <tr>
-                        <td>Rust (release)</td>
-                        <td>0.29s</td>
-                        <td>0.9x</td>
-                    </tr>
-                    <tr>
-                        <td>Python</td>
-                        <td>23.4s</td>
-                        <td>75x</td>
-                    </tr>
+                    <tr><th>言語</th><th>実行時間</th><th>比率</th></tr>
+                    <tr><td><strong>Cm (JIT)</strong></td><td>0.31s</td><td>1.0x</td></tr>
+                    <tr><td>C++ (clang -O3)</td><td>0.28s</td><td>0.9x</td></tr>
+                    <tr><td>Rust (release)</td><td>0.29s</td><td>0.9x</td></tr>
+                    <tr><td>Python</td><td>23.4s</td><td>75x</td></tr>
                 </table>
                 <p style="font-size: 8pt; color: #666;">※JIT時間を含む。Cm Nativeは更に高速</p>
 
@@ -133,13 +100,10 @@
                     </ul>
                 </div>
 
-                <h3>1. Rust風Interface/Impl + with自動実装</h3>
-                <div class="code-block" style="font-size: 9pt;">// with Debug: 自動でdebug()メソッド生成
-struct Point with Debug {
-    int x; int y;
-}
+                <h3>1. Interface/Impl + with自動実装</h3>
+                <div class="code-block" style="font-size: 7.5pt;">// with Debug: 自動でdebug()メソッド生成
+struct Point with Debug { int x; int y; }
 
-// 明示的なimpl
 interface Printable { void print(); }
 impl Printable for Point {
     void print() { println("({self.x},{self.y})"); }
@@ -152,7 +116,7 @@ int main() {
 }</div>
 
                 <h3>2. ジェネリクス + Match式</h3>
-                <div class="code-block" style="font-size: 9pt;">enum OptionTag { Some, None }
+                <div class="code-block" style="font-size: 7.5pt;">enum OptionTag { Some, None }
 struct Option&lt;T&gt; { OptionTag tag; T value; }
 
 &lt;T&gt; Option&lt;T&gt; some(T v) {
@@ -168,10 +132,8 @@ int main() {
 }</div>
 
                 <h3>3. ポインタ・配列（C++互換）</h3>
-                <div class="code-block" style="font-size: 9pt;">int[10] arr;
-for (int i = 0; i &lt; 10; i++) {
-    arr[i] = i * 2;
-}
+                <div class="code-block" style="font-size: 7.5pt;">int[10] arr;
+for (int i = 0; i &lt; 10; i++) { arr[i] = i * 2; }
 int* p = &amp;arr[0];
 println(*p); // 0</div>
             </div>
@@ -187,71 +149,17 @@ println(*p); // 0</div>
 
                 <table style="font-size: 9.5pt;">
                     <thead>
-                        <tr>
-                            <th>特徴</th>
-                            <th><strong>Cm</strong></th>
-                            <th>C++</th>
-                            <th>Rust</th>
-                            <th>Python</th>
-                        </tr>
+                        <tr><th>特徴</th><th><strong>Cm</strong></th><th>C++</th><th>Rust</th><th>Python</th></tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td>型安全性</td>
-                            <td>強</td>
-                            <td>弱</td>
-                            <td>最強</td>
-                            <td>弱</td>
-                        </tr>
-                        <tr>
-                            <td>メモリ管理</td>
-                            <td>RAII</td>
-                            <td>RAII</td>
-                            <td>所有権</td>
-                            <td>GC</td>
-                        </tr>
-                        <tr>
-                            <td>学習コスト</td>
-                            <td>低</td>
-                            <td>高</td>
-                            <td>高</td>
-                            <td>低</td>
-                        </tr>
-                        <tr>
-                            <td>実行速度</td>
-                            <td>高</td>
-                            <td>高</td>
-                            <td>高</td>
-                            <td>低</td>
-                        </tr>
-                        <tr>
-                            <td>ジェネリクス</td>
-                            <td>○</td>
-                            <td>○</td>
-                            <td>○</td>
-                            <td>△</td>
-                        </tr>
-                        <tr>
-                            <td>Match式</td>
-                            <td>○</td>
-                            <td>×</td>
-                            <td>○</td>
-                            <td>○</td>
-                        </tr>
-                        <tr>
-                            <td>Interface</td>
-                            <td>○</td>
-                            <td>×</td>
-                            <td>○</td>
-                            <td>△</td>
-                        </tr>
-                        <tr>
-                            <td>WASM出力</td>
-                            <td>○</td>
-                            <td>△</td>
-                            <td>○</td>
-                            <td>×</td>
-                        </tr>
+                        <tr><td>型安全性</td><td>強</td><td>弱</td><td>最強</td><td>弱</td></tr>
+                        <tr><td>メモリ管理</td><td>RAII</td><td>RAII</td><td>所有権</td><td>GC</td></tr>
+                        <tr><td>学習コスト</td><td>低</td><td>高</td><td>高</td><td>低</td></tr>
+                        <tr><td>実行速度</td><td>高</td><td>高</td><td>高</td><td>低</td></tr>
+                        <tr><td>ジェネリクス</td><td>○</td><td>○</td><td>○</td><td>△</td></tr>
+                        <tr><td>Match式</td><td>○</td><td>×</td><td>○</td><td>○</td></tr>
+                        <tr><td>Interface</td><td>○</td><td>×</td><td>○</td><td>△</td></tr>
+                        <tr><td>WASM出力</td><td>○</td><td>△</td><td>○</td><td>×</td></tr>
                     </tbody>
                 </table>
 
@@ -286,25 +194,15 @@ println(*p); // 0</div>
                     <li>標準ライブラリ拡充</li>
                 </ul>
 
-                <div class="highlight-box"
-                    style="background: #000000; color: white; text-align: center; margin-top: 10px; padding: 10px; border: 3px solid #000000;">
+                <div class="highlight-box" style="background: #000000; color: white; text-align: center; margin-top: 10px; padding: 10px; border: 3px solid #000000;">
                     <strong style="font-size: 10pt;">"OS開発からWebアプリまで、1つの言語で"</strong>
                 </div>
 
                 <h2>品質指標</h2>
                 <table style="font-size: 9.5pt;">
-                    <tr>
-                        <td><strong>JITテスト</strong></td>
-                        <td>283/311 PASS (91%)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>JSテスト</strong></td>
-                        <td>170/259 PASS (66%)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>コード行数</strong></td>
-                        <td>約80,000行</td>
-                    </tr>
+                    <tr><td><strong>JITテスト</strong></td><td>283/311 PASS (91%)</td></tr>
+                    <tr><td><strong>JSテスト</strong></td><td>170/259 PASS (66%)</td></tr>
+                    <tr><td><strong>コード行数</strong></td><td>約80,000行</td></tr>
                 </table>
 
                 <h3>開発スタイル</h3>
@@ -320,7 +218,7 @@ println(*p); // 0</div>
                 <h2>サンプルプログラム</h2>
 
                 <h4>例1: FizzBuzz（Interface活用）</h4>
-                <div class="code-block" style="font-size: 9pt;">interface IFizzbuzz { void fizzbuzz(); }
+                <div class="code-block" style="font-size: 7.5pt;">interface IFizzbuzz { void fizzbuzz(); }
 
 impl IFizzbuzz for int {
     void fizzbuzz() {
@@ -332,9 +230,7 @@ impl IFizzbuzz for int {
 }
 
 int main() {
-    for (int i = 1; i &lt;= 100; i++) {
-        i.fizzbuzz();
-    }
+    for (int i = 1; i &lt;= 100; i++) { i.fizzbuzz(); }
 }</div>
 
                 <div class="point-box">
@@ -342,7 +238,7 @@ int main() {
                 </div>
 
                 <h4>例2: ラムダ・クロージャ</h4>
-                <div class="code-block" style="font-size: 9pt;">int[5] nums = [1, 2, 3, 4, 5];
+                <div class="code-block" style="font-size: 7.5pt;">int[5] nums = [1, 2, 3, 4, 5];
 int sum = nums.reduce(0, (a, b) =&gt; a + b);
 println(sum); // 15
 
@@ -351,27 +247,33 @@ int multiplier = 3;
 int[5] result = nums.map(x =&gt; x * multiplier);</div>
 
                 <h2>クイックスタート</h2>
-                <div class="terminal-block" style="font-size: 9pt;">git clone https://github.com/shadowlink0122/Cm.git
+                <div class="terminal-block" style="font-size: 7.5pt;">git clone https://github.com/shadowlink0122/Cm.git
 cd Cm && mkdir build && cd build
 cmake .. && make
-./cm run sample/hello.cm # JIT実行
-./cm compile hello.cm -o hello # Native
-./cm run --target=js hello.cm # JS出力</div>
+./cm run sample/hello.cm    # JIT実行
+./cm compile hello.cm -o hello  # Native
+./cm run --target=js hello.cm   # JS出力</div>
 
                 <h2>詳細情報・コミュニティ</h2>
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
                     <div style="flex: 1;">
                         <p style="font-size: 10pt; margin-bottom: 4px;">
-                            <strong>GitHub:</strong> <code style="font-size: 9pt;">github.com/shadowlink0122/Cm</code>
+                            <strong>GitHub:</strong><br>
+                            <code style="font-size: 8pt;">github.com/shadowlink0122/Cm</code>
                         </p>
                         <p style="font-size: 10pt; margin-bottom: 4px;">
-                            <strong>X:</strong> <code style="font-size: 9pt;">@sl_0122</code>
+                            <strong>X:</strong> <code style="font-size: 8pt;">@sl_0122</code>
                         </p>
-                        <p style="font-size: 10pt; margin-bottom: 4px;"><strong>コミュニティ:</strong> <code style="font-size: 9pt;">osdev-jp</code></p>
-                        <p style="font-size: 10pt; margin-bottom: 4px;"><strong>ドキュメント:</strong> <code style="font-size: 9pt;">shadowlink0122.github.io/Cm/</code></p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>コミュニティ:</strong> <code style="font-size: 8pt;">osdev-jp</code>
+                        </p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>ドキュメント:</strong><br>
+                            <code style="font-size: 8pt;">shadowlink0122.github.io/Cm/</code>
+                        </p>
                     </div>
                     <div style="text-align: center;">
-                        <img src="docs-qr.png" style="width: 100px; height: 100px; border: 1px solid #ccc;">
+                        <img src="docs-qr.png" style="width: 100px; height: 100px; border: 1px solid #000;">
                         <p style="font-size: 8pt; margin: 2px 0 0 0;">Docs</p>
                     </div>
                 </div>
