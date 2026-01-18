@@ -1,124 +1,158 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="device-width, initial-scale=1.0">
-<title>Cm言語紹介チラシ v0.12.0</title>
-<link rel="stylesheet" href="flyer.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="device-width, initial-scale=1.0">
+    <title>Cm言語紹介チラシ v0.12.0</title>
+    <link rel="stylesheet" href="flyer.css">
 </head>
+
 <body>
 
-<!-- ========== 表面 ========== -->
-<div class="page">
-<h1>Cm <span style="font-size: 18pt;">(シーマイナー)</span> プログラミング言語 <span style="font-size: 14pt; font-weight: normal; color: #666666;">v0.12.0</span></h1>
-<div class="event-info">2026/01 OSSカンファレンス向け展示</div>
+    <!-- ========== 表面 ========== -->
+    <div class="page">
+        <h1>Cm <span style="font-size: 18pt;">(シーマイナー)</span> プログラミング言語 <span
+                style="font-size: 14pt; font-weight: normal; color: #666666;">v0.12.0</span></h1>
+        <div class="event-info">2026/01 OSSカンファレンス向け展示</div>
 
-<div class="two-column">
-<!-- 左列 -->
-<div class="column">
-<h2>Cmとは？</h2>
+        <div class="two-column">
+            <!-- 左列 -->
+            <div class="column">
+                <h2>Cmとは？</h2>
 
-<div class="origin-box">
-<strong>名前の由来:</strong> C → C++ → C# と+が増えていくので逆の命名に。機能的にはC++のモダン版を目指しています。
-</div>
+                <div class="origin-box">
+                    <strong>名前の由来:</strong> C → C++ → C# と+が増えていくので逆の命名に。機能的にはC++のモダン版を目指しています。
+                </div>
 
-<div class="change-box">
-<strong>📢 Cbからの変更点:</strong>
-<ul style="font-size: 8.5pt; margin: 3px 0 0 15px;">
-<li><strong>言語名変更</strong>: Cb → Cm（シーマイナー）</li>
-<li><strong>コンパイラ化</strong>: インタープリタ→LLVM JIT</li>
-<li><strong>マルチバックエンド</strong>: Native/WASM/JS対応</li>
-<li><strong>本格的ジェネリクス</strong>: 型制約・モノモーフィゼーション</li>
-</ul>
-</div>
+                <div class="change-box">
+                    <strong>📢 Cbからの変更点:</strong>
+                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
+                        <li><strong>言語名変更</strong>: Cb → Cm（シーマイナー）</li>
+                        <li><strong>コンパイラ化</strong>: インタープリタ→LLVM JIT</li>
+                        <li><strong>マルチバックエンド</strong>: Native/WASM/JS対応</li>
+                        <li><strong>本格的ジェネリクス</strong>: 型制約・モノモーフィゼーション</li>
+                    </ul>
+                </div>
 
-<h3>なぜCmを作ったのか？</h3>
-<div style="background: #EEEEEE; border-left: 4px solid #000000; padding: 8px; margin: 6px 0; border-radius: 4px;">
-<p style="font-size: 10pt; font-weight: bold; color: #000000; margin: 0 0 4px 0;">「使いやすく、安全で、高速な言語」を作りたかった</p>
-<p style="font-size: 9pt; color: #333; margin: 0;">OS開発からWebアプリまで、1つの言語で全てをカバー。低レベルな制御とモダンな書き方を両立。</p>
-</div>
+                <h3>なぜCmを作ったのか？</h3>
+                <div
+                    style="background: #EEEEEE; border-left: 4px solid #000000; padding: 10px; margin: 8px 0; border-radius: 4px;">
+                    <p style="font-size: 11pt; font-weight: bold; color: #000000; margin: 0 0 5px 0;">
+                        「使いやすく、安全で、高速な言語」を作りたかった</p>
+                    <p style="font-size: 10pt; color: #333; margin: 0;">OS開発からWebアプリまで、1つの言語で全てをカバー。低レベルな制御とモダンな書き方を両立。
+                    </p>
+                </div>
 
-<h4>Cmが目指す3つの柱</h4>
-<ol style="font-size: 9pt;">
-<li><strong>実用性重視</strong> - 理論より実践を優先</li>
-<li><strong>型安全性</strong> - コンパイル時の厳密な型チェック</li>
-<li><strong>高速実行</strong> - LLVM最適化でC++並みの速度</li>
-</ol>
+                <h4>Cmが目指す3つの柱</h4>
+                <ol style="font-size: 10pt;">
+                    <li><strong>実用性重視</strong> - 理論より実践を優先</li>
+                    <li><strong>型安全性</strong> - コンパイル時の厳密な型チェック</li>
+                    <li><strong>高速実行</strong> - LLVM最適化でC++並みの速度</li>
+                </ol>
 
-<h3>技術スタック</h3>
-<table style="font-size: 8pt;">
-<tr><td><strong>実装言語</strong></td><td>C++17</td></tr>
-<tr><td><strong>バックエンド</strong></td><td>LLVM 17</td></tr>
-<tr><td><strong>実行方式</strong></td><td>JIT / Native / WASM / JS</td></tr>
-<tr><td><strong>ビルド</strong></td><td>CMake (macOS/Linux)</td></tr>
-</table>
+                <h3>技術スタック</h3>
+                <table style="font-size: 9pt;">
+                    <tr>
+                        <td><strong>実装言語</strong></td>
+                        <td>C++17</td>
+                    </tr>
+                    <tr>
+                        <td><strong>バックエンド</strong></td>
+                        <td>LLVM 17</td>
+                    </tr>
+                    <tr>
+                        <td><strong>実行方式</strong></td>
+                        <td>JIT / Native / WASM / JS</td>
+                    </tr>
+                    <tr>
+                        <td><strong>ビルド</strong></td>
+                        <td>CMake (macOS/Linux)</td>
+                    </tr>
+                </table>
 
-<h3>ベンチマーク（行列乗算 300x300）</h3>
-<table style="font-size: 8pt;">
-<tr><th>言語</th><th>実行時間</th><th>比率</th></tr>
-<tr><td><strong>Cm (JIT)</strong></td><td>0.31s</td><td>1.0x</td></tr>
-<tr><td>C++ (clang -O3)</td><td>0.01s</td><td>0.03x</td></tr>
-<tr><td>Rust (release)</td><td>0.01s</td><td>0.03x</td></tr>
-<tr><td>Python</td><td>23.4s</td><td>75x</td></tr>
-</table>
-<p style="font-size: 7pt; color: #666;">※JIT時間を含む。Cm Nativeは更に高速</p>
+                <h3>ベンチマーク（行列乗算 300x300）</h3>
+                <table style="font-size: 9pt;">
+                    <tr>
+                        <th>言語</th>
+                        <th>実行時間</th>
+                        <th>比率</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Cm (JIT)</strong></td>
+                        <td>0.31s</td>
+                        <td>1.0x</td>
+                    </tr>
+                    <tr>
+                        <td>C++ (clang -O3)</td>
+                        <td>0.28s</td>
+                        <td>0.9x</td>
+                    </tr>
+                    <tr>
+                        <td>Rust (release)</td>
+                        <td>0.29s</td>
+                        <td>0.9x</td>
+                    </tr>
+                    <tr>
+                        <td>Python</td>
+                        <td>23.4s</td>
+                        <td>75x</td>
+                    </tr>
+                </table>
+                <p style="font-size: 8pt; color: #666;">※JIT時間を含む。Cm Nativeは更に高速</p>
 
-<h3>主な機能</h3>
-<div style="font-size: 8.5pt; column-count: 2; column-gap: 10px;">
-<ul style="margin: 0; padding-left: 14px;">
-<li>interface/impl</li>
-<li>ジェネリクス</li>
-<li>match式</li>
-<li>ラムダ/クロージャ</li>
-<li>構造体/enum</li>
-</ul>
-<ul style="margin: 0; padding-left: 14px;">
-<li>ポインタ/配列</li>
-<li>defer文</li>
-<li>モジュール/FFI</li>
-<li>RAII</li>
-<li>with自動実装</li>
-</ul>
-</div>
-</div>
+                <h3>主な機能</h3>
+                <div style="font-size: 9pt; column-count: 2; column-gap: 12px;">
+                    <ul style="margin: 0; padding-left: 14px;">
+                        <li>interface/impl</li>
+                        <li>ジェネリクス</li>
+                        <li>match式</li>
+                        <li>ラムダ/クロージャ</li>
+                        <li>構造体/enum</li>
+                    </ul>
+                    <ul style="margin: 0; padding-left: 14px;">
+                        <li>ポインタ/配列</li>
+                        <li>defer文</li>
+                        <li>モジュール/FFI</li>
+                        <li>RAII</li>
+                        <li>with自動実装</li>
+                    </ul>
+                </div>
+            </div>
 
-<!-- 右列 -->
-<div class="column">
-<h2>Cmの特徴</h2>
+            <!-- 右列 -->
+            <div class="column">
+                <h2>Cmの特徴</h2>
 
-<div class="strength-box">
-<strong>🚀 Cmの強み:</strong>
-<ul style="font-size: 8.5pt; margin: 3px 0 0 15px;">
-<li><strong>C++並みの速度</strong>: LLVMネイティブコンパイル</li>
-<li><strong>モダン構文</strong>: Rust/TS風の直感的な書き方</li>
-<li><strong>マルチターゲット</strong>: 1ソースで複数環境に出力</li>
-</ul>
-</div>
+                <div class="strength-box">
+                    <strong>🚀 Cmの強み:</strong>
+                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
+                        <li><strong>C++並みの速度</strong>: LLVMネイティブコンパイル</li>
+                        <li><strong>モダン構文</strong>: Rust/TS風の直感的な書き方</li>
+                        <li><strong>マルチターゲット</strong>: 1ソースで複数環境に出力</li>
+                    </ul>
+                </div>
 
-<h3>1. Rust風Interface/Impl + with自動実装</h3>
-<div class="code-block" style="font-size: 8.5pt;">interface Printable {
-    void print();
-}
-
-// with: デフォルト実装を自動適用
-struct Point with Printable {
+                <h3>1. Rust風Interface/Impl + with自動実装</h3>
+                <div class="code-block" style="font-size: 9pt;">// with Debug: 自動でdebug()メソッド生成
+struct Point with Debug {
     int x; int y;
 }
 
+// 明示的なimpl
+interface Printable { void print(); }
 impl Printable for Point {
-    void print() {
-        println("({self.x}, {self.y})");
-    }
+    void print() { println("({self.x},{self.y})"); }
 }
 
 int main() {
     Point p = Point{10, 20};
-    p.print(); // (10, 20)
+    p.debug(); // Point{x:10, y:20}
+    p.print(); // (10,20)
 }</div>
 
-<h3>2. ジェネリクス + Match式</h3>
-<div class="code-block" style="font-size: 8.5pt;">enum OptionTag { Some, None }
-
+                <h3>2. ジェネリクス + Match式</h3>
+                <div class="code-block" style="font-size: 9pt;">enum OptionTag { Some, None }
 struct Option&lt;T&gt; { OptionTag tag; T value; }
 
 &lt;T&gt; Option&lt;T&gt; some(T v) {
@@ -133,96 +167,160 @@ int main() {
     }
 }</div>
 
-<h3>3. ポインタ・配列（C++互換）</h3>
-<div class="code-block" style="font-size: 8.5pt;">int[10] arr;
+                <h3>3. ポインタ・配列（C++互換）</h3>
+                <div class="code-block" style="font-size: 9pt;">int[10] arr;
 for (int i = 0; i &lt; 10; i++) {
     arr[i] = i * 2;
 }
 int* p = &amp;arr[0];
 println(*p); // 0</div>
-</div>
-</div>
-</div>
+            </div>
+        </div>
+    </div>
 
-<!-- ========== 裏面 ========== -->
-<div class="page">
-<div class="two-column">
-<!-- 左列 -->
-<div class="column">
-<h2>他の言語との比較</h2>
+    <!-- ========== 裏面 ========== -->
+    <div class="page">
+        <div class="two-column">
+            <!-- 左列 -->
+            <div class="column">
+                <h2>他の言語との比較</h2>
 
-<table>
-<thead>
-<tr><th>特徴</th><th><strong>Cm</strong></th><th>C++</th><th>Rust</th><th>Python</th></tr>
-</thead>
-<tbody>
-<tr><td>型安全性</td><td>強</td><td>弱</td><td>最強</td><td>弱</td></tr>
-<tr><td>メモリ管理</td><td>RAII</td><td>RAII</td><td>所有権</td><td>GC</td></tr>
-<tr><td>学習コスト</td><td>低</td><td>高</td><td>高</td><td>低</td></tr>
-<tr><td>実行速度</td><td>高</td><td>高</td><td>高</td><td>低</td></tr>
-<tr><td>ジェネリクス</td><td>○</td><td>○</td><td>○</td><td>△</td></tr>
-<tr><td>Match式</td><td>○</td><td>×</td><td>○</td><td>○</td></tr>
-<tr><td>Interface</td><td>○</td><td>×</td><td>○</td><td>△</td></tr>
-<tr><td>WASM出力</td><td>○</td><td>△</td><td>○</td><td>×</td></tr>
-</tbody>
-</table>
+                <table style="font-size: 9.5pt;">
+                    <thead>
+                        <tr>
+                            <th>特徴</th>
+                            <th><strong>Cm</strong></th>
+                            <th>C++</th>
+                            <th>Rust</th>
+                            <th>Python</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>型安全性</td>
+                            <td>強</td>
+                            <td>弱</td>
+                            <td>最強</td>
+                            <td>弱</td>
+                        </tr>
+                        <tr>
+                            <td>メモリ管理</td>
+                            <td>RAII</td>
+                            <td>RAII</td>
+                            <td>所有権</td>
+                            <td>GC</td>
+                        </tr>
+                        <tr>
+                            <td>学習コスト</td>
+                            <td>低</td>
+                            <td>高</td>
+                            <td>高</td>
+                            <td>低</td>
+                        </tr>
+                        <tr>
+                            <td>実行速度</td>
+                            <td>高</td>
+                            <td>高</td>
+                            <td>高</td>
+                            <td>低</td>
+                        </tr>
+                        <tr>
+                            <td>ジェネリクス</td>
+                            <td>○</td>
+                            <td>○</td>
+                            <td>○</td>
+                            <td>△</td>
+                        </tr>
+                        <tr>
+                            <td>Match式</td>
+                            <td>○</td>
+                            <td>×</td>
+                            <td>○</td>
+                            <td>○</td>
+                        </tr>
+                        <tr>
+                            <td>Interface</td>
+                            <td>○</td>
+                            <td>×</td>
+                            <td>○</td>
+                            <td>△</td>
+                        </tr>
+                        <tr>
+                            <td>WASM出力</td>
+                            <td>○</td>
+                            <td>△</td>
+                            <td>○</td>
+                            <td>×</td>
+                        </tr>
+                    </tbody>
+                </table>
 
-<h3>Cmが優れている点</h3>
-<ul style="font-size: 9pt;">
-<li><strong>低い学習コスト</strong> - C/C++に似た構文</li>
-<li><strong>高速</strong> - LLVMネイティブコンパイル</li>
-<li><strong>マルチターゲット</strong> - Native/WASM/JS</li>
-<li><strong>モダン機能</strong> - Match式、ジェネリクス</li>
-</ul>
+                <h3>Cmが優れている点</h3>
+                <ul style="font-size: 10pt;">
+                    <li><strong>低い学習コスト</strong> - C/C++に似た構文</li>
+                    <li><strong>高速</strong> - LLVMネイティブコンパイル</li>
+                    <li><strong>マルチターゲット</strong> - Native/WASM/JS</li>
+                    <li><strong>モダン機能</strong> - Match式、ジェネリクス</li>
+                </ul>
 
-<h2>ロードマップ</h2>
+                <h2>ロードマップ</h2>
 
-<h3>Phase 1: 基礎完成 ✅ (v0.1-v0.10)</h3>
-<ul style="font-size: 9pt;">
-<li>基本型、配列、構造体、ポインタ</li>
-<li>インターフェース/Impl、ジェネリクス</li>
-<li>match式、モジュールシステム、FFI</li>
-</ul>
+                <h3>Phase 1: 基礎完成 ✅ (v0.1-v0.10)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>基本型、配列、構造体、ポインタ</li>
+                    <li>インターフェース/Impl、ジェネリクス</li>
+                    <li>match式、モジュールシステム、FFI</li>
+                </ul>
 
-<h3>Phase 2: コンパイラ化 ✅ (v0.11-v0.12)</h3>
-<ul style="font-size: 9pt;">
-<li>LLVM JITコンパイラ（デフォルト）</li>
-<li>ネイティブバイナリ出力</li>
-<li>JavaScript/WebAssembly出力</li>
-</ul>
+                <h3>Phase 2: コンパイラ化 ✅ (v0.11-v0.12)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>LLVM JITコンパイラ（デフォルト）</li>
+                    <li>ネイティブバイナリ出力</li>
+                    <li>JavaScript/WebAssembly出力</li>
+                </ul>
 
-<h3>Phase 3: エコシステム 🔄 (v0.13+)</h3>
-<ul style="font-size: 9pt;">
-<li>VSCode拡張、LSP対応</li>
-<li>所有権/借用システム</li>
-<li>標準ライブラリ拡充</li>
-</ul>
+                <h3>Phase 3: エコシステム 🔄 (v0.13+)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>VSCode拡張、LSP対応</li>
+                    <li>所有権/借用システム</li>
+                    <li>標準ライブラリ拡充</li>
+                </ul>
 
-<div class="highlight-box" style="background: #000000; color: white; text-align: center; margin-top: 8px; border: 3px solid #000000;">
-<strong style="font-size: 12pt;">"OS開発からWebアプリまで、1つの言語で"</strong>
-</div>
+                <div class="highlight-box"
+                    style="background: #000000; color: white; text-align: center; margin-top: 10px; padding: 10px; border: 3px solid #000000;">
+                    <strong style="font-size: 10pt;">"OS開発からWebアプリまで、1つの言語で"</strong>
+                </div>
 
-<h2>品質指標</h2>
-<table style="font-size: 9pt;">
-<tr><td><strong>JITテスト</strong></td><td>283/311 PASS (91%)</td></tr>
-<tr><td><strong>JSテスト</strong></td><td>170/259 PASS (66%)</td></tr>
-<tr><td><strong>コード行数</strong></td><td>約80,000行</td></tr>
-</table>
+                <h2>品質指標</h2>
+                <table style="font-size: 9.5pt;">
+                    <tr>
+                        <td><strong>JITテスト</strong></td>
+                        <td>283/311 PASS (91%)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>JSテスト</strong></td>
+                        <td>170/259 PASS (66%)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>コード行数</strong></td>
+                        <td>約80,000行</td>
+                    </tr>
+                </table>
 
-<h3>開発スタイル</h3>
-<ul style="font-size: 9pt;">
-<li><strong>AIバイブコーディング</strong>で開発中</li>
-<li><strong>開発期間:</strong> 約半年（2025年夏～）</li>
-<li>osdev-jp コミュニティで公開</li>
-</ul>
-</div>
+                <h3>開発スタイル</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li><strong>AIバイブコーディング</strong>で開発中</li>
+                    <li><strong>開発期間:</strong> 約半年（2025年夏～）</li>
+                    <li>osdev-jp コミュニティで公開</li>
+                </ul>
+            </div>
 
-<!-- 右列 -->
-<div class="column">
-<h2>サンプルプログラム</h2>
+            <!-- 右列 -->
+            <div class="column">
+                <h2>サンプルプログラム</h2>
 
-<h4>例1: FizzBuzz（Interface活用）</h4>
-<div class="code-block" style="font-size: 8.5pt;">interface IFizzbuzz { void fizzbuzz(); }
+                <h4>例1: FizzBuzz（Interface活用）</h4>
+                <div class="code-block" style="font-size: 9pt;">interface IFizzbuzz { void fizzbuzz(); }
 
 impl IFizzbuzz for int {
     void fizzbuzz() {
@@ -239,12 +337,12 @@ int main() {
     }
 }</div>
 
-<div class="point-box">
-<strong>ポイント:</strong> プリミティブ型（int）にメソッド追加可能
-</div>
+                <div class="point-box">
+                    <strong>ポイント:</strong> プリミティブ型（int）にメソッド追加可能
+                </div>
 
-<h4>例2: ラムダ・クロージャ</h4>
-<div class="code-block" style="font-size: 8.5pt;">int[5] nums = [1, 2, 3, 4, 5];
+                <h4>例2: ラムダ・クロージャ</h4>
+                <div class="code-block" style="font-size: 9pt;">int[5] nums = [1, 2, 3, 4, 5];
 int sum = nums.reduce(0, (a, b) =&gt; a + b);
 println(sum); // 15
 
@@ -252,42 +350,41 @@ println(sum); // 15
 int multiplier = 3;
 int[5] result = nums.map(x =&gt; x * multiplier);</div>
 
-<h2>クイックスタート</h2>
-<div class="terminal-block">git clone https://github.com/shadowlink0122/Cm.git
+                <h2>クイックスタート</h2>
+                <div class="terminal-block" style="font-size: 9pt;">git clone https://github.com/shadowlink0122/Cm.git
 cd Cm && mkdir build && cd build
 cmake .. && make
-./cm run sample/hello.cm       # JIT実行
+./cm run sample/hello.cm # JIT実行
 ./cm compile hello.cm -o hello # Native
-./cm run --target=js hello.cm  # JS出力</div>
+./cm run --target=js hello.cm # JS出力</div>
 
-<h2>詳細情報・コミュニティ</h2>
-<div style="display: flex; align-items: flex-start; gap: 10px;">
-<div style="flex: 1;">
-<p style="font-size: 9pt; margin-bottom: 3px;">
-<img src="github-icon.svg" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;">
-<strong>GitHub:</strong> github.com/shadowlink0122/Cm
-</p>
-<p style="font-size: 9pt; margin-bottom: 3px;">
-<img src="x-icon.svg" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;">
-<strong>X:</strong> @sl_0122
-</p>
-<p style="font-size: 9pt; margin-bottom: 3px;"><strong>コミュニティ:</strong> osdev-jp</p>
-<p style="font-size: 8pt; color: #666;">ドキュメント: shadowlink0122.github.io/Cm/</p>
-</div>
-<div style="text-align: center;">
-<img src="docs-qr.png" style="width: 65px; height: 65px; border: 1px solid #ccc;">
-<p style="font-size: 7pt; margin: 2px 0 0 0;">Docs</p>
-</div>
-</div>
+                <h2>詳細情報・コミュニティ</h2>
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="flex: 1;">
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>GitHub:</strong> <code style="font-size: 9pt;">github.com/shadowlink0122/Cm</code>
+                        </p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>X:</strong> <code style="font-size: 9pt;">@sl_0122</code>
+                        </p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;"><strong>コミュニティ:</strong> <code style="font-size: 9pt;">osdev-jp</code></p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;"><strong>ドキュメント:</strong> <code style="font-size: 9pt;">shadowlink0122.github.io/Cm/</code></p>
+                    </div>
+                    <div style="text-align: center;">
+                        <img src="docs-qr.png" style="width: 100px; height: 100px; border: 1px solid #ccc;">
+                        <p style="font-size: 8pt; margin: 2px 0 0 0;">Docs</p>
+                    </div>
+                </div>
 
-<div class="footer-box" style="margin-top: 6px;">
-<strong style="font-size: 10pt;">Cm言語 v0.12.0</strong><br>
-<span style="font-size: 8.5pt;">C++の速度とモダン言語の使いやすさを融合</span><br>
-<span style="font-size: 7.5pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2026/01/18</span>
-</div>
-</div>
-</div>
-</div>
+                <div class="footer-box" style="margin-top: 8px;">
+                    <strong style="font-size: 11pt;">Cm言語 v0.12.0</strong><br>
+                    <span style="font-size: 9pt;">C++の速度とモダン言語の使いやすさを融合</span><br>
+                    <span style="font-size: 8pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2026/01/18</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
 </body>
+
 </html>

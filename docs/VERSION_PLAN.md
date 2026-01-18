@@ -35,6 +35,7 @@
 | **リファクタ** | エラー報告統一 | ⬜ |
 
 ### 参考ドキュメント
+
 - [所有権と借用](design/ownership_and_borrowing.html)
 - [リファクタリング提案](design/refactoring_proposal.html)
 
