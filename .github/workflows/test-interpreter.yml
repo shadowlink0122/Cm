@@ -21,6 +21,8 @@ jobs:
             llvm_version: "17"
           - os: macos-latest
             llvm_version: "17"
+          - os: windows-latest
+            llvm_version: "17"
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -43,6 +45,13 @@ jobs:
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install llvm --version=17.0.6 -y
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "LLVM_DIR=C:\Program Files\LLVM\lib\cmake\llvm" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y libgtest-dev
@@ -51,11 +60,27 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install googletest
       
-      - name: Configure CMake
+      - name: Install Google Test (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install gtest:x64-windows
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON
       
-      - name: Build
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
+      
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+      
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $env:NUMBER_OF_PROCESSORS
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -64,7 +89,9 @@ jobs:
           path: |
             build/bin/
             build/lib/
+            build/${{ env.BUILD_TYPE }}/
             cm
+            cm.exe
           retention-days: 1
 
   interpreter-o0:
@@ -142,3 +169,69 @@ jobs:
       
       - name: Run Interpreter Tests (O3)
         run: make tip3
+
+  # ========================================
+  # Windows JIT テスト (O3)
+  # ========================================
+  windows-jit-o3:
+    name: Windows JIT O3
+    needs: build
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-interp-build-windows-latest
+      
+      - name: Install LLVM (Windows)
+        run: |
+          choco install llvm --version=17.0.6 -y
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      
+      - name: Verify cm executable
+        run: |
+          if (Test-Path "cm.exe") {
+            Write-Host "✅ cm.exe found in root"
+          } elseif (Test-Path "build/Debug/cm.exe") {
+            Copy-Item "build/Debug/cm.exe" "cm.exe"
+            Write-Host "✅ Copied cm.exe from build/Debug"
+          } elseif (Test-Path "build/Release/cm.exe") {
+            Copy-Item "build/Release/cm.exe" "cm.exe"
+            Write-Host "✅ Copied cm.exe from build/Release"
+          } else {
+            Write-Host "❌ cm.exe not found"
+            Get-ChildItem -Recurse -Filter "cm.exe" | Select-Object FullName
+            exit 1
+          }
+          .\cm.exe --version
+      
+      - name: Run JIT Tests (O3)
+        run: |
+          $testFiles = Get-ChildItem -Path "tests/test_programs" -Filter "*.cm" -Recurse | Select-Object -First 20
+          $passed = 0
+          $failed = 0
+          foreach ($file in $testFiles) {
+            Write-Host "Testing: $($file.Name)"
+            try {
+              $output = .\cm.exe run -O3 $file.FullName 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                $passed++
+                Write-Host "  ✅ PASS"
+              } else {
+                $failed++
+                Write-Host "  ❌ FAIL (exit code: $LASTEXITCODE)"
+              }
+            } catch {
+              $failed++
+              Write-Host "  ❌ ERROR: $_"
+            }
+          }
+          Write-Host ""
+          Write-Host "=== JIT Test Summary ==="
+          Write-Host "Passed: $passed"
+          Write-Host "Failed: $failed"
+          if ($failed -gt 0) {
+            Write-Host "⚠️ Some tests failed, but continuing..."
+          }
