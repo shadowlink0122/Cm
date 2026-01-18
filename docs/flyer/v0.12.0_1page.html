@@ -21,10 +21,6 @@
             <div class="column">
                 <h2>Cmとは？</h2>
 
-                <div class="origin-box">
-                    <strong>名前の由来:</strong> C → C++ → C# と+が増えていくので逆の命名に。機能的にはC++のモダン版を目指しています。
-                </div>
-
                 <div class="change-box">
                     <strong>📢 Cbからの変更点:</strong>
                     <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
@@ -55,18 +51,27 @@
                     <tr><td><strong>実装言語</strong></td><td>C++17</td></tr>
                     <tr><td><strong>バックエンド</strong></td><td>LLVM 17</td></tr>
                     <tr><td><strong>実行方式</strong></td><td>JIT / Native / WASM / JS</td></tr>
-                    <tr><td><strong>ビルド</strong></td><td>CMake (macOS/Linux)</td></tr>
+                    <tr><td><strong>ビルド</strong></td><td>CMake (macOS/Linux/Windows)</td></tr>
                 </table>
 
                 <h3>ベンチマーク（行列乗算 300x300）</h3>
                 <table style="font-size: 9pt;">
                     <tr><th>言語</th><th>実行時間</th><th>比率</th></tr>
+                    <tr><td><strong>Cm (Native)</strong></td><td>0.28s</td><td>0.9x</td></tr>
                     <tr><td><strong>Cm (JIT)</strong></td><td>0.31s</td><td>1.0x</td></tr>
                     <tr><td>C++ (clang -O3)</td><td>0.28s</td><td>0.9x</td></tr>
                     <tr><td>Rust (release)</td><td>0.29s</td><td>0.9x</td></tr>
-                    <tr><td>Python</td><td>23.4s</td><td>75x</td></tr>
+                    <tr><td>Python</td><td>4.0s</td><td>13x</td></tr>
                 </table>
-                <p style="font-size: 8pt; color: #666;">※JIT時間を含む。Cm Nativeは更に高速</p>
+
+                <h3>Cmの強み</h3>
+                <div class="strength-box">
+                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
+                        <li><strong>C++並みの速度</strong>: LLVMネイティブコンパイル</li>
+                        <li><strong>モダン構文</strong>: Rust/TS風の直感的な書き方</li>
+                        <li><strong>マルチターゲット</strong>: 1ソースで複数環境に出力</li>
+                    </ul>
+                </div>
 
                 <h3>主な機能</h3>
                 <div style="font-size: 9pt; column-count: 2; column-gap: 12px;">
@@ -90,15 +95,6 @@
             <!-- 右列 -->
             <div class="column">
                 <h2>Cmの特徴</h2>
-
-                <div class="strength-box">
-                    <strong>🚀 Cmの強み:</strong>
-                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
-                        <li><strong>C++並みの速度</strong>: LLVMネイティブコンパイル</li>
-                        <li><strong>モダン構文</strong>: Rust/TS風の直感的な書き方</li>
-                        <li><strong>マルチターゲット</strong>: 1ソースで複数環境に出力</li>
-                    </ul>
-                </div>
 
                 <h3>1. Interface/Impl + with自動実装</h3>
                 <div class="code-block" style="font-size: 7.5pt;">// with Debug: 自動でdebug()メソッド生成
@@ -136,6 +132,28 @@ int main() {
 for (int i = 0; i &lt; 10; i++) { arr[i] = i * 2; }
 int* p = &amp;arr[0];
 println(*p); // 0</div>
+
+                <h3>コンパイラアーキテクチャ</h3>
+                <div style="font-size: 8.5pt; background: #F5F5F5; border: 1px solid #000; border-radius: 3px; padding: 6px; margin: 4px 0;">
+                    <p style="margin: 0 0 4px 0; font-weight: bold;">多段IR変換パイプライン:</p>
+                    <div style="text-align: center; font-family: monospace; font-size: 8pt;">
+                        Source → <strong>AST</strong> → <strong>HIR</strong> → <strong>MIR</strong> → <strong>LLVM IR</strong> → Native
+                    </div>
+                    <ul style="font-size: 8pt; margin: 4px 0 0 12px;">
+                        <li><strong>AST</strong>: 構文解析結果（型推論前）</li>
+                        <li><strong>HIR</strong>: 高レベルIR（型解決・脱糖後）</li>
+                        <li><strong>MIR</strong>: 制御フローグラフ（借用検査対応）</li>
+                    </ul>
+                </div>
+
+                <h3>開発ツール (エコシステム)</h3>
+                <table style="font-size: 8pt;">
+                    <tr><td><strong>cm run</strong></td><td>JIT実行（即座に実行）</td></tr>
+                    <tr><td><strong>cm compile</strong></td><td>ネイティブバイナリ生成</td></tr>
+                    <tr><td><strong>cm check</strong></td><td>型チェック（コンパイルなし）</td></tr>
+                    <tr><td><strong>cm lint</strong></td><td>静的解析・コード品質検査</td></tr>
+                    <tr><td><strong>cm fmt</strong></td><td>コードフォーマッタ</td></tr>
+                </table>
             </div>
         </div>
     </div>
@@ -171,6 +189,20 @@ println(*p); // 0</div>
                     <li><strong>モダン機能</strong> - Match式、ジェネリクス</li>
                 </ul>
 
+                <h2>最適化パイプライン</h2>
+                <div style="font-size: 8.5pt; background: #F5F5F5; border: 1px solid #000; border-radius: 3px; padding: 6px; margin: 4px 0;">
+                    <p style="margin: 0 0 4px 0; font-weight: bold;">MIR最適化 (独自実装):</p>
+                    <ul style="font-size: 8pt; margin: 0 0 0 12px;">
+                        <li><strong>定数畳み込み</strong> - コンパイル時計算</li>
+                        <li><strong>DCE</strong> - 到達不能コード除去</li>
+                        <li><strong>SCCP</strong> - 疎条件付き定数伝播</li>
+                        <li><strong>CSE</strong> - 共通部分式除去</li>
+                        <li><strong>インライン展開</strong> - 小関数の埋め込み</li>
+                        <li><strong>末尾呼出最適化</strong> - 再帰をループに変換</li>
+                    </ul>
+                    <p style="margin: 4px 0 0 0; font-size: 8pt; font-weight: bold;">+ LLVM O3最適化（ベクトル化、ループ最適化等）</p>
+                </div>
+
                 <h2>ロードマップ</h2>
 
                 <h3>Phase 1: 基礎完成 ✅ (v0.1-v0.10)</h3>
@@ -194,21 +226,9 @@ println(*p); // 0</div>
                     <li>標準ライブラリ拡充</li>
                 </ul>
 
-                <div class="highlight-box" style="background: #000000; color: white; text-align: center; margin-top: 10px; padding: 10px; border: 3px solid #000000;">
-                    <strong style="font-size: 10pt;">"OS開発からWebアプリまで、1つの言語で"</strong>
-                </div>
-
-                <h2>品質指標</h2>
-                <table style="font-size: 9.5pt;">
-                    <tr><td><strong>JITテスト</strong></td><td>283/311 PASS (91%)</td></tr>
-                    <tr><td><strong>JSテスト</strong></td><td>170/259 PASS (66%)</td></tr>
-                    <tr><td><strong>コード行数</strong></td><td>約80,000行</td></tr>
-                </table>
-
                 <h3>開発スタイル</h3>
                 <ul style="font-size: 9.5pt;">
                     <li><strong>AIバイブコーディング</strong>で開発中</li>
-                    <li><strong>開発期間:</strong> 約半年（2025年夏～）</li>
                     <li>osdev-jp コミュニティで公開</li>
                 </ul>
             </div>
@@ -246,6 +266,14 @@ println(sum); // 15
 int multiplier = 3;
 int[5] result = nums.map(x =&gt; x * multiplier);</div>
 
+                <h2>品質指標</h2>
+                <table style="font-size: 9.5pt;">
+                    <tr><td><strong>JITテスト</strong></td><td>283/311 PASS (91%)</td></tr>
+                    <tr><td><strong>JSテスト</strong></td><td>170/259 PASS (66%)</td></tr>
+                    <tr><td><strong>コード行数</strong></td><td>約80,000行 (C++)</td></tr>
+                    <tr><td><strong>開発期間</strong></td><td>約半年（2025年夏～）</td></tr>
+                </table>
+
                 <h2>クイックスタート</h2>
                 <div class="terminal-block" style="font-size: 7.5pt;">git clone https://github.com/shadowlink0122/Cm.git
 cd Cm && mkdir build && cd build
@@ -259,17 +287,17 @@ cmake .. && make
                     <div style="flex: 1;">
                         <p style="font-size: 10pt; margin-bottom: 4px;">
                             <strong>GitHub:</strong><br>
-                            <code style="font-size: 8pt;">github.com/shadowlink0122/Cm</code>
+                            <code style="font-size: 8pt; font-weight: bold;">github.com/shadowlink0122/Cm</code>
                         </p>
                         <p style="font-size: 10pt; margin-bottom: 4px;">
-                            <strong>X:</strong> <code style="font-size: 8pt;">@sl_0122</code>
+                            <strong>X:</strong> <code style="font-size: 8pt; font-weight: bold;">@sl_0122</code>
                         </p>
                         <p style="font-size: 10pt; margin-bottom: 4px;">
-                            <strong>コミュニティ:</strong> <code style="font-size: 8pt;">osdev-jp</code>
+                            <strong>コミュニティ:</strong> <code style="font-size: 8pt; font-weight: bold;">osdev-jp</code>
                         </p>
                         <p style="font-size: 10pt; margin-bottom: 4px;">
                             <strong>ドキュメント:</strong><br>
-                            <code style="font-size: 8pt;">shadowlink0122.github.io/Cm/</code>
+                            <code style="font-size: 8pt; font-weight: bold;">shadowlink0122.github.io/Cm/</code>
                         </p>
                     </div>
                     <div style="text-align: center;">
@@ -281,7 +309,7 @@ cmake .. && make
                 <div class="footer-box" style="margin-top: 8px;">
                     <strong style="font-size: 11pt;">Cm言語 v0.12.0</strong><br>
                     <span style="font-size: 9pt;">C++の速度とモダン言語の使いやすさを融合</span><br>
-                    <span style="font-size: 8pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2026/01/18</span>
+                    <span style="font-size: 8pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2026/01/19</span>
                 </div>
             </div>
         </div>
