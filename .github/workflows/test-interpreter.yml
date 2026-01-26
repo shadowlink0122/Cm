@@ -90,7 +90,7 @@ jobs:
       
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=OFF -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
       
       - name: Build (Unix)
         if: runner.os != 'Windows'
