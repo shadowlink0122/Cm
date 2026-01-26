@@ -36,7 +36,9 @@
 #include <set>
 #include <sstream>
 #include <string>
+#if !defined(_WIN32)
 #include <sys/wait.h>
+#endif
 #include <vector>
 
 namespace fs = std::filesystem;
