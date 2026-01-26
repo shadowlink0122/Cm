@@ -1,6 +1,8 @@
 // lowering_expr.cpp - 式のlowering
 #include "fwd.hpp"
 
+#include <algorithm>  // std::reverse用
+
 namespace cm::hir {
 
 // 式の変換
