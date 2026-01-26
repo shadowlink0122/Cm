@@ -1023,7 +1023,11 @@ int main(int argc, char* argv[]) {
                         }
                         std::string cmd = "node " + js_opts.outputFile;
                         int exec_result = std::system(cmd.c_str());
+#if defined(_WIN32)
+                        return exec_result;  // Windowsでは直接終了コードを返す
+#else
                         return WEXITSTATUS(exec_result);
+#endif
                     }
                 } catch (const std::exception& e) {
                     std::cerr << "JavaScript コード生成エラー: " << e.what() << "\n";
