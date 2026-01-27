@@ -8,13 +8,14 @@
 > **📋 最新のバージョン計画**: [docs/VERSION_PLAN.md](docs/VERSION_PLAN.md) を参照
 > **📝 所有権・借用設計**: [docs/design/ownership_and_borrowing.md](docs/design/ownership_and_borrowing.md)
 
-### 現在のバージョン: v0.10.0 ✅
+### 現在のバージョン: v0.12.0 ✅
 
-実装済み機能（v0.10.0に統合）:
-- モジュールシステム、FFI、ラムダ式、クロージャ
-- 動的スライス、高階関数（map/filter/reduce等）
-- Debug/Display自動実装、MIR最適化安定化
-- no_std対応、文字列補間拡張
+実装済み機能（v0.12.0に統合）:
+- const強化（配列サイズにconst変数使用可能）
+- 多次元配列フラット化最適化
+- Linter（`cm lint`）、Formatter（`cm fmt`）
+- 末尾呼び出し最適化（TCE）
+- 静的解析強化（未使用変数、const推奨警告）
 
 次期バージョン（v0.11.0）計画:
 
