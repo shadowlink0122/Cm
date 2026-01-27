@@ -42,6 +42,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      # macOS: 既存のNixアーティファクトをクリーンアップ
+      - name: Cleanup existing Nix (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # 既存のNixビルドユーザーを削除
+          for i in $(seq 1 32); do
+            sudo dscl . -delete /Users/_nixbld$i 2>/dev/null || true
+          done
+          sudo dscl . -delete /Groups/nixbld 2>/dev/null || true
+          # Nixボリュームをアンマウント
+          sudo diskutil apfs deleteVolume /nix 2>/dev/null || true
+          # Nix関連ファイルを削除
+          sudo rm -rf /nix 2>/dev/null || true
+          sudo rm -rf /etc/nix 2>/dev/null || true
+          sudo rm -f /etc/synthetic.conf 2>/dev/null || true
+          sudo rm -f /Library/LaunchDaemons/org.nixos.nix-daemon.plist 2>/dev/null || true
+        continue-on-error: true
+      
       - name: Install Nix
         uses: cachix/install-nix-action@v27
         with:
