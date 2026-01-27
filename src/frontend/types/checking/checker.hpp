@@ -133,6 +133,12 @@ class TypeChecker {
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
 
+    // コンパイル時定数評価（const強化）
+    std::optional<int64_t> evaluate_const_expr(ast::Expr& expr);
+
+    // 配列サイズのsize_param_name解決（const強化）
+    void resolve_array_size(ast::TypePtr& type);
+
     // 変数変更追跡（const推奨警告用）
     void mark_variable_modified(const std::string& name);
     void check_const_recommendations();

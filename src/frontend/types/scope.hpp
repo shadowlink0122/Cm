@@ -27,6 +27,9 @@ struct Symbol {
     int scope_level = 0;       // スコープレベル（ライフタイム追跡）
     Span span;                 // 宣言位置（警告の正確な行番号用）
 
+    // コンパイル時定数の値（const強化：配列サイズ等で使用）
+    std::optional<int64_t> const_int_value;
+
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
     ast::TypePtr return_type;
@@ -45,7 +48,8 @@ class Scope {
 
     // シンボル登録
     bool define(const std::string& name, ast::TypePtr type, bool is_const = false,
-                bool is_static = false, Span span = Span{}) {
+                bool is_static = false, Span span = Span{},
+                std::optional<int64_t> const_int_value = std::nullopt) {
         if (symbols_.count(name))
             return false;  // 既存
         Symbol sym;
@@ -55,6 +59,7 @@ class Scope {
         sym.is_static = is_static;
         sym.scope_level = level_;
         sym.span = span;
+        sym.const_int_value = const_int_value;
         symbols_[name] = std::move(sym);
         return true;
     }

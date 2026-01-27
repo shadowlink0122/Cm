@@ -4,7 +4,7 @@
 int main() {
     // 4D array: 30x30x30x30 = 810,000 elements
     static int arr4d[30][30][30][30];
-    
+
     // Initialize
     for (int i = 0; i < 30; i++) {
         for (int j = 0; j < 30; j++) {
@@ -15,7 +15,7 @@ int main() {
             }
         }
     }
-    
+
     // Sum 5 times
     long long total = 0;
     for (int iter = 0; iter < 5; iter++) {
@@ -31,9 +31,9 @@ int main() {
         }
         total += sum;
     }
-    
+
     std::cout << "4D array benchmark completed" << std::endl;
     std::cout << "Total: " << total << std::endl;
-    
+
     return 0;
 }

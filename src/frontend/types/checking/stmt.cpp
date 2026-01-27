@@ -41,6 +41,18 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     // エラー表示用に文のSpanを保存
     Span stmt_span = current_span_;
 
+    // const変数の値を評価（配列サイズ等で使用）
+    std::optional<int64_t> const_int_value = std::nullopt;
+    if (let.is_const && let.init) {
+        const_int_value = evaluate_const_expr(*let.init);
+        if (const_int_value) {
+            debug::tc::log(
+                debug::tc::Id::TypeInfer,
+                "Evaluated const: " + let.name + " = " + std::to_string(*const_int_value),
+                debug::Level::Debug);
+        }
+    }
+
     ast::TypePtr init_type;
     if (let.init) {
         if (auto* array_lit = let.init->as<ast::ArrayLiteralExpr>()) {
@@ -84,7 +96,8 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.type && let.type->kind == ast::TypeKind::Inferred) {
         if (init_type) {
             let.type = init_type;
-            scopes_.current().define(let.name, init_type, let.is_const, let.is_static, stmt_span);
+            scopes_.current().define(let.name, init_type, let.is_const, let.is_static, stmt_span,
+                                     const_int_value);
             debug::tc::log(debug::tc::Id::TypeInfer,
                            "auto " + let.name + " : " + ast::type_to_string(*init_type),
                            debug::Level::Trace);
@@ -94,6 +107,10 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         }
     } else if (let.type) {
         auto resolved_type = resolve_typedef(let.type);
+
+        // 配列型のsize_param_nameを解決（const強化）
+        resolve_array_size(resolved_type);
+
         // ポインタ型の場合、宣言時のconst情報を保持（借用システム Phase 2）
         // const int* p = &x の場合、let.type->element_type->qualifiers.is_const = true
         if (resolved_type->kind == ast::TypeKind::Pointer &&
@@ -116,10 +133,12 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                  "', got '" + ast::type_to_string(*init_type) + "'");
         }
         let.type = resolved_type;
-        scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static, stmt_span);
+        scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static, stmt_span,
+                                 const_int_value);
     } else if (init_type) {
         let.type = init_type;
-        scopes_.current().define(let.name, init_type, let.is_const, let.is_static, stmt_span);
+        scopes_.current().define(let.name, init_type, let.is_const, let.is_static, stmt_span,
+                                 const_int_value);
         debug::tc::log(debug::tc::Id::TypeInfer, let.name + " : " + ast::type_to_string(*init_type),
                        debug::Level::Trace);
     } else {

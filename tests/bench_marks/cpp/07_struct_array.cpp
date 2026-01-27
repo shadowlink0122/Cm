@@ -10,14 +10,14 @@ struct Point {
 int main() {
     // Struct array: 1000 elements
     Point points[1000];
-    
+
     // Initialize
     for (int i = 0; i < 1000; i++) {
         points[i].x = i;
         points[i].y = i * 2;
         points[i].z = i * 3;
     }
-    
+
     // Distance squared sum 10 times
     long long total = 0;
     for (int iter = 0; iter < 10; iter++) {
@@ -30,9 +30,9 @@ int main() {
         }
         total += sum;
     }
-    
+
     std::cout << "Struct array benchmark completed" << std::endl;
     std::cout << "Total: " << total << std::endl;
-    
+
     return 0;
 }

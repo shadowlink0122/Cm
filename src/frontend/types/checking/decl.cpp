@@ -231,6 +231,38 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         register_typedef(*td);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
         register_impl(*impl);
+    } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
+        // グローバル変数/定数の登録（const強化）
+        current_span_ = decl.span;
+        std::optional<int64_t> const_int_value = std::nullopt;
+
+        // const変数の値を評価
+        if (gv->is_const && gv->init_expr) {
+            const_int_value = evaluate_const_expr(*gv->init_expr);
+            if (const_int_value) {
+                debug::tc::log(
+                    debug::tc::Id::TypeInfer,
+                    "Global const: " + gv->name + " = " + std::to_string(*const_int_value),
+                    debug::Level::Debug);
+            }
+        }
+
+        // 初期化式の型チェック
+        ast::TypePtr init_type;
+        if (gv->init_expr) {
+            init_type = infer_type(*gv->init_expr);
+        }
+
+        // 型を決定
+        ast::TypePtr var_type = gv->type ? resolve_typedef(gv->type) : init_type;
+        if (var_type) {
+            scopes_.global().define(gv->name, var_type, gv->is_const, false, decl.span,
+                                    const_int_value);
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "Global " + std::string(gv->is_const ? "const" : "var") + ": " +
+                               gv->name + " : " + ast::type_to_string(*var_type),
+                           debug::Level::Debug);
+        }
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         for (const auto& func : extern_block->declarations) {
             std::vector<ast::TypePtr> param_types;
