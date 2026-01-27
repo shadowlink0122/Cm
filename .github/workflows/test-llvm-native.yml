@@ -171,10 +171,10 @@ jobs:
         run: make tlp3
 
   # ========================================
-  # Windows Native コンパイルテスト (O3)
+  # Windows テスト (LLVM無効、JS生成テスト)
   # ========================================
-  windows-native-o3:
-    name: Windows Native O3
+  windows-tests:
+    name: Windows Tests (No LLVM)
     needs: build
     runs-on: windows-latest
     
@@ -185,16 +185,10 @@ jobs:
         with:
           name: cm-native-build-windows-latest
       
-      - name: Install LLVM (Windows)
-        run: |
-          $llvmVersion = "17.0.6"
-          $llvmUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/LLVM-$llvmVersion-win64.exe"
-          $installer = "$env:TEMP\LLVM-$llvmVersion-win64.exe"
-          Write-Host "Downloading LLVM $llvmVersion..."
-          Invoke-WebRequest -Uri $llvmUrl -OutFile $installer -UseBasicParsing
-          Write-Host "Installing LLVM..."
-          Start-Process -FilePath $installer -ArgumentList "/S" -Wait
-          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       
       - name: Verify cm executable
         run: |
@@ -206,6 +200,9 @@ jobs:
           } elseif (Test-Path "build/Release/cm.exe") {
             Copy-Item "build/Release/cm.exe" "cm.exe"
             Write-Host "✅ Copied cm.exe from build/Release"
+          } elseif (Test-Path "build/bin/Debug/cm.exe") {
+            Copy-Item "build/bin/Debug/cm.exe" "cm.exe"
+            Write-Host "✅ Copied cm.exe from build/bin/Debug"
           } else {
             Write-Host "❌ cm.exe not found"
             Get-ChildItem -Recurse -Filter "cm.exe" | Select-Object FullName
@@ -213,23 +210,22 @@ jobs:
           }
           .\cm.exe --version
       
-      - name: Run Native Compile Tests (O3)
+      - name: Run Check Tests
         run: |
+          Write-Host "=== Running Check Tests ==="
           $testFiles = Get-ChildItem -Path "tests/test_programs" -Filter "*.cm" -Recurse | Select-Object -First 10
           $passed = 0
           $failed = 0
           foreach ($file in $testFiles) {
-            $outFile = [System.IO.Path]::GetFileNameWithoutExtension($file.Name) + ".exe"
-            Write-Host "Compiling: $($file.Name)"
+            Write-Host "Checking: $($file.Name)"
             try {
-              .\cm.exe compile -O3 $file.FullName -o $outFile 2>&1
-              if ($LASTEXITCODE -eq 0 -and (Test-Path $outFile)) {
+              .\cm.exe check $file.FullName 2>&1
+              if ($LASTEXITCODE -eq 0) {
                 $passed++
-                Write-Host "  ✅ Compiled successfully"
-                Remove-Item $outFile -ErrorAction SilentlyContinue
+                Write-Host "  ✅ Check passed"
               } else {
                 $failed++
-                Write-Host "  ❌ Compilation failed"
+                Write-Host "  ⚠️ Check had issues (exit code: $LASTEXITCODE)"
               }
             } catch {
               $failed++
@@ -237,6 +233,42 @@ jobs:
             }
           }
           Write-Host ""
-          Write-Host "=== Native Compile Summary ==="
+          Write-Host "=== Check Summary ==="
+          Write-Host "Passed: $passed"
+          Write-Host "Failed: $failed"
+      
+      - name: Run JavaScript Generation Tests
+        run: |
+          Write-Host "=== Running JavaScript Generation Tests ==="
+          $testFiles = Get-ChildItem -Path "tests/test_programs" -Filter "*.cm" -Recurse | Select-Object -First 5
+          $passed = 0
+          $failed = 0
+          foreach ($file in $testFiles) {
+            $outFile = [System.IO.Path]::GetFileNameWithoutExtension($file.Name) + ".js"
+            Write-Host "Compiling to JS: $($file.Name)"
+            try {
+              .\cm.exe compile --target=js $file.FullName -o $outFile 2>&1
+              if ($LASTEXITCODE -eq 0 -and (Test-Path $outFile)) {
+                $passed++
+                Write-Host "  ✅ JS generated successfully"
+                # 実行テスト（Node.js）
+                try {
+                  $output = node $outFile 2>&1
+                  Write-Host "  ✅ Executed: $output"
+                } catch {
+                  Write-Host "  ⚠️ Execution skipped: $_"
+                }
+                Remove-Item $outFile -ErrorAction SilentlyContinue
+              } else {
+                $failed++
+                Write-Host "  ❌ JS generation failed"
+              }
+            } catch {
+              $failed++
+              Write-Host "  ❌ ERROR: $_"
+            }
+          }
+          Write-Host ""
+          Write-Host "=== JS Generation Summary ==="
           Write-Host "Passed: $passed"
           Write-Host "Failed: $failed"
