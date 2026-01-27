@@ -4,7 +4,7 @@
 
 ## 概要
 
-v0.12.0は**const強化とCI整理**に焦点を当てたアップデートです。配列サイズにconst変数を使用可能にし、コンパイル時定数評価を実装しました。また、CI/CDパイプラインを整理し、Windows対応を一時停止しました。
+v0.12.0は**const強化、多次元配列最適化、Lint/Formatter、CI整理**に焦点を当てた大規模アップデートです。配列サイズにconst変数を使用可能にし、多次元配列のフラット化最適化を実装しました。また、CI/CDからWindowsを一時削除し、Linux/macOSに集中しています。
 
 ## 🎯 主要な新機能
 
@@ -38,29 +38,55 @@ int main() {
 - `resolve_array_size`関数で配列サイズを解決
 - グローバルconst変数の型チェッカー登録を追加
 
-### 2. CI/CDパイプライン整理
+### 2. 多次元配列フラット化最適化
 
-#### Windowsパイプラインの削除
+多次元配列を1次元配列に自動変換し、キャッシュ効率を大幅に改善しました。
+
+```cm
+// コンパイラが自動的に最適化
+int arr[100][100];  // → 内部的に int arr[10000] として扱う
+```
+
+### 3. Linter実装
+
+コードの静的解析ツールを実装しました。
+
+```bash
+./cm lint src/main.cm
+```
+
+機能:
+- 命名規則チェック（snake_case、PascalCase）
+- 未使用変数の検出
+- const推奨警告
+
+### 4. Formatter実装
+
+コードフォーマッターを実装しました。
+
+```bash
+./cm fmt src/main.cm
+```
+
+### 5. 末尾呼び出し最適化（TCE）
+
+LLVMレベルでの末尾呼び出し最適化を実装しました。再帰関数のスタックオーバーフローを防止します。
+
+## 🔧 CI/CD改善
+
+### Windows対応の一時停止
 - `test-interpreter.yml`からWindowsのbuild/JITテストを完全削除
 - 理由: LLVM公式Windows版にCMakeファイル（LLVMConfig.cmake）が含まれていないため
-- Linux/macOSのみでテストを実行
 
-#### 変更されたワークフロー
-- `test-interpreter.yml`: Windowsパイプラインを削除（build、JIT O3テスト）
+### Nix flake試行（後にrevert）
+- Nix flakeでLinux/macOS CI環境の統一を試みたが、複雑さから従来のHomebrew/aptに戻す
 
-## 🔧 改善・修正
+### 不要なテストバイナリの削除
+- `test_1d_native`、`test_2d_native`、`test_ptr_native`を削除
 
-### 型チェッカーの改善
-- `GlobalVarDecl`（グローバル変数/定数宣言）の型チェック処理を追加
-- const変数の値をスコープに保存し、後続の型チェックで参照可能に
+## 📁 変更ファイル一覧（主要）
 
-### ドキュメント更新
-- `docs/FEATURES.md`: const強化機能を追加
-- `docs/design/v0.12.0/const_enhancement.md`: 設計ドキュメント
-
-## 📁 変更ファイル一覧
-
-### コンパイラ本体
+### コンパイラ本体（const強化）
 | ファイル | 変更内容 |
 |---------|---------|
 | `src/frontend/types/scope.hpp` | `Symbol`に`const_int_value`フィールド追加 |
@@ -69,21 +95,44 @@ int main() {
 | `src/frontend/types/checking/stmt.cpp` | `check_let`にconst値評価を追加 |
 | `src/frontend/types/checking/decl.cpp` | `GlobalVarDecl`の登録処理追加 |
 
+### 多次元配列最適化
+| ファイル | 変更内容 |
+|---------|---------|
+| `src/mir/optimization/` | 配列フラット化最適化パス追加 |
+
+### Linter/Formatter
+| ファイル | 変更内容 |
+|---------|---------|
+| `src/frontend/types/checking/` | Lint警告機能追加 |
+| `src/main.cpp` | `lint`/`fmt`コマンド追加 |
+
 ### CI/CD
 | ファイル | 変更内容 |
 |---------|---------|
-| `.github/workflows/test-interpreter.yml` | Windowsビルド・JITテスト削除 |
+| `.github/workflows/test-interpreter.yml` | Windowsパイプラインを削除 |
+| `.github/workflows/ci.yml` | 整理・簡素化 |
 
 ### ドキュメント
 | ファイル | 変更内容 |
 |---------|---------|
 | `docs/FEATURES.md` | const強化機能を追加 |
 | `docs/design/v0.12.0/const_enhancement.md` | 設計ドキュメント（新規） |
+| `docs/UNIMPLEMENTED_FEATURES.md` | 未実装機能リスト（新規） |
+| `docs/flyer/` | Cm言語のチラシを追加 |
 
 ### テスト
 | ファイル | 変更内容 |
 |---------|---------|
-| `tests/test_programs/const/const_array_size.cm` | テストケース（新規） |
+| `tests/test_programs/const/const_array_size.cm` | const配列サイズテスト（新規） |
+| `tests/test_tce_fib.cm` | 末尾呼び出し最適化テスト（新規） |
+| `tests/bench_marks/cpp/` | C++ベンチマーク追加 |
+
+### ベンチマーク
+| ファイル | 変更内容 |
+|---------|---------|
+| `tests/bench_marks/cpp/05b_matrix_multiply_2d.cpp` | 2D行列乗算 |
+| `tests/bench_marks/cpp/06_4d_array.cpp` | 4次元配列 |
+| `tests/bench_marks/cpp/07_struct_array.cpp` | 構造体配列 |
 
 ## 🧪 テスト状況
 
@@ -94,10 +143,17 @@ int main() {
 | インタプリタ (O0) | 283 | 0 | 29 |
 | インタプリタ (O3) | 283 | 0 | 29 |
 
+## 📊 統計
+
+- **コミット数**: 48
+- **変更ファイル数**: 408
+- **追加行数**: 19,918
+- **削除行数**: 1,608
+
 ## ⚠️ 注意事項
 
 ### Windows対応について
-現在Windows対応は一時停止中です。LLVM公式Windows版に開発用ファイル（CMake設定）が含まれていないため、ソースからLLVMをビルドする必要があります。将来的にvcpkgやconanなどのパッケージマネージャー経由での対応を検討中です。
+現在Windows対応は一時停止中です。将来的にvcpkgやconanなどのパッケージマネージャー経由での対応を検討中です。
 
 ## 🚀 今後の予定
 
