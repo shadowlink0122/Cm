@@ -69,14 +69,25 @@ jobs:
           echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
-      # LLVM インストール (Windows) - vcpkg経由
+      # LLVM インストール (Windows) - プリビルド版インストーラー
       - name: Install LLVM (Windows)
         if: runner.os == 'Windows'
         run: |
-          Write-Host "Installing LLVM via vcpkg (this may take a while)..."
-          vcpkg install llvm[core,target-x86]:x64-windows --recurse
-          echo "LLVM_DIR=C:/vcpkg/installed/x64-windows/share/llvm" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "C:/vcpkg/installed/x64-windows/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $llvmVersion = "17.0.6"
+          $llvmUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/LLVM-$llvmVersion-win64.exe"
+          $installer = "$env:TEMP\LLVM-$llvmVersion-win64.exe"
+          
+          Write-Host "Downloading LLVM $llvmVersion..."
+          Invoke-WebRequest -Uri $llvmUrl -OutFile $installer -UseBasicParsing
+          
+          Write-Host "Installing LLVM..."
+          Start-Process -FilePath $installer -ArgumentList "/S" -Wait
+          
+          $llvmPath = "C:\Program Files\LLVM"
+          Write-Host "LLVM installed at: $llvmPath"
+          Get-ChildItem "$llvmPath\lib" -Filter "*.lib" | Select-Object -First 5 | ForEach-Object { Write-Host "  - $($_.Name)" }
+          
+          echo "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
       # Google Test インストール (Ubuntu)
       - name: Install Google Test (Ubuntu)

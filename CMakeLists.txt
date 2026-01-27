@@ -24,8 +24,7 @@ endif()
 
 # LLVM Configuration
 if(CM_USE_LLVM)
-    # Find LLVM (try versions from newest to oldest, suppress warnings with QUIET)
-    # Support LLVM 14-18 for compatibility
+    # Try to find LLVM using CMake config files
     find_package(LLVM 18 CONFIG QUIET)
     if(NOT LLVM_FOUND)
         find_package(LLVM 17 CONFIG QUIET)
@@ -40,66 +39,105 @@ if(CM_USE_LLVM)
         find_package(LLVM 14 CONFIG QUIET)
     endif()
     if(NOT LLVM_FOUND)
-        # Final attempt without version requirement
-        find_package(LLVM CONFIG REQUIRED)
+        find_package(LLVM CONFIG QUIET)
     endif()
 
-    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-    message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+    if(LLVM_FOUND)
+        # Standard CMake-based LLVM configuration
+        message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+        message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-    # LLVM definitions
-    add_compile_definitions(CM_LLVM_ENABLED)
-    add_compile_definitions(${LLVM_DEFINITIONS})
+        add_compile_definitions(CM_LLVM_ENABLED)
+        add_compile_definitions(${LLVM_DEFINITIONS})
+        include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-    # LLVM include directories (SYSTEM to suppress warnings from LLVM headers)
-    include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+        llvm_map_components_to_libnames(llvm_libs
+            Core Support IRReader Passes CodeGen MC MCParser MCJIT OrcJIT ExecutionEngine Target
+            X86CodeGen X86AsmParser X86Desc X86Info
+            AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+            WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
+        )
 
-    # Find the libraries that correspond to the LLVM components we need
-    llvm_map_components_to_libnames(llvm_libs
-        Core
-        Support
-        IRReader
-        Passes
-        CodeGen
-        MC
-        MCParser
-        MCJIT
-        OrcJIT
-        ExecutionEngine
-        Target
+        add_library(cm_llvm_backend INTERFACE)
+        target_include_directories(cm_llvm_backend INTERFACE
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
+        )
 
-        # Target architectures (add as needed)
-        X86CodeGen X86AsmParser X86Desc X86Info
-        AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
-        WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
-    )
+        if(CM_LLVM_STATIC)
+            target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
+        else()
+            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
+            get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
+            message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
+            set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
+            set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
+            set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+        endif()
 
-    # Create LLVM backend library
-    add_library(cm_llvm_backend INTERFACE)
-    target_include_directories(cm_llvm_backend INTERFACE
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
-    )
+        message(STATUS "LLVM backend enabled (CMake config)")
 
-    if(CM_LLVM_STATIC)
+    elseif(WIN32)
+        # Windows: Manual LLVM configuration without CMake files
+        message(STATUS "LLVMConfig.cmake not found, trying manual configuration...")
+        
+        # Check common LLVM installation paths on Windows
+        set(LLVM_SEARCH_PATHS
+            "C:/Program Files/LLVM"
+            "$ENV{ProgramFiles}/LLVM"
+            "$ENV{LLVM_PATH}"
+        )
+        
+        foreach(LLVM_SEARCH_PATH ${LLVM_SEARCH_PATHS})
+            if(EXISTS "${LLVM_SEARCH_PATH}/include/llvm/IR/LLVMContext.h")
+                set(LLVM_ROOT "${LLVM_SEARCH_PATH}")
+                break()
+            endif()
+        endforeach()
+        
+        if(NOT LLVM_ROOT)
+            message(FATAL_ERROR "LLVM not found. Please install LLVM or set LLVM_PATH environment variable.")
+        endif()
+        
+        message(STATUS "Found LLVM at: ${LLVM_ROOT}")
+        
+        set(LLVM_INCLUDE_DIRS "${LLVM_ROOT}/include")
+        set(LLVM_LIBRARY_DIRS "${LLVM_ROOT}/lib")
+        set(LLVM_BIN_DIRS "${LLVM_ROOT}/bin")
+        
+        add_compile_definitions(CM_LLVM_ENABLED)
+        include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+        link_directories(${LLVM_LIBRARY_DIRS})
+        
+        # Windows LLVM uses LLVM-C.lib for C API or individual .lib files
+        # The prebuilt LLVM installer typically provides LLVM-C.lib
+        set(llvm_libs
+            "${LLVM_LIBRARY_DIRS}/LLVM-C.lib"
+        )
+        
+        # Check if LLVM-C.lib exists, otherwise try to find individual libs
+        if(NOT EXISTS "${LLVM_LIBRARY_DIRS}/LLVM-C.lib")
+            file(GLOB llvm_libs "${LLVM_LIBRARY_DIRS}/LLVM*.lib")
+            if(NOT llvm_libs)
+                message(FATAL_ERROR "No LLVM libraries found in ${LLVM_LIBRARY_DIRS}")
+            endif()
+        endif()
+        
+        message(STATUS "LLVM libraries: ${llvm_libs}")
+        
+        add_library(cm_llvm_backend INTERFACE)
+        target_include_directories(cm_llvm_backend INTERFACE
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
+        )
         target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
+        
+        message(STATUS "LLVM backend enabled (manual configuration)")
     else()
-        # Dynamic linking
-        target_link_libraries(cm_llvm_backend INTERFACE LLVM)
-        
-        # Set RPATH to find LLVM shared libraries at runtime
-        # This is crucial for finding libLLVM-*.so on Linux
-        get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
-        message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
-        
-        # Add RPATH settings
-        set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
-        set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
-        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+        message(FATAL_ERROR "LLVM not found. Please install LLVM development packages.")
     endif()
-
-    message(STATUS "LLVM backend enabled")
 else()
     message(STATUS "LLVM backend disabled")
 endif()
