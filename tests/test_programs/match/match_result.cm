@@ -34,15 +34,16 @@ struct Result<T, E> {
 // Result状態を整数コードに変換
 <T, E> int result_to_code(Result<T, E> res) {
     return match (res.is_ok) {
-        true => 0,   // 成功
-        false => -1, // エラー
+        true => 0,    // 成功
+        false => -1,  // エラー
     };
 }
 
 // 安全な除算
 Result<int, int> safe_divide(int a, int b) {
     if (b == 0) {
-        return err(0, -1);  // エラーコード -1
+        return err(0, -1);
+        // エラーコード -1
     }
     return ok(a / b, 0);
 }
@@ -50,12 +51,15 @@ Result<int, int> safe_divide(int a, int b) {
 // 境界チェック付き配列アクセス（シミュレート）
 Result<int, int> safe_get(int index, int max_index) {
     if (index < 0) {
-        return err(0, -1);  // index < 0
+        return err(0, -1);
+        // index < 0
     }
     if (index >= max_index) {
-        return err(0, -2);  // index >= max
+        return err(0, -2);
+        // index >= max
     }
-    return ok(index * 10, 0);  // 値を返す
+    return ok(index * 10, 0);
+    // 値を返す
 }
 
 int main() {
@@ -64,23 +68,23 @@ int main() {
     int v1 = unwrap_or_match(r1, -999);
     int c1 = result_to_code(r1);
     println("safe_divide(10, 2) = {v1}, code = {c1}");
-    
+
     // ゼロ除算
     Result<int, int> r2 = safe_divide(10, 0);
     int v2 = unwrap_or_match(r2, -999);
     int c2 = result_to_code(r2);
     println("safe_divide(10, 0) = {v2}, code = {c2}");
-    
+
     // 境界チェック - 正常
     Result<int, int> r3 = safe_get(3, 10);
     int v3 = unwrap_or_match(r3, -999);
     println("safe_get(3, 10) = {v3}");
-    
+
     // 境界チェック - 範囲外
     Result<int, int> r4 = safe_get(15, 10);
     int v4 = unwrap_or_match(r4, -999);
     println("safe_get(15, 10) = {v4}");
-    
+
     // 連鎖処理のシミュレート
     Result<int, int> step1 = safe_divide(100, 2);
     Result<int, int> step2 = safe_divide(step1.value, 5);
@@ -92,6 +96,6 @@ int main() {
         false => -1,
     };
     println("100 / 2 / 5 = {final_result}");
-    
+
     return 0;
 }

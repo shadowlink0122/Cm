@@ -10,26 +10,26 @@ int main() {
     Pair<int, int> p1;
     p1.first = 10;
     p1.second = 20;
-    
+
     Pair<int, int> p2;
     p2.first = 10;
     p2.second = 20;
-    
+
     Pair<int, int> p3;
     p3.first = 10;
     p3.second = 30;
-    
+
     if (p1 == p2) {
         println("p1 == p2: true");
     } else {
         println("p1 == p2: false");
     }
-    
+
     if (p1 == p3) {
         println("p1 == p3: true");
     } else {
         println("p1 == p3: false");
     }
-    
+
     return 0;
 }

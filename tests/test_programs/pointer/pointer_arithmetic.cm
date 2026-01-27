@@ -3,10 +3,10 @@ import std::io::println;
 
 int main() {
     int[5] arr = [10, 20, 30, 40, 50];
-    
+
     // 配列先頭へのポインタ
     int* p = &arr[0];
-    
+
     // ポインタ + オフセット
     int v0 = *p;
     int v1 = *(p + 1);
@@ -14,23 +14,23 @@ int main() {
     int v3 = *(p + 3);
     int v4 = *(p + 4);
     println("v0={v0}, v1={v1}, v2={v2}, v3={v3}, v4={v4}");
-    
+
     // ポインタを進める
     int* q = p + 2;
     int qv = *q;
     println("*(p+2) = {qv}");
-    
+
     // ポインタを戻す
     int* r = q - 1;
     int rv = *r;
     println("*(q-1) = {rv}");
-    
+
     // ループでポインタ演算
     int sum = 0;
     for (int i = 0; i < 5; i = i + 1) {
         sum = sum + *(p + i);
     }
     println("sum = {sum}");
-    
+
     return 0;
 }

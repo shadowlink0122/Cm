@@ -32,11 +32,11 @@ int testMixedConst() {
         println("FAIL: msg3 expected 'Mixed: v10.42 (99 items)'");
         errors = errors + 1;
     }
-    
+
     if (errors == 0) {
         println("PASS: Mixed const interpolation works");
     }
-    
+
     return errors;
 }
 

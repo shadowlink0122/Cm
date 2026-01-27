@@ -110,6 +110,7 @@ struct GenericParam {
 // ============================================================
 struct FunctionDecl {
     std::string name;
+    Span name_span;  // 名前の位置（Lintエラー表示用）
     std::vector<Param> params;
     TypePtr return_type;
     std::vector<StmtPtr> body;
@@ -154,6 +155,7 @@ struct Field {
 // ============================================================
 struct StructDecl {
     std::string name;
+    Span name_span;  // 名前の位置（Lintエラー表示用）
     std::vector<Field> fields;
     Visibility visibility = Visibility::Private;
     std::vector<AttributeNode> attributes;

@@ -3,7 +3,8 @@
 
 struct BadStruct {
     default int x;
-    default int y;  // エラー: 複数のdefaultは不可
+    default int y;
+    // エラー: 複数のdefaultは不可
 }
 
 int main() {

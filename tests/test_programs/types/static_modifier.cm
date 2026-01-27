@@ -3,7 +3,8 @@ import std::io::println;
 
 // カウンターをインクリメントして返す
 int counter() {
-    static int count = 0;  // 初期値は最初の呼び出しでのみ適用
+    static int count = 0;
+    // 初期値は最初の呼び出しでのみ適用
     count = count + 1;
     return count;
 }
@@ -20,11 +21,11 @@ int main() {
     println("counter() = {counter()}");  // 1
     println("counter() = {counter()}");  // 2
     println("counter() = {counter()}");  // 3
-    
+
     // 累積値のテスト
     println("accumulator(10) = {accumulator(10)}");  // 10
     println("accumulator(20) = {accumulator(20)}");  // 30
     println("accumulator(15) = {accumulator(15)}");  // 45
-    
+
     return 0;
 }

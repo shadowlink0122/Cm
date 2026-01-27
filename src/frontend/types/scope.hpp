@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../common/span.hpp"
 #include "../ast/types.hpp"
 
 #include <memory>
@@ -22,7 +23,12 @@ struct Symbol {
     bool is_moved = false;     // 所有権が移動済みか（Move Semantics）
     bool is_static = false;    // static変数（プログラム全体のライフタイム）
     size_t borrow_count = 0;   // 借用回数（借用安全性）
+    size_t use_count = 0;      // 使用回数（未使用変数検出用）
     int scope_level = 0;       // スコープレベル（ライフタイム追跡）
+    Span span;                 // 宣言位置（警告の正確な行番号用）
+
+    // コンパイル時定数の値（const強化：配列サイズ等で使用）
+    std::optional<int64_t> const_int_value;
 
     // 関数の場合
     std::vector<ast::TypePtr> param_types;
@@ -42,11 +48,19 @@ class Scope {
 
     // シンボル登録
     bool define(const std::string& name, ast::TypePtr type, bool is_const = false,
-                bool is_static = false) {
+                bool is_static = false, Span span = Span{},
+                std::optional<int64_t> const_int_value = std::nullopt) {
         if (symbols_.count(name))
             return false;  // 既存
-        symbols_[name] = Symbol{name, std::move(type), is_const, false,   false, false, is_static,
-                                0,    level_,          {},       nullptr, 0};
+        Symbol sym;
+        sym.name = name;
+        sym.type = std::move(type);
+        sym.is_const = is_const;
+        sym.is_static = is_static;
+        sym.scope_level = level_;
+        sym.span = span;
+        sym.const_int_value = const_int_value;
+        symbols_[name] = std::move(sym);
         return true;
     }
 
@@ -85,6 +99,32 @@ class Scope {
 
     // 現スコープのみ検索
     bool has_local(const std::string& name) const { return symbols_.count(name) > 0; }
+
+    // 変数を使用済みとしてマーク（未使用検出用）
+    bool mark_used(const std::string& name) {
+        auto it = symbols_.find(name);
+        if (it != symbols_.end()) {
+            it->second.use_count++;
+            return true;
+        }
+        if (parent_) {
+            return parent_->mark_used(name);
+        }
+        return false;
+    }
+
+    // 未使用シンボル取得（現スコープのみ）
+    std::vector<Symbol> get_unused_symbols() const {
+        std::vector<Symbol> unused;
+        for (const auto& [name, sym] : symbols_) {
+            // 関数は除外、変数のみチェック
+            // 空のspanを持つシンボル（ビルトイン）も除外
+            if (!sym.is_function && sym.use_count == 0 && !sym.span.is_empty()) {
+                unused.push_back(sym);
+            }
+        }
+        return unused;
+    }
 
     // 変数を移動済みとしてマーク（Move Semantics）
     bool mark_moved(const std::string& name) {

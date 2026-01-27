@@ -5,6 +5,7 @@
 #include "../type_checker.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <regex>
 
 namespace cm {
@@ -239,6 +240,13 @@ void TypeChecker::mark_variable_modified(const std::string& name) {
 
 // const推奨警告をチェック（関数終了時に呼び出す）
 void TypeChecker::check_const_recommendations() {
+    // Lint警告が無効な場合はスキップ（クリアのみ実行）
+    if (!enable_lint_warnings_) {
+        modified_variables_.clear();
+        non_const_variable_spans_.clear();
+        return;
+    }
+
     for (const auto& [name, span] : non_const_variable_spans_) {
         // 変更されていない変数に対してconst推奨警告
         if (modified_variables_.count(name) == 0) {
@@ -248,6 +256,85 @@ void TypeChecker::check_const_recommendations() {
     // 次の関数用にクリア
     modified_variables_.clear();
     non_const_variable_spans_.clear();
+}
+
+// 未使用変数チェック (W001)
+void TypeChecker::check_unused_variables() {
+    // 現在のスコープから未使用シンボルを取得
+    auto unused_symbols = scopes_.current().get_unused_symbols();
+
+    for (const auto& sym : unused_symbols) {
+        // パラメータ名がアンダースコアで始まる場合は警告しない（意図的な未使用）
+        if (!sym.name.empty() && sym.name[0] == '_') {
+            continue;
+        }
+        // self は常に警告しない
+        if (sym.name == "self") {
+            continue;
+        }
+
+        warning(sym.span, "Variable '" + sym.name + "' is never used [W001]");
+    }
+}
+
+// ============================================================
+// 命名規則チェック (L100-L103)
+// ============================================================
+
+// snake_case判定: 小文字、数字、アンダースコアのみ、先頭は小文字またはアンダースコア
+bool TypeChecker::is_snake_case(const std::string& name) {
+    if (name.empty())
+        return true;
+
+    // 先頭は小文字またはアンダースコア
+    if (!std::islower(name[0]) && name[0] != '_') {
+        return false;
+    }
+
+    for (char c : name) {
+        if (!std::islower(c) && !std::isdigit(c) && c != '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// PascalCase判定: 先頭が大文字、アンダースコアなし
+bool TypeChecker::is_pascal_case(const std::string& name) {
+    if (name.empty())
+        return true;
+
+    // 先頭は大文字
+    if (!std::isupper(name[0])) {
+        return false;
+    }
+
+    // アンダースコアは禁止
+    for (char c : name) {
+        if (c == '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// UPPER_SNAKE_CASE判定: 大文字、数字、アンダースコアのみ
+bool TypeChecker::is_upper_snake_case(const std::string& name) {
+    if (name.empty())
+        return true;
+
+    for (char c : name) {
+        if (!std::isupper(c) && !std::isdigit(c) && c != '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 命名規則をチェック（関数終了時に呼び出す）
+void TypeChecker::check_naming_conventions() {
+    // 現在のスコープの変数をチェック
+    // Note: 関数名や構造体名のチェックはregister_declaration時に行う
 }
 
 bool TypeChecker::type_implements_interface(const std::string& type_name,
@@ -316,6 +403,11 @@ void TypeChecker::mark_variable_initialized(const std::string& name) {
 }
 
 void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
+    // Lint警告が無効な場合はスキップ
+    if (!enable_lint_warnings_) {
+        return;
+    }
+
     // 初期化されていない変数の使用を検出
     // 注: 関数パラメータは常に初期化されているとみなす
     auto sym = scopes_.current().lookup(name);
@@ -326,6 +418,159 @@ void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
     // initialized_variables_に含まれていない場合は警告
     if (initialized_variables_.count(name) == 0) {
         warning(span, "Variable '" + name + "' may be used before initialization");
+    }
+}
+
+// ============================================================
+// コンパイル時定数評価（const強化）
+// ============================================================
+std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
+    // リテラル: 整数値を直接返す
+    if (auto* lit = expr.as<ast::LiteralExpr>()) {
+        if (std::holds_alternative<int64_t>(lit->value)) {
+            return std::get<int64_t>(lit->value);
+        }
+        // bool値もint64_tに変換可能
+        if (std::holds_alternative<bool>(lit->value)) {
+            return std::get<bool>(lit->value) ? 1 : 0;
+        }
+        // double/charは整数として評価不可
+        return std::nullopt;
+    }
+
+    // 識別子: const変数を検索
+    if (auto* ident = expr.as<ast::IdentExpr>()) {
+        auto sym = scopes_.current().lookup(ident->name);
+        if (sym && sym->is_const && sym->const_int_value.has_value()) {
+            return sym->const_int_value;
+        }
+        return std::nullopt;
+    }
+
+    // 単項演算子
+    if (auto* unary = expr.as<ast::UnaryExpr>()) {
+        auto val = evaluate_const_expr(*unary->operand);
+        if (!val)
+            return std::nullopt;
+
+        switch (unary->op) {
+            case ast::UnaryOp::Neg:
+                return -(*val);
+            case ast::UnaryOp::Not:
+                return (*val) ? 0 : 1;
+            case ast::UnaryOp::BitNot:
+                return ~(*val);
+            default:
+                return std::nullopt;
+        }
+    }
+
+    // 二項演算子
+    if (auto* binary = expr.as<ast::BinaryExpr>()) {
+        auto left_val = evaluate_const_expr(*binary->left);
+        auto right_val = evaluate_const_expr(*binary->right);
+        if (!left_val || !right_val)
+            return std::nullopt;
+
+        switch (binary->op) {
+            case ast::BinaryOp::Add:
+                return *left_val + *right_val;
+            case ast::BinaryOp::Sub:
+                return *left_val - *right_val;
+            case ast::BinaryOp::Mul:
+                return *left_val * *right_val;
+            case ast::BinaryOp::Div:
+                if (*right_val == 0)
+                    return std::nullopt;  // ゼロ除算
+                return *left_val / *right_val;
+            case ast::BinaryOp::Mod:
+                if (*right_val == 0)
+                    return std::nullopt;
+                return *left_val % *right_val;
+            case ast::BinaryOp::BitAnd:
+                return *left_val & *right_val;
+            case ast::BinaryOp::BitOr:
+                return *left_val | *right_val;
+            case ast::BinaryOp::BitXor:
+                return *left_val ^ *right_val;
+            case ast::BinaryOp::Shl:
+                return *left_val << *right_val;
+            case ast::BinaryOp::Shr:
+                return *left_val >> *right_val;
+            case ast::BinaryOp::Lt:
+                return (*left_val < *right_val) ? 1 : 0;
+            case ast::BinaryOp::Le:
+                return (*left_val <= *right_val) ? 1 : 0;
+            case ast::BinaryOp::Gt:
+                return (*left_val > *right_val) ? 1 : 0;
+            case ast::BinaryOp::Ge:
+                return (*left_val >= *right_val) ? 1 : 0;
+            case ast::BinaryOp::Eq:
+                return (*left_val == *right_val) ? 1 : 0;
+            case ast::BinaryOp::Ne:
+                return (*left_val != *right_val) ? 1 : 0;
+            case ast::BinaryOp::And:
+                return (*left_val && *right_val) ? 1 : 0;
+            case ast::BinaryOp::Or:
+                return (*left_val || *right_val) ? 1 : 0;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    // 三項演算子
+    if (auto* ternary = expr.as<ast::TernaryExpr>()) {
+        auto cond = evaluate_const_expr(*ternary->condition);
+        if (!cond)
+            return std::nullopt;
+        return *cond ? evaluate_const_expr(*ternary->then_expr)
+                     : evaluate_const_expr(*ternary->else_expr);
+    }
+
+    // その他の式はコンパイル時評価不可
+    return std::nullopt;
+}
+
+// ============================================================
+// 配列サイズのsize_param_name解決（const強化）
+// ============================================================
+void TypeChecker::resolve_array_size(ast::TypePtr& type) {
+    if (!type)
+        return;
+
+    // 配列型でsize_param_nameが設定されている場合
+    if (type->kind == ast::TypeKind::Array && !type->size_param_name.empty()) {
+        // const変数を検索
+        auto sym = scopes_.current().lookup(type->size_param_name);
+        if (sym && sym->is_const && sym->const_int_value.has_value()) {
+            int64_t size = *sym->const_int_value;
+            if (size > 0 && size <= INT32_MAX) {
+                type->array_size = static_cast<uint32_t>(size);
+                type->size_param_name.clear();  // 解決済みなのでクリア
+
+                debug::tc::log(debug::tc::Id::TypeInfer,
+                               "Resolved array size: " + sym->name + " = " + std::to_string(size),
+                               debug::Level::Debug);
+            } else {
+                error(current_span_, "Array size must be a positive integer, got " +
+                                         std::to_string(size) + " for '" + type->size_param_name +
+                                         "'");
+            }
+        } else if (sym && !sym->is_const) {
+            error(current_span_, "Array size must be a const variable, but '" +
+                                     type->size_param_name + "' is not const");
+        } else if (!sym) {
+            error(current_span_,
+                  "Undefined variable '" + type->size_param_name + "' used as array size");
+        } else {
+            error(current_span_, "Const variable '" + type->size_param_name +
+                                     "' does not have a compile-time integer value");
+        }
+    }
+
+    // 要素型も再帰的に解決
+    if (type->element_type) {
+        resolve_array_size(type->element_type);
     }
 }
 

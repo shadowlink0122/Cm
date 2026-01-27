@@ -18,7 +18,7 @@ int main() {
     int s2 = __sizeof__(double);
     int s3 = __sizeof__(Point);
     int s4 = __sizeof__(Aligned);
-    
+
     if (s1 != 4) {
         println("FAIL: __sizeof__(int) expected 4, got {s1}");
         return 1;
@@ -36,12 +36,12 @@ int main() {
         println("FAIL: __sizeof__(Aligned) expected 8, got {s4}");
         return 1;
     }
-    
+
     // __alignof__ テスト
     int a1 = __alignof__(int);
     int a2 = __alignof__(double);
     int a3 = __alignof__(Aligned);
-    
+
     if (a1 != 4) {
         println("FAIL: __alignof__(int) expected 4, got {a1}");
         return 1;
@@ -54,11 +54,11 @@ int main() {
         println("FAIL: __alignof__(Aligned) expected 4, got {a3}");
         return 1;
     }
-    
+
     // __typename__ テスト
     string t1 = __typename__(int);
     string t2 = __typename__(Point);
-    
+
     if (t1 != "int") {
         println("FAIL: __typename__(int) expected 'int', got '{t1}'");
         return 1;
@@ -67,7 +67,7 @@ int main() {
         println("FAIL: __typename__(Point) expected 'Point', got '{t2}'");
         return 1;
     }
-    
+
     println("All intrinsic tests passed!");
     return 0;
 }

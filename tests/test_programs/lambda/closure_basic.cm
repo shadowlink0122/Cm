@@ -3,12 +3,14 @@ import std::io::println;
 // クロージャ（変数キャプチャ）のテスト
 int main() {
     int multiplier = 3;
-    
+
     // 外部変数をキャプチャするラムダ
-    int*(int) multiply = (int x) => { return x * multiplier; };
-    
-    int result = multiply(5);  // 5 * 3 = 15
+    int*(int) multiply = (int x) => { return x * multiplier;
+    };
+
+    int result = multiply(5);
+    // 5 * 3 = 15
     println("result: {result}");
-    
+
     return 0;
 }

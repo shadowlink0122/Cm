@@ -58,10 +58,12 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             if (!type->array_size.has_value()) {
                 return ctx.getPtrType();
             }
-            // 静的配列の場合は配列型を返す
+
+            // Clang準拠: 多次元配列はネスト構造を保持
+            // int[D1][D2] → [D1 x [D2 x int]]
+            // これによりGEPで複数インデックスを使用でき、LLVMのベクトル化が効く
             auto elemType = convertType(type->element_type);
-            size_t size = type->array_size.value();
-            return llvm::ArrayType::get(elemType, size);
+            return llvm::ArrayType::get(elemType, type->array_size.value());
         }
         case hir::TypeKind::Struct: {
             // まずインターフェース型かチェック

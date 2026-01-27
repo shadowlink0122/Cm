@@ -11,20 +11,23 @@ bool is_even(int x) {
 
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
-    
+
     // mapテスト
     int[] mapped = arr.map(double_it);
     int map_len = mapped.len();
     if (map_len != 5) {
-        return 1;  // map失敗
+        return 1;
+        // map失敗
     }
-    
+
     // filterテスト
     int[] filtered = arr.filter(is_even);
     int filter_len = filtered.len();
     if (filter_len != 2) {
-        return 2;  // filter失敗
+        return 2;
+        // filter失敗
     }
-    
-    return 0;  // 成功
+
+    return 0;
+    // 成功
 }

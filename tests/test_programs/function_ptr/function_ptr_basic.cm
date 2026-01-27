@@ -12,15 +12,15 @@ int sub(int a, int b) {
 int main() {
     // 関数ポインタの宣言と初期化
     int*(int, int) op = &add;
-    
+
     // 関数ポインタ経由での呼び出し
     int result1 = op(3, 2);
     println("add(3, 2) = {result1}");
-    
+
     // 別の関数を代入
     op = &sub;
     int result2 = op(3, 2);
     println("sub(3, 2) = {result2}");
-    
+
     return 0;
 }

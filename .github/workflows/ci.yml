@@ -28,7 +28,7 @@ jobs:
             xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
 
   # ========================================
-  # Build - ビルドのみ (全プラットフォーム)
+  # Build - ビルド (Linux/macOS)
   # ========================================
   build:
     name: Build (${{ matrix.os }})

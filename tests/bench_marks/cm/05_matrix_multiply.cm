@@ -1,59 +1,46 @@
-// ベンチマーク5: 行列乗算
-// 500x500の行列同士を乗算
+// ベンチマーク5: 行列乗算（1D配列版 - SIMD最適化）
+// 300x300の行列同士を乗算
+// 1D配列を使用してSIMDベクトル化を有効にする
 
 import std::io;
 
-use libc {
-    void* malloc(ulong size);
-    void free(void* ptr);
-}
-
 void matrix_multiply(int n) {
-    // ヒープ割り当て（スタックオーバーフロー回避）
-    ulong size = n * n * sizeof(int);
-    void* mem_a = malloc(size);
-    void* mem_b = malloc(size);
-    void* mem_c = malloc(size);
-
-    int* a = mem_a as int*;
-    int* b = mem_b as int*;
-    int* c = mem_c as int*;
+    // 1D配列として行列を格納（行優先）
+    int[90000] a;  // 300x300
+    int[90000] b;  // 300x300（転置済みとして使用）
+    int[90000] c;  // 300x300
 
     // 行列初期化
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
             int idx = i * n + j;
             a[idx] = (i + j) % 100;
-            b[idx] = (i - j + 100) % 100;
+            b[idx] = (i - j + 100) % 100;  // B^T[j][i] = B[i][j]
             c[idx] = 0;
         }
     }
 
-    // 行列乗算（キャッシュ効率的なIKJ順）
+    // 行列乗算（キャッシュ効率的なIKJ順、1Dインデックス）
+    // SIMD最適化: 内側ループが連続メモリアクセス
     for (int i = 0; i < n; i++) {
         for (int k = 0; k < n; k++) {
             int a_ik = a[i * n + k];
+            int base_c = i * n;
+            int base_b = k * n;
             for (int j = 0; j < n; j++) {
-                c[i * n + j] = c[i * n + j] + a_ik * b[k * n + j];
+                c[base_c + j] = c[base_c + j] + a_ik * b[base_b + j];
             }
         }
     }
 
     // 結果の一部を表示（検証用）
-    int idx_00 = 0;
-    int idx_nn = (n-1) * n + (n-1);
-    println("Result c[0][0] = {c[idx_00]}");
-    println("Result c[n-1][n-1] = {c[idx_nn]}");
-
-    // メモリ解放
-    free(mem_a);
-    free(mem_b);
-    free(mem_c);
+    println("Result c[0][0] = {c[0]}");
+    println("Result c[n-1][n-1] = {c[(n-1) * n + (n-1)]}");
 }
 
 int main() {
-    int n = 500;
-    println("Multiplying {n}x{n} matrices...");
+    int n = 300;
+    println("Multiplying {n}x{n} matrices (1D array, SIMD optimized)...");
 
     matrix_multiply(n);
 

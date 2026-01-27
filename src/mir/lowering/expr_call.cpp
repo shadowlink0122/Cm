@@ -2474,6 +2474,31 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                 args.push_back(MirOperand::copy(MirPlace{arg_local}));
             }
         } else {
+            hir::TypePtr arg_type = arg->type;
+
+            // 固定サイズ配列の変数参照をポインタに自動変換（array decay）
+            // C言語セマンティクス: 配列を関数に渡すとポインタにdecayする
+            // 注意: スライス（動的配列、array_sizeなし）はすでに参照型なのでdecay不要
+            if (arg_type && arg_type->kind == hir::TypeKind::Array &&
+                arg_type->array_size.has_value()) {
+                // 変数参照の場合、アドレスを取得
+                if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
+                    const auto& var_ref = **var_ref_ptr;
+                    auto original_var_opt = ctx.resolve_variable(var_ref.name);
+                    if (original_var_opt) {
+                        LocalId original_var = *original_var_opt;
+                        // 配列の要素型へのポインタを作成
+                        hir::TypePtr elem_type =
+                            arg_type->element_type ? arg_type->element_type : hir::make_int();
+                        LocalId ref_temp = ctx.new_temp(hir::make_pointer(elem_type));
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{ref_temp}, MirRvalue::ref(MirPlace{original_var}, false)));
+                        args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                        continue;
+                    }
+                }
+            }
+
             LocalId arg_local = lower_expression(*arg, ctx);
             args.push_back(MirOperand::copy(MirPlace{arg_local}));
         }

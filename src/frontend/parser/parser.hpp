@@ -25,7 +25,7 @@ using DiagKind = Severity;
 // ============================================================
 class Parser {
    public:
-    Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)), pos_(0) {}
+    Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)), pos_(0), last_error_line_(0) {}
 
     // プログラム全体を解析
     ast::Program parse() {
@@ -320,7 +320,11 @@ class Parser {
         auto return_type = parse_type();
         // C++スタイルの配列戻り値型: int[] func(), int[3] func()
         return_type = check_array_suffix(std::move(return_type));
+
+        // 名前のスパンを記録（Lint警告用）
+        uint32_t name_start = current().start;
         std::string name = expect_ident();
+        uint32_t name_end = previous().end;
 
         // main関数はエクスポート不可
         if (is_export && name == "main") {
@@ -335,6 +339,9 @@ class Parser {
 
         auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
                                                         std::move(return_type), std::move(body));
+
+        // 名前のスパンを設定
+        func->name_span = Span{name_start, name_end};
 
         // ジェネリックパラメータを設定（明示的に指定された場合）
         if (!generic_params.empty()) {
@@ -396,7 +403,11 @@ class Parser {
         debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
 
         expect(TokenKind::KwStruct);
+
+        // 名前のスパンを記録（Lint警告用）
+        uint32_t name_start = current().start;
         std::string name = expect_ident();
+        uint32_t name_end = previous().end;
 
         // ジェネリックパラメータをチェック（例: struct Vec<T>）
         auto [generic_params, generic_params_v2] = parse_generic_params_v2();
@@ -485,6 +496,7 @@ class Parser {
         expect(TokenKind::RBrace);
 
         auto decl = std::make_unique<ast::StructDecl>(std::move(name), std::move(fields));
+        decl->name_span = Span{name_start, name_end};  // 名前のスパンを設定
         decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         decl->auto_impls = std::move(auto_impls);
         decl->attributes = std::move(attributes);
@@ -1442,6 +1454,15 @@ class Parser {
     }
 
     void error(const std::string& msg) {
+        // 同じ行で連続したエラーを抑制
+        uint32_t current_line =
+            current().start;  // Spanはバイトオフセットだが、行単位で簡易チェック
+        if (current_line == last_error_line_ && !diagnostics_.empty()) {
+            // 同じ位置での連続エラーを無視
+            return;
+        }
+        last_error_line_ = current_line;
+
         debug::par::log(debug::par::Id::Error, msg, debug::Level::Error);
         diagnostics_.emplace_back(DiagKind::Error, Span{current().start, current().end}, msg);
     }
@@ -1502,6 +1523,7 @@ class Parser {
     std::vector<Token> tokens_;
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
+    uint32_t last_error_line_ = 0;  // 連続エラー抑制用
 };
 
 }  // namespace cm

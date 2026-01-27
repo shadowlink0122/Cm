@@ -10,6 +10,6 @@ int main() {
     int product = multiply(3, 4);
     println("add(10,20) = {sum}");
     println("multiply(3,4) = {product}");
-    
+
     return 0;
 }

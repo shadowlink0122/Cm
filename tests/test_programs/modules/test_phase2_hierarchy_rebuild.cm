@@ -7,8 +7,10 @@ int main() {
     // 直接インポートした関数を使用
     int r = read(5);
     int s = open(50);
-    
-    println("Read: {r}");    // 50
-    println("Open: {s}");    // 150
+
+    println("Read: {r}");
+    // 50
+    println("Open: {s}");
+    // 150
     return 0;
 }

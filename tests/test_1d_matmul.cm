@@ -1,0 +1,27 @@
+import std::io;
+int main() {
+    int[90000] a;  // 300*300 as 1D
+    int[90000] b;
+    int[90000] c;
+    int n = 300;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            int idx = i * n + j;
+            a[idx] = 1;
+            b[idx] = 1;
+            c[idx] = 0;
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        for (int k = 0; k < n; k++) {
+            int a_ik = a[i * n + k];
+            for (int j = 0; j < n; j++) {
+                int c_idx = i * n + j;
+                int b_idx = k * n + j;
+                c[c_idx] = c[c_idx] + a_ik * b[b_idx];
+            }
+        }
+    }
+    println("done {c[0]}");
+    return 0;
+}

@@ -24,8 +24,7 @@ endif()
 
 # LLVM Configuration
 if(CM_USE_LLVM)
-    # Find LLVM (try versions from newest to oldest, suppress warnings with QUIET)
-    # Support LLVM 14-18 for compatibility
+    # Try to find LLVM using CMake config files
     find_package(LLVM 18 CONFIG QUIET)
     if(NOT LLVM_FOUND)
         find_package(LLVM 17 CONFIG QUIET)
@@ -40,66 +39,48 @@ if(CM_USE_LLVM)
         find_package(LLVM 14 CONFIG QUIET)
     endif()
     if(NOT LLVM_FOUND)
-        # Final attempt without version requirement
-        find_package(LLVM CONFIG REQUIRED)
+        find_package(LLVM CONFIG QUIET)
     endif()
 
-    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-    message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+    if(LLVM_FOUND)
+        # Standard CMake-based LLVM configuration
+        message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+        message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-    # LLVM definitions
-    add_compile_definitions(CM_LLVM_ENABLED)
-    add_compile_definitions(${LLVM_DEFINITIONS})
+        add_compile_definitions(CM_LLVM_ENABLED)
+        add_compile_definitions(${LLVM_DEFINITIONS})
+        include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-    # LLVM include directories (SYSTEM to suppress warnings from LLVM headers)
-    include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+        llvm_map_components_to_libnames(llvm_libs
+            Core Support IRReader Passes CodeGen MC MCParser MCJIT OrcJIT ExecutionEngine Target
+            X86CodeGen X86AsmParser X86Desc X86Info
+            AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+            WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
+        )
 
-    # Find the libraries that correspond to the LLVM components we need
-    llvm_map_components_to_libnames(llvm_libs
-        Core
-        Support
-        IRReader
-        Passes
-        CodeGen
-        MC
-        MCParser
-        MCJIT
-        OrcJIT
-        ExecutionEngine
-        Target
+        add_library(cm_llvm_backend INTERFACE)
+        target_include_directories(cm_llvm_backend INTERFACE
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
+            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
+        )
 
-        # Target architectures (add as needed)
-        X86CodeGen X86AsmParser X86Desc X86Info
-        AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
-        WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
-    )
+        if(CM_LLVM_STATIC)
+            target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
+        else()
+            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
+            get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
+            message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
+            set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
+            set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
+            set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+        endif()
 
-    # Create LLVM backend library
-    add_library(cm_llvm_backend INTERFACE)
-    target_include_directories(cm_llvm_backend INTERFACE
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
-        ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
-    )
+        message(STATUS "LLVM backend enabled (CMake config)")
 
-    if(CM_LLVM_STATIC)
-        target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
     else()
-        # Dynamic linking
-        target_link_libraries(cm_llvm_backend INTERFACE LLVM)
-        
-        # Set RPATH to find LLVM shared libraries at runtime
-        # This is crucial for finding libLLVM-*.so on Linux
-        get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
-        message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
-        
-        # Add RPATH settings
-        set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
-        set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
-        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+        message(FATAL_ERROR "LLVM not found. Please install LLVM development packages.")
     endif()
-
-    message(STATUS "LLVM backend enabled")
 else()
     message(STATUS "LLVM backend disabled")
 endif()
@@ -165,6 +146,8 @@ set(CM_SOURCES
     src/frontend/types/checking/utils.cpp
     src/preprocessor/import.cpp
     src/module/resolver.cpp
+    # Lint configuration
+    src/lint/config.cpp
     # HIR lowering (AST -> HIR)
     src/hir/lowering/impl.cpp
     src/hir/lowering/decl.cpp
@@ -186,6 +169,14 @@ set(CM_SOURCES
     src/mir/lowering/auto_impl/ord.cpp
     src/mir/lowering/auto_impl/clone_hash.cpp
     src/mir/lowering/auto_impl/debug_display_css.cpp
+)
+
+# JavaScript backend (LLVMに依存しない)
+list(APPEND CM_SOURCES
+    src/codegen/js/codegen.cpp
+    src/codegen/js/control_flow.cpp
+    src/codegen/js/emit_statements.cpp
+    src/codegen/js/emit_expressions.cpp
 )
 
 # Add LLVM sources if enabled
@@ -213,11 +204,6 @@ if(CM_USE_LLVM)
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp
-        # JavaScript backend
-        src/codegen/js/codegen.cpp
-        src/codegen/js/control_flow.cpp
-        src/codegen/js/emit_statements.cpp
-        src/codegen/js/emit_expressions.cpp
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
     )

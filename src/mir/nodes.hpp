@@ -454,6 +454,9 @@ struct MirTerminator {
         std::string interface_name;  // インターフェース名（空なら通常の関数呼び出し）
         std::string method_name;  // メソッド名
         bool is_virtual = false;  // vtable経由の呼び出しか
+
+        // 末尾呼び出し最適化（LLVM tail call attribute）
+        bool is_tail_call = false;  // 末尾位置の自己呼び出し
     };
 
     std::variant<std::monostate,  // Return, Unreachable

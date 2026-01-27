@@ -9,7 +9,7 @@ impl Item {
         self.id = i;
         println("C{self.id}");
     }
-    
+
     ~self() {
         println("D{self.id}");
     }

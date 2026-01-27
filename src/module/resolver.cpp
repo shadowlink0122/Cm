@@ -18,6 +18,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace cm::module {
 
 // 実行ファイルのディレクトリを取得するヘルパー関数

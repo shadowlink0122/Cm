@@ -582,6 +582,19 @@ run-debug:
 	@$(CM) run $(FILE) --debug
 
 # ========================================
+# Linter Test Commands
+# ========================================
+
+.PHONY: test-lint
+test-lint:
+	@echo "Running Linter tests..."
+	@chmod +x tests/linter/scripts/run_tests.sh
+	@tests/linter/scripts/run_tests.sh
+
+.PHONY: tli
+tli: test-lint
+
+# ========================================
 # Development Commands
 # ========================================
 

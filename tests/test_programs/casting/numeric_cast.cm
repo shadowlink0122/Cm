@@ -2,7 +2,7 @@
 
 int main() {
     print("=== Numeric Cast Test ===\n");
-    
+
     // Test 1: float -> int
     float f = 3.14;
     int i = f as int;
@@ -11,7 +11,7 @@ int main() {
     } else {
         print("  float -> int: FAIL\n");
     }
-    
+
     // Test 2: int -> double
     int j = 42;
     double d = j as double;
@@ -20,7 +20,7 @@ int main() {
     } else {
         print("  int -> double: FAIL\n");
     }
-    
+
     // Test 3: double -> float
     double d2 = 1.23456789;
     float f2 = d2 as float;
@@ -29,7 +29,7 @@ int main() {
     } else {
         print("  double -> float: FAIL\n");
     }
-    
+
     // Test 4: 多重キャスト
     int k = 100;
     char c = k as char;
@@ -39,7 +39,7 @@ int main() {
     } else {
         print("  int -> char -> int: FAIL\n");
     }
-    
+
     print("\nAll numeric cast tests completed!\n");
     return 0;
 }

@@ -1,0 +1,15 @@
+// Minimal test for LLVM IR inspection
+import std::io;
+
+void set_by_index(int* ptr) {
+    ptr[0] = 888;
+}
+
+int main() {
+    int[1] arr = [123];
+    
+    set_by_index(arr);
+    println("After: {arr[0]}");
+    
+    return 0;
+}

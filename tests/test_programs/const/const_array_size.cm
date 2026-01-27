@@ -1,0 +1,25 @@
+// const強化テスト: シンプルな配列サイズ確認
+
+const int SIZE = 10;
+const int DOUBLE_SIZE = SIZE * 2;
+
+int main() {
+    // const変数を配列サイズとして使用
+    int[SIZE] arr1;           // int[10]
+    int[DOUBLE_SIZE] arr2;    // int[20]
+    
+    // サイズを確認
+    println(arr1.size());   // 10
+    println(arr2.size());   // 20
+    
+    // 初期化のテスト
+    arr1[0] = 100;
+    arr1[5] = 500;
+    arr1[9] = 900;
+    
+    println(arr1[0]);   // 100
+    println(arr1[5]);   // 500
+    println(arr1[9]);   // 900
+    
+    return 0;
+}

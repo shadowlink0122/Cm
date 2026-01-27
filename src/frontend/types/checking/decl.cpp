@@ -175,6 +175,17 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         }
         scopes_.global().define_function(func->name, std::move(param_types), func->return_type,
                                          required_params);
+
+        // L100: 関数名はsnake_caseであるべき
+        // main関数とネームスペース付き関数は除外
+        if (enable_lint_warnings_ && func->name != "main" &&
+            func->name.find("::") == std::string::npos) {
+            if (!is_snake_case(func->name)) {
+                // name_spanが設定されていればそれを使用、なければdecl.span
+                Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
+                warning(name_pos, "Function name '" + func->name + "' should be snake_case [L100]");
+            }
+        }
     } else if (auto* st = decl.as<ast::StructDecl>()) {
         if (!st->generic_params.empty()) {
             generic_structs_[st->name] = st->generic_params;
@@ -186,6 +197,13 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
         scopes_.global().define(st->name, ast::make_named(st->name));
         register_struct(st->name, *st);
+
+        // L103: 型名はPascalCaseであるべき
+        if (enable_lint_warnings_ && !is_pascal_case(st->name)) {
+            // name_spanが設定されていればそれを使用、なければdecl.span
+            Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
+            warning(name_pos, "Type name '" + st->name + "' should be PascalCase [L103]");
+        }
 
         for (const auto& iface_name : st->auto_impls) {
             register_auto_impl(*st, iface_name);
@@ -213,6 +231,38 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         register_typedef(*td);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
         register_impl(*impl);
+    } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
+        // グローバル変数/定数の登録（const強化）
+        current_span_ = decl.span;
+        std::optional<int64_t> const_int_value = std::nullopt;
+
+        // const変数の値を評価
+        if (gv->is_const && gv->init_expr) {
+            const_int_value = evaluate_const_expr(*gv->init_expr);
+            if (const_int_value) {
+                debug::tc::log(
+                    debug::tc::Id::TypeInfer,
+                    "Global const: " + gv->name + " = " + std::to_string(*const_int_value),
+                    debug::Level::Debug);
+            }
+        }
+
+        // 初期化式の型チェック
+        ast::TypePtr init_type;
+        if (gv->init_expr) {
+            init_type = infer_type(*gv->init_expr);
+        }
+
+        // 型を決定
+        ast::TypePtr var_type = gv->type ? resolve_typedef(gv->type) : init_type;
+        if (var_type) {
+            scopes_.global().define(gv->name, var_type, gv->is_const, false, decl.span,
+                                    const_int_value);
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "Global " + std::string(gv->is_const ? "const" : "var") + ": " +
+                               gv->name + " : " + ast::type_to_string(*var_type),
+                           debug::Level::Debug);
+        }
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         for (const auto& func : extern_block->declarations) {
             std::vector<ast::TypePtr> param_types;
@@ -505,8 +555,14 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
         check_statement(*stmt);
     }
 
-    // 関数終了時にconst推奨警告をチェック
-    check_const_recommendations();
+    // Lint警告が有効な場合のみチェック
+    if (enable_lint_warnings_) {
+        // 関数終了時にconst推奨警告をチェック
+        check_const_recommendations();
+
+        // 未使用変数チェック (W001)
+        check_unused_variables();
+    }
 
     // 初期化追跡をクリア（次の関数用）
     initialized_variables_.clear();

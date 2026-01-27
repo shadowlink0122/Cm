@@ -1,0 +1,26 @@
+// Test: Simple pointer write through function parameter
+import std::io;
+
+void set_first(int* ptr) {
+    *ptr = 999;  // Explicit dereference
+}
+
+void set_by_index(int* ptr) {
+    ptr[0] = 888;  // Index access
+}
+
+int main() {
+    int x = 42;
+    println("Before: {x}");
+    
+    set_first(&x);
+    println("After set_first: {x}");
+    
+    int[1] arr = [123];
+    println("Before set_by_index: {arr[0]}");
+    
+    set_by_index(arr);
+    println("After set_by_index: {arr[0]}");
+    
+    return 0;
+}

@@ -4,12 +4,14 @@ import std::io::println;
 int main() {
     int a = 10;
     int b = 20;
-    
+
     // 2つの外部変数をキャプチャ
-    int*(int) adder = (int x) => { return x + a + b; };
-    
-    int result = adder(5);  // 5 + 10 + 20 = 35
+    int*(int) adder = (int x) => { return x + a + b;
+    };
+
+    int result = adder(5);
+    // 5 + 10 + 20 = 35
     println("result: {result}");
-    
+
     return 0;
 }

@@ -1,0 +1,63 @@
+// Struct with multi-dimensional array field test
+import std::io;
+
+struct Matrix {
+    int[3][3] data;
+    int rows;
+    int cols;
+}
+
+struct Container {
+    int[2][2][2] cube;  // 3D array field
+    int id;
+}
+
+int main() {
+    // 構造体内の2D配列フィールド
+    Matrix m;
+    m.rows = 3;
+    m.cols = 3;
+    
+    // 2D配列フィールドを初期化
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            m.data[i][j] = i * 3 + j;
+        }
+    }
+    
+    println("Matrix 3x3:");
+    println("[{m.data[0][0]}, {m.data[0][1]}, {m.data[0][2]}]");
+    println("[{m.data[1][0]}, {m.data[1][1]}, {m.data[1][2]}]");
+    println("[{m.data[2][0]}, {m.data[2][1]}, {m.data[2][2]}]");
+    
+    // 合計を計算
+    int sum = 0;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            sum = sum + m.data[i][j];
+        }
+    }
+    // Expected: 0+1+2+3+4+5+6+7+8 = 36
+    println("Sum: {sum}");
+    println("Expected: 36");
+    
+    // 3D配列フィールドを持つ構造体
+    Container c;
+    c.id = 42;
+    
+    // 3D配列フィールドを初期化
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            for (int k = 0; k < 2; k++) {
+                c.cube[i][j][k] = i * 4 + j * 2 + k;
+            }
+        }
+    }
+    
+    println("Container cube values:");
+    println("c.cube[0][0][0] = {c.cube[0][0][0]}");  // 0
+    println("c.cube[1][1][1] = {c.cube[1][1][1]}");  // 7
+    println("c.id = {c.id}");  // 42
+    
+    return 0;
+}

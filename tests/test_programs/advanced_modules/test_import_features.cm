@@ -8,7 +8,8 @@ import ./math as M;
 import ./math::{ Vector3, dot };
 
 // 3. 相対パスインポート
-import ./math/constants;  // 直接内部ファイルにアクセス（テスト用）
+import ./math/constants;
+// 直接内部ファイルにアクセス（テスト用）
 
 int main() {
     // エイリアス経由でアクセス

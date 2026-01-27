@@ -1,0 +1,34 @@
+import std::io;
+
+int main() {
+    // 1D 配列として行列を保存（行優先）
+    int[90000] a;  // 300x300
+    int[90000] b;  // 300x300 転置済み
+    int[90000] c;  // 300x300
+    
+    // 初期化
+    for (int i = 0; i < 90000; i++) {
+        a[i] = 1;
+        b[i] = 1;  // 転置済みとして扱う
+        c[i] = 0;
+    }
+    
+    // 最適化された行列乗算（1D配列、転置済みB）
+    // C[i,j] = sum_k A[i,k] * B^T[j,k]
+    // A[i,k] → a[i*300 + k] (連続アクセス for k)
+    // B^T[j,k] → b[j*300 + k] (連続アクセス for k)
+    for (int i = 0; i < 300; i++) {
+        for (int j = 0; j < 300; j++) {
+            int sum = 0;
+            int a_base = i * 300;
+            int b_base = j * 300;
+            for (int k = 0; k < 300; k++) {
+                sum = sum + a[a_base + k] * b[b_base + k];
+            }
+            c[i * 300 + j] = sum;
+        }
+    }
+    
+    println("done {c[0]}");
+    return 0;
+}

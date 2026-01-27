@@ -36,14 +36,14 @@ impl IntContainer {
 int main() {
     // IntContainerでテスト
     IntContainer c = IntContainer(42);
-    
+
     int val = c.get();
     println("value: {val}");
-    
+
     c.increment();
     c.increment();
     int cnt = c.get_count();
     println("count: {cnt}");
-    
+
     return 0;
 }

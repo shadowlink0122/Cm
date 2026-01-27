@@ -4,7 +4,7 @@ import std::fs::{write_file, exists, remove};
 
 int main() {
     string path = "/tmp/cm_simple_test.txt";
-    
+
     // 書き込みのみテスト
     bool ok = write_file(path, "test");
     if (ok) {
@@ -12,13 +12,13 @@ int main() {
     } else {
         println("write: FAILED");
     }
-    
+
     // 存在確認
     bool ex = exists(path);
     if (ex) {
         println("exists: OK");
         remove(path);
     }
-    
+
     return 0;
 }

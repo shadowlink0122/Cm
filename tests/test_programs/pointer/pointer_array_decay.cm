@@ -8,17 +8,17 @@ int main() {
     arr[2] = 30;
     arr[3] = 40;
     arr[4] = 50;
-    
+
     // 配列をポインタに暗黙変換
     int* p = arr;
-    
+
     int v0 = *p;
     println("*p (arr[0]) = {v0}");
-    
+
     // ポインタ経由で配列要素を変更
     *p = 100;
     int arr0 = arr[0];
     println("arr[0] after *p = 100: {arr0}");
-    
+
     return 0;
 }

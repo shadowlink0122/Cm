@@ -5,10 +5,13 @@ import ./selective_import/math::{add, multiply};
 
 int main() {
     // インポートした関数は直接呼び出せる（名前空間不要）
-    int sum = add(10, 20);      // 30
-    int prod = multiply(3, 4);  // 12
-    int total = add(sum, prod); // 42
-    
+    int sum = add(10, 20);
+    // 30
+    int prod = multiply(3, 4);
+    // 12
+    int total = add(sum, prod);
+    // 42
+
     println("Sum: {sum}");
     println("Product: {prod}");
     println("Total: {total}");

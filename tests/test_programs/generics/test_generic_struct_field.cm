@@ -30,22 +30,22 @@ struct Node<T> {
 
 int main() {
     println("=== Generic Struct Field Test ===");
-    
+
     // Node<Item> を作成
     void* mem = malloc(sizeof(Node<Item>));
     Node<Item>* node = mem as Node<Item>*;
-    
+
     // Item構造体を作成してセット
     Item item = {value: 42};
     set_data(node, item);
-    
+
     // 読み取り
     Item got = get_data(node);
     int v = got.value;
     println("got.value = {v}");
-    
+
     free(node as void*);
-    
+
     println("=== Done ===");
     return 0;
 }

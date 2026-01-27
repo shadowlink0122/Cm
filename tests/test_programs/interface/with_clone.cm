@@ -9,20 +9,20 @@ int main() {
     Point p1;
     p1.x = 10;
     p1.y = 20;
-    
+
     // cloneメソッドを呼び出す
     Point p2 = p1.clone();
-    
+
     println("p1.x = {p1.x}");
     println("p1.y = {p1.y}");
     println("p2.x = {p2.x}");
     println("p2.y = {p2.y}");
-    
+
     // p1を変更してもp2は影響を受けない
     p1.x = 100;
     println("After p1.x = 100:");
     println("p1.x = {p1.x}");
     println("p2.x = {p2.x}");
-    
+
     return 0;
 }
