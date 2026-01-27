@@ -69,25 +69,12 @@ jobs:
           echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
-      # LLVM インストール (Windows) - プリビルド版インストーラー
-      - name: Install LLVM (Windows)
+      # Windows: LLVMプリビルド版には開発用ヘッダー/ライブラリがないためスキップ
+      - name: Skip LLVM (Windows)
         if: runner.os == 'Windows'
         run: |
-          $llvmVersion = "17.0.6"
-          $llvmUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/LLVM-$llvmVersion-win64.exe"
-          $installer = "$env:TEMP\LLVM-$llvmVersion-win64.exe"
-          
-          Write-Host "Downloading LLVM $llvmVersion..."
-          Invoke-WebRequest -Uri $llvmUrl -OutFile $installer -UseBasicParsing
-          
-          Write-Host "Installing LLVM..."
-          Start-Process -FilePath $installer -ArgumentList "/S" -Wait
-          
-          $llvmPath = "C:\Program Files\LLVM"
-          Write-Host "LLVM installed at: $llvmPath"
-          Get-ChildItem "$llvmPath\lib" -Filter "*.lib" | Select-Object -First 5 | ForEach-Object { Write-Host "  - $($_.Name)" }
-          
-          echo "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "LLVM is disabled on Windows (prebuilt installer lacks development headers)"
+          Write-Host "Windows build will use CM_USE_LLVM=OFF"
       
       # Google Test インストール (Ubuntu)
       - name: Install Google Test (Ubuntu)
@@ -115,11 +102,11 @@ jobs:
             -DCM_USE_LLVM=ON \
             -DBUILD_TESTING=ON
       
-      # ビルド (Windows)
+      # ビルド (Windows) - LLVM無効
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
+          cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=OFF -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
       
       - name: Build (Unix)
         if: runner.os != 'Windows'
