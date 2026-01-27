@@ -28,50 +28,57 @@ jobs:
             xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
 
   # ========================================
-  # Build - ビルドのみ (全プラットフォーム)
+  # Build - Linux/macOS (Nix)
   # ========================================
-  build:
+  build-unix:
     name: Build (${{ matrix.os }})
     needs: lint
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            llvm_version: "17"
-          - os: macos-latest
-            llvm_version: "17"
-          - os: windows-latest
-            llvm_version: "17"
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v4
       
-      # LLVM インストール (Ubuntu)
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }}
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-24.05
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
-      # LLVM インストール (macOS)
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
+      - name: Build with Nix
         run: |
-          brew install llvm@${{ matrix.llvm_version }}
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
-          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+          nix develop --command bash -c '
+            echo "=== Nix Environment ==="
+            echo "LLVM: $(llvm-config --version)"
+            echo "Clang: $(clang --version | head -1)"
+            
+            cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON
+            cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+          '
       
-      # LLVM インストール (Windows) - プリビルド版インストーラー
+      - name: Verify build
+        run: |
+          echo "=== Build Verification ==="
+          ls -la build/bin/ || echo "No bin directory"
+          ./cm --version || echo "cm not found in root"
+          echo "✅ Build completed successfully"
+  
+  # ========================================
+  # Build - Windows (Native MSVC + LLVM)
+  # ========================================
+  build-windows:
+    name: Build (windows-latest)
+    needs: lint
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
       - name: Install LLVM (Windows)
-        if: runner.os == 'Windows'
         run: |
           $llvmVersion = "17.0.6"
           $llvmUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/LLVM-$llvmVersion-win64.exe"
@@ -89,56 +96,19 @@ jobs:
           
           echo "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
-      # Google Test インストール (Ubuntu)
-      - name: Install Google Test (Ubuntu)
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y libgtest-dev
-      
-      # Google Test インストール (macOS)
-      - name: Install Google Test (macOS)
-        if: runner.os == 'macOS'
-        run: brew install googletest
-      
-      # Google Test インストール (Windows)
       - name: Install Google Test (Windows)
-        if: runner.os == 'Windows'
         run: |
           vcpkg install gtest:x64-windows
           echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       
-      # ビルド (Unix)
-      - name: Configure CMake (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DCM_USE_LLVM=ON \
-            -DBUILD_TESTING=ON
-      
-      # ビルド (Windows)
       - name: Configure CMake (Windows)
-        if: runner.os == 'Windows'
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
       
-      - name: Build (Unix)
-        if: runner.os != 'Windows'
-        run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-      
       - name: Build (Windows)
-        if: runner.os == 'Windows'
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $env:NUMBER_OF_PROCESSORS
       
-      - name: Verify build (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          echo "=== Build Verification ==="
-          ls -la build/bin/ || echo "No bin directory"
-          ./cm --version || echo "cm not found in root"
-          echo "✅ Build completed successfully"
-      
       - name: Verify build (Windows)
-        if: runner.os == 'Windows'
         run: |
           Write-Host "=== Build Verification ==="
           Get-ChildItem build -Recurse -Filter "cm.exe" | Select-Object FullName

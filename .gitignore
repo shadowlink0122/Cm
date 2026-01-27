@@ -85,3 +85,8 @@ tests/bench_marks/python/*.pyc
 cpp_results.txt
 rust_results.txt
 python_results.txt
+
+# Nix
+result
+result-*
+.direnv/
