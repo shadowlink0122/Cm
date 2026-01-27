@@ -190,6 +190,14 @@ set(CM_SOURCES
     src/mir/lowering/auto_impl/debug_display_css.cpp
 )
 
+# JavaScript backend (LLVMに依存しない)
+list(APPEND CM_SOURCES
+    src/codegen/js/codegen.cpp
+    src/codegen/js/control_flow.cpp
+    src/codegen/js/emit_statements.cpp
+    src/codegen/js/emit_expressions.cpp
+)
+
 # Add LLVM sources if enabled
 if(CM_USE_LLVM)
     list(APPEND CM_SOURCES
@@ -215,11 +223,6 @@ if(CM_USE_LLVM)
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp
-        # JavaScript backend
-        src/codegen/js/codegen.cpp
-        src/codegen/js/control_flow.cpp
-        src/codegen/js/emit_statements.cpp
-        src/codegen/js/emit_expressions.cpp
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
     )
