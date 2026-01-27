@@ -21,8 +21,6 @@ jobs:
             llvm_version: "17"
           - os: macos-latest
             llvm_version: "17"
-          - os: windows-latest
-            llvm_version: "17"
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -45,12 +43,6 @@ jobs:
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
           echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
       
-      # Windows: LLVMプリビルド版には開発用ヘッダー/ライブラリがないためスキップ
-      - name: Skip LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Write-Host "LLVM is disabled on Windows (prebuilt installer lacks development headers)"
-      
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y libgtest-dev
@@ -59,27 +51,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install googletest
       
-      - name: Install Google Test (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          vcpkg install gtest:x64-windows
-          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      
-      - name: Configure CMake (Unix)
-        if: runner.os != 'Windows'
+      - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=ON -DBUILD_TESTING=ON
       
-      - name: Configure CMake (Windows)
-        if: runner.os == 'Windows'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCM_USE_LLVM=OFF -DBUILD_TESTING=ON -G "Visual Studio 17 2022" -A x64
-      
-      - name: Build (Unix)
-        if: runner.os != 'Windows'
+      - name: Build
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-      
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $env:NUMBER_OF_PROCESSORS
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -88,9 +64,7 @@ jobs:
           path: |
             build/bin/
             build/lib/
-            build/${{ env.BUILD_TYPE }}/
             cm
-            cm.exe
           retention-days: 1
 
   llvm-native-o0:
@@ -99,7 +73,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
             llvm_version: "17"
@@ -137,7 +110,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
             llvm_version: "17"
@@ -168,106 +140,3 @@ jobs:
       
       - name: Run LLVM Native Tests (O3)
         run: make tlp3
-
-  # ========================================
-  # Windows テスト (LLVM無効、JS生成テスト)
-  # ========================================
-  windows-tests:
-    name: Windows Tests (No LLVM)
-    needs: build
-    runs-on: windows-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/download-artifact@v4
-        with:
-          name: cm-native-build-windows-latest
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Verify cm executable
-        run: |
-          if (Test-Path "cm.exe") {
-            Write-Host "✅ cm.exe found in root"
-          } elseif (Test-Path "build/Debug/cm.exe") {
-            Copy-Item "build/Debug/cm.exe" "cm.exe"
-            Write-Host "✅ Copied cm.exe from build/Debug"
-          } elseif (Test-Path "build/Release/cm.exe") {
-            Copy-Item "build/Release/cm.exe" "cm.exe"
-            Write-Host "✅ Copied cm.exe from build/Release"
-          } elseif (Test-Path "build/bin/Debug/cm.exe") {
-            Copy-Item "build/bin/Debug/cm.exe" "cm.exe"
-            Write-Host "✅ Copied cm.exe from build/bin/Debug"
-          } else {
-            Write-Host "❌ cm.exe not found"
-            Get-ChildItem -Recurse -Filter "cm.exe" | Select-Object FullName
-            exit 1
-          }
-          .\cm.exe --version
-      
-      - name: Run Check Tests
-        run: |
-          Write-Host "=== Running Check Tests ==="
-          $testFiles = Get-ChildItem -Path "tests/test_programs" -Filter "*.cm" -Recurse | Select-Object -First 10
-          $passed = 0
-          $failed = 0
-          foreach ($file in $testFiles) {
-            Write-Host "Checking: $($file.Name)"
-            try {
-              .\cm.exe check $file.FullName 2>&1
-              if ($LASTEXITCODE -eq 0) {
-                $passed++
-                Write-Host "  ✅ Check passed"
-              } else {
-                $failed++
-                Write-Host "  ⚠️ Check had issues (exit code: $LASTEXITCODE)"
-              }
-            } catch {
-              $failed++
-              Write-Host "  ❌ ERROR: $_"
-            }
-          }
-          Write-Host ""
-          Write-Host "=== Check Summary ==="
-          Write-Host "Passed: $passed"
-          Write-Host "Failed: $failed"
-      
-      - name: Run JavaScript Generation Tests
-        run: |
-          Write-Host "=== Running JavaScript Generation Tests ==="
-          $testFiles = Get-ChildItem -Path "tests/test_programs" -Filter "*.cm" -Recurse | Select-Object -First 5
-          $passed = 0
-          $failed = 0
-          foreach ($file in $testFiles) {
-            $outFile = [System.IO.Path]::GetFileNameWithoutExtension($file.Name) + ".js"
-            Write-Host "Compiling to JS: $($file.Name)"
-            try {
-              .\cm.exe compile --target=js $file.FullName -o $outFile 2>&1
-              if ($LASTEXITCODE -eq 0 -and (Test-Path $outFile)) {
-                $passed++
-                Write-Host "  ✅ JS generated successfully"
-                # 実行テスト（Node.js）
-                try {
-                  $output = node $outFile 2>&1
-                  Write-Host "  ✅ Executed: $output"
-                } catch {
-                  Write-Host "  ⚠️ Execution skipped: $_"
-                }
-                Remove-Item $outFile -ErrorAction SilentlyContinue
-              } else {
-                $failed++
-                Write-Host "  ❌ JS generation failed"
-              }
-            } catch {
-              $failed++
-              Write-Host "  ❌ ERROR: $_"
-            }
-          }
-          Write-Host ""
-          Write-Host "=== JS Generation Summary ==="
-          Write-Host "Passed: $passed"
-          Write-Host "Failed: $failed"

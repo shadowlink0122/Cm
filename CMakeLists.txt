@@ -78,63 +78,6 @@ if(CM_USE_LLVM)
 
         message(STATUS "LLVM backend enabled (CMake config)")
 
-    elseif(WIN32)
-        # Windows: Manual LLVM configuration without CMake files
-        message(STATUS "LLVMConfig.cmake not found, trying manual configuration...")
-        
-        # Check common LLVM installation paths on Windows
-        set(LLVM_SEARCH_PATHS
-            "C:/Program Files/LLVM"
-            "$ENV{ProgramFiles}/LLVM"
-            "$ENV{LLVM_PATH}"
-        )
-        
-        foreach(LLVM_SEARCH_PATH ${LLVM_SEARCH_PATHS})
-            if(EXISTS "${LLVM_SEARCH_PATH}/include/llvm/IR/LLVMContext.h")
-                set(LLVM_ROOT "${LLVM_SEARCH_PATH}")
-                break()
-            endif()
-        endforeach()
-        
-        if(NOT LLVM_ROOT)
-            message(FATAL_ERROR "LLVM not found. Please install LLVM or set LLVM_PATH environment variable.")
-        endif()
-        
-        message(STATUS "Found LLVM at: ${LLVM_ROOT}")
-        
-        set(LLVM_INCLUDE_DIRS "${LLVM_ROOT}/include")
-        set(LLVM_LIBRARY_DIRS "${LLVM_ROOT}/lib")
-        set(LLVM_BIN_DIRS "${LLVM_ROOT}/bin")
-        
-        add_compile_definitions(CM_LLVM_ENABLED)
-        include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
-        link_directories(${LLVM_LIBRARY_DIRS})
-        
-        # Windows LLVM uses LLVM-C.lib for C API or individual .lib files
-        # The prebuilt LLVM installer typically provides LLVM-C.lib
-        set(llvm_libs
-            "${LLVM_LIBRARY_DIRS}/LLVM-C.lib"
-        )
-        
-        # Check if LLVM-C.lib exists, otherwise try to find individual libs
-        if(NOT EXISTS "${LLVM_LIBRARY_DIRS}/LLVM-C.lib")
-            file(GLOB llvm_libs "${LLVM_LIBRARY_DIRS}/LLVM*.lib")
-            if(NOT llvm_libs)
-                message(FATAL_ERROR "No LLVM libraries found in ${LLVM_LIBRARY_DIRS}")
-            endif()
-        endif()
-        
-        message(STATUS "LLVM libraries: ${llvm_libs}")
-        
-        add_library(cm_llvm_backend INTERFACE)
-        target_include_directories(cm_llvm_backend INTERFACE
-            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/core
-            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native
-            ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
-        )
-        target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
-        
-        message(STATUS "LLVM backend enabled (manual configuration)")
     else()
         message(FATAL_ERROR "LLVM not found. Please install LLVM development packages.")
     endif()
