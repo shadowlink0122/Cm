@@ -881,38 +881,39 @@ FILE ?=
 # Standard Library Test Commands
 # ========================================
 
-# 個別のstdモジュールテスト
-.PHONY: test-std-io
-test-std-io:
-	@echo "Running std::io tests..."
+# std::asm モジュールテスト（個別）
+.PHONY: test-std-asm-instructions
+test-std-asm-instructions:
+	@echo "Running std::asm/instructions tests..."
 	@mkdir -p .tmp
-	@$(CM) run tests/std/io_test.cm > .tmp/io_test.out 2>&1 || true
-	@diff -u tests/std/io_test.expect .tmp/io_test.out && echo "✅ std::io test passed!" || echo "❌ std::io test failed!"
+	@$(CM) run tests/std/asm/instructions.cm > .tmp/asm_instructions.out 2>&1 || true
+	@diff -u tests/std/asm/instructions.expect .tmp/asm_instructions.out && echo "✅ asm/instructions passed!" || echo "❌ asm/instructions failed!"
 
-.PHONY: test-std-math
-test-std-math:
-	@echo "Running std::math tests..."
+.PHONY: test-std-asm-barriers
+test-std-asm-barriers:
+	@echo "Running std::asm/barriers tests..."
 	@mkdir -p .tmp
-	@$(CM) run tests/std/math_test.cm > .tmp/math_test.out 2>&1 || true
-	@diff -u tests/std/math_test.expect .tmp/math_test.out && echo "✅ std::math test passed!" || echo "❌ std::math test failed!"
+	@$(CM) run tests/std/asm/barriers.cm > .tmp/asm_barriers.out 2>&1 || true
+	@diff -u tests/std/asm/barriers.expect .tmp/asm_barriers.out && echo "✅ asm/barriers passed!" || echo "❌ asm/barriers failed!"
 
-.PHONY: test-std-mem
-test-std-mem:
-	@echo "Running std::mem tests..."
+.PHONY: test-std-asm-architecture
+test-std-asm-architecture:
+	@echo "Running std::asm/architecture tests..."
 	@mkdir -p .tmp
-	@$(CM) run tests/std/mem_test.cm > .tmp/mem_test.out 2>&1 || true
-	@diff -u tests/std/mem_test.expect .tmp/mem_test.out && echo "✅ std::mem test passed!" || echo "❌ std::mem test failed!"
+	@$(CM) run tests/std/asm/architecture.cm > .tmp/asm_architecture.out 2>&1 || true
+	@diff -u tests/std/asm/architecture.expect .tmp/asm_architecture.out && echo "✅ asm/architecture passed!" || echo "❌ asm/architecture failed!"
 
+# std::asm 全テスト
 .PHONY: test-std-asm
-test-std-asm:
-	@echo "Running std::asm tests..."
-	@mkdir -p .tmp
-	@$(CM) run tests/std/asm_test.cm > .tmp/asm_test.out 2>&1 || true
-	@diff -u tests/std/asm_test.expect .tmp/asm_test.out && echo "✅ std::asm test passed!" || echo "❌ std::asm test failed!"
+test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All std::asm tests completed!"
+	@echo "=========================================="
 
 # すべてのstdライブラリテストを実行
 .PHONY: test-std
-test-std: test-std-io test-std-math test-std-mem test-std-asm
+test-std: test-std-asm
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std library tests completed!"

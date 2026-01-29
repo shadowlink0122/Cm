@@ -1,0 +1,44 @@
+// tests/std/asm/architecture.cm
+// std::asm アーキテクチャ検出テスト
+
+import std::io::println;
+import std::asm::{is_x86, is_arm64};
+
+int main() {
+    println("=== asm/architecture test ===");
+    
+    // アーキテクチャ検出
+    println("--- detection ---");
+    bool x86 = is_x86();
+    bool arm = is_arm64();
+    
+    // 両方trueはあり得ない
+    if (x86 && arm) {
+        println("error: both x86 and arm64");
+        return 1;
+    }
+    
+    // どちらか一方、または未知
+    if (x86) {
+        println("arch: x86");
+    } else if (arm) {
+        println("arch: arm64");
+    } else {
+        println("arch: other");
+    }
+    
+    // 複数回呼び出しで同じ結果になることを確認
+    println("--- consistency ---");
+    bool x86_2 = is_x86();
+    bool arm_2 = is_arm64();
+    
+    if (x86 == x86_2 && arm == arm_2) {
+        println("consistent: ok");
+    } else {
+        println("consistent: error");
+        return 1;
+    }
+    
+    println("=== architecture complete ===");
+    return 0;
+}

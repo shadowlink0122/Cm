@@ -1,0 +1,8 @@
+=== asm/instructions test ===
+--- nop ---
+nop x3: ok
+--- pause ---
+pause: ok
+--- sequence ---
+nop loop: ok
+=== instructions complete ===

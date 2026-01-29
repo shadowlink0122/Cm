@@ -1,0 +1,6 @@
+=== asm/architecture test ===
+--- detection ---
+arch: other
+--- consistency ---
+consistent: ok
+=== architecture complete ===

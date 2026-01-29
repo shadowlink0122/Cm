@@ -1,0 +1,46 @@
+// tests/std/asm/barriers.cm
+// std::asm メモリバリアテスト
+
+import std::io::println;
+import std::asm::{barrier, store_barrier, load_barrier};
+
+int main() {
+    println("=== asm/barriers test ===");
+    
+    // フルバリアテスト
+    println("--- barrier ---");
+    int a = 10;
+    barrier();  // 全メモリ操作の完了を保証
+    int b = a + 1;
+    println("barrier: ok");
+    println(b);  // 11
+    
+    // ストアバリアテスト
+    println("--- store_barrier ---");
+    int x = 100;
+    store_barrier();  // 書き込み操作の完了を保証
+    println("store_barrier: ok");
+    println(x);  // 100
+    
+    // ロードバリアテスト
+    println("--- load_barrier ---");
+    int y = 200;
+    load_barrier();  // 読み込み操作の完了を保証
+    int z = y;
+    println("load_barrier: ok");
+    println(z);  // 200
+    
+    // 複合テスト（書き込み→バリア→読み込み）
+    println("--- combined ---");
+    int val = 0;
+    val = 42;
+    store_barrier();
+    barrier();
+    load_barrier();
+    int result = val;
+    println("combined: ok");
+    println(result);  // 42
+    
+    println("=== barriers complete ===");
+    return 0;
+}

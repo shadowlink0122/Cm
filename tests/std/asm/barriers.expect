@@ -1,0 +1,14 @@
+=== asm/barriers test ===
+--- barrier ---
+barrier: ok
+11
+--- store_barrier ---
+store_barrier: ok
+100
+--- load_barrier ---
+load_barrier: ok
+200
+--- combined ---
+combined: ok
+42
+=== barriers complete ===
