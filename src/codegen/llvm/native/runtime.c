@@ -8,6 +8,7 @@
 // - runtime_format.c  : Formatting functions (cm_format_*, cm_format_replace_*)
 // - runtime_slice.c   : Slice (dynamic array) functions
 // - runtime_file.c    : File I/O and stdin input functions
+// - runtime_async.c   : Async/await runtime (v0.13.0)
 //
 // This file includes all components to create a single compilation unit
 
@@ -16,6 +17,7 @@
 
 #include "../../common/runtime_alloc.c"
 #include "../../common/runtime_file.c"
+#include "runtime_async.c"
 #include "runtime_format.c"
 #include "runtime_platform.c"
 #include "runtime_print.c"
