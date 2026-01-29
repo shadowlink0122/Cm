@@ -1,0 +1,45 @@
+// std::math テスト
+// 基本的な算術テスト
+
+import std::io::println;
+
+int main() {
+    println("=== std::math test ===");
+    
+    // 基本的な算術演算
+    println("--- arithmetic ---");
+    int a = 10;
+    int b = 3;
+    
+    println(a + b);  // 13
+    println(a - b);  // 7
+    println(a * b);  // 30
+    println(a / b);  // 3
+    println(a % b);  // 1
+    
+    // 比較演算
+    println("--- comparison ---");
+    int x = 5;
+    int y = 10;
+    
+    if (x < y) {
+        println(1);  // 1
+    } else {
+        println(0);
+    }
+    
+    if (x > y) {
+        println(1);
+    } else {
+        println(0);  // 0
+    }
+    
+    if (x == 5) {
+        println(1);  // 1
+    } else {
+        println(0);
+    }
+    
+    println("=== test complete ===");
+    return 0;
+}

@@ -1,9 +1,0 @@
-Initial length: 3
-Initial capacity: 4
-After push: length = 5
-arr[0] = 1
-arr[3] = 4
-Popped value: 5
-After pop: length = 4
-After remove(1): length = 3
-After clear: length = 0

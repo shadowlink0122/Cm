@@ -1,9 +1,0 @@
-import std::io;
-int main() {
-    int[100] a;
-    for (int i = 0; i < 100; i++) {
-        a[i] = i;
-    }
-    println("{a[50]}");
-    return 0;
-}

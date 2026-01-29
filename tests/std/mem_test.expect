@@ -1,0 +1,7 @@
+=== std::mem test ===
+--- pointer basics ---
+42
+100
+--- pointer arithmetic ---
+10
+=== test complete ===

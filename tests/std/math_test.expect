@@ -1,0 +1,12 @@
+=== std::math test ===
+--- arithmetic ---
+13
+7
+30
+3
+1
+--- comparison ---
+1
+0
+1
+=== test complete ===

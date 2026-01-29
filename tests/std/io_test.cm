@@ -1,0 +1,29 @@
+// std::io テスト
+// println, print, 各型出力のテスト
+
+import std::io::println;
+import std::io::print;
+
+int main() {
+    // 文字列出力
+    println("=== std::io test ===");
+    
+    // 整数出力
+    println(42);
+    println(-123);
+    
+    // ブール値出力
+    println(true);
+    println(false);
+    
+    // 文字出力
+    println('A');
+    println('z');
+    
+    // print（改行なし）+ println
+    print("Hello ");
+    println("World");
+    
+    println("=== test complete ===");
+    return 0;
+}
