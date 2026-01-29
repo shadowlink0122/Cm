@@ -910,9 +910,16 @@ test-std-asm-inline:
 	@$(CM) run tests/std/asm/inline.cm > .tmp/asm_inline.out 2>&1 || true
 	@diff -u tests/std/asm/inline.expect .tmp/asm_inline.out && echo "✅ asm/inline passed!" || echo "❌ asm/inline failed!"
 
+.PHONY: test-std-asm-advanced
+test-std-asm-advanced:
+	@echo "Running std::asm/advanced tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/asm/advanced.cm > .tmp/asm_advanced.out 2>&1 || true
+	@diff -u tests/std/asm/advanced.expect .tmp/asm_advanced.out && echo "✅ asm/advanced passed!" || echo "❌ asm/advanced failed!"
+
 # std::asm 全テスト
 .PHONY: test-std-asm
-test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture test-std-asm-inline
+test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture test-std-asm-inline test-std-asm-advanced
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std::asm tests completed!"
