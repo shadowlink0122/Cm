@@ -135,6 +135,57 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         debug::hir::log(debug::hir::Id::ExprLower, "Lowering move expression", debug::Level::Debug);
         // moveは単にオペランドを返す - 所有権追跡は型チェッカーで行われている
         return lower_expr(*move_expr->operand);
+    } else if (auto* await_expr = expr.as<ast::AwaitExpr>()) {
+        // await式: await future → Future::poll() の呼び出しに変換
+        // v0.13.0: 現時点ではプレースホルダー実装
+        // 完全な実装にはステートマシン変換が必要
+        debug::hir::log(debug::hir::Id::ExprLower, "Lowering await expression",
+                        debug::Level::Debug);
+
+        // 暫定: await expr を単純に expr.poll() 呼び出しに変換
+        // 実際には Executor とコンテキスト管理が必要
+        auto operand = lower_expr(*await_expr->operand);
+
+        // Future<T> からTを取得（型がある場合）
+        TypePtr result_type = type;
+        if (operand->type && operand->type->kind == ast::TypeKind::Generic) {
+            // Future<T> の場合、T を抽出
+            if (!operand->type->type_args.empty()) {
+                result_type = operand->type->type_args[0];
+            }
+        }
+
+        // block_on(future) 呼び出しを生成
+        auto hir_call = std::make_unique<HirCall>();
+        hir_call->func_name = "block_on";
+        hir_call->args.push_back(std::move(operand));
+
+        return std::make_unique<HirExpr>(std::move(hir_call), result_type);
+    } else if (auto* try_expr = expr.as<ast::TryExpr>()) {
+        // try式: expr? → Result<T,E>のアンラップとエラー伝播
+        // v0.13.0: 現時点ではプレースホルダー実装
+        // 完全な実装にはmatch式への変換とearly returnが必要
+        debug::hir::log(debug::hir::Id::ExprLower, "Lowering try expression", debug::Level::Debug);
+
+        // 暫定: expr? を expr.unwrap() 呼び出しに変換
+        // 実際にはmatch + early return パターンが必要
+        auto operand = lower_expr(*try_expr->operand);
+
+        // Result<T, E> からTを取得（型がある場合）
+        TypePtr result_type = type;
+        if (operand->type && operand->type->kind == ast::TypeKind::Generic) {
+            // Result<T, E> の場合、T を抽出
+            if (!operand->type->type_args.empty()) {
+                result_type = operand->type->type_args[0];
+            }
+        }
+
+        // unwrap() メソッド呼び出しを生成
+        auto hir_call = std::make_unique<HirCall>();
+        hir_call->func_name = "__result_unwrap";
+        hir_call->args.push_back(std::move(operand));
+
+        return std::make_unique<HirExpr>(std::move(hir_call), result_type);
     }
 
     debug::hir::log(debug::hir::Id::Warning, "Unknown expression type, using null literal",

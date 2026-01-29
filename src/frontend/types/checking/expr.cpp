@@ -119,6 +119,71 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         } else {
             inferred_type = ast::make_error();
         }
+    } else if (auto* await_expr = expr.as<ast::AwaitExpr>()) {
+        // await式: オペランドはFuture<T>型である必要がある
+        // v0.13.0: 非同期サポート
+        if (await_expr->operand) {
+            auto operand_type = infer_type(*await_expr->operand);
+
+            // Future<T>からT型を抽出
+            if (operand_type && operand_type->kind == ast::TypeKind::Generic) {
+                if (operand_type->name == "Future" && !operand_type->type_args.empty()) {
+                    inferred_type = operand_type->type_args[0];
+                    debug::tc::log(
+                        debug::tc::Id::CheckExpr,
+                        "await expression yields type: " + ast::type_to_string(*inferred_type),
+                        debug::Level::Debug);
+                } else {
+                    error(current_span_, "await requires a Future<T> type, got: " +
+                                             ast::type_to_string(*operand_type));
+                    inferred_type = ast::make_error();
+                }
+            } else if (operand_type) {
+                // 暫定的に、不明な型はそのまま返す
+                // 完全な型チェックは後のフェーズで行う
+                inferred_type = operand_type;
+                debug::tc::log(
+                    debug::tc::Id::CheckExpr,
+                    "await on non-Future type (placeholder): " + ast::type_to_string(*operand_type),
+                    debug::Level::Warn);
+            } else {
+                inferred_type = ast::make_error();
+            }
+        } else {
+            inferred_type = ast::make_error();
+        }
+    } else if (auto* try_expr = expr.as<ast::TryExpr>()) {
+        // try式 (expr?): オペランドはResult<T, E>型である必要がある
+        // v0.13.0: エラー伝播サポート
+        if (try_expr->operand) {
+            auto operand_type = infer_type(*try_expr->operand);
+
+            // Result<T, E>からT型を抽出
+            if (operand_type && operand_type->kind == ast::TypeKind::Generic) {
+                if (operand_type->name == "Result" && !operand_type->type_args.empty()) {
+                    inferred_type = operand_type->type_args[0];
+                    debug::tc::log(
+                        debug::tc::Id::CheckExpr,
+                        "try expression yields type: " + ast::type_to_string(*inferred_type),
+                        debug::Level::Debug);
+                } else {
+                    error(current_span_, "? operator requires a Result<T, E> type, got: " +
+                                             ast::type_to_string(*operand_type));
+                    inferred_type = ast::make_error();
+                }
+            } else if (operand_type) {
+                // 暫定的に、不明な型はそのまま返す
+                inferred_type = operand_type;
+                debug::tc::log(
+                    debug::tc::Id::CheckExpr,
+                    "? on non-Result type (placeholder): " + ast::type_to_string(*operand_type),
+                    debug::Level::Warn);
+            } else {
+                inferred_type = ast::make_error();
+            }
+        } else {
+            inferred_type = ast::make_error();
+        }
     } else {
         inferred_type = ast::make_error();
     }
