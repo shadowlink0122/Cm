@@ -1,0 +1,46 @@
+// Test impl STR syntax (without interface)
+// v0.13.0: impl StructName { methods } テスト
+
+import std::io::println;
+
+struct Counter {
+    int value;
+}
+
+// インターフェースなしのimpl - メソッドを直接定義
+impl Counter {
+    int get() {
+        return self.value;
+    }
+    
+    void set(int v) {
+        self.value = v;
+    }
+    
+    void increment() {
+        self.value = self.value + 1;
+    }
+    
+    int add_and_get(int delta) {
+        self.value = self.value + delta;
+        return self.value;
+    }
+}
+
+int main() {
+    Counter c = Counter { value: 0 };
+    
+    // setとget
+    c.set(10);
+    println(c.get());  // 10
+    
+    // increment
+    c.increment();
+    println(c.get());  // 11
+    
+    // add_and_get
+    int result = c.add_and_get(5);
+    println(result);   // 16
+    
+    return 0;
+}

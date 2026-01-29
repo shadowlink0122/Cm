@@ -1,0 +1,52 @@
+// Test impl STR with multiple methods
+// v0.13.0: 複数メソッドのテスト
+
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point {
+    int getX() {
+        return self.x;
+    }
+    
+    int getY() {
+        return self.y;
+    }
+    
+    void setX(int v) {
+        self.x = v;
+    }
+    
+    void setY(int v) {
+        self.y = v;
+    }
+    
+    void translate(int dx, int dy) {
+        self.x = self.x + dx;
+        self.y = self.y + dy;
+    }
+    
+    int sum() {
+        return self.x + self.y;
+    }
+}
+
+int main() {
+    Point p = Point { x: 10, y: 20 };
+    
+    println(p.getX());   // 10
+    println(p.getY());   // 20
+    println(p.sum());    // 30
+    
+    p.translate(5, 10);
+    println(p.getX());   // 15
+    println(p.getY());   // 30
+    println(p.sum());    // 45
+    
+    return 0;
+}
+
