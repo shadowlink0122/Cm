@@ -541,6 +541,18 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
         current_return_type_ = func.return_type;
     }
 
+    // v0.13.0: async関数の戻り値型処理
+    // async関数は暗黙的にFuture<T>を返す
+    if (func.is_async) {
+        debug::tc::log(debug::tc::Id::CheckDecl,
+                       "async function '" + func.name + "' returns Future<" +
+                           ast::type_to_string(*current_return_type_) + ">",
+                       debug::Level::Debug);
+
+        // 関数内部では通常の戻り値型として扱う
+        // 実際のFuture<T>変換はHIR/MIRレベルで行う
+    }
+
     for (const auto& param : func.params) {
         auto resolved_type = resolve_typedef(param.type);
         if (generic_context_.has_type_param(ast::type_to_string(*param.type))) {
