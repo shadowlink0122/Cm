@@ -564,6 +564,59 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
+        // try式（エラー伝播）: expr?
+        // 注意: 三項演算子 (cond ? then : else) との衝突を避けるため、
+        // ? の直後に式開始トークンがある場合は三項演算子として扱う
+        // ? の直後がセミコロン、カンマ、閉じ括弧、演算子等の場合はtry式
+        if (check(TokenKind::Question)) {
+            // 次の次のトークンを確認して三項演算子かどうか判定
+            // peek(1) がトークンの次の位置
+            size_t saved_pos = pos_;
+            advance();  // ? を消費
+
+            // ? の後に式が続く可能性があるトークン = 三項演算子
+            bool looks_like_ternary = false;
+            switch (current().kind) {
+                case TokenKind::IntLiteral:
+                case TokenKind::FloatLiteral:
+                case TokenKind::StringLiteral:
+                case TokenKind::CharLiteral:
+                case TokenKind::Ident:
+                case TokenKind::KwTrue:
+                case TokenKind::KwFalse:
+                case TokenKind::KwNull:
+                case TokenKind::KwNew:
+                case TokenKind::KwSizeof:
+                case TokenKind::KwTypeof:
+                case TokenKind::LParen:
+                case TokenKind::LBracket:
+                case TokenKind::Minus:
+                case TokenKind::Bang:
+                case TokenKind::Tilde:
+                case TokenKind::Amp:
+                case TokenKind::Star:
+                case TokenKind::PlusPlus:
+                case TokenKind::MinusMinus:
+                case TokenKind::KwMove:
+                case TokenKind::KwAwait:
+                    looks_like_ternary = true;
+                    break;
+                default:
+                    break;
+            }
+
+            if (looks_like_ternary) {
+                // 三項演算子 - 位置を戻して上位で処理させる
+                pos_ = saved_pos;
+            } else {
+                // try式
+                debug::par::log(debug::par::Id::PrimaryExpr, "Detected '?' try expression",
+                                debug::Level::Debug);
+                expr = ast::make_try(std::move(expr), Span{expr->span.start, previous().end});
+                continue;
+            }
+        }
+
         break;
     }
 

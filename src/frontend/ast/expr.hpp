@@ -468,6 +468,19 @@ struct AwaitExpr {
 };
 
 // ============================================================
+// try式 - エラー伝播 (expr?)
+// v0.13.0: Result型のアンラップとエラー早期リターン
+// Rustの ? 演算子と同等
+// Result::Ok(v) → v を返す
+// Result::Err(e) → 関数から早期リターン
+// ============================================================
+struct TryExpr {
+    ExprPtr operand;  // Result<T, E>型の式
+
+    explicit TryExpr(ExprPtr e) : operand(std::move(e)) {}
+};
+
+// ============================================================
 // 式作成ヘルパー
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
@@ -552,6 +565,10 @@ inline ExprPtr make_move(ExprPtr expr, Span s = {}) {
 
 inline ExprPtr make_await(ExprPtr expr, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<AwaitExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_try(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<TryExpr>(std::move(expr)), s);
 }
 
 }  // namespace cm::ast
