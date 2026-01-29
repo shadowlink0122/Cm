@@ -566,6 +566,44 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // v0.13.0: 非同期ランタイム関数
+    else if (name == "block_on" || name == "cm_block_on") {
+        // void* cm_block_on(void* future)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction("cm_block_on", funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_block_on_i64") {
+        // i64 cm_block_on_i64(void* future)
+        auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__result_unwrap" || name == "cm_result_unwrap") {
+        // void* __result_unwrap(void* result)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction("__result_unwrap", funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_ready_future_i64") {
+        // void* cm_ready_future_i64(i64 value)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_spawn") {
+        // void cm_spawn(void* executor, void* future)
+        auto funcType =
+            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_executor_new") {
+        // void* cm_executor_new()
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_executor_drop" || name == "cm_run_until_complete") {
+        // void cm_*_*(void* executor)
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
 
     // currentProgramから関数情報を取得（extern関数だけでなく、全ての関数を検索）
     // これにより、モノモーフィック化されたメソッド（Container__int__get等）も正しいシグネチャで宣言される
