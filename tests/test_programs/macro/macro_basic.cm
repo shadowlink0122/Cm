@@ -1,0 +1,17 @@
+// tests/test_programs/macro/macro_basic.cm
+// マクロシステムの基本テスト
+
+import std::io::println;
+
+// オブジェクトマクロ定義
+#macro VERSION 13;
+#macro MSG "hello";
+
+int main() {
+    println("macro: basic");
+    
+    // マクロがパースされたことを確認
+    println("macro: parse ok");
+    
+    return 0;
+}

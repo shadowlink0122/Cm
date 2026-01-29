@@ -2,81 +2,49 @@
 // v0.13.0: 低レベルアセンブリアクセス
 //
 // 使用例:
-//   import std::asm::{asm, nop, barrier};
+//   import std::asm::{nop, barrier};
 //   
 //   nop();           // NOP命令
 //   barrier();       // メモリバリア
-//   asm("cpuid");    // 任意のアセンブリ
 
 module std.asm;
 
 // ============================================================
-// 組み込みasm関数（コンパイラが特別扱い）
-// ============================================================
-
-// インラインアセンブリを実行
-// 構文: asm("assembly code")
-// 補間: asm("mov {}, %eax", value)
-// Note: この関数はコンパイラ組み込みとして処理される
-export void asm(string code) {
-    __asm__(code);
-}
-
-// ============================================================
-// ヘルパー関数
+// 外部関数宣言（ランタイムライブラリで実装）
 // ============================================================
 
 // NOP命令（何もしない）
 // 主にタイミング調整やパディングに使用
+extern "C" void cm_asm_nop();
 export void nop() {
-    __asm__("nop");
+    cm_asm_nop();
 }
 
 // メモリバリア（フルフェンス）
 // 全てのメモリ操作が完了するまで待機
+extern "C" void cm_asm_barrier();
 export void barrier() {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__("mfence");
-#elif defined(__aarch64__)
-    __asm__("dmb sy");
-#else
-    __asm__("");  // フォールバック
-#endif
+    cm_asm_barrier();
 }
 
 // ストアバリア
 // 書き込み操作が完了するまで待機
+extern "C" void cm_asm_store_barrier();
 export void store_barrier() {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__("sfence");
-#elif defined(__aarch64__)
-    __asm__("dmb st");
-#else
-    __asm__("");
-#endif
+    cm_asm_store_barrier();
 }
 
 // ロードバリア
 // 読み込み操作が完了するまで待機
+extern "C" void cm_asm_load_barrier();
 export void load_barrier() {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__("lfence");
-#elif defined(__aarch64__)
-    __asm__("dmb ld");
-#else
-    __asm__("");
-#endif
+    cm_asm_load_barrier();
 }
 
 // CPU一時停止（スピンループ最適化）
+extern "C" void cm_asm_pause();
 export void pause() {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__("pause");
-#elif defined(__aarch64__)
-    __asm__("yield");
-#else
-    __asm__("");
-#endif
+    cm_asm_pause();
 }
 
 // ============================================================
@@ -84,19 +52,13 @@ export void pause() {
 // ============================================================
 
 // x86/x64アーキテクチャかどうか
+extern "C" bool cm_asm_is_x86();
 export bool is_x86() {
-#if defined(__x86_64__) || defined(__i386__)
-    return true;
-#else
-    return false;
-#endif
+    return cm_asm_is_x86();
 }
 
 // ARM64アーキテクチャかどうか
+extern "C" bool cm_asm_is_arm64();
 export bool is_arm64() {
-#if defined(__aarch64__)
-    return true;
-#else
-    return false;
-#endif
+    return cm_asm_is_arm64();
 }

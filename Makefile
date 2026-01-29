@@ -903,9 +903,16 @@ test-std-mem:
 	@$(CM) run tests/std/mem_test.cm > .tmp/mem_test.out 2>&1 || true
 	@diff -u tests/std/mem_test.expect .tmp/mem_test.out && echo "✅ std::mem test passed!" || echo "❌ std::mem test failed!"
 
+.PHONY: test-std-asm
+test-std-asm:
+	@echo "Running std::asm tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/asm_test.cm > .tmp/asm_test.out 2>&1 || true
+	@diff -u tests/std/asm_test.expect .tmp/asm_test.out && echo "✅ std::asm test passed!" || echo "❌ std::asm test failed!"
+
 # すべてのstdライブラリテストを実行
 .PHONY: test-std
-test-std: test-std-io test-std-math test-std-mem
+test-std: test-std-io test-std-math test-std-mem test-std-asm
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std library tests completed!"

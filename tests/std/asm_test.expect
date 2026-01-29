@@ -1,0 +1,8 @@
+=== std::asm test ===
+--- nop ---
+nop: ok
+--- barrier ---
+barrier: ok
+--- architecture ---
+arch: other
+=== test complete ===
