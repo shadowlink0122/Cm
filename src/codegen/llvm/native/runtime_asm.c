@@ -2,6 +2,47 @@
 // v0.13.0: std::asm モジュールのバックエンド
 
 #include <stdbool.h>
+#include <string.h>
+
+// ============================================================
+// 前方宣言
+// ============================================================
+void cm_asm_nop(void);
+void cm_asm_pause(void);
+void cm_asm_barrier(void);
+void cm_asm_store_barrier(void);
+void cm_asm_load_barrier(void);
+
+// ============================================================
+// 任意のインラインアセンブリ
+// Note: ランタイムでの動的アセンブリ実行は制限あり
+// 主にコンパイル時インライン展開用のプレースホルダー
+// ============================================================
+void cm_asm_inline(const char* code) {
+    // ランタイムでの文字列ベースのアセンブリ実行は
+    // セキュリティとポータビリティの理由で制限
+    // インタプリタモードでは以下の基本命令のみサポート:
+    if (code == NULL)
+        return;
+
+    // 基本的な命令パターンマッチング
+    if (strcmp(code, "nop") == 0) {
+        cm_asm_nop();
+    } else if (strcmp(code, "pause") == 0 || strcmp(code, "yield") == 0) {
+        cm_asm_pause();
+    } else if (strcmp(code, "mfence") == 0 || strcmp(code, "dmb sy") == 0) {
+        cm_asm_barrier();
+    } else if (strcmp(code, "sfence") == 0 || strcmp(code, "dmb st") == 0) {
+        cm_asm_store_barrier();
+    } else if (strcmp(code, "lfence") == 0 || strcmp(code, "dmb ld") == 0) {
+        cm_asm_load_barrier();
+    }
+    // その他の命令はインタプリタモードでは無視
+}
+
+void cm_asm_volatile(const char* code) {
+    cm_asm_inline(code);
+}
 
 // ============================================================
 // NOP命令
@@ -12,7 +53,6 @@ void cm_asm_nop(void) {
 #elif defined(__aarch64__) || defined(_M_ARM64)
     __asm__ volatile("nop");
 #else
-    // フォールバック: 何もしない
     (void)0;
 #endif
 }
@@ -61,7 +101,6 @@ void cm_asm_pause(void) {
 #elif defined(__aarch64__)
     __asm__ volatile("yield");
 #else
-    // フォールバック: 何もしない
     (void)0;
 #endif
 }

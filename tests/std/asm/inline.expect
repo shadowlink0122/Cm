@@ -1,0 +1,9 @@
+=== asm/inline test ===
+--- asm(string) ---
+asm nop: ok
+asm mfence: ok
+--- volatile_asm ---
+volatile_asm: ok
+--- sequence ---
+sequence: ok
+=== inline complete ===

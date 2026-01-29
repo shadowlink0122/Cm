@@ -2,15 +2,35 @@
 // v0.13.0: 低レベルアセンブリアクセス
 //
 // 使用例:
-//   import std::asm::{nop, barrier};
+//   import std::asm::{asm, nop, barrier};
 //   
-//   nop();           // NOP命令
-//   barrier();       // メモリバリア
+//   asm("nop");              // 任意のアセンブリ命令
+//   nop();                   // NOP命令
+//   barrier();               // メモリバリア
 
 module std.asm;
 
 // ============================================================
-// 外部関数宣言（ランタイムライブラリで実装）
+// 任意のインラインアセンブリ
+// ============================================================
+
+// 任意のアセンブリ命令を実行
+// 使用例: asm("nop")
+//         asm("mov $42, %eax")
+// Note: VolatileなのでDCE対象外
+extern "C" void cm_asm_inline(string code);
+export void asm(string code) {
+    cm_asm_inline(code);
+}
+
+// Volatileフラグ付きアセンブリ（最適化で削除されない）
+extern "C" void cm_asm_volatile(string code);
+export void volatile_asm(string code) {
+    cm_asm_volatile(code);
+}
+
+// ============================================================
+// プリセット命令（ヘルパー関数）
 // ============================================================
 
 // NOP命令（何もしない）

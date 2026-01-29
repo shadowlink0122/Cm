@@ -903,9 +903,16 @@ test-std-asm-architecture:
 	@$(CM) run tests/std/asm/architecture.cm > .tmp/asm_architecture.out 2>&1 || true
 	@diff -u tests/std/asm/architecture.expect .tmp/asm_architecture.out && echo "✅ asm/architecture passed!" || echo "❌ asm/architecture failed!"
 
+.PHONY: test-std-asm-inline
+test-std-asm-inline:
+	@echo "Running std::asm/inline tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/asm/inline.cm > .tmp/asm_inline.out 2>&1 || true
+	@diff -u tests/std/asm/inline.expect .tmp/asm_inline.out && echo "✅ asm/inline passed!" || echo "❌ asm/inline failed!"
+
 # std::asm 全テスト
 .PHONY: test-std-asm
-test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture
+test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture test-std-asm-inline
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std::asm tests completed!"
