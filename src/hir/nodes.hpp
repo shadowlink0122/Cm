@@ -328,6 +328,7 @@ struct HirFunction {
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_overload = false;                          // overloadキーワードの有無
+    bool is_async = false;                             // v0.13.0: async関数
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 
