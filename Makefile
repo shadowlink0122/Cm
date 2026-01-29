@@ -876,3 +876,43 @@ bench-clean:
 
 # デフォルトファイル設定
 FILE ?=
+
+# ========================================
+# Standard Library Test Commands
+# ========================================
+
+# 個別のstdモジュールテスト
+.PHONY: test-std-io
+test-std-io:
+	@echo "Running std::io tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/io_test.cm > .tmp/io_test.out 2>&1 || true
+	@diff -u tests/std/io_test.expect .tmp/io_test.out && echo "✅ std::io test passed!" || echo "❌ std::io test failed!"
+
+.PHONY: test-std-math
+test-std-math:
+	@echo "Running std::math tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/math_test.cm > .tmp/math_test.out 2>&1 || true
+	@diff -u tests/std/math_test.expect .tmp/math_test.out && echo "✅ std::math test passed!" || echo "❌ std::math test failed!"
+
+.PHONY: test-std-mem
+test-std-mem:
+	@echo "Running std::mem tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/mem_test.cm > .tmp/mem_test.out 2>&1 || true
+	@diff -u tests/std/mem_test.expect .tmp/mem_test.out && echo "✅ std::mem test passed!" || echo "❌ std::mem test failed!"
+
+# すべてのstdライブラリテストを実行
+.PHONY: test-std
+test-std: test-std-io test-std-math test-std-mem
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All std library tests completed!"
+	@echo "=========================================="
+
+# Shortcuts
+.PHONY: ts
+ts: test-std
+
+
