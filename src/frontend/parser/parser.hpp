@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace cm {
@@ -210,36 +211,7 @@ class Parser {
             advance();  // consume '#'
 
             if (check(TokenKind::KwMacro)) {
-                // マクロは未実装
-                error("Macro definitions (#macro) are not yet implemented");
-                // マクロ定義全体をスキップ
-                advance();  // consume 'macro'
-
-                // 安全なスキップ: 最大100トークンまでスキップ
-                int token_count = 0;
-                int brace_count = 0;
-                bool in_block = false;
-
-                while (!is_at_end() && token_count < 100) {
-                    if (current().kind == TokenKind::LBrace) {
-                        in_block = true;
-                        brace_count++;
-                    } else if (current().kind == TokenKind::RBrace && in_block) {
-                        brace_count--;
-                        if (brace_count == 0) {
-                            advance();  // consume final '}'
-                            break;
-                        }
-                    }
-                    advance();
-                    token_count++;
-                }
-
-                // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
-                if (token_count >= 100) {
-                    error("Failed to skip macro definition - too many tokens");
-                }
-                return nullptr;
+                return parse_macro_definition();
             }
 
             // その他のディレクティブ（#test, #bench, #deprecated等）
@@ -1524,6 +1496,135 @@ class Parser {
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
+
+    // v0.13.0: マクロシステム
+    struct MacroDef {
+        std::string name;
+        std::vector<std::string> params;  // 空ならオブジェクトマクロ
+        std::vector<Token> body;          // 展開されるトークン列
+    };
+    std::unordered_map<std::string, MacroDef> macro_defs_;
+
+    // マクロ定義をパース
+    // 構文: #macro NAME または #macro NAME(a, b, ...)
+    //       本体は次の行の終わりまで、または { } ブロック
+    ast::DeclPtr parse_macro_definition() {
+        advance();  // consume 'macro'
+
+        if (!check(TokenKind::Ident)) {
+            error("Expected macro name after '#macro'");
+            return nullptr;
+        }
+
+        std::string name = std::string(current().get_string());
+        advance();  // consume name
+
+        MacroDef macro;
+        macro.name = name;
+
+        // 関数マクロ: NAME(a, b, ...)
+        if (check(TokenKind::LParen)) {
+            advance();  // consume '('
+
+            while (!check(TokenKind::RParen) && !is_at_end()) {
+                if (check(TokenKind::Ident)) {
+                    macro.params.push_back(std::string(current().get_string()));
+                    advance();
+                }
+                if (check(TokenKind::Comma)) {
+                    advance();
+                }
+            }
+
+            if (!check(TokenKind::RParen)) {
+                error("Expected ')' in macro parameter list");
+                return nullptr;
+            }
+            advance();  // consume ')'
+        }
+
+        // マクロ本体: 行末まで、または { } ブロック
+        if (check(TokenKind::LBrace)) {
+            // ブロック形式: { tokens... }
+            advance();  // consume '{'
+            int brace_depth = 1;
+            while (brace_depth > 0 && !is_at_end()) {
+                if (current().kind == TokenKind::LBrace) {
+                    brace_depth++;
+                } else if (current().kind == TokenKind::RBrace) {
+                    brace_depth--;
+                    if (brace_depth == 0) {
+                        advance();  // consume final '}'
+                        break;
+                    }
+                }
+                macro.body.push_back(current());
+                advance();
+            }
+        } else {
+            // 単一行形式: セミコロンまで
+            while (!is_at_end() && current().kind != TokenKind::Semicolon) {
+                macro.body.push_back(current());
+                advance();
+            }
+            if (check(TokenKind::Semicolon)) {
+                advance();  // consume ';'
+            }
+        }
+
+        // マクロを登録
+        macro_defs_[name] = std::move(macro);
+
+        // 成功を返す（ASTノードなしでOK - マクロはプリプロセッサ的）
+        return nullptr;
+    }
+
+    // マクロ呼び出しをチェック
+    bool is_macro_call() {
+        if (!check(TokenKind::Ident))
+            return false;
+        std::string name = std::string(current().get_string());
+        return macro_defs_.count(name) > 0;
+    }
+
+    // マクロ展開
+    std::vector<Token> expand_macro(const std::string& name,
+                                    const std::vector<std::vector<Token>>& args) {
+        auto it = macro_defs_.find(name);
+        if (it == macro_defs_.end()) {
+            return {};
+        }
+
+        const MacroDef& macro = it->second;
+        std::vector<Token> result;
+
+        // パラメータを引数に置き換え
+        for (const Token& tok : macro.body) {
+            if (tok.kind == TokenKind::Ident) {
+                std::string param_name = std::string(tok.get_string());
+                bool replaced = false;
+
+                for (size_t i = 0; i < macro.params.size(); ++i) {
+                    if (macro.params[i] == param_name && i < args.size()) {
+                        // パラメータを引数トークンに置き換え
+                        for (const Token& arg_tok : args[i]) {
+                            result.push_back(arg_tok);
+                        }
+                        replaced = true;
+                        break;
+                    }
+                }
+
+                if (!replaced) {
+                    result.push_back(tok);
+                }
+            } else {
+                result.push_back(tok);
+            }
+        }
+
+        return result;
+    }
 };
 
 }  // namespace cm
