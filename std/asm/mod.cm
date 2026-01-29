@@ -1,0 +1,102 @@
+// std::asm - インラインアセンブリモジュール
+// v0.13.0: 低レベルアセンブリアクセス
+//
+// 使用例:
+//   import std::asm::{asm, nop, barrier};
+//   
+//   nop();           // NOP命令
+//   barrier();       // メモリバリア
+//   asm("cpuid");    // 任意のアセンブリ
+
+module std.asm;
+
+// ============================================================
+// 組み込みasm関数（コンパイラが特別扱い）
+// ============================================================
+
+// インラインアセンブリを実行
+// 構文: asm("assembly code")
+// 補間: asm("mov {}, %eax", value)
+// Note: この関数はコンパイラ組み込みとして処理される
+export void asm(string code) {
+    __asm__(code);
+}
+
+// ============================================================
+// ヘルパー関数
+// ============================================================
+
+// NOP命令（何もしない）
+// 主にタイミング調整やパディングに使用
+export void nop() {
+    __asm__("nop");
+}
+
+// メモリバリア（フルフェンス）
+// 全てのメモリ操作が完了するまで待機
+export void barrier() {
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__("mfence");
+#elif defined(__aarch64__)
+    __asm__("dmb sy");
+#else
+    __asm__("");  // フォールバック
+#endif
+}
+
+// ストアバリア
+// 書き込み操作が完了するまで待機
+export void store_barrier() {
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__("sfence");
+#elif defined(__aarch64__)
+    __asm__("dmb st");
+#else
+    __asm__("");
+#endif
+}
+
+// ロードバリア
+// 読み込み操作が完了するまで待機
+export void load_barrier() {
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__("lfence");
+#elif defined(__aarch64__)
+    __asm__("dmb ld");
+#else
+    __asm__("");
+#endif
+}
+
+// CPU一時停止（スピンループ最適化）
+export void pause() {
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__("pause");
+#elif defined(__aarch64__)
+    __asm__("yield");
+#else
+    __asm__("");
+#endif
+}
+
+// ============================================================
+// アーキテクチャ検出
+// ============================================================
+
+// x86/x64アーキテクチャかどうか
+export bool is_x86() {
+#if defined(__x86_64__) || defined(__i386__)
+    return true;
+#else
+    return false;
+#endif
+}
+
+// ARM64アーキテクチャかどうか
+export bool is_arm64() {
+#if defined(__aarch64__)
+    return true;
+#else
+    return false;
+#endif
+}

@@ -73,7 +73,8 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
         case mir::MirStatement::StorageLive:
         case mir::MirStatement::StorageDead:
         case mir::MirStatement::Nop:
-            // JSではこれらは無視
+        case mir::MirStatement::Asm:
+            // JSではこれらは無視（asmはJS非対応）
             break;
     }
 }

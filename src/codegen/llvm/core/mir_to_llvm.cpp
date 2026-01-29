@@ -6,6 +6,7 @@
 #include "../../../common/debug/codegen.hpp"
 #include "../monitoring/compilation_guard.hpp"
 
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <set>
@@ -1371,6 +1372,29 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
         case mir::MirStatement::Nop:
             // これらは無視
             break;
+        case mir::MirStatement::Asm: {
+            // v0.13.0: インラインアセンブリ
+            auto& asmData = std::get<mir::MirStatement::AsmData>(stmt.data);
+
+            // 制約文字列を構築（入力なし、サイドエフェクトあり）
+            std::string constraints = "~{memory}";
+            for (const auto& clobber : asmData.clobbers) {
+                constraints = "~{" + clobber + "}," + constraints;
+            }
+
+            // インラインアセンブリのFunctionTypeを作成
+            auto asmFuncType = llvm::FunctionType::get(ctx.getVoidType(), {}, false);
+
+            // InlineAsmオブジェクトを作成
+            auto inlineAsm =
+                llvm::InlineAsm::get(asmFuncType, asmData.code, constraints, asmData.is_volatile,
+                                     false  // alignStack
+                );
+
+            // 呼び出し
+            builder->CreateCall(asmFuncType, inlineAsm, {});
+            break;
+        }
     }
 
     // 関数終了のデバッグ

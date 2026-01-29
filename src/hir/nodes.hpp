@@ -278,12 +278,20 @@ struct HirSwitch {
     std::vector<HirSwitchCase> cases;
 };
 
+// v0.13.0: インラインアセンブリ文
+struct HirAsm {
+    std::string code;                   // アセンブリコード
+    std::vector<HirExprPtr> inputs;     // 入力オペランド
+    std::vector<std::string> clobbers;  // 破壊レジスタ
+    bool is_volatile = true;            // volatile修飾
+};
+
 using HirStmtKind =
     std::variant<std::unique_ptr<HirLet>, std::unique_ptr<HirAssign>, std::unique_ptr<HirReturn>,
                  std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirWhile>,
                  std::unique_ptr<HirFor>, std::unique_ptr<HirBreak>, std::unique_ptr<HirContinue>,
                  std::unique_ptr<HirDefer>, std::unique_ptr<HirExprStmt>, std::unique_ptr<HirBlock>,
-                 std::unique_ptr<HirSwitch>>;
+                 std::unique_ptr<HirSwitch>, std::unique_ptr<HirAsm>>;
 
 struct HirStmt {
     HirStmtKind kind;
