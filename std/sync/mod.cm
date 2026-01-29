@@ -1,0 +1,277 @@
+// std::sync - 同期プリミティブモジュール
+module std.sync;
+
+// ============================================================
+// プラットフォーム依存型（OS Mutex抽象化）
+// ============================================================
+
+// POSIX pthread_mutex_t の抽象化
+// サイズはプラットフォームによって異なるため、十分なバッファを確保
+struct RawMutex {
+    // pthread_mutex_t は最大64バイト（Linux/macOS）
+    long[8] _opaque;
+}
+
+// ============================================================
+// Mutex - 排他ロック
+// ============================================================
+
+struct Mutex<T> {
+    T value;
+    RawMutex raw;
+    bool initialized;
+}
+
+// Mutexを保持するガード
+// スコープを抜けると自動的にアンロック
+struct MutexGuard<T> {
+    Mutex<T>* mutex;
+}
+
+impl<T> MutexGuard<T> {
+    // 内部値への参照を取得
+    T* get() {
+        return &self.mutex.value;
+    }
+
+    // 内部値への不変参照を取得
+    const T* get_const() {
+        return &self.mutex.value;
+    }
+
+    // 明示的なアンロック（通常はデストラクタで呼ばれる）
+    void unlock() {
+        mutex_unlock(&self.mutex.raw);
+    }
+}
+
+// 外部C関数宣言（ランタイムで実装）
+extern "C" void mutex_init(RawMutex* m);
+extern "C" void mutex_lock(RawMutex* m);
+extern "C" void mutex_unlock(RawMutex* m);
+extern "C" void mutex_destroy(RawMutex* m);
+extern "C" bool mutex_try_lock(RawMutex* m);
+
+impl<T> Mutex<T> {
+    // 新しいMutexを作成
+    static Mutex<T> new(T value) {
+        Mutex<T> m = Mutex<T> { value: value, initialized: false };
+        mutex_init(&m.raw);
+        m.initialized = true;
+        return m;
+    }
+
+    // ロックを取得（ブロッキング）
+    MutexGuard<T> lock() {
+        mutex_lock(&self.raw);
+        return MutexGuard<T> { mutex: &self };
+    }
+
+    // ロックを試行（非ブロッキング）
+    // 成功時はガードを返し、失敗時はnullを返す
+    MutexGuard<T>? try_lock() {
+        if (mutex_try_lock(&self.raw)) {
+            return MutexGuard<T> { mutex: &self };
+        }
+        return null;
+    }
+}
+
+// ============================================================
+// RwLock - 読み書きロック
+// ============================================================
+
+struct RawRwLock {
+    long[8] _opaque;
+}
+
+struct RwLock<T> {
+    T value;
+    RawRwLock raw;
+    bool initialized;
+}
+
+// 読み取りガード
+struct RwLockReadGuard<T> {
+    RwLock<T>* lock;
+}
+
+// 書き込みガード
+struct RwLockWriteGuard<T> {
+    RwLock<T>* lock;
+}
+
+extern "C" void rwlock_init(RawRwLock* l);
+extern "C" void rwlock_read_lock(RawRwLock* l);
+extern "C" void rwlock_read_unlock(RawRwLock* l);
+extern "C" void rwlock_write_lock(RawRwLock* l);
+extern "C" void rwlock_write_unlock(RawRwLock* l);
+extern "C" void rwlock_destroy(RawRwLock* l);
+
+impl<T> RwLockReadGuard<T> {
+    const T* get() {
+        return &self.lock.value;
+    }
+
+    void unlock() {
+        rwlock_read_unlock(&self.lock.raw);
+    }
+}
+
+impl<T> RwLockWriteGuard<T> {
+    T* get() {
+        return &self.lock.value;
+    }
+
+    void unlock() {
+        rwlock_write_unlock(&self.lock.raw);
+    }
+}
+
+impl<T> RwLock<T> {
+    static RwLock<T> new(T value) {
+        RwLock<T> l = RwLock<T> { value: value, initialized: false };
+        rwlock_init(&l.raw);
+        l.initialized = true;
+        return l;
+    }
+
+    RwLockReadGuard<T> read() {
+        rwlock_read_lock(&self.raw);
+        return RwLockReadGuard<T> { lock: &self };
+    }
+
+    RwLockWriteGuard<T> write() {
+        rwlock_write_lock(&self.raw);
+        return RwLockWriteGuard<T> { lock: &self };
+    }
+}
+
+// ============================================================
+// Atomic - アトミック操作
+// ============================================================
+
+struct AtomicInt {
+    int value;
+}
+
+struct AtomicLong {
+    long value;
+}
+
+struct AtomicBool {
+    bool value;
+}
+
+// 外部C関数（LLVMアトミック命令にコンパイル）
+extern "C" int atomic_load_i32(int* ptr);
+extern "C" void atomic_store_i32(int* ptr, int value);
+extern "C" int atomic_add_i32(int* ptr, int value);
+extern "C" int atomic_sub_i32(int* ptr, int value);
+extern "C" bool atomic_cas_i32(int* ptr, int* expected, int desired);
+
+extern "C" long atomic_load_i64(long* ptr);
+extern "C" void atomic_store_i64(long* ptr, long value);
+extern "C" long atomic_add_i64(long* ptr, long value);
+extern "C" long atomic_sub_i64(long* ptr, long value);
+extern "C" bool atomic_cas_i64(long* ptr, long* expected, long desired);
+
+impl AtomicInt {
+    static AtomicInt new(int value) {
+        return AtomicInt { value: value };
+    }
+
+    int load() {
+        return atomic_load_i32(&self.value);
+    }
+
+    void store(int value) {
+        atomic_store_i32(&self.value, value);
+    }
+
+    int fetch_add(int value) {
+        return atomic_add_i32(&self.value, value);
+    }
+
+    int fetch_sub(int value) {
+        return atomic_sub_i32(&self.value, value);
+    }
+
+    bool compare_exchange(int* expected, int desired) {
+        return atomic_cas_i32(&self.value, expected, desired);
+    }
+}
+
+impl AtomicLong {
+    static AtomicLong new(long value) {
+        return AtomicLong { value: value };
+    }
+
+    long load() {
+        return atomic_load_i64(&self.value);
+    }
+
+    void store(long value) {
+        atomic_store_i64(&self.value, value);
+    }
+
+    long fetch_add(long value) {
+        return atomic_add_i64(&self.value, value);
+    }
+
+    long fetch_sub(long value) {
+        return atomic_sub_i64(&self.value, value);
+    }
+
+    bool compare_exchange(long* expected, long desired) {
+        return atomic_cas_i64(&self.value, expected, desired);
+    }
+}
+
+impl AtomicBool {
+    static AtomicBool new(bool value) {
+        return AtomicBool { value: value };
+    }
+
+    bool load() {
+        int v = atomic_load_i32(&self.value);
+        return v != 0;
+    }
+
+    void store(bool value) {
+        atomic_store_i32(&self.value, value ? 1 : 0);
+    }
+}
+
+// ============================================================
+// Once - 一度だけ実行
+// ============================================================
+
+struct Once {
+    AtomicInt state;  // 0: 未実行, 1: 実行中, 2: 完了
+}
+
+impl Once {
+    static Once new() {
+        return Once { state: AtomicInt::new(0) };
+    }
+
+    // 一度だけ関数を実行
+    void call_once(void() f) {
+        int expected = 0;
+        if (self.state.compare_exchange(&expected, 1)) {
+            // 初回実行
+            f();
+            self.state.store(2);
+        } else {
+            // 他のスレッドが実行中または完了を待つ
+            while (self.state.load() != 2) {
+                // スピン待機（実際の実装ではyieldが必要）
+            }
+        }
+    }
+
+    bool is_completed() {
+        return self.state.load() == 2;
+    }
+}
