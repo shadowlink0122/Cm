@@ -917,9 +917,16 @@ test-std-asm-advanced:
 	@$(CM) run tests/std/asm/advanced.cm > .tmp/asm_advanced.out 2>&1 || true
 	@diff -u tests/std/asm/advanced.expect .tmp/asm_advanced.out && echo "✅ asm/advanced passed!" || echo "❌ asm/advanced failed!"
 
+.PHONY: test-std-asm-memory
+test-std-asm-memory:
+	@echo "Running std::asm/memory tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/asm/memory.cm > .tmp/asm_memory.out 2>&1 || true
+	@diff -u tests/std/asm/memory.expect .tmp/asm_memory.out && echo "✅ asm/memory passed!" || echo "❌ asm/memory failed!"
+
 # std::asm 全テスト
 .PHONY: test-std-asm
-test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture test-std-asm-inline test-std-asm-advanced
+test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture test-std-asm-inline test-std-asm-advanced test-std-asm-memory
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std::asm tests completed!"

@@ -1,0 +1,19 @@
+=== asm/memory test ===
+--- load/store ---
+load: ok
+0
+store: ok
+100
+--- atomic ---
+atomic_load: ok
+0
+atomic_store: ok
+42
+--- cas ---
+cas success:
+false
+10
+cas fail:
+false
+10
+=== memory complete ===
