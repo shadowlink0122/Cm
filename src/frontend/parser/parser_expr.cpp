@@ -1193,11 +1193,43 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern() {
 
         // 名前空間またはenum値アクセス: A::B または A::B::C::...
         if (consume_if(TokenKind::ColonColon)) {
-            std::string qualified_name = name;
-            do {
-                std::string member = expect_ident();
-                qualified_name += "::" + member;
-            } while (consume_if(TokenKind::ColonColon));
+            std::string enum_name = name;
+            std::string variant_name = expect_ident();
+            std::string qualified_name = enum_name + "::" + variant_name;
+
+            // 追加の名前空間アクセス (A::B::C::...)
+            while (consume_if(TokenKind::ColonColon)) {
+                enum_name = qualified_name;
+                variant_name = expect_ident();
+                qualified_name += "::" + variant_name;
+            }
+
+            // v0.13.0: デストラクチャリングパターン EnumName::Variant(x, y, ...)
+            if (consume_if(TokenKind::LParen)) {
+                std::vector<std::string> bindings;
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        if (check(TokenKind::Ident)) {
+                            std::string binding(current().get_string());
+                            advance();
+                            bindings.push_back(std::move(binding));
+                        } else if (check(TokenKind::Ident) && current().get_string() == "_") {
+                            advance();
+                            bindings.push_back("_");  // ワイルドカードバインディング
+                        } else {
+                            error("Expected identifier in destructuring pattern");
+                        }
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+
+                debug::par::log(debug::par::Id::PrimaryExpr,
+                                "Match pattern: enum destructure " + qualified_name + " with " +
+                                    std::to_string(bindings.size()) + " bindings",
+                                debug::Level::Debug);
+                return ast::MatchPattern::make_enum_destructure(enum_name, variant_name,
+                                                                std::move(bindings));
+            }
 
             auto enum_expr =
                 ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});

@@ -388,6 +388,11 @@ struct MatchPattern {
     ExprPtr value;         // Literal/EnumVariant用
     std::string var_name;  // Variable用（束縛変数名）
 
+    // v0.13.0: enum デストラクチャリング用
+    std::string enum_name;              // enum名（例: "Result"）
+    std::string variant_name;           // バリアント名（例: "Ok"）
+    std::vector<std::string> bindings;  // バインディング変数名（例: ["value"]）
+
     static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::Literal;
@@ -412,6 +417,18 @@ struct MatchPattern {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::EnumVariant;
         p->value = std::move(val);
+        return p;
+    }
+
+    // v0.13.0: デストラクチャリング付きenumバリアントパターン
+    static std::unique_ptr<MatchPattern> make_enum_destructure(std::string enum_name,
+                                                               std::string variant_name,
+                                                               std::vector<std::string> bindings) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::EnumVariant;
+        p->enum_name = std::move(enum_name);
+        p->variant_name = std::move(variant_name);
+        p->bindings = std::move(bindings);
         return p;
     }
 };

@@ -595,6 +595,9 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
 
     ast::TypePtr result_type = nullptr;
     for (auto& arm : match.arms) {
+        // v0.13.0: アームごとにスコープを作成してバインディング変数を登録
+        scopes_.push();
+
         check_match_pattern(arm.pattern.get(), scrutinee_type);
 
         if (arm.guard) {
@@ -605,6 +608,8 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
         }
 
         auto body_type = infer_type(*arm.body);
+
+        scopes_.pop();  // スコープを終了
 
         if (!result_type) {
             result_type = body_type;
@@ -657,7 +662,16 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 }
                 break;
             case ast::MatchPatternKind::EnumVariant:
-                if (arm.pattern->value) {
+                // v0.13.0: デストラクチャリングパターンのサポート
+                if (!arm.pattern->bindings.empty()) {
+                    // EnumName::Variant(x, y, ...) 形式
+                    std::string full_name =
+                        arm.pattern->enum_name + "::" + arm.pattern->variant_name;
+                    covered_values.insert(full_name);
+                    if (enum_names_.count(arm.pattern->enum_name)) {
+                        detected_enum_name = arm.pattern->enum_name;
+                    }
+                } else if (arm.pattern->value) {
                     if (auto* ident = arm.pattern->value->as<ast::IdentExpr>()) {
                         covered_values.insert(ident->name);
                         auto pos = ident->name.find("::");
@@ -749,7 +763,30 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             break;
 
         case ast::MatchPatternKind::EnumVariant:
-            if (pattern->value) {
+            // v0.13.0: デストラクチャリングパターンのサポート
+            if (!pattern->bindings.empty()) {
+                // EnumName::Variant(x, y, ...) 形式
+                std::string full_name = pattern->enum_name + "::" + pattern->variant_name;
+
+                // enumのバリアント情報を取得してbinding変数の型を登録
+                if (enum_defs_.count(pattern->enum_name)) {
+                    const auto* enum_def = enum_defs_.at(pattern->enum_name);
+                    for (const auto& member : enum_def->members) {
+                        if (member.name == pattern->variant_name) {
+                            // バインディング変数とフィールドを照合
+                            for (size_t i = 0;
+                                 i < pattern->bindings.size() && i < member.fields.size(); ++i) {
+                                const std::string& binding = pattern->bindings[i];
+                                if (binding != "_") {  // ワイルドカードは無視
+                                    ast::TypePtr field_type = member.fields[i].type;
+                                    scopes_.current().define(binding, field_type);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            } else if (pattern->value) {
                 auto enum_type = infer_type(*pattern->value);
                 if (!types_compatible(enum_type, expected_type)) {
                     error(current_span_, "Enum pattern type does not match scrutinee type");
