@@ -76,6 +76,11 @@ class StmtLowering : public MirLoweringBase {
                     if (stmt_ptr->expr) {
                         expr_lowering->lower_expression(*stmt_ptr->expr, ctx);
                     }
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAsm>>) {
+                    // インラインアセンブリ文
+                    auto mir_asm = MirStatement::make_asm(stmt_ptr->code, {}, stmt_ptr->clobbers,
+                                                          stmt_ptr->is_volatile);
+                    ctx.push_statement(std::move(mir_asm));
                 }
             },
             stmt.kind);

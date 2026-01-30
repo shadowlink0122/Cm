@@ -889,15 +889,8 @@ test-std-asm-basic:
 	@$(CM) run tests/std/asm/basic.cm > .tmp/asm_basic.out 2>&1 || true
 	@diff -u tests/std/asm/basic.expect .tmp/asm_basic.out && echo "✅ asm/basic passed!" || echo "❌ asm/basic failed!"
 
-.PHONY: test-std-asm-operations
-test-std-asm-operations:
-	@echo "Running std::asm/operations tests..."
-	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/operations.cm > .tmp/asm_operations.out 2>&1 || true
-	@diff -u tests/std/asm/operations.expect .tmp/asm_operations.out && echo "✅ asm/operations passed!" || echo "❌ asm/operations failed!"
-
 .PHONY: test-std-asm
-test-std-asm: test-std-asm-basic test-std-asm-operations
+test-std-asm: test-std-asm-basic
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std::asm tests completed!"

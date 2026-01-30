@@ -1,0 +1,4 @@
+=== __builtin_asm test ===
+nop: ok
+multiple: ok
+=== complete ===

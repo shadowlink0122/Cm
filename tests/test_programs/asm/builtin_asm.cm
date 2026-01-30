@@ -1,0 +1,19 @@
+// tests/test_programs/asm/builtin_asm.cm
+// __builtin_asm 組み込み関数テスト
+
+import std::io::println;
+
+int main() {
+    println("=== __builtin_asm test ===");
+    
+    // 基本的なasm命令
+    __builtin_asm("nop");
+    println("nop: ok");
+    
+    __builtin_asm("nop");
+    __builtin_asm("nop");
+    println("multiple: ok");
+    
+    println("=== complete ===");
+    return 0;
+}

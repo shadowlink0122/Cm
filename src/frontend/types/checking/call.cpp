@@ -29,6 +29,19 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
+        // __builtin_asm - コンパイラ組み込みインラインアセンブリ
+        if (ident->name == "__builtin_asm") {
+            if (call.args.empty()) {
+                error(current_span_, "'__builtin_asm' requires 1 string argument");
+                return ast::make_error();
+            }
+            // 引数は文字列リテラルであることを期待
+            for (auto& arg : call.args) {
+                infer_type(*arg);
+            }
+            return ast::make_void();
+        }
+
         // ジェネリック関数かチェック
         auto gen_it = generic_functions_.find(ident->name);
         if (gen_it != generic_functions_.end()) {

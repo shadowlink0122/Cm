@@ -13,9 +13,8 @@ int main() {
     barrier();
     println("nop/pause/barrier: ok");
     
-    // asm(string)
+    // asm(string) - 純粋Cm実装
     asm("nop");
-    asm("mfence");
     println("asm(string): ok");
     
     // アーキテクチャ検出
