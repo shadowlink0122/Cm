@@ -468,6 +468,39 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
         debug::hir::log(debug::hir::Id::CallTarget, "indirect call", debug::Level::Trace);
     }
 
+    // enumバリアントコンストラクタかチェック（v0.13.0）
+    // 形式: EnumName::VariantName(args)
+    if (func_name.find("::") != std::string::npos) {
+        size_t pos = func_name.find("::");
+        std::string enum_name = func_name.substr(0, pos);
+        std::string variant_name = func_name.substr(pos + 2);
+
+        auto enum_it = enum_defs_.find(enum_name);
+        if (enum_it != enum_defs_.end()) {
+            const auto* enum_def = enum_it->second;
+
+            // バリアントを検索
+            for (const auto& member : enum_def->members) {
+                if (member.name == variant_name && member.has_fields()) {
+                    // Associated Dataを持つバリアント → HirEnumConstruct
+                    debug::hir::log(debug::hir::Id::CallExprLower,
+                                    "enum variant constructor: " + func_name, debug::Level::Debug);
+
+                    auto hir_enum = std::make_unique<HirEnumConstruct>();
+                    hir_enum->enum_name = enum_name;
+                    hir_enum->variant_name = variant_name;
+                    hir_enum->tag = member.value.value_or(0);
+
+                    for (auto& arg : call.args) {
+                        hir_enum->args.push_back(lower_expr(*arg));
+                    }
+
+                    return std::make_unique<HirExpr>(std::move(hir_enum), type);
+                }
+            }
+        }
+    }
+
     debug::hir::log(debug::hir::Id::CallArgs, "count=" + std::to_string(call.args.size()),
                     debug::Level::Trace);
     for (size_t i = 0; i < call.args.size(); i++) {

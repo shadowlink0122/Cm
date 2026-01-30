@@ -1,0 +1,32 @@
+// enum バリアントコンストラクタテスト（v0.13.0）
+import std::io::println;
+
+// Associated Dataを持つenum
+enum Color {
+    RGB(int r, int g, int b),
+    Grayscale(int value),
+    Named(string name)
+}
+
+// シンプルなenum
+enum Status {
+    Ok,
+    Error
+}
+
+int main() {
+    println("=== Enum Variant Constructor Test ===");
+    
+    // Associated Dataを持つバリアントの作成
+    auto c1 = Color::RGB(255, 128, 64);
+    auto c2 = Color::Grayscale(128);
+    auto c3 = Color::Named("red");
+    
+    // シンプルなバリアント
+    int s = Status::Ok;
+    
+    println("Variant constructed successfully!");
+    println("Test passed!");
+    
+    return 0;
+}

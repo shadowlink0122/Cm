@@ -472,16 +472,40 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     debug::tc::log(debug::tc::Id::Resolved, "Registering enum: " + en.name, debug::Level::Debug);
 
     enum_names_.insert(en.name);
-    scopes_.global().define(en.name, ast::make_int());
+    enum_defs_[en.name] = &en;  // enum定義を保存（v0.13.0）
+
+    // Associated Dataを持つenumの場合、enum型として扱う
+    auto enum_type = ast::make_named(en.name);
+    scopes_.global().define(en.name, enum_type);
 
     for (const auto& member : en.members) {
         std::string full_name = en.name + "::" + member.name;
         int64_t value = member.value.value_or(0);
         enum_values_[full_name] = value;
-        scopes_.global().define(full_name, ast::make_int());
 
-        debug::tc::log(debug::tc::Id::Resolved, "  " + full_name + " = " + std::to_string(value),
-                       debug::Level::Debug);
+        // Associated Dataを持つ場合
+        if (member.has_fields()) {
+            // バリアントのフィールド型を保存
+            std::vector<ast::TypePtr> field_types;
+            for (const auto& field : member.fields) {
+                field_types.push_back(field.type);
+            }
+            enum_variant_fields_[full_name] = std::move(field_types);
+
+            // バリアントはenum型を返す「コンストラクタ関数」として登録
+            scopes_.global().define(full_name, enum_type);
+
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "  " + full_name + "(constructor) with " +
+                               std::to_string(member.fields.size()) + " fields",
+                           debug::Level::Debug);
+        } else {
+            // 従来のシンプルなenumバリアント
+            scopes_.global().define(full_name, enum_type);
+
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "  " + full_name + " = " + std::to_string(value), debug::Level::Debug);
+        }
     }
 }
 

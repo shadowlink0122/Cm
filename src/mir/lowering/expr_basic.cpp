@@ -1160,4 +1160,39 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     return result;
 }
 
+// enum バリアントコンストラクタのlowering（v0.13.0）
+LocalId ExprLowering::lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx) {
+    debug_msg("MIR", "Lowering enum construct: " + ec.enum_name + "::" + ec.variant_name);
+
+    // enum型を作成
+    hir::TypePtr enum_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+    enum_type->name = ec.enum_name;
+
+    // 結果用の変数を作成
+    LocalId result = ctx.new_temp(enum_type);
+
+    // 引数を lowering
+    std::vector<MirOperandPtr> operands;
+    for (const auto& arg : ec.args) {
+        LocalId arg_local = lower_expression(*arg, ctx);
+        operands.push_back(MirOperand::copy(MirPlace{arg_local}));
+    }
+
+    // Aggregate (Enum) Rvalue を生成
+    AggregateKind kind;
+    kind.type = AggregateKind::Enum;
+    kind.name = ec.enum_name;
+    kind.variant_name = ec.variant_name;
+    kind.tag = ec.tag;
+    kind.ty = enum_type;
+
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = MirRvalue::Aggregate;
+    rv->data = MirRvalue::AggregateData{kind, std::move(operands)};
+
+    ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(rv)));
+
+    return result;
+}
+
 }  // namespace cm::mir

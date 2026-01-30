@@ -23,6 +23,7 @@ class HirLowering {
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
+    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;  // v0.13.0
     std::unordered_set<std::string> types_with_default_ctor_;
     std::unordered_map<std::string, TypePtr> typedef_defs_;        // typedef定義
     std::unordered_map<std::string, std::string> import_aliases_;  // インポートエイリアス

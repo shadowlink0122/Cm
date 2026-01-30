@@ -191,6 +191,12 @@ class TypeChecker {
     // enum名のセット
     std::unordered_set<std::string> enum_names_;
 
+    // enum定義のキャッシュ（v0.13.0: Associated Dataサポート）
+    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;
+
+    // enumバリアントのコンストラクタ情報 (EnumName::VariantName -> フィールド型リスト)
+    std::unordered_map<std::string, std::vector<ast::TypePtr>> enum_variant_fields_;
+
     // typedef定義のキャッシュ (エイリアス名 -> 実際の型)
     std::unordered_map<std::string, ast::TypePtr> typedef_defs_;
 

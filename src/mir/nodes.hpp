@@ -252,10 +252,13 @@ struct AggregateKind {
         Array,   // 配列
         Tuple,   // タプル
         Struct,  // 構造体
+        Enum,    // enumバリアント（v0.13.0）
     };
 
     Type type;
-    std::string name;  // Structの場合の型名
+    std::string name;          // Struct/Enumの場合の型名
+    std::string variant_name;  // Enumの場合のバリアント名（v0.13.0）
+    int64_t tag = 0;           // Enumの場合のタグ値（v0.13.0）
     hir::TypePtr ty;
 };
 

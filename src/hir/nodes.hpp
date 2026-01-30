@@ -158,13 +158,23 @@ struct HirCast {
     TypePtr target_type;
 };
 
+// enumバリアントコンストラクタ（v0.13.0）
+// 例: Result::Ok(value), Option::Some(42)
+struct HirEnumConstruct {
+    std::string enum_name;         // enum名（例: "Result"）
+    std::string variant_name;      // バリアント名（例: "Ok"）
+    int64_t tag;                   // バリアントのタグ値
+    std::vector<HirExprPtr> args;  // Associated Dataの値
+};
+
 // 式の種類
 using HirExprKind =
     std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
                  std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
                  std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
                  std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>,
-                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>>;
+                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>,
+                 std::unique_ptr<HirEnumConstruct>>;
 
 struct HirExpr {
     HirExprKind kind;

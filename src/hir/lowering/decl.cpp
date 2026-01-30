@@ -359,6 +359,9 @@ HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
 HirDeclPtr HirLowering::lower_enum(ast::EnumDecl& en) {
     debug::hir::log(debug::hir::Id::NodeCreate, "enum " + en.name, debug::Level::Debug);
 
+    // enum定義をキャッシュに登録（v0.13.0）
+    enum_defs_[en.name] = &en;
+
     auto hir_enum = std::make_unique<HirEnum>();
     hir_enum->name = en.name;
     hir_enum->is_export = en.visibility == ast::Visibility::Export;
