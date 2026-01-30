@@ -1779,11 +1779,40 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateLoad(arrayType, alloca, "arr_load");
             } else if (aggData.kind.type == mir::AggregateKind::Type::Enum) {
                 // v0.13.0: Enumバリアントの構築
-                // 現在のシンプルな実装: タグ値をi32として返す
-                // Associated Dataの完全サポートは後続実装
+                // { i32 tag, payload... } 形式のstruct
                 int64_t tag = aggData.kind.tag;
+                std::string enumName = aggData.kind.name;
 
-                // タグ値を返す
+                // enum型をenumTypesから取得
+                auto enumIt = enumTypes.find(enumName);
+                if (enumIt != enumTypes.end() && enumIt->second) {
+                    auto* enumStructType = enumIt->second;
+
+                    // 一時allocaを作成
+                    auto* alloca = builder->CreateAlloca(enumStructType, nullptr, "enum_temp");
+
+                    // タグフィールドを設定 (index 0)
+                    auto* tagPtr = builder->CreateStructGEP(enumStructType, alloca, 0, "enum_tag");
+                    builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), tag), tagPtr);
+
+                    // ペイロードフィールドを設定 (index 1以降)
+                    for (size_t i = 0; i < aggData.operands.size(); ++i) {
+                        if (aggData.operands[i]) {
+                            auto* fieldValue = convertOperand(*aggData.operands[i]);
+                            if (fieldValue) {
+                                // フィールドインデックスは tag(0) の後なので i+1
+                                auto* fieldPtr = builder->CreateStructGEP(enumStructType, alloca,
+                                                                          i + 1, "enum_field");
+                                builder->CreateStore(fieldValue, fieldPtr);
+                            }
+                        }
+                    }
+
+                    // 構造体をロードして返す
+                    return builder->CreateLoad(enumStructType, alloca, "enum_load");
+                }
+
+                // フォールバック: タグ値のみ返す
                 return llvm::ConstantInt::get(ctx.getI32Type(), tag);
             }
 
