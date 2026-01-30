@@ -887,6 +887,19 @@ ast::ExprPtr Parser::parse_primary() {
         std::string name(current().get_string());
         debug::par::log(debug::par::Id::IdentifierRef, "Found identifier: " + name,
                         debug::Level::Debug);
+
+        // オブジェクトマクロ展開チェック（引数なしマクロ）
+        if (is_macro_call() && !peek_ahead(TokenKind::LParen)) {
+            auto expanded = expand_macro(name, {});
+            if (!expanded.empty()) {
+                advance();  // consume macro name
+                debug::par::log(debug::par::Id::IdentifierRef, "Expanding macro: " + name,
+                                debug::Level::Debug);
+                // 展開されたトークンを一時的にパース
+                return parse_expanded_macro_tokens(expanded, start_pos);
+            }
+        }
+
         advance();
 
         // 名前空間またはenum値アクセス: A::B または A::B::C::...

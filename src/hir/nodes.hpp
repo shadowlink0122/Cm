@@ -444,17 +444,36 @@ struct HirImport {
     std::string alias;
 };
 
+// Enum関連データ用のフィールド（v0.13.0）
+struct HirEnumField {
+    std::string name;  // 空の場合は位置引数
+    TypePtr type;
+};
+
 // Enumメンバ
 struct HirEnumMember {
     std::string name;
     int64_t value;
+    std::vector<HirEnumField> fields;  // Associated Data（v0.13.0）
+
+    bool has_fields() const { return !fields.empty(); }
 };
 
 // Enum定義
 struct HirEnum {
     std::string name;
+    std::vector<std::string> type_params;  // ジェネリック型パラメータ（v0.13.0）
     std::vector<HirEnumMember> members;
     bool is_export = false;
+
+    bool is_generic() const { return !type_params.empty(); }
+    bool has_associated_data() const {
+        for (const auto& m : members) {
+            if (m.has_fields())
+                return true;
+        }
+        return false;
+    }
 };
 
 // Typedef定義

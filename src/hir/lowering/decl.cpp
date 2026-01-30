@@ -363,10 +363,22 @@ HirDeclPtr HirLowering::lower_enum(ast::EnumDecl& en) {
     hir_enum->name = en.name;
     hir_enum->is_export = en.visibility == ast::Visibility::Export;
 
+    // ジェネリック型パラメータ（v0.13.0）
+    hir_enum->type_params = en.type_params;
+
     for (const auto& member : en.members) {
         HirEnumMember hir_member;
         hir_member.name = member.name;
         hir_member.value = member.value.value_or(0);
+
+        // Associated Dataフィールド（v0.13.0）
+        for (const auto& field : member.fields) {
+            HirEnumField hir_field;
+            hir_field.name = field.name;
+            hir_field.type = field.type;
+            hir_member.fields.push_back(std::move(hir_field));
+        }
+
         hir_enum->members.push_back(std::move(hir_member));
     }
 

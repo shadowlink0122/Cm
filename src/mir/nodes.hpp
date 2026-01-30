@@ -691,6 +691,63 @@ struct MirStruct {
 
 using MirStructPtr = std::unique_ptr<MirStruct>;
 
+// ============================================================
+// Enum定義（v0.13.0: Associated Dataサポート）
+// ============================================================
+
+// Enumフィールド（Associated Data用）
+struct MirEnumField {
+    std::string name;  // 空の場合は位置引数
+    hir::TypePtr type;
+};
+
+// Enumバリアント
+struct MirEnumVariant {
+    std::string name;
+    int64_t tag;                       // ディスクリミネータ値
+    std::vector<MirEnumField> fields;  // Associated Data
+
+    bool has_fields() const { return !fields.empty(); }
+};
+
+// Enum定義
+struct MirEnum {
+    std::string name;
+    std::string module_path;
+    std::vector<std::string> type_params;  // ジェネリック型パラメータ
+    std::vector<MirEnumVariant> variants;
+    bool is_export = false;
+
+    bool is_generic() const { return !type_params.empty(); }
+    bool has_associated_data() const {
+        for (const auto& v : variants) {
+            if (v.has_fields())
+                return true;
+        }
+        return false;
+    }
+
+    // タグ値からバリアントを取得
+    const MirEnumVariant* get_variant(int64_t tag) const {
+        for (const auto& v : variants) {
+            if (v.tag == tag)
+                return &v;
+        }
+        return nullptr;
+    }
+
+    // 名前からバリアントを取得
+    const MirEnumVariant* get_variant_by_name(const std::string& name) const {
+        for (const auto& v : variants) {
+            if (v.name == name)
+                return &v;
+        }
+        return nullptr;
+    }
+};
+
+using MirEnumPtr = std::unique_ptr<MirEnum>;
+
 // インターフェースメソッド定義
 struct MirInterfaceMethod {
     std::string name;
@@ -770,6 +827,7 @@ using MirModulePtr = std::unique_ptr<MirModule>;
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
     std::vector<MirStructPtr> structs;        // 構造体定義
+    std::vector<MirEnumPtr> enums;            // enum定義（v0.13.0）
     std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
     std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
     std::vector<MirModulePtr> modules;        // モジュール
@@ -811,6 +869,16 @@ struct MirProgram {
         for (const auto& st : structs) {
             if (st && st->name == name) {
                 return st.get();
+            }
+        }
+        return nullptr;
+    }
+
+    // enumを名前で検索（v0.13.0）
+    const MirEnum* find_enum(const std::string& name) const {
+        for (const auto& e : enums) {
+            if (e && e->name == name) {
+                return e.get();
             }
         }
         return nullptr;

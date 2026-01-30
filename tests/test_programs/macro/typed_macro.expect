@@ -1,0 +1,7 @@
+=== Typed Macro Test ===
+VERSION = 13
+APP_NAME = CmApp
+PI = 3.14159
+Debug mode is ON
+Next version = 14
+=== Complete ===

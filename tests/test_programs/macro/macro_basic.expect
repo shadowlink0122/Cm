@@ -1,2 +1,4 @@
-macro: basic
-macro: parse ok
+=== macro test ===
+13
+hello macro
+=== complete ===

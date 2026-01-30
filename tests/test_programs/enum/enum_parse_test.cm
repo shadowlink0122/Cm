@@ -1,0 +1,19 @@
+// シンプルなAssociated Dataテスト（パース確認用）
+import std::io::println;
+
+// Associated Dataを持つenum
+enum Message {
+    Quit,
+    Move(int, int),
+    Write(string)
+}
+
+int main() {
+    println("=== Enum Associated Data (Parse Test) ===");
+    
+    // 現時点ではパースのみ確認
+    // バリアント作成とマッチはCGEN対応後
+    
+    println("Enum parsed successfully!");
+    return 0;
+}

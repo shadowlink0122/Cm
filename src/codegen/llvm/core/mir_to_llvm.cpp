@@ -457,6 +457,42 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         structType->setBody(fieldTypes);
     }
 
+    // enum定義を収集（v0.13.0）
+    for (const auto& enumPtr : program.enums) {
+        if (!enumPtr)
+            continue;
+        const auto& enumDef = *enumPtr;
+        enumDefs[enumDef.name] = &enumDef;
+
+        // Associated Dataを持つenumの場合、LLVM構造体型を生成
+        if (enumDef.has_associated_data()) {
+            // 最大サイズのバリアントを見つける
+            size_t maxFields = 0;
+            for (const auto& variant : enumDef.variants) {
+                maxFields = std::max(maxFields, variant.fields.size());
+            }
+
+            // enum型 = { i32 tag, payload... }
+            // 簡易実装: 固定サイズのペイロードを使用
+            std::vector<llvm::Type*> enumBodyTypes;
+            enumBodyTypes.push_back(llvm::Type::getInt32Ty(ctx.getContext()));  // tag
+
+            // 最大バリアントのフィールド分のスペースを確保
+            // TODO: 実際にはunion（最大サイズ）を使用すべき
+            for (const auto& variant : enumDef.variants) {
+                if (variant.fields.size() == maxFields) {
+                    for (const auto& field : variant.fields) {
+                        enumBodyTypes.push_back(convertType(field.type));
+                    }
+                    break;
+                }
+            }
+
+            auto enumType = llvm::StructType::create(ctx.getContext(), enumBodyTypes, enumDef.name);
+            enumTypes[enumDef.name] = enumType;
+        }
+    }
+
     // インターフェース型（fat pointer）を定義
     // std::cerr << "[MIR2LLVM] Creating interface fat pointer types...\n";
     for (const auto& iface : program.interfaces) {

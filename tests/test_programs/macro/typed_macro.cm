@@ -1,0 +1,39 @@
+// 型付きマクロのテスト
+import std::io::println;
+
+// 基本的な型付きマクロ
+macro int VERSION = 13;
+macro string APP_NAME = "CmApp";
+macro float PI = 3.14159;
+macro bool DEBUG = true;
+
+// 型なしマクロ（void扱い）
+macro UNUSED = 0;
+
+int main() {
+    println("=== Typed Macro Test ===");
+    
+    // 整数マクロ
+    int v = VERSION;
+    println("VERSION = {v}");
+    
+    // 文字列マクロ
+    string name = APP_NAME;
+    println("APP_NAME = {name}");
+    
+    // 浮動小数点マクロ
+    float pi = PI;
+    println("PI = {pi}");
+    
+    // bool マクロ
+    if (DEBUG) {
+        println("Debug mode is ON");
+    }
+    
+    // マクロを式で使用
+    int next_version = VERSION + 1;
+    println("Next version = {next_version}");
+    
+    println("=== Complete ===");
+    return 0;
+}

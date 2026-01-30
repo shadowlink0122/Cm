@@ -299,12 +299,28 @@ struct ImplDecl {
 // ============================================================
 // Enumメンバ定義
 // ============================================================
+
+// enum関連データ用のフィールド
+struct EnumField {
+    std::string name;  // 空の場合は位置引数
+    TypePtr type;
+
+    EnumField(std::string n, TypePtr t) : name(std::move(n)), type(std::move(t)) {}
+    EnumField(TypePtr t) : type(std::move(t)) {}
+};
+
 struct EnumMember {
     std::string name;
     std::optional<int64_t> value;  // 明示的な値（なければオートインクリメント）
+    std::vector<EnumField> fields;  // Associated Data フィールド（v0.13.0）
 
     EnumMember(std::string n, std::optional<int64_t> v = std::nullopt)
         : name(std::move(n)), value(v) {}
+
+    EnumMember(std::string n, std::vector<EnumField> f)
+        : name(std::move(n)), value(std::nullopt), fields(std::move(f)) {}
+
+    bool has_fields() const { return !fields.empty(); }
 };
 
 // ============================================================
@@ -312,12 +328,25 @@ struct EnumMember {
 // ============================================================
 struct EnumDecl {
     std::string name;
+    std::vector<std::string> type_params;  // ジェネリック型パラメータ（v0.13.0）
     std::vector<EnumMember> members;
     Visibility visibility = Visibility::Private;
     std::vector<AttributeNode> attributes;
 
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}
+
+    EnumDecl(std::string n, std::vector<std::string> tp, std::vector<EnumMember> m)
+        : name(std::move(n)), type_params(std::move(tp)), members(std::move(m)) {}
+
+    bool is_generic() const { return !type_params.empty(); }
+    bool has_associated_data() const {
+        for (const auto& m : members) {
+            if (m.has_fields())
+                return true;
+        }
+        return false;
+    }
 };
 
 // ============================================================
