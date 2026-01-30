@@ -1,58 +1,73 @@
 // tests/std/asm/memory.cm
-// std::asm メモリ操作テスト
+// std::asm 直接メモリ操作テスト
 
 import std::io::println;
-import std::asm::{asm_load_i32, asm_store_i32, atomic_load_i32, atomic_store_i32, cas_i32};
+import std::asm::{asm_ptr, asm_ptr_val, asm_ptr_ret, is_x86, is_arm64};
 
 int main() {
     println("=== asm/memory test ===");
     
     // ============================================================
-    // 基本的なロード/ストア
+    // 直接asm命令でのストア
     // ============================================================
-    println("--- load/store ---");
+    println("--- asm store ---");
     
-    int value = 100;
-    int loaded = asm_load_i32(&value);
-    println("load: ok");
-    println(loaded);  // 100
+    int value = 0;
     
-    asm_store_i32(&value, 200);
-    println("store: ok");
-    println(value);   // 200
-    
-    // ============================================================
-    // アトミックロード/ストア
-    // ============================================================
-    println("--- atomic ---");
-    
-    int atomic_val = 42;
-    int atomic_loaded = atomic_load_i32(&atomic_val);
-    println("atomic_load: ok");
-    println(atomic_loaded);  // 42
-    
-    atomic_store_i32(&atomic_val, 99);
-    println("atomic_store: ok");
-    println(atomic_val);     // 99
+    if (is_x86()) {
+        // x86: movl %1, (%0)
+        asm_ptr_val("movl %1, (%0)", &value, 42);
+        println("x86 store: ok");
+    } else if (is_arm64()) {
+        // ARM64: str %1, [%0]
+        asm_ptr_val("str %1, [%0]", &value, 42);
+        println("arm64 store: ok");
+    } else {
+        println("store: skip");
+    }
+    println(value);
     
     // ============================================================
-    // Compare-And-Swap
+    // 直接asm命令でのロード
     // ============================================================
-    println("--- cas ---");
+    println("--- asm load ---");
     
-    int cas_val = 10;
+    int source = 100;
+    int loaded = 0;
     
-    // CAS成功：expected == 現在値
-    bool success1 = cas_i32(&cas_val, 10, 20);
-    println("cas success:");
-    println(success1);  // true
-    println(cas_val);   // 20
+    if (is_x86()) {
+        // x86: movl (%0), %0
+        loaded = asm_ptr_ret("movl (%0), %0", &source);
+        println("x86 load: ok");
+    } else if (is_arm64()) {
+        // ARM64: ldr %0, [%0]
+        loaded = asm_ptr_ret("ldr %0, [%0]", &source);
+        println("arm64 load: ok");
+    } else {
+        println("load: skip");
+    }
+    println(loaded);
     
-    // CAS失敗：expected != 現在値
-    bool success2 = cas_i32(&cas_val, 10, 30);
-    println("cas fail:");
-    println(success2);  // false
-    println(cas_val);   // 20（変更なし）
+    // ============================================================
+    // インクリメント/デクリメント
+    // ============================================================
+    println("--- asm modify ---");
+    
+    int counter = 10;
+    
+    if (is_x86()) {
+        asm_ptr("incl (%0)", &counter);
+        println("x86 inc: ok");
+        println(counter);  // 11
+        
+        asm_ptr("decl (%0)", &counter);
+        println("x86 dec: ok");
+        println(counter);  // 10
+    } else {
+        println("modify: skip");
+        println(counter);
+        println(counter);
+    }
     
     println("=== memory complete ===");
     return 0;

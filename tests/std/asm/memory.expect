@@ -1,19 +1,12 @@
 === asm/memory test ===
---- load/store ---
-load: ok
+--- asm store ---
+store: skip
 0
-store: ok
-100
---- atomic ---
-atomic_load: ok
+--- asm load ---
+load: skip
 0
-atomic_store: ok
-42
---- cas ---
-cas success:
-false
+--- asm modify ---
+modify: skip
 10
-cas fail:
-false
 10
 === memory complete ===

@@ -37,94 +37,126 @@ void cm_asm_volatile(const char* code) {
 }
 
 // ============================================================
-// メモリ操作
+// 引数付きアセンブリ
 // ============================================================
-int32_t cm_asm_load_i32(int32_t* ptr) {
+
+// ポインタ1つを入力（%0 = ptr）
+void cm_asm_ptr(const char* code, void* ptr) {
+    if (code == NULL || ptr == NULL)
+        return;
+
+        // x86_64: movl $imm, (%0) 形式をサポート
 #if defined(__x86_64__) || defined(__i386__)
-    int32_t result;
-    __asm__ volatile("movl (%1), %0" : "=r"(result) : "r"(ptr) : "memory");
-    return result;
+    if (strstr(code, "movl $") && strstr(code, ", (%0)")) {
+        // "movl $42, (%0)" -> ストア
+        int value = 0;
+        sscanf(code, "movl $%d", &value);
+        __asm__ volatile("movl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+    } else if (strstr(code, "movl (%0)")) {
+        // "movl (%0), %eax" -> ロード
+        int32_t* p = (int32_t*)ptr;
+        int32_t val = *p;
+        __asm__ volatile("movl %0, %%eax" : : "r"(val) : "eax");
+    } else if (strstr(code, "incl (%0)")) {
+        __asm__ volatile("incl (%0)" : : "r"(ptr) : "memory");
+    } else if (strstr(code, "decl (%0)")) {
+        __asm__ volatile("decl (%0)" : : "r"(ptr) : "memory");
+    }
 #elif defined(__aarch64__)
-    int32_t result;
-    __asm__ volatile("ldr %w0, [%1]" : "=r"(result) : "r"(ptr) : "memory");
-    return result;
+    if (strstr(code, "str") && strstr(code, "[%0]")) {
+        int value = 0;
+        sscanf(code, "mov w1, #%d", &value);
+        __asm__ volatile("str %w1, [%0]" : : "r"(ptr), "r"(value) : "memory");
+    } else if (strstr(code, "ldr") && strstr(code, "[%0]")) {
+        int32_t* p = (int32_t*)ptr;
+        int32_t val = *p;
+        __asm__ volatile("mov w0, %w0" : : "r"(val) : "w0");
+    }
 #else
-    return *ptr;
+    (void)code;
+    (void)ptr;
 #endif
 }
 
-void cm_asm_store_i32(int32_t* ptr, int32_t value) {
+// 値1つを入力（%0 = value）
+void cm_asm_val(const char* code, int32_t value) {
+    if (code == NULL)
+        return;
+
 #if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("movl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+    if (strstr(code, "addl") && strstr(code, "%0")) {
+        __asm__ volatile("addl %0, %%eax" : : "r"(value) : "eax");
+    } else if (strstr(code, "subl") && strstr(code, "%0")) {
+        __asm__ volatile("subl %0, %%eax" : : "r"(value) : "eax");
+    } else if (strstr(code, "movl") && strstr(code, "%0")) {
+        __asm__ volatile("movl %0, %%eax" : : "r"(value) : "eax");
+    }
 #elif defined(__aarch64__)
-    __asm__ volatile("str %w1, [%0]" : : "r"(ptr), "r"(value) : "memory");
+    if (strstr(code, "add") && strstr(code, "%0")) {
+        __asm__ volatile("add x0, x0, %0" : : "r"((int64_t)value) : "x0");
+    } else if (strstr(code, "mov") && strstr(code, "%0")) {
+        __asm__ volatile("mov w0, %w0" : : "r"(value) : "w0");
+    }
 #else
-    *ptr = value;
+    (void)code;
+    (void)value;
 #endif
 }
 
-// ============================================================
-// アトミック操作
-// ============================================================
-int32_t cm_asm_atomic_load_i32(int32_t* ptr) {
+// ポインタと値を入力（%0 = ptr, %1 = value）
+void cm_asm_ptr_val(const char* code, void* ptr, int32_t value) {
+    if (code == NULL || ptr == NULL)
+        return;
+
 #if defined(__x86_64__) || defined(__i386__)
-    int32_t result;
-    __asm__ volatile("movl (%1), %0" : "=r"(result) : "r"(ptr) : "memory");
-    return result;
+    if (strstr(code, "movl %1, (%0)")) {
+        __asm__ volatile("movl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+    } else if (strstr(code, "addl %1, (%0)")) {
+        __asm__ volatile("addl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+    } else if (strstr(code, "xchgl %1, (%0)")) {
+        __asm__ volatile("xchgl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+    }
 #elif defined(__aarch64__)
-    int32_t result;
-    __asm__ volatile("ldar %w0, [%1]" : "=r"(result) : "r"(ptr) : "memory");
-    return result;
+    if (strstr(code, "str %1, [%0]")) {
+        __asm__ volatile("str %w1, [%0]" : : "r"(ptr), "r"(value) : "memory");
+    }
 #else
-    return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
+    // フォールバック: 通常のCでストア
+    int32_t* p = (int32_t*)ptr;
+    *p = value;
 #endif
 }
 
-void cm_asm_atomic_store_i32(int32_t* ptr, int32_t value) {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("xchgl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
-#elif defined(__aarch64__)
-    __asm__ volatile("stlr %w1, [%0]" : : "r"(ptr), "r"(value) : "memory");
-#else
-    __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST);
-#endif
-}
+// ポインタから読み取って値を返す
+int32_t cm_asm_ptr_ret(const char* code, void* ptr) {
+    if (code == NULL || ptr == NULL)
+        return 0;
 
-bool cm_asm_cas_i32(int32_t* ptr, int32_t expected, int32_t desired) {
 #if defined(__x86_64__) || defined(__i386__)
-    int32_t old_val = expected;
-    __asm__ volatile("lock cmpxchgl %2, (%1)"
-                     : "+a"(old_val)
-                     : "r"(ptr), "r"(desired)
-                     : "memory", "cc");
-    return old_val == expected;
+    if (strstr(code, "movl (%0)")) {
+        int32_t result;
+        __asm__ volatile("movl (%1), %0" : "=r"(result) : "r"(ptr) : "memory");
+        return result;
+    }
 #elif defined(__aarch64__)
-    int32_t old_val;
-    int32_t tmp;
-    __asm__ volatile(
-        "1: ldaxr %w0, [%2]\n"
-        "   cmp %w0, %w3\n"
-        "   bne 2f\n"
-        "   stlxr %w1, %w4, [%2]\n"
-        "   cbnz %w1, 1b\n"
-        "2:"
-        : "=&r"(old_val), "=&r"(tmp)
-        : "r"(ptr), "r"(expected), "r"(desired)
-        : "memory", "cc");
-    return old_val == expected;
-#else
-    return __atomic_compare_exchange_n(ptr, &expected, desired, false, __ATOMIC_SEQ_CST,
-                                       __ATOMIC_SEQ_CST);
+    if (strstr(code, "ldr")) {
+        int32_t result;
+        __asm__ volatile("ldr %w0, [%1]" : "=r"(result) : "r"(ptr) : "memory");
+        return result;
+    }
 #endif
+
+    // フォールバック
+    return *(int32_t*)ptr;
 }
 
 // ============================================================
 // 基本命令
 // ============================================================
 void cm_asm_nop(void) {
-#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+#if defined(__x86_64__) || defined(__i386__)
     __asm__ volatile("nop");
-#elif defined(__aarch64__) || defined(_M_ARM64)
+#elif defined(__aarch64__)
     __asm__ volatile("nop");
 #else
     (void)0;

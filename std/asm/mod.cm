@@ -2,11 +2,11 @@
 // v0.13.0: 低レベルアセンブリアクセス
 //
 // 使用例:
-//   import std::asm::{asm, asm_load_i32, asm_store_i32};
+//   import std::asm::{asm, asm_ptr, asm_val};
 //   
-//   asm("nop");                    // 任意のアセンブリ命令
-//   int val = asm_load_i32(&x);    // メモリからロード
-//   asm_store_i32(&x, 42);         // メモリにストア
+//   asm("nop");                          // 基本命令
+//   asm_ptr("movl $42, (%0)", &x);       // ポインタ経由でストア
+//   int v = asm_ptr_ret("movl (%0), %0", &x);  // ポインタ経由でロード
 
 module std.asm;
 
@@ -14,54 +14,56 @@ module std.asm;
 // 任意のインラインアセンブリ
 // ============================================================
 
+// 基本的なアセンブリ命令（引数なし）
 extern "C" void cm_asm_inline(string code);
 export void asm(string code) {
     cm_asm_inline(code);
 }
 
+// Volatile版
 extern "C" void cm_asm_volatile(string code);
 export void volatile_asm(string code) {
     cm_asm_volatile(code);
 }
 
 // ============================================================
-// メモリ操作アセンブリ
+// 引数付きアセンブリ
 // ============================================================
 
-// ポインタからi32をロード（アセンブリ経由）
-extern "C" int cm_asm_load_i32(int* ptr);
-export int asm_load_i32(int* ptr) {
-    return cm_asm_load_i32(ptr);
+// ポインタ1つを入力としてアセンブリ実行
+// %0 = ptr
+// 例: asm_ptr("movl $42, (%0)", &x)  // x = 42
+extern "C" void cm_asm_ptr(string code, void* ptr);
+export void asm_ptr(string code, void* ptr) {
+    cm_asm_ptr(code, ptr);
 }
 
-// ポインタにi32をストア（アセンブリ経由）
-extern "C" void cm_asm_store_i32(int* ptr, int value);
-export void asm_store_i32(int* ptr, int value) {
-    cm_asm_store_i32(ptr, value);
+// 値1つを入力としてアセンブリ実行
+// %0 = value (レジスタに配置)
+// 例: asm_val("addl $10, %0", x)
+extern "C" void cm_asm_val(string code, int value);
+export void asm_val(string code, int value) {
+    cm_asm_val(code, value);
+}
+
+// ポインタと値を入力としてアセンブリ実行
+// %0 = ptr, %1 = value
+// 例: asm_ptr_val("movl %1, (%0)", &x, 42)  // x = 42
+extern "C" void cm_asm_ptr_val(string code, void* ptr, int value);
+export void asm_ptr_val(string code, void* ptr, int value) {
+    cm_asm_ptr_val(code, ptr, value);
+}
+
+// ポインタから値を読み取ってレジスタ値を返す
+// %0 = ptr (入力/出力)
+// 例: int v = asm_ptr_ret("movl (%0), %0", &x)
+extern "C" int cm_asm_ptr_ret(string code, void* ptr);
+export int asm_ptr_ret(string code, void* ptr) {
+    return cm_asm_ptr_ret(code, ptr);
 }
 
 // ============================================================
-// アトミック操作
-// ============================================================
-
-extern "C" int cm_asm_atomic_load_i32(int* ptr);
-export int atomic_load_i32(int* ptr) {
-    return cm_asm_atomic_load_i32(ptr);
-}
-
-extern "C" void cm_asm_atomic_store_i32(int* ptr, int value);
-export void atomic_store_i32(int* ptr, int value) {
-    cm_asm_atomic_store_i32(ptr, value);
-}
-
-// Compare-And-Swap
-extern "C" bool cm_asm_cas_i32(int* ptr, int expected, int desired);
-export bool cas_i32(int* ptr, int expected, int desired) {
-    return cm_asm_cas_i32(ptr, expected, desired);
-}
-
-// ============================================================
-// プリセット命令
+// プリセット命令（よく使う命令のヘルパー）
 // ============================================================
 
 extern "C" void cm_asm_nop();
