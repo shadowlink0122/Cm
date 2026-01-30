@@ -42,6 +42,7 @@ enum class TypeKind {
     Struct,
     Interface,
     Function,  // (T1, T2) -> R
+    Enum,      // v0.13.0: Tagged Union型
 
     // 特殊
     Generic,       // <T>
@@ -138,6 +139,14 @@ struct Type {
     // 関数型用: 引数型と戻り値型
     std::vector<TypePtr> param_types;
     TypePtr return_type;
+
+    // v0.13.0: Enum型用 (Tagged Union)
+    struct EnumVariantType {
+        std::string name;             // バリアント名
+        std::vector<TypePtr> fields;  // Associated Data型リスト
+    };
+    std::vector<EnumVariantType> enum_variants;  // バリアント一覧
+    int32_t enum_tag = -1;  // 特定バリアントを指す場合のタグ値 (-1 = 未指定)
 
     // コンストラクタ
     explicit Type(TypeKind k) : kind(k) {}
@@ -316,6 +325,13 @@ inline TypePtr make_function_ptr(TypePtr return_type, std::vector<TypePtr> param
     return t;
 }
 
+// v0.13.0: Enum型 (Tagged Union)
+inline TypePtr make_enum(const std::string& name) {
+    auto t = std::make_shared<Type>(TypeKind::Enum);
+    t->name = name;
+    return t;
+}
+
 // ============================================================
 // 型の文字列表現
 // ============================================================
@@ -374,7 +390,8 @@ inline std::string type_to_string(const Type& t) {
             }
             return (t.element_type ? type_to_string(*t.element_type) : "?") + "[]";
         case TypeKind::Struct:
-        case TypeKind::Interface: {
+        case TypeKind::Interface:
+        case TypeKind::Enum: {  // v0.13.0: Enum追加
             std::string result = t.name;
             if (!t.type_args.empty()) {
                 result += "<";
@@ -416,7 +433,8 @@ inline std::string type_to_mangled_name(const Type& t) {
     switch (t.kind) {
         case TypeKind::Struct:
         case TypeKind::Union:
-        case TypeKind::TypeAlias: {
+        case TypeKind::TypeAlias:
+        case TypeKind::Enum: {  // v0.13.0: Enum追加
             std::string result = t.name;
             // ジェネリック型引数がある場合
             if (!t.type_args.empty()) {

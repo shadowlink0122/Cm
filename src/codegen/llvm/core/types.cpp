@@ -219,6 +219,71 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             return llvm::PointerType::get(funcType, 0);
 #endif
         }
+        case hir::TypeKind::Enum: {
+            // v0.13.0: Enum型 (Tagged Union)
+            // まずenum型テーブルから検索
+            std::string lookupName = type->name;
+
+            auto it = enumTypes.find(lookupName);
+            if (it != enumTypes.end()) {
+                return it->second;
+            }
+
+            // ジェネリックenumの場合、マングリングされた名前で検索
+            if (!type->type_args.empty() && lookupName.find("__") == std::string::npos) {
+                for (const auto& typeArg : type->type_args) {
+                    if (typeArg) {
+                        lookupName += "__";
+                        switch (typeArg->kind) {
+                            case hir::TypeKind::Int:
+                                lookupName += "int";
+                                break;
+                            case hir::TypeKind::UInt:
+                                lookupName += "uint";
+                                break;
+                            case hir::TypeKind::Long:
+                                lookupName += "long";
+                                break;
+                            case hir::TypeKind::ULong:
+                                lookupName += "ulong";
+                                break;
+                            case hir::TypeKind::Float:
+                                lookupName += "float";
+                                break;
+                            case hir::TypeKind::Double:
+                                lookupName += "double";
+                                break;
+                            case hir::TypeKind::Bool:
+                                lookupName += "bool";
+                                break;
+                            case hir::TypeKind::Char:
+                                lookupName += "char";
+                                break;
+                            case hir::TypeKind::String:
+                                lookupName += "string";
+                                break;
+                            case hir::TypeKind::Struct:
+                            case hir::TypeKind::Enum:
+                                lookupName += typeArg->name;
+                                break;
+                            default:
+                                if (!typeArg->name.empty())
+                                    lookupName += typeArg->name;
+                                break;
+                        }
+                    }
+                }
+
+                auto it2 = enumTypes.find(lookupName);
+                if (it2 != enumTypes.end()) {
+                    return it2->second;
+                }
+            }
+
+            // 見つからない場合はi32（タグのみ）として扱う
+            std::cerr << "[LLVM] WARNING: Enum type not found: " << lookupName << "\n";
+            return ctx.getI32Type();
+        }
         default:
             return ctx.getI32Type();
     }
