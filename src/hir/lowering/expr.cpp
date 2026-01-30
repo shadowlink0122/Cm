@@ -1653,14 +1653,65 @@ HirExprPtr HirLowering::build_match_condition(const HirExprPtr& scrutinee,
     HirExprPtr scrutinee_copy = clone_hir_expr(scrutinee);
 
     switch (arm.pattern->kind) {
-        case ast::MatchPatternKind::Literal:
-        case ast::MatchPatternKind::EnumVariant: {
+        case ast::MatchPatternKind::Literal: {
             auto pattern_value = lower_expr(*arm.pattern->value);
             auto cond = std::make_unique<HirBinary>();
             cond->op = HirBinaryOp::Eq;
             cond->lhs = std::move(scrutinee_copy);
             cond->rhs = std::move(pattern_value);
             return std::make_unique<HirExpr>(std::move(cond),
+                                             std::make_shared<ast::Type>(ast::TypeKind::Bool));
+        }
+
+        case ast::MatchPatternKind::EnumVariant: {
+            // v0.13.0: デストラクチャリングパターンの場合
+            if (!arm.pattern->bindings.empty()) {
+                // enum_name::variant_nameからタグ値を取得
+                std::string full_name = arm.pattern->enum_name + "::" + arm.pattern->variant_name;
+
+                // enum定義からタグ値を取得
+                int64_t tag_value = 0;
+                auto enum_it = enum_defs_.find(arm.pattern->enum_name);
+                if (enum_it != enum_defs_.end()) {
+                    const auto* enum_def = enum_it->second;
+                    for (const auto& member : enum_def->members) {
+                        if (member.name == arm.pattern->variant_name) {
+                            tag_value = member.value.value_or(0);
+                            break;
+                        }
+                    }
+                }
+
+                // scrutinee（enum構造体）のタグフィールドと比較
+                // 現在のAssociated Data設計ではenum全体を整数として扱っているため
+                // タグ値との直接比較で条件を生成
+                auto tag_lit = std::make_unique<HirLiteral>();
+                tag_lit->value = tag_value;
+
+                auto cond = std::make_unique<HirBinary>();
+                cond->op = HirBinaryOp::Eq;
+                cond->lhs = std::move(scrutinee_copy);
+                cond->rhs = std::make_unique<HirExpr>(
+                    std::move(tag_lit), std::make_shared<ast::Type>(ast::TypeKind::Int));
+                return std::make_unique<HirExpr>(std::move(cond),
+                                                 std::make_shared<ast::Type>(ast::TypeKind::Bool));
+            }
+
+            // 通常のEnumVariantパターン（デストラクチャリングなし）
+            if (arm.pattern->value) {
+                auto pattern_value = lower_expr(*arm.pattern->value);
+                auto cond = std::make_unique<HirBinary>();
+                cond->op = HirBinaryOp::Eq;
+                cond->lhs = std::move(scrutinee_copy);
+                cond->rhs = std::move(pattern_value);
+                return std::make_unique<HirExpr>(std::move(cond),
+                                                 std::make_shared<ast::Type>(ast::TypeKind::Bool));
+            }
+
+            // フォールバック: trueを返す
+            auto lit = std::make_unique<HirLiteral>();
+            lit->value = true;
+            return std::make_unique<HirExpr>(std::move(lit),
                                              std::make_shared<ast::Type>(ast::TypeKind::Bool));
         }
 
