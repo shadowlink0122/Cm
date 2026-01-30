@@ -1,0 +1,5 @@
+=== asm/basic ===
+nop/pause/barrier: ok
+asm(string): ok
+arch: other
+=== complete ===

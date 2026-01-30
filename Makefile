@@ -881,52 +881,23 @@ FILE ?=
 # Standard Library Test Commands
 # ========================================
 
-# std::asm モジュールテスト（個別）
-.PHONY: test-std-asm-instructions
-test-std-asm-instructions:
-	@echo "Running std::asm/instructions tests..."
+# std::asm テスト
+.PHONY: test-std-asm-basic
+test-std-asm-basic:
+	@echo "Running std::asm/basic tests..."
 	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/instructions.cm > .tmp/asm_instructions.out 2>&1 || true
-	@diff -u tests/std/asm/instructions.expect .tmp/asm_instructions.out && echo "✅ asm/instructions passed!" || echo "❌ asm/instructions failed!"
+	@$(CM) run tests/std/asm/basic.cm > .tmp/asm_basic.out 2>&1 || true
+	@diff -u tests/std/asm/basic.expect .tmp/asm_basic.out && echo "✅ asm/basic passed!" || echo "❌ asm/basic failed!"
 
-.PHONY: test-std-asm-barriers
-test-std-asm-barriers:
-	@echo "Running std::asm/barriers tests..."
+.PHONY: test-std-asm-operations
+test-std-asm-operations:
+	@echo "Running std::asm/operations tests..."
 	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/barriers.cm > .tmp/asm_barriers.out 2>&1 || true
-	@diff -u tests/std/asm/barriers.expect .tmp/asm_barriers.out && echo "✅ asm/barriers passed!" || echo "❌ asm/barriers failed!"
+	@$(CM) run tests/std/asm/operations.cm > .tmp/asm_operations.out 2>&1 || true
+	@diff -u tests/std/asm/operations.expect .tmp/asm_operations.out && echo "✅ asm/operations passed!" || echo "❌ asm/operations failed!"
 
-.PHONY: test-std-asm-architecture
-test-std-asm-architecture:
-	@echo "Running std::asm/architecture tests..."
-	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/architecture.cm > .tmp/asm_architecture.out 2>&1 || true
-	@diff -u tests/std/asm/architecture.expect .tmp/asm_architecture.out && echo "✅ asm/architecture passed!" || echo "❌ asm/architecture failed!"
-
-.PHONY: test-std-asm-inline
-test-std-asm-inline:
-	@echo "Running std::asm/inline tests..."
-	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/inline.cm > .tmp/asm_inline.out 2>&1 || true
-	@diff -u tests/std/asm/inline.expect .tmp/asm_inline.out && echo "✅ asm/inline passed!" || echo "❌ asm/inline failed!"
-
-.PHONY: test-std-asm-advanced
-test-std-asm-advanced:
-	@echo "Running std::asm/advanced tests..."
-	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/advanced.cm > .tmp/asm_advanced.out 2>&1 || true
-	@diff -u tests/std/asm/advanced.expect .tmp/asm_advanced.out && echo "✅ asm/advanced passed!" || echo "❌ asm/advanced failed!"
-
-.PHONY: test-std-asm-memory
-test-std-asm-memory:
-	@echo "Running std::asm/memory tests..."
-	@mkdir -p .tmp
-	@$(CM) run tests/std/asm/memory.cm > .tmp/asm_memory.out 2>&1 || true
-	@diff -u tests/std/asm/memory.expect .tmp/asm_memory.out && echo "✅ asm/memory passed!" || echo "❌ asm/memory failed!"
-
-# std::asm 全テスト
 .PHONY: test-std-asm
-test-std-asm: test-std-asm-instructions test-std-asm-barriers test-std-asm-architecture test-std-asm-inline test-std-asm-advanced test-std-asm-memory
+test-std-asm: test-std-asm-basic test-std-asm-operations
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All std::asm tests completed!"

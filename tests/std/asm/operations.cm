@@ -1,0 +1,40 @@
+// tests/std/asm/operations.cm
+// std::asm メモリ操作テスト
+
+import std::io::println;
+import std::asm::{asm_ptr, asm_ptr_val, asm_ptr_ret, is_x86, is_arm64};
+
+int main() {
+    println("=== asm/operations ===");
+    
+    int value = 0;
+    
+    // ストア操作
+    if (is_x86()) {
+        asm_ptr_val("movl %1, (%0)", &value, 42);
+        println("store: x86");
+    } else if (is_arm64()) {
+        asm_ptr_val("str %1, [%0]", &value, 42);
+        println("store: arm64");
+    } else {
+        println("store: skip");
+    }
+    println(value);
+    
+    // ロード操作
+    int source = 100;
+    int loaded = 0;
+    if (is_x86()) {
+        loaded = asm_ptr_ret("movl (%0), %0", &source);
+        println("load: x86");
+    } else if (is_arm64()) {
+        loaded = asm_ptr_ret("ldr %0, [%0]", &source);
+        println("load: arm64");
+    } else {
+        println("load: skip");
+    }
+    println(loaded);
+    
+    println("=== complete ===");
+    return 0;
+}

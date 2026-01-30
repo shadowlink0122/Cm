@@ -1,0 +1,34 @@
+// tests/std/asm/basic.cm
+// std::asm 基本機能テスト
+
+import std::io::println;
+import std::asm::{asm, nop, pause, barrier, is_x86, is_arm64};
+
+int main() {
+    println("=== asm/basic ===");
+    
+    // 基本命令
+    nop();
+    pause();
+    barrier();
+    println("nop/pause/barrier: ok");
+    
+    // asm(string)
+    asm("nop");
+    asm("mfence");
+    println("asm(string): ok");
+    
+    // アーキテクチャ検出
+    bool x86 = is_x86();
+    bool arm = is_arm64();
+    if (x86) {
+        println("arch: x86");
+    } else if (arm) {
+        println("arch: arm64");
+    } else {
+        println("arch: other");
+    }
+    
+    println("=== complete ===");
+    return 0;
+}
