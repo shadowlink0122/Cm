@@ -1574,6 +1574,14 @@ HirExprPtr HirLowering::lower_match(ast::MatchExpr& match, TypePtr type) {
     HirExprPtr result = nullptr;
     for (int i = static_cast<int>(match.arms.size()) - 1; i >= 0; i--) {
         auto& arm = match.arms[i];
+
+        // v0.13.0: デストラクチャリングパターンのバインディング変数を登録
+        // 注: 現在のHIR Lowering設計ではバインディング変数のランタイム値抽出は未対応
+        // 型チェック段階でバインディング変数は登録済みだが、HIRでは値抽出ができないため
+        // 現時点ではフォールバック値（0）が使用される
+        // TODO: v0.14.0でmatch式をステートメントベースで再設計し、
+        //       ローカル変数宣言と代入を含むブロックを生成する
+
         auto body = lower_expr(*arm.body);
 
         if (arm.pattern->kind == ast::MatchPatternKind::Wildcard) {

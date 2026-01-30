@@ -1777,6 +1777,14 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 }
 
                 return builder->CreateLoad(arrayType, alloca, "arr_load");
+            } else if (aggData.kind.type == mir::AggregateKind::Type::Enum) {
+                // v0.13.0: Enumバリアントの構築
+                // 現在のシンプルな実装: タグ値をi32として返す
+                // Associated Dataの完全サポートは後続実装
+                int64_t tag = aggData.kind.tag;
+
+                // タグ値を返す
+                return llvm::ConstantInt::get(ctx.getI32Type(), tag);
             }
 
             return nullptr;
