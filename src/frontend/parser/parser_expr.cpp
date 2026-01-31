@@ -345,13 +345,6 @@ ast::ExprPtr Parser::parse_unary() {
         auto operand = parse_unary();
         return ast::make_move(std::move(operand), Span{start_pos, previous().end});
     }
-    // await式: await expr → 非同期値の待機 (v0.13.0)
-    if (consume_if(TokenKind::KwAwait)) {
-        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'await' expression",
-                        debug::Level::Debug);
-        auto operand = parse_unary();
-        return ast::make_await(std::move(operand), Span{start_pos, previous().end});
-    }
 
     return parse_postfix();
 }
@@ -562,59 +555,6 @@ ast::ExprPtr Parser::parse_postfix() {
             auto target_type = parse_type();
             expr = ast::make_cast(std::move(expr), std::move(target_type));
             continue;
-        }
-
-        // try式（エラー伝播）: expr?
-        // 注意: 三項演算子 (cond ? then : else) との衝突を避けるため、
-        // ? の直後に式開始トークンがある場合は三項演算子として扱う
-        // ? の直後がセミコロン、カンマ、閉じ括弧、演算子等の場合はtry式
-        if (check(TokenKind::Question)) {
-            // 次の次のトークンを確認して三項演算子かどうか判定
-            // peek(1) がトークンの次の位置
-            size_t saved_pos = pos_;
-            advance();  // ? を消費
-
-            // ? の後に式が続く可能性があるトークン = 三項演算子
-            bool looks_like_ternary = false;
-            switch (current().kind) {
-                case TokenKind::IntLiteral:
-                case TokenKind::FloatLiteral:
-                case TokenKind::StringLiteral:
-                case TokenKind::CharLiteral:
-                case TokenKind::Ident:
-                case TokenKind::KwTrue:
-                case TokenKind::KwFalse:
-                case TokenKind::KwNull:
-                case TokenKind::KwNew:
-                case TokenKind::KwSizeof:
-                case TokenKind::KwTypeof:
-                case TokenKind::LParen:
-                case TokenKind::LBracket:
-                case TokenKind::Minus:
-                case TokenKind::Bang:
-                case TokenKind::Tilde:
-                case TokenKind::Amp:
-                case TokenKind::Star:
-                case TokenKind::PlusPlus:
-                case TokenKind::MinusMinus:
-                case TokenKind::KwMove:
-                case TokenKind::KwAwait:
-                    looks_like_ternary = true;
-                    break;
-                default:
-                    break;
-            }
-
-            if (looks_like_ternary) {
-                // 三項演算子 - 位置を戻して上位で処理させる
-                pos_ = saved_pos;
-            } else {
-                // try式
-                debug::par::log(debug::par::Id::PrimaryExpr, "Detected '?' try expression",
-                                debug::Level::Debug);
-                expr = ast::make_try(std::move(expr), Span{expr->span.start, previous().end});
-                continue;
-            }
         }
 
         break;
@@ -887,19 +827,6 @@ ast::ExprPtr Parser::parse_primary() {
         std::string name(current().get_string());
         debug::par::log(debug::par::Id::IdentifierRef, "Found identifier: " + name,
                         debug::Level::Debug);
-
-        // オブジェクトマクロ展開チェック（引数なしマクロ）
-        if (is_macro_call() && !peek_ahead(TokenKind::LParen)) {
-            auto expanded = expand_macro(name, {});
-            if (!expanded.empty()) {
-                advance();  // consume macro name
-                debug::par::log(debug::par::Id::IdentifierRef, "Expanding macro: " + name,
-                                debug::Level::Debug);
-                // 展開されたトークンを一時的にパース
-                return parse_expanded_macro_tokens(expanded, start_pos);
-            }
-        }
-
         advance();
 
         // 名前空間またはenum値アクセス: A::B または A::B::C::...
@@ -1193,43 +1120,11 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern() {
 
         // 名前空間またはenum値アクセス: A::B または A::B::C::...
         if (consume_if(TokenKind::ColonColon)) {
-            std::string enum_name = name;
-            std::string variant_name = expect_ident();
-            std::string qualified_name = enum_name + "::" + variant_name;
-
-            // 追加の名前空間アクセス (A::B::C::...)
-            while (consume_if(TokenKind::ColonColon)) {
-                enum_name = qualified_name;
-                variant_name = expect_ident();
-                qualified_name += "::" + variant_name;
-            }
-
-            // v0.13.0: デストラクチャリングパターン EnumName::Variant(x, y, ...)
-            if (consume_if(TokenKind::LParen)) {
-                std::vector<std::string> bindings;
-                if (!check(TokenKind::RParen)) {
-                    do {
-                        if (check(TokenKind::Ident)) {
-                            std::string binding(current().get_string());
-                            advance();
-                            bindings.push_back(std::move(binding));
-                        } else if (check(TokenKind::Ident) && current().get_string() == "_") {
-                            advance();
-                            bindings.push_back("_");  // ワイルドカードバインディング
-                        } else {
-                            error("Expected identifier in destructuring pattern");
-                        }
-                    } while (consume_if(TokenKind::Comma));
-                }
-                expect(TokenKind::RParen);
-
-                debug::par::log(debug::par::Id::PrimaryExpr,
-                                "Match pattern: enum destructure " + qualified_name + " with " +
-                                    std::to_string(bindings.size()) + " bindings",
-                                debug::Level::Debug);
-                return ast::MatchPattern::make_enum_destructure(enum_name, variant_name,
-                                                                std::move(bindings));
-            }
+            std::string qualified_name = name;
+            do {
+                std::string member = expect_ident();
+                qualified_name += "::" + member;
+            } while (consume_if(TokenKind::ColonColon));
 
             auto enum_expr =
                 ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});

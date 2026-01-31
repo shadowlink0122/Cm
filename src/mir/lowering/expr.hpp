@@ -43,8 +43,6 @@ class ExprLowering : public MirLoweringBase {
                     return ctx.new_temp(hir::make_error());
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirCast>>) {
                     return lower_cast(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirEnumConstruct>>) {
-                    return lower_enum_construct(*expr_ptr, ctx);
                 } else {
                     // 未実装の式種別
                     return ctx.new_temp(hir::make_error());
@@ -68,7 +66,6 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_array_literal(const hir::HirArrayLiteral& lit, const hir::TypePtr& expected_type,
                                 LoweringContext& ctx);
     LocalId lower_cast(const hir::HirCast& cast, LoweringContext& ctx);
-    LocalId lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx);
 
     // メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
     // 成功時はtrue、失敗時はfalseを返す

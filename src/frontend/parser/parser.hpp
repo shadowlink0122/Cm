@@ -9,7 +9,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace cm {
@@ -47,14 +46,11 @@ class Parser {
             }
             last_pos = pos_;
 
-            size_t before_pos = pos_;
             if (auto decl = parse_top_level()) {
                 program.declarations.push_back(std::move(decl));
-            } else if (pos_ == before_pos) {
-                // 位置が進んでいない場合のみsynchronize
+            } else {
                 synchronize();
             }
-            // マクロ定義など、成功してもnullptrを返すケースは位置が進むのでOK
             iterations++;
         }
 
@@ -139,13 +135,13 @@ class Parser {
                 // 既に正しい位置にいる
                 return parse_const_decl(true, std::move(attrs));
             }
-            if (check(TokenKind::KwMacro)) {
-                // export macro NAME = value;
-                return parse_macro_definition(true);
-            }
             if (check(TokenKind::KwImpl)) {
                 // 既に正しい位置にいる
                 return parse_impl_export(std::move(attrs));
+            }
+            // v0.13.0: export macro
+            if (check(TokenKind::KwMacro)) {
+                return parse_macro(true);
             }
 
             // export function (型から始まる関数の場合)
@@ -211,30 +207,28 @@ class Parser {
             return parse_const_decl(false, std::move(attrs));
         }
 
-        // #macro は廃止 - macro キーワードを使用してください
+        // #macro (新しいC++風マクロ構文)
         if (check(TokenKind::Hash)) {
+            // #macroか他のディレクティブか確認
             auto saved_pos = pos_;
             advance();  // consume '#'
 
             if (check(TokenKind::KwMacro)) {
-                error("'#macro' is deprecated. Use 'macro NAME = value;' instead");
-                // スキップして続行
-                while (!is_at_end() && current().kind != TokenKind::Semicolon &&
-                       current().kind != TokenKind::RBrace) {
-                    advance();
-                }
-                if (check(TokenKind::Semicolon))
-                    advance();
-                return nullptr;
+                // v0.13.0: #macro も型付きマクロとして処理
+                // 注: #hashはすでに消費されているので、macroのみ処理
+                return parse_macro(false);
             }
 
-            // その他のディレクティブ
+            // その他のディレクティブ（#test, #bench, #deprecated等）
+            // 現在未実装のディレクティブをチェック
             if (check(TokenKind::Ident)) {
                 std::string directive_name = std::string(current().get_string());
                 if (directive_name == "test" || directive_name == "bench" ||
                     directive_name == "deprecated" || directive_name == "inline" ||
                     directive_name == "optimize") {
+                    // 未実装のディレクティブ
                     error("Directive '#" + directive_name + "' is not yet implemented");
+                    // エラー後はスキップして続行
                     while (!is_at_end() && current().kind != TokenKind::Semicolon &&
                            current().kind != TokenKind::LBrace) {
                         advance();
@@ -243,14 +237,16 @@ class Parser {
                 }
             }
 
-            pos_ = saved_pos;
+            pos_ = saved_pos;  // 位置を戻す
+            // 未知のディレクティブ
             error("Unknown or invalid directive after '#'");
             return nullptr;
         }
 
-        // macro NAME = value; (新構文)
+        // macro (v0.13.0: 型付きマクロ)
+        // 構文: macro TYPE NAME = EXPR;
         if (check(TokenKind::KwMacro)) {
-            return parse_macro_definition(false);
+            return parse_macro(false);
         }
 
         // constexpr
@@ -1333,7 +1329,7 @@ class Parser {
     ast::DeclPtr parse_import_stmt(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_export();
     ast::DeclPtr parse_use(std::vector<ast::AttributeNode> attributes = {});
-    ast::DeclPtr parse_macro();
+    ast::DeclPtr parse_macro(bool is_exported = false);
     ast::DeclPtr parse_extern(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_extern_decl(std::vector<ast::AttributeNode> attributes = {});
     std::unique_ptr<ast::FunctionDecl> parse_extern_func_decl();
@@ -1478,269 +1474,6 @@ class Parser {
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
-
-    // v0.13.0: マクロシステム
-    struct MacroDef {
-        std::string name;
-        std::string type_name;            // 型名（空ならvoid）
-        std::vector<std::string> params;  // 空ならオブジェクトマクロ
-        std::vector<Token> body;          // 展開されるトークン列
-        bool is_exported = false;         // エクスポートされているか
-    };
-    std::unordered_map<std::string, MacroDef> macro_defs_;
-
-    // マクロ定義をパース
-    // 新構文:
-    //   [export] macro [type] NAME = value;
-    //   [export] macro [type] NAME(params...) { return expr; }
-    ast::DeclPtr parse_macro_definition(bool is_exported = false) {
-        advance();  // consume 'macro'
-
-        MacroDef macro;
-        macro.is_exported = is_exported;
-
-        // 型名をチェック（型キーワードまたは識別子）
-        // 型がある場合: macro int VERSION = 13;
-        // 型がない場合: macro VERSION = 13;
-        if (is_type_keyword() || (check(TokenKind::Ident) && peek_ahead(TokenKind::Ident))) {
-            // 型付きマクロ
-            macro.type_name = parse_type_name_for_macro();
-        }
-
-        if (!check(TokenKind::Ident)) {
-            error("Expected macro name after 'macro'");
-            return nullptr;
-        }
-
-        std::string name = std::string(current().get_string());
-        advance();  // consume name
-        macro.name = name;
-
-        // 関数マクロ: NAME(a, b, ...)
-        if (check(TokenKind::LParen)) {
-            advance();  // consume '('
-
-            while (!check(TokenKind::RParen) && !is_at_end()) {
-                if (check(TokenKind::Ident)) {
-                    macro.params.push_back(std::string(current().get_string()));
-                    advance();
-                }
-                if (check(TokenKind::Comma)) {
-                    advance();
-                }
-            }
-
-            if (!check(TokenKind::RParen)) {
-                error("Expected ')' in macro parameter list");
-                return nullptr;
-            }
-            advance();  // consume ')'
-        }
-
-        // マクロ本体
-        if (check(TokenKind::LBrace)) {
-            // ブロック形式: { return expr; }
-            advance();  // consume '{'
-            int brace_depth = 1;
-            while (brace_depth > 0 && !is_at_end()) {
-                if (current().kind == TokenKind::LBrace) {
-                    brace_depth++;
-                } else if (current().kind == TokenKind::RBrace) {
-                    brace_depth--;
-                    if (brace_depth == 0) {
-                        advance();  // consume final '}'
-                        break;
-                    }
-                }
-                macro.body.push_back(current());
-                advance();
-            }
-        } else if (check(TokenKind::Eq)) {
-            // 単純形式: = value;
-            advance();  // consume '='
-            while (!is_at_end() && current().kind != TokenKind::Semicolon) {
-                macro.body.push_back(current());
-                advance();
-            }
-            if (check(TokenKind::Semicolon)) {
-                advance();  // consume ';'
-            }
-        } else {
-            error("Expected '=' or '{' after macro name");
-            return nullptr;
-        }
-
-        // マクロを登録
-        macro_defs_[name] = std::move(macro);
-
-        // 成功を返す（ASTノードなしでOK - マクロはプリプロセッサ的）
-        return nullptr;
-    }
-
-    // 型キーワードかどうかをチェック
-    bool is_type_keyword() {
-        switch (current().kind) {
-            case TokenKind::KwInt:
-            case TokenKind::KwUint:
-            case TokenKind::KwLong:
-            case TokenKind::KwUlong:
-            case TokenKind::KwFloat:
-            case TokenKind::KwDouble:
-            case TokenKind::KwBool:
-            case TokenKind::KwChar:
-            case TokenKind::KwString:
-            case TokenKind::KwVoid:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    // マクロ用の型名をパース
-    std::string parse_type_name_for_macro() {
-        std::string type_name;
-
-        if (is_type_keyword()) {
-            type_name = token_kind_to_string(current().kind);
-            advance();
-        } else if (check(TokenKind::Ident)) {
-            type_name = std::string(current().get_string());
-            advance();
-        }
-
-        // ジェネリック型: Type<T>
-        if (check(TokenKind::Lt)) {
-            type_name += "<";
-            advance();
-            int depth = 1;
-            while (depth > 0 && !is_at_end()) {
-                if (current().kind == TokenKind::Lt) {
-                    depth++;
-                    type_name += "<";
-                } else if (current().kind == TokenKind::Gt) {
-                    depth--;
-                    type_name += ">";
-                } else if (current().kind == TokenKind::Ident) {
-                    type_name += std::string(current().get_string());
-                } else if (current().kind == TokenKind::Comma) {
-                    type_name += ", ";
-                }
-                advance();
-            }
-        }
-
-        // ポインタ: Type*
-        while (check(TokenKind::Star)) {
-            type_name += "*";
-            advance();
-        }
-
-        return type_name;
-    }
-
-    // マクロ呼び出しをチェック
-    bool is_macro_call() {
-        if (!check(TokenKind::Ident))
-            return false;
-        std::string name = std::string(current().get_string());
-        return macro_defs_.count(name) > 0;
-    }
-
-    // マクロ展開
-    std::vector<Token> expand_macro(const std::string& name,
-                                    const std::vector<std::vector<Token>>& args) {
-        auto it = macro_defs_.find(name);
-        if (it == macro_defs_.end()) {
-            return {};
-        }
-
-        const MacroDef& macro = it->second;
-        std::vector<Token> result;
-
-        // パラメータを引数に置き換え
-        for (const Token& tok : macro.body) {
-            if (tok.kind == TokenKind::Ident) {
-                std::string param_name = std::string(tok.get_string());
-                bool replaced = false;
-
-                for (size_t i = 0; i < macro.params.size(); ++i) {
-                    if (macro.params[i] == param_name && i < args.size()) {
-                        // パラメータを引数トークンに置き換え
-                        for (const Token& arg_tok : args[i]) {
-                            result.push_back(arg_tok);
-                        }
-                        replaced = true;
-                        break;
-                    }
-                }
-
-                if (!replaced) {
-                    result.push_back(tok);
-                }
-            } else {
-                result.push_back(tok);
-            }
-        }
-
-        return result;
-    }
-
-    // 先読み: 次のトークンが指定の種類か確認
-    bool peek_ahead(TokenKind kind) {
-        if (pos_ + 1 >= tokens_.size())
-            return false;
-        return tokens_[pos_ + 1].kind == kind;
-    }
-
-    // 展開されたマクロトークンをパース
-    ast::ExprPtr parse_expanded_macro_tokens(const std::vector<Token>& expanded,
-                                             uint32_t start_pos) {
-        if (expanded.empty()) {
-            return nullptr;
-        }
-
-        // 単一トークンの場合、直接リテラルとして処理
-        if (expanded.size() == 1) {
-            const Token& tok = expanded[0];
-            switch (tok.kind) {
-                case TokenKind::IntLiteral:
-                    return ast::make_int_literal(tok.get_int(), Span{start_pos, start_pos + 1});
-                case TokenKind::FloatLiteral:
-                    return ast::make_float_literal(tok.get_float(), Span{start_pos, start_pos + 1});
-                case TokenKind::StringLiteral:
-                    return ast::make_string_literal(std::string(tok.get_string()),
-                                                    Span{start_pos, start_pos + 1});
-                case TokenKind::KwTrue:
-                    return ast::make_bool_literal(true, Span{start_pos, start_pos + 1});
-                case TokenKind::KwFalse:
-                    return ast::make_bool_literal(false, Span{start_pos, start_pos + 1});
-                case TokenKind::Ident:
-                    return ast::make_ident(std::string(tok.get_string()),
-                                           Span{start_pos, start_pos + 1});
-                default:
-                    break;
-            }
-        }
-
-        // 複数トークンの場合: トークンを一時挿入してパース
-        // 現在の位置を保存
-        size_t saved_pos = pos_;
-        std::vector<Token> saved_tokens = std::move(tokens_);
-
-        // 展開されたトークン + EOFをセット
-        tokens_ = expanded;
-        tokens_.push_back(Token{TokenKind::Eof, 0, 0});
-        pos_ = 0;
-
-        // 式をパース
-        auto expr = parse_expr();
-
-        // 元に戻す
-        tokens_ = std::move(saved_tokens);
-        pos_ = saved_pos;
-
-        return expr;
-    }
 };
 
 }  // namespace cm

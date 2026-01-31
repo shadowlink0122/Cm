@@ -1,7 +1,9 @@
 === Typed Macro Test ===
-VERSION = 13
-APP_NAME = CmApp
-PI = 3.14159
-Debug mode is ON
-Next version = 14
+13
+1
+CmApp
+v0.13.0
+Debug mode
+Not release
+14
 === Complete ===

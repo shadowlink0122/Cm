@@ -119,71 +119,6 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         } else {
             inferred_type = ast::make_error();
         }
-    } else if (auto* await_expr = expr.as<ast::AwaitExpr>()) {
-        // await式: オペランドはFuture<T>型である必要がある
-        // v0.13.0: 非同期サポート
-        if (await_expr->operand) {
-            auto operand_type = infer_type(*await_expr->operand);
-
-            // Future<T>からT型を抽出
-            if (operand_type && operand_type->kind == ast::TypeKind::Generic) {
-                if (operand_type->name == "Future" && !operand_type->type_args.empty()) {
-                    inferred_type = operand_type->type_args[0];
-                    debug::tc::log(
-                        debug::tc::Id::CheckExpr,
-                        "await expression yields type: " + ast::type_to_string(*inferred_type),
-                        debug::Level::Debug);
-                } else {
-                    error(current_span_, "await requires a Future<T> type, got: " +
-                                             ast::type_to_string(*operand_type));
-                    inferred_type = ast::make_error();
-                }
-            } else if (operand_type) {
-                // 暫定的に、不明な型はそのまま返す
-                // 完全な型チェックは後のフェーズで行う
-                inferred_type = operand_type;
-                debug::tc::log(
-                    debug::tc::Id::CheckExpr,
-                    "await on non-Future type (placeholder): " + ast::type_to_string(*operand_type),
-                    debug::Level::Warn);
-            } else {
-                inferred_type = ast::make_error();
-            }
-        } else {
-            inferred_type = ast::make_error();
-        }
-    } else if (auto* try_expr = expr.as<ast::TryExpr>()) {
-        // try式 (expr?): オペランドはResult<T, E>型である必要がある
-        // v0.13.0: エラー伝播サポート
-        if (try_expr->operand) {
-            auto operand_type = infer_type(*try_expr->operand);
-
-            // Result<T, E>からT型を抽出
-            if (operand_type && operand_type->kind == ast::TypeKind::Generic) {
-                if (operand_type->name == "Result" && !operand_type->type_args.empty()) {
-                    inferred_type = operand_type->type_args[0];
-                    debug::tc::log(
-                        debug::tc::Id::CheckExpr,
-                        "try expression yields type: " + ast::type_to_string(*inferred_type),
-                        debug::Level::Debug);
-                } else {
-                    error(current_span_, "? operator requires a Result<T, E> type, got: " +
-                                             ast::type_to_string(*operand_type));
-                    inferred_type = ast::make_error();
-                }
-            } else if (operand_type) {
-                // 暫定的に、不明な型はそのまま返す
-                inferred_type = operand_type;
-                debug::tc::log(
-                    debug::tc::Id::CheckExpr,
-                    "? on non-Result type (placeholder): " + ast::type_to_string(*operand_type),
-                    debug::Level::Warn);
-            } else {
-                inferred_type = ast::make_error();
-            }
-        } else {
-            inferred_type = ast::make_error();
-        }
     } else {
         inferred_type = ast::make_error();
     }
@@ -595,9 +530,6 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
 
     ast::TypePtr result_type = nullptr;
     for (auto& arm : match.arms) {
-        // v0.13.0: アームごとにスコープを作成してバインディング変数を登録
-        scopes_.push();
-
         check_match_pattern(arm.pattern.get(), scrutinee_type);
 
         if (arm.guard) {
@@ -608,8 +540,6 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
         }
 
         auto body_type = infer_type(*arm.body);
-
-        scopes_.pop();  // スコープを終了
 
         if (!result_type) {
             result_type = body_type;
@@ -662,16 +592,7 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 }
                 break;
             case ast::MatchPatternKind::EnumVariant:
-                // v0.13.0: デストラクチャリングパターンのサポート
-                if (!arm.pattern->bindings.empty()) {
-                    // EnumName::Variant(x, y, ...) 形式
-                    std::string full_name =
-                        arm.pattern->enum_name + "::" + arm.pattern->variant_name;
-                    covered_values.insert(full_name);
-                    if (enum_names_.count(arm.pattern->enum_name)) {
-                        detected_enum_name = arm.pattern->enum_name;
-                    }
-                } else if (arm.pattern->value) {
+                if (arm.pattern->value) {
                     if (auto* ident = arm.pattern->value->as<ast::IdentExpr>()) {
                         covered_values.insert(ident->name);
                         auto pos = ident->name.find("::");
@@ -763,30 +684,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             break;
 
         case ast::MatchPatternKind::EnumVariant:
-            // v0.13.0: デストラクチャリングパターンのサポート
-            if (!pattern->bindings.empty()) {
-                // EnumName::Variant(x, y, ...) 形式
-                std::string full_name = pattern->enum_name + "::" + pattern->variant_name;
-
-                // enumのバリアント情報を取得してbinding変数の型を登録
-                if (enum_defs_.count(pattern->enum_name)) {
-                    const auto* enum_def = enum_defs_.at(pattern->enum_name);
-                    for (const auto& member : enum_def->members) {
-                        if (member.name == pattern->variant_name) {
-                            // バインディング変数とフィールドを照合
-                            for (size_t i = 0;
-                                 i < pattern->bindings.size() && i < member.fields.size(); ++i) {
-                                const std::string& binding = pattern->bindings[i];
-                                if (binding != "_") {  // ワイルドカードは無視
-                                    ast::TypePtr field_type = member.fields[i].type;
-                                    scopes_.current().define(binding, field_type);
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            } else if (pattern->value) {
+            if (pattern->value) {
                 auto enum_type = infer_type(*pattern->value);
                 if (!types_compatible(enum_type, expected_type)) {
                     error(current_span_, "Enum pattern type does not match scrutinee type");

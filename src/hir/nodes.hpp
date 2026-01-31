@@ -113,8 +113,6 @@ struct HirIndex {
 struct HirMember {
     HirExprPtr object;
     std::string member;
-    // v0.13.0: enum tagged unionのフィールドアクセス用
-    int index = -1;  // -1 = 名前ベースアクセス、0+ = インデックスベースアクセス
 };
 
 // 三項演算子
@@ -160,23 +158,13 @@ struct HirCast {
     TypePtr target_type;
 };
 
-// enumバリアントコンストラクタ（v0.13.0）
-// 例: Result::Ok(value), Option::Some(42)
-struct HirEnumConstruct {
-    std::string enum_name;         // enum名（例: "Result"）
-    std::string variant_name;      // バリアント名（例: "Ok"）
-    int64_t tag;                   // バリアントのタグ値
-    std::vector<HirExprPtr> args;  // Associated Dataの値
-};
-
 // 式の種類
 using HirExprKind =
     std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
                  std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
                  std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
                  std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>,
-                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>,
-                 std::unique_ptr<HirEnumConstruct>>;
+                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>>;
 
 struct HirExpr {
     HirExprKind kind;
@@ -290,20 +278,12 @@ struct HirSwitch {
     std::vector<HirSwitchCase> cases;
 };
 
-// v0.13.0: インラインアセンブリ文
-struct HirAsm {
-    std::string code;                   // アセンブリコード
-    std::vector<HirExprPtr> inputs;     // 入力オペランド
-    std::vector<std::string> clobbers;  // 破壊レジスタ
-    bool is_volatile = true;            // volatile修飾
-};
-
 using HirStmtKind =
     std::variant<std::unique_ptr<HirLet>, std::unique_ptr<HirAssign>, std::unique_ptr<HirReturn>,
                  std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirWhile>,
                  std::unique_ptr<HirFor>, std::unique_ptr<HirBreak>, std::unique_ptr<HirContinue>,
                  std::unique_ptr<HirDefer>, std::unique_ptr<HirExprStmt>, std::unique_ptr<HirBlock>,
-                 std::unique_ptr<HirSwitch>, std::unique_ptr<HirAsm>>;
+                 std::unique_ptr<HirSwitch>>;
 
 struct HirStmt {
     HirStmtKind kind;
@@ -348,7 +328,6 @@ struct HirFunction {
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_overload = false;                          // overloadキーワードの有無
-    bool is_async = false;                             // v0.13.0: async関数
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 
@@ -456,36 +435,17 @@ struct HirImport {
     std::string alias;
 };
 
-// Enum関連データ用のフィールド（v0.13.0）
-struct HirEnumField {
-    std::string name;  // 空の場合は位置引数
-    TypePtr type;
-};
-
 // Enumメンバ
 struct HirEnumMember {
     std::string name;
     int64_t value;
-    std::vector<HirEnumField> fields;  // Associated Data（v0.13.0）
-
-    bool has_fields() const { return !fields.empty(); }
 };
 
 // Enum定義
 struct HirEnum {
     std::string name;
-    std::vector<std::string> type_params;  // ジェネリック型パラメータ（v0.13.0）
     std::vector<HirEnumMember> members;
     bool is_export = false;
-
-    bool is_generic() const { return !type_params.empty(); }
-    bool has_associated_data() const {
-        for (const auto& m : members) {
-            if (m.has_fields())
-                return true;
-        }
-        return false;
-    }
 };
 
 // Typedef定義

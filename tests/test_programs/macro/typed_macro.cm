@@ -1,38 +1,42 @@
-// 型付きマクロのテスト
+// 型付きマクロのテスト - 全型サポート
 import std::io::println;
 
-// 基本的な型付きマクロ
+// int型マクロ
 macro int VERSION = 13;
-macro string APP_NAME = "CmApp";
-macro float PI = 3.14159;
-macro bool DEBUG = true;
+macro int DEBUG_LEVEL = 1;
 
-// 型なしマクロ（void扱い）
-macro UNUSED = 0;
+// string型マクロ
+macro string APP_NAME = "CmApp";
+macro string VERSION_STR = "v0.13.0";
+
+// bool型マクロ
+macro bool DEBUG = true;
+macro bool RELEASE = false;
 
 int main() {
     println("=== Typed Macro Test ===");
     
-    // 整数マクロ
+    // int型マクロ
     int v = VERSION;
-    println("VERSION = {v}");
+    println(v);
+    println(DEBUG_LEVEL);
     
-    // 文字列マクロ
-    string name = APP_NAME;
-    println("APP_NAME = {name}");
+    // string型マクロ
+    println(APP_NAME);
+    println(VERSION_STR);
     
-    // 浮動小数点マクロ
-    float pi = PI;
-    println("PI = {pi}");
-    
-    // bool マクロ
+    // bool型マクロ
     if (DEBUG) {
-        println("Debug mode is ON");
+        println("Debug mode");
+    }
+    
+    if (!RELEASE) {
+        println("Not release");
     }
     
     // マクロを式で使用
     int next_version = VERSION + 1;
-    println("Next version = {next_version}");
+    println(next_version);
     
     println("=== Complete ===");
     return 0;

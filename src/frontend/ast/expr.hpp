@@ -388,11 +388,6 @@ struct MatchPattern {
     ExprPtr value;         // Literal/EnumVariant用
     std::string var_name;  // Variable用（束縛変数名）
 
-    // v0.13.0: enum デストラクチャリング用
-    std::string enum_name;              // enum名（例: "Result"）
-    std::string variant_name;           // バリアント名（例: "Ok"）
-    std::vector<std::string> bindings;  // バインディング変数名（例: ["value"]）
-
     static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::Literal;
@@ -417,18 +412,6 @@ struct MatchPattern {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::EnumVariant;
         p->value = std::move(val);
-        return p;
-    }
-
-    // v0.13.0: デストラクチャリング付きenumバリアントパターン
-    static std::unique_ptr<MatchPattern> make_enum_destructure(std::string enum_name,
-                                                               std::string variant_name,
-                                                               std::vector<std::string> bindings) {
-        auto p = std::make_unique<MatchPattern>();
-        p->kind = MatchPatternKind::EnumVariant;
-        p->enum_name = std::move(enum_name);
-        p->variant_name = std::move(variant_name);
-        p->bindings = std::move(bindings);
         return p;
     }
 };
@@ -472,29 +455,6 @@ struct MoveExpr {
     ExprPtr operand;  // 移動対象の式
 
     explicit MoveExpr(ExprPtr e) : operand(std::move(e)) {}
-};
-
-// ============================================================
-// await式 - 非同期値の待機 (await expr)
-// v0.13.0: async/await サポート
-// ============================================================
-struct AwaitExpr {
-    ExprPtr operand;  // 待機対象のFuture式
-
-    explicit AwaitExpr(ExprPtr e) : operand(std::move(e)) {}
-};
-
-// ============================================================
-// try式 - エラー伝播 (expr?)
-// v0.13.0: Result型のアンラップとエラー早期リターン
-// Rustの ? 演算子と同等
-// Result::Ok(v) → v を返す
-// Result::Err(e) → 関数から早期リターン
-// ============================================================
-struct TryExpr {
-    ExprPtr operand;  // Result<T, E>型の式
-
-    explicit TryExpr(ExprPtr e) : operand(std::move(e)) {}
 };
 
 // ============================================================
@@ -578,14 +538,6 @@ inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {
 
 inline ExprPtr make_move(ExprPtr expr, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<MoveExpr>(std::move(expr)), s);
-}
-
-inline ExprPtr make_await(ExprPtr expr, Span s = {}) {
-    return std::make_unique<Expr>(std::make_unique<AwaitExpr>(std::move(expr)), s);
-}
-
-inline ExprPtr make_try(ExprPtr expr, Span s = {}) {
-    return std::make_unique<Expr>(std::make_unique<TryExpr>(std::move(expr)), s);
 }
 
 }  // namespace cm::ast

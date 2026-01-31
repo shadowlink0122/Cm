@@ -23,19 +23,12 @@ class HirLowering {
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
-    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;  // v0.13.0
+    std::unordered_map<std::string, int64_t> macro_values_;  // v0.13.0: int型定数マクロ
+    std::unordered_map<std::string, std::string> macro_string_values_;  // v0.13.0: string型マクロ
+    std::unordered_map<std::string, bool> macro_bool_values_;           // v0.13.0: bool型マクロ
     std::unordered_set<std::string> types_with_default_ctor_;
     std::unordered_map<std::string, TypePtr> typedef_defs_;        // typedef定義
     std::unordered_map<std::string, std::string> import_aliases_;  // インポートエイリアス
-
-    // v0.13.0: matchバインディングコンテキスト
-    // バインディング変数名 -> {scrutinee HIR, フィールドインデックス, フィールド型}
-    struct BindingInfo {
-        HirExprPtr* scrutinee;  // scrutinee式へのポインタ
-        size_t field_index;  // enum構造体内のフィールドインデックス (tag=0, data=1+)
-        TypePtr field_type;  // フィールドの型
-    };
-    std::unordered_map<std::string, BindingInfo> match_bindings_;
 
     // ラムダ関数のリスト（後でプログラムに追加）
     std::vector<std::unique_ptr<HirFunction>> lambda_functions_;
@@ -58,6 +51,7 @@ class HirLowering {
     HirDeclPtr lower_global_var(ast::GlobalVarDecl& gv);
     HirDeclPtr lower_module(ast::ModuleDecl& mod);
     HirDeclPtr lower_extern_block(ast::ExternBlockDecl& extern_block);
+    HirDeclPtr lower_macro(ast::MacroDecl& macro);  // v0.13.0
 
     // 文のlowering
     HirStmtPtr lower_stmt(ast::Stmt& stmt);

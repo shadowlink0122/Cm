@@ -43,10 +43,6 @@ class MIRToLLVM {
     std::unordered_map<std::string, llvm::StructType*> structTypes;
     std::unordered_map<std::string, const mir::MirStruct*> structDefs;
 
-    // enum定義キャッシュ（v0.13.0）
-    std::unordered_map<std::string, const mir::MirEnum*> enumDefs;
-    std::unordered_map<std::string, llvm::StructType*> enumTypes;  // Associated Data付きenum用
-
     // インターフェース関連
     std::unordered_set<std::string> interfaceNames;
     std::unordered_map<std::string, llvm::StructType*> interfaceTypes;  // fat pointer型

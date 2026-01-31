@@ -470,13 +470,79 @@ ast::DeclPtr Parser::parse_use(std::vector<ast::AttributeNode> attributes) {
 }
 
 // ============================================================
-// マクロ定義
+// マクロ定義 (v0.13.0)
 // ============================================================
-ast::DeclPtr Parser::parse_macro() {
-    // この関数は現在使用されていません
-    // parse_top_level() で直接エラー処理とスキップを行っています
-    error("Internal error: parse_macro() should not be called");
-    return nullptr;
+// 構文: macro TYPE NAME = EXPR;
+// 例: macro int VERSION = 13;
+//     macro string NAME = "Cm";
+//     macro int*(int, int) add = (a, b) => a + b;  <- 関数マクロ
+ast::DeclPtr Parser::parse_macro(bool is_exported) {
+    expect(TokenKind::KwMacro);
+    uint32_t start_pos = previous().start;
+
+    // 型をパース
+    auto type = parse_type();
+
+    // マクロ名
+    std::string name = expect_ident();
+    debug::par::log(debug::par::Id::MacroDef, "Parsing typed macro: " + name, debug::Level::Debug);
+
+    // = を期待
+    expect(TokenKind::Eq);
+
+    // 値をパース（定数式）
+    auto value = parse_expr();
+
+    // セミコロン
+    expect(TokenKind::Semicolon);
+
+    // v0.13.0: ラムダ式マクロの場合は関数として変換
+    if (auto* lambda = value->as<ast::LambdaExpr>()) {
+        debug::par::log(debug::par::Id::MacroDef, "Converting lambda macro to function: " + name,
+                        debug::Level::Debug);
+
+        // 戻り値型を決定（関数ポインタ型から取得またはラムダから）
+        ast::TypePtr return_type;
+        if (type->kind == ast::TypeKind::Function) {
+            return_type = type->return_type;
+        } else if (lambda->return_type) {
+            return_type = lambda->return_type;
+        } else {
+            return_type = ast::make_int();  // デフォルト
+        }
+
+        // パラメータをムーブ（ラムダからはconst参照なので直接ムーブは不可、新規作成）
+        // lambda->params のベクトルを直接ムーブ
+        std::vector<ast::Param> params = std::move(lambda->params);
+
+        // ボディを変換
+        std::vector<ast::StmtPtr> body;
+        if (lambda->is_expr_body()) {
+            // 式形式: => expr を return expr; に変換
+            auto ret = std::make_unique<ast::ReturnStmt>();
+            ret->value = std::move(std::get<ast::ExprPtr>(lambda->body));
+            auto stmt =
+                std::make_unique<ast::Stmt>(std::move(ret), Span{start_pos, previous().end});
+            body.push_back(std::move(stmt));
+        } else {
+            // ブロック形式
+            body = std::move(std::get<std::vector<ast::StmtPtr>>(lambda->body));
+        }
+
+        // FunctionDeclを作成（4引数コンストラクタを使用）
+        auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
+                                                        std::move(return_type), std::move(body));
+        func->visibility = is_exported ? ast::Visibility::Export : ast::Visibility::Private;
+
+        return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
+    }
+
+    // MacroDeclノードを作成（リテラル定数の場合）
+    auto macro_decl =
+        std::make_unique<ast::MacroDecl>(std::move(name), std::move(type), std::move(value));
+    macro_decl->is_exported = is_exported;
+
+    return std::make_unique<ast::Decl>(std::move(macro_decl), Span{start_pos, previous().end});
 }
 
 // ============================================================
@@ -670,69 +736,24 @@ ast::DeclPtr Parser::parse_template_decl() {
 
 // ============================================================
 // Enum宣言
-// v0.13.0: ジェネリック型パラメータとAssociated Dataをサポート
-// enum Result<T, E> { Ok(T), Err(E) }
 // ============================================================
 ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
 
     std::string name = expect_ident();
-
-    // ジェネリック型パラメータ: enum Result<T, E>
-    std::vector<std::string> type_params;
-    if (check(TokenKind::Lt)) {
-        advance();  // consume '<'
-        do {
-            type_params.push_back(expect_ident());
-        } while (consume_if(TokenKind::Comma));
-        expect(TokenKind::Gt);
-    }
-
     expect(TokenKind::LBrace);
 
     std::vector<ast::EnumMember> members;
     int64_t next_value = 0;                   // オートインクリメント用
     std::unordered_set<int64_t> used_values;  // 重複チェック用
-    bool has_associated_data = false;         // Associated Dataモードかどうか
 
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         std::string member_name = expect_ident();
         std::optional<int64_t> explicit_value;
-        std::vector<ast::EnumField> fields;
 
-        // Associated Data: Ok(T) または Move(int x, int y)
-        if (check(TokenKind::LParen)) {
-            has_associated_data = true;
-            advance();  // consume '('
-
-            while (!check(TokenKind::RParen) && !is_at_end()) {
-                // 型をパース
-                auto field_type = parse_type();
-                std::string field_name;
-
-                // 型の後に識別子があれば名前付きフィールド
-                if (check(TokenKind::Ident) && !check(TokenKind::Comma) &&
-                    !check(TokenKind::RParen)) {
-                    // ただし、次のトークンがカンマか閉じ括弧でない場合のみ
-                    if (check(TokenKind::Ident)) {
-                        field_name = std::string(current().get_string());
-                        advance();
-                    }
-                }
-
-                fields.emplace_back(std::move(field_name), std::move(field_type));
-
-                if (!check(TokenKind::RParen)) {
-                    consume_if(TokenKind::Comma);
-                }
-            }
-
-            expect(TokenKind::RParen);
-            members.emplace_back(std::move(member_name), std::move(fields));
-        }
-        // 明示的な値指定: Variant = 1
-        else if (consume_if(TokenKind::Eq)) {
+        // 明示的な値指定
+        if (consume_if(TokenKind::Eq)) {
             // 負の数をサポート
             bool is_negative = consume_if(TokenKind::Minus);
 
@@ -750,31 +771,19 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
 
             explicit_value = value;
             next_value = value + 1;
-
-            // 重複チェック
-            if (used_values.count(*explicit_value)) {
-                error("enum値 " + std::to_string(*explicit_value) + " は既に使用されています");
-                return nullptr;
-            }
-            used_values.insert(*explicit_value);
-
-            members.emplace_back(std::move(member_name), explicit_value);
         } else {
-            // 値なしバリアント
-            if (!has_associated_data) {
-                explicit_value = next_value;
-                next_value++;
-
-                // 重複チェック
-                if (used_values.count(*explicit_value)) {
-                    error("enum値 " + std::to_string(*explicit_value) + " は既に使用されています");
-                    return nullptr;
-                }
-                used_values.insert(*explicit_value);
-            }
-
-            members.emplace_back(std::move(member_name), explicit_value);
+            explicit_value = next_value;
+            next_value++;
         }
+
+        // 重複チェック
+        if (used_values.count(*explicit_value)) {
+            error("enum値 " + std::to_string(*explicit_value) + " は既に使用されています");
+            return nullptr;
+        }
+        used_values.insert(*explicit_value);
+
+        members.emplace_back(std::move(member_name), explicit_value);
 
         // カンマは省略可能（最後の要素の後も許可）
         consume_if(TokenKind::Comma);
@@ -782,13 +791,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
 
     expect(TokenKind::RBrace);
 
-    std::unique_ptr<ast::EnumDecl> enum_decl;
-    if (type_params.empty()) {
-        enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
-    } else {
-        enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(type_params),
-                                                    std::move(members));
-    }
+    auto enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     enum_decl->attributes = std::move(attributes);
     return std::make_unique<ast::Decl>(std::move(enum_decl), Span{start_pos, previous().end});

@@ -152,13 +152,6 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
                 }
             } else {
                 hir_let->init = lower_expr(*let.init);
-
-                // v0.13.0: auto型でinit式がEnum型の場合、変数にEnum型を伝播
-                // これによりmatchのscrutineeが正しくEnum型として認識される
-                if (hir_let->init && hir_let->init->type &&
-                    hir_let->init->type->kind == hir::TypeKind::Enum) {
-                    hir_let->type = hir_let->init->type;
-                }
             }
         }
     }
@@ -489,34 +482,6 @@ std::unique_ptr<HirSwitchPattern> HirLowering::lower_pattern(ast::Pattern& patte
 HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
     if (!expr_stmt.expr)
         return nullptr;
-
-    // __builtin_asm 検出
-    if (auto* call = std::get_if<std::unique_ptr<ast::CallExpr>>(&expr_stmt.expr->kind)) {
-        auto& call_expr = *call;
-        if (call_expr->callee) {
-            // 呼び出し先が識別子の場合
-            if (auto* ident =
-                    std::get_if<std::unique_ptr<ast::IdentExpr>>(&call_expr->callee->kind)) {
-                std::string func_name = (*ident)->name;
-
-                // __builtin_asm(code) の場合
-                if (func_name == "__builtin_asm" && call_expr->args.size() >= 1) {
-                    auto asm_stmt = std::make_unique<HirAsm>();
-
-                    // 第1引数から文字列リテラルを抽出
-                    if (auto* lit = std::get_if<std::unique_ptr<ast::LiteralExpr>>(
-                            &call_expr->args[0]->kind)) {
-                        if (std::holds_alternative<std::string>((*lit)->value)) {
-                            asm_stmt->code = std::get<std::string>((*lit)->value);
-                        }
-                    }
-
-                    asm_stmt->is_volatile = true;
-                    return std::make_unique<HirStmt>(std::move(asm_stmt));
-                }
-            }
-        }
-    }
 
     auto hir = std::make_unique<HirExprStmt>();
     hir->expr = lower_expr(*expr_stmt.expr);

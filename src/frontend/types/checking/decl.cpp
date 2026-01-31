@@ -263,6 +263,80 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
                                gv->name + " : " + ast::type_to_string(*var_type),
                            debug::Level::Debug);
         }
+    } else if (auto* macro = decl.as<ast::MacroDecl>()) {
+        // v0.13.0: 型付きマクロを処理
+        if (macro->kind == ast::MacroDecl::Kind::Constant) {
+            current_span_ = decl.span;
+
+            // v0.13.0: ラムダ式マクロの場合は関数として登録
+            if (macro->value) {
+                if (auto* lambda = macro->value->as<ast::LambdaExpr>()) {
+                    // パラメータ型を収集
+                    std::vector<ast::TypePtr> param_types;
+                    for (const auto& param : lambda->params) {
+                        param_types.push_back(param.type);
+                    }
+
+                    // 戻り値型を決定
+                    ast::TypePtr return_type = lambda->return_type;
+                    if (!return_type) {
+                        // 式本体の場合、式の型を推論するためにスコープを作成
+                        if (lambda->is_expr_body()) {
+                            // 一時的なスコープを作成してパラメータを登録
+                            scopes_.push();
+                            for (const auto& param : lambda->params) {
+                                scopes_.current().define(param.name, param.type, false, false,
+                                                         decl.span, std::nullopt);
+                            }
+                            return_type = infer_type(*std::get<ast::ExprPtr>(lambda->body));
+                            scopes_.pop();
+                        } else {
+                            return_type = ast::make_void();
+                        }
+                    }
+
+                    // 関数として登録
+                    scopes_.global().define_function(macro->name, std::move(param_types),
+                                                     return_type);
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Macro function: " + macro->name + " -> " +
+                                       ast::type_to_string(*return_type),
+                                   debug::Level::Debug);
+                    return;  // 処理完了
+                }
+            }
+
+            // リテラル定数マクロの場合
+            std::optional<int64_t> const_int_value = std::nullopt;
+
+            // マクロの値を評価
+            if (macro->value) {
+                const_int_value = evaluate_const_expr(*macro->value);
+                if (const_int_value) {
+                    debug::tc::log(
+                        debug::tc::Id::TypeInfer,
+                        "Macro const: " + macro->name + " = " + std::to_string(*const_int_value),
+                        debug::Level::Debug);
+                }
+            }
+
+            // 初期化式の型チェック
+            ast::TypePtr init_type;
+            if (macro->value) {
+                init_type = infer_type(*macro->value);
+            }
+
+            // 型を決定
+            ast::TypePtr var_type = macro->type ? resolve_typedef(macro->type) : init_type;
+            if (var_type) {
+                scopes_.global().define(macro->name, var_type, true /* is_const */, false,
+                                        decl.span, const_int_value);
+                debug::tc::log(
+                    debug::tc::Id::Resolved,
+                    "Macro const: " + macro->name + " : " + ast::type_to_string(*var_type),
+                    debug::Level::Debug);
+            }
+        }
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         for (const auto& func : extern_block->declarations) {
             std::vector<ast::TypePtr> param_types;
@@ -472,40 +546,16 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     debug::tc::log(debug::tc::Id::Resolved, "Registering enum: " + en.name, debug::Level::Debug);
 
     enum_names_.insert(en.name);
-    enum_defs_[en.name] = &en;  // enum定義を保存（v0.13.0）
-
-    // Associated Dataを持つenumの場合、enum型として扱う
-    auto enum_type = ast::make_named(en.name);
-    scopes_.global().define(en.name, enum_type);
+    scopes_.global().define(en.name, ast::make_int());
 
     for (const auto& member : en.members) {
         std::string full_name = en.name + "::" + member.name;
         int64_t value = member.value.value_or(0);
         enum_values_[full_name] = value;
+        scopes_.global().define(full_name, ast::make_int());
 
-        // Associated Dataを持つ場合
-        if (member.has_fields()) {
-            // バリアントのフィールド型を保存
-            std::vector<ast::TypePtr> field_types;
-            for (const auto& field : member.fields) {
-                field_types.push_back(field.type);
-            }
-            enum_variant_fields_[full_name] = std::move(field_types);
-
-            // バリアントはenum型を返す「コンストラクタ関数」として登録
-            scopes_.global().define(full_name, enum_type);
-
-            debug::tc::log(debug::tc::Id::Resolved,
-                           "  " + full_name + "(constructor) with " +
-                               std::to_string(member.fields.size()) + " fields",
-                           debug::Level::Debug);
-        } else {
-            // 従来のシンプルなenumバリアント
-            scopes_.global().define(full_name, enum_type);
-
-            debug::tc::log(debug::tc::Id::Resolved,
-                           "  " + full_name + " = " + std::to_string(value), debug::Level::Debug);
-        }
+        debug::tc::log(debug::tc::Id::Resolved, "  " + full_name + " = " + std::to_string(value),
+                       debug::Level::Debug);
     }
 }
 
@@ -563,18 +613,6 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
     current_return_type_ = resolve_typedef(func.return_type);
     if (generic_context_.has_type_param(ast::type_to_string(*func.return_type))) {
         current_return_type_ = func.return_type;
-    }
-
-    // v0.13.0: async関数の戻り値型処理
-    // async関数は暗黙的にFuture<T>を返す
-    if (func.is_async) {
-        debug::tc::log(debug::tc::Id::CheckDecl,
-                       "async function '" + func.name + "' returns Future<" +
-                           ast::type_to_string(*current_return_type_) + ">",
-                       debug::Level::Debug);
-
-        // 関数内部では通常の戻り値型として扱う
-        // 実際のFuture<T>変換はHIR/MIRレベルで行う
     }
 
     for (const auto& param : func.params) {

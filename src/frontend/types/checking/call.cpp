@@ -29,19 +29,6 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
-        // __builtin_asm - コンパイラ組み込みインラインアセンブリ
-        if (ident->name == "__builtin_asm") {
-            if (call.args.empty()) {
-                error(current_span_, "'__builtin_asm' requires 1 string argument");
-                return ast::make_error();
-            }
-            // 引数は文字列リテラルであることを期待
-            for (auto& arg : call.args) {
-                infer_type(*arg);
-            }
-            return ast::make_void();
-        }
-
         // ジェネリック関数かチェック
         auto gen_it = generic_functions_.find(ident->name);
         if (gen_it != generic_functions_.end()) {
@@ -52,48 +39,6 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         if (get_struct(ident->name) != nullptr) {
             for (auto& arg : call.args) {
                 infer_type(*arg);
-            }
-            return ast::make_named(ident->name);
-        }
-
-        // enumバリアントコンストラクタ呼び出しかチェック（v0.13.0）
-        // 例: Result::Ok(42), Option::Some(value)
-        auto variant_it = enum_variant_fields_.find(ident->name);
-        if (variant_it != enum_variant_fields_.end()) {
-            const auto& expected_fields = variant_it->second;
-
-            // 引数の数をチェック
-            if (call.args.size() != expected_fields.size()) {
-                error(current_span_, "Enum variant '" + ident->name + "' expects " +
-                                         std::to_string(expected_fields.size()) +
-                                         " argument(s), got " + std::to_string(call.args.size()));
-                return ast::make_error();
-            }
-
-            // 引数の型をチェック
-            for (size_t i = 0; i < call.args.size(); ++i) {
-                auto arg_type = infer_type(*call.args[i]);
-                // ジェネリック型パラメータ（例: T, E）は任意の型を受け入れる
-                if (expected_fields[i] && expected_fields[i]->kind == ast::TypeKind::Struct &&
-                    expected_fields[i]->name.size() == 1 &&
-                    std::isupper(expected_fields[i]->name[0])) {
-                    // 単一大文字は型パラメータとして扱う
-                    continue;
-                }
-                if (!types_compatible(expected_fields[i], arg_type)) {
-                    std::string expected =
-                        expected_fields[i] ? ast::type_to_string(*expected_fields[i]) : "unknown";
-                    std::string actual = arg_type ? ast::type_to_string(*arg_type) : "unknown";
-                    error(current_span_, "Type mismatch in enum variant constructor '" +
-                                             ident->name + "': expected " + expected + ", got " +
-                                             actual);
-                }
-            }
-
-            // enum名を抽出（例: "Result::Ok" -> "Result"）
-            size_t pos = ident->name.find("::");
-            if (pos != std::string::npos) {
-                return ast::make_named(ident->name.substr(0, pos));
             }
             return ast::make_named(ident->name);
         }

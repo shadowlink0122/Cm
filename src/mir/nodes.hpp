@@ -252,13 +252,10 @@ struct AggregateKind {
         Array,   // 配列
         Tuple,   // タプル
         Struct,  // 構造体
-        Enum,    // enumバリアント（v0.13.0）
     };
 
     Type type;
-    std::string name;          // Struct/Enumの場合の型名
-    std::string variant_name;  // Enumの場合のバリアント名（v0.13.0）
-    int64_t tag = 0;           // Enumの場合のタグ値（v0.13.0）
+    std::string name;  // Structの場合の型名
     hir::TypePtr ty;
 };
 
@@ -372,7 +369,6 @@ struct MirStatement {
         StorageLive,  // 変数の有効範囲開始
         StorageDead,  // 変数の有効範囲終了
         Nop,          // 何もしない（最適化で削除される）
-        Asm,          // v0.13.0: インラインアセンブリ
     };
 
     Kind kind;
@@ -390,16 +386,8 @@ struct MirStatement {
         LocalId local;
     };
 
-    // v0.13.0: インラインアセンブリデータ
-    struct AsmData {
-        std::string code;                   // アセンブリコード
-        std::vector<MirOperand> inputs;     // 入力オペランド
-        std::vector<std::string> clobbers;  // 破壊レジスタ
-        bool is_volatile = true;
-    };
-
     std::variant<std::monostate,  // Nop
-                 AssignData, StorageData, AsmData>
+                 AssignData, StorageData>
         data;
 
     static MirStatementPtr assign(MirPlace place, MirRvaluePtr rvalue, Span s = {}) {
@@ -423,17 +411,6 @@ struct MirStatement {
         stmt->kind = StorageDead;
         stmt->span = s;
         stmt->data = StorageData{local};
-        return stmt;
-    }
-
-    // v0.13.0: アセンブリ文を生成
-    static MirStatementPtr make_asm(std::string code, std::vector<MirOperand> inputs = {},
-                                    std::vector<std::string> clobbers = {}, bool is_volatile = true,
-                                    Span s = {}) {
-        auto stmt = std::make_unique<MirStatement>();
-        stmt->kind = Asm;
-        stmt->span = s;
-        stmt->data = AsmData{std::move(code), std::move(inputs), std::move(clobbers), is_volatile};
         return stmt;
     }
 };
@@ -609,7 +586,6 @@ struct MirFunction {
     bool is_export = false;           // エクスポートされているか
     bool is_extern = false;           // extern "C" 関数か
     bool is_variadic = false;         // 可変長引数（FFI用）
-    bool is_async = false;            // v0.13.0: async関数
     std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
     LocalId return_local;             // 戻り値用のローカル（_0）
@@ -694,63 +670,6 @@ struct MirStruct {
 
 using MirStructPtr = std::unique_ptr<MirStruct>;
 
-// ============================================================
-// Enum定義（v0.13.0: Associated Dataサポート）
-// ============================================================
-
-// Enumフィールド（Associated Data用）
-struct MirEnumField {
-    std::string name;  // 空の場合は位置引数
-    hir::TypePtr type;
-};
-
-// Enumバリアント
-struct MirEnumVariant {
-    std::string name;
-    int64_t tag;                       // ディスクリミネータ値
-    std::vector<MirEnumField> fields;  // Associated Data
-
-    bool has_fields() const { return !fields.empty(); }
-};
-
-// Enum定義
-struct MirEnum {
-    std::string name;
-    std::string module_path;
-    std::vector<std::string> type_params;  // ジェネリック型パラメータ
-    std::vector<MirEnumVariant> variants;
-    bool is_export = false;
-
-    bool is_generic() const { return !type_params.empty(); }
-    bool has_associated_data() const {
-        for (const auto& v : variants) {
-            if (v.has_fields())
-                return true;
-        }
-        return false;
-    }
-
-    // タグ値からバリアントを取得
-    const MirEnumVariant* get_variant(int64_t tag) const {
-        for (const auto& v : variants) {
-            if (v.tag == tag)
-                return &v;
-        }
-        return nullptr;
-    }
-
-    // 名前からバリアントを取得
-    const MirEnumVariant* get_variant_by_name(const std::string& name) const {
-        for (const auto& v : variants) {
-            if (v.name == name)
-                return &v;
-        }
-        return nullptr;
-    }
-};
-
-using MirEnumPtr = std::unique_ptr<MirEnum>;
-
 // インターフェースメソッド定義
 struct MirInterfaceMethod {
     std::string name;
@@ -830,7 +749,6 @@ using MirModulePtr = std::unique_ptr<MirModule>;
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
     std::vector<MirStructPtr> structs;        // 構造体定義
-    std::vector<MirEnumPtr> enums;            // enum定義（v0.13.0）
     std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
     std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
     std::vector<MirModulePtr> modules;        // モジュール
@@ -872,16 +790,6 @@ struct MirProgram {
         for (const auto& st : structs) {
             if (st && st->name == name) {
                 return st.get();
-            }
-        }
-        return nullptr;
-    }
-
-    // enumを名前で検索（v0.13.0）
-    const MirEnum* find_enum(const std::string& name) const {
-        for (const auto& e : enums) {
-            if (e && e->name == name) {
-                return e.get();
             }
         }
         return nullptr;
