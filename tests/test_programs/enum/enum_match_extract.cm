@@ -1,0 +1,28 @@
+// enumのmatch式でバインディング変数から値を抽出するテスト
+import std::io::println;
+
+enum Option {
+    None,
+    Some(int value)
+}
+
+int main() {
+    auto opt1 = Option::Some(42);
+    auto opt2 = Option::None;
+
+    // inline matchで値抽出
+    int v1 = match (opt1) {
+        Option::None => 0,
+        Option::Some(v) => v
+    };
+
+    int v2 = match (opt2) {
+        Option::None => 0,
+        Option::Some(v) => v
+    };
+
+    println("Some(42) => {v1}");
+    println("None => {v2}");
+
+    return 0;
+}

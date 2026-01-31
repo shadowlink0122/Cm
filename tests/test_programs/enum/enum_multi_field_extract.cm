@@ -1,0 +1,23 @@
+// 複数フィールドのenum match抽出テスト
+import std::io::println;
+
+enum Point {
+    Origin,
+    Coord(int x, int y)
+}
+
+int main() {
+    auto p = Point::Coord(10, 20);
+
+    match (p) {
+        Point::Origin => {
+            println("origin");
+        }
+        Point::Coord(x, y) => {
+            int sum = x + y;
+            println("x={x}, y={y}, sum={sum}");
+        }
+    }
+
+    return 0;
+}
