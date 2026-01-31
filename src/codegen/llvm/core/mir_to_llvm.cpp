@@ -1375,9 +1375,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             // LLVM inline asm を生成
             // 形式: asm volatile ("code" ::: "memory")
             auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
-            std::string constraints = asmData.is_volatile ? "~{memory}" : "";
+            std::string constraints = asmData.is_must ? "~{memory}" : "";
             auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
-                                                   asmData.is_volatile  // hasSideEffects
+                                                   asmData.is_must  // hasSideEffects
             );
             builder->CreateCall(asmFuncTy, inlineAsm);
             break;

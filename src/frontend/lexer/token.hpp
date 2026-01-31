@@ -48,6 +48,7 @@ enum class TokenKind {
     KwMatch,
     KwModule,  // module declaration
     KwMove,    // move ownership
+    KwMust,    // must execute (no optimization) for inline asm
     KwMutable,
     KwNamespace,  // namespace declaration
     KwNew,

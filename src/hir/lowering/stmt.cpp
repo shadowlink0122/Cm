@@ -493,7 +493,7 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                         if (std::holds_alternative<std::string>(arg->value)) {
                             auto hir_asm = std::make_unique<HirAsm>();
                             hir_asm->code = std::get<std::string>(arg->value);
-                            hir_asm->is_volatile = true;  // デフォルトvolatile
+                            hir_asm->is_must = true;  // デフォルトmust（最適化抑制）
                             debug::hir::log(debug::hir::Id::StmtLower,
                                             "__builtin_asm: " + hir_asm->code, debug::Level::Debug);
                             return std::make_unique<HirStmt>(std::move(hir_asm));

@@ -1160,7 +1160,7 @@ void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
 // インラインアセンブリのlowering
 void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) {
     debug_msg("mir_asm", "[MIR] lower_asm: " + asm_stmt.code);
-    ctx.push_statement(MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_volatile));
+    ctx.push_statement(MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must));
 }
 
 }  // namespace cm::mir

@@ -389,7 +389,7 @@ struct MirStatement {
 
     struct AsmData {
         std::string code;
-        bool is_volatile;
+        bool is_must;  // must修飾（最適化抑制）
         std::vector<std::string> clobbers;
     };
 
@@ -422,11 +422,11 @@ struct MirStatement {
     }
 
     // インラインアセンブリ用
-    static MirStatementPtr asm_stmt(std::string code, bool is_volatile = true, Span s = {}) {
+    static MirStatementPtr asm_stmt(std::string code, bool is_must = true, Span s = {}) {
         auto stmt = std::make_unique<MirStatement>();
         stmt->kind = Asm;
         stmt->span = s;
-        stmt->data = AsmData{std::move(code), is_volatile, {}};
+        stmt->data = AsmData{std::move(code), is_must, {}};
         return stmt;
     }
 };

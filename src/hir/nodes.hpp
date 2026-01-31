@@ -281,7 +281,7 @@ struct HirSwitch {
 // インラインアセンブリ
 struct HirAsm {
     std::string code;                   // アセンブリコード
-    bool is_volatile;                   // volatile修飾
+    bool is_must;                       // must修飾（最適化抑制）
     std::vector<std::string> clobbers;  // 破壊レジスタ
 };
 
