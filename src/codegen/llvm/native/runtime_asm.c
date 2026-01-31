@@ -221,3 +221,57 @@ bool cm_asm_is_arm64(void) {
     return false;
 #endif
 }
+
+// ============================================================
+// 演算テスト用関数（インラインアセンブリで実装）
+// ============================================================
+
+// アセンブリによる加算
+int32_t cm_asm_add(int32_t a, int32_t b) {
+#if defined(__x86_64__) || defined(__i386__)
+    int32_t result;
+    __asm__ volatile("addl %2, %0" : "=r"(result) : "0"(a), "r"(b));
+    return result;
+#elif defined(__aarch64__)
+    int32_t result;
+    __asm__ volatile("add %w0, %w1, %w2" : "=r"(result) : "r"(a), "r"(b));
+    return result;
+#else
+    return a + b;
+#endif
+}
+
+// アセンブリによる乗算
+int32_t cm_asm_mul(int32_t a, int32_t b) {
+#if defined(__x86_64__) || defined(__i386__)
+    int32_t result;
+    __asm__ volatile("imull %2, %0" : "=r"(result) : "0"(a), "r"(b));
+    return result;
+#elif defined(__aarch64__)
+    int32_t result;
+    __asm__ volatile("mul %w0, %w1, %w2" : "=r"(result) : "r"(a), "r"(b));
+    return result;
+#else
+    return a * b;
+#endif
+}
+
+// RDTSCの下位32ビットを取得（タイムスタンプカウンタ）
+int32_t cm_asm_rdtsc_low(void) {
+#if defined(__x86_64__)
+    uint32_t lo, hi;
+    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    return (int32_t)lo;
+#elif defined(__i386__)
+    uint32_t lo;
+    __asm__ volatile("rdtsc" : "=a"(lo) : : "edx");
+    return (int32_t)lo;
+#elif defined(__aarch64__)
+    // ARM64: CNTVCTを使用
+    uint64_t cntpct;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(cntpct));
+    return (int32_t)(cntpct & 0xFFFFFFFF);
+#else
+    return 0;
+#endif
+}

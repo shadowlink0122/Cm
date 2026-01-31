@@ -76,6 +76,9 @@ class StmtLowering : public MirLoweringBase {
                     if (stmt_ptr->expr) {
                         expr_lowering->lower_expression(*stmt_ptr->expr, ctx);
                     }
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAsm>>) {
+                    // インラインアセンブリ
+                    lower_asm(*stmt_ptr, ctx);
                 }
             },
             stmt.kind);
@@ -114,6 +117,9 @@ class StmtLowering : public MirLoweringBase {
 
     // スコープ終了時のデストラクタ呼び出しを生成
     void emit_scope_destructors(LoweringContext& ctx);
+
+    // インラインアセンブリのlowering
+    void lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx);
 };
 
 }  // namespace cm::mir

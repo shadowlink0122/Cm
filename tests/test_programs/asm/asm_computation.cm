@@ -1,0 +1,53 @@
+// __builtin_asm 演算テスト
+// アセンブリが実際に動作していることを確認するテスト
+
+import std::asm::{nop, barrier, asm_add, asm_mul};
+import std::io::println;
+
+int main() {
+    println("=== __builtin_asm Computation Test ===");
+    
+    // 基本的なアセンブリ命令
+    nop();
+    println("nop: ok");
+    
+    barrier();
+    println("barrier: ok");
+    
+    // アセンブリによる加算テスト
+    int add_result = asm_add(3, 5);
+    if (add_result == 8) {
+        println("asm_add(3, 5) = 8: PASS");
+    } else {
+        println("asm_add(3, 5) FAIL");
+        return 1;
+    }
+    
+    // アセンブリによる乗算テスト
+    int mul_result = asm_mul(7, 6);
+    if (mul_result == 42) {
+        println("asm_mul(7, 6) = 42: PASS");
+    } else {
+        println("asm_mul(7, 6) FAIL");
+        return 1;
+    }
+    
+    // 複数の演算を組み合わせ
+    int a = asm_add(10, 20);     // 30
+    int b = asm_mul(a, 2);       // 60
+    int c = asm_add(b, 40);      // 100
+    if (c == 100) {
+        println("combined ops: 100: PASS");
+    } else {
+        println("combined ops FAIL");
+        return 1;
+    }
+    
+    // 直接 __builtin_asm テスト
+    __builtin_asm("nop");
+    __builtin_asm("nop");
+    println("__builtin_asm(nop x2): ok");
+    
+    println("=== All Tests Passed ===");
+    return 0;
+}

@@ -1,18 +1,24 @@
 // tests/test_programs/asm/builtin_asm.cm
-// __builtin_asm 組み込み関数テスト
+// std::asm モジュールテスト（__builtin_asmを内部で使用）
 
+import std::asm::nop;
 import std::io::println;
 
 int main() {
-    println("=== __builtin_asm test ===");
+    println("=== std::asm test ===");
     
-    // 基本的なasm命令
-    __builtin_asm("nop");
+    // 基本的なnop命令
+    nop();
     println("nop: ok");
     
-    __builtin_asm("nop");
-    __builtin_asm("nop");
+    // 複数回呼び出し
+    nop();
+    nop();
     println("multiple: ok");
+    
+    // 直接__builtin_asmを使用
+    __builtin_asm("nop");
+    println("__builtin_asm(nop): ok");
     
     println("=== complete ===");
     return 0;

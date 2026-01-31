@@ -16,6 +16,7 @@
 
 #include "../../common/runtime_alloc.c"
 #include "../../common/runtime_file.c"
+#include "runtime_asm.c"
 #include "runtime_format.c"
 #include "runtime_platform.c"
 #include "runtime_print.c"

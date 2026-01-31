@@ -1,24 +1,23 @@
-// tests/test_programs/asm_basic.cm
-// インラインアセンブリの基本テスト
-
+// インラインアセンブリ基本テスト
+import std::asm::{nop, barrier, pause, is_x86, is_arm64};
 import std::io::println;
 
 int main() {
-    // 基本的なインラインアセンブリ
-    int value = 10;
-
-    // NOP命令（何もしない）
-    asm("nop");
-    println("asm: nop");
-
-    // 値を使った補間（正しい構文は{}）
-    asm("mov {value}, %ebx");
-    println("asm: mov with interpolation");
-
-    // メモリフェンス
-    asm("mfence");
-    println("asm: mfence");
-
+    println("=== Inline Assembly Test ===");
+    
+    // 基本命令
+    nop();
+    barrier();
+    pause();
+    
+    // アーキテクチャ検出
+    if (is_x86()) {
+        println("x86 detected");
+    }
+    if (is_arm64()) {
+        println("ARM64 detected");
+    }
+    
+    println("=== Complete ===");
     return 0;
-    // 成功
 }

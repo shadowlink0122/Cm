@@ -369,6 +369,7 @@ struct MirStatement {
         StorageLive,  // 変数の有効範囲開始
         StorageDead,  // 変数の有効範囲終了
         Nop,          // 何もしない（最適化で削除される）
+        Asm,          // インラインアセンブリ
     };
 
     Kind kind;
@@ -386,8 +387,14 @@ struct MirStatement {
         LocalId local;
     };
 
+    struct AsmData {
+        std::string code;
+        bool is_volatile;
+        std::vector<std::string> clobbers;
+    };
+
     std::variant<std::monostate,  // Nop
-                 AssignData, StorageData>
+                 AssignData, StorageData, AsmData>
         data;
 
     static MirStatementPtr assign(MirPlace place, MirRvaluePtr rvalue, Span s = {}) {
@@ -411,6 +418,15 @@ struct MirStatement {
         stmt->kind = StorageDead;
         stmt->span = s;
         stmt->data = StorageData{local};
+        return stmt;
+    }
+
+    // インラインアセンブリ用
+    static MirStatementPtr asm_stmt(std::string code, bool is_volatile = true, Span s = {}) {
+        auto stmt = std::make_unique<MirStatement>();
+        stmt->kind = Asm;
+        stmt->span = s;
+        stmt->data = AsmData{std::move(code), is_volatile, {}};
         return stmt;
     }
 };

@@ -1,4 +1,5 @@
-=== __builtin_asm test ===
+=== std::asm test ===
 nop: ok
 multiple: ok
+__builtin_asm(nop): ok
 === complete ===

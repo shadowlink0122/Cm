@@ -1,67 +1,109 @@
 // std::asm - インラインアセンブリモジュール
-// v0.13.0: 純粋Cm実装（Cランタイム不要）
+// v0.13.0: __builtin_asm intrinsicを使用した純粋Cm実装
 //
 // 使用例:
 //   import std::asm::{asm, nop, barrier};
 //   
-//   asm("nop");       // 任意のアセンブリ命令
-//   nop();            // NOP命令
-//   barrier();        // メモリバリア
+//   asm("nop");         // 任意のアセンブリ（文字列）
+//   nop();              // NOP命令
+//   barrier();          // メモリバリア
+//   pause();            // CPU一時停止
 
 module std.asm;
 
 // ============================================================
-// 任意のインラインアセンブリ
+// パブリックAPI - 汎用アセンブリ
 // ============================================================
 
-// 基本的なアセンブリ命令
+// 任意のアセンブリ命令を実行（文字列）
+// 注: 現在のコンパイラ制限により、コンパイル時に文字列が確定している必要あり
 export void asm(string code) {
-    __builtin_asm(code);
+    // 現在の実装では動的な文字列は直接実行できないため、
+    // FFI経由で実装
+    cm_asm_inline(code);
+}
+
+// Volatile修飾付きアセンブリ（最適化抑制）
+export void asm_volatile(string code) {
+    cm_asm_volatile(code);
 }
 
 // ============================================================
-// プリセット命令（よく使う命令のヘルパー）
+// パブリックAPI - 基本命令
 // ============================================================
 
-// NOP（何もしない命令）
+// NOP命令（何もしない）
 export void nop() {
     __builtin_asm("nop");
 }
 
-// フルメモリバリア
+// フルメモリバリア（x86: mfence）
 export void barrier() {
-    // x86: mfence, ARM: dmb sy
     __builtin_asm("mfence");
 }
 
-// ストアバリア
+// ストアバリア（x86: sfence）
 export void store_barrier() {
-    // x86: sfence, ARM: dmb st
     __builtin_asm("sfence");
 }
 
-// ロードバリア
+// ロードバリア（x86: lfence）
 export void load_barrier() {
-    // x86: lfence, ARM: dmb ld
     __builtin_asm("lfence");
 }
 
-// CPU一時停止（スピンループ用）
+// CPU一時停止（x86: pause - スピンループ最適化）
 export void pause() {
-    // x86: pause, ARM: yield
     __builtin_asm("pause");
 }
 
+// コンパイラバリア（最適化抑制）
+export void compiler_barrier() {
+    __builtin_asm("");
+}
+
 // ============================================================
-// アーキテクチャ検出（Cランタイム依存）
+// FFI関数とアーキテクチャ検出
 // ============================================================
 
-extern "C" bool cm_asm_is_x86();
+// FFIランタイム関数（runtime_asm.cで実装）
+extern "C" {
+    void cm_asm_inline(string code);
+    void cm_asm_volatile(string code);
+    bool cm_asm_is_x86();
+    bool cm_asm_is_arm64();
+    
+    // 演算付きアセンブリ（テスト用）
+    int cm_asm_add(int a, int b);
+    int cm_asm_mul(int a, int b);
+    int cm_asm_rdtsc_low();
+}
+
+// x86/x86_64かどうか
 export bool is_x86() {
     return cm_asm_is_x86();
 }
 
-extern "C" bool cm_asm_is_arm64();
+// ARM64かどうか
 export bool is_arm64() {
     return cm_asm_is_arm64();
+}
+
+// ============================================================
+// 演算テスト用関数（インラインアセンブリで実装）
+// ============================================================
+
+// アセンブリによる加算（テスト用）
+export int asm_add(int a, int b) {
+    return cm_asm_add(a, b);
+}
+
+// アセンブリによる乗算（テスト用）
+export int asm_mul(int a, int b) {
+    return cm_asm_mul(a, b);
+}
+
+// RDTSCの下位32ビットを取得（x86専用）
+export int rdtsc_low() {
+    return cm_asm_rdtsc_low();
 }

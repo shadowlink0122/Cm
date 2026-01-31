@@ -6,6 +6,7 @@
 #include "../../../common/debug/codegen.hpp"
 #include "../monitoring/compilation_guard.hpp"
 
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <set>
@@ -1364,6 +1365,21 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     locals[assign.place.local] = rvalue;
                 }
             }
+            break;
+        }
+        case mir::MirStatement::Asm: {
+            // インラインアセンブリ
+            auto& asmData = std::get<mir::MirStatement::AsmData>(stmt.data);
+            debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code);
+
+            // LLVM inline asm を生成
+            // 形式: asm volatile ("code" ::: "memory")
+            auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+            std::string constraints = asmData.is_volatile ? "~{memory}" : "";
+            auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
+                                                   asmData.is_volatile  // hasSideEffects
+            );
+            builder->CreateCall(asmFuncTy, inlineAsm);
             break;
         }
         case mir::MirStatement::StorageLive:

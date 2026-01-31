@@ -483,6 +483,32 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
     if (!expr_stmt.expr)
         return nullptr;
 
+    // __builtin_asm の特別処理
+    if (auto* call = expr_stmt.expr->as<ast::CallExpr>()) {
+        if (auto* ident = call->callee->as<ast::IdentExpr>()) {
+            if (ident->name == "__builtin_asm") {
+                // 引数から文字列リテラルを取得
+                if (!call->args.empty()) {
+                    if (auto* arg = call->args[0]->as<ast::LiteralExpr>()) {
+                        if (std::holds_alternative<std::string>(arg->value)) {
+                            auto hir_asm = std::make_unique<HirAsm>();
+                            hir_asm->code = std::get<std::string>(arg->value);
+                            hir_asm->is_volatile = true;  // デフォルトvolatile
+                            debug::hir::log(debug::hir::Id::StmtLower,
+                                            "__builtin_asm: " + hir_asm->code, debug::Level::Debug);
+                            return std::make_unique<HirStmt>(std::move(hir_asm));
+                        }
+                    }
+                }
+                // 引数が不正な場合
+                debug::hir::log(debug::hir::Id::StmtLower,
+                                "__builtin_asm requires string literal argument",
+                                debug::Level::Error);
+                return nullptr;
+            }
+        }
+    }
+
     auto hir = std::make_unique<HirExprStmt>();
     hir->expr = lower_expr(*expr_stmt.expr);
     return std::make_unique<HirStmt>(std::move(hir));
