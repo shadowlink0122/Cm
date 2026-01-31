@@ -1,0 +1,6 @@
+=== std::asm must Syntax Test ===
+nop(): ok
+barrier(): ok
+asm_must(nop x3): ok
+compiler_barrier(): ok
+=== All Tests Passed ===

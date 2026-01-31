@@ -275,3 +275,94 @@ int32_t cm_asm_rdtsc_low(void) {
     return 0;
 #endif
 }
+
+// ============================================================
+// 入出力オペランド関数（inout相当）
+// ============================================================
+
+// inout(ptr) + in(value): *ptr += value
+void cm_asm_inout_add(int32_t* ptr, int32_t value) {
+    if (ptr == NULL)
+        return;
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("addl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile(
+        "ldr w2, [%0]\n\t"
+        "add w2, w2, %w1\n\t"
+        "str w2, [%0]"
+        :
+        : "r"(ptr), "r"(value)
+        : "w2", "memory");
+#else
+    *ptr += value;
+#endif
+}
+
+// inout(ptr): (*ptr)++
+void cm_asm_inout_inc(int32_t* ptr) {
+    if (ptr == NULL)
+        return;
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("incl (%0)" : : "r"(ptr) : "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile(
+        "ldr w1, [%0]\n\t"
+        "add w1, w1, #1\n\t"
+        "str w1, [%0]"
+        :
+        : "r"(ptr)
+        : "w1", "memory");
+#else
+    (*ptr)++;
+#endif
+}
+
+// inout(ptr): (*ptr)--
+void cm_asm_inout_dec(int32_t* ptr) {
+    if (ptr == NULL)
+        return;
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("decl (%0)" : : "r"(ptr) : "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile(
+        "ldr w1, [%0]\n\t"
+        "sub w1, w1, #1\n\t"
+        "str w1, [%0]"
+        :
+        : "r"(ptr)
+        : "w1", "memory");
+#else
+    (*ptr)--;
+#endif
+}
+
+// in(ptr) -> out(result): メモリロード
+int32_t cm_asm_in_load(int32_t* ptr) {
+    if (ptr == NULL)
+        return 0;
+#if defined(__x86_64__) || defined(__i386__)
+    int32_t result;
+    __asm__ volatile("movl (%1), %0" : "=r"(result) : "r"(ptr) : "memory");
+    return result;
+#elif defined(__aarch64__)
+    int32_t result;
+    __asm__ volatile("ldr %w0, [%1]" : "=r"(result) : "r"(ptr) : "memory");
+    return result;
+#else
+    return *ptr;
+#endif
+}
+
+// in(value), out(ptr): メモリストア
+void cm_asm_out_store(int32_t* ptr, int32_t value) {
+    if (ptr == NULL)
+        return;
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("movl %1, (%0)" : : "r"(ptr), "r"(value) : "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile("str %w1, [%0]" : : "r"(ptr), "r"(value) : "memory");
+#else
+    *ptr = value;
+#endif
+}

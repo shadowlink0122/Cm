@@ -2,34 +2,57 @@
 // v0.13.0: __builtin_asm intrinsicを使用した純粋Cm実装
 //
 // 使用例:
-//   import std::asm::{asm, nop, barrier};
+//   import std::asm::{asm, nop, barrier, asm_in, asm_inout};
 //   
-//   asm("nop");         // 任意のアセンブリ（文字列）
-//   nop();              // NOP命令
-//   barrier();          // メモリバリア
-//   pause();            // CPU一時停止
+//   asm("nop");           // 任意のアセンブリ（文字列）
+//   nop();                // NOP命令
+//   barrier();            // メモリバリア
+//   asm_add(3, 5);        // アセンブリによる加算
+//   asm_inout_add(x, 5);  // x += 5 をアセンブリで実行
 
 module std.asm;
+
+// ============================================================
+// FFIランタイム関数（runtime_asm.cで実装）
+// ============================================================
+
+extern "C" {
+    // 基本
+    void cm_asm_inline(string code);
+    void cm_asm_volatile(string code);
+    bool cm_asm_is_x86();
+    bool cm_asm_is_arm64();
+    
+    // 演算（入出力オペランド相当）
+    int cm_asm_add(int a, int b);
+    int cm_asm_mul(int a, int b);
+    int cm_asm_rdtsc_low();
+    
+    // 入出力付き演算（inout相当）
+    void cm_asm_inout_add(int* ptr, int value);
+    void cm_asm_inout_inc(int* ptr);
+    void cm_asm_inout_dec(int* ptr);
+    int cm_asm_in_load(int* ptr);
+    void cm_asm_out_store(int* ptr, int value);
+}
 
 // ============================================================
 // パブリックAPI - 汎用アセンブリ
 // ============================================================
 
 // 任意のアセンブリ命令を実行（文字列）
-// 注: 現在のコンパイラ制限により、コンパイル時に文字列が確定している必要あり
+// 内部で__builtin_asmまたはFFIを使用
 export void asm(string code) {
-    // 現在の実装では動的な文字列は直接実行できないため、
-    // FFI経由で実装
     cm_asm_inline(code);
 }
 
-// Volatile修飾付きアセンブリ（最適化抑制）
-export void asm_volatile(string code) {
+// must修飾付きアセンブリ（最適化抑制を保証）
+export void asm_must(string code) {
     cm_asm_volatile(code);
 }
 
 // ============================================================
-// パブリックAPI - 基本命令
+// パブリックAPI - 基本命令（__builtin_asmを内部使用）
 // ============================================================
 
 // NOP命令（何もしない）
@@ -63,21 +86,56 @@ export void compiler_barrier() {
 }
 
 // ============================================================
-// FFI関数とアーキテクチャ検出
+// パブリックAPI - 演算（入力オペランド）
+// in(a), in(b) 相当
 // ============================================================
 
-// FFIランタイム関数（runtime_asm.cで実装）
-extern "C" {
-    void cm_asm_inline(string code);
-    void cm_asm_volatile(string code);
-    bool cm_asm_is_x86();
-    bool cm_asm_is_arm64();
-    
-    // 演算付きアセンブリ（テスト用）
-    int cm_asm_add(int a, int b);
-    int cm_asm_mul(int a, int b);
-    int cm_asm_rdtsc_low();
+// アセンブリによる加算: a + b
+export int asm_add(int a, int b) {
+    return cm_asm_add(a, b);
 }
+
+// アセンブリによる乗算: a * b
+export int asm_mul(int a, int b) {
+    return cm_asm_mul(a, b);
+}
+
+// ============================================================
+// パブリックAPI - 入出力オペランド（inout相当）
+// ============================================================
+
+// inout(ptr) + in(value): *ptr += value
+export void asm_inout_add(int* ptr, int value) {
+    cm_asm_inout_add(ptr, value);
+}
+
+// inout(ptr): (*ptr)++
+export void asm_inout_inc(int* ptr) {
+    cm_asm_inout_inc(ptr);
+}
+
+// inout(ptr): (*ptr)--
+export void asm_inout_dec(int* ptr) {
+    cm_asm_inout_dec(ptr);
+}
+
+// ============================================================
+// パブリックAPI - 入力/出力（in/out相当）
+// ============================================================
+
+// in(ptr) -> out(result): メモリロード
+export int asm_in_load(int* ptr) {
+    return cm_asm_in_load(ptr);
+}
+
+// in(value), out(ptr): メモリストア
+export void asm_out_store(int* ptr, int value) {
+    cm_asm_out_store(ptr, value);
+}
+
+// ============================================================
+// アーキテクチャ検出
+// ============================================================
 
 // x86/x86_64かどうか
 export bool is_x86() {
@@ -87,20 +145,6 @@ export bool is_x86() {
 // ARM64かどうか
 export bool is_arm64() {
     return cm_asm_is_arm64();
-}
-
-// ============================================================
-// 演算テスト用関数（インラインアセンブリで実装）
-// ============================================================
-
-// アセンブリによる加算（テスト用）
-export int asm_add(int a, int b) {
-    return cm_asm_add(a, b);
-}
-
-// アセンブリによる乗算（テスト用）
-export int asm_mul(int a, int b) {
-    return cm_asm_mul(a, b);
 }
 
 // RDTSCの下位32ビットを取得（x86専用）

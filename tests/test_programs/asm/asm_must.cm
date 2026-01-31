@@ -1,0 +1,31 @@
+// std::asm must修飾子テスト
+// mustはアセンブリの最適化抑制を保証
+// __builtin_asmは使用せず、std::asm経由で使用
+
+import std::io::println;
+import std::asm::{nop, barrier, asm_must, compiler_barrier};
+
+void main() {
+    println("=== std::asm must Syntax Test ===");
+    
+    // nop() は内部で __builtin_asm("nop") を使用
+    // デフォルトで must=true（最適化抑制）
+    nop();
+    println("nop(): ok");
+    
+    // barrier() はメモリバリア（mfence）
+    barrier();
+    println("barrier(): ok");
+    
+    // asm_must() は明示的に最適化抑制を保証
+    asm_must("nop");
+    asm_must("nop");
+    asm_must("nop");
+    println("asm_must(nop x3): ok");
+    
+    // compiler_barrier() はコンパイラバリア
+    compiler_barrier();
+    println("compiler_barrier(): ok");
+    
+    println("=== All Tests Passed ===");
+}
