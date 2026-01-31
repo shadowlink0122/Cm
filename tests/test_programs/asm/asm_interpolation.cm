@@ -1,0 +1,21 @@
+// ${constraint:var} 構文テスト
+// Phase 2: asm文字列埋め込み
+
+import std::io::println;
+
+void main() {
+    println("=== Asm String Interpolation Test ===");
+    
+    // 基本的な文字列埋め込み構文
+    // ${+r:x} → %0 に変換される
+    int x = 10;
+    
+    // 現時点: 文字列解析のみ、変数バインドは未実装
+    // __builtin_asm("addl $5, ${+r:x}");
+    
+    // 基本のasm（オペランドなし）は動作
+    __builtin_asm("nop");
+    println("basic asm: PASS");
+    
+    println("=== Test Complete ===");
+}

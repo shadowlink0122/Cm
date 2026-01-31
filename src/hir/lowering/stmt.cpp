@@ -505,8 +505,79 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                     if (auto* arg = call->args[0]->as<ast::LiteralExpr>()) {
                         if (std::holds_alternative<std::string>(arg->value)) {
                             auto hir_asm = std::make_unique<HirAsm>();
-                            hir_asm->code = std::get<std::string>(arg->value);
-                            hir_asm->is_must = true;  // デフォルトmust（最適化抑制）
+                            std::string code = std::get<std::string>(arg->value);
+
+                            // ${+r:varname} パターンを検出して展開
+                            // フォーマット: ${constraint:variable}
+                            // 例: ${+r:x} → %0 (制約+r、変数x)
+                            std::string processed_code;
+                            std::string constraints;
+                            std::vector<std::string> operand_vars;
+                            size_t operand_idx = 0;
+
+                            size_t pos = 0;
+                            while (pos < code.size()) {
+                                // ${...} パターンを探す
+                                size_t start = code.find("${", pos);
+                                if (start == std::string::npos) {
+                                    processed_code += code.substr(pos);
+                                    break;
+                                }
+
+                                // ${の前の部分を追加
+                                processed_code += code.substr(pos, start - pos);
+
+                                // }を探す
+                                size_t end = code.find("}", start);
+                                if (end == std::string::npos) {
+                                    processed_code += code.substr(start);
+                                    break;
+                                }
+
+                                // ${...} の内容を解析
+                                std::string inner = code.substr(start + 2, end - start - 2);
+                                size_t colon = inner.find(':');
+                                if (colon != std::string::npos) {
+                                    std::string constraint = inner.substr(0, colon);
+                                    std::string varname = inner.substr(colon + 1);
+
+                                    // オペランド番号に置き換え
+                                    processed_code += "%" + std::to_string(operand_idx);
+
+                                    // 制約文字列に追加
+                                    if (operand_idx > 0)
+                                        constraints += ",";
+                                    constraints += constraint;
+
+                                    operand_vars.push_back(varname);
+                                    operand_idx++;
+
+                                    debug::hir::log(debug::hir::Id::StmtLower,
+                                                    "asm operand: " + constraint + ":" + varname,
+                                                    debug::Level::Debug);
+                                } else {
+                                    // 制約なし: そのまま出力
+                                    processed_code += "${" + inner + "}";
+                                }
+
+                                pos = end + 1;
+                            }
+
+                            hir_asm->code = processed_code;
+                            hir_asm->is_must = true;
+
+                            // clobbersに制約と変数情報を一時的に格納
+                            // フォーマット: "constraint1,constraint2|var1,var2"
+                            if (!operand_vars.empty()) {
+                                std::string vars_str;
+                                for (size_t i = 0; i < operand_vars.size(); i++) {
+                                    if (i > 0)
+                                        vars_str += ",";
+                                    vars_str += operand_vars[i];
+                                }
+                                hir_asm->clobbers.push_back(constraints + "|" + vars_str);
+                            }
+
                             debug::hir::log(debug::hir::Id::StmtLower,
                                             "__builtin_asm: " + hir_asm->code, debug::Level::Debug);
                             return std::make_unique<HirStmt>(std::move(hir_asm));
