@@ -159,15 +159,10 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 }
                 structType->setBody(fieldTypes);
 
-                // デバッグ情報
-                std::cerr << "[LLVM] Registered specialized struct: " << lookupName << " with "
-                          << fieldTypes.size() << " fields\n";
-
                 return structType;
             }
 
             // エラーログを追加
-            std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
             std::cerr << "       Available types: ";
             for (const auto& [name, _] : structTypes) {
                 std::cerr << name << " ";
@@ -281,7 +276,6 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
 
             // 見つからない場合はi32（タグのみ）として扱う
-            std::cerr << "[LLVM] WARNING: Enum type not found: " << lookupName << "\n";
             return ctx.getI32Type();
         }
         default:

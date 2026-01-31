@@ -113,6 +113,8 @@ struct HirIndex {
 struct HirMember {
     HirExprPtr object;
     std::string member;
+    // v0.13.0: enum tagged unionのフィールドアクセス用
+    int index = -1;  // -1 = 名前ベースアクセス、0+ = インデックスベースアクセス
 };
 
 // 三項演算子

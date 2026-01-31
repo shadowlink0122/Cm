@@ -1981,10 +1981,28 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
                     for (const auto& proj : place.projections) {
                         if (proj.kind == mir::ProjectionKind::Field && currentType) {
-                            // Generic型もStructとして扱う（モノモーフィック化後の型）
+                            // v0.13.0: Generic型とEnum型もStructとして扱う
                             if (currentType->kind == hir::TypeKind::Struct ||
-                                currentType->kind == hir::TypeKind::Generic) {
+                                currentType->kind == hir::TypeKind::Generic ||
+                                currentType->kind == hir::TypeKind::Enum) {
                                 std::string lookupName = currentType->name;
+
+                                // v0.13.0: Enum型の場合は先にenumDefsで処理
+                                if (currentType->kind == hir::TypeKind::Enum) {
+                                    auto enumIt = enumDefs.find(lookupName);
+                                    if (enumIt != enumDefs.end()) {
+                                        // field_id=0: tag, field_id=1: payload
+                                        if (proj.field_id == 1) {
+                                            // payloadフィールド - int型として扱う（簡略化）
+                                            currentType = hir::make_int();
+                                            continue;  // 次のプロジェクションへ
+                                        } else if (proj.field_id == 0) {
+                                            currentType = hir::make_int();
+                                            continue;
+                                        }
+                                    }
+                                }
+
                                 auto structIt = structDefs.find(lookupName);
 
                                 // フォールバック: 関数名から構造体名を推論
@@ -2005,6 +2023,19 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                     auto& fields = structIt->second->fields;
                                     if (proj.field_id < fields.size()) {
                                         currentType = fields[proj.field_id].type;
+
+                                        // v0.13.0: Enum型の場合はenumDefsからフィールド型を取得
+                                        // field_id=0: tag, field_id=1: payload
+                                    } else if (currentType->kind == hir::TypeKind::Enum) {
+                                        auto enumIt = enumDefs.find(lookupName);
+                                        if (enumIt != enumDefs.end() && proj.field_id == 1) {
+                                            // payloadフィールドのアクセス - int型を返す（簡略化）
+                                            // 実際にはvariantのtype_argsから取得すべき
+                                            currentType = hir::make_int();
+                                        } else if (proj.field_id == 0) {
+                                            // tagフィールド
+                                            currentType = hir::make_int();
+                                        }
 
                                         // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
                                         // 例: Box__intのvalue: T -> int
@@ -2365,63 +2396,73 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     currentType->element_type) {
                     targetStructType = currentType->element_type;
                 }
-                if (targetStructType && (targetStructType->kind == hir::TypeKind::Struct ||
-                                         targetStructType->kind == hir::TypeKind::Generic)) {
+                if (targetStructType &&
+                    (targetStructType->kind == hir::TypeKind::Struct ||
+                     targetStructType->kind == hir::TypeKind::Generic ||
+                     targetStructType->kind == hir::TypeKind::Enum)) {  // v0.13.0: Enum追加
                     structName = targetStructType->name;
 
-                    // ジェネリック構造体の場合、型引数を考慮した名前を生成
-                    // 例: Node<int> -> Node__int
-                    // 既にマングリング済み(__含む)の場合はスキップ
-                    if (!targetStructType->type_args.empty() &&
-                        structName.find("__") == std::string::npos) {
-                        for (const auto& typeArg : targetStructType->type_args) {
-                            if (typeArg) {
-                                structName += "__";
-                                if (typeArg->kind == hir::TypeKind::Struct) {
-                                    structName += typeArg->name;
-                                } else {
-                                    switch (typeArg->kind) {
-                                        case hir::TypeKind::Int:
-                                            structName += "int";
-                                            break;
-                                        case hir::TypeKind::UInt:
-                                            structName += "uint";
-                                            break;
-                                        case hir::TypeKind::Long:
-                                            structName += "long";
-                                            break;
-                                        case hir::TypeKind::ULong:
-                                            structName += "ulong";
-                                            break;
-                                        case hir::TypeKind::Float:
-                                            structName += "float";
-                                            break;
-                                        case hir::TypeKind::Double:
-                                            structName += "double";
-                                            break;
-                                        case hir::TypeKind::Bool:
-                                            structName += "bool";
-                                            break;
-                                        case hir::TypeKind::Char:
-                                            structName += "char";
-                                            break;
-                                        case hir::TypeKind::String:
-                                            structName += "string";
-                                            break;
-                                        default:
-                                            if (!typeArg->name.empty()) {
-                                                structName += typeArg->name;
-                                            }
-                                            break;
+                    // v0.13.0: Enum型の場合、enumTypesから検索
+                    if (targetStructType->kind == hir::TypeKind::Enum) {
+                        auto enumIt = enumTypes.find(structName);
+                        if (enumIt != enumTypes.end()) {
+                            structType = enumIt->second;
+                        }
+                    } else {
+                        // ジェネリック構造体の場合、型引数を考慮した名前を生成
+                        // 例: Node<int> -> Node__int
+                        // 既にマングリング済み(__含む)の場合はスキップ
+                        if (!targetStructType->type_args.empty() &&
+                            structName.find("__") == std::string::npos) {
+                            for (const auto& typeArg : targetStructType->type_args) {
+                                if (typeArg) {
+                                    structName += "__";
+                                    if (typeArg->kind == hir::TypeKind::Struct) {
+                                        structName += typeArg->name;
+                                    } else {
+                                        switch (typeArg->kind) {
+                                            case hir::TypeKind::Int:
+                                                structName += "int";
+                                                break;
+                                            case hir::TypeKind::UInt:
+                                                structName += "uint";
+                                                break;
+                                            case hir::TypeKind::Long:
+                                                structName += "long";
+                                                break;
+                                            case hir::TypeKind::ULong:
+                                                structName += "ulong";
+                                                break;
+                                            case hir::TypeKind::Float:
+                                                structName += "float";
+                                                break;
+                                            case hir::TypeKind::Double:
+                                                structName += "double";
+                                                break;
+                                            case hir::TypeKind::Bool:
+                                                structName += "bool";
+                                                break;
+                                            case hir::TypeKind::Char:
+                                                structName += "char";
+                                                break;
+                                            case hir::TypeKind::String:
+                                                structName += "string";
+                                                break;
+                                            default:
+                                                if (!typeArg->name.empty()) {
+                                                    structName += typeArg->name;
+                                                }
+                                                break;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    auto it = structTypes.find(structName);
-                    if (it != structTypes.end()) {
-                        structType = it->second;
+                        auto it = structTypes.find(structName);
+                        if (it != structTypes.end()) {
+                            structType = it->second;
+                        }
                     }
                 }
                 // フォールバック: 関数名から構造体名を推論
@@ -2444,6 +2485,12 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     // 型情報が取得できない場合は、addrの型から推測
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         structType = allocaInst->getAllocatedType();
+                        // v0.13.0: allocated type名でenumTypesを検索
+                        if (structType && structType->isStructTy()) {
+                            std::string typeName = structType->getStructName().str();
+                            auto enumIt = enumTypes.find(typeName);
+                            if (enumIt != enumTypes.end()) {}
+                        }
                     } else if (auto loadInst = llvm::dyn_cast<llvm::LoadInst>(addr)) {
                         (void)loadInst;  // 未使用警告を抑制
                         // LoadInst（デリファレンス後）の場合
@@ -2452,6 +2499,17 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                             auto it = structTypes.find(currentType->name);
                             if (it != structTypes.end()) {
                                 structType = it->second;
+                            }
+                        }
+                        // v0.13.0: Enum型の場合もチェック
+                        if (!structType && currentType &&
+                            currentType->kind == hir::TypeKind::Enum) {
+                            auto enumIt = enumTypes.find(currentType->name);
+                            if (enumIt != enumTypes.end()) {
+                                structType = enumIt->second;
+                                std::cerr
+                                    << "[LLVM] Found enum by currentType: " << currentType->name
+                                    << "\n";
                             }
                         }
                     } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {

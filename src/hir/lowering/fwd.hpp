@@ -28,6 +28,15 @@ class HirLowering {
     std::unordered_map<std::string, TypePtr> typedef_defs_;        // typedef定義
     std::unordered_map<std::string, std::string> import_aliases_;  // インポートエイリアス
 
+    // v0.13.0: matchバインディングコンテキスト
+    // バインディング変数名 -> {scrutinee HIR, フィールドインデックス, フィールド型}
+    struct BindingInfo {
+        HirExprPtr* scrutinee;  // scrutinee式へのポインタ
+        size_t field_index;  // enum構造体内のフィールドインデックス (tag=0, data=1+)
+        TypePtr field_type;  // フィールドの型
+    };
+    std::unordered_map<std::string, BindingInfo> match_bindings_;
+
     // ラムダ関数のリスト（後でプログラムに追加）
     std::vector<std::unique_ptr<HirFunction>> lambda_functions_;
 

@@ -413,22 +413,56 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
         mir_type = ctx.func->locals[object].type;
     }
 
+    // v0.13.0: Enum型のインデックスベースフィールドアクセス
+    // HirMember.index >= 0 の場合、フィールド名解決せず直接インデックスで参照
+    if (member.index >= 0) {
+        debug_msg("MIR", "Index-based field access: index=" + std::to_string(member.index));
+
+        // v0.13.0: MIRローカル変数の型がintでもHIRオブジェクト型がEnumなら更新
+        // これによりLLVM codegenでEnum型として正しく処理される
+        if (member.object->type && member.object->type->kind == hir::TypeKind::Enum &&
+            object < ctx.func->locals.size()) {
+            ctx.func->locals[object].type = member.object->type;
+        }
+
+        // ベースオブジェクトからフィールドアクセス
+        MirPlace place{object};
+
+        // ポインタ型の場合デリファレンス
+        if (mir_type && mir_type->kind == hir::TypeKind::Pointer) {
+            place.projections.push_back(PlaceProjection::deref());
+        }
+
+        place.projections.push_back(PlaceProjection::field(static_cast<size_t>(member.index)));
+
+        // 戻り値用一時変数を作成
+        auto field_type = member.object->type;  // フィールド型はHIRから取得
+        LocalId result = ctx.new_temp(field_type);
+
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(place))));
+
+        return result;
+    }
+
     // ポインタ型の場合、デリファレンスが必要
     // HIRの型ではなくMIRの型でポインタかどうかを判定（selfは暗黙的にポインタ）
     bool needs_deref = false;
     if (mir_type && mir_type->kind == hir::TypeKind::Pointer) {
         needs_deref = true;
         obj_type = mir_type->element_type;  // ポインタの先の型を使用
-    } else if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
-        // HIRの型が未設定または構造体でない場合、MIRの型から推論
+    } else if (!obj_type ||
+               (obj_type->kind != hir::TypeKind::Struct && obj_type->kind != hir::TypeKind::Enum)) {
+        // HIRの型が未設定または構造体/Enumでない場合、MIRの型から推論
         if (mir_type) {
             obj_type = mir_type;
         }
     }
 
-    if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
-        debug_msg("MIR",
-                  "Error: Member access on non-struct type for member '" + member.member + "'");
+    if (!obj_type ||
+        (obj_type->kind != hir::TypeKind::Struct && obj_type->kind != hir::TypeKind::Enum)) {
+        debug_msg("MIR", "Error: Member access on non-struct/enum type for member '" +
+                             member.member + "'");
         return ctx.new_temp(hir::make_error());
     }
 
@@ -1164,8 +1198,8 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
 LocalId ExprLowering::lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx) {
     debug_msg("MIR", "Lowering enum construct: " + ec.enum_name + "::" + ec.variant_name);
 
-    // enum型を作成
-    hir::TypePtr enum_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+    // v0.13.0: enum型を正しくEnum kindで作成
+    hir::TypePtr enum_type = std::make_shared<hir::Type>(hir::TypeKind::Enum);
     enum_type->name = ec.enum_name;
 
     // 結果用の変数を作成

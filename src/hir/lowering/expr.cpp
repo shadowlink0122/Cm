@@ -19,6 +19,25 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
     } else if (auto* ident = expr.as<ast::IdentExpr>()) {
         debug::hir::log(debug::hir::Id::IdentifierLower, ident->name, debug::Level::Debug);
 
+        // v0.13.0: matchバインディング変数チェック
+        // バインディング変数はscrutineeのフィールドアクセスに変換
+        auto binding_it = match_bindings_.find(ident->name);
+        if (binding_it != match_bindings_.end()) {
+            const BindingInfo& info = binding_it->second;
+            debug::hir::log(
+                debug::hir::Id::IdentifierRef,
+                "binding var: " + ident->name + " -> field " + std::to_string(info.field_index),
+                debug::Level::Debug);
+
+            // scrutineeのcloneを作成してメンバアクセスを生成
+            auto scrutinee_clone = clone_hir_expr(*info.scrutinee);
+            auto member = std::make_unique<HirMember>();
+            member->object = std::move(scrutinee_clone);
+            member->member = ident->name;                        // デバッグ用
+            member->index = static_cast<int>(info.field_index);  // v0.13.0: インデックスアクセス
+            return std::make_unique<HirExpr>(std::move(member), info.field_type);
+        }
+
         // enum値アクセスかチェック
         auto it = enum_values_.find(ident->name);
         if (it != enum_values_.end()) {
@@ -495,7 +514,11 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
                         hir_enum->args.push_back(lower_expr(*arg));
                     }
 
-                    return std::make_unique<HirExpr>(std::move(hir_enum), type);
+                    // v0.13.0: 正しくTypeKind::Enumで型を作成
+                    // 渡されたtype引数はStructである可能性があるため、明示的にEnumとして作成
+                    auto enum_type = std::make_shared<hir::Type>(hir::TypeKind::Enum);
+                    enum_type->name = enum_name;
+                    return std::make_unique<HirExpr>(std::move(hir_enum), enum_type);
                 }
             }
         }
@@ -1575,14 +1598,43 @@ HirExprPtr HirLowering::lower_match(ast::MatchExpr& match, TypePtr type) {
     for (int i = static_cast<int>(match.arms.size()) - 1; i >= 0; i--) {
         auto& arm = match.arms[i];
 
-        // v0.13.0: デストラクチャリングパターンのバインディング変数を登録
-        // 注: 現在のHIR Lowering設計ではバインディング変数のランタイム値抽出は未対応
-        // 型チェック段階でバインディング変数は登録済みだが、HIRでは値抽出ができないため
-        // 現時点ではフォールバック値（0）が使用される
-        // TODO: v0.14.0でmatch式をステートメントベースで再設計し、
-        //       ローカル変数宣言と代入を含むブロックを生成する
+        // v0.13.0: デストラクチャリングパターンのバインディング変数を設定
+        if (arm.pattern->kind == ast::MatchPatternKind::EnumVariant &&
+            !arm.pattern->bindings.empty()) {
+            // バインディング変数をmatch_bindings_に登録
+            auto enum_it = enum_defs_.find(arm.pattern->enum_name);
+            if (enum_it != enum_defs_.end()) {
+                const auto* enum_def = enum_it->second;
+                for (const auto& member : enum_def->members) {
+                    if (member.name == arm.pattern->variant_name) {
+                        for (size_t j = 0;
+                             j < arm.pattern->bindings.size() && j < member.fields.size(); ++j) {
+                            const std::string& binding = arm.pattern->bindings[j];
+                            if (binding != "_") {
+                                BindingInfo info;
+                                info.scrutinee = &scrutinee;
+                                info.field_index = j + 1;  // tag=0, fields=1+
+                                info.field_type = member.fields[j].type;
+                                match_bindings_[binding] = info;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
 
         auto body = lower_expr(*arm.body);
+
+        // バインディングをクリア
+        if (arm.pattern->kind == ast::MatchPatternKind::EnumVariant &&
+            !arm.pattern->bindings.empty()) {
+            for (const auto& binding : arm.pattern->bindings) {
+                if (binding != "_") {
+                    match_bindings_.erase(binding);
+                }
+            }
+        }
 
         if (arm.pattern->kind == ast::MatchPatternKind::Wildcard) {
             if (result == nullptr) {
@@ -1691,14 +1743,20 @@ HirExprPtr HirLowering::build_match_condition(const HirExprPtr& scrutinee,
                 }
 
                 // scrutinee（enum構造体）のタグフィールドと比較
-                // 現在のAssociated Data設計ではenum全体を整数として扱っているため
-                // タグ値との直接比較で条件を生成
+                // v0.13.0: enum構造体からタグフィールド（index 0）を抽出して比較
                 auto tag_lit = std::make_unique<HirLiteral>();
                 tag_lit->value = tag_value;
 
+                // scrutinee.0（タグフィールド）を抽出するHirMemberを作成
+                auto tag_access = std::make_unique<HirMember>();
+                tag_access->object = std::move(scrutinee_copy);
+                tag_access->index = 0;  // タグはfield 0
+                auto tag_expr = std::make_unique<HirExpr>(
+                    std::move(tag_access), std::make_shared<ast::Type>(ast::TypeKind::Int));
+
                 auto cond = std::make_unique<HirBinary>();
                 cond->op = HirBinaryOp::Eq;
-                cond->lhs = std::move(scrutinee_copy);
+                cond->lhs = std::move(tag_expr);  // タグフィールドを使用
                 cond->rhs = std::make_unique<HirExpr>(
                     std::move(tag_lit), std::make_shared<ast::Type>(ast::TypeKind::Int));
                 return std::make_unique<HirExpr>(std::move(cond),

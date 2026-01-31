@@ -32,58 +32,36 @@ class MirLowering : public MirLoweringBase {
 
     // HIRプログラムをMIRに変換
     MirProgram lower(const hir::HirProgram& hir_program) {
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 0: process_imports" << std::endl;
         // Pass 0: インポートを処理
         process_imports(hir_program);
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 1: register_declarations" << std::endl;
         // Pass 1: 構造体、typedef、enum、インターフェースの登録
         register_declarations(hir_program);
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 1.5: generate_auto_impls" << std::endl;
         // Pass 1.5: with キーワードによる自動実装を生成（非ジェネリック構造体のみ）
         generate_auto_impls(hir_program);
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 2: lower_functions" << std::endl;
         // Pass 2: 関数のlowering
         lower_functions(hir_program);
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 3: lower_impl_methods" << std::endl;
         // Pass 3: impl内のメソッドのlowering
         lower_impl_methods(hir_program);
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 4: perform_monomorphization" << std::endl;
         // Pass 4: モノモーフィゼーション（インターフェース特殊化）
         perform_monomorphization();
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 5: generate_monomorphized_auto_impls" << std::endl;
         // Pass 5: モノモーフィゼーション後のジェネリック構造体に対する自動実装を生成
         generate_monomorphized_auto_impls();
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 6: rewrite_struct_comparison_operators" << std::endl;
         // Pass 6: 構造体比較演算子を関数呼び出しに変換
         rewrite_struct_comparison_operators();
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 7: propagate_closure_info" << std::endl;
         // Pass 7: クロージャ情報を伝播（固定点まで繰り返し）
         propagate_closure_info();
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] Pass 8: rewrite_hof_calls_for_closures" << std::endl;
         // Pass 8: 高階関数呼び出しをクロージャ版に書き換え
         rewrite_hof_calls_for_closures();
 
-        if (cm::debug::g_debug_mode)
-            std::cerr << "[MIR] All passes complete" << std::endl;
         return std::move(mir_program);
     }
 

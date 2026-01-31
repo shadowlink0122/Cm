@@ -152,6 +152,13 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
                 }
             } else {
                 hir_let->init = lower_expr(*let.init);
+
+                // v0.13.0: auto型でinit式がEnum型の場合、変数にEnum型を伝播
+                // これによりmatchのscrutineeが正しくEnum型として認識される
+                if (hir_let->init && hir_let->init->type &&
+                    hir_let->init->type->kind == hir::TypeKind::Enum) {
+                    hir_let->type = hir_let->init->type;
+                }
             }
         }
     }
