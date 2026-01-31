@@ -278,11 +278,18 @@ struct HirSwitch {
     std::vector<HirSwitchCase> cases;
 };
 
+// asmオペランド（制約+変数名）
+struct AsmOperand {
+    std::string constraint;  // "+r", "=r", "r", etc.
+    std::string var_name;    // 変数名
+};
+
 // インラインアセンブリ
 struct HirAsm {
-    std::string code;                   // アセンブリコード
+    std::string code;                   // アセンブリコード（%0, %1... に変換済み）
     bool is_must;                       // must修飾（最適化抑制）
     std::vector<std::string> clobbers;  // 破壊レジスタ
+    std::vector<AsmOperand> operands;   // オペランド（制約+変数名）
 };
 
 // must {} ブロック（最適化禁止）

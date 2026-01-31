@@ -387,10 +387,17 @@ struct MirStatement {
         LocalId local;
     };
 
+    // asmオペランド（制約+ローカル変数ID）
+    struct MirAsmOperand {
+        std::string constraint;  // "+r", "=r", "r", etc.
+        LocalId local_id;        // 変数のローカルID
+    };
+
     struct AsmData {
         std::string code;
         bool is_must;  // must修飾（最適化抑制）
         std::vector<std::string> clobbers;
+        std::vector<MirAsmOperand> operands;  // オペランド情報
     };
 
     std::variant<std::monostate,  // Nop
@@ -422,11 +429,12 @@ struct MirStatement {
     }
 
     // インラインアセンブリ用
-    static MirStatementPtr asm_stmt(std::string code, bool is_must = true, Span s = {}) {
+    static MirStatementPtr asm_stmt(std::string code, bool is_must = true,
+                                    std::vector<MirAsmOperand> operands = {}, Span s = {}) {
         auto stmt = std::make_unique<MirStatement>();
         stmt->kind = Asm;
         stmt->span = s;
-        stmt->data = AsmData{std::move(code), is_must, {}};
+        stmt->data = AsmData{std::move(code), is_must, {}, std::move(operands)};
         return stmt;
     }
 };

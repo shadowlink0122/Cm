@@ -1,0 +1,21 @@
+// オペランド構文テスト
+// 基本動作確認のみ（オペランド付きはLLVM制約調査中）
+
+import std::io::println;
+
+void main() {
+    println("=== Asm Operand Test ===");
+    
+    // 基本テスト: オペランドなしasm
+    __builtin_asm("nop");
+    println("nop: PASS");
+    
+    // 変数宣言（将来のオペランド対応のため）
+    int x = 42;
+    int y = 0;
+    
+    // TODO: ${r:x}, ${=r:y}, ${+r:z} 構文対応
+    // 現在LLVM InlineAsmの%0オペランド番号の処理に課題あり
+    
+    println("=== Test Complete ===");
+}

@@ -549,7 +549,8 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                                         constraints += ",";
                                     constraints += constraint;
 
-                                    operand_vars.push_back(varname);
+                                    // HirAsm.operandsにAsmOperandを格納
+                                    hir_asm->operands.push_back(AsmOperand{constraint, varname});
                                     operand_idx++;
 
                                     debug::hir::log(debug::hir::Id::StmtLower,
@@ -566,20 +567,10 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                             hir_asm->code = processed_code;
                             hir_asm->is_must = true;
 
-                            // clobbersに制約と変数情報を一時的に格納
-                            // フォーマット: "constraint1,constraint2|var1,var2"
-                            if (!operand_vars.empty()) {
-                                std::string vars_str;
-                                for (size_t i = 0; i < operand_vars.size(); i++) {
-                                    if (i > 0)
-                                        vars_str += ",";
-                                    vars_str += operand_vars[i];
-                                }
-                                hir_asm->clobbers.push_back(constraints + "|" + vars_str);
-                            }
-
                             debug::hir::log(debug::hir::Id::StmtLower,
-                                            "__builtin_asm: " + hir_asm->code, debug::Level::Debug);
+                                            "__builtin_asm: " + hir_asm->code + " operands=" +
+                                                std::to_string(hir_asm->operands.size()),
+                                            debug::Level::Debug);
                             return std::make_unique<HirStmt>(std::move(hir_asm));
                         }
                     }

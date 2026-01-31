@@ -1159,8 +1159,25 @@ void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
 
 // インラインアセンブリのlowering
 void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) {
-    debug_msg("mir_asm", "[MIR] lower_asm: " + asm_stmt.code);
-    ctx.push_statement(MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must));
+    debug_msg("mir_asm", "[MIR] lower_asm: " + asm_stmt.code +
+                             " operands=" + std::to_string(asm_stmt.operands.size()));
+
+    // オペランドを変換: 変数名 → LocalId
+    std::vector<MirStatement::MirAsmOperand> mir_operands;
+    for (const auto& operand : asm_stmt.operands) {
+        // 変数名をローカル変数テーブルから検索
+        auto local_id_opt = ctx.resolve_variable(operand.var_name);
+        if (local_id_opt) {
+            mir_operands.push_back({operand.constraint, *local_id_opt});
+            debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" + operand.var_name +
+                                     " -> local_id=" + std::to_string(*local_id_opt));
+        } else {
+            debug_msg("mir_asm", "[MIR] WARNING: variable not found: " + operand.var_name);
+        }
+    }
+
+    ctx.push_statement(
+        MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must, std::move(mir_operands)));
 }
 
 // must {} ブロックのlowering（最適化禁止）

@@ -1,21 +1,30 @@
-// ${constraint:var} 構文テスト
-// Phase 2: asm文字列埋め込み
+// ${+r:x} / ${=r:y} オペランド構文テスト
+// Phase 2: asm変数オペランド操作
 
 import std::io::println;
 
 void main() {
-    println("=== Asm String Interpolation Test ===");
+    println("=== Asm Operand Test ===");
     
-    // 基本的な文字列埋め込み構文
-    // ${+r:x} → %0 に変換される
-    int x = 10;
-    
-    // 現時点: 文字列解析のみ、変数バインドは未実装
-    // __builtin_asm("addl $5, ${+r:x}");
-    
-    // 基本のasm（オペランドなし）は動作
+    // 基本テスト: オペランドなし
     __builtin_asm("nop");
-    println("basic asm: PASS");
+    println("nop: PASS");
+    
+    // 入力オペランドテスト
+    int x = 42;
+    // ${r:x} は入力オペランドとして変数xをasmに渡す
+    // ※現時点: 値を読むだけなので結果確認不可
+    // __builtin_asm("movl ${r:x}, %eax");
+    
+    // 出力テスト: 変数への代入
+    int y = 0;
+    // ${=r:y} は出力オペランドとして変数yに値を書き込む
+    // __builtin_asm("movl $100, ${=r:y}");
+    
+    // 入出力テスト: 変数を読み書き
+    int z = 10;
+    // ${+r:z} は入出力オペランドとして変数zを読み書き
+    // __builtin_asm("addl $5, ${+r:z}");   // z += 5
     
     println("=== Test Complete ===");
 }

@@ -1370,16 +1370,67 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
         case mir::MirStatement::Asm: {
             // インラインアセンブリ
             auto& asmData = std::get<mir::MirStatement::AsmData>(stmt.data);
-            debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code);
+            debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code +
+                                      " operands=" + std::to_string(asmData.operands.size()));
 
-            // LLVM inline asm を生成
-            // 形式: asm volatile ("code" ::: "memory")
-            auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
-            std::string constraints = asmData.is_must ? "~{memory}" : "";
-            auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
-                                                   asmData.is_must  // hasSideEffects
-            );
-            builder->CreateCall(asmFuncTy, inlineAsm);
+            if (asmData.operands.empty()) {
+                // オペランドなし: シンプルなasm
+                auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                std::string constraints = asmData.is_must ? "~{memory}" : "";
+                auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
+                                                       asmData.is_must  // hasSideEffects
+                );
+                builder->CreateCall(asmFuncTy, inlineAsm);
+            } else {
+                // オペランド付き: 制約文字列とオペランドを生成
+                std::vector<llvm::Type*> operandTypes;
+                std::vector<llvm::Value*> operandValues;
+                std::string constraints;
+
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    auto& operand = asmData.operands[i];
+
+                    // ローカル変数を取得
+                    llvm::Value* localPtr = nullptr;
+                    if (operand.local_id < locals.size()) {
+                        localPtr = locals[operand.local_id];
+                    }
+
+                    if (localPtr) {
+                        // ポインタから値をロード
+                        auto* elemType = ctx.getI32Type();  // デフォルトint型
+                        if (llvm::isa<llvm::PointerType>(localPtr->getType())) {
+                            auto* loadedVal = builder->CreateLoad(elemType, localPtr);
+                            operandTypes.push_back(loadedVal->getType());
+                            operandValues.push_back(loadedVal);
+                        } else {
+                            operandTypes.push_back(localPtr->getType());
+                            operandValues.push_back(localPtr);
+                        }
+
+                        if (i > 0)
+                            constraints += ",";
+                        constraints += operand.constraint;
+
+                        debug_msg("llvm_asm", "operand " + std::to_string(i) + ": " +
+                                                  operand.constraint +
+                                                  " local_id=" + std::to_string(operand.local_id));
+                    }
+                }
+
+                if (asmData.is_must && !constraints.empty()) {
+                    constraints += ",~{memory}";
+                }
+
+                if (!operandValues.empty()) {
+                    // オペランドの型で関数型を生成
+                    auto* asmFuncTy =
+                        llvm::FunctionType::get(ctx.getVoidType(), operandTypes, false);
+                    auto* inlineAsm =
+                        llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints, asmData.is_must);
+                    builder->CreateCall(asmFuncTy, inlineAsm, operandValues);
+                }
+            }
             break;
         }
         case mir::MirStatement::StorageLive:
