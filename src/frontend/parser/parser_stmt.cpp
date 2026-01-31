@@ -58,6 +58,13 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_while(std::move(cond), std::move(body), Span{start_pos, previous().end});
     }
 
+    // must {} ブロック（最適化禁止）
+    if (consume_if(TokenKind::KwMust)) {
+        debug::par::log(debug::par::Id::Stmt, "must block", debug::Level::Trace);
+        auto body = parse_block();
+        return ast::make_must(std::move(body), Span{start_pos, previous().end});
+    }
+
     // switch
     if (consume_if(TokenKind::KwSwitch)) {
         expect(TokenKind::LParen);

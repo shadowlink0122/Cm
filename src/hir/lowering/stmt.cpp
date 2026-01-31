@@ -29,6 +29,8 @@ HirStmtPtr HirLowering::lower_stmt(ast::Stmt& stmt) {
         return std::make_unique<HirStmt>(std::make_unique<HirContinue>());
     } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
         return lower_defer(*defer_stmt);
+    } else if (auto* must_stmt = stmt.as<ast::MustBlockStmt>()) {
+        return lower_must_block(*must_stmt);
     }
     return nullptr;
 }
@@ -40,6 +42,17 @@ HirStmtPtr HirLowering::lower_defer(ast::DeferStmt& defer) {
         hir_defer->body = lower_stmt(*defer.body);
     }
     return std::make_unique<HirStmt>(std::move(hir_defer));
+}
+
+// must {} ブロック（最適化禁止）
+HirStmtPtr HirLowering::lower_must_block(ast::MustBlockStmt& must) {
+    auto hir_must = std::make_unique<HirMustBlock>();
+    for (auto& s : must.body) {
+        if (auto hs = lower_stmt(*s)) {
+            hir_must->body.push_back(std::move(hs));
+        }
+    }
+    return std::make_unique<HirStmt>(std::move(hir_must));
 }
 
 // ブロック文

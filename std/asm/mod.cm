@@ -1,14 +1,12 @@
 // std::asm - インラインアセンブリモジュール
-// v0.13.0: __builtin_asm intrinsicを使用した純粋Cm実装
+// v0.13.0: must{}ブロック + 基本asm API
 //
 // 使用例:
-//   import std::asm::{asm, nop, barrier, asm_in, asm_inout};
+//   import std::asm::{nop, barrier, asm_add};
 //   
-//   asm("nop");           // 任意のアセンブリ（文字列）
-//   nop();                // NOP命令
-//   barrier();            // メモリバリア
-//   asm_add(3, 5);        // アセンブリによる加算
-//   asm_inout_add(x, 5);  // x += 5 をアセンブリで実行
+//   nop();              // NOP命令
+//   barrier();          // メモリバリア
+//   int sum = asm_add(3, 5);  // アセンブリによる加算
 
 module std.asm;
 
@@ -23,17 +21,10 @@ extern "C" {
     bool cm_asm_is_x86();
     bool cm_asm_is_arm64();
     
-    // 演算（入出力オペランド相当）
+    // 演算
     int cm_asm_add(int a, int b);
     int cm_asm_mul(int a, int b);
     int cm_asm_rdtsc_low();
-    
-    // 入出力付き演算（inout相当）
-    void cm_asm_inout_add(int* ptr, int value);
-    void cm_asm_inout_inc(int* ptr);
-    void cm_asm_inout_dec(int* ptr);
-    int cm_asm_in_load(int* ptr);
-    void cm_asm_out_store(int* ptr, int value);
 }
 
 // ============================================================
@@ -41,18 +32,17 @@ extern "C" {
 // ============================================================
 
 // 任意のアセンブリ命令を実行（文字列）
-// 内部で__builtin_asmまたはFFIを使用
 export void asm(string code) {
     cm_asm_inline(code);
 }
 
-// must修飾付きアセンブリ（最適化抑制を保証）
-export void asm_must(string code) {
+// volatile修飾付きアセンブリ（レガシー互換）
+export void asm_volatile(string code) {
     cm_asm_volatile(code);
 }
 
 // ============================================================
-// パブリックAPI - 基本命令（__builtin_asmを内部使用）
+// パブリックAPI - 基本命令
 // ============================================================
 
 // NOP命令（何もしない）
@@ -86,8 +76,7 @@ export void compiler_barrier() {
 }
 
 // ============================================================
-// パブリックAPI - 演算（入力オペランド）
-// in(a), in(b) 相当
+// パブリックAPI - 演算（入力オペランド相当）
 // ============================================================
 
 // アセンブリによる加算: a + b
@@ -98,39 +87,6 @@ export int asm_add(int a, int b) {
 // アセンブリによる乗算: a * b
 export int asm_mul(int a, int b) {
     return cm_asm_mul(a, b);
-}
-
-// ============================================================
-// パブリックAPI - 入出力オペランド（inout相当）
-// ============================================================
-
-// inout(ptr) + in(value): *ptr += value
-export void asm_inout_add(int* ptr, int value) {
-    cm_asm_inout_add(ptr, value);
-}
-
-// inout(ptr): (*ptr)++
-export void asm_inout_inc(int* ptr) {
-    cm_asm_inout_inc(ptr);
-}
-
-// inout(ptr): (*ptr)--
-export void asm_inout_dec(int* ptr) {
-    cm_asm_inout_dec(ptr);
-}
-
-// ============================================================
-// パブリックAPI - 入力/出力（in/out相当）
-// ============================================================
-
-// in(ptr) -> out(result): メモリロード
-export int asm_in_load(int* ptr) {
-    return cm_asm_in_load(ptr);
-}
-
-// in(value), out(ptr): メモリストア
-export void asm_out_store(int* ptr, int value) {
-    cm_asm_out_store(ptr, value);
 }
 
 // ============================================================

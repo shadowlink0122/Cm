@@ -1,31 +1,45 @@
-// std::asm must修飾子テスト
-// mustはアセンブリの最適化抑制を保証
-// __builtin_asmは使用せず、std::asm経由で使用
+// must {} ブロック構文テスト
+// mustブロック内のコードはデッドコード最適化禁止
 
 import std::io::println;
-import std::asm::{nop, barrier, asm_must, compiler_barrier};
 
 void main() {
-    println("=== std::asm must Syntax Test ===");
+    println("=== must {} Block Test ===");
     
-    // nop() は内部で __builtin_asm("nop") を使用
-    // デフォルトで must=true（最適化抑制）
-    nop();
-    println("nop(): ok");
+    // 基本的なmustブロック
+    int x = 0;
+    must {
+        x = 10;  // この代入は最適化で消えない
+        x = 20;  // この代入も最適化で消えない
+    }
+    if (x == 20) {
+        println("must block basic: PASS");
+    } else {
+        println("must block basic: FAIL");
+    }
     
-    // barrier() はメモリバリア（mfence）
-    barrier();
-    println("barrier(): ok");
+    // mustブロック内でasm使用
+    must {
+        __builtin_asm("nop");
+        __builtin_asm("nop");
+        __builtin_asm("nop");
+    }
+    println("must block with asm: PASS");
     
-    // asm_must() は明示的に最適化抑制を保証
-    asm_must("nop");
-    asm_must("nop");
-    asm_must("nop");
-    println("asm_must(nop x3): ok");
-    
-    // compiler_barrier() はコンパイラバリア
-    compiler_barrier();
-    println("compiler_barrier(): ok");
+    // ネストしたmustブロック
+    int y = 0;
+    must {
+        y = 1;
+        must {
+            y = 2;
+        }
+        y = 3;
+    }
+    if (y == 3) {
+        println("nested must blocks: PASS");
+    } else {
+        println("nested must blocks: FAIL");
+    }
     
     println("=== All Tests Passed ===");
 }

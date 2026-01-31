@@ -79,6 +79,9 @@ class StmtLowering : public MirLoweringBase {
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAsm>>) {
                     // インラインアセンブリ
                     lower_asm(*stmt_ptr, ctx);
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirMustBlock>>) {
+                    // must {} ブロック（最適化禁止）
+                    lower_must_block(*stmt_ptr, ctx);
                 }
             },
             stmt.kind);
@@ -120,6 +123,9 @@ class StmtLowering : public MirLoweringBase {
 
     // インラインアセンブリのlowering
     void lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx);
+
+    // must {} ブロックのlowering
+    void lower_must_block(const hir::HirMustBlock& must_block, LoweringContext& ctx);
 };
 
 }  // namespace cm::mir

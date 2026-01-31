@@ -187,8 +187,23 @@ struct DeferStmt {
 };
 
 // ============================================================
+// must {} ブロック（最適化禁止）
+// ブロック内のコードはデッドコード削除・並び替え禁止
+// ============================================================
+struct MustBlockStmt {
+    std::vector<StmtPtr> body;
+
+    MustBlockStmt() = default;
+    explicit MustBlockStmt(std::vector<StmtPtr> b) : body(std::move(b)) {}
+};
+
+// ============================================================
 // 文作成ヘルパー
 // ============================================================
+inline StmtPtr make_must(std::vector<StmtPtr> body, Span s = {}) {
+    return std::make_unique<Stmt>(std::make_unique<MustBlockStmt>(std::move(body)), s);
+}
+
 inline StmtPtr make_let(std::string name, TypePtr type, ExprPtr init, bool is_const = false,
                         Span s = {}, bool is_static = false) {
     return std::make_unique<Stmt>(std::make_unique<LetStmt>(std::move(name), std::move(type),

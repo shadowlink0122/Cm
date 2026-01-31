@@ -1,9 +1,0 @@
-=== std::asm In/Out/InOut Test ===
-asm_add(10, 20) = 30: PASS
-asm_mul(7, 8) = 56: PASS
-asm_inout_add(&x, 23): x=123: PASS
-asm_inout_inc(&y): y=42: PASS
-asm_inout_dec(&z): z=9: PASS
-asm_in_load(&src): 999: PASS
-asm_out_store(&dest, 777): PASS
-=== All Tests Passed ===

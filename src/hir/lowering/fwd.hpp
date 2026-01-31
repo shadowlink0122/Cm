@@ -65,6 +65,7 @@ class HirLowering {
     HirStmtPtr lower_expr_stmt(ast::ExprStmt& expr_stmt);
     HirStmtPtr lower_block(ast::BlockStmt& block);
     HirStmtPtr lower_defer(ast::DeferStmt& defer);
+    HirStmtPtr lower_must_block(ast::MustBlockStmt& must);
     std::unique_ptr<HirSwitchPattern> lower_pattern(ast::Pattern& pattern);
 
     // 式のlowering
