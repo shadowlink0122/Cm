@@ -496,10 +496,10 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
     if (!expr_stmt.expr)
         return nullptr;
 
-    // __builtin_asm の特別処理
+    // __llvm__ の特別処理
     if (auto* call = expr_stmt.expr->as<ast::CallExpr>()) {
         if (auto* ident = call->callee->as<ast::IdentExpr>()) {
-            if (ident->name == "__builtin_asm") {
+            if (ident->name == "__llvm__") {
                 // 引数から文字列リテラルを取得
                 if (!call->args.empty()) {
                     if (auto* arg = call->args[0]->as<ast::LiteralExpr>()) {
@@ -541,21 +541,37 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                                     std::string constraint = inner.substr(0, colon);
                                     std::string varname = inner.substr(colon + 1);
 
-                                    // オペランド番号に置き換え
-                                    processed_code += "%" + std::to_string(operand_idx);
+                                    // 同じ変数名が既に登録されているかチェック
+                                    int existing_idx = -1;
+                                    for (size_t i = 0; i < hir_asm->operands.size(); ++i) {
+                                        if (hir_asm->operands[i].var_name == varname) {
+                                            existing_idx = static_cast<int>(i);
+                                            break;
+                                        }
+                                    }
 
-                                    // 制約文字列に追加
-                                    if (operand_idx > 0)
-                                        constraints += ",";
-                                    constraints += constraint;
+                                    if (existing_idx >= 0) {
+                                        // 既存のオペランド番号を再利用
+                                        processed_code += "$" + std::to_string(existing_idx);
+                                    } else {
+                                        // 新規オペランド: 番号を割り当て
+                                        processed_code += "$" + std::to_string(operand_idx);
 
-                                    // HirAsm.operandsにAsmOperandを格納
-                                    hir_asm->operands.push_back(AsmOperand{constraint, varname});
-                                    operand_idx++;
+                                        // 制約文字列に追加
+                                        if (operand_idx > 0)
+                                            constraints += ",";
+                                        constraints += constraint;
 
-                                    debug::hir::log(debug::hir::Id::StmtLower,
-                                                    "asm operand: " + constraint + ":" + varname,
-                                                    debug::Level::Debug);
+                                        // HirAsm.operandsにAsmOperandを格納
+                                        hir_asm->operands.push_back(
+                                            AsmOperand{constraint, varname});
+                                        operand_idx++;
+
+                                        debug::hir::log(
+                                            debug::hir::Id::StmtLower,
+                                            "asm operand: " + constraint + ":" + varname,
+                                            debug::Level::Debug);
+                                    }
                                 } else {
                                     // 制約なし: そのまま出力
                                     processed_code += "${" + inner + "}";
@@ -568,7 +584,7 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                             hir_asm->is_must = true;
 
                             debug::hir::log(debug::hir::Id::StmtLower,
-                                            "__builtin_asm: " + hir_asm->code + " operands=" +
+                                            "__llvm__: " + hir_asm->code + " operands=" +
                                                 std::to_string(hir_asm->operands.size()),
                                             debug::Level::Debug);
                             return std::make_unique<HirStmt>(std::move(hir_asm));
@@ -577,8 +593,7 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                 }
                 // 引数が不正な場合
                 debug::hir::log(debug::hir::Id::StmtLower,
-                                "__builtin_asm requires string literal argument",
-                                debug::Level::Error);
+                                "__llvm__ requires string literal argument", debug::Level::Error);
                 return nullptr;
             }
         }

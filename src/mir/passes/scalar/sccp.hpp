@@ -262,6 +262,23 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             if (!stmt) {
                 continue;
             }
+
+            // Asmステートメント: 出力オペランドの変数をOverdefinedにマーク
+            // インラインアセンブリは実行時に変数を変更するため、定数伝播を抑制
+            if (stmt->kind == MirStatement::Asm) {
+                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                for (const auto& operand : asm_data.operands) {
+                    // 出力オペランド（+r, =rなど）は定数として扱えない
+                    if (!operand.constraint.empty() &&
+                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                        if (operand.local_id < state.size()) {
+                            state[operand.local_id] = {LatticeKind::Overdefined, {}};
+                        }
+                    }
+                }
+                continue;
+            }
+
             if (stmt->kind != MirStatement::Assign) {
                 continue;
             }

@@ -1,22 +1,24 @@
 // インラインアセンブリ基本テスト
-import std::asm::{nop, barrier, pause, is_x86, is_arm64};
+// __llvm__ 直接使用で動作確認
+
 import std::io::println;
 
 int main() {
     println("=== Inline Assembly Test ===");
     
-    // 基本命令
-    nop();
-    barrier();
-    pause();
+    // 基本命令（直接__llvm__使用）
+    __llvm__("nop");
+    println("nop: ok");
     
-    // アーキテクチャ検出
-    if (is_x86()) {
-        println("x86 detected");
-    }
-    if (is_arm64()) {
-        println("ARM64 detected");
-    }
+    // コンパイラバリア（空asm）
+    __llvm__("");
+    println("compiler_barrier: ok");
+    
+    // 複数回実行
+    __llvm__("nop");
+    __llvm__("nop");
+    __llvm__("nop");
+    println("multiple: ok");
     
     println("=== Complete ===");
     return 0;

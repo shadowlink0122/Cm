@@ -557,6 +557,30 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         allocatedLocals.clear();
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
+        // asm出力オペランドを持つ変数を事前スキャンしてallocatedLocalsに登録
+        // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
+        std::set<unsigned int> asmOutputLocals;
+        for (size_t bbIdx = 0; bbIdx < func.basic_blocks.size(); ++bbIdx) {
+            const auto& bb = func.basic_blocks[bbIdx];
+            // DCEで削除されたブロックはスキップ
+            if (!bb) {
+                continue;
+            }
+            for (size_t stmtIdx = 0; stmtIdx < bb->statements.size(); ++stmtIdx) {
+                const auto& stmt = bb->statements[stmtIdx];
+                if (stmt->kind == mir::MirStatement::Asm) {
+                    auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+                    for (const auto& operand : asmData.operands) {
+                        // 出力オペランド（=r, +r）を検出
+                        if (!operand.constraint.empty() &&
+                            (operand.constraint[0] == '=' || operand.constraint[0] == '+')) {
+                            asmOutputLocals.insert(operand.local_id);
+                        }
+                    }
+                }
+            }
+        }
+
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
         builder->SetInsertPoint(entryBB);
@@ -620,20 +644,30 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     if (local.type->kind == hir::TypeKind::Void) {
                         continue;
                     }
+
+                    // asm出力オペランド変数はSSA形式ではなくalloca強制
+                    bool isAsmOutput = asmOutputLocals.count(static_cast<unsigned int>(i)) > 0;
+
                     // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
-                    if (local.type->kind == hir::TypeKind::Function ||
-                        (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
-                         local.type->element_type->kind == hir::TypeKind::Function)) {
+                    // ただしasm出力変数は例外
+                    if (!isAsmOutput &&
+                        (local.type->kind == hir::TypeKind::Function ||
+                         (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
+                          local.type->element_type->kind == hir::TypeKind::Function))) {
                         continue;
                     }
                     // 配列へのポインタ型の一時変数はアロケーションしない（SSA形式で扱う）
-                    if (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
+                    // ただしasm出力変数は例外
+                    if (!isAsmOutput && local.type->kind == hir::TypeKind::Pointer &&
+                        local.type->element_type &&
                         local.type->element_type->kind == hir::TypeKind::Array &&
                         !local.is_user_variable) {
                         continue;
                     }
                     // 文字列型の一時変数はアロケーションしない（直接値を使用）
-                    if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
+                    // ただしasm出力変数は例外
+                    if (!isAsmOutput && local.type->kind == hir::TypeKind::String &&
+                        !local.is_user_variable) {
                         continue;
                     }
 
@@ -667,6 +701,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         }
 
                         // cm_slice_new呼び出しでスライスを初期化
+                        // std::cerr << "[MIR2LLVM]     Local " << i
+                        //           << " is slice, calling cm_slice_new\n";
                         auto sliceNewFunc = declareExternalFunction("cm_slice_new");
                         auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
                         auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
@@ -1354,7 +1390,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             }
 
                             // Store操作を実行
-                            builder->CreateStore(rvalue, addr);
+                            // asm出力で変更される変数へのstoreはvolatileにして最適化を防止
+                            auto* storeInst = builder->CreateStore(rvalue, addr);
+                            if (isAllocated) {
+                                storeInst->setVolatile(true);
+                            }
                         }
                     } else {
                         // addr取得失敗: フォールバックとしてlocalsに直接格納（SSA形式）
@@ -1383,52 +1423,179 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 builder->CreateCall(asmFuncTy, inlineAsm);
             } else {
                 // オペランド付き: 制約文字列とオペランドを生成
-                std::vector<llvm::Type*> operandTypes;
-                std::vector<llvm::Value*> operandValues;
+                // 出力/入出力オペランドを分類
+                std::vector<llvm::Type*> inputTypes;
+                std::vector<llvm::Value*> inputValues;
+                std::vector<llvm::Value*> outputPtrs;      // 出力先ポインタ
+                std::vector<mir::LocalId> outputLocalIds;  // 出力ローカルIDも記録
                 std::string constraints;
+                int outputCount = 0;
+                int inputCount = 0;
 
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     auto& operand = asmData.operands[i];
 
-                    // ローカル変数を取得
+                    // ローカル変数を取得（localsはstd::map）
                     llvm::Value* localPtr = nullptr;
-                    if (operand.local_id < locals.size()) {
+                    if (locals.count(operand.local_id) > 0 && locals[operand.local_id]) {
                         localPtr = locals[operand.local_id];
                     }
 
-                    if (localPtr) {
-                        // ポインタから値をロード
-                        auto* elemType = ctx.getI32Type();  // デフォルトint型
+                    if (!localPtr)
+                        continue;
+
+                    auto* elemType = ctx.getI32Type();  // デフォルトint型
+                    bool hasOutput = operand.constraint[0] == '=' || operand.constraint[0] == '+';
+                    bool hasInput = operand.constraint[0] == '+' ||
+                                    (operand.constraint[0] != '=' && operand.constraint[0] != '+');
+
+                    // 入力値を先に取得（alloca作成前に）
+                    llvm::Value* inputVal = nullptr;
+                    if (hasInput || operand.constraint[0] == '+') {
+                        // +r制約: 入力として現在の値をロード
                         if (llvm::isa<llvm::PointerType>(localPtr->getType())) {
-                            auto* loadedVal = builder->CreateLoad(elemType, localPtr);
-                            operandTypes.push_back(loadedVal->getType());
-                            operandValues.push_back(loadedVal);
+                            // ポインタ型: volatileロードで値を取得（最適化で消されないように）
+                            auto* loadInst = builder->CreateLoad(elemType, localPtr);
+                            if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
+                                li->setVolatile(true);  // 最適化抑制
+                            }
+                            inputVal = loadInst;
+                        } else if (llvm::isa<llvm::AllocaInst>(localPtr)) {
+                            // alloca: volatileロードで値を取得
+                            auto* loadInst = builder->CreateLoad(elemType, localPtr);
+                            if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
+                                li->setVolatile(true);  // 最適化抑制
+                            }
+                            inputVal = loadInst;
                         } else {
-                            operandTypes.push_back(localPtr->getType());
-                            operandValues.push_back(localPtr);
+                            // 既にSSA値: そのまま使用
+                            inputVal = localPtr;
                         }
+                        inputTypes.push_back(inputVal->getType());
+                        inputValues.push_back(inputVal);
+                        inputCount++;
+                    }
 
-                        if (i > 0)
-                            constraints += ",";
-                        constraints += operand.constraint;
+                    if (hasOutput) {
+                        // 出力オペランドの場合、ストア可能なポインタが必要
+                        // SSA値（定数等）の場合はallocaを作成
+                        if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
+                            !llvm::isa<llvm::GlobalVariable>(localPtr) &&
+                            !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
+                            // allocaを作成（入力値は既に取得済み）
+                            auto* alloca = builder->CreateAlloca(elemType, nullptr, "asm_out_tmp");
+                            // 現在の値をallocaにvolatileで格納（最適化で定数伝播されないように）
+                            if (inputVal) {
+                                auto* initStore = builder->CreateStore(inputVal, alloca);
+                                initStore->setVolatile(true);  // 最適化抑制
+                            }
+                            localPtr = alloca;
+                            // allocatedLocalsに追加
+                            allocatedLocals.insert(operand.local_id);
+                        }
+                        outputPtrs.push_back(localPtr);
+                        outputLocalIds.push_back(operand.local_id);
+                        outputCount++;
+                    }
 
-                        debug_msg("llvm_asm", "operand " + std::to_string(i) + ": " +
-                                                  operand.constraint +
-                                                  " local_id=" + std::to_string(operand.local_id));
+                    // 制約をそのままLLVMに渡す
+                    if (!constraints.empty())
+                        constraints += ",";
+                    constraints += operand.constraint;
+
+                    debug_msg("llvm_asm", "operand " + std::to_string(i) + ": " +
+                                              operand.constraint +
+                                              " hasOutput=" + std::to_string(hasOutput) +
+                                              " hasInput=" + std::to_string(hasInput));
+                }
+
+                // 制約文字列をLLVM形式に変換
+                // +rは「=r」（出力）と「0」（入力をtie）に分解する必要がある
+                // LLVMの制約形式: 出力制約,入力制約の順
+                // 例: +r → "=r,0" (出力が=r、入力が出力0にtie)
+                std::string outputConstraints;
+                std::string inputConstraints;
+
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+
+                    if (operand.constraint[0] == '+') {
+                        // +r → 出力として=r、入力としてtied operand
+                        if (!outputConstraints.empty()) {
+                            outputConstraints += ",";
+                        }
+                        outputConstraints += "=" + operand.constraint.substr(1);
+
+                        // 入力としてこの出力にtie（出力番号を参照）
+                        if (!inputConstraints.empty()) {
+                            inputConstraints += ",";
+                        }
+                        inputConstraints += std::to_string(i);  // 出力オペランドi番にtie
+                    } else if (operand.constraint[0] == '=') {
+                        // 出力のみ
+                        if (!outputConstraints.empty()) {
+                            outputConstraints += ",";
+                        }
+                        outputConstraints += operand.constraint;
+                    } else {
+                        // 入力のみ（r, m等）
+                        if (!inputConstraints.empty()) {
+                            inputConstraints += ",";
+                        }
+                        inputConstraints += operand.constraint;
                     }
                 }
 
-                if (asmData.is_must && !constraints.empty()) {
-                    constraints += ",~{memory}";
+                // 最終制約: 出力,入力の順
+                std::string llvmConstraints = outputConstraints;
+                if (!inputConstraints.empty()) {
+                    if (!llvmConstraints.empty()) {
+                        llvmConstraints += ",";
+                    }
+                    llvmConstraints += inputConstraints;
                 }
 
-                if (!operandValues.empty()) {
-                    // オペランドの型で関数型を生成
-                    auto* asmFuncTy =
-                        llvm::FunctionType::get(ctx.getVoidType(), operandTypes, false);
+                if (asmData.is_must && !llvmConstraints.empty()) {
+                    llvmConstraints += ",~{memory}";
+                }
+
+                constraints = llvmConstraints;  // 変換後の制約を使用
+
+                if (outputCount > 0) {
+                    // 出力がある場合: 戻り値型を設定
+                    auto* retType = ctx.getI32Type();
+                    auto* asmFuncTy = llvm::FunctionType::get(retType, inputTypes, false);
+                    // 出力オペランドがある場合は常にsideeffect=trueにして最適化を抑制
+                    auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
+                                                           true /* hasSideEffects */);
+                    auto* result = builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
+
+                    // asm結果をvolatile storeでメモリに格納し、volatile loadで読み戻す
+                    // これによりLLVMの定数伝播・最適化がasm結果を無視することを防ぐ
+                    if (!outputLocalIds.empty() && !outputPtrs.empty()) {
+                        auto local_id = outputLocalIds[0];
+                        auto* outputPtr = outputPtrs[0];
+
+                        // 出力ポインタがある場合はvolatile store
+                        if (outputPtr && llvm::isa<llvm::PointerType>(outputPtr->getType())) {
+                            auto* storeInst = builder->CreateStore(result, outputPtr);
+                            storeInst->setVolatile(true);
+
+                            // volatile loadで読み戻し、localsを更新
+                            auto* loadedResult = builder->CreateLoad(retType, outputPtr);
+                            cast<llvm::LoadInst>(loadedResult)->setVolatile(true);
+                            locals[local_id] = loadedResult;
+                        } else {
+                            // 直接SSA値として格納（fallback）
+                            locals[local_id] = result;
+                        }
+                    }
+                } else if (!inputValues.empty()) {
+                    // 入力のみ: 戻り値なし
+                    auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), inputTypes, false);
                     auto* inlineAsm =
                         llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints, asmData.is_must);
-                    builder->CreateCall(asmFuncTy, inlineAsm, operandValues);
+                    builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
                 }
             }
             break;
@@ -2116,6 +2283,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             // 通常のローカル変数
             auto local = place.local;
             auto val = locals[local];
+
             // デバッグ: main関数でのコピー操作を確認
             if (cm::debug::g_debug_mode && currentMIRFunction &&
                 currentMIRFunction->name == "main" && local <= 2) {
@@ -2205,7 +2373,15 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 }
 
                 // スカラー型の場合はロード
-                return builder->CreateLoad(allocatedType, val, "load");
+                // asm出力で変更される可能性がある変数はvolatile loadで最適化を防止
+                auto* loadInst = builder->CreateLoad(allocatedType, val, "load");
+                if (allocatedLocals.count(local) > 0) {
+                    // asm影響変数: volatile loadで最適化を抑制
+                    if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
+                        li->setVolatile(true);
+                    }
+                }
+                return loadInst;
             }
             // static変数（GlobalVariable）の場合もロードが必要
             if (val && llvm::isa<llvm::GlobalVariable>(val)) {

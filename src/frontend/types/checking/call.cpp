@@ -8,20 +8,20 @@ namespace cm {
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
-        // __builtin_asm intrinsic - インラインアセンブリ
-        if (ident->name == "__builtin_asm") {
+        // __llvm__ intrinsic - LLVMインラインアセンブリ
+        if (ident->name == "__llvm__") {
             if (call.args.size() != 1) {
-                error(current_span_, "__builtin_asm requires exactly 1 argument (assembly code)");
+                error(current_span_, "__llvm__ requires exactly 1 argument (assembly code)");
                 return ast::make_error();
             }
             // 引数が文字列リテラルであることを確認
             if (auto* lit = call.args[0]->as<ast::LiteralExpr>()) {
                 if (!std::holds_alternative<std::string>(lit->value)) {
-                    error(current_span_, "__builtin_asm argument must be a string literal");
+                    error(current_span_, "__llvm__ argument must be a string literal");
                     return ast::make_error();
                 }
             } else {
-                error(current_span_, "__builtin_asm argument must be a string literal");
+                error(current_span_, "__llvm__ argument must be a string literal");
                 return ast::make_error();
             }
             return ast::make_void();

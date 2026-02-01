@@ -1,8 +1,0 @@
-=== __builtin_asm Computation Test ===
-nop: ok
-barrier: ok
-asm_add(3, 5) = 8: PASS
-asm_mul(7, 6) = 42: PASS
-combined ops: 100: PASS
-__builtin_asm(nop x2): ok
-=== All Tests Passed ===

@@ -1,0 +1,3 @@
+=== std::asm basic test ===
+NOP executed successfully
+Test: PASS

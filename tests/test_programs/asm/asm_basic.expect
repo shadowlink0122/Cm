@@ -1,3 +1,5 @@
 === Inline Assembly Test ===
-x86 detected
+nop: ok
+compiler_barrier: ok
+multiple: ok
 === Complete ===

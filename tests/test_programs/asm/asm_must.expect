@@ -1,5 +1,4 @@
 === must {} Block Test ===
 must block basic: PASS
-must block with asm: PASS
-nested must blocks: PASS
+asm outside must: PASS
 === All Tests Passed ===

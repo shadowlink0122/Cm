@@ -1,24 +1,19 @@
 // tests/test_programs/asm/builtin_asm.cm
-// std::asm モジュールテスト（__builtin_asmを内部で使用）
+// __llvm__ 直接使用テスト
 
-import std::asm::nop;
 import std::io::println;
 
 int main() {
-    println("=== std::asm test ===");
+    println("=== builtin_asm test ===");
     
-    // 基本的なnop命令
-    nop();
-    println("nop: ok");
+    // 直接__llvm__を使用
+    __llvm__("nop");
+    println("__llvm__(nop): ok");
     
-    // 複数回呼び出し
-    nop();
-    nop();
+    // 複数回
+    __llvm__("nop");
+    __llvm__("nop");
     println("multiple: ok");
-    
-    // 直接__builtin_asmを使用
-    __builtin_asm("nop");
-    println("__builtin_asm(nop): ok");
     
     println("=== complete ===");
     return 0;
