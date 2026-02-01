@@ -1,0 +1,40 @@
+// 複数行LLVMインラインアセンブリテスト
+// 複数命令を含むアセンブリブロックのテスト
+
+int main() {
+    println("=== Multi-line LLVM ASM Test ===");
+    
+    // テスト1: 複数命令の連続実行（セミコロン区切り）
+    println("\n--- Test 1: Multiple instructions (semicolon) ---");
+    int val1 = 10;
+    // 複数命令: val1 += 5; val1 *= 2 (addl + sall)
+    __llvm__("addl $$5, ${+r:val1}; sall $$1, ${+r:val1}");
+    println("val1 (should be 30):");  // (10+5)*2 = 30
+    println(val1);
+    
+    // テスト2: バックスラッシュn区切りの複数命令
+    println("\n--- Test 2: Multiple instructions (backslash-n) ---");
+    int val2 = 100;
+    __llvm__("subl $$20, ${+r:val2}\n addl $$5, ${+r:val2}");  // 100-20+5 = 85
+    println("val2 (should be 85):");
+    println(val2);
+    
+    // テスト3: NOP命令
+    println("\n--- Test 3: NOP instruction ---");
+    int nop_val = 42;
+    __llvm__("nop");
+    println("nop_val (should be 42):");
+    println(nop_val);
+    
+    // テスト4: 連続した独立した__llvm__呼び出し
+    println("\n--- Test 4: Sequential llvm calls ---");
+    int seq = 5;
+    __llvm__("addl $$10, ${+r:seq}");  // seq = 15
+    __llvm__("sall $$2, ${+r:seq}");   // seq = 60  (15 << 2)
+    __llvm__("subl $$10, ${+r:seq}");  // seq = 50
+    println("seq (should be 50):");
+    println(seq);
+    
+    println("\n=== All tests completed! ===");
+    return 0;
+}

@@ -1,0 +1,19 @@
+=== Multi-line LLVM ASM Test ===
+
+--- Test 1: Multiple instructions (semicolon) ---
+val1 (should be 30):
+30
+
+--- Test 2: Multiple instructions (backslash-n) ---
+val2 (should be 85):
+85
+
+--- Test 3: NOP instruction ---
+nop_val (should be 42):
+42
+
+--- Test 4: Sequential llvm calls ---
+seq (should be 50):
+50
+
+=== All tests completed! ===
