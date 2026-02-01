@@ -616,6 +616,21 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 if (!stmt) {
                     continue;
                 }
+
+                // ASMステートメント: 出力オペランドをOverdefinedにマーク
+                if (stmt->kind == MirStatement::Asm) {
+                    const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                    for (const auto& operand : asm_data.operands) {
+                        if (!operand.constraint.empty() &&
+                            (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                            if (operand.local_id < state.size()) {
+                                state[operand.local_id] = {LatticeKind::Overdefined, {}};
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 if (stmt->kind != MirStatement::Assign) {
                     continue;
                 }

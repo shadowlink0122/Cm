@@ -218,6 +218,12 @@ class DeadCodeElimination : public OptimizationPass {
             if (!assign_data.place.projections.empty()) {
                 used.insert(assign_data.place.local);
             }
+        } else if (stmt.kind == MirStatement::Asm) {
+            // ASMステートメントのオペランド変数は使用されているとマーク
+            const auto& asm_data = std::get<MirStatement::AsmData>(stmt.data);
+            for (const auto& operand : asm_data.operands) {
+                used.insert(operand.local_id);
+            }
         }
     }
 

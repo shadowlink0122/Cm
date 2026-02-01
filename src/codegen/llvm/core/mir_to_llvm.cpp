@@ -1640,10 +1640,13 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             auto* storeInst = builder->CreateStore(result, outputPtr);
                             storeInst->setVolatile(true);
 
-                            // volatile loadで読み戻し、localsを更新
-                            auto* loadedResult = builder->CreateLoad(retType, outputPtr);
-                            cast<llvm::LoadInst>(loadedResult)->setVolatile(true);
-                            locals[local_id] = loadedResult;
+                            // 重要: locals[local_id]はallocaポインタのまま維持し、
+                            // SSA値に更新しない。これにより後続のconvertOperandで
+                            // allocaからloadが行われ、ASMで書き込まれた値が正しく読まれる。
+                            // locals[local_id] = outputPtr; // 既にallocaなので変更不要
+
+                            // allocatedLocalsに追加してvolatile loadを強制
+                            allocatedLocals.insert(local_id);
                         } else {
                             // 直接SSA値として格納（fallback）
                             locals[local_id] = result;

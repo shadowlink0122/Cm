@@ -45,6 +45,18 @@ class GVN : public OptimizationPass {
             if (stmt->kind == MirStatement::Nop)
                 continue;
 
+            // ASMステートメント: 出力オペランドの変数は変更されるため式を無効化
+            if (stmt->kind == MirStatement::Asm) {
+                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                for (const auto& operand : asm_data.operands) {
+                    if (!operand.constraint.empty() &&
+                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                        invalidate_exprs_using(operand.local_id, available_exprs, var_to_exprs);
+                    }
+                }
+                continue;
+            }
+
             // 1. この文が変数を変更する場合、その変数に依存する式を無効化
             if (stmt->kind == MirStatement::Assign) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);

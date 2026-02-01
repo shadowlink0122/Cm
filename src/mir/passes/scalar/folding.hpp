@@ -71,6 +71,18 @@ class ConstantFolding : public OptimizationPass {
 
         // 各文を処理
         for (auto& stmt : block.statements) {
+            // ASMステートメント: 出力オペランドの変数は定数追跡から除外
+            if (stmt->kind == MirStatement::Asm) {
+                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                for (const auto& operand : asm_data.operands) {
+                    if (!operand.constraint.empty() &&
+                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                        constants.erase(operand.local_id);
+                    }
+                }
+                continue;
+            }
+
             if (stmt->kind == MirStatement::Assign) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
 
