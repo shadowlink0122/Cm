@@ -1511,6 +1511,10 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         // 制約の種類によって値の渡し方を変える
                         std::string constraintType = operand.constraint;
                         bool isMemoryConstraint = (constraintType.find('m') != std::string::npos);
+                        bool isImmediateConstraint =
+                            (constraintType.find('i') != std::string::npos ||
+                             constraintType.find('n') != std::string::npos);
+                        bool isGeneralConstraint = (constraintType.find('g') != std::string::npos);
 
                         if (isMemoryConstraint) {
                             // m制約: ポインタ（アドレス）を渡す
@@ -1519,6 +1523,17 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             memInputTypes.push_back(elemType);  // 要素型を記録
                             pureInputValues.push_back(localPtr);
                             pureInputTypes.push_back(localPtr->getType());
+                        } else if (isImmediateConstraint) {
+                            // i,n制約: 即値（値をロードして渡す、LLVMが定数最適化）
+                            auto* val = loadValue();
+                            pureInputValues.push_back(val);
+                            pureInputTypes.push_back(val->getType());
+                        } else if (isGeneralConstraint) {
+                            // g制約: 汎用オペランド（レジスタ、メモリ、即値のいずれか）
+                            // 値をロードして渡す（LLVMが最適な方法を選択）
+                            auto* val = loadValue();
+                            pureInputValues.push_back(val);
+                            pureInputTypes.push_back(val->getType());
                         } else {
                             // r制約: 値をロードして渡す
                             auto* val = loadValue();
