@@ -1608,15 +1608,16 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     constraints += operand.constraint;
                 }
 
-                // 入力値をLLVM順序で結合: tied入力 → 純粋入力
-                for (size_t i = 0; i < tiedInputValues.size(); ++i) {
-                    inputValues.push_back(tiedInputValues[i]);
-                    inputTypes.push_back(tiedInputTypes[i]);
-                    inputCount++;
-                }
+                // 入力値をLLVM順序で結合: 純粋入力 → tied入力 → メモリ出力
+                // 制約文字列の順序と一致させる（r,... → 0,1,... → *m,...）
                 for (size_t i = 0; i < pureInputValues.size(); ++i) {
                     inputValues.push_back(pureInputValues[i]);
                     inputTypes.push_back(pureInputTypes[i]);
+                    inputCount++;
+                }
+                for (size_t i = 0; i < tiedInputValues.size(); ++i) {
+                    inputValues.push_back(tiedInputValues[i]);
+                    inputTypes.push_back(tiedInputTypes[i]);
                     inputCount++;
                 }
                 // メモリ出力ポインタを入力として追加（=m, +m制約用）
@@ -1667,19 +1668,17 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 }
 
                 // 次に入力オペランドを処理
+                // inputValuesの構築順序と一致させるため:
+                // 1. 純粋入力（r, m等）
+                // 2. tied入力（+r）
+                // 3. メモリ出力（=m, +m）
+
+                // 1. 純粋入力を先に処理
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     const auto& operand = asmData.operands[i];
 
-                    if (operand.constraint[0] == '+') {
-                        // +r: 入力としてtied（出力番号を参照）
-                        // ただし+mはスキップ（メモリ出力として別処理）
-                        if (operand.constraint.find('m') == std::string::npos) {
-                            if (!inputConstraints.empty())
-                                inputConstraints += ",";
-                            inputConstraints += std::to_string(operandRemap[i]);
-                        }
-                    } else if (operand.constraint[0] != '=') {
-                        // 純粋な入力（r, m等）
+                    // 純粋な入力（r, m等）のみ処理
+                    if (operand.constraint[0] != '+' && operand.constraint[0] != '=') {
                         operandRemap[i] = llvmOutputIdx + llvmInputIdx;
                         llvmInputIdx++;
                         if (!inputConstraints.empty())
@@ -1693,7 +1692,22 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     }
                 }
 
-                // メモリ出力の制約を入力制約に追加（=*m形式）
+                // 2. tied入力（+r）を処理
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+
+                    if (operand.constraint[0] == '+') {
+                        // +r: 入力としてtied（出力番号を参照）
+                        // ただし+mはスキップ（メモリ出力として別処理）
+                        if (operand.constraint.find('m') == std::string::npos) {
+                            if (!inputConstraints.empty())
+                                inputConstraints += ",";
+                            inputConstraints += std::to_string(operandRemap[i]);
+                        }
+                    }
+                }
+
+                // 3. メモリ出力の制約を入力制約に追加（=*m形式）
                 // メモリ出力のオペランド番号も再マッピング
                 size_t memOutputStartIdx = llvmOutputIdx + llvmInputIdx;
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
@@ -1752,11 +1766,17 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::string remappedCode = asmData.code;
 
                 // 第1段階: $N を一時プレースホルダー __TMP_N__ に置換
+                // ただし $$N（即値エスケープ）はスキップする
                 for (int i = static_cast<int>(asmData.operands.size()) - 1; i >= 0; --i) {
                     std::string oldPattern = "$" + std::to_string(i);
                     std::string tempPattern = "__TMP_" + std::to_string(i) + "__";
                     size_t pos = 0;
                     while ((pos = remappedCode.find(oldPattern, pos)) != std::string::npos) {
+                        // $$N（即値エスケープ）の場合はスキップ
+                        if (pos > 0 && remappedCode[pos - 1] == '$') {
+                            pos++;
+                            continue;
+                        }
                         size_t afterNum = pos + oldPattern.length();
                         if (afterNum < remappedCode.length() &&
                             std::isdigit(remappedCode[afterNum])) {
@@ -1783,35 +1803,48 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                 if (outputCount > 0) {
                     // 出力がある場合: 戻り値型を設定
-                    // 最初の出力オペランドの型を使用（現在は単一出力のみサポート）
-                    llvm::Type* retType = !outputTypes.empty() ? outputTypes[0] : ctx.getI32Type();
+                    llvm::Type* retType;
+                    if (outputCount == 1) {
+                        // 単一出力: 直接その型を返す
+                        retType = !outputTypes.empty() ? outputTypes[0] : ctx.getI32Type();
+                    } else {
+                        // 複数出力: 構造体型を返す
+                        retType = llvm::StructType::get(ctx.getContext(), outputTypes);
+                    }
+
                     auto* asmFuncTy = llvm::FunctionType::get(retType, inputTypes, false);
                     // 出力オペランドがある場合は常にsideeffect=trueにして最適化を抑制
                     auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints,
                                                            true /* hasSideEffects */);
                     auto* result = builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
 
-                    // asm結果をvolatile storeでメモリに格納し、volatile loadで読み戻す
-                    // これによりLLVMの定数伝播・最適化がasm結果を無視することを防ぐ
-                    if (!outputLocalIds.empty() && !outputPtrs.empty()) {
-                        auto local_id = outputLocalIds[0];
-                        auto* outputPtr = outputPtrs[0];
+                    // 出力結果を各ローカル変数にstoreする
+                    for (size_t i = 0; i < outputLocalIds.size() && i < outputPtrs.size(); ++i) {
+                        auto local_id = outputLocalIds[i];
+                        auto* outputPtr = outputPtrs[i];
+
+                        if (!outputPtr)
+                            continue;
+
+                        llvm::Value* outputValue;
+                        if (outputCount == 1) {
+                            // 単一出力: 結果をそのまま使用
+                            outputValue = result;
+                        } else {
+                            // 複数出力: 構造体からextractvalueで取り出す
+                            outputValue =
+                                builder->CreateExtractValue(result, {static_cast<unsigned>(i)});
+                        }
 
                         // 出力ポインタがある場合はvolatile store
-                        if (outputPtr && llvm::isa<llvm::PointerType>(outputPtr->getType())) {
-                            auto* storeInst = builder->CreateStore(result, outputPtr);
+                        if (llvm::isa<llvm::PointerType>(outputPtr->getType())) {
+                            auto* storeInst = builder->CreateStore(outputValue, outputPtr);
                             storeInst->setVolatile(true);
-
-                            // 重要: locals[local_id]はallocaポインタのまま維持し、
-                            // SSA値に更新しない。これにより後続のconvertOperandで
-                            // allocaからloadが行われ、ASMで書き込まれた値が正しく読まれる。
-                            // locals[local_id] = outputPtr; // 既にallocaなので変更不要
-
                             // allocatedLocalsに追加してvolatile loadを強制
                             allocatedLocals.insert(local_id);
                         } else {
                             // 直接SSA値として格納（fallback）
-                            locals[local_id] = result;
+                            locals[local_id] = outputValue;
                         }
                     }
 

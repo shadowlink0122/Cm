@@ -541,10 +541,14 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                                     std::string constraint = inner.substr(0, colon);
                                     std::string varname = inner.substr(colon + 1);
 
-                                    // 同じ変数名が既に登録されているかチェック
+                                    // 同じ変数名かつ同じ制約が既に登録されているかチェック
+                                    // 注意:
+                                    // 同じ変数でも制約が異なる場合は別オペランドとして登録する
+                                    // これにより ${r:x} と ${=r:x} は別々のオペランドになる
                                     int existing_idx = -1;
                                     for (size_t i = 0; i < hir_asm->operands.size(); ++i) {
-                                        if (hir_asm->operands[i].var_name == varname) {
+                                        if (hir_asm->operands[i].var_name == varname &&
+                                            hir_asm->operands[i].constraint == constraint) {
                                             existing_idx = static_cast<int>(i);
                                             break;
                                         }

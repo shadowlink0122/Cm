@@ -1,0 +1,150 @@
+// 完全LLVMナップサックDP - 2次元配列版
+// dp[i][w] = アイテム0..i-1を使って容量wでの最大価値
+// println以外は全てLLVMインラインアセンブリで実装
+
+int main() {
+    println("=== Pure LLVM Knapsack DP (2D Array) ===");
+    println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
+    println("Capacity: 7");
+    
+    // 2次元DP配列: dp[n_items+1][capacity+1] = dp[4][8]
+    // 行優先レイアウト: dp[i][w] = base + (i * 8 + w) * 4
+    int[32] dp = [
+        0, 0, 0, 0, 0, 0, 0, 0,  // dp[0][0..7] - アイテムなし
+        0, 0, 0, 0, 0, 0, 0, 0,  // dp[1][0..7] - アイテム0まで
+        0, 0, 0, 0, 0, 0, 0, 0,  // dp[2][0..7] - アイテム1まで
+        0, 0, 0, 0, 0, 0, 0, 0   // dp[3][0..7] - アイテム2まで
+    ];
+    
+    // アイテムの重さと価値
+    int[3] weights = [2, 3, 4];
+    int[3] values = [3, 4, 5];
+    
+    // ポインタを取得
+    int* dp_ptr = &dp[0];
+    int* w_ptr = &weights[0];
+    int* v_ptr = &values[0];
+    
+    // ループ変数（Cm側で管理）
+    int i = 0;
+    int w = 0;
+    
+    // 2次元DP更新
+    // 最小限の+r制約（i, wのみ）
+    __llvm__(`
+        # callee-savedレジスタを保存
+        pushq %r12
+        pushq %r13
+        pushq %r14
+        pushq %r15
+        pushq %rbx
+        
+        # ポインタをr8-r10に保存（r制約）
+        movq ${r:dp_ptr}, %r8
+        movq ${r:w_ptr}, %r12
+        movq ${r:v_ptr}, %r13
+        
+        # 定数: n_items=3, capacity=7, row_size=8
+        
+        # 外側ループ: i = 1
+        movl $$1, ${+r:i}
+        
+    1:  # outer_loop
+        # i > 3 なら終了
+        cmpl $$3, ${+r:i}
+        jg 5f
+        
+        # 内側ループ: w = 0
+        movl $$0, ${+r:w}
+        
+    2:  # inner_loop
+        # w > 7 なら次のアイテムへ
+        cmpl $$7, ${+r:w}
+        jg 4f
+        
+        # weights[i-1] を %r14d に取得
+        movl ${+r:i}, %eax
+        decl %eax
+        movslq %eax, %rax
+        movl (%r12, %rax, 4), %r14d
+        
+        # dp[i-1][w]のオフセット計算: (i-1) * 8 + w
+        movl ${+r:i}, %eax
+        decl %eax
+        shll $$3, %eax          # (i-1) * 8
+        addl ${+r:w}, %eax
+        movslq %eax, %rax
+        movl (%r8, %rax, 4), %r15d   # dp[i-1][w]
+        
+        # w < weights[i-1] なら dp[i][w] = dp[i-1][w]
+        cmpl %r14d, ${+r:w}
+        jl 3f
+        
+        # values[i-1] を %ebx に取得
+        movl ${+r:i}, %eax
+        decl %eax
+        movslq %eax, %rax
+        movl (%r13, %rax, 4), %ebx
+        
+        # dp[i-1][w - weight]のオフセット計算
+        movl ${+r:i}, %eax
+        decl %eax
+        shll $$3, %eax
+        movl ${+r:w}, %ecx
+        subl %r14d, %ecx
+        addl %ecx, %eax
+        movslq %eax, %rax
+        movl (%r8, %rax, 4), %ecx   # dp[i-1][w-weight]
+        
+        # cand = dp[i-1][w-weight] + value
+        addl %ebx, %ecx
+        
+        # new_val = max(dp[i-1][w], cand)
+        cmpl %r15d, %ecx
+        cmovlel %r15d, %ecx
+        movl %ecx, %r15d
+        
+    3:  # store_dp
+        # dp[i][w]のオフセット計算: i * 8 + w
+        movl ${+r:i}, %eax
+        shll $$3, %eax
+        addl ${+r:w}, %eax
+        movslq %eax, %rax
+        movl %r15d, (%r8, %rax, 4)   # dp[i][w] = new_val
+        
+        # w++
+        incl ${+r:w}
+        jmp 2b
+        
+    4:  # next_item
+        # i++
+        incl ${+r:i}
+        jmp 1b
+        
+    5:  # done
+        popq %rbx
+        popq %r15
+        popq %r14
+        popq %r13
+        popq %r12
+    `);
+    
+    // =========================================
+    // 最終結果表示
+    // =========================================
+    println("\n=== 2D DP Table (last row) ===");
+    // dp[3][w] = dp[3 * 8 + w] = dp[24 + w]
+    for (int k = 2; k <= 7; k++) {
+        print("dp[3]["); print(k); print("]=");
+        println(dp[24 + k]);
+    }
+    
+    println("\n=== Verification ===");
+    if (dp[31] == 9) {
+        println("Knapsack DP: PASS (optimal = 9)");
+    } else {
+        print("Expected 9, got "); println(dp[31]);
+    }
+    
+    return 0;
+}
