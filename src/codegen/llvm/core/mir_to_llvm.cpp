@@ -1732,7 +1732,27 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), inputTypes, false);
                     auto* inlineAsm =
                         llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints, asmData.is_must);
-                    builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
+                    auto* callInst = builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
+
+                    // メモリ出力ポインタ（*m制約）にelementtype属性を追加
+                    // LLVM 17ではindirect memory制約にはelementtype属性が必要
+                    if (!memOutputPtrs.empty()) {
+                        // メモリ出力のインデックス計算: tied入力 + pure入力 + memOutputIdx
+                        size_t memOutputStartArgIdx =
+                            tiedInputValues.size() + pureInputValues.size();
+                        for (size_t i = 0; i < memOutputPtrs.size(); ++i) {
+                            size_t argIdx = memOutputStartArgIdx + i;
+                            // elementtype(i32)属性を追加
+                            auto elemTypeAttr = llvm::Attribute::get(
+                                ctx.getContext(), llvm::Attribute::ElementType, ctx.getI32Type());
+                            callInst->addParamAttr(argIdx, elemTypeAttr);
+                        }
+
+                        // メモリ出力のローカル変数をallocatedLocalsに追加
+                        for (const auto& local_id : memOutputLocalIds) {
+                            allocatedLocals.insert(local_id);
+                        }
+                    }
                 }
             }
             break;
