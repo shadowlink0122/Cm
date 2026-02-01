@@ -1437,13 +1437,16 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                 // =m制約用: メモリ出力はポインタを入力として渡す
                 std::vector<llvm::Value*> memOutputPtrs;  // =m用のポインタ（入力として渡す）
+                std::vector<llvm::Type*> memOutputTypes;  // =m用の要素型（elementtype属性用）
                 std::vector<mir::LocalId> memOutputLocalIds;
                 std::vector<std::string> memOutputConstraints;
 
                 // m入力制約用: ポインタを渡し、elementtype属性が必要
                 std::vector<size_t> memInputIndices;  // pureInputValues内でのm制約インデックス
+                std::vector<llvm::Type*> memInputTypes;  // m入力の要素型（elementtype属性用）
                 // +m tied入力用: 同様にelementtype属性が必要
                 std::vector<size_t> memTiedInputIndices;  // tiedInputValues内での+m制約インデックス
+                std::vector<llvm::Type*> memTiedInputTypes;  // +m入力の要素型
 
                 // 2パス方式で入力値を収集
                 // 第1パス: +rのtied入力を収集（出力順）
@@ -1495,6 +1498,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             // +m: ポインタを渡す（メモリ出力と同様）
                             // tiedInputValues内でのインデックスを記録（後でelementtype追加用）
                             memTiedInputIndices.push_back(tiedInputValues.size());
+                            memTiedInputTypes.push_back(elemType);  // 要素型を記録
                             tiedInputValues.push_back(localPtr);
                             tiedInputTypes.push_back(localPtr->getType());
                         } else {
@@ -1512,6 +1516,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             // m制約: ポインタ（アドレス）を渡す
                             // pureInputValues内でのインデックスを記録（後でelementtype追加用）
                             memInputIndices.push_back(pureInputValues.size());
+                            memInputTypes.push_back(elemType);  // 要素型を記録
                             pureInputValues.push_back(localPtr);
                             pureInputTypes.push_back(localPtr->getType());
                         } else {
@@ -1541,6 +1546,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             }
                             // メモリ出力として記録（後で入力に追加）
                             memOutputPtrs.push_back(localPtr);
+                            memOutputTypes.push_back(elemType);  // 要素型を記録
                             memOutputLocalIds.push_back(operand.local_id);
                             // 制約文字列を記録（=m → *m として変換）
                             if (operand.constraint[0] == '=') {
@@ -1786,11 +1792,15 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     if (!memInputIndices.empty()) {
                         if (auto* callInst = llvm::dyn_cast<llvm::CallInst>(result)) {
                             size_t pureInputStartArgIdx = tiedInputValues.size();
-                            for (size_t pureIdx : memInputIndices) {
+                            for (size_t i = 0; i < memInputIndices.size(); ++i) {
+                                size_t pureIdx = memInputIndices[i];
                                 size_t argIdx = pureInputStartArgIdx + pureIdx;
+                                // オペランドの実際の型を使用
+                                llvm::Type* memElemType = (i < memInputTypes.size())
+                                                              ? memInputTypes[i]
+                                                              : ctx.getI32Type();
                                 auto elemTypeAttr = llvm::Attribute::get(
-                                    ctx.getContext(), llvm::Attribute::ElementType,
-                                    ctx.getI32Type());
+                                    ctx.getContext(), llvm::Attribute::ElementType, memElemType);
                                 callInst->addParamAttr(argIdx, elemTypeAttr);
                             }
                         }
@@ -1810,9 +1820,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             tiedInputValues.size() + pureInputValues.size();
                         for (size_t i = 0; i < memOutputPtrs.size(); ++i) {
                             size_t argIdx = memOutputStartArgIdx + i;
-                            // elementtype(i32)属性を追加
+                            // オペランドの実際の型を使用
+                            llvm::Type* memElemType =
+                                (i < memOutputTypes.size()) ? memOutputTypes[i] : ctx.getI32Type();
                             auto elemTypeAttr = llvm::Attribute::get(
-                                ctx.getContext(), llvm::Attribute::ElementType, ctx.getI32Type());
+                                ctx.getContext(), llvm::Attribute::ElementType, memElemType);
                             callInst->addParamAttr(argIdx, elemTypeAttr);
                         }
 
@@ -1827,10 +1839,14 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         // memInputIndicesはpureInputValues内でのインデックス
                         // 実際のCallInst引数インデックス: tied入力 + pureInputIndex
                         size_t pureInputStartArgIdx = tiedInputValues.size();
-                        for (size_t pureIdx : memInputIndices) {
+                        for (size_t i = 0; i < memInputIndices.size(); ++i) {
+                            size_t pureIdx = memInputIndices[i];
                             size_t argIdx = pureInputStartArgIdx + pureIdx;
+                            // オペランドの実際の型を使用
+                            llvm::Type* memElemType =
+                                (i < memInputTypes.size()) ? memInputTypes[i] : ctx.getI32Type();
                             auto elemTypeAttr = llvm::Attribute::get(
-                                ctx.getContext(), llvm::Attribute::ElementType, ctx.getI32Type());
+                                ctx.getContext(), llvm::Attribute::ElementType, memElemType);
                             callInst->addParamAttr(argIdx, elemTypeAttr);
                         }
                     }
@@ -1839,9 +1855,14 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     if (!memTiedInputIndices.empty()) {
                         // memTiedInputIndicesはtiedInputValues内でのインデックス
                         // 実際のCallInst引数インデックス: tiedInputIndex （先頭から）
-                        for (size_t tiedIdx : memTiedInputIndices) {
+                        for (size_t i = 0; i < memTiedInputIndices.size(); ++i) {
+                            size_t tiedIdx = memTiedInputIndices[i];
+                            // オペランドの実際の型を使用
+                            llvm::Type* memElemType = (i < memTiedInputTypes.size())
+                                                          ? memTiedInputTypes[i]
+                                                          : ctx.getI32Type();
                             auto elemTypeAttr = llvm::Attribute::get(
-                                ctx.getContext(), llvm::Attribute::ElementType, ctx.getI32Type());
+                                ctx.getContext(), llvm::Attribute::ElementType, memElemType);
                             callInst->addParamAttr(tiedIdx, elemTypeAttr);
                         }
                     }
