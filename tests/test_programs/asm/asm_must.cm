@@ -19,8 +19,10 @@ int main() {
     }
     
     // asmはmustブロック外で実行
-    __llvm__("nop");
-    println("asm outside must: PASS");
+    must {
+        __llvm__("nop");
+        println("asm inside must: PASS");
+    }
     
     println("=== All Tests Passed ===");
     return 0;

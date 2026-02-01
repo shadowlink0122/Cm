@@ -1162,17 +1162,43 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
     debug_msg("mir_asm", "[MIR] lower_asm: " + asm_stmt.code +
                              " operands=" + std::to_string(asm_stmt.operands.size()));
 
-    // オペランドを変換: 変数名 → LocalId
+    // オペランドを変換: 変数名 → LocalId、またはmacro/const → 定数値
     std::vector<MirStatement::MirAsmOperand> mir_operands;
     for (const auto& operand : asm_stmt.operands) {
+        // HIRレベルで既に定数として解決されている場合
+        if (operand.is_constant) {
+            mir_operands.push_back(
+                MirStatement::MirAsmOperand(operand.constraint, operand.const_value));
+            debug_msg("mir_asm", "[MIR] operand: " + operand.constraint +
+                                     " -> const_value=" + std::to_string(operand.const_value));
+            continue;
+        }
+
         // 変数名をローカル変数テーブルから検索
         auto local_id_opt = ctx.resolve_variable(operand.var_name);
         if (local_id_opt) {
-            mir_operands.push_back({operand.constraint, *local_id_opt});
+            mir_operands.push_back(MirStatement::MirAsmOperand(operand.constraint, *local_id_opt));
             debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" + operand.var_name +
                                      " -> local_id=" + std::to_string(*local_id_opt));
         } else {
-            debug_msg("mir_asm", "[MIR] WARNING: variable not found: " + operand.var_name);
+            // 変数が見つからない場合、macro/const定数として検索
+            auto const_val_opt = ctx.get_const_value(operand.var_name);
+            if (const_val_opt) {
+                // 定数値を取得（整数のみサポート）
+                int64_t val = 0;
+                if (std::holds_alternative<int64_t>(const_val_opt->value)) {
+                    val = std::get<int64_t>(const_val_opt->value);
+                } else if (std::holds_alternative<double>(const_val_opt->value)) {
+                    val = static_cast<int64_t>(std::get<double>(const_val_opt->value));
+                }
+                mir_operands.push_back(MirStatement::MirAsmOperand(operand.constraint, val));
+                debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" +
+                                         operand.var_name +
+                                         " -> const_value=" + std::to_string(val));
+            } else {
+                debug_msg("mir_asm",
+                          "[MIR] WARNING: variable or constant not found: " + operand.var_name);
+            }
         }
     }
 

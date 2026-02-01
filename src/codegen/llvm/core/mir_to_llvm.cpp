@@ -1459,6 +1459,18 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     auto& operand = asmData.operands[i];
 
+                    // 定数オペランドの場合（macro/const）
+                    if (operand.is_constant) {
+                        // i,n制約: 定数値をConstantIntとして生成
+                        llvm::Value* constVal =
+                            llvm::ConstantInt::get(ctx.getI64Type(), operand.const_value);
+                        pureInputValues.push_back(constVal);
+                        pureInputTypes.push_back(constVal->getType());
+                        debug_msg("llvm_asm", "[ASM] const operand: " + operand.constraint + " = " +
+                                                  std::to_string(operand.const_value));
+                        continue;
+                    }
+
                     // ローカル変数を取得（localsはstd::map）
                     llvm::Value* localPtr = nullptr;
                     if (locals.count(operand.local_id) > 0 && locals[operand.local_id]) {

@@ -278,10 +278,23 @@ struct HirSwitch {
     std::vector<HirSwitchCase> cases;
 };
 
-// asmオペランド（制約+変数名）
+// asmオペランド（制約+変数名または定数値）
 struct AsmOperand {
-    std::string constraint;  // "+r", "=r", "r", etc.
-    std::string var_name;    // 変数名
+    std::string constraint;  // "+r", "=r", "r", "i", "n", etc.
+    std::string var_name;    // 変数名（is_constant=falseの場合）
+    bool is_constant;        // 定数値かどうか（i,n制約用）
+    int64_t const_value;     // 定数値（is_constant=trueの場合）
+
+    // デフォルトコンストラクタ
+    AsmOperand() : is_constant(false), const_value(0) {}
+
+    // 変数用コンストラクタ
+    AsmOperand(std::string c, std::string v)
+        : constraint(std::move(c)), var_name(std::move(v)), is_constant(false), const_value(0) {}
+
+    // 定数用コンストラクタ
+    AsmOperand(std::string c, int64_t val)
+        : constraint(std::move(c)), is_constant(true), const_value(val) {}
 };
 
 // インラインアセンブリ

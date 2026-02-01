@@ -387,10 +387,23 @@ struct MirStatement {
         LocalId local;
     };
 
-    // asmオペランド（制約+ローカル変数ID）
+    // asmオペランド（制約+ローカル変数IDまたは定数値）
     struct MirAsmOperand {
-        std::string constraint;  // "+r", "=r", "r", etc.
-        LocalId local_id;        // 変数のローカルID
+        std::string constraint;  // "+r", "=r", "r", "i", "n", etc.
+        LocalId local_id;        // 変数のローカルID（is_constant=falseの場合）
+        bool is_constant;        // 定数値かどうか（i,n制約用）
+        int64_t const_value;     // 定数値（is_constant=trueの場合）
+
+        // デフォルトコンストラクタ
+        MirAsmOperand() : local_id(0), is_constant(false), const_value(0) {}
+
+        // 変数用コンストラクタ
+        MirAsmOperand(std::string c, LocalId id)
+            : constraint(std::move(c)), local_id(id), is_constant(false), const_value(0) {}
+
+        // 定数用コンストラクタ
+        MirAsmOperand(std::string c, int64_t val)
+            : constraint(std::move(c)), local_id(0), is_constant(true), const_value(val) {}
     };
 
     struct AsmData {
