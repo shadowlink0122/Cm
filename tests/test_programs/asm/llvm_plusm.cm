@@ -1,0 +1,16 @@
+// +m制約テスト - 読み書きメモリ
+import std::io::println;
+
+int main() {
+    // +m: 入力と出力の両方を同じメモリで行う
+    int readwrite_val = 10;
+    __llvm__("addl $$5, ${+m:readwrite_val}");  // 10 + 5 = 15
+    println(readwrite_val);  // 15
+    
+    // もう一度テスト
+    int val2 = 100;
+    __llvm__("subl $$20, ${+m:val2}");  // 100 - 20 = 80
+    println(val2);  // 80
+    
+    return 0;
+}

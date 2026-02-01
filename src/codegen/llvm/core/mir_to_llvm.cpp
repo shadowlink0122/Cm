@@ -1439,6 +1439,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::vector<mir::LocalId> memOutputLocalIds;
                 std::vector<std::string> memOutputConstraints;
 
+                // m入力制約用: ポインタを渡し、elementtype属性が必要
+                std::vector<size_t> memInputIndices;  // pureInputValues内でのm制約インデックス
+                // +m tied入力用: 同様にelementtype属性が必要
+                std::vector<size_t> memTiedInputIndices;  // tiedInputValues内での+m制約インデックス
+
                 // 2パス方式で入力値を収集
                 // 第1パス: +rのtied入力を収集（出力順）
                 // 第2パス: 純粋な入力(r,m)を収集
@@ -1478,10 +1483,20 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     };
 
                     if (isTiedInput) {
-                        // +r: tied入力 - 先に入力値を収集
-                        auto* val = loadValue();
-                        tiedInputValues.push_back(val);
-                        tiedInputTypes.push_back(val->getType());
+                        // +r, +m: tied入力 - 先に入力値を収集
+                        bool isMemoryTied = (operand.constraint.find('m') != std::string::npos);
+                        if (isMemoryTied) {
+                            // +m: ポインタを渡す（メモリ出力と同様）
+                            // tiedInputValues内でのインデックスを記録（後でelementtype追加用）
+                            memTiedInputIndices.push_back(tiedInputValues.size());
+                            tiedInputValues.push_back(localPtr);
+                            tiedInputTypes.push_back(localPtr->getType());
+                        } else {
+                            // +r: 値をロードして渡す
+                            auto* val = loadValue();
+                            tiedInputValues.push_back(val);
+                            tiedInputTypes.push_back(val->getType());
+                        }
                     } else if (isPureInput) {
                         // 制約の種類によって値の渡し方を変える
                         std::string constraintType = operand.constraint;
@@ -1489,6 +1504,8 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                         if (isMemoryConstraint) {
                             // m制約: ポインタ（アドレス）を渡す
+                            // pureInputValues内でのインデックスを記録（後でelementtype追加用）
+                            memInputIndices.push_back(pureInputValues.size());
                             pureInputValues.push_back(localPtr);
                             pureInputTypes.push_back(localPtr->getType());
                         } else {
@@ -1627,7 +1644,12 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         llvmInputIdx++;
                         if (!inputConstraints.empty())
                             inputConstraints += ",";
-                        inputConstraints += operand.constraint;
+                        // m制約は*m（間接メモリ）に変換
+                        if (operand.constraint.find('m') != std::string::npos) {
+                            inputConstraints += "*m";
+                        } else {
+                            inputConstraints += operand.constraint;
+                        }
                     }
                 }
 
@@ -1727,6 +1749,20 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             locals[local_id] = result;
                         }
                     }
+
+                    // m入力制約にelementtype属性を追加（*m間接メモリ用）
+                    if (!memInputIndices.empty()) {
+                        if (auto* callInst = llvm::dyn_cast<llvm::CallInst>(result)) {
+                            size_t pureInputStartArgIdx = tiedInputValues.size();
+                            for (size_t pureIdx : memInputIndices) {
+                                size_t argIdx = pureInputStartArgIdx + pureIdx;
+                                auto elemTypeAttr = llvm::Attribute::get(
+                                    ctx.getContext(), llvm::Attribute::ElementType,
+                                    ctx.getI32Type());
+                                callInst->addParamAttr(argIdx, elemTypeAttr);
+                            }
+                        }
+                    }
                 } else if (!inputValues.empty()) {
                     // 入力のみ: 戻り値なし
                     auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), inputTypes, false);
@@ -1751,6 +1787,30 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         // メモリ出力のローカル変数をallocatedLocalsに追加
                         for (const auto& local_id : memOutputLocalIds) {
                             allocatedLocals.insert(local_id);
+                        }
+                    }
+
+                    // m入力制約にもelementtype属性を追加（*m間接メモリ用）
+                    if (!memInputIndices.empty()) {
+                        // memInputIndicesはpureInputValues内でのインデックス
+                        // 実際のCallInst引数インデックス: tied入力 + pureInputIndex
+                        size_t pureInputStartArgIdx = tiedInputValues.size();
+                        for (size_t pureIdx : memInputIndices) {
+                            size_t argIdx = pureInputStartArgIdx + pureIdx;
+                            auto elemTypeAttr = llvm::Attribute::get(
+                                ctx.getContext(), llvm::Attribute::ElementType, ctx.getI32Type());
+                            callInst->addParamAttr(argIdx, elemTypeAttr);
+                        }
+                    }
+
+                    // +m tied入力にもelementtype属性を追加
+                    if (!memTiedInputIndices.empty()) {
+                        // memTiedInputIndicesはtiedInputValues内でのインデックス
+                        // 実際のCallInst引数インデックス: tiedInputIndex （先頭から）
+                        for (size_t tiedIdx : memTiedInputIndices) {
+                            auto elemTypeAttr = llvm::Attribute::get(
+                                ctx.getContext(), llvm::Attribute::ElementType, ctx.getI32Type());
+                            callInst->addParamAttr(tiedIdx, elemTypeAttr);
                         }
                     }
                 }
