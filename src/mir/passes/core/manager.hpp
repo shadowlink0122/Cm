@@ -13,7 +13,6 @@
 #include "../scalar/propagation.hpp"
 #include "../scalar/sccp.hpp"
 #include "base.hpp"
-#include "pipeline.hpp"  // 改良版パイプライン
 
 #include <iostream>
 
@@ -77,8 +76,8 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
     // 1. propagation.hpp: キャストを含む代入ではコピー情報を無効化
     // 2. folding.hpp: ポインタ型への変換は定数畳み込みから除外
 
-    // パスマネージャーv2を使用（収束管理付き）
-    OptimizationPipelineV2 pass_mgr;
+    // パイプラインを使用（収束管理付き）
+    OptimizationPipeline pass_mgr;
     pass_mgr.enable_debug_output(debug);
 
     // 最適化パスを追加
@@ -119,8 +118,8 @@ inline void run_optimization_passes(MirProgram& program, int optimization_level,
             break;
     }
 
-    // 最適化を実行（v2を使用 - 収束判定とタイムアウト機能付き）
-    pass_mgr.run_until_fixpoint_v2(program, max_iterations);
+    // 最適化を実行（収束判定とタイムアウト機能付き）
+    pass_mgr.run_until_fixpoint(program, max_iterations);
 
     if (debug) {
         std::cout << "[OPT] 最適化完了\n";
