@@ -1,12 +1,19 @@
 # CLAUDE.md - Cm言語プロジェクトAIガイド
 
-## 重要：開発前に必ず確認
-1. `ROADMAP.md` - ロードマップ(最優先)
-2. `docs/design/*.md` - **正式言語仕様**
+> **Note:** 詳細なルールは `.agent/rules/` を参照
 
-## 言語仕様（必須）
+## プロジェクト概要
 
-### 構文スタイル：C++風（Rust風禁止）
+**Cm (Sea Minor)** - OS/ベアメタル開発からWebアプリケーションまで、単一言語で実現するプログラミング言語
+
+### 設計思想
+- C++にモダン言語の良いとこ取り
+- シンプルで直感的な構文
+- Rust風構文は使用しない（`fn`, `->`等禁止）
+
+## 言語仕様
+
+### 構文スタイル：C++風
 ```cm
 // ✓ 正しい
 int add(int a, int b) { return a + b; }
@@ -16,75 +23,65 @@ int add(int a, int b) { return a + b; }
 fn add(a: int, b: int) -> int { }
 ```
 
-### キーワード優先順位
-- `typedef` - 型エイリアス（`type`は使わない）
-- `overload` - 関数オーバーロード（明示的に必要）
-- `with` - 自動トレイト実装（`[[derive()]]`は使わない）
-- `T 宣言` - 変数・関数宣言(`fn 宣言() -> T`は使わない)
-
-## プロジェクトルール（厳守）
-
-### ファイル配置
-```
-✗ プロジェクトルート禁止：*.cm, 実行ファイル, 個別ドキュメント
-✓ tests/        - 全テストファイル
-✓ docs/         - 全ドキュメント
-✓ src/          - ソースコード
-✓ examples/     - サンプルコード
-```
-
-### デバッグ出力
-```cpp
-// 正しい形式：[STAGE] のみ（1つのブラケット）
-[LEXER] Starting tokenization
-[PARSER] ERROR: Expected ';'
-[MIR] Lowering function: main
-
-// ✗ 間違い：[STAGE] [LEVEL] （2つのブラケット）
-```
+### キーワード
+| 使用 | 不使用 |
+|------|--------|
+| `typedef` | `type` |
+| `with` | `[[derive()]]` |
+| `T 宣言` | `fn 宣言() -> T` |
 
 ## コンパイラパイプライン
 
 ```
-Lexer → Parser → AST → HIR → MIR → LLVM IR → Native/WASM
-                                 → インタプリタ
+Source → Lexer → Parser → AST → HIR → MIR → LLVM IR → Native/WASM/JS
+                                          ↘ インタプリタ
 ```
-
-### 実装済み
-- ✓ Lexer/Parser（基本構文）
-- ✓ HIR（高レベル中間表現）
-- ✓ MIR（SSA形式、CFGベース）
-- ✓ 基本的な型システム
-- ✓ LLVMバックエンド（基本機能）
 
 ## ビルド・テスト
 
 ```bash
-# ビルド（LLVM有効）
-cmake -B build -DCM_USE_LLVM=ON && cmake --build build
+# ビルド
+make build
 
 # テスト
-ctest --test-dir build               # C++テスト
-./build/bin/cm tests/regression/*.cm # Cmテスト
-make tip                             # インタプリタテスト
-make tlp                             # LLVMテスト
-make tlwp                            # WASMテスト
+make tip    # インタプリタ
+make tlp    # LLVM Native
+make tjp    # JavaScript
 ```
 
-## 開発時の注意
+## 開発ルール
 
-1. **矛盾時は`CANONICAL_SPEC.md`が最優先**
-2. **C++20必須**（Clang 17+推奨） 
-3. **テストは必ず`tests/`に配置**
-4. **新機能は設計文書を先に作成**
+### 一貫性の原則
+機能開発時は以下を**すべて**更新：
+- コンパイラ実装
+- テスト
+- lint/format
+- tutorials/
+- README.md
+- VERSION
 
-## AI向けヒント
-- 思考は英語、コメントは日本語
-- エラーメッセージは具体的に
-- デバッグモード(--debug, -d)を必ず使うこと
-- デバッグメッセージはdebug_msgで表示するためのIDとメッセージを正しく設定すること
-- 実装前に既存コードを確認
-- テスト駆動開発を推奨
-- 機能実装時に他の機能が壊れていないことを確認
-- ファイル構成はシンプルにする
-- 1ファイルは1000行が目安。それ以上になる場合は分割を検討
+### デバッグ
+- `-d`オプションを常に使用
+- 不要なデバッグ出力は削除ではなくデバッグモードで活かす
+
+### ドキュメント
+- 生成ドキュメントに`00N_`プレフィックス
+- 実装完了後`docs/archive/`へ移動
+
+## ファイル配置
+
+```
+✓ tests/     - テストファイル
+✓ docs/      - ドキュメント
+✓ src/       - ソースコード
+✓ examples/  - サンプル
+✓ tutorials/ - チュートリアル
+✗ ルート禁止  - *.cm, 個別md
+```
+
+## 参照
+
+- `.agent/rules/` - 詳細な開発ルール
+- `.agent/workflows/` - 開発ワークフロー
+- `.agent/skills/` - チェックスキル
+- `ROADMAP.md` - ロードマップ
