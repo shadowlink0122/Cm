@@ -9,6 +9,7 @@
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -1424,6 +1425,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             } else {
                 // オペランド付き: 制約文字列とオペランドを生成
                 // 出力/入出力オペランドを分類
+                // LLVMの制約形式: 出力制約,tied入力,純粋入力の順
                 std::vector<llvm::Type*> inputTypes;
                 std::vector<llvm::Value*> inputValues;
                 std::vector<llvm::Value*> outputPtrs;      // 出力先ポインタ
@@ -1431,6 +1433,14 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::string constraints;
                 int outputCount = 0;
                 int inputCount = 0;
+
+                // 2パス方式で入力値を収集
+                // 第1パス: +rのtied入力を収集（出力順）
+                // 第2パス: 純粋な入力(r,m)を収集
+                std::vector<llvm::Value*> tiedInputValues;
+                std::vector<llvm::Type*> tiedInputTypes;
+                std::vector<llvm::Value*> pureInputValues;
+                std::vector<llvm::Type*> pureInputTypes;
 
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     auto& operand = asmData.operands[i];
@@ -1446,51 +1456,46 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                     auto* elemType = ctx.getI32Type();  // デフォルトint型
                     bool hasOutput = operand.constraint[0] == '=' || operand.constraint[0] == '+';
-                    bool hasInput = operand.constraint[0] == '+' ||
-                                    (operand.constraint[0] != '=' && operand.constraint[0] != '+');
+                    bool isPureInput = operand.constraint[0] != '=' && operand.constraint[0] != '+';
+                    bool isTiedInput = operand.constraint[0] == '+';
 
-                    // 入力値を先に取得（alloca作成前に）
-                    llvm::Value* inputVal = nullptr;
-                    if (hasInput || operand.constraint[0] == '+') {
-                        // +r制約: 入力として現在の値をロード
-                        if (llvm::isa<llvm::PointerType>(localPtr->getType())) {
-                            // ポインタ型: volatileロードで値を取得（最適化で消されないように）
+                    // ローカル変数から値をロード
+                    auto loadValue = [&]() -> llvm::Value* {
+                        if (llvm::isa<llvm::PointerType>(localPtr->getType()) ||
+                            llvm::isa<llvm::AllocaInst>(localPtr)) {
                             auto* loadInst = builder->CreateLoad(elemType, localPtr);
                             if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
-                                li->setVolatile(true);  // 最適化抑制
+                                li->setVolatile(true);
                             }
-                            inputVal = loadInst;
-                        } else if (llvm::isa<llvm::AllocaInst>(localPtr)) {
-                            // alloca: volatileロードで値を取得
-                            auto* loadInst = builder->CreateLoad(elemType, localPtr);
-                            if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
-                                li->setVolatile(true);  // 最適化抑制
-                            }
-                            inputVal = loadInst;
-                        } else {
-                            // 既にSSA値: そのまま使用
-                            inputVal = localPtr;
+                            return loadInst;
                         }
-                        inputTypes.push_back(inputVal->getType());
-                        inputValues.push_back(inputVal);
-                        inputCount++;
+                        return localPtr;
+                    };
+
+                    if (isTiedInput) {
+                        // +r: tied入力 - 先に入力値を収集
+                        auto* val = loadValue();
+                        tiedInputValues.push_back(val);
+                        tiedInputTypes.push_back(val->getType());
+                    } else if (isPureInput) {
+                        // r, m: 純粋入力
+                        auto* val = loadValue();
+                        pureInputValues.push_back(val);
+                        pureInputTypes.push_back(val->getType());
                     }
 
                     if (hasOutput) {
                         // 出力オペランドの場合、ストア可能なポインタが必要
-                        // SSA値（定数等）の場合はallocaを作成
                         if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
                             !llvm::isa<llvm::GlobalVariable>(localPtr) &&
                             !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
-                            // allocaを作成（入力値は既に取得済み）
                             auto* alloca = builder->CreateAlloca(elemType, nullptr, "asm_out_tmp");
-                            // 現在の値をallocaにvolatileで格納（最適化で定数伝播されないように）
-                            if (inputVal) {
-                                auto* initStore = builder->CreateStore(inputVal, alloca);
-                                initStore->setVolatile(true);  // 最適化抑制
+                            if (isTiedInput && !tiedInputValues.empty()) {
+                                auto* initStore =
+                                    builder->CreateStore(tiedInputValues.back(), alloca);
+                                initStore->setVolatile(true);
                             }
                             localPtr = alloca;
-                            // allocatedLocalsに追加
                             allocatedLocals.insert(operand.local_id);
                         }
                         outputPtrs.push_back(localPtr);
@@ -1498,50 +1503,71 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         outputCount++;
                     }
 
-                    // 制約をそのままLLVMに渡す
                     if (!constraints.empty())
                         constraints += ",";
                     constraints += operand.constraint;
+                }
 
-                    debug_msg("llvm_asm", "operand " + std::to_string(i) + ": " +
-                                              operand.constraint +
-                                              " hasOutput=" + std::to_string(hasOutput) +
-                                              " hasInput=" + std::to_string(hasInput));
+                // 入力値をLLVM順序で結合: tied入力 → 純粋入力
+                for (size_t i = 0; i < tiedInputValues.size(); ++i) {
+                    inputValues.push_back(tiedInputValues[i]);
+                    inputTypes.push_back(tiedInputTypes[i]);
+                    inputCount++;
+                }
+                for (size_t i = 0; i < pureInputValues.size(); ++i) {
+                    inputValues.push_back(pureInputValues[i]);
+                    inputTypes.push_back(pureInputTypes[i]);
+                    inputCount++;
                 }
 
                 // 制約文字列をLLVM形式に変換
-                // +rは「=r」（出力）と「0」（入力をtie）に分解する必要がある
                 // LLVMの制約形式: 出力制約,入力制約の順
-                // 例: +r → "=r,0" (出力が=r、入力が出力0にtie)
+                // オペランド番号はこの順序に対応するため、再マッピングが必要
+                // +rは「=r」（出力）と「0」（入力をtie）に分解する
                 std::string outputConstraints;
                 std::string inputConstraints;
 
+                // オペランド番号の再マッピング表（元の番号→LLVM番号）
+                std::map<size_t, size_t> operandRemap;
+                size_t llvmOutputIdx = 0;  // 出力オペランドのLLVMインデックス
+                size_t llvmInputIdx = 0;  // 入力オペランドを数える（出力の後に来る）
+
+                // まず出力オペランドを処理
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+
+                    if (operand.constraint[0] == '+' || operand.constraint[0] == '=') {
+                        // 出力または読み書きオペランド
+                        operandRemap[i] = llvmOutputIdx;
+                        llvmOutputIdx++;
+
+                        if (operand.constraint[0] == '+') {
+                            if (!outputConstraints.empty())
+                                outputConstraints += ",";
+                            outputConstraints += "=" + operand.constraint.substr(1);
+                        } else {
+                            if (!outputConstraints.empty())
+                                outputConstraints += ",";
+                            outputConstraints += operand.constraint;
+                        }
+                    }
+                }
+
+                // 次に入力オペランドを処理
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     const auto& operand = asmData.operands[i];
 
                     if (operand.constraint[0] == '+') {
-                        // +r → 出力として=r、入力としてtied operand
-                        if (!outputConstraints.empty()) {
-                            outputConstraints += ",";
-                        }
-                        outputConstraints += "=" + operand.constraint.substr(1);
-
-                        // 入力としてこの出力にtie（出力番号を参照）
-                        if (!inputConstraints.empty()) {
+                        // +r: 入力としてtied（出力番号を参照）
+                        if (!inputConstraints.empty())
                             inputConstraints += ",";
-                        }
-                        inputConstraints += std::to_string(i);  // 出力オペランドi番にtie
-                    } else if (operand.constraint[0] == '=') {
-                        // 出力のみ
-                        if (!outputConstraints.empty()) {
-                            outputConstraints += ",";
-                        }
-                        outputConstraints += operand.constraint;
-                    } else {
-                        // 入力のみ（r, m等）
-                        if (!inputConstraints.empty()) {
+                        inputConstraints += std::to_string(operandRemap[i]);
+                    } else if (operand.constraint[0] != '=') {
+                        // 純粋な入力（r, m等）
+                        operandRemap[i] = llvmOutputIdx + llvmInputIdx;
+                        llvmInputIdx++;
+                        if (!inputConstraints.empty())
                             inputConstraints += ",";
-                        }
                         inputConstraints += operand.constraint;
                     }
                 }
@@ -1559,6 +1585,26 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     llvmConstraints += ",~{memory}";
                 }
 
+                // asmコード内のオペランド番号を更新
+                std::string remappedCode = asmData.code;
+                // $Nを$REMAP[N]に置き換え（大きい番号から処理して誤置換を防ぐ）
+                for (int i = static_cast<int>(asmData.operands.size()) - 1; i >= 0; --i) {
+                    std::string oldPattern = "$" + std::to_string(i);
+                    std::string newPattern = "$" + std::to_string(operandRemap[i]);
+                    size_t pos = 0;
+                    while ((pos = remappedCode.find(oldPattern, pos)) != std::string::npos) {
+                        // $の次の文字が数字でない場合（$10と$1の区別）
+                        size_t afterNum = pos + oldPattern.length();
+                        if (afterNum < remappedCode.length() &&
+                            std::isdigit(remappedCode[afterNum])) {
+                            pos++;
+                            continue;
+                        }
+                        remappedCode.replace(pos, oldPattern.length(), newPattern);
+                        pos += newPattern.length();
+                    }
+                }
+
                 constraints = llvmConstraints;  // 変換後の制約を使用
 
                 if (outputCount > 0) {
@@ -1566,7 +1612,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     auto* retType = ctx.getI32Type();
                     auto* asmFuncTy = llvm::FunctionType::get(retType, inputTypes, false);
                     // 出力オペランドがある場合は常にsideeffect=trueにして最適化を抑制
-                    auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
+                    auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints,
                                                            true /* hasSideEffects */);
                     auto* result = builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
 
@@ -1594,7 +1640,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     // 入力のみ: 戻り値なし
                     auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), inputTypes, false);
                     auto* inlineAsm =
-                        llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints, asmData.is_must);
+                        llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints, asmData.is_must);
                     builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
                 }
             }
