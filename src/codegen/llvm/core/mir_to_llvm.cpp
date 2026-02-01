@@ -1586,21 +1586,34 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 }
 
                 // asmコード内のオペランド番号を更新
+                // 2段階方式: まず一時プレースホルダーに置換、次に最終番号に置換
+                // これにより$0→$1と$1→$0のような交差置換が正しく処理される
                 std::string remappedCode = asmData.code;
-                // $Nを$REMAP[N]に置き換え（大きい番号から処理して誤置換を防ぐ）
+
+                // 第1段階: $N を一時プレースホルダー __TMP_N__ に置換
                 for (int i = static_cast<int>(asmData.operands.size()) - 1; i >= 0; --i) {
                     std::string oldPattern = "$" + std::to_string(i);
-                    std::string newPattern = "$" + std::to_string(operandRemap[i]);
+                    std::string tempPattern = "__TMP_" + std::to_string(i) + "__";
                     size_t pos = 0;
                     while ((pos = remappedCode.find(oldPattern, pos)) != std::string::npos) {
-                        // $の次の文字が数字でない場合（$10と$1の区別）
                         size_t afterNum = pos + oldPattern.length();
                         if (afterNum < remappedCode.length() &&
                             std::isdigit(remappedCode[afterNum])) {
                             pos++;
                             continue;
                         }
-                        remappedCode.replace(pos, oldPattern.length(), newPattern);
+                        remappedCode.replace(pos, oldPattern.length(), tempPattern);
+                        pos += tempPattern.length();
+                    }
+                }
+
+                // 第2段階: __TMP_N__ を最終的な$REMAP[N]に置換
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    std::string tempPattern = "__TMP_" + std::to_string(i) + "__";
+                    std::string newPattern = "$" + std::to_string(operandRemap[i]);
+                    size_t pos = 0;
+                    while ((pos = remappedCode.find(tempPattern, pos)) != std::string::npos) {
+                        remappedCode.replace(pos, tempPattern.length(), newPattern);
                         pos += newPattern.length();
                     }
                 }
