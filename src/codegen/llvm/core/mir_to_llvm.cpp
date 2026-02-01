@@ -1428,11 +1428,16 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 // LLVMの制約形式: 出力制約,tied入力,純粋入力の順
                 std::vector<llvm::Type*> inputTypes;
                 std::vector<llvm::Value*> inputValues;
-                std::vector<llvm::Value*> outputPtrs;      // 出力先ポインタ
+                std::vector<llvm::Value*> outputPtrs;      // 出力先ポインタ（=r用）
                 std::vector<mir::LocalId> outputLocalIds;  // 出力ローカルIDも記録
                 std::string constraints;
-                int outputCount = 0;
+                int outputCount = 0;  // =r の数
                 int inputCount = 0;
+
+                // =m制約用: メモリ出力はポインタを入力として渡す
+                std::vector<llvm::Value*> memOutputPtrs;  // =m用のポインタ（入力として渡す）
+                std::vector<mir::LocalId> memOutputLocalIds;
+                std::vector<std::string> memOutputConstraints;
 
                 // 2パス方式で入力値を収集
                 // 第1パス: +rのtied入力を収集（出力順）
@@ -1495,22 +1500,50 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     }
 
                     if (hasOutput) {
-                        // 出力オペランドの場合、ストア可能なポインタが必要
-                        if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
-                            !llvm::isa<llvm::GlobalVariable>(localPtr) &&
-                            !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
-                            auto* alloca = builder->CreateAlloca(elemType, nullptr, "asm_out_tmp");
-                            if (isTiedInput && !tiedInputValues.empty()) {
-                                auto* initStore =
-                                    builder->CreateStore(tiedInputValues.back(), alloca);
-                                initStore->setVolatile(true);
+                        // 制約の種類をチェック: =m (メモリ出力) か =r (レジスタ出力) か
+                        std::string constraintType = operand.constraint;
+                        bool isMemOutput = (constraintType.find('m') != std::string::npos);
+
+                        if (isMemOutput) {
+                            // =m 制約: メモリ出力
+                            // LLVMではメモリ出力はポインタを入力として渡す（void型）
+                            // 出力オペランドの場合、ストア可能なポインタが必要
+                            if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
+                                !llvm::isa<llvm::GlobalVariable>(localPtr) &&
+                                !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
+                                auto* alloca =
+                                    builder->CreateAlloca(elemType, nullptr, "asm_mem_out");
+                                localPtr = alloca;
+                                allocatedLocals.insert(operand.local_id);
                             }
-                            localPtr = alloca;
-                            allocatedLocals.insert(operand.local_id);
+                            // メモリ出力として記録（後で入力に追加）
+                            memOutputPtrs.push_back(localPtr);
+                            memOutputLocalIds.push_back(operand.local_id);
+                            // 制約文字列を記録（=m → *m として変換）
+                            if (operand.constraint[0] == '=') {
+                                memOutputConstraints.push_back("=*m");
+                            } else {  // +m
+                                memOutputConstraints.push_back("+*m");
+                            }
+                        } else {
+                            // =r 制約: レジスタ出力（従来通り）
+                            if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
+                                !llvm::isa<llvm::GlobalVariable>(localPtr) &&
+                                !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
+                                auto* alloca =
+                                    builder->CreateAlloca(elemType, nullptr, "asm_out_tmp");
+                                if (isTiedInput && !tiedInputValues.empty()) {
+                                    auto* initStore =
+                                        builder->CreateStore(tiedInputValues.back(), alloca);
+                                    initStore->setVolatile(true);
+                                }
+                                localPtr = alloca;
+                                allocatedLocals.insert(operand.local_id);
+                            }
+                            outputPtrs.push_back(localPtr);
+                            outputLocalIds.push_back(operand.local_id);
+                            outputCount++;
                         }
-                        outputPtrs.push_back(localPtr);
-                        outputLocalIds.push_back(operand.local_id);
-                        outputCount++;
                     }
 
                     if (!constraints.empty())
@@ -1529,6 +1562,12 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     inputTypes.push_back(pureInputTypes[i]);
                     inputCount++;
                 }
+                // メモリ出力ポインタを入力として追加（=m, +m制約用）
+                for (size_t i = 0; i < memOutputPtrs.size(); ++i) {
+                    inputValues.push_back(memOutputPtrs[i]);
+                    inputTypes.push_back(memOutputPtrs[i]->getType());
+                    inputCount++;
+                }
 
                 // 制約文字列をLLVM形式に変換
                 // LLVMの制約形式: 出力制約,入力制約の順
@@ -1542,12 +1581,19 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 size_t llvmOutputIdx = 0;  // 出力オペランドのLLVMインデックス
                 size_t llvmInputIdx = 0;  // 入力オペランドを数える（出力の後に来る）
 
-                // まず出力オペランドを処理
+                // まず出力オペランドを処理（=r のみ、=m は除外）
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     const auto& operand = asmData.operands[i];
 
                     if (operand.constraint[0] == '+' || operand.constraint[0] == '=') {
-                        // 出力または読み書きオペランド
+                        // メモリ出力(=m, +m)は出力制約に含めない（入力として処理）
+                        bool isMemOutput = (operand.constraint.find('m') != std::string::npos);
+                        if (isMemOutput) {
+                            // メモリ出力はスキップ（後で入力として追加）
+                            continue;
+                        }
+
+                        // =r または +r: 出力オペランド
                         operandRemap[i] = llvmOutputIdx;
                         llvmOutputIdx++;
 
@@ -1569,9 +1615,12 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                     if (operand.constraint[0] == '+') {
                         // +r: 入力としてtied（出力番号を参照）
-                        if (!inputConstraints.empty())
-                            inputConstraints += ",";
-                        inputConstraints += std::to_string(operandRemap[i]);
+                        // ただし+mはスキップ（メモリ出力として別処理）
+                        if (operand.constraint.find('m') == std::string::npos) {
+                            if (!inputConstraints.empty())
+                                inputConstraints += ",";
+                            inputConstraints += std::to_string(operandRemap[i]);
+                        }
                     } else if (operand.constraint[0] != '=') {
                         // 純粋な入力（r, m等）
                         operandRemap[i] = llvmOutputIdx + llvmInputIdx;
@@ -1579,6 +1628,22 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         if (!inputConstraints.empty())
                             inputConstraints += ",";
                         inputConstraints += operand.constraint;
+                    }
+                }
+
+                // メモリ出力の制約を入力制約に追加（=*m形式）
+                // メモリ出力のオペランド番号も再マッピング
+                size_t memOutputStartIdx = llvmOutputIdx + llvmInputIdx;
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+                    if ((operand.constraint[0] == '=' || operand.constraint[0] == '+') &&
+                        operand.constraint.find('m') != std::string::npos) {
+                        // メモリ出力のオペランド番号を設定
+                        operandRemap[i] = memOutputStartIdx++;
+                        if (!inputConstraints.empty())
+                            inputConstraints += ",";
+                        // =m → "*m" (indirect memory), +m も同様
+                        inputConstraints += "*m";
                     }
                 }
 
