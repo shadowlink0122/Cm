@@ -1174,6 +1174,32 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
             continue;
         }
 
+        // i/n制約の場合は優先的にconst_valueを検索
+        bool isImmediateConstraint = (operand.constraint.find('i') != std::string::npos ||
+                                      operand.constraint.find('n') != std::string::npos);
+
+        if (isImmediateConstraint) {
+            // i/n制約: 定数値が必要なので優先的にconst_valueを検索
+            auto const_val_opt = ctx.get_const_value(operand.var_name);
+            if (const_val_opt) {
+                // 定数値を取得（整数のみサポート）
+                int64_t val = 0;
+                if (std::holds_alternative<int64_t>(const_val_opt->value)) {
+                    val = std::get<int64_t>(const_val_opt->value);
+                } else if (std::holds_alternative<double>(const_val_opt->value)) {
+                    val = static_cast<int64_t>(std::get<double>(const_val_opt->value));
+                }
+                mir_operands.push_back(MirStatement::MirAsmOperand(operand.constraint, val));
+                debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" +
+                                         operand.var_name +
+                                         " -> const_value=" + std::to_string(val));
+                continue;  // 次のオペランドへ
+            }
+            // const_valueが見つからない場合はエラー（i/n制約には定数が必要）
+            debug_msg("mir_asm",
+                      "[MIR] WARNING: i/n constraint requires constant: " + operand.var_name);
+        }
+
         // 変数名をローカル変数テーブルから検索
         auto local_id_opt = ctx.resolve_variable(operand.var_name);
         if (local_id_opt) {
