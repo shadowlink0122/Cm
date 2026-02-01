@@ -70,6 +70,7 @@ struct Options {
     bool show_hir = false;
     bool show_mir = false;
     bool show_mir_opt = false;
+    bool show_lir_opt = false;  // 最適化後のLLVM IRを表示
     bool emit_llvm = false;
     bool emit_js = false;         // JavaScript生成
     std::string target = "";      // ターゲット (native, wasm, js, web)
@@ -116,7 +117,8 @@ void print_help(const char* program_name) {
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
     std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
-    std::cout << "  --mir-opt             最適化後のMIRを表示\n\n";
+    std::cout << "  --mir-opt             最適化後のMIRを表示\n";
+    std::cout << "  --lir-opt             最適化後のLLVM IRを表示（codegen直前）\n\n";
     std::cout << "その他のオプション:\n";
     std::cout << "  --lang=ja             日本語デバッグメッセージ\n";
     std::cout << "  --version             バージョン情報を表示\n\n";
@@ -184,6 +186,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.show_mir = true;
         } else if (arg == "--mir-opt") {
             opts.show_mir_opt = true;
+        } else if (arg == "--lir-opt") {
+            opts.show_lir_opt = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
         } else if (arg == "--emit-js") {
@@ -909,7 +913,7 @@ int main(int argc, char* argv[]) {
         if (opts.show_mir && !opts.show_mir_opt) {
             std::cout << "=== MIR (最適化前) ===\n";
             mir::MirPrinter printer;
-            printer.print(mir);
+            printer.print(mir, std::cout);
         }
 
         // ========== Optimization ==========
@@ -952,9 +956,10 @@ int main(int argc, char* argv[]) {
 
         // MIRを表示（最適化後）
         if (opts.show_mir_opt) {
-            std::cout << "=== MIR (最適化後) ===\n";
+            std::cout << "=== MIR (最適化後) ===" << std::endl;
             mir::MirPrinter printer;
-            printer.print(mir);
+            printer.print(mir, std::cout);
+            return 0;
         }
 
         // ========== Backend ==========
@@ -1093,6 +1098,14 @@ int main(int argc, char* argv[]) {
                     codegen.compile(mir);
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
+
+                    // --lir-opt: 最適化後のLLVM IRを表示
+                    if (opts.show_lir_opt) {
+                        std::cout << "=== LLVM IR (最適化後) ===\n";
+                        std::cout << codegen.getIRString();
+                        std::cout << "========================\n";
+                        return 0;
+                    }
 
                     if (opts.verbose) {
                         std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";

@@ -54,40 +54,14 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
 
         ConvergenceManager convergence_mgr;
 
-        // タイムアウトガードを設定（全体で30秒まで）
-        TimeoutGuard timeout_guard(std::chrono::seconds(30));
-
-        // パスごとのタイムアウト管理（各パス最大5秒）
-        PassTimeoutManager pass_timer(std::chrono::seconds(5));
-
-        // 複雑度制限（ブロック1000、ステートメント10000、ローカル500）
-        ComplexityLimiter complexity_limiter(1000, 10000, 500);
-
-        // 複雑すぎる関数をスキップ
-        for (const auto& func : program.functions) {
-            if (func && complexity_limiter.is_too_complex(*func)) {
-                if (debug_output) {
-                    std::cout << "[OPT] 関数 '" << func->name
-                              << "' は複雑すぎるため最適化をスキップします\n";
-                }
-            }
-        }
-
         // 個々の最適化パスの実行回数を追跡
         std::unordered_map<std::string, int> pass_run_counts;
 
         for (int i = 0; i < max_iterations; ++i) {
-            // タイムアウトチェック
-            if (timeout_guard.is_timeout()) {
-                std::cerr << "[OPT] ⚠ 警告: 最適化がタイムアウトしました（30秒）\n";
-                return;
-            }
-
             ConvergenceManager::ChangeMetrics metrics;
 
             if (debug_output) {
                 std::cout << "[OPT] 反復 " << (i + 1) << "/" << max_iterations << "\n";
-                std::cout << "[OPT]   経過時間: " << timeout_guard.elapsed().count() << "ms\n";
             }
 
             // 実行前の状態を記録
@@ -102,12 +76,6 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
 
             // 各パスを実行（回数制限付き）
             for (auto& pass : passes) {
-                // 全体のタイムアウトチェック
-                if (timeout_guard.is_timeout()) {
-                    std::cerr << "[OPT] ⚠ パス実行中にタイムアウトしました\n";
-                    return;
-                }
-
                 std::string pass_name = pass->name();
 
                 // このパスの実行回数をチェック
@@ -119,20 +87,8 @@ class OptimizationPipelineV2 : public OptimizationPipeline {
                     continue;
                 }
 
-                // 個別パスのタイマー開始
-                pass_timer.start_pass(pass_name);
-
-                // パスをタイムアウト付きで実行
-                bool pass_changed = timeout_guard.execute_with_timeout(
-                    [&]() { return pass->run_on_program(program); }, pass_name);
-
-                // パスのタイムアウトチェック
-                if (pass_timer.check_pass_timeout()) {
-                    std::cerr << "[OPT] ⚠ パス '" << pass_name << "' がタイムアウトしました\n";
-                    return;
-                }
-
-                pass_timer.end_pass(debug_output);
+                // パスを実行
+                bool pass_changed = pass->run_on_program(program);
 
                 if (pass_changed) {
                     pass_run_counts[pass_name]++;

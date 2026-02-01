@@ -13,7 +13,7 @@
 #include "../scalar/propagation.hpp"
 #include "../scalar/sccp.hpp"
 #include "base.hpp"
-#include "pipeline_v2.hpp"  // 改良版パイプライン
+#include "pipeline.hpp"  // 改良版パイプライン
 
 #include <iostream>
 
