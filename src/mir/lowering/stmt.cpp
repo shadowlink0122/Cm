@@ -1176,8 +1176,8 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
         }
     }
 
-    ctx.push_statement(
-        MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must, std::move(mir_operands)));
+    ctx.push_statement(MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must,
+                                              std::move(mir_operands), asm_stmt.clobbers));
 }
 
 // must {} ブロックのlowering（最適化禁止）

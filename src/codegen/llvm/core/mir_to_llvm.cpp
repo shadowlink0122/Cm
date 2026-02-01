@@ -1429,6 +1429,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::vector<llvm::Type*> inputTypes;
                 std::vector<llvm::Value*> inputValues;
                 std::vector<llvm::Value*> outputPtrs;      // 出力先ポインタ（=r用）
+                std::vector<llvm::Type*> outputTypes;      // 出力オペランドの型（=r用）
                 std::vector<mir::LocalId> outputLocalIds;  // 出力ローカルIDも記録
                 std::string constraints;
                 int outputCount = 0;  // =r の数
@@ -1464,7 +1465,12 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     if (!localPtr)
                         continue;
 
-                    auto* elemType = ctx.getI32Type();  // デフォルトint型
+                    // ローカル変数の実際の型を取得
+                    llvm::Type* elemType = ctx.getI32Type();  // デフォルトint型
+                    if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(localPtr)) {
+                        // allocaから実際の型を取得
+                        elemType = allocaInst->getAllocatedType();
+                    }
                     bool hasOutput = operand.constraint[0] == '=' || operand.constraint[0] == '+';
                     bool isPureInput = operand.constraint[0] != '=' && operand.constraint[0] != '+';
                     bool isTiedInput = operand.constraint[0] == '+';
@@ -1558,6 +1564,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                 allocatedLocals.insert(operand.local_id);
                             }
                             outputPtrs.push_back(localPtr);
+                            outputTypes.push_back(elemType);  // 出力の型を記録
                             outputLocalIds.push_back(operand.local_id);
                             outputCount++;
                         }
@@ -1678,8 +1685,32 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     llvmConstraints += inputConstraints;
                 }
 
+                // clobberリストを追加（~{memory}, ~{eax}等）
+                // is_must=trueの場合はデフォルトで~{memory}を追加
                 if (asmData.is_must && !llvmConstraints.empty()) {
-                    llvmConstraints += ",~{memory}";
+                    // clobbers配列に~{memory}がなければ追加
+                    bool hasMemoryClobber = false;
+                    for (const auto& clob : asmData.clobbers) {
+                        if (clob == "memory" || clob == "~{memory}") {
+                            hasMemoryClobber = true;
+                            break;
+                        }
+                    }
+                    if (!hasMemoryClobber) {
+                        llvmConstraints += ",~{memory}";
+                    }
+                }
+                // 明示的なclobbersを追加
+                for (const auto& clob : asmData.clobbers) {
+                    if (!llvmConstraints.empty()) {
+                        llvmConstraints += ",";
+                    }
+                    // ~{...}形式でなければ追加
+                    if (clob.substr(0, 2) == "~{") {
+                        llvmConstraints += clob;
+                    } else {
+                        llvmConstraints += "~{" + clob + "}";
+                    }
                 }
 
                 // asmコード内のオペランド番号を更新
@@ -1719,7 +1750,8 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                 if (outputCount > 0) {
                     // 出力がある場合: 戻り値型を設定
-                    auto* retType = ctx.getI32Type();
+                    // 最初の出力オペランドの型を使用（現在は単一出力のみサポート）
+                    llvm::Type* retType = !outputTypes.empty() ? outputTypes[0] : ctx.getI32Type();
                     auto* asmFuncTy = llvm::FunctionType::get(retType, inputTypes, false);
                     // 出力オペランドがある場合は常にsideeffect=trueにして最適化を抑制
                     auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints,

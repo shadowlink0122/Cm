@@ -430,11 +430,12 @@ struct MirStatement {
 
     // インラインアセンブリ用
     static MirStatementPtr asm_stmt(std::string code, bool is_must = true,
-                                    std::vector<MirAsmOperand> operands = {}, Span s = {}) {
+                                    std::vector<MirAsmOperand> operands = {},
+                                    std::vector<std::string> clobbers = {}, Span s = {}) {
         auto stmt = std::make_unique<MirStatement>();
         stmt->kind = Asm;
         stmt->span = s;
-        stmt->data = AsmData{std::move(code), is_must, {}, std::move(operands)};
+        stmt->data = AsmData{std::move(code), is_must, std::move(clobbers), std::move(operands)};
         return stmt;
     }
 };
