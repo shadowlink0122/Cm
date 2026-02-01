@@ -1478,10 +1478,20 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         tiedInputValues.push_back(val);
                         tiedInputTypes.push_back(val->getType());
                     } else if (isPureInput) {
-                        // r, m: 純粋入力
-                        auto* val = loadValue();
-                        pureInputValues.push_back(val);
-                        pureInputTypes.push_back(val->getType());
+                        // 制約の種類によって値の渡し方を変える
+                        std::string constraintType = operand.constraint;
+                        bool isMemoryConstraint = (constraintType.find('m') != std::string::npos);
+
+                        if (isMemoryConstraint) {
+                            // m制約: ポインタ（アドレス）を渡す
+                            pureInputValues.push_back(localPtr);
+                            pureInputTypes.push_back(localPtr->getType());
+                        } else {
+                            // r制約: 値をロードして渡す
+                            auto* val = loadValue();
+                            pureInputValues.push_back(val);
+                            pureInputTypes.push_back(val->getType());
+                        }
                     }
 
                     if (hasOutput) {
