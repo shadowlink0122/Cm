@@ -50,8 +50,24 @@ TargetConfig TargetConfig::getNative() {
         }
     }
 
+    // ターゲットトリプルを取得し、macOSバージョンを正規化
+    std::string triple = llvm::sys::getDefaultTargetTriple();
+#ifdef __APPLE__
+    // macOSトリプルのバージョンを15.0に正規化してリンカ警告を回避
+    // ユーザーがmacOS 15.x以降を使用している前提
+    size_t macosxPos = triple.find("-macosx");
+    if (macosxPos != std::string::npos) {
+        size_t versionStart = macosxPos + 7;  // "-macosx"の長さ
+        size_t versionEnd = triple.find_first_not_of("0123456789.", versionStart);
+        if (versionEnd == std::string::npos) {
+            versionEnd = triple.length();
+        }
+        triple = triple.substr(0, versionStart) + "15.0" + triple.substr(versionEnd);
+    }
+#endif
+
     return {.target = BuildTarget::Native,
-            .triple = llvm::sys::getDefaultTargetTriple(),
+            .triple = triple,
             .cpu = cpu,
             .features = featureStr,
             .dataLayout = "",  // 後で設定

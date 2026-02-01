@@ -496,7 +496,8 @@ class LLVMCodeGen {
             // macOSではシステムのclangを使用してリンク
             // Homebrew LLVMのclangはSDKパスを認識しないため、/usr/bin/clangを使用
             // -dead_strip: 未使用関数を削除
-            linkCmd = "/usr/bin/clang -Wl,-dead_strip ";
+            // -mmacosx-version-min: 最小macOSバージョンを指定してリンカ警告を回避
+            linkCmd = "/usr/bin/clang -mmacosx-version-min=15.0 -Wl,-dead_strip ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
