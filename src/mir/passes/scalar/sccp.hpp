@@ -282,6 +282,14 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             if (stmt->kind != MirStatement::Assign) {
                 continue;
             }
+            // no_optフラグがtrueの場合は最適化スキップ（Overdefinedとして扱う）
+            if (stmt->no_opt) {
+                const auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                if (assign_data.place.local < state.size()) {
+                    state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                }
+                continue;
+            }
             const auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
             if (assign_data.place.local >= state.size()) {
                 continue;
@@ -632,6 +640,16 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 }
 
                 if (stmt->kind != MirStatement::Assign) {
+                    continue;
+                }
+                // no_optフラグがtrueの場合は定数置換をスキップするが、
+                // 代入先変数はOverdefinedにする（後続の参照で誤った定数が使われないよう）
+                if (stmt->no_opt) {
+                    auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                    if (assign_data.place.projections.empty() &&
+                        assign_data.place.local < state.size()) {
+                        state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                    }
                     continue;
                 }
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);

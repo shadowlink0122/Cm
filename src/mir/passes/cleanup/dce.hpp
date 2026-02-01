@@ -111,6 +111,12 @@ class DeadCodeElimination : public OptimizationPass {
             while (it != stmts.end()) {
                 bool should_remove = false;
 
+                // no_optフラグがtrueの場合は最適化スキップ
+                if ((*it)->no_opt) {
+                    ++it;
+                    continue;
+                }
+
                 if ((*it)->kind == MirStatement::Assign) {
                     auto& assign_data = std::get<MirStatement::AssignData>((*it)->data);
 
@@ -199,6 +205,12 @@ class DeadCodeElimination : public OptimizationPass {
     void collect_used_locals_in_statement(const MirStatement& stmt, std::set<LocalId>& used) {
         if (stmt.kind == MirStatement::Assign) {
             const auto& assign_data = std::get<MirStatement::AssignData>(stmt.data);
+
+            // mustブロック内の代入はターゲット変数自体も使用済みとしてマーク
+            // （デッドストア扱いを防止）
+            if (stmt.no_opt) {
+                used.insert(assign_data.place.local);
+            }
 
             // 右辺から使用を収集
             if (assign_data.rvalue) {

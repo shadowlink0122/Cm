@@ -1236,17 +1236,16 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
 void StmtLowering::lower_must_block(const hir::HirMustBlock& must_block, LoweringContext& ctx) {
     debug_msg("mir_must", "[MIR] lower_must_block");
 
-    // mustブロック内の各文をlowering
-    // LLVMレベルで最適化禁止にするため、各文にsideeffectを付与
-    for (const auto& stmt : must_block.body) {
-        // ブロック開始マーカー：コンパイラバリアとして空のasm volatileを挿入
-        ctx.push_statement(MirStatement::asm_stmt("", true));  // sideeffect
+    // mustブロック開始：最適化禁止フラグをON
+    ctx.in_must_block = true;
 
+    // mustブロック内の各文をlowering
+    for (const auto& stmt : must_block.body) {
         lower_statement(*stmt, ctx);
     }
 
-    // ブロック終了マーカー
-    ctx.push_statement(MirStatement::asm_stmt("", true));  // sideeffect
+    // mustブロック終了：最適化禁止フラグをOFF
+    ctx.in_must_block = false;
 }
 
 }  // namespace cm::mir

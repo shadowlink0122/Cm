@@ -374,9 +374,10 @@ struct MirStatement {
 
     Kind kind;
     Span span;
+    bool no_opt = false;  // 最適化禁止フラグ（must{}ブロック内の文）
 
     // デフォルトコンストラクタ
-    MirStatement() : kind(Nop), data(std::monostate{}) {}
+    MirStatement() : kind(Nop), no_opt(false), data(std::monostate{}) {}
 
     struct AssignData {
         MirPlace place;

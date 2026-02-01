@@ -72,6 +72,9 @@ class LoweringContext {
     // グローバルconst変数の値 - 親クラスから参照
     const std::unordered_map<std::string, MirConstant>* global_const_values = nullptr;
 
+    // must{}ブロック内かどうか（最適化禁止フラグ）
+    bool in_must_block = false;
+
     // const変数の値のキャッシュ (変数名 -> 定数値)
     // 文字列補間で使用するため、const変数の初期値を保持
     std::unordered_map<std::string, MirConstant> const_values;
@@ -115,6 +118,10 @@ class LoweringContext {
     void push_statement(MirStatementPtr stmt) {
         auto* block = get_current_block();
         if (block) {
+            // must{}ブロック内の文は最適化禁止
+            if (in_must_block) {
+                stmt->no_opt = true;
+            }
             // デバッグ: ステートメント追加前の状態
             if (current_block == 0 && stmt->kind == MirStatement::Assign) {
                 auto& assign = std::get<MirStatement::AssignData>(stmt->data);

@@ -276,6 +276,10 @@ class MirPrinter {
         switch (stmt.kind) {
             case MirStatement::Assign: {
                 auto& data = std::get<MirStatement::AssignData>(stmt.data);
+                // no_optフラグがtrueの場合は[must]を表示
+                if (stmt.no_opt) {
+                    out << "[must] ";
+                }
                 print_place(data.place, out);
                 out << " = ";
                 if (data.rvalue) {
