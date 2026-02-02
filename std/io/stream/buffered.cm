@@ -1,15 +1,17 @@
-// std::io::buffered - バッファリングI/O
+// std::io::stream::buffered - バッファリングI/O
 // v0.13.0: BufReader, BufWriter実装
-module std.io.buffered;
+module std.io.stream.buffered;
 
 import std.io.error::{IoResult, IoError, IoErrorKind};
 
 // ============================================================
-// Cランタイム関数
+// libc syscall
 // ============================================================
 
-extern "C" int cm_io_read(int fd, utiny* buf, int len);
-extern "C" int cm_io_write(int fd, utiny* buf, int len);
+use libc {
+    long read(int fd, void* buf, long count);
+    long write(int fd, void* buf, long count);
+}
 
 // ============================================================
 // 定数
@@ -45,7 +47,7 @@ impl BufReader {
         // バッファが空の場合のみリフィル
         if (this._pos >= this._cap) {
             utiny* buf_ptr = &this._buf[0];
-            int n = cm_io_read(this._fd, buf_ptr, DEFAULT_BUF_SIZE);
+            long n = read(this._fd, buf_ptr as void*, DEFAULT_BUF_SIZE as long);
             if (n < 0) {
                 return IoResult.Err(IoError.other("read failed"));
             }
@@ -190,7 +192,7 @@ impl BufWriter {
         // 大きなデータは直接書き込み
         if (src_len >= DEFAULT_BUF_SIZE) {
             utiny* src_ptr = &src[0];
-            int n = cm_io_write(this._fd, src_ptr, src_len);
+            long n = write(this._fd, src_ptr as void*, src_len as long);
             if (n < 0) {
                 return IoResult.Err(IoError.other("write failed"));
             }
@@ -228,7 +230,7 @@ impl BufWriter {
             Ok(_) => {}
         }
 
-        int n = cm_io_write(this._fd, ptr, len);
+        long n = write(this._fd, ptr as void*, len as long);
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));
         }
@@ -242,7 +244,7 @@ impl BufWriter {
         }
 
         utiny* buf_ptr = &this._buf[0];
-        int n = cm_io_write(this._fd, buf_ptr, this._len);
+        long n = write(this._fd, buf_ptr as void*, this._len as long);
         if (n < 0) {
             return IoResult.Err(IoError.other("flush failed"));
         }

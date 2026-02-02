@@ -1,0 +1,48 @@
+// std::io::console::output - 標準出力
+// v0.13.0: libc syscall直接呼び出し（Cランタイム非依存）
+module std.io.console.output;
+
+// ============================================================
+// libc syscall
+// ============================================================
+
+use libc {
+    long write(int fd, void* buf, long count);
+}
+
+// ファイルディスクリプタ
+const int STDOUT_FD = 1;
+const int STDERR_FD = 2;
+
+// ============================================================
+// print / println 関数
+// ============================================================
+
+/// 標準出力に文字列を出力（改行なし）
+export void print(string s) {
+    if (s.len() > 0) {
+        write(STDOUT_FD, s as void*, s.len() as long);
+    }
+}
+
+/// 標準出力に文字列を出力（改行あり）
+export void println(string s) {
+    print(s);
+    // 改行を出力
+    string newline = "\n";
+    write(STDOUT_FD, newline as void*, 1);
+}
+
+/// 標準エラー出力に文字列を出力（改行なし）
+export void eprint(string s) {
+    if (s.len() > 0) {
+        write(STDERR_FD, s as void*, s.len() as long);
+    }
+}
+
+/// 標準エラー出力に文字列を出力（改行あり）
+export void eprintln(string s) {
+    eprint(s);
+    string newline = "\n";
+    write(STDERR_FD, newline as void*, 1);
+}

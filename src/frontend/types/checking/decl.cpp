@@ -601,6 +601,7 @@ void TypeChecker::register_typedef(ast::TypedefDecl& td) {
 void TypeChecker::check_import(ast::ImportDecl& import) {
     std::string path_str = import.path.to_string();
 
+    // std::io からのインポート
     if (path_str == "std::io") {
         for (const auto& item : import.items) {
             if (item.name == "println" || item.name.empty()) {
@@ -612,6 +613,7 @@ void TypeChecker::check_import(ast::ImportDecl& import) {
         }
     } else if (import.path.segments.size() >= 3 && import.path.segments[0] == "std" &&
                import.path.segments[1] == "io") {
+        // std::io::println / std::io::print
         if (import.path.segments[2] == "println") {
             register_println();
         } else if (import.path.segments[2] == "print") {

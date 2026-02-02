@@ -1,69 +1,46 @@
 // std::io - I/Oモジュール
-// v0.13.0: Reader/Writer/Seek interface & 標準入出力/ファイルI/O
+// v0.13.0: libc syscall直接呼び出しによる純粋Cm実装
 module std.io;
 
+// ============================================================
+// コンソール出力
+// ============================================================
+
+export import std.io.console.output::{print, println, eprint, eprintln};
+
+// ============================================================
+// コンソール入力
+// ============================================================
+
+export import std.io.console.input::{input, input_int, input_long, input_double, input_bool, input_string};
+
+// ============================================================
 // エラー型
+// ============================================================
+
 export import std.io.error::{IoResult, IoError, IoErrorKind};
 
+// ============================================================
 // インターフェース
+// ============================================================
+
 export import std.io.traits::{Reader, Writer, Seek, SeekFrom};
 
-// 標準入出力
-export import std.io.stdin::{Stdin, stdin};
-export import std.io.stdout::{Stdout, Stderr, stdout, stderr};
+// ============================================================
+// 標準入出力ストリーム
+// ============================================================
 
+export import std.io.stream.stdin::{Stdin, stdin};
+export import std.io.stream.stdout::{Stdout, Stderr, stdout, stderr};
+
+// ============================================================
+// バッファ付きI/O
+// ============================================================
+
+export import std.io.stream.buffered::{BufferedReader, BufferedWriter};
+
+// ============================================================
 // ファイルI/O
-export import std.io.file::File;
-
-// 既存の便利関数を再エクスポート（後方互換性）
-export import std.io::{print, println};
-
-// ============================================================
-// ファイルI/O便利関数（ランタイム経由）
 // ============================================================
 
-// Cランタイム関数
-extern "C" string cm_file_read_all(string path);
-extern "C" bool cm_file_write_all(string path, string content);
-
-/// ファイル全体を文字列として読み込み
-export string read_file(string path) {
-    return cm_file_read_all(path);
-}
-
-/// 文字列をファイルに書き込み
-export bool write_file(string path, string content) {
-    return cm_file_write_all(path, content);
-}
-
-// ============================================================
-// 標準入力関数（ランタイム経由）
-// ============================================================
-
-extern "C" string cm_io_input();
-extern "C" int cm_io_input_int();
-
-/// 標準入力から1行読み取り（改行は除去）
-export string input() {
-    return cm_io_input();
-}
-
-/// 標準入力から整数を読み取り
-export int input_int() {
-    return cm_io_input_int();
-}
-
-/// 標準入力から文字列を読み取り（エイリアス）
-export string input_string() {
-    return cm_io_input();
-}
-
-/// 標準入力からbool読み取り
-/// "true", "1", "yes" -> true, その他 -> false
-export bool input_bool() {
-    string line = cm_io_input();
-    if (line == "true" || line == "1" || line == "yes") {
-        return true;
-    }
-    return false;
-}
+export import std.io.file.file::File;

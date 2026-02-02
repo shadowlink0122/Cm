@@ -1,18 +1,17 @@
-// std::io::stdout - 標準出力
-// v0.13.0: Writer interface実装
-module std.io.stdout;
+// std::io::stream::stdout - 標準出力ストリーム
+// v0.13.0: libc syscall直接呼び出し
+module std.io.stream.stdout;
 
 import std.io.error::{IoResult, IoError, IoErrorKind};
 
 // ============================================================
-// libc関数宣言（LLVM経由で直接呼び出し）
+// libc syscall
 // ============================================================
 
-// ssize_t write(int fd, const void* buf, size_t count)
-extern "C" long write(int fd, utiny* buf, long count);
-
-// int fsync(int fd)
-extern "C" int fsync(int fd);
+use libc {
+    long write(int fd, void* buf, long count);
+    int fsync(int fd);
+}
 
 // ============================================================
 // 定数
@@ -39,12 +38,12 @@ impl Stdout {
     }
 
     /// バッファからデータを書き込む
-    IoResult<int> write(utiny[] buf) {
+    IoResult<int> write_bytes(utiny[] buf) {
         if (buf.len() == 0) {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, buf.ptr(), buf.len() as long);
+        long n = write(this._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));
@@ -55,12 +54,20 @@ impl Stdout {
 
     /// 文字列を書き込む
     IoResult<int> write_str(string s) {
-        // 文字列をバイト配列として扱う
-        cm_print_string(s);
-        return IoResult.Ok(s.len() as int);
+        if (s.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(this._fd, s as void*, s.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
     }
 
-    /// フラッシュ（stdoutは通常バッファなし）
+    /// フラッシュ
     IoResult<int> flush() {
         int ret = fsync(this._fd);
         if (ret < 0) {
@@ -69,9 +76,6 @@ impl Stdout {
         return IoResult.Ok(0);
     }
 }
-
-// 既存のランタイム関数
-extern "C" void cm_print_string(string s);
 
 // ============================================================
 // Stderr構造体
@@ -91,12 +95,27 @@ impl Stderr {
     }
 
     /// バッファからデータを書き込む
-    IoResult<int> write(utiny[] buf) {
+    IoResult<int> write_bytes(utiny[] buf) {
         if (buf.len() == 0) {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, buf.ptr(), buf.len() as long);
+        long n = write(this._fd, &buf[0] as void*, buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// 文字列を書き込む
+    IoResult<int> write_str(string s) {
+        if (s.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(this._fd, s as void*, s.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));

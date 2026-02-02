@@ -295,8 +295,9 @@ HirDeclPtr HirLowering::lower_import(ast::ImportDecl& imp) {
     hir_imp->path = imp.path.segments;
     hir_imp->alias = "";
 
-    // std::io::println -> __println__ へのエイリアス登録
+    // std::io からのインポート
     std::string path_str = imp.path.to_string();
+
     if (path_str == "std::io::println") {
         import_aliases_["println"] = "__println__";
     } else if (path_str == "std::io::print") {

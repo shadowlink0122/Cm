@@ -1,19 +1,23 @@
-// std::io::file - ファイルI/O
+// std::io::file::file - ファイルI/O
 // v0.13.0: Reader, Writer, Seek interface実装
-module std.io.file;
+module std.io.file.file;
 
 import std.io.error::{IoResult, IoError, IoErrorKind};
 
 // ============================================================
-// libc関数宣言（LLVM経由で直接呼び出し）
+// libc syscall
 // ============================================================
 
-extern "C" long read(int fd, utiny* buf, long count);
-extern "C" long write(int fd, utiny* buf, long count);
-extern "C" int open(string path, int flags, int mode);
-extern "C" int close(int fd);
-extern "C" long lseek(int fd, long offset, int whence);
-extern "C" int fsync(int fd);
+use libc {
+    long read(int fd, void* buf, long count);
+    long write(int fd, void* buf, long count);
+    int open(string path, int flags, int mode);
+    int close(int fd);
+    long lseek(int fd, long offset, int whence);
+    int fsync(int fd);
+    void* malloc(long size);
+    void free(void* ptr);
+}
 
 // ============================================================
 // Open フラグ定数 (POSIX)
@@ -104,7 +108,7 @@ impl File {
             return IoResult.Ok(0);
         }
 
-        long n = read(this._fd, buf.ptr(), buf.len() as long);
+        long n = read(this._fd, &buf[0] as void*, buf.len() as long);
         if (n < 0) {
             return IoResult.Err(IoError.other("read error"));
         }
@@ -124,7 +128,7 @@ impl File {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, buf.ptr(), buf.len() as long);
+        long n = write(this._fd, &buf[0] as void*, buf.len() as long);
         if (n < 0) {
             return IoResult.Err(IoError.other("write error"));
         }
@@ -137,7 +141,7 @@ impl File {
         // 将来的にはstring.as_bytes()を使用
         utiny* ptr = s as utiny*;
         long len = s.len() as long;
-        long n = write(this._fd, ptr, len);
+        long n = write(this._fd, ptr as void*, len);
         if (n < 0) {
             return IoResult.Err(IoError.other("write error"));
         }
@@ -233,23 +237,61 @@ impl File {
 
 /// ファイル全体を文字列として読み込み
 export IoResult<string> read_to_string(string path) {
-    // 既存のランタイム関数を使用
-    string content = cm_file_read_all(path);
-    if (content.len() == 0) {
-        // 空かエラーか判定できない（簡易実装）
+    // ファイルを開く
+    int fd = open(path, O_RDONLY, 0);
+    if (fd < 0) {
+        return IoResult.Err(IoError.not_found(path));
     }
-    return IoResult.Ok(content);
+    
+    // ファイルサイズを取得
+    long size = lseek(fd, 0, SEEK_END);
+    if (size < 0) {
+        close(fd);
+        return IoResult.Err(IoError.other("failed to get file size"));
+    }
+    lseek(fd, 0, SEEK_SET);
+    
+    // バッファを確保
+    void* buf = malloc(size + 1);
+    if (buf == 0 as void*) {
+        close(fd);
+        return IoResult.Err(IoError.other("out of memory"));
+    }
+    
+    // ファイルを読み込み
+    long bytes_read = read(fd, buf, size);
+    close(fd);
+    
+    if (bytes_read < 0) {
+        free(buf);
+        return IoResult.Err(IoError.other("read error"));
+    }
+    
+    // null終端
+    char* str = buf as char*;
+    str[bytes_read as int] = 0 as char;
+    
+    return IoResult.Ok(str as string);
 }
 
 /// 文字列をファイルに書き込み
 export IoResult<int> write_string(string path, string content) {
-    bool ok = cm_file_write_all(path, content);
-    if (!ok) {
-        return IoResult.Err(IoError.other("write failed: " + path));
+    // ファイルを作成
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    int fd = open(path, flags, DEFAULT_MODE);
+    if (fd < 0) {
+        return IoResult.Err(IoError.other("failed to create file: " + path));
     }
-    return IoResult.Ok(content.len() as int);
+    
+    // 書き込み
+    long len = content.len() as long;
+    long bytes_written = write(fd, content as void*, len);
+    close(fd);
+    
+    if (bytes_written < 0) {
+        return IoResult.Err(IoError.other("write error"));
+    }
+    
+    return IoResult.Ok(bytes_written as int);
 }
 
-// 既存のランタイム関数
-extern "C" string cm_file_read_all(string path);
-extern "C" bool cm_file_write_all(string path, string content);
