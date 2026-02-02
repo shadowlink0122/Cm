@@ -1567,7 +1567,17 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
             }
         }
 
-        // 1. ルートコンポーネントのファイル（std.cm）を最初に試す
+        // 1. 完全パス（std/io/file.cm など）を最初に試す
+        //    サブモジュールへの直接アクセスを優先
+        auto full_path = current_dir / (full_filename + ".cm");
+        if (std::filesystem::exists(full_path)) {
+            if (debug_mode) {
+                std::cout << "[PREPROCESSOR] Found full path module: " << full_path << "\n";
+            }
+            return std::filesystem::canonical(full_path);
+        }
+
+        // 2. ルートコンポーネントのファイル（std.cm）を試す
         //    これは再エクスポートベースの解決に必要
         auto root_path = current_dir / (root_filename + ".cm");
         if (std::filesystem::exists(root_path)) {
@@ -1577,7 +1587,7 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
             return std::filesystem::canonical(root_path);
         }
 
-        // 2. ルートディレクトリ内のエントリーポイント（std/std.cm）
+        // 3. ルートディレクトリ内のエントリーポイント（std/std.cm）
         auto root_dir_path = current_dir / root_filename;
         if (std::filesystem::exists(root_dir_path) &&
             std::filesystem::is_directory(root_dir_path)) {
@@ -1585,12 +1595,6 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
             if (!entry.empty()) {
                 return entry;
             }
-        }
-
-        // 3. 完全パス（std/io.cm など）を試す
-        auto full_path = current_dir / (full_filename + ".cm");
-        if (std::filesystem::exists(full_path)) {
-            return std::filesystem::canonical(full_path);
         }
 
         // 4. ディレクトリ内のエントリーポイント（std/io/io.cm など）
@@ -1605,44 +1609,24 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
 
     // 検索パスから探す
     for (const auto& search_path : search_paths) {
-        // セグメントが3つ以上（選択的インポート）の場合、module_pathを優先
-        if (segments.size() >= 3 && module_path != full_filename) {
-            // 0. モジュールパス（mem.cm など）を試す
-            auto mod_file_path = search_path / (module_path + ".cm");
-            if (std::filesystem::exists(mod_file_path)) {
-                if (debug_mode) {
-                    std::cout << "[PREPROCESSOR] Found module file in search path: "
-                              << mod_file_path << "\n";
-                }
-                return std::filesystem::canonical(mod_file_path);
-            }
-
-            // 0.5. ディレクトリ内のエントリーポイント（mem/mod.cm など）
-            auto mod_dir_path = search_path / module_path;
-            if (std::filesystem::exists(mod_dir_path) &&
-                std::filesystem::is_directory(mod_dir_path)) {
-                auto entry = find_module_entry_point(mod_dir_path);
-                if (!entry.empty()) {
-                    if (debug_mode) {
-                        std::cout << "[PREPROCESSOR] Found module entry point in search path: "
-                                  << entry << "\n";
-                    }
-                    return entry;
-                }
-            }
-        }
-
-        // 1. 完全パスを試す
+        // 1. 完全パスを最優先で試す (std/io/file.cm など)
         auto full_path = search_path / (full_filename + ".cm");
         if (std::filesystem::exists(full_path)) {
+            if (debug_mode) {
+                std::cout << "[PREPROCESSOR] Found full path in search path: " << full_path << "\n";
+            }
             return std::filesystem::canonical(full_path);
         }
 
-        // 2. ディレクトリ内のエントリーポイントを探す
+        // 2. ディレクトリ内のエントリーポイントを探す (std/io/file/mod.cm)
         auto dir_path = search_path / full_filename;
         if (std::filesystem::exists(dir_path) && std::filesystem::is_directory(dir_path)) {
             auto entry = find_module_entry_point(dir_path);
             if (!entry.empty()) {
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Found module entry point in search path: " << entry
+                              << "\n";
+                }
                 return entry;
             }
         }

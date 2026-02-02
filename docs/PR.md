@@ -142,20 +142,24 @@ match value {
 
 ## ⚠️ 既知の問題
 
-### プリプロセッサのexport import再エクスポート問題
+### ファイルI/Oのread_file問題
 
-**問題**: `mod.cm`で`export import`を使用しても、インポート側で関数が認識されない。
+**問題**: `read_file`がファイル内容ではなくアドレス値を返す
 
-**原因**: プリプロセッサの`filter_exports`関数が`export import`経由の関数定義を抽出できない。
+**原因**: JITでの`char* -> string`変換が正しく動作していない
 
-**回避策**: 直接インポート
-```cm
-import std::io::file::io::{read_file, write_file};
-```
+**回避策**: なし（修正予定）
+
+### const定数のビット演算問題
+
+**問題**: `O_WRONLY | O_CREAT | O_TRUNC`のようなconst定数のビット演算が0になる
+
+**回避策**: リテラル値を直接使用（例: `0x0601`）
 
 ## 🚀 今後の予定
 
-- プリプロセッサのモジュール解決修正
+- char*→string変換問題の修正
+- const定数ビット演算の修正
 - std::netモジュール実装
 - async/await対応
 

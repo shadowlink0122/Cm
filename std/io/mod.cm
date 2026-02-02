@@ -43,4 +43,4 @@ export import std.io.stream.buffered::{BufferedReader, BufferedWriter};
 // ファイルI/O (簡易版)
 // ============================================================
 
-export import std.io.file.io::{read_file, write_file};
+export import std.io.file::{read_file, write_file};
