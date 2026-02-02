@@ -24,11 +24,15 @@ tests/test_programs/    - Cm言語テスト
 
 ## テスト実行コマンド
 ```bash
-make tip      # インタプリタテスト
-make tlp      # LLVMネイティブテスト
+make tip      # インタプリタテスト（高速、開発中推奨）
+make tlp      # LLVMネイティブテスト（並列）
 make tlwp     # WASMテスト
 make tjp      # JavaScriptテスト
 ```
+
+> [!IMPORTANT]
+> **開発中のテストは `make tip` または個別実行で確認する**
+> `make tl` は最終確認時のみ使用（時間がかかるため）
 
 ## スキップ方法
 - `.skip`ファイルを作成（特定ターゲット用: `test.skip.llvm`）

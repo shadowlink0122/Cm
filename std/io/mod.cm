@@ -40,7 +40,7 @@ export import std.io.stream.stdout::{Stdout, Stderr, stdout, stderr};
 export import std.io.stream.buffered::{BufferedReader, BufferedWriter};
 
 // ============================================================
-// ファイルI/O
+// ファイルI/O (簡易版)
 // ============================================================
 
-export import std.io.file.file::File;
+export import std.io.file.io::{read_file, write_file};

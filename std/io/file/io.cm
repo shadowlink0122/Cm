@@ -1,0 +1,82 @@
+// std::io::file::io - 簡易ファイルI/O関数
+// 依存なしの自己完結型実装
+module std.io.file.io;
+
+// ============================================================
+// libc syscall
+// ============================================================
+
+use libc {
+    long read(int fd, void* buf, long count);
+    long write(int fd, void* buf, long count);
+    int open(string path, int flags, int mode);
+    int close(int fd);
+    long lseek(int fd, long offset, int whence);
+    void* malloc(long size);
+    void free(void* ptr);
+}
+
+// ============================================================
+// 定数
+// ============================================================
+
+const int O_RDONLY   = 0;
+const int O_WRONLY   = 1;
+const int O_CREAT    = 0x0200;
+const int O_TRUNC    = 0x0400;
+const int SEEK_SET = 0;
+const int SEEK_END = 2;
+const int DEFAULT_MODE = 0644;
+
+// ============================================================
+// 簡易API
+// ============================================================
+
+/// ファイルを読み込み（簡易版、エラー時は空文字列）
+export string read_file(string path) {
+    int fd = open(path, O_RDONLY, 0);
+    if (fd < 0) {
+        return "";
+    }
+    
+    long size = lseek(fd, 0, SEEK_END);
+    if (size < 0) {
+        close(fd);
+        return "";
+    }
+    lseek(fd, 0, SEEK_SET);
+    
+    void* buf = malloc(size + 1);
+    if (buf == 0 as void*) {
+        close(fd);
+        return "";
+    }
+    
+    long bytes_read = read(fd, buf, size);
+    close(fd);
+    
+    if (bytes_read < 0) {
+        free(buf);
+        return "";
+    }
+    
+    char* str = buf as char*;
+    str[bytes_read as int] = 0 as char;
+    
+    return str as string;
+}
+
+/// ファイルに書き込み（簡易版、成功時true）
+export bool write_file(string path, string content) {
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    int fd = open(path, flags, DEFAULT_MODE);
+    if (fd < 0) {
+        return false;
+    }
+    
+    long len = content.len() as long;
+    long bytes_written = write(fd, content as void*, len);
+    close(fd);
+    
+    return bytes_written >= 0;
+}

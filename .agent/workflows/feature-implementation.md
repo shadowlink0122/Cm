@@ -36,8 +36,7 @@ description: 新機能の実装手順
 // turbo
 1. `make build` でビルド確認
 2. `make tip` でインタプリタテスト
-3. `make tlp` でLLVMテスト
-4. 全テスト通過を確認
+3. 全テスト通過を確認
 
 ## 5. 品質確認
 // turbo
