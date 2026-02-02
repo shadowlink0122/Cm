@@ -1,0 +1,6 @@
+=== Union Slice Test ===
+Empty slice created: len = 0
+int value: 42
+float value: 3.14
+string value: hello
+=== Test Passed ===
