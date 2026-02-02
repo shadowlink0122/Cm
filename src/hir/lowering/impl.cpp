@@ -18,9 +18,19 @@ HirProgram HirLowering::lower(ast::Program& program) {
         } else if (auto* func = decl->as<ast::FunctionDecl>()) {
             func_defs_[func->name] = func;
         } else if (auto* en = decl->as<ast::EnumDecl>()) {
+            // v0.13.0: enum定義を登録（Tagged Union用）
+            enum_defs_[en->name] = en;
+            int64_t auto_value = 0;
             for (const auto& member : en->members) {
+                std::string full_name = en->name + "::" + member.name;
                 if (member.value.has_value()) {
-                    enum_values_[en->name + "::" + member.name] = *member.value;
+                    // 明示的な値がある場合はそれを使用
+                    enum_values_[full_name] = *member.value;
+                    auto_value = *member.value + 1;
+                } else {
+                    // 値がない場合は自動割り当て（Associated Dataを持つvariantも含む）
+                    enum_values_[full_name] = auto_value;
+                    auto_value++;
                 }
             }
         } else if (auto* td = decl->as<ast::TypedefDecl>()) {

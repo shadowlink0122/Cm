@@ -735,25 +735,60 @@ ast::DeclPtr Parser::parse_template_decl() {
 }
 
 // ============================================================
-// Enum宣言
+// Enum宣言（Tagged Union & ジェネリック対応）
 // ============================================================
 ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
 
     std::string name = expect_ident();
+
+    // ジェネリックパラメータ: enum Result<T, E> { ... }
+    std::vector<std::string> generic_params;
+    if (consume_if(TokenKind::Lt)) {
+        do {
+            generic_params.push_back(expect_ident());
+        } while (consume_if(TokenKind::Comma));
+        expect(TokenKind::Gt);
+    }
+
     expect(TokenKind::LBrace);
 
     std::vector<ast::EnumMember> members;
     int64_t next_value = 0;                   // オートインクリメント用
     std::unordered_set<int64_t> used_values;  // 重複チェック用
+    bool has_associated_data = false;         // Associated dataがあればtrueになる
 
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         std::string member_name = expect_ident();
-        std::optional<int64_t> explicit_value;
 
-        // 明示的な値指定
-        if (consume_if(TokenKind::Eq)) {
+        // Associated dataをチェック: Variant(int x, string y)
+        if (consume_if(TokenKind::LParen)) {
+            has_associated_data = true;
+            std::vector<std::pair<std::string, ast::TypePtr>> fields;
+
+            if (!check(TokenKind::RParen)) {
+                do {
+                    // 型をパース
+                    auto field_type = parse_type();
+                    // フィールド名（オプション: 型のみの場合もあり）
+                    std::string field_name;
+                    if (check(TokenKind::Ident)) {
+                        field_name = current_text();
+                        advance();
+                    } else {
+                        // 名前がない場合は _0, _1, ... を使用
+                        field_name = "_" + std::to_string(fields.size());
+                    }
+                    fields.emplace_back(std::move(field_name), std::move(field_type));
+                } while (consume_if(TokenKind::Comma));
+            }
+
+            expect(TokenKind::RParen);
+            members.emplace_back(std::move(member_name), std::move(fields));
+        }
+        // 明示的な値指定: Variant = 42
+        else if (consume_if(TokenKind::Eq)) {
             // 負の数をサポート
             bool is_negative = consume_if(TokenKind::Minus);
 
@@ -769,21 +804,33 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
                 value = -value;
             }
 
-            explicit_value = value;
+            // 重複チェック（Associated dataがない場合のみ）
+            if (!has_associated_data && used_values.count(value)) {
+                error("enum値 " + std::to_string(value) + " は既に使用されています");
+                return nullptr;
+            }
+            used_values.insert(value);
+
+            members.emplace_back(std::move(member_name), value);
             next_value = value + 1;
-        } else {
-            explicit_value = next_value;
-            next_value++;
         }
-
-        // 重複チェック
-        if (used_values.count(*explicit_value)) {
-            error("enum値 " + std::to_string(*explicit_value) + " は既に使用されています");
-            return nullptr;
+        // シンプルなバリアント: Variant
+        else {
+            if (!has_associated_data) {
+                // シンプルなenumの場合はオートインクリメント
+                if (used_values.count(next_value)) {
+                    error("enum値 " + std::to_string(next_value) + " は既に使用されています");
+                    return nullptr;
+                }
+                used_values.insert(next_value);
+                members.emplace_back(std::move(member_name), next_value);
+                next_value++;
+            } else {
+                // Tagged Unionでデータなしのバリアント
+                members.emplace_back(std::move(member_name),
+                                     std::vector<std::pair<std::string, ast::TypePtr>>{});
+            }
         }
-        used_values.insert(*explicit_value);
-
-        members.emplace_back(std::move(member_name), explicit_value);
 
         // カンマは省略可能（最後の要素の後も許可）
         consume_if(TokenKind::Comma);
@@ -794,6 +841,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     auto enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     enum_decl->attributes = std::move(attributes);
+    enum_decl->generic_params = std::move(generic_params);
     return std::make_unique<ast::Decl>(std::move(enum_decl), Span{start_pos, previous().end});
 }
 

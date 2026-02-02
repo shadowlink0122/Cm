@@ -1,0 +1,23 @@
+// Associated Dataを持つenumのmatchテスト
+import std::io::println;
+
+// Associated Dataを持つenum
+enum Option {
+    None,
+    Some(int)
+}
+
+int main() {
+    // Option::Some(42) の代入
+    Option opt = Option::Some(42);
+    
+    // matchでパターン分岐
+    int result = match (opt) {
+        Option::None => 0,
+        Option::Some => 1,
+        _ => -1,
+    };
+    
+    println("Result: {result}");
+    return 0;
+}

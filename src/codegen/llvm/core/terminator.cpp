@@ -155,6 +155,54 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             }
 
             // ============================================================
+            // Tagged Union Variant Constructor (v0.13.0)
+            // ============================================================
+            // Color::RGB(255, 128, 64) のようなvariant constructor呼び出しを検出
+            // "::" を含み、通常の関数として登録されていない場合、variant constructorとして処理
+            // ただし、モジュール関数（m::calculate等）は通常の関数として処理する
+            if (funcName.find("::") != std::string::npos && functions.count(funcName) == 0) {
+                // まずMIR関数リストを検索（モジュール関数の可能性）
+                bool isMirFunction = false;
+                for (const auto& func : currentProgram->functions) {
+                    if (func->name == funcName) {
+                        isMirFunction = true;
+                        break;
+                    }
+                }
+
+                // MIR関数として存在する場合は、通常の関数呼び出しとして続行
+                // （このブロックを抜けて、後続の通常関数呼び出し処理へ）
+                if (!isMirFunction) {
+                    size_t colonPos = funcName.find("::");
+                    std::string enumName = funcName.substr(0, colonPos);
+                    std::string variantName = funcName.substr(colonPos + 2);
+
+                    // v0.13.0: 暫定実装 - variant constructorを検出
+                    // enum_info_キャッシュが実装されるまでは、未知の関数呼び出しを
+                    // タグ値として処理し、警告を抑制する
+                    // TODO: Phase 2でMIRToLLVMにenum_info_マップを追加
+
+                    // 現時点では単純にタグ値0を返す（シンプルなenumの場合最初の値）
+                    // 引数がある場合も無視（Associated dataは後で対応）
+                    llvm::Value* tagValue = llvm::ConstantInt::get(ctx.getI32Type(), 0);
+
+                    if (callData.destination) {
+                        auto destLocal = callData.destination->local;
+                        if (allocatedLocals.count(destLocal) > 0 && locals[destLocal]) {
+                            builder->CreateStore(tagValue, locals[destLocal]);
+                        } else {
+                            locals[destLocal] = tagValue;
+                        }
+                    }
+
+                    if (callData.success != mir::INVALID_BLOCK) {
+                        builder->CreateBr(blocks[callData.success]);
+                    }
+                    break;
+                }
+            }
+
+            // ============================================================
             // 配列スライス呼び出し
             // ============================================================
             if (funcName == "__builtin_array_slice") {

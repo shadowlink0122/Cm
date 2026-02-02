@@ -23,6 +23,7 @@ class HirLowering {
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
+    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;  // v0.13.0: Tagged Union
     std::unordered_map<std::string, int64_t> macro_values_;  // v0.13.0: int型定数マクロ
     std::unordered_map<std::string, std::string> macro_string_values_;  // v0.13.0: string型マクロ
     std::unordered_map<std::string, bool> macro_bool_values_;           // v0.13.0: bool型マクロ
@@ -66,6 +67,7 @@ class HirLowering {
     HirStmtPtr lower_block(ast::BlockStmt& block);
     HirStmtPtr lower_defer(ast::DeferStmt& defer);
     HirStmtPtr lower_must_block(ast::MustBlockStmt& must);
+    HirStmtPtr lower_match_as_stmt(ast::MatchExpr& match);  // v0.13.0: match文対応
     std::unique_ptr<HirSwitchPattern> lower_pattern(ast::Pattern& pattern);
 
     // 式のlowering
@@ -104,6 +106,8 @@ class HirLowering {
     HirExprPtr make_default_value(TypePtr type);
     HirExprPtr build_match_condition(const HirExprPtr& scrutinee, TypePtr scrutinee_type,
                                      const ast::MatchArm& arm);
+    HirExprPtr build_single_pattern_condition(const HirExprPtr& scrutinee,
+                                              const ast::MatchPattern& pattern);
     HirExprPtr clone_hir_expr(const HirExprPtr& expr);
     HirExprPtr lower_guard_with_binding(ast::Expr& guard, const std::string& var_name,
                                         const HirExprPtr& scrutinee, TypePtr scrutinee_type);

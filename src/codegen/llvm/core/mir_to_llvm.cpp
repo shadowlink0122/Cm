@@ -458,6 +458,33 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         structType->setBody(fieldTypes);
     }
 
+    // enum型を処理（Tagged Unionは構造体として生成）
+    for (const auto& enumPtr : program.enums) {
+        if (!enumPtr)
+            continue;
+        const auto& enumDef = *enumPtr;
+        enumDefs[enumDef.name] = &enumDef;
+
+        // Tagged Unionの場合は構造体型を生成
+        if (enumDef.is_tagged_union()) {
+            // Tagged Union: { i32 tag, i8[N] payload }
+            // Nは最大ペイロードサイズ
+            uint32_t maxPayloadSize = enumDef.max_payload_size();
+            if (maxPayloadSize == 0)
+                maxPayloadSize = 8;  // 最低8バイト
+
+            std::vector<llvm::Type*> enumFieldTypes;
+            enumFieldTypes.push_back(ctx.getI32Type());  // tag
+            enumFieldTypes.push_back(
+                llvm::ArrayType::get(ctx.getI8Type(), maxPayloadSize));  // payload
+
+            auto enumStructType = llvm::StructType::create(ctx.getContext(), enumFieldTypes,
+                                                           enumDef.name + "_tagged");
+            enumTypes[enumDef.name] = enumStructType;
+        }
+        // シンプルなenumはi32として扱う（enumTypes追加なし）
+    }
+
     // インターフェース型（fat pointer）を定義
     // std::cerr << "[MIR2LLVM] Creating interface fat pointer types...\n";
     for (const auto& iface : program.interfaces) {
@@ -2453,74 +2480,88 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                             if (currentType->kind == hir::TypeKind::Struct ||
                                 currentType->kind == hir::TypeKind::Generic) {
                                 std::string lookupName = currentType->name;
-                                auto structIt = structDefs.find(lookupName);
 
-                                // フォールバック: 関数名から構造体名を推論
-                                // Container__int__get → Container__int
-                                if (structIt == structDefs.end() && currentMIRFunction) {
-                                    const auto& funcName = currentMIRFunction->name;
-                                    size_t lastDunder = funcName.rfind("__");
-                                    if (lastDunder != std::string::npos && lastDunder > 0) {
-                                        std::string inferredStruct = funcName.substr(0, lastDunder);
-                                        structIt = structDefs.find(inferredStruct);
-                                        if (structIt != structDefs.end()) {
-                                            lookupName = inferredStruct;
+                                // Tagged Union構造体の特別処理
+                                // __TaggedUnion_* 構造体は {i32 tag, i32 payload} 形式
+                                if (lookupName.find("__TaggedUnion_") == 0) {
+                                    // field[0] = タグ (int), field[1] = ペイロード (int)
+                                    if (proj.field_id == 0) {
+                                        currentType = hir::make_int();
+                                    } else if (proj.field_id == 1) {
+                                        currentType = hir::make_int();
+                                    }
+                                } else {
+                                    auto structIt = structDefs.find(lookupName);
+
+                                    // フォールバック: 関数名から構造体名を推論
+                                    // Container__int__get → Container__int
+                                    if (structIt == structDefs.end() && currentMIRFunction) {
+                                        const auto& funcName = currentMIRFunction->name;
+                                        size_t lastDunder = funcName.rfind("__");
+                                        if (lastDunder != std::string::npos && lastDunder > 0) {
+                                            std::string inferredStruct =
+                                                funcName.substr(0, lastDunder);
+                                            structIt = structDefs.find(inferredStruct);
+                                            if (structIt != structDefs.end()) {
+                                                lookupName = inferredStruct;
+                                            }
                                         }
                                     }
-                                }
 
-                                if (structIt != structDefs.end()) {
-                                    auto& fields = structIt->second->fields;
-                                    if (proj.field_id < fields.size()) {
-                                        currentType = fields[proj.field_id].type;
+                                    if (structIt != structDefs.end()) {
+                                        auto& fields = structIt->second->fields;
+                                        if (proj.field_id < fields.size()) {
+                                            currentType = fields[proj.field_id].type;
 
-                                        // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
-                                        // 例: Box__intのvalue: T -> int
-                                        if (currentType && currentType->name.length() <= 2 &&
-                                            !currentType->name.empty()) {
-                                            // ベースローカルの型名からマングリング名を抽出
-                                            auto& baseLocal =
-                                                currentMIRFunction->locals[place.local].type;
-                                            std::string mangledName;
-                                            if (baseLocal) {
-                                                if (!baseLocal->type_args.empty() &&
-                                                    baseLocal->type_args[0]) {
-                                                    // type_argsがある場合は直接使用
-                                                    currentType = baseLocal->type_args[0];
-                                                } else if (baseLocal->name.find("__") !=
-                                                           std::string::npos) {
-                                                    // マングリング名から型引数を抽出 (Box__int ->
-                                                    // int)
-                                                    mangledName = baseLocal->name;
-                                                    size_t pos = mangledName.find("__");
-                                                    std::string typeArg =
-                                                        mangledName.substr(pos + 2);
-                                                    size_t nextPos = typeArg.find("__");
-                                                    if (nextPos != std::string::npos) {
-                                                        typeArg = typeArg.substr(0, nextPos);
-                                                    }
-                                                    if (!typeArg.empty()) {
-                                                        if (typeArg == "int")
-                                                            currentType = hir::make_int();
-                                                        else if (typeArg == "uint")
-                                                            currentType = hir::make_uint();
-                                                        else if (typeArg == "long")
-                                                            currentType = hir::make_long();
-                                                        else if (typeArg == "ulong")
-                                                            currentType = hir::make_ulong();
-                                                        else if (typeArg == "float")
-                                                            currentType = hir::make_float();
-                                                        else if (typeArg == "double")
-                                                            currentType = hir::make_double();
-                                                        else if (typeArg == "bool")
-                                                            currentType = hir::make_bool();
-                                                        else if (typeArg == "string")
-                                                            currentType = hir::make_string();
-                                                        else {
-                                                            auto st = std::make_shared<hir::Type>(
-                                                                hir::TypeKind::Struct);
-                                                            st->name = typeArg;
-                                                            currentType = st;
+                                            // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
+                                            // 例: Box__intのvalue: T -> int
+                                            if (currentType && currentType->name.length() <= 2 &&
+                                                !currentType->name.empty()) {
+                                                // ベースローカルの型名からマングリング名を抽出
+                                                auto& baseLocal =
+                                                    currentMIRFunction->locals[place.local].type;
+                                                std::string mangledName;
+                                                if (baseLocal) {
+                                                    if (!baseLocal->type_args.empty() &&
+                                                        baseLocal->type_args[0]) {
+                                                        // type_argsがある場合は直接使用
+                                                        currentType = baseLocal->type_args[0];
+                                                    } else if (baseLocal->name.find("__") !=
+                                                               std::string::npos) {
+                                                        // マングリング名から型引数を抽出 (Box__int
+                                                        // -> int)
+                                                        mangledName = baseLocal->name;
+                                                        size_t pos = mangledName.find("__");
+                                                        std::string typeArg =
+                                                            mangledName.substr(pos + 2);
+                                                        size_t nextPos = typeArg.find("__");
+                                                        if (nextPos != std::string::npos) {
+                                                            typeArg = typeArg.substr(0, nextPos);
+                                                        }
+                                                        if (!typeArg.empty()) {
+                                                            if (typeArg == "int")
+                                                                currentType = hir::make_int();
+                                                            else if (typeArg == "uint")
+                                                                currentType = hir::make_uint();
+                                                            else if (typeArg == "long")
+                                                                currentType = hir::make_long();
+                                                            else if (typeArg == "ulong")
+                                                                currentType = hir::make_ulong();
+                                                            else if (typeArg == "float")
+                                                                currentType = hir::make_float();
+                                                            else if (typeArg == "double")
+                                                                currentType = hir::make_double();
+                                                            else if (typeArg == "bool")
+                                                                currentType = hir::make_bool();
+                                                            else if (typeArg == "string")
+                                                                currentType = hir::make_string();
+                                                            else {
+                                                                auto st =
+                                                                    std::make_shared<hir::Type>(
+                                                                        hir::TypeKind::Struct);
+                                                                st->name = typeArg;
+                                                                currentType = st;
+                                                            }
                                                         }
                                                     }
                                                 }

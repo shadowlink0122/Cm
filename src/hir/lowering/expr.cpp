@@ -409,6 +409,46 @@ HirExprPtr HirLowering::lower_unary(ast::UnaryExpr& unary, TypePtr type) {
 // 関数呼び出し
 HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
     debug::hir::log(debug::hir::Id::CallExprLower, "", debug::Level::Debug);
+
+    // enum variantコンストラクタ呼び出しのチェック（例：OptVal::HasVal(42)）
+    if (auto* ident = call.callee->as<ast::IdentExpr>()) {
+        auto enum_it = enum_values_.find(ident->name);
+        if (enum_it != enum_values_.end()) {
+            // Tagged Union: enum variantコンストラクタ呼び出し
+            debug::hir::log(debug::hir::Id::CallTarget,
+                            "enum variant constructor: " + ident->name + " = " +
+                                std::to_string(enum_it->second),
+                            debug::Level::Debug);
+
+            // HirEnumConstructノードを生成（タグ+ペイロード）
+            auto enum_construct = std::make_unique<HirEnumConstruct>();
+
+            // enum名とバリアント名を分解（"EnumName::VariantName" 形式）
+            std::string full_name = ident->name;
+            auto sep = full_name.find("::");
+            if (sep != std::string::npos) {
+                enum_construct->enum_name = full_name.substr(0, sep);
+                enum_construct->variant_name = full_name.substr(sep + 2);
+            } else {
+                enum_construct->enum_name = full_name;
+                enum_construct->variant_name = full_name;
+            }
+            enum_construct->tag_value = enum_it->second;
+
+            // 引数があればペイロードとして保存
+            if (!call.args.empty()) {
+                enum_construct->payload = lower_expr(*call.args[0]);
+            }
+
+            // Tagged Union型を作成
+            // 結果型は__TaggedUnion_{enum_name}構造体
+            auto tagged_union_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+            tagged_union_type->name = "__TaggedUnion_" + enum_construct->enum_name;
+
+            return std::make_unique<HirExpr>(std::move(enum_construct), tagged_union_type);
+        }
+    }
+
     auto hir = std::make_unique<HirCall>();
 
     std::string func_name;
@@ -1508,69 +1548,106 @@ HirExprPtr HirLowering::lower_ternary(ast::TernaryExpr& tern, TypePtr type) {
     return std::make_unique<HirExpr>(std::move(hir), type);
 }
 
-// match式
+// match式のlowering
+// v0.13.0: 両方の形式をサポート:
+//   - 式形式: pattern => expr (三項演算子チェーンに変換)
+//   - ブロック形式: 文として処理されるのでここでは呼ばれない
 HirExprPtr HirLowering::lower_match(ast::MatchExpr& match, TypePtr type) {
-    debug::hir::log(debug::hir::Id::LiteralLower, "Lowering match expression", debug::Level::Debug);
-
-    auto scrutinee = lower_expr(*match.scrutinee);
-    auto scrutinee_type = scrutinee->type;
-
-    if (match.arms.empty()) {
-        auto lit = std::make_unique<HirLiteral>();
-        lit->value = int64_t{0};
-        return std::make_unique<HirExpr>(std::move(lit), type);
+    // 全てのarmが式形式かチェック
+    bool all_expr_form = true;
+    for (auto& arm : match.arms) {
+        if (arm.is_block_form) {
+            all_expr_form = false;
+            break;
+        }
     }
 
+    // ブロック形式が混在している場合は警告してダミー値を返す
+    if (!all_expr_form) {
+        debug::hir::log(debug::hir::Id::Warning,
+                        "match with block arms should be used as statement", debug::Level::Warn);
+        auto lit = std::make_unique<HirLiteral>();
+        lit->value = int64_t{0};
+        return std::make_unique<HirExpr>(std::move(lit), ast::make_void());
+    }
+
+    // 式形式: 三項演算子のチェーンに変換
+    auto scrutinee = lower_expr(*match.scrutinee);
+    auto scrutinee_type = match.scrutinee->type;
+
+    // armsを逆順でネストされた三項演算子に変換
     HirExprPtr result = nullptr;
-    for (int i = static_cast<int>(match.arms.size()) - 1; i >= 0; i--) {
-        auto& arm = match.arms[i];
-        auto body = lower_expr(*arm.body);
 
-        if (arm.pattern->kind == ast::MatchPatternKind::Wildcard) {
-            if (result == nullptr) {
-                result = std::move(body);
-            } else {
-                debug::hir::log(debug::hir::Id::Warning, "Wildcard pattern should be last",
-                                debug::Level::Warn);
+    // デフォルト値（ガードなしワイルドカード/Variablearmがあればそれ、なければ0）
+    for (auto& arm : match.arms) {
+        // ガード条件がある場合はデフォルトとして扱わない
+        if ((arm.pattern->kind == ast::MatchPatternKind::Wildcard ||
+             arm.pattern->kind == ast::MatchPatternKind::Variable) &&
+            !arm.guard) {
+            if (arm.expr_body) {
+                result = lower_expr(*arm.expr_body);
             }
-        } else {
-            auto cond = build_match_condition(scrutinee, scrutinee_type, arm);
-
-            if (arm.guard) {
-                HirExprPtr guard_cond;
-
-                if (arm.pattern->kind == ast::MatchPatternKind::Variable &&
-                    !arm.pattern->var_name.empty()) {
-                    guard_cond = lower_guard_with_binding(*arm.guard, arm.pattern->var_name,
-                                                          scrutinee, scrutinee_type);
-                } else {
-                    guard_cond = lower_expr(*arm.guard);
-                }
-
-                auto combined = std::make_unique<HirBinary>();
-                combined->op = HirBinaryOp::And;
-                combined->lhs = std::move(cond);
-                combined->rhs = std::move(guard_cond);
-                cond = std::make_unique<HirExpr>(std::move(combined),
-                                                 std::make_shared<ast::Type>(ast::TypeKind::Bool));
-            }
-
-            auto ternary = std::make_unique<HirTernary>();
-            ternary->condition = std::move(cond);
-            ternary->then_expr = std::move(body);
-
-            if (result) {
-                ternary->else_expr = std::move(result);
-            } else {
-                ternary->else_expr = make_default_value(type);
-            }
-
-            result = std::make_unique<HirExpr>(std::move(ternary), type);
+            break;
         }
     }
 
     if (!result) {
         result = make_default_value(type);
+    }
+
+    // 非ワイルドカードarmを逆順に処理してネスト
+    for (auto it = match.arms.rbegin(); it != match.arms.rend(); ++it) {
+        auto& arm = *it;
+
+        // ワイルドカードはスキップ（デフォルト値として既に処理済み）
+        // ただし、ガード条件がある場合はスキップしない
+        if ((arm.pattern->kind == ast::MatchPatternKind::Wildcard ||
+             arm.pattern->kind == ast::MatchPatternKind::Variable) &&
+            !arm.guard) {
+            continue;
+        }
+
+        // 条件を構築
+        HirExprPtr cond;
+
+        if (arm.pattern->kind == ast::MatchPatternKind::Variable && arm.guard) {
+            // 変数バインディング+ガードの場合：ガード条件のみを評価
+            // 変数をscrutineeで置換
+            std::string var_name = arm.pattern->var_name;
+            cond = lower_guard_with_binding(*arm.guard, var_name, scrutinee, scrutinee_type);
+        } else {
+            cond = build_match_condition(scrutinee, scrutinee_type, arm);
+
+            // ガード条件がある場合は論理AND
+            if (arm.guard) {
+                // パターンがenum variant + bindingの場合、ガード内の変数を置換
+                HirExprPtr guard;
+                if (arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding &&
+                    !arm.pattern->binding_name.empty()) {
+                    // TODO: バインディング変数をペイロード値で置換
+                    guard = lower_expr(*arm.guard);
+                } else {
+                    guard = lower_expr(*arm.guard);
+                }
+                auto and_cond = std::make_unique<HirBinary>();
+                and_cond->op = HirBinaryOp::And;
+                and_cond->lhs = std::move(cond);
+                and_cond->rhs = std::move(guard);
+                cond = std::make_unique<HirExpr>(std::move(and_cond),
+                                                 std::make_shared<ast::Type>(ast::TypeKind::Bool));
+            }
+        }
+
+        // このarmの値
+        HirExprPtr arm_value =
+            arm.expr_body ? lower_expr(*arm.expr_body) : make_default_value(type);
+
+        // 三項演算子を構築
+        auto ternary = std::make_unique<HirTernary>();
+        ternary->condition = std::move(cond);
+        ternary->then_expr = std::move(arm_value);
+        ternary->else_expr = std::move(result);
+        result = std::make_unique<HirExpr>(std::move(ternary), type);
     }
 
     return result;
@@ -1596,16 +1673,14 @@ HirExprPtr HirLowering::make_default_value(TypePtr type) {
     return std::make_unique<HirExpr>(std::move(lit), type);
 }
 
-// matchパターンの条件式を構築
-HirExprPtr HirLowering::build_match_condition(const HirExprPtr& scrutinee,
-                                              TypePtr /*scrutinee_type*/,
-                                              const ast::MatchArm& arm) {
+// matchパターンの条件式を構築（単一パターン用ヘルパー）
+HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutinee,
+                                                       const ast::MatchPattern& pattern) {
     HirExprPtr scrutinee_copy = clone_hir_expr(scrutinee);
 
-    switch (arm.pattern->kind) {
-        case ast::MatchPatternKind::Literal:
-        case ast::MatchPatternKind::EnumVariant: {
-            auto pattern_value = lower_expr(*arm.pattern->value);
+    switch (pattern.kind) {
+        case ast::MatchPatternKind::Literal: {
+            auto pattern_value = lower_expr(*pattern.value);
             auto cond = std::make_unique<HirBinary>();
             cond->op = HirBinaryOp::Eq;
             cond->lhs = std::move(scrutinee_copy);
@@ -1614,18 +1689,150 @@ HirExprPtr HirLowering::build_match_condition(const HirExprPtr& scrutinee,
                                              std::make_shared<ast::Type>(ast::TypeKind::Bool));
         }
 
-        case ast::MatchPatternKind::Variable: {
+        case ast::MatchPatternKind::EnumVariant: {
+            // scrutineeがint型（単純enum）の場合は直接値比較
+            // scrutineeがTagged Union型の場合は__tagアクセス
+            auto pattern_value = lower_expr(*pattern.value);
+            HirExprPtr lhs_expr;
+
+            // パターン値からenum名を抽出してassociated dataを持つかチェック
+            bool is_tagged_union = false;
+            if (pattern.value) {
+                if (auto* member = pattern.value->as<ast::MemberExpr>()) {
+                    // MemberExpr形式: Enum.Variant
+                    if (auto* obj = member->object->as<ast::IdentExpr>()) {
+                        std::string enum_name = obj->name;
+                        auto it = enum_defs_.find(enum_name);
+                        if (it != enum_defs_.end() && it->second) {
+                            // enumがassociated dataを持つかチェック
+                            for (const auto& m : it->second->members) {
+                                if (!m.fields.empty()) {
+                                    is_tagged_union = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else if (auto* ident = pattern.value->as<ast::IdentExpr>()) {
+                    // IdentExpr形式: EnumName::Variant（::を含む場合）
+                    std::string full_name = ident->name;
+                    size_t pos = full_name.find("::");
+                    if (pos != std::string::npos) {
+                        std::string enum_name = full_name.substr(0, pos);
+                        auto it = enum_defs_.find(enum_name);
+                        if (it != enum_defs_.end() && it->second) {
+                            // enumがassociated dataを持つかチェック
+                            for (const auto& m : it->second->members) {
+                                if (!m.fields.empty()) {
+                                    is_tagged_union = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (is_tagged_union) {
+                // Tagged Union: scrutinee.tag (field[0]) を抽出して比較
+                auto tag_access = std::make_unique<HirMember>();
+                tag_access->object = std::move(scrutinee_copy);
+                tag_access->member = "__tag";  // tagフィールド
+                lhs_expr = std::make_unique<HirExpr>(std::move(tag_access), make_int());
+            } else {
+                // 単純なenum（int型）: 直接比較
+                lhs_expr = std::move(scrutinee_copy);
+            }
+
+            auto cond = std::make_unique<HirBinary>();
+            cond->op = HirBinaryOp::Eq;
+            cond->lhs = std::move(lhs_expr);
+            cond->rhs = std::move(pattern_value);
+            return std::make_unique<HirExpr>(std::move(cond),
+                                             std::make_shared<ast::Type>(ast::TypeKind::Bool));
+        }
+
+        case ast::MatchPatternKind::EnumVariantWithBinding: {
+            // Tagged Union: scrutinee.tag (field[0]) を抽出して比較
+            auto tag_access = std::make_unique<HirMember>();
+            tag_access->object = std::move(scrutinee_copy);
+            tag_access->member = "__tag";  // tagフィールド
+            auto tag_expr = std::make_unique<HirExpr>(std::move(tag_access), make_int());
+
+            auto enum_variant_ident = ast::make_ident(pattern.enum_variant, {});
+            auto pattern_value = lower_expr(*enum_variant_ident);
+            auto cond = std::make_unique<HirBinary>();
+            cond->op = HirBinaryOp::Eq;
+            cond->lhs = std::move(tag_expr);
+            cond->rhs = std::move(pattern_value);
+            return std::make_unique<HirExpr>(std::move(cond),
+                                             std::make_shared<ast::Type>(ast::TypeKind::Bool));
+        }
+
+        case ast::MatchPatternKind::Variable:
+        case ast::MatchPatternKind::Wildcard: {
             auto lit = std::make_unique<HirLiteral>();
             lit->value = true;
             return std::make_unique<HirExpr>(std::move(lit),
                                              std::make_shared<ast::Type>(ast::TypeKind::Bool));
         }
 
-        case ast::MatchPatternKind::Wildcard: {
-            auto lit = std::make_unique<HirLiteral>();
-            lit->value = true;
-            return std::make_unique<HirExpr>(std::move(lit),
+        case ast::MatchPatternKind::Range: {
+            // 範囲パターン: start <= scrutinee && scrutinee <= end
+            auto start_val = lower_expr(*pattern.range_start);
+            auto end_val = lower_expr(*pattern.range_end);
+            auto scrutinee_copy2 = clone_hir_expr(scrutinee);
+
+            // scrutinee >= start
+            auto ge_cond = std::make_unique<HirBinary>();
+            ge_cond->op = HirBinaryOp::Ge;
+            ge_cond->lhs = std::move(scrutinee_copy);
+            ge_cond->rhs = std::move(start_val);
+            auto ge_expr = std::make_unique<HirExpr>(
+                std::move(ge_cond), std::make_shared<ast::Type>(ast::TypeKind::Bool));
+
+            // scrutinee <= end
+            auto le_cond = std::make_unique<HirBinary>();
+            le_cond->op = HirBinaryOp::Le;
+            le_cond->lhs = std::move(scrutinee_copy2);
+            le_cond->rhs = std::move(end_val);
+            auto le_expr = std::make_unique<HirExpr>(
+                std::move(le_cond), std::make_shared<ast::Type>(ast::TypeKind::Bool));
+
+            // ge && le
+            auto and_cond = std::make_unique<HirBinary>();
+            and_cond->op = HirBinaryOp::And;
+            and_cond->lhs = std::move(ge_expr);
+            and_cond->rhs = std::move(le_expr);
+            return std::make_unique<HirExpr>(std::move(and_cond),
                                              std::make_shared<ast::Type>(ast::TypeKind::Bool));
+        }
+
+        case ast::MatchPatternKind::Or: {
+            // 再帰的にORパターンを処理
+            if (pattern.or_patterns.empty()) {
+                auto lit = std::make_unique<HirLiteral>();
+                lit->value = false;
+                return std::make_unique<HirExpr>(std::move(lit),
+                                                 std::make_shared<ast::Type>(ast::TypeKind::Bool));
+            }
+
+            // 最初のパターンの条件を構築
+            HirExprPtr result = build_single_pattern_condition(scrutinee, *pattern.or_patterns[0]);
+
+            // 残りのパターンをOR結合
+            for (size_t i = 1; i < pattern.or_patterns.size(); ++i) {
+                auto next_cond = build_single_pattern_condition(scrutinee, *pattern.or_patterns[i]);
+
+                auto or_cond = std::make_unique<HirBinary>();
+                or_cond->op = HirBinaryOp::Or;
+                or_cond->lhs = std::move(result);
+                or_cond->rhs = std::move(next_cond);
+                result = std::make_unique<HirExpr>(
+                    std::move(or_cond), std::make_shared<ast::Type>(ast::TypeKind::Bool));
+            }
+
+            return result;
         }
     }
 
@@ -1633,6 +1840,13 @@ HirExprPtr HirLowering::build_match_condition(const HirExprPtr& scrutinee,
     lit->value = false;
     return std::make_unique<HirExpr>(std::move(lit),
                                      std::make_shared<ast::Type>(ast::TypeKind::Bool));
+}
+
+// matchパターンの条件式を構築
+HirExprPtr HirLowering::build_match_condition(const HirExprPtr& scrutinee,
+                                              TypePtr /*scrutinee_type*/,
+                                              const ast::MatchArm& arm) {
+    return build_single_pattern_condition(scrutinee, *arm.pattern);
 }
 
 // HIR式の簡易クローン

@@ -29,7 +29,19 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // 新しいローカル変数を作成
     // is_const = true なら変更不可、false なら変更可能
     // is_static = true なら関数呼び出し間で値が保持される
-    LocalId local = ctx.new_local(let.name, let.type, !let.is_const, true, let.is_static);
+
+    // enum型の場合、Tagged Union構造体型に変換
+    // enum型は型名がenum_defsに登録されている
+    hir::TypePtr actual_type = let.type;
+
+    if (let.type && !let.type->name.empty() && ctx.enum_defs &&
+        ctx.enum_defs->count(let.type->name)) {
+        auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+        tagged_union_type->name = "__TaggedUnion_" + let.type->name;
+        actual_type = tagged_union_type;
+    }
+
+    LocalId local = ctx.new_local(let.name, actual_type, !let.is_const, true, let.is_static);
 
     // 変数をスコープに登録
     ctx.register_variable(let.name, local);

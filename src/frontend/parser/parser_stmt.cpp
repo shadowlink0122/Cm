@@ -107,6 +107,14 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_switch(std::move(expr), std::move(cases), Span{start_pos, previous().end});
     }
 
+    // v0.13.0: match文（セミコロン不要のブロックベース構文）
+    if (consume_if(TokenKind::KwMatch)) {
+        debug::par::log(debug::par::Id::Stmt, "match statement", debug::Level::Trace);
+        auto match_expr = parse_match_expr(start_pos);
+        // ExprStmtとしてラップ（セミコロンは不要）
+        return ast::make_expr_stmt(std::move(match_expr), Span{start_pos, previous().end});
+    }
+
     // for
     if (consume_if(TokenKind::KwFor)) {
         expect(TokenKind::LParen);

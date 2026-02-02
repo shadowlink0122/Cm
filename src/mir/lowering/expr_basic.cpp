@@ -460,7 +460,28 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
             base_name = base_name.substr(0, mangled_pos);
         }
 
-        auto field_idx = ctx.get_field_index(base_name, field_name);
+        // Tagged Union構造体の特別処理
+        // __TaggedUnion_*の場合、または enum_defs に登録されている enum型の場合
+        // __tagはfield[0]、__payloadはfield[1]
+        std::optional<size_t> field_idx = std::nullopt;
+        bool is_tagged_union = (current_type->name.find("__TaggedUnion_") == 0);
+
+        // enum_defs に登録されている場合もTagged Unionとして扱う
+        if (!is_tagged_union && ctx.enum_defs && ctx.enum_defs->count(current_type->name)) {
+            is_tagged_union = true;
+        }
+
+        if (is_tagged_union) {
+            if (field_name == "__tag") {
+                field_idx = 0;
+            } else if (field_name == "__payload") {
+                field_idx = 1;
+            }
+        }
+
+        if (!field_idx) {
+            field_idx = ctx.get_field_index(base_name, field_name);
+        }
         if (!field_idx) {
             // マングリング前の名前でも見つからない場合、元の名前で再試行
             field_idx = ctx.get_field_index(original_base, field_name);
@@ -1156,6 +1177,75 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // キャスト命令を生成
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type)));
+
+    return result;
+}
+
+// enumバリアントコンストラクタのlowering
+// Tagged Union: {tag, payload}構造体を生成
+// field[0] = タグ値（i32）、field[1] = ペイロード（型に応じて）
+LocalId ExprLowering::lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx) {
+    debug_msg("MIR", "Lowering enum construct: " + ec.enum_name + "::" + ec.variant_name);
+
+    // Tagged Union型（2フィールド構造体）を作成
+    // 型名: "__TaggedUnion_{enum_name}"
+    std::string tagged_union_name = "__TaggedUnion_" + ec.enum_name;
+    hir::TypePtr union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+    union_type->name = tagged_union_name;
+
+    // 結果用の変数を作成
+    LocalId result = ctx.new_temp(union_type);
+
+    // field[0] = タグ値
+    MirConstant tag_const;
+    tag_const.type = hir::make_int();
+    tag_const.value = ec.tag_value;
+
+    MirPlace tag_place{result};
+    tag_place.projections.push_back(PlaceProjection::field(0));
+    ctx.push_statement(
+        MirStatement::assign(tag_place, MirRvalue::use(MirOperand::constant(tag_const))));
+
+    // field[1] = ペイロード値（ペイロードがある場合）
+    if (ec.payload) {
+        LocalId payload_local = lower_expression(*ec.payload, ctx);
+
+        MirPlace payload_place{result};
+        payload_place.projections.push_back(PlaceProjection::field(1));
+        ctx.push_statement(MirStatement::assign(
+            payload_place, MirRvalue::use(MirOperand::copy(MirPlace{payload_local}))));
+    } else {
+        // ペイロードがない場合はデフォルト値（0）を設定
+        MirConstant zero_const;
+        zero_const.type = hir::make_int();
+        zero_const.value = int64_t(0);
+
+        MirPlace payload_place{result};
+        payload_place.projections.push_back(PlaceProjection::field(1));
+        ctx.push_statement(
+            MirStatement::assign(payload_place, MirRvalue::use(MirOperand::constant(zero_const))));
+    }
+
+    return result;
+}
+
+// enumペイロード抽出のlowering
+// match式でバインディング変数に代入するペイロード値を取得
+// scrutinee.field[1]からペイロードを抽出
+LocalId ExprLowering::lower_enum_payload(const hir::HirEnumPayload& ep, LoweringContext& ctx) {
+    debug_msg("MIR", "Lowering enum payload extract for variant: " + ep.variant_name);
+
+    // scrutineeをlowering
+    LocalId scrutinee_local = lower_expression(*ep.scrutinee, ctx);
+
+    // ペイロード型で結果を作成
+    LocalId result = ctx.new_temp(ep.payload_type);
+
+    // scrutinee.field[1]（ペイロード）を抽出
+    MirPlace payload_place{scrutinee_local};
+    payload_place.projections.push_back(PlaceProjection::field(1));
+    ctx.push_statement(
+        MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(payload_place))));
 
     return result;
 }

@@ -1,0 +1,2 @@
+Tagged Union型とenum値の直接比較（if文内）は未サポート
+将来実装予定

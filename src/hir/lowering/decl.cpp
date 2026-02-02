@@ -357,7 +357,7 @@ HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
     return std::make_unique<HirDecl>(std::move(hir_imp));
 }
 
-// Enum
+// Enum（Associated Data対応）
 HirDeclPtr HirLowering::lower_enum(ast::EnumDecl& en) {
     debug::hir::log(debug::hir::Id::NodeCreate, "enum " + en.name, debug::Level::Debug);
 
@@ -369,6 +369,19 @@ HirDeclPtr HirLowering::lower_enum(ast::EnumDecl& en) {
         HirEnumMember hir_member;
         hir_member.name = member.name;
         hir_member.value = member.value.value_or(0);
+
+        // Associated data フィールドをコピー
+        for (const auto& [field_name, field_type] : member.fields) {
+            hir_member.fields.emplace_back(field_name, field_type);
+        }
+
+        if (hir_member.has_data()) {
+            debug::hir::log(debug::hir::Id::NodeCreate,
+                            "  " + member.name + "(...) with " +
+                                std::to_string(hir_member.fields.size()) + " fields",
+                            debug::Level::Trace);
+        }
+
         hir_enum->members.push_back(std::move(hir_member));
     }
 

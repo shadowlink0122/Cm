@@ -1,18 +1,27 @@
 // シンプルなAssociated Dataテスト（パース確認用）
+// 設計: 各バリアントは1つのフィールドのみ持つ
 import std::io::println;
 
-// Associated Dataを持つenum
+// 座標を表す構造体
+struct Coord {
+    int x;
+    int y;
+}
+
+// Associated Dataを持つenum（各バリアントは1つのフィールドのみ）
 enum Message {
-    Quit,
-    Move(int, int),
-    Write(string)
+    Quit,            // データなし
+    Move(Coord),     // 構造体を1つ持つ
+    Write(string)    // 文字列を1つ持つ
 }
 
 int main() {
     println("=== Enum Associated Data (Parse Test) ===");
     
-    // 現時点ではパースのみ確認
-    // バリアント作成とマッチはCGEN対応後
+    // バリアント作成テスト
+    Message m1 = Message::Quit;
+    Message m2 = Message::Move(Coord { x: 10, y: 20 });
+    Message m3 = Message::Write("hello");
     
     println("Enum parsed successfully!");
     return 0;

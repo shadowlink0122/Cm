@@ -919,6 +919,7 @@ class Parser {
     ast::ExprPtr parse_lambda_body(std::vector<ast::Param> params, uint32_t start_pos);
     ast::ExprPtr parse_match_expr(uint32_t start_pos);
     std::unique_ptr<ast::MatchPattern> parse_match_pattern();
+    std::unique_ptr<ast::MatchPattern> parse_match_pattern_element();
 
     // ジェネリックパラメータ（<T>, <T: Interface>, <T: I + J>, <T: I | J>, <T, U>）をパース
     // すべての制約はインターフェース境界として解釈される

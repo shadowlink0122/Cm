@@ -191,6 +191,12 @@ class TypeChecker {
     // enum名のセット
     std::unordered_set<std::string> enum_names_;
 
+    // ジェネリックenumの登録情報（enum名 → ジェネリックパラメータリスト）
+    std::unordered_map<std::string, std::vector<std::string>> generic_enums_;
+
+    // enum定義のキャッシュ（Tagged Union用）
+    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;
+
     // typedef定義のキャッシュ (エイリアス名 -> 実際の型)
     std::unordered_map<std::string, ast::TypePtr> typedef_defs_;
 

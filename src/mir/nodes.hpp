@@ -709,6 +709,80 @@ struct MirStruct {
 
 using MirStructPtr = std::unique_ptr<MirStruct>;
 
+// ============================================================
+// Enum定義（Tagged Union対応）
+// ============================================================
+struct MirEnumMember {
+    std::string name;
+    int64_t tag_value;  // タグ値（バリアントを識別）
+    // Associated data フィールド（Tagged Union用）
+    std::vector<std::pair<std::string, hir::TypePtr>> fields;
+
+    // Associated dataを持つかどうか
+    bool has_data() const { return !fields.empty(); }
+};
+
+struct MirEnum {
+    std::string name;
+    std::string module_path;
+    bool is_export = false;
+    std::vector<MirEnumMember> members;
+
+    // Tagged Unionかどうか（dataを持つメンバーがあるか）
+    bool is_tagged_union() const {
+        for (const auto& m : members) {
+            if (m.has_data())
+                return true;
+        }
+        return false;
+    }
+
+    // 最大ペイロードサイズを計算（Tagged Union用）
+    uint32_t max_payload_size() const {
+        uint32_t maxSize = 0;
+        for (const auto& member : members) {
+            uint32_t memberSize = 0;
+            for (const auto& [name, type] : member.fields) {
+                if (!type)
+                    continue;
+                switch (type->kind) {
+                    case hir::TypeKind::Bool:
+                    case hir::TypeKind::Char:
+                    case hir::TypeKind::Tiny:
+                    case hir::TypeKind::UTiny:
+                        memberSize += 1;
+                        break;
+                    case hir::TypeKind::Short:
+                    case hir::TypeKind::UShort:
+                        memberSize += 2;
+                        break;
+                    case hir::TypeKind::Int:
+                    case hir::TypeKind::UInt:
+                    case hir::TypeKind::Float:
+                        memberSize += 4;
+                        break;
+                    case hir::TypeKind::Long:
+                    case hir::TypeKind::ULong:
+                    case hir::TypeKind::Double:
+                    case hir::TypeKind::Pointer:
+                    case hir::TypeKind::String:
+                        memberSize += 8;
+                        break;
+                    default:
+                        memberSize += 8;  // デフォルトはポインタサイズ
+                        break;
+                }
+            }
+            if (memberSize > maxSize) {
+                maxSize = memberSize;
+            }
+        }
+        return maxSize;
+    }
+};
+
+using MirEnumPtr = std::unique_ptr<MirEnum>;
+
 // インターフェースメソッド定義
 struct MirInterfaceMethod {
     std::string name;
@@ -788,6 +862,7 @@ using MirModulePtr = std::unique_ptr<MirModule>;
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
     std::vector<MirStructPtr> structs;        // 構造体定義
+    std::vector<MirEnumPtr> enums;            // enum定義（Tagged Union含む）
     std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
     std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
     std::vector<MirModulePtr> modules;        // モジュール

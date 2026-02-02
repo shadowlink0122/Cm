@@ -158,13 +158,31 @@ struct HirCast {
     TypePtr target_type;
 };
 
+// enumバリアントコンストラクタ（Tagged Union用）
+// 例: Option::Some(42) → { tag: 1, payload: 42 }
+struct HirEnumConstruct {
+    std::string enum_name;     // enum型名
+    std::string variant_name;  // バリアント名
+    int64_t tag_value;         // タグ値
+    HirExprPtr payload;        // ペイロード式（nullptrなら引数なし）
+};
+
+// enumペイロード抽出（Tagged Union用）
+// match式のバインディング変数で使用: value = extract_payload(scrutinee)
+struct HirEnumPayload {
+    HirExprPtr scrutinee;      // Tagged Union式
+    std::string variant_name;  // 期待するバリアント名
+    TypePtr payload_type;      // ペイロードの型
+};
+
 // 式の種類
 using HirExprKind =
     std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
                  std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
                  std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
                  std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>,
-                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>>;
+                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>,
+                 std::unique_ptr<HirEnumConstruct>, std::unique_ptr<HirEnumPayload>>;
 
 struct HirExpr {
     HirExprKind kind;
@@ -468,10 +486,15 @@ struct HirImport {
     std::string alias;
 };
 
-// Enumメンバ
+// Enumメンバ（Associated Data対応）
 struct HirEnumMember {
     std::string name;
     int64_t value;
+    // Associated data フィールド（Tagged Union用）
+    std::vector<std::pair<std::string, TypePtr>> fields;
+
+    // Associated dataを持つかどうか
+    bool has_data() const { return !fields.empty(); }
 };
 
 // Enum定義

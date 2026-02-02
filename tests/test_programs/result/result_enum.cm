@@ -1,8 +1,9 @@
 // enum版Result型のテスト
 // v0.13.0 新機能
+// 設計: Result<T, E> は Ok(T) と Err(E) で各々1つの型を持つ
 import std::io::println;
 
-// enum版Result型
+// enum版Result型（各バリアントは1つのフィールドのみ）
 enum Result<T, E> {
     Ok(T),
     Err(E)
@@ -11,10 +12,17 @@ enum Result<T, E> {
 // Result型のヘルパー
 impl<T, E> Result<T, E> {
     bool is_ok() {
-        match this {
-            Ok(_) => return true;
-            Err(_) => return false;
+        // matchで判定（ステートメント形式）
+        bool result = false;
+        match (this) {
+            Result::Ok(v) => {
+                result = true;
+            }
+            Result::Err(e) => {
+                result = false;
+            }
         }
+        return result;
     }
     
     bool is_err() {
@@ -22,27 +30,39 @@ impl<T, E> Result<T, E> {
     }
     
     T unwrap() {
-        match this {
-            Ok(v) => return v;
-            Err(_) => panic("unwrap called on Err");
+        T value;
+        match (this) {
+            Result::Ok(v) => {
+                value = v;
+            }
+            Result::Err(e) => {
+                panic("unwrap called on Err");
+            }
         }
+        return value;
     }
     
     T unwrap_or(T default_val) {
-        match this {
-            Ok(v) => return v;
-            Err(_) => return default_val;
+        T value = default_val;
+        match (this) {
+            Result::Ok(v) => {
+                value = v;
+            }
+            Result::Err(e) => {
+                value = default_val;
+            }
         }
+        return value;
     }
 }
 
 // グローバルヘルパー関数
 Result<int, string> ok_int(int value) {
-    return Result.Ok(value);
+    return Result::Ok(value);
 }
 
 Result<int, string> err_str(string error) {
-    return Result.Err(error);
+    return Result::Err(error);
 }
 
 // 安全な除算
@@ -58,16 +78,24 @@ int main() {
     
     // 成功ケース
     Result<int, string> r1 = safe_divide(10, 2);
-    match r1 {
-        Ok(value) => println("10 / 2 = {value}");
-        Err(msg) => println("Error: {msg}");
+    match (r1) {
+        Result::Ok(value) => {
+            println("10 / 2 = {value}");
+        }
+        Result::Err(msg) => {
+            println("Error: {msg}");
+        }
     }
     
     // 失敗ケース
     Result<int, string> r2 = safe_divide(10, 0);
-    match r2 {
-        Ok(value) => println("10 / 0 = {value}");
-        Err(msg) => println("Error: {msg}");
+    match (r2) {
+        Result::Ok(value) => {
+            println("10 / 0 = {value}");
+        }
+        Result::Err(msg) => {
+            println("Error: {msg}");
+        }
     }
     
     // is_ok / is_err

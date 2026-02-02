@@ -546,16 +546,49 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     debug::tc::log(debug::tc::Id::Resolved, "Registering enum: " + en.name, debug::Level::Debug);
 
     enum_names_.insert(en.name);
-    scopes_.global().define(en.name, ast::make_int());
+
+    // ジェネリックenumの場合は型パラメータを登録
+    if (!en.generic_params.empty()) {
+        generic_enums_[en.name] = en.generic_params;
+        debug::tc::log(debug::tc::Id::Resolved,
+                       "Generic enum: " + en.name + " with " +
+                           std::to_string(en.generic_params.size()) + " type params",
+                       debug::Level::Debug);
+    }
+
+    // 基本型として登録
+    scopes_.global().define(en.name, ast::make_named(en.name));
+
+    // Tagged Union情報を保存
+    enum_defs_[en.name] = &en;
 
     for (const auto& member : en.members) {
         std::string full_name = en.name + "::" + member.name;
-        int64_t value = member.value.value_or(0);
-        enum_values_[full_name] = value;
-        scopes_.global().define(full_name, ast::make_int());
 
-        debug::tc::log(debug::tc::Id::Resolved, "  " + full_name + " = " + std::to_string(value),
-                       debug::Level::Debug);
+        if (member.has_data()) {
+            // Associated dataを持つVariant: コンストラクタ関数として登録
+            std::vector<ast::TypePtr> param_types;
+            for (const auto& [field_name, field_type] : member.fields) {
+                param_types.push_back(field_type);
+            }
+
+            // 戻り値型はenum型
+            ast::TypePtr return_type = ast::make_named(en.name);
+
+            scopes_.global().define_function(full_name, std::move(param_types), return_type);
+
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "  " + full_name + "(...) -> " + en.name + " [variant constructor]",
+                           debug::Level::Debug);
+        } else {
+            // シンプルなVariant: 整数定数として登録
+            int64_t value = member.value.value_or(0);
+            enum_values_[full_name] = value;
+            scopes_.global().define(full_name, ast::make_int());
+
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "  " + full_name + " = " + std::to_string(value), debug::Level::Debug);
+        }
     }
 }
 

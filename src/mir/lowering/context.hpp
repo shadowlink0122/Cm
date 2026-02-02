@@ -79,6 +79,11 @@ class LoweringContext {
     // 文字列補間で使用するため、const変数の初期値を保持
     std::unordered_map<std::string, MirConstant> const_values;
 
+    // enumペイロードキャッシュ（Tagged Union用）
+    // HirEnumConstructでペイロードをloweringした際に保存し、
+    // HirEnumPayloadで取得する
+    std::optional<LocalId> last_enum_payload_local;
+
     explicit LoweringContext(MirFunction* f) : func(f) {
         // 初期スコープを作成
         push_scope();

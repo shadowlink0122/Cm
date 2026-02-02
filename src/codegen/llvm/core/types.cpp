@@ -166,6 +166,20 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 return structType;
             }
 
+            // Tagged Union構造体の動的生成
+            // 型名が__TaggedUnion_で始まる場合、{i32, i64}構造体を生成
+            if (lookupName.find("__TaggedUnion_") == 0) {
+                auto structType = llvm::StructType::create(ctx.getContext(), lookupName);
+                std::vector<llvm::Type*> fieldTypes = {
+                    ctx.getI32Type(),  // tag (field[0])
+                    ctx.getI32Type()   // payload (field[1]) - int型ペイロード用
+                };
+                structType->setBody(fieldTypes);
+                structTypes[lookupName] = structType;
+
+                return structType;
+            }
+
             // エラーログを追加
             std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
             std::cerr << "       Available types: ";

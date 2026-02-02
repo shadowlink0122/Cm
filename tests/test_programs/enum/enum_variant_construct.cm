@@ -1,11 +1,19 @@
 // enum バリアントコンストラクタテスト（v0.13.0）
+// 設計: 各バリアントは1つのフィールドのみ持つ
 import std::io::println;
 
-// Associated Dataを持つenum
+// RGB色構造体
+struct RGB {
+    int r;
+    int g;
+    int b;
+}
+
+// Associated Dataを持つenum（各バリアントは1つのフィールドのみ）
 enum Color {
-    RGB(int r, int g, int b),
-    Grayscale(int value),
-    Named(string name)
+    RGB(RGB),            // 構造体を1つ持つ
+    Grayscale(int),      // 整数を1つ持つ
+    Named(string)        // 文字列を1つ持つ
 }
 
 // シンプルなenum
@@ -18,9 +26,9 @@ int main() {
     println("=== Enum Variant Constructor Test ===");
     
     // Associated Dataを持つバリアントの作成
-    auto c1 = Color::RGB(255, 128, 64);
-    auto c2 = Color::Grayscale(128);
-    auto c3 = Color::Named("red");
+    Color c1 = Color::RGB(RGB { r: 255, g: 128, b: 64 });
+    Color c2 = Color::Grayscale(128);
+    Color c3 = Color::Named("red");
     
     // シンプルなバリアント
     int s = Status::Ok;

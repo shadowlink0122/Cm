@@ -1,29 +1,44 @@
 // データ付きenum（Associated Data）のテスト
 // v0.13.0 新機能
+// 設計: 各バリアントは1つのフィールドのみ持つ
 import std::io::println;
 
-// データ付きenum定義
+// 座標を表す構造体（複数値をまとめる）
+struct Point {
+    int x;
+    int y;
+}
+
+// RGB色を表す構造体
+struct RGB {
+    int r;
+    int g;
+    int b;
+}
+
+// データ付きenum定義（各バリアントは1つのフィールドのみ）
 enum Message {
-    Quit,                          // データなし
-    Move(int x, int y),            // 2つの整数
-    Write(string text),            // 文字列
-    ChangeColor(int r, int g, int b)  // 3つの整数
+    Quit,                  // データなし
+    Move(Point),           // Point構造体を1つ持つ
+    Write(string),         // 文字列を1つ持つ
+    ChangeColor(RGB)       // RGB構造体を1つ持つ
 }
 
 // enumを処理する関数
 void process_message(Message msg) {
-    match msg {
-        Quit => {
+    // matchで値を抽出（ステートメント形式）
+    match (msg) {
+        Message::Quit => {
             println("Quit message");
         }
-        Move(x, y) => {
-            println("Move to ({x}, {y})");
+        Message::Move(p) => {
+            println("Move to ({p.x}, {p.y})");
         }
-        Write(text) => {
+        Message::Write(text) => {
             println("Write: {text}");
         }
-        ChangeColor(r, g, b) => {
-            println("Color: RGB({r}, {g}, {b})");
+        Message::ChangeColor(c) => {
+            println("Color: RGB({c.r}, {c.g}, {c.b})");
         }
     }
 }
@@ -32,10 +47,10 @@ int main() {
     println("=== Enum Associated Data Test ===");
     
     // 各バリアントの作成
-    Message m1 = Message.Quit;
-    Message m2 = Message.Move(100, 200);
-    Message m3 = Message.Write("Hello, World!");
-    Message m4 = Message.ChangeColor(255, 128, 0);
+    Message m1 = Message::Quit;
+    Message m2 = Message::Move(Point { x: 100, y: 200 });
+    Message m3 = Message::Write("Hello, World!");
+    Message m4 = Message::ChangeColor(RGB { r: 255, g: 128, b: 0 });
     
     // 処理
     process_message(m1);

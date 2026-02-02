@@ -297,18 +297,36 @@ struct ImplDecl {
 };
 
 // ============================================================
-// Enumメンバ定義
+// Enumメンバ定義（Tagged Union対応）
+// 設計: 各バリアントは0個または1個のフィールドのみ持つ
+// 複数値が必要な場合は構造体で包む（例: Move(Point)）
 // ============================================================
 struct EnumMember {
     std::string name;
     std::optional<int64_t> value;  // 明示的な値（なければオートインクリメント）
 
+    // Associated data（タグ付きユニオン用）
+    // 設計: 1つのフィールドのみ許可（例: Some(int) -> fields = [{_, int}]）
+    // 複数値が必要な場合は構造体で包む（例: Move(Point) -> fields = [{_, Point}]）
+    std::vector<std::pair<std::string, TypePtr>> fields;
+
+    // シンプルなenumメンバ
     EnumMember(std::string n, std::optional<int64_t> v = std::nullopt)
         : name(std::move(n)), value(v) {}
+
+    // Associated data付きenumメンバ（1フィールドのみ推奨）
+    EnumMember(std::string n, std::vector<std::pair<std::string, TypePtr>> f)
+        : name(std::move(n)), value(std::nullopt), fields(std::move(f)) {}
+
+    // Associated dataを持つかどうか
+    bool has_data() const { return !fields.empty(); }
+
+    // フィールドが1つのみかどうか（推奨設計）
+    bool has_single_field() const { return fields.size() == 1; }
 };
 
 // ============================================================
-// Enum定義
+// Enum定義（ジェネリック対応）
 // ============================================================
 struct EnumDecl {
     std::string name;
@@ -316,8 +334,21 @@ struct EnumDecl {
     Visibility visibility = Visibility::Private;
     std::vector<AttributeNode> attributes;
 
+    // ジェネリックパラメータ（例: Result<T, E>）
+    std::vector<std::string> generic_params;      // 後方互換性
+    std::vector<GenericParam> generic_params_v2;  // 型制約付き
+
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}
+
+    // ジェネリックenumかどうか
+    bool is_generic() const { return !generic_params.empty() || !generic_params_v2.empty(); }
+
+    // Tagged Union（Associated dataを持つメンバがある）かどうか
+    bool is_tagged_union() const {
+        return std::any_of(members.begin(), members.end(),
+                           [](const EnumMember& m) { return m.has_data(); });
+    }
 };
 
 // ============================================================
