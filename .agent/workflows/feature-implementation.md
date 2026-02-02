@@ -19,7 +19,11 @@ description: 新機能の実装手順
 ## 2. テスト作成（TDD）
 // turbo
 1. `tests/test_programs/<category>/`にテスト作成
-2. `.expect`ファイルで期待出力定義
+   - **ファイル名に `test_` プレフィックスを付けない**（例: `simple_io.cm`）
+   - 期待値ファイルは `.expected` 拡張子（例: `simple_io.expected`）
+2. テスト用データファイル配置
+   - **`/tmp`を使用禁止**
+   - テストフォルダ内の `data/` ディレクトリに配置
 3. 初回テスト実行（失敗確認）
 
 ## 3. 実装フェーズ

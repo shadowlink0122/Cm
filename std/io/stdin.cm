@@ -1,0 +1,71 @@
+// std::io::stdin - 標準入力
+// v0.13.0: Reader interface実装
+module std.io.stdin;
+
+import std.io.error::{IoResult, IoError, IoErrorKind};
+
+// ============================================================
+// libc関数宣言（LLVM経由で直接呼び出し）
+// ============================================================
+
+// ssize_t read(int fd, void* buf, size_t count)
+extern "C" long read(int fd, utiny* buf, long count);
+
+// ============================================================
+// 定数
+// ============================================================
+
+// ファイルディスクリプタ
+const int STDIN_FD = 0;
+
+// ============================================================
+// Stdin構造体
+// ============================================================
+
+/// 標準入力ストリーム
+export struct Stdin {
+    int _fd;
+}
+
+impl Stdin {
+    /// 新しいStdinインスタンスを作成
+    Stdin new() {
+        Stdin s;
+        s._fd = STDIN_FD;
+        return s;
+    }
+
+    /// バッファにデータを読み込む
+    IoResult<int> read(utiny[] buf) {
+        if (buf.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = read(this._fd, buf.ptr(), buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("read failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// 1行読み取り（改行を含まない）
+    IoResult<string> read_line() {
+        // 簡易実装：既存のランタイム関数を使用
+        string line = cm_read_line();
+        return IoResult.Ok(line);
+    }
+}
+
+// 既存のランタイム関数
+extern "C" string cm_read_line();
+
+// ============================================================
+// グローバルアクセサ
+// ============================================================
+
+/// 標準入力を取得
+export Stdin stdin() {
+    return Stdin.new();
+}

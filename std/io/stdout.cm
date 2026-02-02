@@ -1,0 +1,130 @@
+// std::io::stdout - 標準出力
+// v0.13.0: Writer interface実装
+module std.io.stdout;
+
+import std.io.error::{IoResult, IoError, IoErrorKind};
+
+// ============================================================
+// libc関数宣言（LLVM経由で直接呼び出し）
+// ============================================================
+
+// ssize_t write(int fd, const void* buf, size_t count)
+extern "C" long write(int fd, utiny* buf, long count);
+
+// int fsync(int fd)
+extern "C" int fsync(int fd);
+
+// ============================================================
+// 定数
+// ============================================================
+
+const int STDOUT_FD = 1;
+const int STDERR_FD = 2;
+
+// ============================================================
+// Stdout構造体
+// ============================================================
+
+/// 標準出力ストリーム
+export struct Stdout {
+    int _fd;
+}
+
+impl Stdout {
+    /// 新しいStdoutインスタンスを作成
+    Stdout new() {
+        Stdout s;
+        s._fd = STDOUT_FD;
+        return s;
+    }
+
+    /// バッファからデータを書き込む
+    IoResult<int> write(utiny[] buf) {
+        if (buf.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(this._fd, buf.ptr(), buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// 文字列を書き込む
+    IoResult<int> write_str(string s) {
+        // 文字列をバイト配列として扱う
+        cm_print_string(s);
+        return IoResult.Ok(s.len() as int);
+    }
+
+    /// フラッシュ（stdoutは通常バッファなし）
+    IoResult<int> flush() {
+        int ret = fsync(this._fd);
+        if (ret < 0) {
+            return IoResult.Err(IoError.other("fsync failed"));
+        }
+        return IoResult.Ok(0);
+    }
+}
+
+// 既存のランタイム関数
+extern "C" void cm_print_string(string s);
+
+// ============================================================
+// Stderr構造体
+// ============================================================
+
+/// 標準エラー出力ストリーム
+export struct Stderr {
+    int _fd;
+}
+
+impl Stderr {
+    /// 新しいStderrインスタンスを作成
+    Stderr new() {
+        Stderr s;
+        s._fd = STDERR_FD;
+        return s;
+    }
+
+    /// バッファからデータを書き込む
+    IoResult<int> write(utiny[] buf) {
+        if (buf.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(this._fd, buf.ptr(), buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// フラッシュ
+    IoResult<int> flush() {
+        int ret = fsync(this._fd);
+        if (ret < 0) {
+            return IoResult.Err(IoError.other("fsync failed"));
+        }
+        return IoResult.Ok(0);
+    }
+}
+
+// ============================================================
+// グローバルアクセサ
+// ============================================================
+
+/// 標準出力を取得
+export Stdout stdout() {
+    return Stdout.new();
+}
+
+/// 標準エラー出力を取得
+export Stderr stderr() {
+    return Stderr.new();
+}

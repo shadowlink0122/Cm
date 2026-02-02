@@ -1,213 +1,69 @@
-// std.io - 標準入出力モジュール
+// std::io - I/Oモジュール
+// v0.13.0: Reader/Writer/Seek interface & 標準入出力/ファイルI/O
 module std.io;
 
+// エラー型
+export import std.io.error::{IoResult, IoError, IoErrorKind};
+
+// インターフェース
+export import std.io.traits::{Reader, Writer, Seek, SeekFrom};
+
+// 標準入出力
+export import std.io.stdin::{Stdin, stdin};
+export import std.io.stdout::{Stdout, Stderr, stdout, stderr};
+
+// ファイルI/O
+export import std.io.file::File;
+
+// 既存の便利関数を再エクスポート（後方互換性）
+export import std.io::{print, println};
+
 // ============================================================
-// 外部関数宣言（ランタイムが提供）
+// ファイルI/O便利関数（ランタイム経由）
 // ============================================================
 
-// プリミティブな出力関数（プラットフォーム依存）
-extern "C" void cm_print_string(string s);
-extern "C" void cm_print_int(int i);
-extern "C" void cm_print_uint(uint i);
-extern "C" void cm_print_long(long i);
-extern "C" void cm_print_float(float f);
-extern "C" void cm_print_double(double d);
-extern "C" void cm_print_bool(bool b);
-extern "C" void cm_print_char(char c);
-extern "C" void cm_println_string(string s);
-extern "C" void cm_println_int(int i);
-extern "C" void cm_println_double(double d);
+// Cランタイム関数
+extern "C" string cm_file_read_all(string path);
+extern "C" bool cm_file_write_all(string path, string content);
 
-// ============================================================
-// パブリックAPI - 基本出力
-// ============================================================
-
-// 文字列を出力（コンパイラ組み込みを使用）
-export void print(string s) {
-    __print__(s);
+/// ファイル全体を文字列として読み込み
+export string read_file(string path) {
+    return cm_file_read_all(path);
 }
 
-// 文字列を出力して改行（コンパイラ組み込みを使用）
-export void println(string s) {
-    __println__(s);
-}
-
-// 改行のみ
-export void println() {
-    cm_print_string("\n");
+/// 文字列をファイルに書き込み
+export bool write_file(string path, string content) {
+    return cm_file_write_all(path, content);
 }
 
 // ============================================================
-// パブリックAPI - 型別出力
+// 標準入力関数（ランタイム経由）
 // ============================================================
 
-// 整数を出力
-export void print(int n) {
-    cm_print_int(n);
-}
+extern "C" string cm_io_input();
+extern "C" int cm_io_input_int();
 
-// 整数を出力して改行
-export void println(int n) {
-    cm_println_int(n);
-}
-
-// 符号なし整数を出力
-export void print(uint n) {
-    cm_print_uint(n);
-}
-
-// long整数を出力
-export void print(long n) {
-    cm_print_long(n);
-}
-
-// 浮動小数点数を出力
-export void print(float f) {
-    cm_print_float(f);
-}
-
-// 浮動小数点数を出力して改行
-export void println(float f) {
-    cm_print_float(f);
-    cm_print_string("\n");
-}
-
-// double を出力
-export void print(double d) {
-    cm_print_double(d);
-}
-
-// double を出力して改行
-export void println(double d) {
-    cm_println_double(d);
-}
-
-// ブール値を出力
-export void print(bool b) {
-    cm_print_bool(b);
-}
-
-// ブール値を出力して改行
-export void println(bool b) {
-    cm_print_bool(b);
-    cm_print_string("\n");
-}
-
-// 文字を出力
-export void print(char c) {
-    cm_print_char(c);
-}
-
-// 文字を出力して改行
-export void println(char c) {
-    cm_print_char(c);
-    cm_print_string("\n");
-}
-
-// ============================================================
-// パブリックAPI - エラー出力
-// ============================================================
-
-// エラー出力
-export void eprint(string s) {
-    // TODO: stderr への出力実装
-    cm_print_string("[ERROR] ");
-    cm_print_string(s);
-}
-
-// エラー出力して改行
-export void eprintln(string s) {
-    eprint(s);
-    cm_print_string("\n");
-}
-
-// ============================================================
-// パブリックAPI - デバッグ出力
-// ============================================================
-
-// デバッグ出力
-export void dbg(string s) {
-    cm_print_string("[DEBUG] ");
-    cm_println_string(s);
-}
-
-// デバッグ出力（整数値付き）
-export void dbg(string label, int value) {
-    cm_print_string("[DEBUG] ");
-    cm_print_string(label);
-    cm_print_string(": ");
-    cm_println_int(value);
-}
-
-// ============================================================
-// 後方互換性のための関数（非推奨）
-// ============================================================
-
-export void print_int(int n) {
-    cm_print_int(n);
-}
-
-export void println_int(int n) {
-    cm_println_int(n);
-}
-
-export void print_float(float f) {
-    cm_print_float(f);
-}
-
-export void println_float(float f) {
-    cm_print_float(f);
-    cm_print_string("\n");
-}
-
-export void print_bool(bool b) {
-    cm_print_bool(b);
-}
-
-export void println_bool(bool b) {
-    cm_print_bool(b);
-    cm_print_string("\n");
-}
-
-export void print_char(char c) {
-    cm_print_char(c);
-}
-
-// ============================================================
-// 外部関数宣言 - 標準入力
-// ============================================================
-
-extern "C" string cm_read_line();
-extern "C" int cm_read_int();
-extern "C" char cm_read_char();
-
-// ============================================================
-// パブリックAPI - 標準入力
-// ============================================================
-
-/// 1行入力（改行は含まない）
+/// 標準入力から1行読み取り（改行は除去）
 export string input() {
-    return cm_read_line();
+    return cm_io_input();
 }
 
-/// 整数入力
+/// 標準入力から整数を読み取り
 export int input_int() {
-    return cm_read_int();
+    return cm_io_input_int();
 }
 
-/// 文字入力
-export char input_char() {
-    return cm_read_char();
+/// 標準入力から文字列を読み取り（エイリアス）
+export string input_string() {
+    return cm_io_input();
 }
 
-/// プロンプト付き入力
-export string input(string prompt) {
-    cm_print_string(prompt);
-    return cm_read_line();
-}
-
-/// プロンプト付き整数入力
-export int input_int(string prompt) {
-    cm_print_string(prompt);
-    return cm_read_int();
+/// 標準入力からbool読み取り
+/// "true", "1", "yes" -> true, その他 -> false
+export bool input_bool() {
+    string line = cm_io_input();
+    if (line == "true" || line == "1" || line == "yes") {
+        return true;
+    }
+    return false;
 }

@@ -220,6 +220,34 @@ void LLVMContext::setupStd() {
     auto freeType = llvm::FunctionType::get(voidTy, {ptrTy}, false);
     module->getOrInsertFunction("free", freeType);
 
+    // ============================================================
+    // POSIX I/O 関数宣言（libc経由）
+    // ============================================================
+
+    // ssize_t read(int fd, void* buf, size_t count)
+    auto readType = llvm::FunctionType::get(i64Ty, {i32Ty, ptrTy, i64Ty}, false);
+    module->getOrInsertFunction("read", readType);
+
+    // ssize_t write(int fd, const void* buf, size_t count)
+    auto writeType = llvm::FunctionType::get(i64Ty, {i32Ty, ptrTy, i64Ty}, false);
+    module->getOrInsertFunction("write", writeType);
+
+    // int open(const char* pathname, int flags, mode_t mode)
+    auto openType = llvm::FunctionType::get(i32Ty, {ptrTy, i32Ty, i32Ty}, false);
+    module->getOrInsertFunction("open", openType);
+
+    // int close(int fd)
+    auto closeType = llvm::FunctionType::get(i32Ty, {i32Ty}, false);
+    module->getOrInsertFunction("close", closeType);
+
+    // off_t lseek(int fd, off_t offset, int whence)
+    auto lseekType = llvm::FunctionType::get(i64Ty, {i32Ty, i64Ty, i32Ty}, false);
+    module->getOrInsertFunction("lseek", lseekType);
+
+    // int fsync(int fd)
+    auto fsyncType = llvm::FunctionType::get(i32Ty, {i32Ty}, false);
+    module->getOrInsertFunction("fsync", fsyncType);
+
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMRuntime, "std mode",
                             cm::debug::Level::Debug);
 }

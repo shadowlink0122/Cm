@@ -1,0 +1,44 @@
+// 行読み取りテスト
+import std::io::{println, read_file, write_file};
+
+int main() {
+    println("=== Line Reading Test ===");
+
+    // テストフォルダ内のデータファイルを使用
+    string data_path = "tests/test_programs/io/data/line_read_data.txt";
+    
+    // 1. テストファイル作成（複数行）
+    string lines = "First Line\nSecond Line\nThird Line\n";
+    bool ok = write_file(data_path, lines);
+    if (!ok) {
+        println("Write failed");
+        return 1;
+    }
+    println("File written");
+
+    // 2. 読み込み
+    string content = read_file(data_path);
+    println("Read content");
+
+    // 3. 行カウントと行の長さ表示
+    int line_count = 0;
+    int line_start = 0;
+    
+    for (int i = 0; i < content.len() as int; i++) {
+        if (content[i] == '\n') {
+            line_count = line_count + 1;
+            int line_len = i - line_start;
+            println("Line {line_count}: {line_len} chars");
+            line_start = i + 1;
+        }
+    }
+
+    // 4. 検証
+    if (line_count == 3) {
+        println("=== PASS: Found 3 lines ===");
+        return 0;
+    } else {
+        println("FAIL: Expected 3 lines, got {line_count}");
+        return 1;
+    }
+}

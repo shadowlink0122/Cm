@@ -536,7 +536,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
             func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||
-            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0) {
+            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0 ||
+            func.name.find("cm_io_") == 0) {
             return;
         }
 
