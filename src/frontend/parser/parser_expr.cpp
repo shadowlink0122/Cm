@@ -1058,9 +1058,47 @@ ast::ExprPtr Parser::parse_lambda_body(std::vector<ast::Param> params, uint32_t 
 //   - 式形式: pattern => expr (値を返す)
 //   - ブロック形式: pattern => { stmts } (文として処理)
 ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
-    expect(TokenKind::LParen);
-    auto scrutinee = parse_expr();
-    expect(TokenKind::RParen);
+    // 括弧付き構文: match (expr) { ... }
+    // 括弧なし構文: match expr { ... }（Rustスタイル）
+    ast::ExprPtr scrutinee;
+    if (consume_if(TokenKind::LParen)) {
+        scrutinee = parse_expr();
+        expect(TokenKind::RParen);
+    } else {
+        // 括弧なし: { が来るまで一次式と後置演算子を解析
+        // ただし、{ をstruct literalとして解釈しないよう注意
+        scrutinee = parse_primary();
+
+        // 後置演算子（メンバアクセス、関数呼び出し、配列インデックス）を処理
+        // ただし { は処理しない（match本体の開始）
+        while (true) {
+            if (check(TokenKind::Dot)) {
+                advance();
+                std::string member = expect_ident();
+                auto mem_expr = std::make_unique<ast::MemberExpr>(std::move(scrutinee), member);
+                scrutinee = std::make_unique<ast::Expr>(std::move(mem_expr));
+            } else if (check(TokenKind::LParen)) {
+                advance();
+                std::vector<ast::ExprPtr> args;
+                if (!check(TokenKind::RParen)) {
+                    do {
+                        args.push_back(parse_expr());
+                    } while (consume_if(TokenKind::Comma));
+                }
+                expect(TokenKind::RParen);
+                scrutinee = ast::make_call(std::move(scrutinee), std::move(args));
+            } else if (check(TokenKind::LBracket)) {
+                advance();
+                auto index = parse_expr();
+                expect(TokenKind::RBracket);
+                auto idx_expr =
+                    std::make_unique<ast::IndexExpr>(std::move(scrutinee), std::move(index));
+                scrutinee = std::make_unique<ast::Expr>(std::move(idx_expr));
+            } else {
+                break;  // { や他のトークンで停止
+            }
+        }
+    }
     expect(TokenKind::LBrace);
 
     std::vector<ast::MatchArm> arms;

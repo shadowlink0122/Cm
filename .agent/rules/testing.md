@@ -12,6 +12,9 @@ tests/test_programs/    - Cm言語テスト
 ## テスト命名規則
 - ファイル名: snake_case
 - 機能を説明する名前（例: `slice_basic.cm`）
+- **フォルダ名をファイル名に含めない**
+  - ❌ `enum/enum_match.cm` → ❌ 冗長
+  - ✅ `enum/match.cm` → ✅ 簡潔
 
 ## テスト作成ガイドライン
 1. **1テスト1機能** - 単一の機能をテスト
