@@ -8,6 +8,7 @@ module std.io.console.output;
 
 use libc {
     long write(int fd, void* buf, long count);
+    long strlen(string s);
 }
 
 // ファイルディスクリプタ
@@ -20,8 +21,10 @@ const int STDERR_FD = 2;
 
 /// 標準出力に文字列を出力（改行なし）
 export void print(string s) {
-    if (s.len() > 0) {
-        write(STDOUT_FD, s as void*, s.len() as long);
+    // use libc strlenを直接使用（.len()ビルトインが不安定なため）
+    long len = strlen(s);
+    if (len > 0) {
+        write(STDOUT_FD, s as void*, len);
     }
 }
 
@@ -35,8 +38,9 @@ export void println(string s) {
 
 /// 標準エラー出力に文字列を出力（改行なし）
 export void eprint(string s) {
-    if (s.len() > 0) {
-        write(STDERR_FD, s as void*, s.len() as long);
+    long len = strlen(s);
+    if (len > 0) {
+        write(STDERR_FD, s as void*, len);
     }
 }
 

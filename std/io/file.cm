@@ -14,19 +14,21 @@ use libc {
     long lseek(int fd, long offset, int whence);
     void* malloc(long size);
     void free(void* ptr);
+    long strlen(string s);
 }
 
 // ============================================================
-// 定数
+// 定数（注意: モジュール内const定数にバグがあるため直接使用しない）
+// 値は関数内でリテラルとして直接記述すること
 // ============================================================
-
-const int O_RDONLY   = 0;
-const int O_WRONLY   = 1;
-const int O_CREAT    = 0x0200;
-const int O_TRUNC    = 0x0400;
-const int SEEK_SET = 0;
-const int SEEK_END = 2;
-const int DEFAULT_MODE = 0644;
+// O_RDONLY = 0
+// O_WRONLY = 1
+// O_CREAT  = 0x0200
+// O_TRUNC  = 0x0400
+// O_WRONLY | O_CREAT | O_TRUNC = 0x0601
+// SEEK_SET = 0
+// SEEK_END = 2
+// DEFAULT_MODE = 0x1A4 (0644 octal)
 
 // ============================================================
 // 簡易ファイルI/O API
@@ -34,50 +36,53 @@ const int DEFAULT_MODE = 0644;
 
 /// ファイルを読み込み（簡易版、エラー時は空文字列）
 export string read_file(string path) {
-    int fd = open(path, O_RDONLY, 0);
+    // O_RDONLY = 0
+    int fd = open(path, 0, 0);
     if (fd < 0) {
         return "";
     }
-    
-    long size = lseek(fd, 0, SEEK_END);
+
+    // SEEK_END = 2
+    long size = lseek(fd, 0 as long, 2);
     if (size < 0) {
         close(fd);
         return "";
     }
-    lseek(fd, 0, SEEK_SET);
-    
+    // SEEK_SET = 0
+    lseek(fd, 0 as long, 0);
+
     void* buf = malloc(size + 1 as long);
     if (buf == 0 as void*) {
         close(fd);
         return "";
     }
-    
+
     long bytes_read = read(fd, buf, size);
     close(fd);
-    
+
     if (bytes_read < 0) {
         free(buf);
         return "";
     }
-    
+
     char* str = buf as char*;
     str[bytes_read as int] = 0 as char;
-    
+
     return str as string;
 }
 
 /// ファイルに書き込み（簡易版、成功時true）
 export bool write_file(string path, string content) {
     // O_WRONLY | O_CREAT | O_TRUNC = 0x0601
-    int flags = 0x0601;
-    int fd = open(path, flags, 0644);
+    // DEFAULT_MODE = 0x1A4 (rw-r--r--)
+    int fd = open(path, 0x0601, 0x1A4);
     if (fd < 0) {
         return false;
     }
-    
-    long len = content.len() as long;
+
+    long len = strlen(content);
     long bytes_written = write(fd, content as void*, len);
     close(fd);
-    
+
     return bytes_written >= 0;
 }
