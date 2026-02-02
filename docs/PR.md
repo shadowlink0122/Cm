@@ -142,9 +142,16 @@ match value {
 
 ## ⚠️ 既知の問題
 
-### プリプロセッサのモジュール解決
-- `std::io::error`依存モジュールのインポートで問題が発生する場合あり
-- 回避策: `std::io::file::io`を直接インポート
+### プリプロセッサのexport import再エクスポート問題
+
+**問題**: `mod.cm`で`export import`を使用しても、インポート側で関数が認識されない。
+
+**原因**: プリプロセッサの`filter_exports`関数が`export import`経由の関数定義を抽出できない。
+
+**回避策**: 直接インポート
+```cm
+import std::io::file::io::{read_file, write_file};
+```
 
 ## 🚀 今後の予定
 
