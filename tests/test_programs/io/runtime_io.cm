@@ -6,7 +6,7 @@ int main() {
     println("=== Runtime I/O Test ===");
 
     // テストフォルダ内のデータファイルを使用
-    string data_path = "tests/test_programs/io/data/runtime_io_data.txt";
+    string data_path = "data/runtime_io_data.txt";
     string content = "Cm I/O Test Data!";
 
     // 1. 書き込み

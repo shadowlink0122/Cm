@@ -6,7 +6,7 @@ int main() {
     println("=== Buffered I/O Test ===");
 
     // テストフォルダ内のデータファイルを使用
-    string data_path = "tests/test_programs/io/data/buffered_io_data.txt";
+    string data_path = "data/buffered_io_data.txt";
 
     // 1. 複数行のコンテンツを書き込み
     string content = "Line 1\nLine 2\nLine 3\n";

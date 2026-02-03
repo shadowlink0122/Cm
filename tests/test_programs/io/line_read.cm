@@ -6,7 +6,7 @@ int main() {
     println("=== Line Reading Test ===");
 
     // テストフォルダ内のデータファイルを使用
-    string data_path = "tests/test_programs/io/data/line_read_data.txt";
+    string data_path = "data/line_read_data.txt";
 
     // 1. テストファイル作成（複数行）
     string lines = "First Line\nSecond Line\nThird Line\n";
