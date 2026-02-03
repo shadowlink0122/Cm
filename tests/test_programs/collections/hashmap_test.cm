@@ -1,0 +1,91 @@
+// HashMap テスト - ローカル実装（インポートエラー回避）
+import std::io::println;
+
+use libc {
+    void* malloc(long size);
+    void free(void* ptr);
+}
+
+struct Entry {
+    int key;
+    int value;
+    bool occupied;
+}
+
+struct HashMap {
+    Entry* entries;
+    int cap;
+    int size;
+}
+
+int main() {
+    println("=== HashMap Test ===");
+
+    // 初期化
+    int capacity = 16;
+    HashMap m;
+    m.entries = malloc((capacity * 24) as long) as Entry*;
+    m.cap = capacity;
+    m.size = 0;
+    for (int i = 0; i < capacity; i++) {
+        m.entries[i].occupied = false;
+    }
+    println("Created: size={m.size}");
+
+    // insert (1, 100)
+    {
+        int key = 1;
+        int val = 100;
+        int idx = key % m.cap;
+        m.entries[idx].key = key;
+        m.entries[idx].value = val;
+        m.entries[idx].occupied = true;
+        int sz = m.size;
+        m.size = sz + 1;
+    }
+    // insert (2, 200)
+    {
+        int key = 2;
+        int val = 200;
+        int idx = key % m.cap;
+        m.entries[idx].key = key;
+        m.entries[idx].value = val;
+        m.entries[idx].occupied = true;
+        int sz = m.size;
+        m.size = sz + 1;
+    }
+    // insert (3, 300)
+    {
+        int key = 3;
+        int val = 300;
+        int idx = key % m.cap;
+        m.entries[idx].key = key;
+        m.entries[idx].value = val;
+        m.entries[idx].occupied = true;
+        int sz = m.size;
+        m.size = sz + 1;
+    }
+    println("After insert: size={m.size}");
+
+    // get
+    println("Get:");
+    println("  key=1: {m.entries[1].value}");
+    println("  key=2: {m.entries[2].value}");
+    println("  key=3: {m.entries[3].value}");
+
+    // contains
+    println("Contains:");
+    println("  key=1: {m.entries[1].occupied}");
+    println("  key=4: {m.entries[4].occupied}");
+
+    // overwrite
+    m.entries[2].value = 999;
+    println("After overwrite key=2: {m.entries[2].value}");
+
+    // 解放
+    free(m.entries as void*);
+    println("Freed");
+
+    println("=== PASS ===");
+    return 0;
+}

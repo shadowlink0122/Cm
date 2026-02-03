@@ -1,0 +1,41 @@
+// ユニオン型配列テスト
+import std::io::println;
+
+// ユニオン型定義
+typedef IntOrStr = int | string;
+
+int main() {
+    println("=== Union Array Test ===");
+
+    // ユニオン型の配列
+    IntOrStr[5] arr;
+
+    // int を代入（負数は別変数経由）
+    int neg = 0 - 5;
+    arr[0] = 42 as IntOrStr;
+    arr[1] = 100 as IntOrStr;
+    arr[2] = neg as IntOrStr;
+
+    // string を代入
+    arr[3] = "hello" as IntOrStr;
+    arr[4] = "world" as IntOrStr;
+
+    println("Array filled with mixed types");
+
+    // キャストして取得
+    int n0 = arr[0] as int;
+    int n1 = arr[1] as int;
+    int n2 = arr[2] as int;
+    string s3 = arr[3] as string;
+    string s4 = arr[4] as string;
+
+    println("Values:");
+    println("  arr[0] as int: {n0}");
+    println("  arr[1] as int: {n1}");
+    println("  arr[2] as int: {n2}");
+    println("  arr[3] as string: {s3}");
+    println("  arr[4] as string: {s4}");
+
+    println("=== PASS ===");
+    return 0;
+}

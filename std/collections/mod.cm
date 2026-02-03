@@ -1,0 +1,6 @@
+// std::collections - コレクション型
+// v0.13.0: Vector, HashMap
+module std.collections;
+
+export import std.collections.vector;
+export import std.collections.hashmap;

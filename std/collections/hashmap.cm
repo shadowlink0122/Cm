@@ -1,0 +1,110 @@
+// std::collections::hashmap - 連想配列
+// 線形探索ベースの簡易実装
+module std.collections.hashmap;
+
+use libc {
+    void* malloc(long size);
+    void free(void* ptr);
+}
+
+// =============================================================
+// HashMap - int→int の連想配列
+// =============================================================
+
+export struct HashMapEntry {
+    int key;
+    int value;
+    bool occupied;
+}
+
+export struct HashMap {
+    HashMapEntry* entries;
+    int cap;
+    int size;
+}
+
+// コンストラクタ
+export HashMap HashMap_new(int capacity) {
+    HashMap m;
+    m.entries = malloc((capacity * 24) as long) as HashMapEntry*;  // 24 = 8+8+8 aligned
+    m.cap = capacity;
+    m.size = 0;
+    // エントリ初期化
+    for (int i = 0; i < capacity; i++) {
+        m.entries[i].occupied = false;
+    }
+    return m;
+}
+
+// ハッシュ関数（単純）
+int hash(int key, int cap) {
+    int h = key;
+    if (h < 0) {
+        h = 0 - h;
+    }
+    return h % cap;
+}
+
+// 挿入
+export void HashMap_insert(HashMap* m, int key, int value) {
+    int idx = hash(key, m->cap);
+    // 線形探索
+    for (int i = 0; i < m->cap; i++) {
+        int pos = (idx + i) % m->cap;
+        if (!m->entries[pos].occupied || m->entries[pos].key == key) {
+            if (!m->entries[pos].occupied) {
+                int s = m->size;
+                m->size = s + 1;
+            }
+            m->entries[pos].key = key;
+            m->entries[pos].value = value;
+            m->entries[pos].occupied = true;
+            return;
+        }
+    }
+}
+
+// 取得（見つからない場合は0）
+export int HashMap_get(HashMap* m, int key) {
+    int idx = hash(key, m->cap);
+    for (int i = 0; i < m->cap; i++) {
+        int pos = (idx + i) % m->cap;
+        if (m->entries[pos].occupied && m->entries[pos].key == key) {
+            return m->entries[pos].value;
+        }
+        if (!m->entries[pos].occupied) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+// 存在確認
+export bool HashMap_contains(HashMap* m, int key) {
+    int idx = hash(key, m->cap);
+    for (int i = 0; i < m->cap; i++) {
+        int pos = (idx + i) % m->cap;
+        if (m->entries[pos].occupied && m->entries[pos].key == key) {
+            return true;
+        }
+        if (!m->entries[pos].occupied) {
+            return false;
+        }
+    }
+    return false;
+}
+
+// サイズ
+export int HashMap_len(HashMap* m) {
+    return m->size;
+}
+
+// メモリ解放
+export void HashMap_free(HashMap* m) {
+    if (m->entries != 0 as HashMapEntry*) {
+        free(m->entries as void*);
+    }
+    m->entries = 0 as HashMapEntry*;
+    m->size = 0;
+    m->cap = 0;
+}

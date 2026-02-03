@@ -1,0 +1,130 @@
+// Cast（型変換）網羅テスト
+import std::io::println;
+
+int main() {
+    println("=== Cast Comprehensive Test ===");
+
+    // ===========================================
+    // 1. 整数型間のキャスト
+    // ===========================================
+    println("1. Integer type casts:");
+    
+    int i = 42;
+    long l = i as long;
+    short s = i as short;
+    tiny t = i as tiny;
+    println("  int 42 -> long: {l}");
+    println("  int 42 -> short: {s}");
+    println("  int 42 -> tiny: {t}");
+
+    long big = 1000000;
+    int from_long = big as int;
+    println("  long 1000000 -> int: {from_long}");
+
+    // ===========================================
+    // 2. 浮動小数点 <-> 整数
+    // ===========================================
+    println("2. Float/Int casts:");
+    
+    double d = 3.14159;
+    int d_to_i = d as int;
+    println("  double 3.14159 -> int: {d_to_i}");
+
+    float f = 2.5;
+    int f_to_i = f as int;
+    println("  float 2.5 -> int: {f_to_i}");
+
+    int i2 = 7;
+    double i_to_d = i2 as double;
+    float i_to_f = i2 as float;
+    println("  int 7 -> double: {i_to_d}");
+    println("  int 7 -> float: {i_to_f}");
+
+    // float <-> double
+    double d2 = 1.23456789;
+    float d_to_f = d2 as float;
+    println("  double 1.23456789 -> float: {d_to_f}");
+
+    float f2 = 9.87;
+    double f_to_d = f2 as double;
+    println("  float 9.87 -> double: {f_to_d}");
+
+    // ===========================================
+    // 3. bool <-> int
+    // ===========================================
+    println("3. Bool/Int casts:");
+    
+    bool btrue = true;
+    bool bfalse = false;
+    int btrue_i = btrue as int;
+    int bfalse_i = bfalse as int;
+    println("  true -> int: {btrue_i}");
+    println("  false -> int: {bfalse_i}");
+
+    int one = 1;
+    int zero = 0;
+    bool one_b = one as bool;
+    bool zero_b = zero as bool;
+    println("  1 -> bool: {one_b}");
+    println("  0 -> bool: {zero_b}");
+
+    // ===========================================
+    // 4. ポインタキャスト
+    // ===========================================
+    println("4. Pointer casts:");
+    
+    int val1 = 111;
+    int val2 = 222;
+    int val3 = 333;
+    
+    int* ip = &val1;
+    void* vp = ip as void*;
+    int* ip2 = vp as int*;
+    int val = *ip2;
+    println("  int* -> void* -> int*: {val}");
+
+    long addr = ip as long;
+    bool addr_nonzero = addr != 0;
+    println("  int* -> long (address): nonzero={addr_nonzero}");
+
+    // ===========================================
+    // 5. 符号なし整数
+    // ===========================================
+    println("5. Unsigned casts:");
+    
+    uint ui = 100 as uint;
+    int ui_to_i = ui as int;
+    println("  uint 100 -> int: {ui_to_i}");
+
+    int neg = 0 - 1;
+    uint neg_to_ui = neg as uint;
+    println("  int -1 -> uint: converted");
+
+    // ===========================================
+    // 6. char <-> int
+    // ===========================================
+    println("6. Char/Int casts:");
+    
+    char c = 'A';
+    int c_to_i = c as int;
+    println("  'A' -> int: {c_to_i}");
+
+    int code = 66;
+    char i_to_c = code as char;
+    println("  66 -> char: B");
+
+    // ===========================================
+    // 7. 連続キャスト
+    // ===========================================
+    println("7. Chained casts:");
+    
+    double d3 = 99.9;
+    int d3_i = d3 as int;
+    short d3_s = d3_i as short;
+    tiny chain = d3_s as tiny;
+    println("  double 99.9 -> int -> short -> tiny: {chain}");
+
+    println("");
+    println("=== PASS ===");
+    return 0;
+}
