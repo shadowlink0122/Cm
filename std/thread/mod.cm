@@ -8,7 +8,7 @@ module std.thread;
 
 use libc {
     void usleep(uint usec);
-    
+
     // pthread関数（POSIXスレッド）
     int pthread_create(ulong* thread, void* attr, void* start_routine, void* arg);
     int pthread_join(ulong thread, void** retval);

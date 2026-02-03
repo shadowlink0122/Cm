@@ -3,32 +3,32 @@ import std::io::println;
 
 int main() {
     println("=== long int compound ===");
-    
+
     // long + int
     long a = 100;
-    a += 50;  // 50はint型
+    a += 50;     // 50はint型
     println(a);  // 150
-    
+
     // long - int
     long b = 200;
     b -= 30;
     println(b);  // 170
-    
+
     // long * int
     long c = 10;
     c *= 5;
     println(c);  // 50
-    
+
     // long / int
     long d = 100;
     d /= 4;
     println(d);  // 25
-    
+
     // long % int
     long e = 17;
     e %= 5;
     println(e);  // 2
-    
+
     println("PASS");
     return 0;
 }

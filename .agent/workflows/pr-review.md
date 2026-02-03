@@ -18,7 +18,7 @@ description: GitHub PRの作成とレビュールール
 1. テンプレートに従って本文を記入
 2. 関連Issueをリンク
 3. チェックリストを確認
-4. `docker compose run --rm lint` でフォーマット確認
+4. `make format` でC++/Cmコードをフォーマット
 
 ## レビュー時
 1. 設計ドキュメント (`docs/design/`) との整合性確認

@@ -24,11 +24,11 @@ impl<T, E> Result<T, E> {
         }
         return result;
     }
-    
+
     bool is_err() {
         return !this.is_ok();
     }
-    
+
     T unwrap() {
         T value;
         match (this) {
@@ -41,7 +41,7 @@ impl<T, E> Result<T, E> {
         }
         return value;
     }
-    
+
     T unwrap_or(T default_val) {
         T value = default_val;
         match (this) {
@@ -75,7 +75,7 @@ Result<int, string> safe_divide(int a, int b) {
 
 int main() {
     println("=== Result Enum Test ===");
-    
+
     // 成功ケース
     Result<int, string> r1 = safe_divide(10, 2);
     match (r1) {
@@ -86,7 +86,7 @@ int main() {
             println("Error: {msg}");
         }
     }
-    
+
     // 失敗ケース
     Result<int, string> r2 = safe_divide(10, 0);
     match (r2) {
@@ -97,7 +97,7 @@ int main() {
             println("Error: {msg}");
         }
     }
-    
+
     // is_ok / is_err
     if (r1.is_ok()) {
         println("r1 is Ok");
@@ -105,13 +105,13 @@ int main() {
     if (r2.is_err()) {
         println("r2 is Err");
     }
-    
+
     // unwrap_or
     int v1 = r1.unwrap_or(-1);
     int v2 = r2.unwrap_or(-1);
     println("r1.unwrap_or(-1) = {v1}");
     println("r2.unwrap_or(-1) = {v2}");
-    
+
     println("=== Complete ===");
     return 0;
 }

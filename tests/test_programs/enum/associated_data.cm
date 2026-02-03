@@ -18,10 +18,10 @@ struct RGB {
 
 // データ付きenum定義（各バリアントは1つのフィールドのみ）
 enum Message {
-    Quit,                  // データなし
-    Move(Point),           // Point構造体を1つ持つ
-    Write(string),         // 文字列を1つ持つ
-    ChangeColor(RGB)       // RGB構造体を1つ持つ
+    Quit,             // データなし
+    Move(Point),      // Point構造体を1つ持つ
+    Write(string),    // 文字列を1つ持つ
+    ChangeColor(RGB)  // RGB構造体を1つ持つ
 }
 
 // enumを処理する関数
@@ -45,19 +45,19 @@ void process_message(Message msg) {
 
 int main() {
     println("=== Enum Associated Data Test ===");
-    
+
     // 各バリアントの作成
     Message m1 = Message::Quit;
     Message m2 = Message::Move(Point { x: 100, y: 200 });
     Message m3 = Message::Write("Hello, World!");
     Message m4 = Message::ChangeColor(RGB { r: 255, g: 128, b: 0 });
-    
+
     // 処理
     process_message(m1);
     process_message(m2);
     process_message(m3);
     process_message(m4);
-    
+
     println("=== Complete ===");
     return 0;
 }

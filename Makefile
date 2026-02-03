@@ -603,6 +603,8 @@ format:
 	@echo "Formatting C++ code..."
 	@find src tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
 		-exec clang-format -i -style=file {} \;
+	@echo "Formatting Cm code..."
+	@find tests/test_programs std -type f -name "*.cm" -exec ./cm fmt {} \;
 	@echo "✅ Format complete!"
 
 .PHONY: format-check

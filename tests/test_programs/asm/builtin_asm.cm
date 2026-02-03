@@ -5,16 +5,16 @@ import std::io::println;
 
 int main() {
     println("=== builtin_asm test ===");
-    
+
     // 直接__llvm__を使用
     __llvm__("nop");
     println("__llvm__(nop): ok");
-    
+
     // 複数回
     __llvm__("nop");
     __llvm__("nop");
     println("multiple: ok");
-    
+
     println("=== complete ===");
     return 0;
 }

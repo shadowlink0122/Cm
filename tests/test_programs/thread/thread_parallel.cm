@@ -37,23 +37,23 @@ void* calc30(void* arg) {
 
 int main() {
     println("Starting parallel threads");
-    
+
     // 3つのスレッドを同時に起動
     ulong t1 = spawn(calc10 as void*);
     ulong t2 = spawn(calc20 as void*);
     ulong t3 = spawn(calc30 as void*);
-    
+
     // 全てのスレッドを待機
     int r1 = join(t1);
     int r2 = join(t2);
     int r3 = join(t3);
-    
+
     // 結果を合計（順序に依存しない）
     int total = r1 + r2 + r3;
     print("Total: ");
     println(total);
-    
+
     println("Done");
-    
+
     return 0;
 }

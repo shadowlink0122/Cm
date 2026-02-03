@@ -5,7 +5,7 @@ import std::io::println;
 
 int main() {
     println("=== must {} Block Test ===");
-    
+
     // 基本的なmustブロック（asmなし）
     int x = 0;
     must {
@@ -17,13 +17,13 @@ int main() {
     } else {
         println("must block basic: FAIL");
     }
-    
+
     // asmはmustブロック外で実行
     must {
         __llvm__("nop");
         println("asm inside must: PASS");
     }
-    
+
     println("=== All Tests Passed ===");
     return 0;
 }

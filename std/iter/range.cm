@@ -1,5 +1,5 @@
 // std::iter::range - 範囲イテレータ
-// 
+//
 // 整数範囲（0..10, 5..0 step -1 など）のイテレーション機能を提供。
 // for-in文との統合時に使用される基本的なイテレータ。
 
@@ -92,14 +92,14 @@ impl RangeIterator {
         self.end = r.end;
         self.step = r.step;
     }
-    
+
     /// 別のコンストラクタ（直接値指定）
     overload self(int start, int end, int step) {
         self.current = start;
         self.end = end;
         self.step = step;
     }
-    
+
     /// 次の要素があるか確認
     bool has_next() {
         if (self.step > 0) {
@@ -108,14 +108,14 @@ impl RangeIterator {
             return self.current > self.end;
         }
     }
-    
+
     /// 次の要素を取得
     int next() {
         int value = self.current;
         self.current = self.current + self.step;
         return value;
     }
-    
+
     /// 次の要素を確認（進めない）
     int peek() {
         return self.current;

@@ -1,5 +1,5 @@
 // std::iter::traits - イテレータインターフェース定義
-// 
+//
 // このファイルはイテレータシステムのコアインターフェースを定義します。
 // 現在はジェネリックインターフェースが未サポートのため、型別に定義しています。
 // 将来的にはIterator<T>のようなジェネリック版に統一する予定です。
@@ -35,16 +35,16 @@ export interface IntIterable {
 //     T peek();
 //     int size_hint();
 // }
-// 
+//
 // export interface Iterable<T> {
 //     Iterator<T> iter();
 // }
-// 
+//
 // export interface BidirectionalIterator<T> for Iterator<T> {
 //     bool has_prev();
 //     T prev();
 // }
-// 
+//
 // export interface ExactSizeIterator<T> for Iterator<T> {
 //     int len();
 //     bool is_empty();

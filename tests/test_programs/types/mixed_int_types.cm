@@ -3,42 +3,42 @@ import std::io::println;
 
 int main() {
     println("=== mixed int types ===");
-    
+
     // tiny + short
     tiny a = 10;
     short b = 100;
     short c = a + b;
     println(c);  // 110
-    
+
     // short + int
     short d = 50;
     int e = 1000;
     int f = d + e;
     println(f);  // 1050
-    
+
     // tiny + int (2段階の拡張)
     tiny g = 5;
     int h = 500;
     int i = g + h;
     println(i);  // 505
-    
+
     // 複合代入: tiny変数 += int値 (左辺への切り捨て)
     tiny j = 10;
-    j += 5;  // 5はint型
+    j += 5;      // 5はint型
     println(j);  // 15
-    
+
     // 複合代入: short変数 += tiny値
     short k = 200;
     tiny l = 50;
     k += l;
     println(k);  // 250
-    
+
     // 符号なし型
     utiny m = 200;
     ushort n = 1000;
     ushort o = m + n;
     println(o);  // 1200
-    
+
     println("PASS");
     return 0;
 }

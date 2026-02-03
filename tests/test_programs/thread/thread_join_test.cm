@@ -19,16 +19,16 @@ impl BusyCounter {
 // ワーカー（10回ループ x 100ms = 1000ms）
 void* worker(void* arg) {
     println("Worker: start");
-    
+
     BusyCounter c = BusyCounter{ loop_count: 0 };
-    
+
     int i = 0;
     while (i < 10) {
         must { c.loop_count = i + 1; }
         sleep_ms(100);
         i = i + 1;
     }
-    
+
     println("Worker: done");
     return c.loop_count as void*;
 }
@@ -40,13 +40,13 @@ int main() {
     int result = join(t1);
     print("Result: ");
     println(result);
-    
+
     // Test 2: detach - スレッドは中断される
     println("Test: detach");
     ulong t2 = spawn(worker as void*);
     detach(t2);
     sleep_ms(50);
     println("Main: exit");
-    
+
     return 0;
 }

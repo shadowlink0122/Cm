@@ -1,8 +1,8 @@
 // std::iter - イテレータモジュール
-// 
+//
 // イテレータシステムのエントリポイント。
 // 各サブモジュールの機能を集約してエクスポートします。
-// 
+//
 // サブモジュール構成:
 //   std::iter::traits   - イテレータインターフェース定義
 //   std::iter::array    - 配列イテレータ
@@ -18,7 +18,7 @@ module std.iter;
 // 注: 現在のCm言語はモジュールの再エクスポートをサポートしていないため、
 // 主要な型と関数はこのファイルで直接定義しています。
 // 将来的には以下のような形式でサブモジュールを参照できるようになる予定:
-// 
+//
 //   export use std.iter.traits::*;
 //   export use std.iter.array::*;
 //   export use std.iter.range::*;
@@ -55,21 +55,21 @@ impl IntArrayIterator {
         self.current = data;
         self.end = data + size;
     }
-    
+
     bool has_next() {
         return self.current < self.end;
     }
-    
+
     int next() {
         int value = *self.current;
         self.current = self.current + 1;
         return value;
     }
-    
+
     int peek() {
         return *self.current;
     }
-    
+
     int remaining() {
         int count = 0;
         int* p = self.current;
@@ -148,13 +148,13 @@ impl RangeIterator {
         self.end = r.end;
         self.step = r.step;
     }
-    
+
     overload self(int start, int end, int step) {
         self.current = start;
         self.end = end;
         self.step = step;
     }
-    
+
     bool has_next() {
         if (self.step > 0) {
             return self.current < self.end;
@@ -162,13 +162,13 @@ impl RangeIterator {
             return self.current > self.end;
         }
     }
-    
+
     int next() {
         int value = self.current;
         self.current = self.current + self.step;
         return value;
     }
-    
+
     int peek() {
         return self.current;
     }

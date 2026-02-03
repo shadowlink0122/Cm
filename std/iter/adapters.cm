@@ -1,8 +1,8 @@
 // std::iter::adapters - イテレータアダプタ
-// 
+//
 // map, filter, fold などの高階関数を提供するイテレータアダプタ。
 // メソッドチェーン: iter.map(f).filter(p).collect() のような使用を想定。
-// 
+//
 // 注: 現在は関数ポインタの型パラメータが未サポートのため、
 //     一部機能は将来実装となります。
 
@@ -13,24 +13,24 @@ module std.iter.adapters;
 // ============================================================
 
 // TODO: 関数ポインタ型パラメータサポート後に実装
-// 
+//
 // /// MapIterator - 変換イテレータ
 // export struct MapIterator<T, U> {
 //     Iterator<T>* source;
 //     U (*transform)(T);
 // }
-// 
+//
 // impl<T, U> MapIterator<T, U> for Iterator<U> {
 //     bool has_next() { return source.has_next(); }
 //     U next() { return transform(source.next()); }
 // }
-// 
+//
 // /// FilterIterator - フィルタイテレータ
 // export struct FilterIterator<T> {
 //     Iterator<T>* source;
 //     bool (*predicate)(T);
 // }
-// 
+//
 // impl<T> FilterIterator<T> for Iterator<T> {
 //     bool has_next() {
 //         while (source.has_next()) {
@@ -67,7 +67,7 @@ export <T> void swap(T* a, T* b) {
 //     }
 //     return total;
 // }
-// 
+//
 // /// 要素数をカウント
 // export int count(IntIterator* iter) {
 //     int n = 0;
@@ -77,7 +77,7 @@ export <T> void swap(T* a, T* b) {
 //     }
 //     return n;
 // }
-// 
+//
 // /// 最大値を取得（空の場合は0）
 // export int max(IntIterator* iter) {
 //     if (!iter.has_next()) { return 0; }
@@ -88,7 +88,7 @@ export <T> void swap(T* a, T* b) {
 //     }
 //     return result;
 // }
-// 
+//
 // /// 最小値を取得（空の場合は0）
 // export int min(IntIterator* iter) {
 //     if (!iter.has_next()) { return 0; }

@@ -15,29 +15,29 @@ macro bool RELEASE = false;
 
 int main() {
     println("=== Typed Macro Test ===");
-    
+
     // int型マクロ
     int v = VERSION;
     println(v);
     println(DEBUG_LEVEL);
-    
+
     // string型マクロ
     println(APP_NAME);
     println(VERSION_STR);
-    
+
     // bool型マクロ
     if (DEBUG) {
         println("Debug mode");
     }
-    
+
     if (!RELEASE) {
         println("Not release");
     }
-    
+
     // マクロを式で使用
     int next_version = VERSION + 1;
     println(next_version);
-    
+
     println("=== Complete ===");
     return 0;
 }

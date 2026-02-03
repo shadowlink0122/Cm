@@ -6,49 +6,49 @@ typedef MyDouble = double;
 
 int main() {
     println("=== typedef compound assignment ===");
-    
+
     // int型typedef
     MyInt a = 10;
     a += 5;
     println(a);  // 15
-    
+
     a -= 3;
     println(a);  // 12
-    
+
     a *= 2;
     println(a);  // 24
-    
+
     a /= 4;
     println(a);  // 6
-    
+
     a %= 4;
     println(a);  // 2
-    
+
     // double型typedef
     MyDouble d = 10.0;
     d += 5.5;
     println(d);  // 15.5
-    
+
     d *= 2.0;
     println(d);  // 31.0
-    
+
     // ビット演算
     MyInt b = 10;  // 0b1010
-    b &= 12;  // AND with 0b1100
-    println(b);  // 8
-    
-    b |= 3;  // OR with 0b0011
+    b &= 12;       // AND with 0b1100
+    println(b);    // 8
+
+    b | = 3;     // OR with 0b0011
     println(b);  // 11
-    
-    b ^= 1;  // XOR with 0b0001
+
+    b ^= 1;      // XOR with 0b0001
     println(b);  // 10
-    
-    b <<= 2;  // 左シフト
+
+    b <<= 2;     // 左シフト
     println(b);  // 40
-    
-    b >>= 1;  // 右シフト
+
+    b >>= 1;     // 右シフト
     println(b);  // 20
-    
+
     println("PASS");
     return 0;
 }

@@ -10,14 +10,14 @@ enum OptVal {
 int main() {
     // OptVal::HasVal(42) の代入
     OptVal opt = OptVal::HasVal(42);
-    
+
     // matchでパターン分岐
     int result = match (opt) {
         OptVal::NoVal => 0,
         OptVal::HasVal => 1,
         _ => -1,
     };
-    
+
     println("Result: {result}");
     return 0;
 }

@@ -13,22 +13,22 @@ macro int*(int, int) mul = (int a, int b) => a * b;
 
 int main() {
     println("=== Function Macro Test ===");
-    
+
     // 引数なし関数マクロ
     int v = get_version();
     println(v);
-    
+
     // 引数あり関数マクロ
     int sum = add(3, 5);
     println(sum);
-    
+
     int product = mul(4, 6);
     println(product);
-    
+
     // 関数マクロの組み合わせ
     int combined = add(mul(2, 3), 4);
     println(combined);
-    
+
     println("=== Complete ===");
     return 0;
 }

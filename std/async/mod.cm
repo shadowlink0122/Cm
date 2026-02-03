@@ -18,7 +18,7 @@ enum TaskState {
 
 // 型消去されたFutureを保持するタスク
 struct Task {
-    void* future_ptr;           // Future<T>へのポインタ（型消去）
+    void* future_ptr;                  // Future<T>へのポインタ（型消去）
     Poll(*)(void*, Context*) poll_fn;  // poll関数へのポインタ
     TaskState state;
     int id;
@@ -339,7 +339,7 @@ export <T> (Sender<T>, Receiver<T>) channel() {
     };
 
     return (
-        Sender<T> { channel: &ch },
-        Receiver<T> { channel: &ch }
+    Sender<T> { channel: &ch },
+    Receiver<T> { channel: &ch }
     );
 }

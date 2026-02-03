@@ -13,18 +13,18 @@ void* worker(void* arg) {
 
 int main() {
     println("Main thread starting worker");
-    
+
     // スレッドを生成（関数ポインタをvoid*にキャスト）
     ulong t = spawn(worker as void*);
-    
+
     println("Main thread waiting for worker");
-    
+
     // スレッドの終了を待機
     int result = join(t);
-    
+
     print("Worker returned: ");
     println(result);
     println("Main thread done");
-    
+
     return 0;
 }

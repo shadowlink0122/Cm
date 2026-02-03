@@ -29,27 +29,27 @@ export string input() {
     // 一時バッファ（スタック上）
     utiny[4096] temp_buf;
     long total = 0;
-    
+
     // 1バイトずつ読み込んで改行を探す
     while (total < 4095) {
         long n = read(STDIN_FD, &temp_buf[total as int] as void*, 1);
-        
+
         if (n <= 0) {
             // EOF または エラー
             break;
         }
-        
+
         if (temp_buf[total as int] == 10) {  // '\n' = 10
             break;
         }
-        
+
         total = total + 1;
     }
-    
+
     // ヒープにバッファを確保してコピー
     void* heap_buf = malloc(total + 1);
     char* result = heap_buf as char*;
-    
+
     // データをコピー
     int i = 0;
     while (i < total as int) {
@@ -57,7 +57,7 @@ export string input() {
         i = i + 1;
     }
     result[total as int] = 0 as char;  // null終端
-    
+
     return result as string;
 }
 
@@ -104,11 +104,11 @@ int parse_int(string s) {
     bool negative = false;
     int i = 0;
     int len = s.len();
-    
+
     if (len == 0) {
         return 0;
     }
-    
+
     // 符号チェック
     if (s[0] == '-') {
         negative = true;
@@ -116,7 +116,7 @@ int parse_int(string s) {
     } else if (s[0] == '+') {
         i = 1;
     }
-    
+
     // 数字を処理
     while (i < len) {
         int c = s[i] as int;
@@ -128,11 +128,11 @@ int parse_int(string s) {
         }
         i = i + 1;
     }
-    
+
     if (negative) {
         result = -result;
     }
-    
+
     return result;
 }
 
@@ -142,11 +142,11 @@ long parse_long(string s) {
     bool negative = false;
     int i = 0;
     int len = s.len();
-    
+
     if (len == 0) {
         return 0;
     }
-    
+
     // 符号チェック
     if (s[0] == '-') {
         negative = true;
@@ -154,7 +154,7 @@ long parse_long(string s) {
     } else if (s[0] == '+') {
         i = 1;
     }
-    
+
     // 数字を処理
     while (i < len) {
         int c = s[i] as int;
@@ -165,11 +165,11 @@ long parse_long(string s) {
         }
         i = i + 1;
     }
-    
+
     if (negative) {
         result = -result;
     }
-    
+
     return result;
 }
 
@@ -180,11 +180,11 @@ double parse_double(string s) {
     bool negative = false;
     int i = 0;
     int len = s.len();
-    
+
     if (len == 0) {
         return 0.0;
     }
-    
+
     // 符号チェック
     if (s[0] == '-') {
         negative = true;
@@ -192,7 +192,7 @@ double parse_double(string s) {
     } else if (s[0] == '+') {
         i = 1;
     }
-    
+
     // 整数部
     while (i < len) {
         int c = s[i] as int;
@@ -206,7 +206,7 @@ double parse_double(string s) {
         }
         i = i + 1;
     }
-    
+
     // 小数部
     double fraction = 0.1;
     while (i < len) {
@@ -219,10 +219,10 @@ double parse_double(string s) {
         }
         i = i + 1;
     }
-    
+
     if (negative) {
         result = -result;
     }
-    
+
     return result;
 }

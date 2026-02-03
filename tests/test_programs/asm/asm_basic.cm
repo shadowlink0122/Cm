@@ -5,21 +5,21 @@ import std::io::println;
 
 int main() {
     println("=== Inline Assembly Test ===");
-    
+
     // 基本命令（直接__llvm__使用）
     __llvm__("nop");
     println("nop: ok");
-    
+
     // コンパイラバリア（空asm）
     __llvm__("");
     println("compiler_barrier: ok");
-    
+
     // 複数回実行
     __llvm__("nop");
     __llvm__("nop");
     __llvm__("nop");
     println("multiple: ok");
-    
+
     println("=== Complete ===");
     return 0;
 }

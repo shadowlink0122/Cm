@@ -10,19 +10,19 @@ struct Coord {
 
 // Associated Dataを持つenum（各バリアントは1つのフィールドのみ）
 enum Message {
-    Quit,            // データなし
-    Move(Coord),     // 構造体を1つ持つ
-    Write(string)    // 文字列を1つ持つ
+    Quit,          // データなし
+    Move(Coord),   // 構造体を1つ持つ
+    Write(string)  // 文字列を1つ持つ
 }
 
 int main() {
     println("=== Enum Associated Data (Parse Test) ===");
-    
+
     // バリアント作成テスト
     Message m1 = Message::Quit;
     Message m2 = Message::Move(Coord { x: 10, y: 20 });
     Message m3 = Message::Write("hello");
-    
+
     println("Enum parsed successfully!");
     return 0;
 }

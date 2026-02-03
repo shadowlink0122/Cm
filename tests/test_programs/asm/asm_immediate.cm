@@ -6,38 +6,38 @@ macro int CONST_100 = 100;
 
 int main() {
     println("=== i,n Constraint Test ===");
-    
+
     // === i制約: macro定数 ===
     int result1 = 0;
     __llvm__("movl ${i:CONST_42}, ${=r:result1}");
-    
+
     if (result1 == 42) {
         println("i constraint with macro: PASS");
     } else {
         println("i constraint with macro: FAIL");
     }
-    
+
     // === n制約: 別のmacro定数 ===
     int result2 = 0;
     __llvm__("movl ${n:CONST_100}, ${=r:result2}");
-    
+
     if (result2 == 100) {
         println("n constraint with macro: PASS");
     } else {
         println("n constraint with macro: FAIL");
     }
-    
+
     // === const定数（関数ローカル） ===
     const int LOCAL_CONST = 77;
     int result3 = 0;
     __llvm__("movl ${i:LOCAL_CONST}, ${=r:result3}");
-    
+
     if (result3 == 77) {
         println("i constraint with local const: PASS");
     } else {
         println("i constraint with local const: FAIL");
     }
-    
+
     println("=== All Tests Passed ===");
     return 0;
 }

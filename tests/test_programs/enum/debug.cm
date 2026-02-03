@@ -10,14 +10,14 @@ enum MyStatus {
 int main() {
     // enum型として宣言
     MyStatus s = MyStatus::Active;
-    
+
     // matchで分岐
     int r = match (s) {
         MyStatus::Active => 10,
         MyStatus::Inactive => 20,
         _ => 0,
     };
-    
+
     println("Result: {r}");
     return 0;
 }

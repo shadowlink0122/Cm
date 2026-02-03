@@ -8,20 +8,20 @@ int main() {
     int dst = 0;
     __llvm__("movl ${r:src}, ${=r:dst}");
     println(dst);  // 100
-    
+
     // === テスト2: 複数の入力オペランド ===
     int a = 10;
     int b = 20;
     int c = 0;
     __llvm__("movl ${r:a}, ${=r:c}");
     println(c);  // 10
-    
+
     // === テスト3: +r制約（読み書き） ===
     int x = 50;
     int ten = 10;
     __llvm__("addl ${r:ten}, ${+r:x}");  // x = x + ten
-    println(x);  // 60
-    
+    println(x);                          // 60
+
     // === テスト4: 複数の出力オペランド ===
     int out1 = 0;
     int out2 = 0;
@@ -31,20 +31,20 @@ int main() {
     __llvm__("movl ${r:in2}, ${=r:out2}");
     println(out1);  // 111
     println(out2);  // 222
-    
+
     // === テスト5: 連続した操作 ===
     int val = 5;
     int one = 1;
     __llvm__("addl ${r:one}, ${+r:val}");  // val = 6
     __llvm__("addl ${r:one}, ${+r:val}");  // val = 7
     __llvm__("addl ${r:one}, ${+r:val}");  // val = 8
-    println(val);  // 8
-    
+    println(val);                          // 8
+
     // === テスト6: ゼロ以外の初期値の変更 ===
     int y = 999;
     int answer = 42;
     __llvm__("movl ${r:answer}, ${=r:y}");
     println(y);  // 42
-    
+
     return 0;
 }

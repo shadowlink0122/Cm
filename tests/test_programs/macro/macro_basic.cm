@@ -7,13 +7,13 @@ macro int MAJOR = 0;
 
 int main() {
     println("=== macro test ===");
-    
+
     // オブジェクトマクロの展開
     int v = VERSION;
     int m = MAJOR;
     println(v);
     println(m);
-    
+
     println("=== complete ===");
     return 0;
 }

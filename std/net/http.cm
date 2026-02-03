@@ -270,7 +270,7 @@ impl HttpClient {
 
         // TCP接続
         NetResult<TcpStream> conn_result = TcpStream::connect_addr(
-            SocketAddr::new(IpAddr::localhost(), port)
+        SocketAddr::new(IpAddr::localhost(), port)
         );
 
         match (conn_result) {

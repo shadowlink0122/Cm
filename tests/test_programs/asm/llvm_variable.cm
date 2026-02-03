@@ -6,17 +6,17 @@ import std::io::println;
 
 int main() {
     println("=== LLVM Operand Test ===");
-    
+
     // 変数初期化
     int x = 50;
-    
+
     // x86_64 AT&T構文: addl $imm, %reg
-    // ${+r:x}が$0に変換される  
+    // ${+r:x}が$0に変換される
     __llvm__("addl $$10, ${+r:x}");
-    
+
     // asm結果を直接表示
     println("Result (should be 60):");
     println(x);
-    
+
     return 0;
 }

@@ -57,26 +57,26 @@ impl Stdin {
         // 一時バッファ（スタック上）
         utiny[4096] temp_buf;
         long total = 0;
-        
+
         // 1バイトずつ読み込んで改行を探す
         while (total < 4095) {
             long n = read(this._fd, &temp_buf[total as int] as void*, 1);
-            
+
             if (n <= 0) {
                 break;
             }
-            
+
             if (temp_buf[total as int] == 10) {  // '\n' = 10
                 break;
             }
-            
+
             total = total + 1;
         }
-        
+
         // ヒープにバッファを確保してコピー
         void* heap_buf = malloc(total + 1);
         char* result = heap_buf as char*;
-        
+
         // データをコピー
         int i = 0;
         while (i < total as int) {
@@ -84,7 +84,7 @@ impl Stdin {
             i = i + 1;
         }
         result[total as int] = 0 as char;  // null終端
-        
+
         return IoResult.Ok(result as string);
     }
 }

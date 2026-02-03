@@ -7,12 +7,12 @@ int main() {
     int result = 0;
     __llvm__("movl ${m:mem_val}, ${=r:result}");
     println(result);  // 42
-    
+
     // === テスト2: 別の値をメモリから読み込み ===
     int src = 100;
     int dst = 0;
     __llvm__("movl ${m:src}, ${=r:dst}");
     println(dst);  // 100
-    
+
     return 0;
 }
