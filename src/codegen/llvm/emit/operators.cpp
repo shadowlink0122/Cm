@@ -189,6 +189,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFAdd(lhs, rhs, "fadd");
             }
+            // 整数型のビット幅を揃える（long + int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
             return builder->CreateAdd(lhs, rhs, "add");
         }
         case mir::MirBinaryOp::Sub: {
@@ -229,12 +239,32 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFSub(lhs, rhs, "fsub");
             }
+            // 整数型のビット幅を揃える（long - int 等）
+            if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
+                auto lhsBits = lhsType->getIntegerBitWidth();
+                auto rhsBits = rhsType->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhsType, "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhsType, "sext");
+                }
+            }
             return builder->CreateSub(lhs, rhs, "sub");
         }
         case mir::MirBinaryOp::Mul: {
             if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFMul(lhs, rhs, "fmul");
+            }
+            // 整数型のビット幅を揃える（long * int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
             }
             return builder->CreateMul(lhs, rhs, "mul");
         }
@@ -243,12 +273,32 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFDiv(lhs, rhs, "fdiv");
             }
+            // 整数型のビット幅を揃える（long / int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
             return builder->CreateSDiv(lhs, rhs, "div");
         }
         case mir::MirBinaryOp::Mod: {
             if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFRem(lhs, rhs, "fmod");
+            }
+            // 整数型のビット幅を揃える（long % int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
             }
             return builder->CreateSRem(lhs, rhs, "mod");
         }
