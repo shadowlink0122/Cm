@@ -167,12 +167,25 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
 
             // Tagged Union構造体の動的生成
-            // 型名が__TaggedUnion_で始まる場合、{i32, i64}構造体を生成
+            // 型名が__TaggedUnion_で始まる場合、{i32, i8[N]}構造体を生成
+            // Nはenumの最大ペイロードサイズ
             if (lookupName.find("__TaggedUnion_") == 0) {
+                // enum名を抽出（__TaggedUnion_Status -> Status）
+                std::string enumName = lookupName.substr(14);
+
+                // enumDefsから最大ペイロードサイズを取得
+                uint32_t maxPayloadSize = 8;  // デフォルト8バイト
+                auto enumIt = enumDefs.find(enumName);
+                if (enumIt != enumDefs.end() && enumIt->second) {
+                    maxPayloadSize = enumIt->second->max_payload_size();
+                    if (maxPayloadSize == 0)
+                        maxPayloadSize = 8;
+                }
+
                 auto structType = llvm::StructType::create(ctx.getContext(), lookupName);
                 std::vector<llvm::Type*> fieldTypes = {
-                    ctx.getI32Type(),  // tag (field[0])
-                    ctx.getI32Type()   // payload (field[1]) - int型ペイロード用
+                    ctx.getI32Type(),                                      // tag (field[0])
+                    llvm::ArrayType::get(ctx.getI8Type(), maxPayloadSize)  // payload (field[1])
                 };
                 structType->setBody(fieldTypes);
                 structTypes[lookupName] = structType;

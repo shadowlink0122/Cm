@@ -1094,6 +1094,67 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 }
                 debug_msg("MIR", msg);
             }
+
+            // Tagged Unionペイロード読み込みの特別処理
+            // rvalueがUse/Copyで、ソースがTagged Unionのfield[1]かつターゲットが構造体の場合
+            // memcpyを使用して直接コピー
+            if (assign.rvalue->kind == mir::MirRvalue::Use) {
+                auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                        useData.operand->kind == mir::MirOperand::Move)) {
+                    auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
+
+                    // ソースがTagged Unionのfield[1]か確認
+                    bool isSrcTaggedUnionPayload = false;
+                    if (!srcPlace.projections.empty() &&
+                        srcPlace.projections.back().kind == mir::ProjectionKind::Field &&
+                        srcPlace.projections.back().field_id == 1) {
+                        if (currentMIRFunction &&
+                            srcPlace.local < currentMIRFunction->locals.size()) {
+                            auto& srcLocal = currentMIRFunction->locals[srcPlace.local];
+                            if (srcLocal.type && srcLocal.type->name.find("__TaggedUnion_") == 0) {
+                                isSrcTaggedUnionPayload = true;
+                            }
+                        }
+                    }
+
+                    // ターゲットが構造体型か確認
+                    bool isTargetStruct = false;
+                    hir::TypePtr targetType = nullptr;
+                    if (currentMIRFunction &&
+                        assign.place.local < currentMIRFunction->locals.size()) {
+                        targetType = currentMIRFunction->locals[assign.place.local].type;
+                        if (targetType && targetType->kind == hir::TypeKind::Struct) {
+                            isTargetStruct = true;
+                        }
+                    }
+
+                    // Tagged Unionペイロードから構造体へのコピー -> memcpy
+                    if (isSrcTaggedUnionPayload && isTargetStruct) {
+                        // ソースアドレス（Tagged Unionのfield[1] = i8配列）
+                        auto srcAddr = convertPlaceToAddress(srcPlace);
+
+                        // ターゲットアドレス（構造体ローカル）
+                        auto destAddr = locals[assign.place.local];
+                        if (!destAddr && allocatedLocals.count(assign.place.local) > 0) {
+                            destAddr = locals[assign.place.local];
+                        }
+
+                        if (srcAddr && destAddr) {
+                            // 構造体サイズを取得
+                            auto llvmTargetType = convertType(targetType);
+                            auto dataLayout = module->getDataLayout();
+                            auto structSize = dataLayout.getTypeAllocSize(llvmTargetType);
+
+                            // memcpy: dest=構造体ローカル, src=i8配列, size=構造体サイズ
+                            builder->CreateMemCpy(destAddr, llvm::MaybeAlign(), srcAddr,
+                                                  llvm::MaybeAlign(), structSize);
+                            break;
+                        }
+                    }
+                }
+            }
+
             auto rvalue = convertRvalue(*assign.rvalue);
             if (rvalue) {
                 // 関数参照の特別処理
@@ -1419,11 +1480,66 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                 }
                             }
 
-                            // Store操作を実行
-                            // asm出力で変更される変数へのstoreはvolatileにして最適化を防止
-                            auto* storeInst = builder->CreateStore(rvalue, addr);
-                            if (isAllocated) {
-                                storeInst->setVolatile(true);
+                            // Tagged Unionペイロードへの書き込みを検出
+                            // field[1]への書き込みで、ターゲットがi8配列の場合はmemcpyを使用
+                            bool isTaggedUnionPayload = false;
+                            bool isFieldProj = !assign.place.projections.empty() &&
+                                               assign.place.projections.back().kind ==
+                                                   mir::ProjectionKind::Field &&
+                                               assign.place.projections.back().field_id == 1;
+
+                            if (isFieldProj) {
+                                // 親がTagged Union型か確認
+                                if (currentMIRFunction &&
+                                    assign.place.local < currentMIRFunction->locals.size()) {
+                                    auto& local = currentMIRFunction->locals[assign.place.local];
+                                    if (local.type &&
+                                        local.type->name.find("__TaggedUnion_") == 0) {
+                                        isTaggedUnionPayload = true;
+                                    }
+                                }
+                            }
+
+                            // rvalueが構造体値、またはallocaポインタで構造体を指す場合
+                            bool isStructPayload = rvalue->getType()->isStructTy();
+                            llvm::Type* structType = nullptr;
+                            if (!isStructPayload && rvalue->getType()->isPointerTy()) {
+                                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(rvalue)) {
+                                    if (allocaInst->getAllocatedType()->isStructTy()) {
+                                        isStructPayload = true;
+                                        structType = allocaInst->getAllocatedType();
+                                    }
+                                }
+                            }
+                            if (!structType && isStructPayload) {
+                                structType = rvalue->getType();
+                            }
+
+                            if (isTaggedUnionPayload && isStructPayload && structType) {
+                                // 構造体ペイロードの場合: memcpyを使用
+                                llvm::Value* srcPtr = rvalue;
+                                if (!rvalue->getType()->isPointerTy()) {
+                                    // 一時的なallocaを作成してstoreし、そのポインタを使用
+                                    auto tempAlloca = builder->CreateAlloca(rvalue->getType(),
+                                                                            nullptr, "tmp_payload");
+                                    builder->CreateStore(rvalue, tempAlloca);
+                                    srcPtr = tempAlloca;
+                                }
+
+                                // ペイロードサイズを取得
+                                auto dataLayout = module->getDataLayout();
+                                auto payloadSize = dataLayout.getTypeAllocSize(structType);
+
+                                // memcpy: dest=addr(i8配列), src=srcPtr, size=payloadSize
+                                builder->CreateMemCpy(addr, llvm::MaybeAlign(), srcPtr,
+                                                      llvm::MaybeAlign(), payloadSize);
+                            } else {
+                                // 通常のStore操作を実行
+                                // asm出力で変更される変数へのstoreはvolatileにして最適化を防止
+                                auto* storeInst = builder->CreateStore(rvalue, addr);
+                                if (isAllocated) {
+                                    storeInst->setVolatile(true);
+                                }
                             }
                         }
                     } else {

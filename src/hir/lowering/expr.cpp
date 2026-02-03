@@ -394,6 +394,82 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
         }
     }
 
+    // enum比較：enum変数とenumバリアント参照の比較を検出
+    // s == Option::Some のような比較で、sのタグ値を抽出して比較
+    if (binary.op == ast::BinaryOp::Eq || binary.op == ast::BinaryOp::Ne) {
+        // 右辺がenum参照（例：Option::Some）かチェック
+        std::string rhs_enum_name;
+        bool rhs_is_enum_tag = false;
+        if (auto* rhs_ident = binary.right->as<ast::IdentExpr>()) {
+            auto enum_it = enum_values_.find(rhs_ident->name);
+            if (enum_it != enum_values_.end()) {
+                rhs_is_enum_tag = true;
+                // enum名を抽出（例：Option::Some -> Option）
+                auto sep = rhs_ident->name.find("::");
+                if (sep != std::string::npos) {
+                    rhs_enum_name = rhs_ident->name.substr(0, sep);
+                }
+            }
+        }
+
+        // 左辺がenum変数参照（IdentExpr）で、右辺がそのenumのバリアントの場合
+        // -> 左辺のタグ（field[0]）を抽出して比較
+        if (rhs_is_enum_tag && !rhs_enum_name.empty()) {
+            if (auto* lhs_ident = binary.left->as<ast::IdentExpr>()) {
+                // 左辺がenum_values_に登録されたenum参照ではなく、通常の変数であることを確認
+                if (enum_values_.find(lhs_ident->name) == enum_values_.end()) {
+                    debug::hir::log(debug::hir::Id::BinaryExprLower,
+                                    "Enum comparison: extracting tag from variable",
+                                    debug::Level::Debug);
+                    // タグ抽出: lhs.0 == rhs_tag_value
+                    auto member = std::make_unique<HirMember>();
+                    member->object = lower_expr(*binary.left);
+                    member->member = "__tag";  // Tagged Unionのタグフィールド
+
+                    auto hir = std::make_unique<HirBinary>();
+                    hir->op = (binary.op == ast::BinaryOp::Eq) ? HirBinaryOp::Eq : HirBinaryOp::Ne;
+                    hir->lhs = std::make_unique<HirExpr>(std::move(member), ast::make_int());
+                    hir->rhs = lower_expr(*binary.right);  // enumタグ値（int）
+                    return std::make_unique<HirExpr>(std::move(hir), type);
+                }
+            }
+        }
+
+        // 逆順: 左辺がenum参照、右辺がenum変数
+        std::string lhs_enum_name;
+        bool lhs_is_enum_tag = false;
+        if (auto* lhs_ident = binary.left->as<ast::IdentExpr>()) {
+            auto enum_it = enum_values_.find(lhs_ident->name);
+            if (enum_it != enum_values_.end()) {
+                lhs_is_enum_tag = true;
+                auto sep = lhs_ident->name.find("::");
+                if (sep != std::string::npos) {
+                    lhs_enum_name = lhs_ident->name.substr(0, sep);
+                }
+            }
+        }
+
+        if (lhs_is_enum_tag && !lhs_enum_name.empty()) {
+            if (auto* rhs_ident = binary.right->as<ast::IdentExpr>()) {
+                if (enum_values_.find(rhs_ident->name) == enum_values_.end()) {
+                    debug::hir::log(debug::hir::Id::BinaryExprLower,
+                                    "Enum comparison (reversed): extracting tag from variable",
+                                    debug::Level::Debug);
+                    auto member = std::make_unique<HirMember>();
+                    member->object = lower_expr(*binary.right);
+                    member->member = "__tag";  // Tagged Unionのタグフィールド
+
+                    auto hir = std::make_unique<HirBinary>();
+                    hir->op = (binary.op == ast::BinaryOp::Eq) ? HirBinaryOp::Eq : HirBinaryOp::Ne;
+                    hir->lhs = lower_expr(*binary.left);  // enumタグ値（int）
+                    hir->rhs = std::make_unique<HirExpr>(std::move(member), ast::make_int());
+                    return std::make_unique<HirExpr>(std::move(hir), type);
+                }
+            }
+        }
+    }
+
+    // 通常の二項演算子処理
     auto hir = std::make_unique<HirBinary>();
     hir->op = convert_binary_op(binary.op);
     debug::hir::log(debug::hir::Id::BinaryOp, hir_binary_op_to_string(hir->op),
@@ -1697,8 +1773,46 @@ HirExprPtr HirLowering::lower_match(ast::MatchExpr& match, TypePtr type) {
         }
 
         // このarmの値
-        HirExprPtr arm_value =
-            arm.expr_body ? lower_expr(*arm.expr_body) : make_default_value(type);
+        HirExprPtr arm_value;
+        if (arm.expr_body) {
+            // EnumVariantWithBindingパターンの場合、バインディング変数をペイロード式で置換
+            if (arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding &&
+                !arm.pattern->binding_name.empty()) {
+                // ペイロード型を取得
+                TypePtr payload_type = scrutinee_type;
+                std::string variant_name = arm.pattern->enum_variant;
+                if (!original_enum_name.empty()) {
+                    auto enum_it = enum_defs_.find(original_enum_name);
+                    if (enum_it != enum_defs_.end() && enum_it->second) {
+                        auto sep = variant_name.rfind("::");
+                        std::string short_variant = (sep != std::string::npos)
+                                                        ? variant_name.substr(sep + 2)
+                                                        : variant_name;
+                        for (const auto& member : enum_it->second->members) {
+                            if (member.name == short_variant && !member.fields.empty()) {
+                                payload_type = member.fields[0].second;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // ペイロード抽出式を生成
+                auto payload_extract = std::make_unique<HirEnumPayload>();
+                payload_extract->scrutinee = clone_hir_expr(scrutinee);
+                payload_extract->variant_name = variant_name;
+                payload_extract->payload_type = payload_type;
+                auto payload_expr =
+                    std::make_unique<HirExpr>(std::move(payload_extract), payload_type);
+
+                // arm.expr_body内のバインディング変数をペイロード式で置換
+                arm_value = lower_guard_with_binding(*arm.expr_body, arm.pattern->binding_name,
+                                                     payload_expr, payload_type);
+            } else {
+                arm_value = lower_expr(*arm.expr_body);
+            }
+        } else {
+            arm_value = make_default_value(type);
+        }
 
         // 三項演算子を構築
         auto ternary = std::make_unique<HirTernary>();
