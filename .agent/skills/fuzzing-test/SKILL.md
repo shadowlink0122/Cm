@@ -21,6 +21,54 @@ description: ファジングテストと網羅的構文確認
 - [ ] `docs/spec/grammar.md` - Markdown形式の文法ドキュメント
 - [ ] バージョン番号の更新（ファイル先頭のコメント）
 
+## 最適化BNFの原則
+
+BNFは**仕様を満たす最小限の文法**であるべき。以下の原則に従う：
+
+### 1. 汎用化
+
+```bnf
+# 悪い例（型ごとに別規則）
+int_assignment ::= 'int' identifier '=' int_expr ';'
+double_assignment ::= 'double' identifier '=' double_expr ';'
+
+# 良い例（汎用規則）
+declaration ::= type identifier ('=' expression)? ';'
+```
+
+### 2. 重複排除
+
+```bnf
+# 悪い例（同じパターンの重複）
+if_stmt ::= 'if' '(' expr ')' block
+while_stmt ::= 'while' '(' expr ')' block
+
+# 良い例（共通部分を抽出）
+cond_stmt ::= ('if' | 'while') '(' expr ')' block
+```
+
+### 3. 実装との整合性確認
+
+実装から導出したBNFが本来の設計意図と一致するか確認：
+
+```bash
+# パーサの実装を確認
+grep -n "parse_" src/frontend/parser/*.cpp | head -50
+
+# BNFの規則数を確認
+grep -E "^[a-z_]+ ::=" docs/design/cm_grammar.bnf | wc -l
+```
+
+### 4. 最小BNF生成目標
+
+| 指標 | 目標 |
+|-----|------|
+| 規則数 | 必要最小限（現在約80規則） |
+| 重複 | ゼロ |
+| 例外処理 | 標準規則で網羅 |
+| 特殊ケース | 汎用規則に統合 |
+
+
 ## 構文網羅テストマトリクス
 
 新機能が以下のすべてで動作することを確認：
@@ -29,14 +77,16 @@ description: ファジングテストと網羅的構文確認
 
 | カテゴリ | 例 | チェック |
 |---------|-----|---------|
-| プリミティブ型 | `int`, `double`, `bool` | [ ] |
+| プリミティブ型 | `tiny`, `short`, `int`, `long`, `float`, `double`, `bool`, `char`, `string` | [ ] |
 | typedef型 | `typedef MyInt = int;` | [ ] |
-| 構造体 | `struct Point { int x; int y; }` | [ ] |
+| 定数マクロ | `macro int VERSION = 13;` | [ ] |    
+| 関数マクロ | `macro T*(T, T) add = (T a, T b) => a + b;` | [ ] |
+| 構造体 | `struct Point { T x; T y; }` | [ ] |
 | 列挙型 | `enum Color { Red, Green, Blue }` | [ ] |
-| 配列 | `int[10]`, `int[]` | [ ] |
-| ポインタ | `int*`, `void*` | [ ] |
-| 参照 | `int&` | [ ] |
-| ジェネリック | `Vec<int>`, `Option<T>` | [ ] |
+| 配列 | `T[10]`, `T[]` | [ ] |
+| ポインタ | `T*`, `void*` | [ ] |
+| 参照 | `T&` | [ ] |
+| ジェネリック | `Vec<T>`, `Option<T>` | [ ] |
 
 ### 代入パターン
 
@@ -83,24 +133,24 @@ cat docs/design/cm_grammar.bnf | grep -A5 "該当キーワード"
 
 ```
 tests/test_programs/[機能名]/
-├── [機能名]_basic.cm          # 基本的な動作
-├── [機能名]_basic.expect
-├── [機能名]_typedef.cm        # typedef型での動作
-├── [機能name]_typedef.expect
-├── [機能名]_struct.cm         # 構造体での動作
-├── [機能名]_struct.expect
-├── [機能名]_enum.cm           # enum での動作
-├── [機能名]_enum.expect
-├── [機能名]_array.cm          # 配列での動作
-├── [機能名]_array.expect
-├── [機能名]_combined.cm       # 組み合わせテスト
-└── [機能名]_combined.expect
+├── basic.cm          # 基本的な動作
+├── basic.expect
+├── typedef.cm        # typedef型での動作
+├── typedef.expect
+├── struct.cm         # 構造体での動作
+├── struct.expect
+├── enum.cm           # enum での動作
+├── enum.expect
+├── array.cm          # 配列での動作
+├── array.expect
+├── combined.cm       # 組み合わせテスト
+└── combined.expect
 ```
 
 ### 4. テストテンプレート
 
 ```cm
-// [機能名]_typedef.cm - typedef型での[機能名]テスト
+// typedef.cm - typedef型でのテスト
 
 typedef MyInt = int;
 typedef MyString = string;
