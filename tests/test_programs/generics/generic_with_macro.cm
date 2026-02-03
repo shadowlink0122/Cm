@@ -1,0 +1,56 @@
+// ジェネリクス + マクロ組み合わせテスト
+// ジェネリック型でマクロが正しく展開されるか確認
+import std::io::println;
+
+// 定数マクロ
+macro int DEFAULT_CAPACITY = 10;
+macro int VERSION = 13;
+macro string PREFIX = "Item:";
+
+// ジェネリック構造体
+struct Container<T> {
+    T value;
+    int capacity;
+}
+
+// ジェネリック関数でマクロ使用
+<T> T identity(T x) {
+    return x;
+}
+
+int main() {
+    println("=== Generics + Macro Test ===");
+
+    // ジェネリック構造体でマクロ定数を使用
+    Container<int> c1;
+    c1.value = 42;
+    c1.capacity = DEFAULT_CAPACITY;
+    println(c1.value);      // 42
+    println(c1.capacity);   // 10
+
+    // 異なる型のジェネリック構造体
+    Container<string> c2;
+    c2.value = "hello";
+    c2.capacity = DEFAULT_CAPACITY;
+    println(c2.value);      // hello
+    println(c2.capacity);   // 10
+
+    // マクロをジェネリック関数に渡す
+    int v = identity(VERSION);
+    println(v);  // 13
+
+    // マクロ文字列をジェネリックに渡す
+    string s = identity(PREFIX);
+    println(s);  // Item:
+
+    // マクロ定数での計算
+    int doubled = DEFAULT_CAPACITY * 2;
+    Container<int> c3;
+    c3.value = doubled;
+    c3.capacity = doubled;
+    println(c3.value);      // 20
+    println(c3.capacity);   // 20
+
+    println("PASS");
+    return 0;
+}

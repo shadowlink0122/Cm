@@ -1,0 +1,55 @@
+// enum + match guard テスト
+// enumバリアントでのガード条件を確認
+import std::io::println;
+
+enum Status {
+    Ok,
+    Error
+}
+
+enum Option {
+    None,
+    Some(int)
+}
+
+int main() {
+    println("=== Enum + Match Guard Test ===");
+
+    // シンプルenum + guard
+    Status s = Status::Ok;
+    int result1 = match (s) {
+        Status::Ok if true => 1,
+        Status::Error if true => 2,
+        _ => 0,
+    };
+    println(result1);  // 1
+
+    // ペイロード付きenum + guard（ペイロード値での条件）
+    Option opt1 = Option::Some(42);
+    int result2 = match (opt1) {
+        Option::Some(v) if v > 10 => 100,
+        Option::Some(v) if v <= 10 => 50,
+        _ => 0,
+    };
+    println(result2);  // 100
+
+    // ペイロード値が条件未満
+    Option opt2 = Option::Some(5);
+    int result3 = match (opt2) {
+        Option::Some(v) if v > 10 => 100,
+        Option::Some(v) if v <= 10 => 50,
+        _ => 0,
+    };
+    println(result3);  // 50
+
+    // None時にワイルドカードで捕捉
+    Option opt3 = Option::None;
+    int result4 = match (opt3) {
+        Option::Some(v) if v > 0 => v,
+        _ => -1,   // Noneはワイルドカードで捕捉
+    };
+    println(result4);  // -1
+
+    println("PASS");
+    return 0;
+}
