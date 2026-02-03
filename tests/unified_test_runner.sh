@@ -385,8 +385,8 @@ PY
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
-                # 実行
-                run_with_timeout "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                # テストディレクトリで実行（相対パス解決のため）
+                (cd "$test_dir" && run_with_timeout "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
@@ -901,7 +901,8 @@ PY
             local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
-                "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                # テストディレクトリで実行（相対パス解決のため）
+                (cd "$test_dir" && "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
