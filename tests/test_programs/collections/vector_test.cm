@@ -1,14 +1,6 @@
-// ジェネリックVector<T>テスト
+// 最小限のVector<T>テスト（malloc/freeなし）
 import std::io::println;
 
-use libc {
-    void* malloc(long size);
-    void free(void* ptr);
-}
-
-// -------------------------------------------
-// ジェネリック構造体 Vector<T>
-// -------------------------------------------
 struct Vector<T> {
     T* data;
     int size;
@@ -16,110 +8,25 @@ struct Vector<T> {
 }
 
 impl Vector<T> {
-    // 初期化メソッド
     void init() {
         this.data = 0 as T*;
         this.size = 0;
         this.cap = 0;
     }
 
-    void push(T value) {
-        if (this.size >= this.cap) {
-            int new_cap = this.cap == 0 ? 4 : this.cap * 2;
-            long elem_size = 8;  // T のサイズ（仮に8bytes）
-            T* new_data = malloc((new_cap as long) * elem_size) as T*;
-            for (int i = 0; i < this.size; i++) {
-                new_data[i] = this.data[i];
-            }
-            if (this.data != 0 as T*) {
-                free(this.data as void*);
-            }
-            this.data = new_data;
-            this.cap = new_cap;
-        }
-        this.data[this.size] = value;
-        this.size = this.size + 1;
-    }
-
-    T get(int index) {
-        return this.data[index];
-    }
-
-    void set(int index, T value) {
-        this.data[index] = value;
-    }
-
     int len() {
         return this.size;
     }
-
-    T pop() {
-        this.size = this.size - 1;
-        return this.data[this.size];
-    }
-
-    void clear() {
-        this.size = 0;
-    }
-
-    void release() {
-        if (this.data != 0 as T*) {
-            free(this.data as void*);
-        }
-        this.data = 0 as T*;
-        this.size = 0;
-        this.cap = 0;
-    }
-}
-
-// テスト用
-struct Point {
-    int x;
-    int y;
 }
 
 int main() {
-    println("=== Generic Vector Test ===");
+    println("=== Minimal Vector Test ===");
 
-    // 1. int型 - vec.init()形式
-    println("1. Vector<int>:");
     Vector<int> vi;
     vi.init();
-    vi.push(10);
-    vi.push(20);
-    vi.push(30);
-    println("  len: {vi.len()}");
-    println("  [0]={vi.get(0)}, [1]={vi.get(1)}, [2]={vi.get(2)}");
-    println("  pop: {vi.pop()}");
-    vi.release();
-    println("  freed");
+    int len1 = vi.len();
+    println("len: {len1}");
 
-    // 2. double型
-    println("2. Vector<double>:");
-    Vector<double> vd;
-    vd.init();
-    vd.push(1.1);
-    vd.push(2.2);
-    println("  len: {vd.len()}");
-    println("  [0]={vd.get(0)}, [1]={vd.get(1)}");
-    vd.release();
-    println("  freed");
-
-    // 3. Point型
-    println("3. Vector<Point>:");
-    Vector<Point> vp;
-    vp.init();
-    Point p1 = Point { x: 1, y: 2 };
-    Point p2 = Point { x: 3, y: 4 };
-    vp.push(p1);
-    vp.push(p2);
-    println("  len: {vp.len()}");
-    Point got = vp.get(0);
-    println("  [0]: ({got.x}, {got.y})");
-    vp.release();
-    println("  freed");
-
-    println("");
     println("=== PASS ===");
     return 0;
 }
