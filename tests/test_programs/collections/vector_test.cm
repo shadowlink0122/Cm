@@ -1,0 +1,107 @@
+// Vectorテスト - 直接操作パターン
+// ポインタ経由関数呼び出しは現在のバージョンで問題があるため
+// 直接フィールドアクセスでテスト
+import std::io::println;
+
+use libc {
+    void* malloc(long size);
+    void free(void* ptr);
+}
+
+struct Vec {
+    int* data;
+    int size;
+    int cap;
+}
+
+int main() {
+    println("=== Vector Test ===");
+
+    // 1. 作成
+    Vec v = Vec { data: 0 as int*, size: 0, cap: 0 };
+    println("Created empty vector");
+    println("  size: {v.size}");
+
+    // 2. push関数 (inline)
+    // push 10
+    {
+        if (v.size >= v.cap) {
+            int new_cap = 4;
+            v.data = malloc((new_cap * 8) as long) as int*;
+            v.cap = new_cap;
+        }
+        int s = v.size;
+        v.data[s] = 10;
+        v.size = s + 1;
+    }
+    
+    // push 20
+    {
+        int s = v.size;
+        v.data[s] = 20;
+        v.size = s + 1;
+    }
+    
+    // push 30
+    {
+        int s = v.size;
+        v.data[s] = 30;
+        v.size = s + 1;
+    }
+    
+    println("After push(10, 20, 30):");
+    println("  len: {v.size}");
+    println("  cap: {v.cap}");
+
+    // 3. 要素取得
+    println("Elements:");
+    for (int i = 0; i < v.size; i++) {
+        int val = v.data[i];
+        println("  [{i}]: {val}");
+    }
+
+    // 4. pop
+    {
+        int s = v.size;
+        v.size = s - 1;
+        int last = v.data[v.size];
+        println("pop(): {last}");
+        println("  len: {v.size}");
+    }
+
+    // 5. push 5個追加（容量拡張テスト）
+    println("Adding more elements...");
+    for (int i = 0; i < 5; i++) {
+        if (v.size >= v.cap) {
+            int c = v.cap;
+            int new_cap = c * 2;
+            int* new_data = malloc((new_cap * 8) as long) as int*;
+            for (int j = 0; j < v.size; j++) {
+                new_data[j] = v.data[j];
+            }
+            free(v.data as void*);
+            v.data = new_data;
+            v.cap = new_cap;
+        }
+        int s = v.size;
+        int val = i * 100;
+        v.data[s] = val;
+        v.size = s + 1;
+    }
+    println("  len: {v.size}");
+    println("  cap: {v.cap}");
+
+    // 6. 全要素確認
+    println("All elements:");
+    for (int i = 0; i < v.size; i++) {
+        int val = v.data[i];
+        println("  [{i}]: {val}");
+    }
+
+    // 7. メモリ解放
+    free(v.data as void*);
+    println("Memory freed");
+
+    println("=== PASS ===");
+    return 0;
+}
