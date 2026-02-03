@@ -1,8 +1,8 @@
 # ============================================
 # Cm Language Grammar (EBNF)
 # ============================================
-# Version: 0.11.0
-# Date: 2026-01-11
+# Version: 0.13.0
+# Date: 2026-02-03
 #
 # Notation:
 #   ::=     defines
@@ -58,7 +58,9 @@ impl_member ::= function_decl
 
 typedef_decl ::= 'typedef' identifier generic_params? '=' type ';'
 
-macro_decl ::= 'macro' identifier generic_params? '(' param_list? ')' where_clause? block
+# マクロ宣言（v0.13.0更新）
+macro_decl ::= 'macro' type identifier '=' literal ';'        # 定数マクロ
+             | 'macro' type '*(' type_list? ')' identifier '=' lambda_expr ';'  # 関数マクロ
 
 enum_decl ::= 'enum' identifier generic_params? '{' enum_variant (',' enum_variant)* ','? '}'
 
@@ -147,7 +149,10 @@ statement ::= declaration_statement
             | break_statement
             | continue_statement
             | defer_statement
+            | must_statement
             | block
+
+must_statement ::= 'must' block  # デッドコード削除防止（volatile扱い）
 
 declaration_statement ::= type identifier ('=' expression)? ';'
 
