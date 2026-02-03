@@ -5,8 +5,8 @@ import std::io::file::{read_file, write_file};
 int main() {
     println("=== Simple File I/O Test ===");
 
-    // テストフォルダ内のデータファイルを使用（テストランナーはこのディレクトリで実行）
-    string data_path = "data/simple_io_data.txt";
+    // テストフォルダ内のデータファイルを使用
+    string data_path = "tests/test_programs/io/data/simple_io_data.txt";
     string content = "Hello from std::io!";
 
     // 1. 書き込み

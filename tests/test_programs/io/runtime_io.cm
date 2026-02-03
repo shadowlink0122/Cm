@@ -1,6 +1,6 @@
 // ランタイムI/Oテスト
 import std::io::println;
-import std::io::file::io::{read_file, write_file};
+import std::io::file::{read_file, write_file};
 
 int main() {
     println("=== Runtime I/O Test ===");
