@@ -825,6 +825,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         TypePtr obj_type = nullptr;
         if (obj_hir->type) {
             obj_type = obj_hir->type;
+            // type_to_stringでジェネリック型引数を含む形式で取得（Vector<int>）
+            // 後でマングリング形式（Vector__int）に変換される
             type_name = ast::type_to_string(*obj_hir->type);
             debug::hir::log(debug::hir::Id::MethodCallLower, "obj_hir->type = " + type_name,
                             debug::Level::Info);

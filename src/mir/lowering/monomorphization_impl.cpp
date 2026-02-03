@@ -654,11 +654,62 @@ void Monomorphization::generate_generic_specializations(
         std::unordered_map<std::string, hir::TypePtr> type_subst;
         // 型名置換マップ（string版 - メソッド呼び出し書き換え用）
         std::unordered_map<std::string, std::string> type_name_subst;
-        for (size_t i = 0; i < hir_func->generic_params.size() && i < type_args.size(); ++i) {
-            const auto& param_name = hir_func->generic_params[i].name;
-            type_subst[param_name] = make_type_from_name(type_args[i]);
-            type_name_subst[param_name] = type_args[i];
-            debug_msg("MONO", "Type substitution: " + param_name + " -> " + type_args[i]);
+
+        if (!hir_func->generic_params.empty()) {
+            // 通常のジェネリック関数: generic_paramsから型パラメータを取得
+            for (size_t i = 0; i < hir_func->generic_params.size() && i < type_args.size(); ++i) {
+                const auto& param_name = hir_func->generic_params[i].name;
+                type_subst[param_name] = make_type_from_name(type_args[i]);
+                type_name_subst[param_name] = type_args[i];
+                debug_msg("MONO", "Type substitution: " + param_name + " -> " + type_args[i]);
+            }
+        } else if (func_name.find('<') != std::string::npos) {
+            // ジェネリックimplメソッドの場合: 関数名Vector<T>__methodから型パラメータを推論
+            // type_args[0]が実際の型（例: "int"）、Tがパラメータ名
+            auto angle_start = func_name.find('<');
+            auto angle_end = func_name.find('>');
+            if (angle_start != std::string::npos && angle_end != std::string::npos) {
+                std::string params_str =
+                    func_name.substr(angle_start + 1, angle_end - angle_start - 1);
+                // 型パラメータを抽出（カンマ区切り）
+                std::vector<std::string> param_names;
+                std::string current;
+                int depth = 0;
+                for (char c : params_str) {
+                    if (c == '<')
+                        depth++;
+                    else if (c == '>')
+                        depth--;
+                    else if (c == ',' && depth == 0) {
+                        if (!current.empty()) {
+                            // 空白をトリム
+                            size_t start = current.find_first_not_of(" ");
+                            size_t end = current.find_last_not_of(" ");
+                            if (start != std::string::npos) {
+                                param_names.push_back(current.substr(start, end - start + 1));
+                            }
+                            current.clear();
+                        }
+                        continue;
+                    }
+                    current += c;
+                }
+                if (!current.empty()) {
+                    size_t start = current.find_first_not_of(" ");
+                    size_t end = current.find_last_not_of(" ");
+                    if (start != std::string::npos) {
+                        param_names.push_back(current.substr(start, end - start + 1));
+                    }
+                }
+
+                // type_argsと対応付け
+                for (size_t i = 0; i < param_names.size() && i < type_args.size(); ++i) {
+                    type_subst[param_names[i]] = make_type_from_name(type_args[i]);
+                    type_name_subst[param_names[i]] = type_args[i];
+                    debug_msg("MONO", "Impl method type substitution: " + param_names[i] + " -> " +
+                                          type_args[i]);
+                }
+            }
         }
 
         // 特殊化関数を生成（MIR関数をコピーして型を置換）
