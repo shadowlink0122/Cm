@@ -34,7 +34,9 @@ description: コードレビューチェックリスト
 ### 5. ドキュメント
 - [ ] 公開APIにドキュメント
 - [ ] 複雑なロジックに説明
-- [ ] 変更がREADMEに反映
+- [ ] READMEに変更反映
+- [ ] リリースノートに記載
+- [ ] チュートリアル（ja/en）追加
 
 ## レビューコマンド
 ```bash
@@ -44,3 +46,13 @@ git diff HEAD~1
 # 変更ファイル一覧
 git diff --name-only HEAD~1
 ```
+
+## ドキュメント更新チェックリスト
+
+新機能追加時には以下を確認：
+
+- [ ] `docs/releases/v*.md` - リリースノートに記載
+- [ ] `docs/tutorials/ja/` - 日本語チュートリアル追加
+- [ ] `docs/tutorials/en/` - 英語チュートリアル追加
+- [ ] `README.md` - 必要であれば更新
+- [ ] `docs/FEATURES.md` - 機能一覧を更新

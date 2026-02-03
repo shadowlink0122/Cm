@@ -59,10 +59,17 @@ impl Printable for Point {
     }
 };
 
-// async/await
-async String fetchData(String url) {
-    Response res = await http::get(url);
-    return res.body;
+// スレッド
+import std::thread::{spawn, join};
+
+void* compute(void* arg) {
+    return 42 as void*;
+}
+
+int main() {
+    ulong t = spawn(compute as void*);
+    int result = join(t);  // 42
+    return 0;
 }
 
 // パターンマッチ
