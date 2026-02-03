@@ -1,91 +1,48 @@
-// HashMap テスト - ローカル実装（インポートエラー回避）
+// ジェネリックHashMap<K,V>テスト
 import std::io::println;
+import std::collections::hashmap::*;
 
-use libc {
-    void* malloc(long size);
-    void free(void* ptr);
-}
-
-struct Entry {
-    int key;
-    int value;
-    bool occupied;
-}
-
-struct HashMap {
-    Entry* entries;
-    int cap;
-    int size;
+// テスト用の構造体
+struct Person {
+    int id;
+    int age;
 }
 
 int main() {
-    println("=== HashMap Test ===");
+    println("=== Generic HashMap Test ===");
 
-    // 初期化
-    int capacity = 16;
-    HashMap m;
-    m.entries = malloc((capacity * 24) as long) as Entry*;
-    m.cap = capacity;
-    m.size = 0;
-    for (int i = 0; i < capacity; i++) {
-        m.entries[i].occupied = false;
-    }
-    println("Created: size={m.size}");
+    // -------------------------------------------
+    // 1. int -> int
+    // -------------------------------------------
+    println("1. HashMap<int, int>:");
+    HashMap<int, int> m1 = hashmap_new<int, int>(16);
+    m1.insert(1, 100);
+    m1.insert(2, 200);
+    m1.insert(3, 300);
+    println("  len: {m1.len()}");
+    println("  get(1): {m1.get(1)}");
+    println("  get(2): {m1.get(2)}");
+    println("  contains(3): {m1.contains(3)}");
+    println("  contains(4): {m1.contains(4)}");
+    m1.release();
+    println("  freed");
 
-    // insert (1, 100)
-    {
-        int key = 1;
-        int val = 100;
-        int idx = key % m.cap;
-        m.entries[idx].key = key;
-        m.entries[idx].value = val;
-        m.entries[idx].occupied = true;
-        int sz = m.size;
-        m.size = sz + 1;
-    }
-    // insert (2, 200)
-    {
-        int key = 2;
-        int val = 200;
-        int idx = key % m.cap;
-        m.entries[idx].key = key;
-        m.entries[idx].value = val;
-        m.entries[idx].occupied = true;
-        int sz = m.size;
-        m.size = sz + 1;
-    }
-    // insert (3, 300)
-    {
-        int key = 3;
-        int val = 300;
-        int idx = key % m.cap;
-        m.entries[idx].key = key;
-        m.entries[idx].value = val;
-        m.entries[idx].occupied = true;
-        int sz = m.size;
-        m.size = sz + 1;
-    }
-    println("After insert: size={m.size}");
+    // -------------------------------------------
+    // 2. int -> Person
+    // -------------------------------------------
+    println("2. HashMap<int, Person>:");
+    HashMap<int, Person> m2 = hashmap_new<int, Person>(16);
+    Person alice = Person { id: 1, age: 25 };
+    Person bob = Person { id: 2, age: 30 };
+    m2.insert(1, alice);
+    m2.insert(2, bob);
+    println("  len: {m2.len()}");
+    Person p = m2.get(1);
+    println("  get(1): id={p.id}, age={p.age}");
+    m2.release();
+    println("  freed");
 
-    // get
-    println("Get:");
-    println("  key=1: {m.entries[1].value}");
-    println("  key=2: {m.entries[2].value}");
-    println("  key=3: {m.entries[3].value}");
-
-    // contains
-    println("Contains:");
-    println("  key=1: {m.entries[1].occupied}");
-    println("  key=4: {m.entries[4].occupied}");
-
-    // overwrite
-    m.entries[2].value = 999;
-    println("After overwrite key=2: {m.entries[2].value}");
-
-    // 解放
-    free(m.entries as void*);
-    println("Freed");
-
+    println("");
     println("=== PASS ===");
     return 0;
 }

@@ -1,4 +1,5 @@
-// Vector テスト - ローカル実装（インポートエラー回避）
+// ジェネリックVector<T>テスト
+// プリミティブ型、構造体、enum、unionでテスト
 import std::io::println;
 
 use libc {
@@ -6,65 +7,153 @@ use libc {
     void free(void* ptr);
 }
 
-struct Vector {
-    int* data;
+// -------------------------------------------
+// ジェネリック構造体 Vector<T>
+// -------------------------------------------
+struct Vector<T> {
+    T* data;
     int size;
     int cap;
 }
 
-int main() {
-    println("=== Vector Test ===");
-
-    // 構造体リテラルで初期化
-    Vector v = Vector { data: 0 as int*, size: 0, cap: 0 };
-    println("Created: size={v.size}");
-
-    // push 3回
-    // --- push 10 ---
-    {
-        if (v.size >= v.cap) {
-            v.data = malloc(32 as long) as int*;
-            v.cap = 4;
+impl Vector<T> {
+    void push(T value) {
+        if (this.size >= this.cap) {
+            int new_cap = this.cap == 0 ? 4 : this.cap * 2;
+            T* new_data = malloc((new_cap * 8) as long) as T*;
+            for (int i = 0; i < this.size; i++) {
+                new_data[i] = this.data[i];
+            }
+            if (this.data != 0 as T*) {
+                free(this.data as void*);
+            }
+            this.data = new_data;
+            this.cap = new_cap;
         }
-        int s = v.size;
-        v.data[s] = 10;
-        v.size = s + 1;
+        this.data[this.size] = value;
+        this.size = this.size + 1;
     }
-    // --- push 20 ---
-    {
-        int s = v.size;
-        v.data[s] = 20;
-        v.size = s + 1;
+
+    T get(int index) {
+        return this.data[index];
     }
-    // --- push 30 ---
-    {
-        int s = v.size;
-        v.data[s] = 30;
-        v.size = s + 1;
+
+    void set(int index, T value) {
+        this.data[index] = value;
     }
-    
-    println("After push: len={v.size}");
 
-    // 取得
-    println("Elements:");
-    println("  [0]: {v.data[0]}");
-    println("  [1]: {v.data[1]}");
-    println("  [2]: {v.data[2]}");
+    int len() {
+        return this.size;
+    }
 
-    // 設定
-    v.data[1] = 200;
-    println("After set(1, 200): [1]={v.data[1]}");
+    T pop() {
+        this.size = this.size - 1;
+        return this.data[this.size];
+    }
 
-    // pop
-    int sz = v.size;
-    v.size = sz - 1;
-    int last = v.data[v.size];
-    println("pop: {last}, len={v.size}");
+    void release() {
+        if (this.data != 0 as T*) {
+            free(this.data as void*);
+        }
+        this.data = 0 as T*;
+        this.size = 0;
+        this.cap = 0;
+    }
+}
 
-    // 解放
-    free(v.data as void*);
-    println("Freed");
+// -------------------------------------------
+// テスト用の型定義
+// -------------------------------------------
+struct Point {
+    int x;
+    int y;
+}
 
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+// -------------------------------------------
+// メイン
+// -------------------------------------------
+int main() {
+    println("=== Generic Vector Test ===");
+
+    // 1. int型 - 直接初期化
+    println("1. Vector<int>:");
+    Vector<int> vi;
+    vi.data = 0 as int*;
+    vi.size = 0;
+    vi.cap = 0;
+    vi.push(10);
+    vi.push(20);
+    vi.push(30);
+    println("  len: {vi.len()}");
+    println("  elements: {vi.get(0)}, {vi.get(1)}, {vi.get(2)}");
+    println("  pop: {vi.pop()}");
+    vi.release();
+    println("  freed");
+
+    // 2. double型
+    println("2. Vector<double>:");
+    Vector<double> vd;
+    vd.data = 0 as double*;
+    vd.size = 0;
+    vd.cap = 0;
+    vd.push(1.1);
+    vd.push(2.2);
+    vd.push(3.3);
+    println("  len: {vd.len()}");
+    println("  elements: {vd.get(0)}, {vd.get(1)}, {vd.get(2)}");
+    vd.release();
+    println("  freed");
+
+    // 3. struct型
+    println("3. Vector<Point>:");
+    Vector<Point> vp;
+    vp.data = 0 as Point*;
+    vp.size = 0;
+    vp.cap = 0;
+    Point p1 = Point { x: 1, y: 2 };
+    Point p2 = Point { x: 3, y: 4 };
+    vp.push(p1);
+    vp.push(p2);
+    println("  len: {vp.len()}");
+    Point got = vp.get(0);
+    println("  [0]: ({got.x}, {got.y})");
+    vp.release();
+    println("  freed");
+
+    // 4. enum型
+    println("4. Vector<Color>:");
+    Vector<Color> vc;
+    vc.data = 0 as Color*;
+    vc.size = 0;
+    vc.cap = 0;
+    vc.push(Color::Red);
+    vc.push(Color::Green);
+    vc.push(Color::Blue);
+    println("  len: {vc.len()}");
+    vc.release();
+    println("  freed");
+
+    // 5. bool型
+    println("5. Vector<bool>:");
+    Vector<bool> vb;
+    vb.data = 0 as bool*;
+    vb.size = 0;
+    vb.cap = 0;
+    vb.push(true);
+    vb.push(false);
+    vb.push(true);
+    println("  len: {vb.len()}");
+    println("  [0]: {vb.get(0)}, [1]: {vb.get(1)}, [2]: {vb.get(2)}");
+    vb.release();
+    println("  freed");
+
+    println("");
     println("=== PASS ===");
     return 0;
 }

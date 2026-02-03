@@ -1,5 +1,5 @@
-// std::collections::hashmap - 連想配列
-// 線形探索ベースの簡易実装
+// std::collections::hashmap - ジェネリック連想配列
+// HashMap<K, V> - キーK、値Vの連想配列
 module std.collections.hashmap;
 
 use libc {
@@ -8,103 +8,105 @@ use libc {
 }
 
 // =============================================================
-// HashMap - int→int の連想配列
+// HashMap<K, V> - ジェネリック連想配列（線形探索）
 // =============================================================
 
-export struct HashMapEntry {
-    int key;
-    int value;
+export struct Entry<K, V> {
+    K key;
+    V value;
     bool occupied;
 }
 
-export struct HashMap {
-    HashMapEntry* entries;
+export struct HashMap<K, V> {
+    Entry<K, V>* entries;
     int cap;
     int size;
 }
 
-// コンストラクタ
-export HashMap HashMap_new(int capacity) {
-    HashMap m;
-    m.entries = malloc((capacity * 24) as long) as HashMapEntry*;  // 24 = 8+8+8 aligned
+export impl HashMap<K, V> {
+    // 挿入
+    void insert(K key, V value) {
+        // 単純なハッシュ: キーをintにキャストしてmod
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % this.cap;
+        
+        for (int i = 0; i < this.cap; i++) {
+            int pos = (idx + i) % this.cap;
+            if (!this.entries[pos].occupied || this.entries[pos].key == key) {
+                if (!this.entries[pos].occupied) {
+                    this.size = this.size + 1;
+                }
+                this.entries[pos].key = key;
+                this.entries[pos].value = value;
+                this.entries[pos].occupied = true;
+                return;
+            }
+        }
+    }
+
+    // 取得
+    V get(K key) {
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % this.cap;
+        
+        for (int i = 0; i < this.cap; i++) {
+            int pos = (idx + i) % this.cap;
+            if (this.entries[pos].occupied && this.entries[pos].key == key) {
+                return this.entries[pos].value;
+            }
+            if (!this.entries[pos].occupied) {
+                break;
+            }
+        }
+        // デフォルト値（型に依存）
+        V default_val;
+        return default_val;
+    }
+
+    // 存在確認
+    bool contains(K key) {
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % this.cap;
+        
+        for (int i = 0; i < this.cap; i++) {
+            int pos = (idx + i) % this.cap;
+            if (this.entries[pos].occupied && this.entries[pos].key == key) {
+                return true;
+            }
+            if (!this.entries[pos].occupied) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // サイズ
+    int len() {
+        return this.size;
+    }
+
+    // 解放
+    void release() {
+        if (this.entries != 0 as Entry<K, V>*) {
+            free(this.entries as void*);
+        }
+        this.entries = 0 as Entry<K, V>*;
+        this.size = 0;
+        this.cap = 0;
+    }
+}
+
+// ファクトリ関数
+export <K, V> HashMap<K, V> hashmap_new(int capacity) {
+    HashMap<K, V> m;
+    m.entries = malloc((capacity * 32) as long) as Entry<K, V>*;
     m.cap = capacity;
     m.size = 0;
-    // エントリ初期化
     for (int i = 0; i < capacity; i++) {
         m.entries[i].occupied = false;
     }
     return m;
-}
-
-// ハッシュ関数（単純）
-int hash(int key, int cap) {
-    int h = key;
-    if (h < 0) {
-        h = 0 - h;
-    }
-    return h % cap;
-}
-
-// 挿入
-export void HashMap_insert(HashMap* m, int key, int value) {
-    int idx = hash(key, m->cap);
-    // 線形探索
-    for (int i = 0; i < m->cap; i++) {
-        int pos = (idx + i) % m->cap;
-        if (!m->entries[pos].occupied || m->entries[pos].key == key) {
-            if (!m->entries[pos].occupied) {
-                int s = m->size;
-                m->size = s + 1;
-            }
-            m->entries[pos].key = key;
-            m->entries[pos].value = value;
-            m->entries[pos].occupied = true;
-            return;
-        }
-    }
-}
-
-// 取得（見つからない場合は0）
-export int HashMap_get(HashMap* m, int key) {
-    int idx = hash(key, m->cap);
-    for (int i = 0; i < m->cap; i++) {
-        int pos = (idx + i) % m->cap;
-        if (m->entries[pos].occupied && m->entries[pos].key == key) {
-            return m->entries[pos].value;
-        }
-        if (!m->entries[pos].occupied) {
-            return 0;
-        }
-    }
-    return 0;
-}
-
-// 存在確認
-export bool HashMap_contains(HashMap* m, int key) {
-    int idx = hash(key, m->cap);
-    for (int i = 0; i < m->cap; i++) {
-        int pos = (idx + i) % m->cap;
-        if (m->entries[pos].occupied && m->entries[pos].key == key) {
-            return true;
-        }
-        if (!m->entries[pos].occupied) {
-            return false;
-        }
-    }
-    return false;
-}
-
-// サイズ
-export int HashMap_len(HashMap* m) {
-    return m->size;
-}
-
-// メモリ解放
-export void HashMap_free(HashMap* m) {
-    if (m->entries != 0 as HashMapEntry*) {
-        free(m->entries as void*);
-    }
-    m->entries = 0 as HashMapEntry*;
-    m->size = 0;
-    m->cap = 0;
 }

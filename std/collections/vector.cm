@@ -1,94 +1,97 @@
-// std::collections::vector - 動的配列
-// ポインタベースAPI（implのthisバグ回避）
+// std::collections::vector - ジェネリック動的配列
+// Vector<T> - 任意の型Tを格納できる動的配列
 module std.collections.vector;
 
 use libc {
     void* malloc(long size);
+    void* realloc(void* ptr, long size);
     void free(void* ptr);
+    void* memcpy(void* dest, void* src, long n);
 }
 
 // =============================================================
-// Vector - 整数用動的配列
+// Vector<T> - ジェネリック動的配列
 // =============================================================
 
-export struct Vector {
-    int* data;
+export struct Vector<T> {
+    T* data;
     int size;
     int cap;
 }
 
-// コンストラクタ
-export Vector Vector_new() {
-    Vector v = Vector { data: 0 as int*, size: 0, cap: 0 };
+export impl Vector<T> {
+    // 末尾に追加
+    void push(T value) {
+        if (this.size >= this.cap) {
+            int new_cap = this.cap == 0 ? 4 : this.cap * 2;
+            T* new_data = malloc((new_cap * 8) as long) as T*;
+            for (int i = 0; i < this.size; i++) {
+                new_data[i] = this.data[i];
+            }
+            if (this.data != 0 as T*) {
+                free(this.data as void*);
+            }
+            this.data = new_data;
+            this.cap = new_cap;
+        }
+        this.data[this.size] = value;
+        this.size = this.size + 1;
+    }
+
+    // 取得
+    T get(int index) {
+        return this.data[index];
+    }
+
+    // 設定
+    void set(int index, T value) {
+        if (index >= 0 && index < this.size) {
+            this.data[index] = value;
+        }
+    }
+
+    // 長さ
+    int len() {
+        return this.size;
+    }
+
+    // 容量
+    int capacity() {
+        return this.cap;
+    }
+
+    // 末尾削除
+    T pop() {
+        this.size = this.size - 1;
+        return this.data[this.size];
+    }
+
+    // 空チェック
+    bool is_empty() {
+        return this.size == 0;
+    }
+
+    // クリア
+    void clear() {
+        this.size = 0;
+    }
+
+    // メモリ解放
+    void release() {
+        if (this.data != 0 as T*) {
+            free(this.data as void*);
+        }
+        this.data = 0 as T*;
+        this.size = 0;
+        this.cap = 0;
+    }
+}
+
+// ファクトリ関数（ジェネリック）
+export <T> Vector<T> vector_new() {
+    Vector<T> v;
+    v.data = 0 as T*;
+    v.size = 0;
+    v.cap = 0;
     return v;
-}
-
-// 追加
-export void Vector_push(Vector* v, int value) {
-    if (v->size >= v->cap) {
-        int c = v->cap;
-        int new_cap = c == 0 ? 4 : c * 2;
-        int* new_data = malloc((new_cap * 8) as long) as int*;
-        for (int i = 0; i < v->size; i++) {
-            new_data[i] = v->data[i];
-        }
-        if (v->data != 0 as int*) {
-            free(v->data as void*);
-        }
-        v->data = new_data;
-        v->cap = new_cap;
-    }
-    int s = v->size;  // バグ回避: ローカル変数経由
-    v->data[s] = value;
-    v->size = s + 1;
-}
-
-// 取得
-export int Vector_get(Vector* v, int index) {
-    if (index < 0 || index >= v->size) {
-        return 0;
-    }
-    return v->data[index];
-}
-
-// 設定
-export void Vector_set(Vector* v, int index, int value) {
-    if (index >= 0 && index < v->size) {
-        v->data[index] = value;
-    }
-}
-
-// 長さ
-export int Vector_len(Vector* v) {
-    return v->size;
-}
-
-// 容量
-export int Vector_capacity(Vector* v) {
-    return v->cap;
-}
-
-// 末尾削除
-export int Vector_pop(Vector* v) {
-    if (v->size == 0) {
-        return 0;
-    }
-    int s = v->size;
-    v->size = s - 1;
-    return v->data[v->size];
-}
-
-// クリア
-export void Vector_clear(Vector* v) {
-    v->size = 0;
-}
-
-// メモリ解放
-export void Vector_free(Vector* v) {
-    if (v->data != 0 as int*) {
-        free(v->data as void*);
-    }
-    v->data = 0 as int*;
-    v->size = 0;
-    v->cap = 0;
 }
