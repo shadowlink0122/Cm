@@ -627,6 +627,27 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
 HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
     debug::hir::log(debug::hir::Id::StmtLower, "Lowering match as statement", debug::Level::Debug);
 
+    // AST段階の元の型名を保存（enum_defs_検索用）
+    std::string original_enum_name;
+    if (match.scrutinee && match.scrutinee->type) {
+        original_enum_name = match.scrutinee->type->name;
+    }
+    // scrutinee->type->nameが空の場合、パターンのenum_variantからenum名を抽出
+    if (original_enum_name.empty()) {
+        for (const auto& arm : match.arms) {
+            if (arm.pattern &&
+                (arm.pattern->kind == ast::MatchPatternKind::EnumVariant ||
+                 arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding)) {
+                const std::string& variant_name = arm.pattern->enum_variant;
+                auto sep = variant_name.rfind("::");
+                if (sep != std::string::npos) {
+                    original_enum_name = variant_name.substr(0, sep);
+                    break;
+                }
+            }
+        }
+    }
+
     auto scrutinee = lower_expr(*match.scrutinee);
     auto scrutinee_type = scrutinee->type;
 
@@ -682,9 +703,9 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                 TypePtr payload_type = scrutinee_type;  // フォールバック
                 std::string variant_name = arm.pattern->enum_variant;
 
-                // scrutinee_typeの型名でenum定義を検索
-                if (scrutinee_type && !scrutinee_type->name.empty()) {
-                    auto enum_it = enum_defs_.find(scrutinee_type->name);
+                // 元のenum名でenum定義を検索
+                if (!original_enum_name.empty()) {
+                    auto enum_it = enum_defs_.find(original_enum_name);
                     if (enum_it != enum_defs_.end() && enum_it->second) {
                         // バリアント名を取得（Type::Variant形式からVariantを抽出）
                         auto sep = variant_name.rfind("::");
@@ -749,7 +770,41 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
 
         // ガード条件がある場合は結合
         if (arm.guard) {
-            auto guard_cond = lower_expr(*arm.guard);
+            HirExprPtr guard_cond;
+            // EnumVariantWithBindingの場合、ガード内のバインディング変数をペイロードで置換
+            if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding &&
+                !arm.pattern->binding_name.empty()) {
+                // ペイロード型を取得（677-702行と同じロジック）
+                TypePtr payload_type = scrutinee_type;
+                std::string variant_name = arm.pattern->enum_variant;
+                if (!original_enum_name.empty()) {
+                    auto enum_it = enum_defs_.find(original_enum_name);
+                    if (enum_it != enum_defs_.end() && enum_it->second) {
+                        auto sep = variant_name.rfind("::");
+                        std::string short_variant = (sep != std::string::npos)
+                                                        ? variant_name.substr(sep + 2)
+                                                        : variant_name;
+                        for (const auto& member : enum_it->second->members) {
+                            if (member.name == short_variant && !member.fields.empty()) {
+                                payload_type = member.fields[0].second;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // ペイロード抽出式を生成
+                auto payload_extract = std::make_unique<HirEnumPayload>();
+                payload_extract->scrutinee = clone_hir_expr(scrutinee);
+                payload_extract->variant_name = variant_name;
+                payload_extract->payload_type = payload_type;
+                auto payload_expr =
+                    std::make_unique<HirExpr>(std::move(payload_extract), payload_type);
+                // ガード内のバインディング変数をペイロードで置換
+                guard_cond = lower_guard_with_binding(*arm.guard, arm.pattern->binding_name,
+                                                      payload_expr, payload_type);
+            } else {
+                guard_cond = lower_expr(*arm.guard);
+            }
             auto combined = std::make_unique<HirBinary>();
             combined->op = HirBinaryOp::And;
             combined->lhs = std::move(cond);

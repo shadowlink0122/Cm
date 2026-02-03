@@ -1587,6 +1587,25 @@ HirExprPtr HirLowering::lower_match(ast::MatchExpr& match, TypePtr type) {
     auto scrutinee = lower_expr(*match.scrutinee);
     auto scrutinee_type = match.scrutinee->type;
 
+    // scrutinee_type->nameが空の場合、パターンのenum_variantからenum名を抽出
+    std::string original_enum_name;
+    if (scrutinee_type && !scrutinee_type->name.empty()) {
+        original_enum_name = scrutinee_type->name;
+    } else {
+        for (const auto& arm : match.arms) {
+            if (arm.pattern &&
+                (arm.pattern->kind == ast::MatchPatternKind::EnumVariant ||
+                 arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding)) {
+                const std::string& variant_name = arm.pattern->enum_variant;
+                auto sep = variant_name.rfind("::");
+                if (sep != std::string::npos) {
+                    original_enum_name = variant_name.substr(0, sep);
+                    break;
+                }
+            }
+        }
+    }
+
     // armsを逆順でネストされた三項演算子に変換
     HirExprPtr result = nullptr;
 
@@ -1636,8 +1655,35 @@ HirExprPtr HirLowering::lower_match(ast::MatchExpr& match, TypePtr type) {
                 HirExprPtr guard;
                 if (arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding &&
                     !arm.pattern->binding_name.empty()) {
-                    // TODO: バインディング変数をペイロード値で置換
-                    guard = lower_expr(*arm.guard);
+                    // バインディング変数をペイロード値で置換
+                    // ペイロード型を取得
+                    TypePtr payload_type = scrutinee_type;
+                    std::string variant_name = arm.pattern->enum_variant;
+                    if (!original_enum_name.empty()) {
+                        auto enum_it = enum_defs_.find(original_enum_name);
+                        if (enum_it != enum_defs_.end() && enum_it->second) {
+                            auto sep = variant_name.rfind("::");
+                            std::string short_variant = (sep != std::string::npos)
+                                                            ? variant_name.substr(sep + 2)
+                                                            : variant_name;
+                            for (const auto& member : enum_it->second->members) {
+                                if (member.name == short_variant && !member.fields.empty()) {
+                                    payload_type = member.fields[0].second;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // ペイロード抽出式を生成
+                    auto payload_extract = std::make_unique<HirEnumPayload>();
+                    payload_extract->scrutinee = clone_hir_expr(scrutinee);
+                    payload_extract->variant_name = variant_name;
+                    payload_extract->payload_type = payload_type;
+                    auto payload_expr =
+                        std::make_unique<HirExpr>(std::move(payload_extract), payload_type);
+                    // ガード内のバインディング変数をペイロード式で置換
+                    guard = lower_guard_with_binding(*arm.guard, arm.pattern->binding_name,
+                                                     payload_expr, payload_type);
                 } else {
                     guard = lower_expr(*arm.guard);
                 }
@@ -1904,6 +1950,15 @@ HirExprPtr HirLowering::clone_hir_expr(const HirExprPtr& expr) {
         auto clone = std::make_unique<HirIndex>();
         clone->object = clone_hir_expr((*index)->object);
         clone->index = clone_hir_expr((*index)->index);
+        return std::make_unique<HirExpr>(std::move(clone), expr->type, expr->span);
+    }
+
+    // HirEnumPayloadのクローン
+    if (auto* payload = std::get_if<std::unique_ptr<HirEnumPayload>>(&expr->kind)) {
+        auto clone = std::make_unique<HirEnumPayload>();
+        clone->scrutinee = clone_hir_expr((*payload)->scrutinee);
+        clone->variant_name = (*payload)->variant_name;
+        clone->payload_type = (*payload)->payload_type;
         return std::make_unique<HirExpr>(std::move(clone), expr->type, expr->span);
     }
 
