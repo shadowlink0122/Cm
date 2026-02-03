@@ -37,7 +37,7 @@ int main() {
     b &= 12;       // AND with 0b1100
     println(b);    // 8
 
-    b | = 3;     // OR with 0b0011
+    b |= 3;      // OR with 0b0011
     println(b);  // 11
 
     b ^= 1;      // XOR with 0b0001
