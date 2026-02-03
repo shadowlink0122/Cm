@@ -24,6 +24,19 @@ export struct HashMap<K, V> {
 }
 
 export impl HashMap<K, V> {
+    // コンストラクタ
+    static HashMap<K, V> new(int capacity) {
+        HashMap<K, V> m;
+        long entry_size = __sizeof__(Entry<K, V>) as long;
+        m.entries = malloc(capacity as long * entry_size) as Entry<K, V>*;
+        m.cap = capacity;
+        m.size = 0;
+        for (int i = 0; i < capacity; i++) {
+            m.entries[i].occupied = false;
+        }
+        return m;
+    }
+
     // 挿入
     void insert(K key, V value) {
         // 単純なハッシュ: キーをintにキャストしてmod
@@ -89,7 +102,7 @@ export impl HashMap<K, V> {
     }
 
     // 解放
-    void release() {
+    void free() {
         if (this.entries != 0 as Entry<K, V>*) {
             free(this.entries as void*);
         }
@@ -97,16 +110,4 @@ export impl HashMap<K, V> {
         this.size = 0;
         this.cap = 0;
     }
-}
-
-// ファクトリ関数
-export <K, V> HashMap<K, V> hashmap_new(int capacity) {
-    HashMap<K, V> m;
-    m.entries = malloc((capacity * 32) as long) as Entry<K, V>*;
-    m.cap = capacity;
-    m.size = 0;
-    for (int i = 0; i < capacity; i++) {
-        m.entries[i].occupied = false;
-    }
-    return m;
 }

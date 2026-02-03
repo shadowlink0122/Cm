@@ -6,7 +6,6 @@ use libc {
     void* malloc(long size);
     void* realloc(void* ptr, long size);
     void free(void* ptr);
-    void* memcpy(void* dest, void* src, long n);
 }
 
 // =============================================================
@@ -20,11 +19,23 @@ export struct Vector<T> {
 }
 
 export impl Vector<T> {
+    // コンストラクタ（静的メソッド風）
+    static Vector<T> new() {
+        Vector<T> v;
+        v.data = 0 as T*;
+        v.size = 0;
+        v.cap = 0;
+        return v;
+    }
+
     // 末尾に追加
     void push(T value) {
         if (this.size >= this.cap) {
             int new_cap = this.cap == 0 ? 4 : this.cap * 2;
-            T* new_data = malloc((new_cap * 8) as long) as T*;
+            // __sizeof__(T)で型サイズ取得
+            long elem_size = __sizeof__(T) as long;
+            T* new_data = malloc(new_cap as long * elem_size) as T*;
+            // 既存データをコピー
             for (int i = 0; i < this.size; i++) {
                 new_data[i] = this.data[i];
             }
@@ -71,13 +82,13 @@ export impl Vector<T> {
         return this.size == 0;
     }
 
-    // クリア
+    // クリア（データは保持、サイズのみリセット）
     void clear() {
         this.size = 0;
     }
 
-    // メモリ解放
-    void release() {
+    // メモリ解放（完全リリース）
+    void free() {
         if (this.data != 0 as T*) {
             free(this.data as void*);
         }
@@ -85,13 +96,4 @@ export impl Vector<T> {
         this.size = 0;
         this.cap = 0;
     }
-}
-
-// ファクトリ関数（ジェネリック）
-export <T> Vector<T> vector_new() {
-    Vector<T> v;
-    v.data = 0 as T*;
-    v.size = 0;
-    v.cap = 0;
-    return v;
 }
