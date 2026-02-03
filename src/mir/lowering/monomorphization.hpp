@@ -30,16 +30,28 @@ class Monomorphization : public MirLoweringBase {
         // ジェネリック関数を特定
         std::unordered_set<std::string> generic_funcs;
         for (const auto& [name, func] : hir_functions) {
-            if (func && !func->generic_params.empty()) {
+            if (!func)
+                continue;
+            // 通常のジェネリック関数（generic_paramsあり）または
+            // ジェネリックimplメソッド（関数名がType<T>__method形式）を検出
+            bool is_generic = !func->generic_params.empty() || name.find('<') != std::string::npos;
+            if (is_generic) {
                 generic_funcs.insert(name);
-                debug_msg("MONO", "Found generic function: " + name + " with " +
-                                      std::to_string(func->generic_params.size()) + " type params");
+                debug_msg("MONO",
+                          "Found generic function: " + name + " with " +
+                              std::to_string(func->generic_params.size()) + " type params" +
+                              (name.find('<') != std::string::npos ? " (impl method)" : ""));
             }
         }
 
         if (generic_funcs.empty()) {
             debug_msg("MONO", "No generic functions found");
             return;  // ジェネリック関数がなければ何もしない
+        }
+
+        // デバッグ：全ジェネリック関数を表示
+        for (const auto& gf : generic_funcs) {
+            debug_msg("MONO", "Generic func in set: " + gf);
         }
 
         // 反復処理：新しい特殊化が生成されなくなるまで繰り返す

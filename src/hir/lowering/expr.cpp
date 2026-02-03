@@ -1551,6 +1551,65 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             method_type_name = type_name.substr(last_colon + 2);
         }
 
+        // ジェネリック型名（例：Vector<int>）をマングリング形式（例：Vector__int）に変換
+        // Struct<T1, T2, ...> -> Struct__T1__T2__...
+        size_t angle_pos = method_type_name.find('<');
+        if (angle_pos != std::string::npos) {
+            size_t close_pos = method_type_name.rfind('>');
+            if (close_pos != std::string::npos && close_pos > angle_pos) {
+                std::string base_name = method_type_name.substr(0, angle_pos);
+                std::string type_args_str =
+                    method_type_name.substr(angle_pos + 1, close_pos - angle_pos - 1);
+
+                // 型引数を抽出（カンマ区切り、ネストを考慮）
+                std::vector<std::string> type_args;
+                int depth = 0;
+                std::string current_arg;
+                for (char c : type_args_str) {
+                    if (c == '<') {
+                        depth++;
+                        current_arg += c;
+                    } else if (c == '>') {
+                        depth--;
+                        current_arg += c;
+                    } else if (c == ',' && depth == 0) {
+                        // 空白を削除
+                        while (!current_arg.empty() && current_arg.front() == ' ') {
+                            current_arg = current_arg.substr(1);
+                        }
+                        while (!current_arg.empty() && current_arg.back() == ' ') {
+                            current_arg.pop_back();
+                        }
+                        type_args.push_back(current_arg);
+                        current_arg.clear();
+                    } else {
+                        current_arg += c;
+                    }
+                }
+                // 最後の引数を追加
+                while (!current_arg.empty() && current_arg.front() == ' ') {
+                    current_arg = current_arg.substr(1);
+                }
+                while (!current_arg.empty() && current_arg.back() == ' ') {
+                    current_arg.pop_back();
+                }
+                if (!current_arg.empty()) {
+                    type_args.push_back(current_arg);
+                }
+
+                // マングリング名を生成：BaseType__Arg1__Arg2__...
+                method_type_name = base_name;
+                for (const auto& arg : type_args) {
+                    method_type_name += "__" + arg;
+                }
+
+                debug::hir::log(
+                    debug::hir::Id::MethodCallLower,
+                    "Generic type name mangled: " + type_name + " -> " + method_type_name,
+                    debug::Level::Debug);
+            }
+        }
+
         // 固定長配列（T[N]）の場合、スライス型名（T[]）にマッピング
         // impl int[] for Interface のメソッドを int[5], int[10] 等からも呼び出し可能にする
         bool needs_array_to_slice = false;

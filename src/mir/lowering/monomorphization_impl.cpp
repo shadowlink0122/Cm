@@ -106,6 +106,58 @@ void Monomorphization::scan_generic_calls(
                                       generic_name + " with type arg: " + type_arg);
                 break;
             }
+
+            // func_name が "Vector__int__init" のようなマングル済み形式の場合
+            // "Vector<T>__init" にマッチするジェネリック関数を探す
+            // パターン: Base__TypeArg__method -> Base<T>__method
+            for (const auto& generic_name : generic_funcs) {
+                // generic_name = "Vector<T>__init"
+                // func_name = "Vector__int__init"
+
+                auto angle_pos = generic_name.find("<");
+                if (angle_pos == std::string::npos)
+                    continue;
+
+                auto angle_close = generic_name.find(">__");
+                if (angle_close == std::string::npos)
+                    continue;
+
+                std::string base_name = generic_name.substr(0, angle_pos);       // "Vector"
+                std::string method_name = generic_name.substr(angle_close + 3);  // "init"
+
+                // func_nameがBase__で始まるかチェック
+                if (func_name.substr(0, base_name.length() + 2) != base_name + "__")
+                    continue;
+
+                // func_nameからメソッド名を抽出（最後の__以降）
+                // "Vector__int__init" -> メソッド名 "init", 型引数 "int"
+                std::string remaining = func_name.substr(base_name.length() + 2);  // "int__init"
+
+                // 最後の__を見つけてメソッド名と型引数を分離
+                size_t last_sep = remaining.rfind("__");
+                if (last_sep == std::string::npos)
+                    continue;
+
+                std::string type_arg = remaining.substr(0, last_sep);      // "int"
+                std::string func_method = remaining.substr(last_sep + 2);  // "init"
+
+                if (func_method != method_name)
+                    continue;
+
+                // HIR関数を取得
+                auto it = hir_functions.find(generic_name);
+                if (it == hir_functions.end())
+                    continue;
+
+                // 特殊化が必要な呼び出しを記録
+                std::vector<std::string> type_args = {type_arg};
+                auto key = std::make_pair(generic_name, type_args);
+                needed[key].push_back(std::make_tuple(func->name, block_idx));
+
+                debug_msg("MONO", "Found mangled call to " + func_name + " matching generic " +
+                                      generic_name + " with type arg: " + type_arg);
+                break;
+            }
         }
     }
 }
