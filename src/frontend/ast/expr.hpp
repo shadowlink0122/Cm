@@ -513,6 +513,15 @@ struct MoveExpr {
 };
 
 // ============================================================
+// await式 - Future<T>を待機してTを返す
+// ============================================================
+struct AwaitExpr {
+    ExprPtr operand;  // 待機対象のFuture<T>式
+
+    explicit AwaitExpr(ExprPtr e) : operand(std::move(e)) {}
+};
+
+// ============================================================
 // 式作成ヘルパー
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
@@ -593,6 +602,10 @@ inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {
 
 inline ExprPtr make_move(ExprPtr expr, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<MoveExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_await(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<AwaitExpr>(std::move(expr)), s);
 }
 
 }  // namespace cm::ast

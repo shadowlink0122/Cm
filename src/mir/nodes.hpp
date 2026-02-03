@@ -496,6 +496,9 @@ struct MirTerminator {
 
         // 末尾呼び出し最適化（LLVM tail call attribute）
         bool is_tail_call = false;  // 末尾位置の自己呼び出し
+
+        // async関数をawaitで呼び出しているか（同期実行する）
+        bool is_awaited = false;
     };
 
     std::variant<std::monostate,  // Return, Unreachable

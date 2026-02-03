@@ -27,11 +27,10 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
-        // 組み込み関数の特別処理（printlnはstd::io::printlnからインポート）
-        if (ident->name == "__println__" || ident->name == "__print__" ||
-            ident->name == "println" || ident->name == "print") {
+        // 組み込み関数の特別処理（printlnはstd::io::printlnからインポート推奨だが互換性のため残す）
+        if (ident->name == "println" || ident->name == "print") {
             // println() は引数なしでも許可（空行出力）
-            if (ident->name != "println" && ident->name != "__println__" && call.args.empty()) {
+            if (ident->name == "print" && call.args.empty()) {
                 error(current_span_, "'" + ident->name + "' requires at least 1 argument");
                 return ast::make_error();
             }

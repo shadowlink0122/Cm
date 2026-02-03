@@ -119,7 +119,6 @@ struct FunctionDecl {
     Visibility visibility = Visibility::Private;
     bool is_static = false;
     bool is_inline = false;
-    bool is_async = false;
 
     // コンストラクタ/デストラクタ
     bool is_constructor = false;  // self() コンストラクタ

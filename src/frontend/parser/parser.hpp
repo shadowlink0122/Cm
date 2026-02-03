@@ -144,14 +144,14 @@ class Parser {
                 return parse_macro(true);
             }
 
-            // export function (型から始まる関数の場合)
-            if (is_type_start()) {
+            // export function (型から始まる関数、または修飾子から始まる関数の場合)
+            // 修飾子: static, inline
+            if (is_type_start() || check(TokenKind::KwStatic) || check(TokenKind::KwInline)) {
                 // 修飾子を収集
                 bool is_static = consume_if(TokenKind::KwStatic);
                 bool is_inline = consume_if(TokenKind::KwInline);
-                bool is_async = consume_if(TokenKind::KwAsync);
 
-                return parse_function(true, is_static, is_inline, is_async, std::move(attrs));
+                return parse_function(true, is_static, is_inline, std::move(attrs));
             }
 
             // それ以外は分離エクスポート (export NAME1, NAME2;)
@@ -170,7 +170,6 @@ class Parser {
         // 修飾子を収集
         bool is_static = consume_if(TokenKind::KwStatic);
         bool is_inline = consume_if(TokenKind::KwInline);
-        bool is_async = consume_if(TokenKind::KwAsync);
 
         // struct
         if (check(TokenKind::KwStruct)) {
@@ -255,11 +254,11 @@ class Parser {
         }
 
         // 関数 (型 名前 ...)
-        return parse_function(false, is_static, is_inline, is_async, std::move(attrs));
+        return parse_function(false, is_static, is_inline, std::move(attrs));
     }
 
     // 関数定義
-    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async,
+    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline,
                                 std::vector<ast::AttributeNode> attributes = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
@@ -309,7 +308,6 @@ class Parser {
         func->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         func->is_static = is_static;
         func->is_inline = is_inline;
-        func->is_async = is_async;
         func->attributes = std::move(attributes);
 
         return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
@@ -723,8 +721,7 @@ class Parser {
                         // private修飾子をチェック
                         bool is_private = consume_if(TokenKind::KwPrivate);
 
-                        auto func =
-                            parse_function(false, false, false, false, std::move(method_attrs));
+                        auto func = parse_function(false, false, false, std::move(method_attrs));
                         if (auto* f = func->as<ast::FunctionDecl>()) {
                             // privateメソッドの場合はvisibilityを設定
                             if (is_private) {
@@ -822,7 +819,7 @@ class Parser {
                     // private修飾子をチェック
                     bool is_private = consume_if(TokenKind::KwPrivate);
 
-                    auto func = parse_function(false, false, false, false, std::move(method_attrs));
+                    auto func = parse_function(false, false, false, std::move(method_attrs));
                     if (auto* f = func->as<ast::FunctionDecl>()) {
                         if (is_private) {
                             f->visibility = ast::Visibility::Private;

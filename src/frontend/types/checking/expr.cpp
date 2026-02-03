@@ -119,6 +119,16 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         } else {
             inferred_type = ast::make_error();
         }
+    } else if (auto* await_expr = expr.as<ast::AwaitExpr>()) {
+        // await式: Future<T>を待機してTを返す
+        // 現時点では単にオペランドの型を返す（同期的実行）
+        if (await_expr->operand) {
+            inferred_type = infer_type(*await_expr->operand);
+            debug::tc::log(debug::tc::Id::CheckExpr, "Inferred await expression type",
+                           debug::Level::Debug);
+        } else {
+            inferred_type = ast::make_error();
+        }
     } else {
         inferred_type = ast::make_error();
     }

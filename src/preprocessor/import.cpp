@@ -807,10 +807,11 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
             R"(export\s+const\s+(?:int|float|double|bool|char|string|uint)\s+(\w+)\s*=)");
         // impl: export impl Type for Interface (implはexportが付かないこともある)
         std::regex impl_regex(R"(^\s*(?:export\s+)?impl\s+(\w+)\s+for\s+(\w+))");
-        // 関数/構造体など: export (type|struct|interface|enum) name
+        // 関数/構造体など: export [static] [inline] [async] (type|struct|interface|enum) name
         // typeは組み込み型またはユーザー定義型（識別子）
+        // 修飾子: static, inline, async をオプションでサポート
         std::regex export_regex(
-            R"(export\s+(?:int|void|float|double|bool|char|string|uint|struct|interface|enum|\w+\*?)\s+(\w+))");
+            R"(export\s+(?:static\s+)?(?:inline\s+)?(?:async\s+)?(?:int|void|float|double|bool|char|string|uint|struct|interface|enum|\w+\*?)\s+(\w+))");
 
         bool matched = false;
 

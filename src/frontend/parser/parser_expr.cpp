@@ -345,6 +345,13 @@ ast::ExprPtr Parser::parse_unary() {
         auto operand = parse_unary();
         return ast::make_move(std::move(operand), Span{start_pos, previous().end});
     }
+    // await式: await expr → Future<T>を待機してTを返す
+    if (consume_if(TokenKind::KwAwait)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'await' expression",
+                        debug::Level::Debug);
+        auto operand = parse_unary();
+        return ast::make_await(std::move(operand), Span{start_pos, previous().end});
+    }
 
     return parse_postfix();
 }

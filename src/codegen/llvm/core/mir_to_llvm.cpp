@@ -504,6 +504,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             continue;
         }
         declaredFunctions.insert(funcId);
+
         auto llvmFunc = convertFunctionSignature(*func);
         functions[funcId] = llvmFunc;
     }

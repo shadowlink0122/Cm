@@ -1,9 +1,10 @@
-// runtime_sync.c - Cm Atomic Operations Runtime
-// Only atomic operations (everything else is in std::sync via libc)
+// runtime_sync.c - Cm Synchronization Primitives Runtime
+// Atomic operations for thread-safe programming
 
 #include "runtime_sync.h"
 
 #include <stdatomic.h>
+#include <stdint.h>
 
 // ============================================================
 // Atomic Operations Implementation

@@ -169,6 +169,18 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         debug::hir::log(debug::hir::Id::ExprLower, "Lowering move expression", debug::Level::Debug);
         // moveは単にオペランドを返す - 所有権追跡は型チェッカーで行われている
         return lower_expr(*move_expr->operand);
+    } else if (auto* await_expr = expr.as<ast::AwaitExpr>()) {
+        // await式: オペランドを評価し、is_awaitedフラグを設定
+        debug::hir::log(debug::hir::Id::ExprLower, "Lowering await expression",
+                        debug::Level::Debug);
+        auto hir_operand = lower_expr(*await_expr->operand);
+
+        // オペランドがHirCallの場合、is_awaitedをtrueに設定
+        if (auto* hir_call = std::get_if<std::unique_ptr<HirCall>>(&hir_operand->kind)) {
+            (*hir_call)->is_awaited = true;
+        }
+
+        return hir_operand;
     }
 
     debug::hir::log(debug::hir::Id::Warning, "Unknown expression type, using null literal",

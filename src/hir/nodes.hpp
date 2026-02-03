@@ -99,6 +99,7 @@ struct HirCall {
     std::vector<HirExprPtr> captured_args;  // キャプチャされた変数の値
     bool is_indirect = false;               // 関数ポインタ経由の呼び出し
     bool is_closure = false;                // クロージャ呼び出しか
+    bool is_awaited = false;                // await式で呼び出されているか
 };
 
 // 配列アクセス

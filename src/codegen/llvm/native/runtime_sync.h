@@ -1,5 +1,5 @@
 // runtime_sync.h - Cm Synchronization Primitives Runtime
-// Atomic operations only (mutex/rwlock/channel are in std::sync via libc)
+// Atomic operations for thread-safe programming
 
 #ifndef CM_RUNTIME_SYNC_H
 #define CM_RUNTIME_SYNC_H
@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 // ============================================================
-// Atomic Operations (LLVM intrinsics)
+// Atomic Operations
 // ============================================================
 
 // Atomic i64
