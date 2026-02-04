@@ -277,12 +277,25 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
 
             // エラーログを追加
-            std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
-            std::cerr << "       Available types: ";
-            for (const auto& [name, _] : structTypes) {
-                std::cerr << name << " ";
+            // ジェネリック型パラメータ（T, U, V, K, E等）の場合は警告をスキップ
+            // これらはモノモーフィゼーション前のジェネリック構造体定義で残っている
+            bool isGenericTypeParam = false;
+            if (lookupName.length() == 1 && std::isupper(lookupName[0])) {
+                isGenericTypeParam = true;
+            } else if (lookupName.length() == 2 && std::isupper(lookupName[0]) &&
+                       std::isdigit(lookupName[1])) {
+                // T1, T2, V1 等のパターン
+                isGenericTypeParam = true;
             }
-            std::cerr << "\n";
+
+            if (!isGenericTypeParam) {
+                std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
+                std::cerr << "       Available types: ";
+                for (const auto& [name, _] : structTypes) {
+                    std::cerr << name << " ";
+                }
+                std::cerr << "\n";
+            }
 
             // 見つからない場合は不透明型として扱う
             return llvm::StructType::create(ctx.getContext(), lookupName);
