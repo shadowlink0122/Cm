@@ -27,7 +27,7 @@ export struct HashMap<V> {
     int size;
 }
 
-export impl HashMap<V> {
+export impl<V> HashMap<V> {
     // コンストラクタ
     void HashMap(int capacity) {
         // Entryサイズは32バイト固定（十分なサイズ確保）

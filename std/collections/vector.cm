@@ -18,7 +18,7 @@ export struct Vector<T> {
     int cap;
 }
 
-export impl Vector<T> {
+export impl<T> Vector<T> {
     // 初期化
     void init() {
         void* null_ptr = 0 as void*;
