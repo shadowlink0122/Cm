@@ -68,6 +68,59 @@ int main() {
 
 ---
 
+## 関連データ付きEnum（Tagged Union）
+
+**v0.13.0以降**
+
+Cmでは、各バリアントに関連データを持つ列挙型（Tagged Union）を定義できます。
+
+### 基本的な定義
+
+```cm
+enum Message {
+    Quit,                      // データなし
+    Move { int x; int y; },    // 構造体風データ
+    Write(string),             // タプル風データ
+    ChangeColor(int, int, int) // 複数の値
+}
+
+int main() {
+    Message m1 = Message::Quit;
+    Message m2 = Message::Move { x: 10, y: 20 };
+    Message m3 = Message::Write("Hello");
+    Message m4 = Message::ChangeColor(255, 128, 0);
+    return 0;
+}
+```
+
+### matchでの分解
+
+関連データ付きEnumは `match` 式でデータを取り出せます。
+
+```cm
+enum Shape {
+    Circle(int),           // 半径
+    Rectangle(int, int),   // 幅, 高さ
+    Point
+}
+
+void describe_shape(Shape s) {
+    match (s) {
+        Shape::Circle(r) => println("Circle with radius {}", r),
+        Shape::Rectangle(w, h) => println("Rectangle {}x{}", w, h),
+        Shape::Point => println("A point"),
+    }
+}
+
+int main() {
+    Shape c = Shape::Circle(5);
+    describe_shape(c);  // Circle with radius 5
+    return 0;
+}
+```
+
+---
+
 ## 制御構文での利用
 
 ### switch文での利用

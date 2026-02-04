@@ -67,6 +67,59 @@ int main() {
 
 ---
 
+## Enums with Associated Data (Tagged Unions)
+
+**Since v0.13.0**
+
+Cm supports enums where each variant can hold associated data (Tagged Unions).
+
+### Basic Definition
+
+```cm
+enum Message {
+    Quit,                      // No data
+    Move { int x; int y; },    // Struct-like data
+    Write(string),             // Tuple-like data
+    ChangeColor(int, int, int) // Multiple values
+}
+
+int main() {
+    Message m1 = Message::Quit;
+    Message m2 = Message::Move { x: 10, y: 20 };
+    Message m3 = Message::Write("Hello");
+    Message m4 = Message::ChangeColor(255, 128, 0);
+    return 0;
+}
+```
+
+### Destructuring with match
+
+Extract associated data using the `match` expression.
+
+```cm
+enum Shape {
+    Circle(int),           // radius
+    Rectangle(int, int),   // width, height
+    Point
+}
+
+void describe_shape(Shape s) {
+    match (s) {
+        Shape::Circle(r) => println("Circle with radius {}", r),
+        Shape::Rectangle(w, h) => println("Rectangle {}x{}", w, h),
+        Shape::Point => println("A point"),
+    }
+}
+
+int main() {
+    Shape c = Shape::Circle(5);
+    describe_shape(c);  // Circle with radius 5
+    return 0;
+}
+```
+
+---
+
 ## Control Flow Integration
 
 ### Using with switch
