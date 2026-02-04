@@ -731,8 +731,18 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         elem_type = current_type ? current_type : hir::make_int();
     }
 
-    // フォールバック: HIR型情報がnullの場合、MIRローカル変数の型から判定
-    if (!is_slice && array < ctx.func->locals.size()) {
+    // フォールバック: HIR型情報がnull、またはelement_typeがジェネリック型の場合、
+    // MIRローカル変数の型から判定
+    // ジェネリック関数内での ptr[i] アクセスでは、HIRの型がまだ T* のままなので
+    // モノモーフ化後のMIRローカル変数の型を使用する必要がある
+    bool needs_fallback =
+        !is_slice &&
+        (!elem_type || elem_type->kind == hir::TypeKind::Generic ||
+         elem_type->name == "T" ||  // 一般的なジェネリック型パラメータ
+         (elem_type->name.length() == 1 && std::isupper(elem_type->name[0]))  // 単一大文字
+        );
+
+    if (needs_fallback && array < ctx.func->locals.size()) {
         hir::TypePtr array_type = ctx.func->locals[array].type;
         if (array_type && (array_type->kind == hir::TypeKind::Array ||
                            array_type->kind == hir::TypeKind::Pointer)) {
@@ -756,7 +766,10 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                     break;
                 }
             }
-            elem_type = current_type ? current_type : hir::make_int();
+            // MIRローカル変数から具象型が取得できた場合のみ更新
+            if (current_type && current_type->kind != hir::TypeKind::Generic) {
+                elem_type = current_type;
+            }
         }
     }
 
@@ -813,7 +826,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
     // a[i][j][k] → place.projections = [Index(i), Index(j), Index(k)]
     MirPlace place{array};
     for (LocalId idx_local : index_locals) {
-        place.projections.push_back(PlaceProjection::index(idx_local));
+        // ポインタ経由のインデックスアクセス時にresult_type（elem_type）を設定
+        // これによりモノモーフ化でsubstitute_place_typesがジェネリック型を具象型に置換可能
+        place.projections.push_back(PlaceProjection::index(idx_local, elem_type));
     }
 
     ctx.push_statement(

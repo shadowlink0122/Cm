@@ -133,6 +133,10 @@ class TypeChecker {
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
 
+    // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
+    // 代入先がLiteralUnion型の場合、代入する値が許容リテラルに含まれるかチェック
+    bool check_literal_assignment(ast::TypePtr target_type, ast::Expr* init_expr, Span span);
+
     // コンパイル時定数評価（const強化）
     std::optional<int64_t> evaluate_const_expr(ast::Expr& expr);
 

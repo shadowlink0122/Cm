@@ -29,7 +29,6 @@ enum class TokenKind {
     KwContinue,
     KwDefault,  // switch default
     KwDefer,    // defer statement
-    KwDelete,
     KwElse,
     KwEnum,
     KwExport,
@@ -51,7 +50,6 @@ enum class TokenKind {
     KwMust,    // must execute (no optimization) for inline asm
     KwMutable,
     KwNamespace,  // namespace declaration
-    KwNew,
     KwNull,
     KwOperator,  // operator overloading in interface/impl
     KwOverload,  // function overloading

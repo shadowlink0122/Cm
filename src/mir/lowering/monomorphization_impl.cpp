@@ -107,7 +107,63 @@ void Monomorphization::scan_generic_calls(
                 break;
             }
 
-            // func_name が "Vector__int__init" のようなマングル済み形式の場合
+            // func_name が "HashMap<int>__ctor_1" や "HashMap<int>__dtor" のような形式の場合
+            // "HashMap<V>__ctor_1" / "HashMap<V>__dtor" にマッチするジェネリック関数を探す
+            // パターン: Base<TypeArg>__ctor_N -> Base<T>__ctor_N
+            for (const auto& generic_name : generic_funcs) {
+                // コンストラクタ/デストラクタのサフィックスをチェック
+                auto ctor_pos = generic_name.find(">__ctor");
+                auto dtor_pos = generic_name.find(">__dtor");
+                if (ctor_pos == std::string::npos && dtor_pos == std::string::npos)
+                    continue;
+
+                auto suffix_pos = (ctor_pos != std::string::npos) ? ctor_pos : dtor_pos;
+                std::string ctor_suffix =
+                    generic_name.substr(suffix_pos + 1);  // "__ctor_1" or "__dtor"
+
+                // generic_name から基本名を抽出: "HashMap<V>" -> "HashMap"
+                auto angle_pos = generic_name.find("<");
+                if (angle_pos == std::string::npos)
+                    continue;
+                std::string base_name = generic_name.substr(0, angle_pos);  // "HashMap"
+
+                // func_name が同じ基本名とサフィックスを持つかチェック
+                // func_name = "HashMap<int>__ctor_1"
+                auto func_angle_pos = func_name.find("<");
+                if (func_angle_pos == std::string::npos)
+                    continue;
+                if (func_name.substr(0, func_angle_pos) != base_name)
+                    continue;
+
+                auto func_suffix_pos = func_name.find(">__ctor");
+                if (func_suffix_pos == std::string::npos)
+                    func_suffix_pos = func_name.find(">__dtor");
+                if (func_suffix_pos == std::string::npos)
+                    continue;
+
+                std::string func_suffix = func_name.substr(func_suffix_pos + 1);
+                if (func_suffix != ctor_suffix)
+                    continue;
+
+                // 型引数を抽出: "HashMap<int>__ctor_1" -> "int"
+                std::string type_arg =
+                    func_name.substr(func_angle_pos + 1, func_suffix_pos - func_angle_pos - 1);
+
+                // HIR関数を取得
+                auto it = hir_functions.find(generic_name);
+                if (it == hir_functions.end())
+                    continue;
+
+                // 特殊化が必要な呼び出しを記録
+                std::vector<std::string> type_args = {type_arg};
+                auto key = std::make_pair(generic_name, type_args);
+                needed[key].push_back(std::make_tuple(func->name, block_idx));
+
+                debug_msg("MONO", "Found generic ctor/dtor call to " + func_name +
+                                      " matching generic " + generic_name +
+                                      " with type arg: " + type_arg);
+                break;
+            }
             // "Vector<T>__init" にマッチするジェネリック関数を探す
             // パターン: Base__TypeArg__method -> Base<T>__method
             for (const auto& generic_name : generic_funcs) {
@@ -372,8 +428,8 @@ static hir::TypePtr substitute_type_in_type(
                                      substituted_elem->name != type->element_type->name)) {
                 auto new_ptr_type = std::make_shared<hir::Type>(hir::TypeKind::Pointer);
                 new_ptr_type->element_type = substituted_elem;
-                new_ptr_type->name =
-                    substituted_elem->name.empty() ? "" : (substituted_elem->name + "*");
+                // ptr_xxx形式で一貫した名前を生成
+                new_ptr_type->name = "ptr_" + get_type_name(substituted_elem);
                 // element_typeにtype_argsがない場合、元の型から継承（重要!）
                 if (substituted_elem->type_args.empty() && !type->element_type->type_args.empty()) {
                     // 元のtype_argsを置換して設定
@@ -406,7 +462,9 @@ static hir::TypePtr substitute_type_in_type(
 
             if (substituted_pointed && substituted_pointed->name != pointed_name) {
                 auto new_ptr_type = std::make_shared<hir::Type>(hir::TypeKind::Pointer);
-                new_ptr_type->name = substituted_pointed->name + "*";
+                // ptr_xxx形式で一貫した名前を生成
+                new_ptr_type->name = "ptr_" + get_type_name(substituted_pointed);
+                new_ptr_type->element_type = substituted_pointed;  // ← 重要: element_typeを設定
                 return new_ptr_type;
             }
         }
@@ -1700,6 +1758,29 @@ void Monomorphization::rewrite_generic_calls(
                     debug_msg("MONO", "Rewrote call in " + func->name + ": " +
                                           std::get<std::string>(call_data.func->data) + " -> " +
                                           func_name);
+                } else {
+                    // フォールバック: Container<int>__ctor_1 -> Container__int__ctor_1 に直接変換
+                    // 型パラメータ名がT以外（Vなど）の場合に対応
+                    std::string args_str;
+                    for (const auto& arg : type_args) {
+                        args_str += "__" + arg;
+                    }
+                    std::string direct_name = base_name + args_str + method_suffix;
+
+                    // MIRに特殊化関数が存在するか確認
+                    bool found = false;
+                    for (const auto& mir_func : program.functions) {
+                        if (mir_func && mir_func->name == direct_name) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        func_name = direct_name;
+                        debug_msg("MONO", "Rewrote call (fallback) in " + func->name + ": " +
+                                              std::get<std::string>(call_data.func->data) + " -> " +
+                                              func_name);
+                    }
                 }
             }
         }

@@ -457,6 +457,7 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
         info.name = method->name;
         info.return_type = method->return_type;
         info.visibility = method->visibility;
+        info.is_static = method->is_static;  // 静的メソッドフラグを設定
         for (const auto& param : method->params) {
             info.param_types.push_back(param.type);
         }

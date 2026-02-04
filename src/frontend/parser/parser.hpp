@@ -718,10 +718,12 @@ class Parser {
                         op_impl->body = parse_block();
                         decl->operators.push_back(std::move(op_impl));
                     } else {
-                        // private修飾子をチェック
+                        // private/static修飾子をチェック
                         bool is_private = consume_if(TokenKind::KwPrivate);
+                        bool is_static = consume_if(TokenKind::KwStatic);
 
-                        auto func = parse_function(false, false, false, std::move(method_attrs));
+                        auto func =
+                            parse_function(false, is_static, false, std::move(method_attrs));
                         if (auto* f = func->as<ast::FunctionDecl>()) {
                             // privateメソッドの場合はvisibilityを設定
                             if (is_private) {
@@ -816,10 +818,11 @@ class Parser {
                         method_attrs.push_back(parse_attribute());
                     }
 
-                    // private修飾子をチェック
+                    // private/static修飾子をチェック
                     bool is_private = consume_if(TokenKind::KwPrivate);
+                    bool is_static = consume_if(TokenKind::KwStatic);
 
-                    auto func = parse_function(false, false, false, std::move(method_attrs));
+                    auto func = parse_function(false, is_static, false, std::move(method_attrs));
                     if (auto* f = func->as<ast::FunctionDecl>()) {
                         if (is_private) {
                             f->visibility = ast::Visibility::Private;

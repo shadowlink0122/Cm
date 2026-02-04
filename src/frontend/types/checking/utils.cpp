@@ -186,7 +186,140 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         }
     }
 
+    // LiteralUnion型とプリミティブ型の互換性
+    // typedef HttpMethod = "GET" | "POST" のような型へのstring代入を許可
+    if (a->kind == ast::TypeKind::LiteralUnion) {
+        // LiteralUnionTypeから基底型を判定
+        auto* lit_union = static_cast<ast::LiteralUnionType*>(a.get());
+        if (lit_union && !lit_union->literals.empty()) {
+            const auto& first_lit = lit_union->literals[0];
+            // 文字列リテラルユニオン → string互換
+            if (std::holds_alternative<std::string>(first_lit.value)) {
+                if (b->kind == ast::TypeKind::String) {
+                    return true;
+                }
+            }
+            // 整数リテラルユニオン → int互換
+            else if (std::holds_alternative<int64_t>(first_lit.value)) {
+                if (b->is_numeric()) {
+                    return true;
+                }
+            }
+            // 浮動小数点リテラルユニオン → float/double互換
+            else if (std::holds_alternative<double>(first_lit.value)) {
+                if (b->is_floating()) {
+                    return true;
+                }
+            }
+        }
+    }
+
     return false;
+}
+
+// ============================================================
+// リテラル型チェック
+// typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE" のような
+// リテラルユニオン型への代入時に、許容されるリテラル値かをチェックする
+// ============================================================
+bool TypeChecker::check_literal_assignment(ast::TypePtr target_type, ast::Expr* init_expr,
+                                           Span span) {
+    if (!target_type || !init_expr) {
+        return true;  // チェック不要
+    }
+
+    // typedefを解決
+    auto resolved_type = resolve_typedef(target_type);
+    if (!resolved_type || resolved_type->kind != ast::TypeKind::LiteralUnion) {
+        return true;  // LiteralUnion型でなければチェック不要
+    }
+
+    // LiteralUnionType にキャスト（TypeKind::LiteralUnionで判定済みなのでstatic_castで安全）
+    auto* lit_union = static_cast<ast::LiteralUnionType*>(resolved_type.get());
+    if (!lit_union || lit_union->literals.empty()) {
+        return true;  // リテラルリストが空ならチェック不要
+    }
+
+    // 初期化式がリテラルでなければチェック不可（動的値は許容）
+    auto* lit_expr = init_expr->as<ast::LiteralExpr>();
+    if (!lit_expr) {
+        // リテラルでない場合は実行時に検証される想定でパス
+        // TODO: 変数参照の場合も追跡可能にするかは将来検討
+        return true;
+    }
+
+    // 許容リテラル一覧を取得して検証
+    bool found = false;
+    std::vector<std::string> allowed_values;
+
+    for (const auto& allowed : lit_union->literals) {
+        // 文字列リテラル
+        if (std::holds_alternative<std::string>(allowed.value)) {
+            const auto& allowed_str = std::get<std::string>(allowed.value);
+            allowed_values.push_back("\"" + allowed_str + "\"");
+
+            if (std::holds_alternative<std::string>(lit_expr->value)) {
+                if (std::get<std::string>(lit_expr->value) == allowed_str) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // 整数リテラル
+        else if (std::holds_alternative<int64_t>(allowed.value)) {
+            int64_t allowed_int = std::get<int64_t>(allowed.value);
+            allowed_values.push_back(std::to_string(allowed_int));
+
+            if (std::holds_alternative<int64_t>(lit_expr->value)) {
+                if (std::get<int64_t>(lit_expr->value) == allowed_int) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // 浮動小数点リテラル
+        else if (std::holds_alternative<double>(allowed.value)) {
+            double allowed_float = std::get<double>(allowed.value);
+            allowed_values.push_back(std::to_string(allowed_float));
+
+            if (std::holds_alternative<double>(lit_expr->value)) {
+                if (std::get<double>(lit_expr->value) == allowed_float) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        // 代入される値を文字列化
+        std::string actual_value;
+        if (std::holds_alternative<std::string>(lit_expr->value)) {
+            actual_value = "\"" + std::get<std::string>(lit_expr->value) + "\"";
+        } else if (std::holds_alternative<int64_t>(lit_expr->value)) {
+            actual_value = std::to_string(std::get<int64_t>(lit_expr->value));
+        } else if (std::holds_alternative<double>(lit_expr->value)) {
+            actual_value = std::to_string(std::get<double>(lit_expr->value));
+        } else if (std::holds_alternative<bool>(lit_expr->value)) {
+            actual_value = std::get<bool>(lit_expr->value) ? "true" : "false";
+        } else {
+            actual_value = "(unknown)";
+        }
+
+        // 許容値の一覧を作成
+        std::string allowed_list;
+        for (size_t i = 0; i < allowed_values.size(); ++i) {
+            if (i > 0)
+                allowed_list += " | ";
+            allowed_list += allowed_values[i];
+        }
+
+        error(span, "Invalid literal value " + actual_value +
+                        " for literal type. Allowed values: " + allowed_list);
+        return false;
+    }
+
+    return true;
 }
 
 ast::TypePtr TypeChecker::common_type(ast::TypePtr a, ast::TypePtr b) {

@@ -637,28 +637,6 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_ident("self", Span{start_pos, previous().end});
     }
 
-    // new式
-    if (consume_if(TokenKind::KwNew)) {
-        debug::par::log(debug::par::Id::NewExpr, "Found 'new' expression", debug::Level::Debug);
-        auto type = parse_type();
-        std::vector<ast::ExprPtr> args;
-
-        if (consume_if(TokenKind::LParen)) {
-            debug::par::log(debug::par::Id::NewArgs, "Parsing new expression arguments",
-                            debug::Level::Trace);
-            if (!check(TokenKind::RParen)) {
-                do {
-                    args.push_back(parse_expr());
-                } while (consume_if(TokenKind::Comma));
-            }
-            expect(TokenKind::RParen);
-        }
-
-        debug::par::log(debug::par::Id::NewCreate, "Creating new expression", debug::Level::Debug);
-        auto new_expr = std::make_unique<ast::NewExpr>(std::move(type), std::move(args));
-        return std::make_unique<ast::Expr>(std::move(new_expr), Span{start_pos, previous().end});
-    }
-
     // sizeof式 - sizeof(型) または sizeof(式)
     if (consume_if(TokenKind::KwSizeof)) {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found 'sizeof' expression",
@@ -835,6 +813,75 @@ ast::ExprPtr Parser::parse_primary() {
         debug::par::log(debug::par::Id::IdentifierRef, "Found identifier: " + name,
                         debug::Level::Debug);
         advance();
+
+        // ジェネリック型静的メソッド呼び出し: Vec<int>::new() パターンを先読み
+        // <Type, Type...>::method の形式をチェック
+        if (check(TokenKind::Lt)) {
+            // 先読みで<...>::パターンかどうかを判定
+            size_t saved_pos = pos_;
+            advance();  // < を消費
+
+            // 型引数をスキップ（ネストした<>を考慮）
+            int angle_depth = 1;
+            bool found_close = false;
+            while (!is_at_end() && angle_depth > 0) {
+                if (check(TokenKind::Lt)) {
+                    angle_depth++;
+                } else if (check(TokenKind::Gt)) {
+                    angle_depth--;
+                    if (angle_depth == 0) {
+                        found_close = true;
+                    }
+                } else if (check(TokenKind::GtGt)) {
+                    // >> は >> または > > として扱う可能性がある
+                    if (angle_depth >= 2) {
+                        angle_depth -= 2;
+                        if (angle_depth == 0) {
+                            found_close = true;
+                        }
+                    } else {
+                        break;  // パターンに合致しない
+                    }
+                }
+                advance();
+            }
+
+            // >の後に::が続くかチェック
+            if (found_close && check(TokenKind::ColonColon)) {
+                // ジェネリック型静的メソッド呼び出しパターン: Vec<int>::method()
+                // 位置を戻して型引数を正しくパース
+                pos_ = saved_pos;
+                advance();  // < を消費
+
+                std::string type_args_str = "<";
+                std::vector<ast::TypePtr> type_args;
+                do {
+                    auto type_arg = parse_type();
+                    type_args_str += ast::type_to_string(*type_arg);
+                    type_args.push_back(std::move(type_arg));
+                    if (consume_if(TokenKind::Comma)) {
+                        type_args_str += ", ";
+                    }
+                } while (!check(TokenKind::Gt) && !is_at_end());
+                expect(TokenKind::Gt);
+                type_args_str += ">";
+
+                // :: とメソッド名を解析
+                expect(TokenKind::ColonColon);
+                std::string method_name = expect_ident();
+
+                // 完全修飾名を構築: Vec<int>::method
+                std::string qualified_name = name + type_args_str + "::" + method_name;
+
+                debug::par::log(debug::par::Id::IdentifierRef,
+                                "Generic static method call: " + qualified_name,
+                                debug::Level::Debug);
+                return ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
+            } else {
+                // パターンに合致しない場合は位置を戻して通常の識別子として処理
+                pos_ = saved_pos;
+            }
+        }
 
         // 名前空間またはenum値アクセス: A::B または A::B::C::...
         // 複数レベルの::をサポート

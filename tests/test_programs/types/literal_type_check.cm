@@ -1,0 +1,38 @@
+// リテラル型チェックのテスト
+// typedef HttpMethod = "GET" | "POST" などのリテラル型への代入時に
+// コンパイル時に値の妥当性を検証する機能のテスト
+
+// HTTP メソッドのリテラル型（文字列）
+typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+// ステータスコードのリテラル型（整数）
+typedef StatusCode = 200 | 400 | 404 | 500;
+
+// 小さな整数リテラル型
+typedef Priority = 1 | 2 | 3;
+
+int main() {
+    // 正しい文字列リテラル値の代入
+    HttpMethod m1 = "GET";
+    HttpMethod m2 = "POST";
+    HttpMethod m3 = "PUT";
+    HttpMethod m4 = "DELETE";
+
+    // 正しい整数リテラル値の代入
+    StatusCode c1 = 200;
+    StatusCode c2 = 400;
+    StatusCode c3 = 404;
+    StatusCode c4 = 500;
+
+    Priority p1 = 1;
+    Priority p2 = 2;
+    Priority p3 = 3;
+
+    // 出力
+    println("Method: {m1}");
+    println("Code: {c1}");
+    println("Priority: {p1}");
+
+    println("PASS: literal_type_check");
+    return 0;
+}

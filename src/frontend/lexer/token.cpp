@@ -36,8 +36,6 @@ const char* token_kind_to_string(TokenKind kind) {
             return "default";
         case TokenKind::KwDefer:
             return "defer";
-        case TokenKind::KwDelete:
-            return "delete";
         case TokenKind::KwElse:
             return "else";
         case TokenKind::KwEnum:
@@ -78,8 +76,6 @@ const char* token_kind_to_string(TokenKind kind) {
             return "mutable";
         case TokenKind::KwNamespace:
             return "namespace";
-        case TokenKind::KwNew:
-            return "new";
         case TokenKind::KwNull:
             return "null";
         case TokenKind::KwOperator:

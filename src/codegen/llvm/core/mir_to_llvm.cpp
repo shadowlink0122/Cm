@@ -1515,7 +1515,23 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                 structType = rvalue->getType();
                             }
 
-                            if (isTaggedUnionPayload && isStructPayload && structType) {
+                            // Index projectionがあるか確認（配列要素への代入）
+                            bool hasIndexProjection = false;
+                            for (const auto& proj : assign.place.projections) {
+                                if (proj.kind == mir::ProjectionKind::Index) {
+                                    hasIndexProjection = true;
+                                    break;
+                                }
+                            }
+
+                            // 構造体代入でmemcpyを使用する条件:
+                            // 1. Tagged Unionペイロードへの書き込み
+                            // 2. 配列要素（Index projection）への構造体代入
+                            bool needsStructCopy =
+                                (isTaggedUnionPayload && isStructPayload && structType) ||
+                                (hasIndexProjection && isStructPayload && structType);
+
+                            if (needsStructCopy) {
                                 // 構造体ペイロードの場合: memcpyを使用
                                 llvm::Value* srcPtr = rvalue;
                                 if (!rvalue->getType()->isPointerTy()) {
@@ -1530,7 +1546,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                 auto dataLayout = module->getDataLayout();
                                 auto payloadSize = dataLayout.getTypeAllocSize(structType);
 
-                                // memcpy: dest=addr(i8配列), src=srcPtr, size=payloadSize
+                                // memcpy: dest=addr, src=srcPtr, size=payloadSize
                                 builder->CreateMemCpy(addr, llvm::MaybeAlign(), srcPtr,
                                                       llvm::MaybeAlign(), payloadSize);
                             } else {
@@ -3193,14 +3209,30 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         elemType = convertType(currentType->element_type);
                     }
 
-                    // addrがポインタ変数のallocaの場合、まずポインタ値をロード
+                    // addrがポインタ変数を格納している場合、まずポインタ値をロード
+                    // これはField projection後（構造体のポインタフィールドへのGEP）にも適用される
                     llvm::Value* ptrVal = addr;
+                    bool needsLoad = false;
+
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         auto allocType = allocaInst->getAllocatedType();
-                        // allocaがポインタ型を格納している場合、ポインタ値をロード
+                        // allocaがポインタ型を格納している場合
                         if (allocType->isPointerTy() || allocType == ctx.getPtrType()) {
-                            ptrVal = builder->CreateLoad(ctx.getPtrType(), addr, "ptr_load");
+                            needsLoad = true;
                         }
+                    } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
+                        // GEP結果がポインタフィールドへのアドレスの場合
+                        // currentTypeがPointerなら、このアドレスからポインタ値をロード
+                        (void)gepInst;  // 未使用警告を抑制
+                        // currentType->kind == Pointer はポインタ型フィールドを示す
+                        needsLoad = true;
+                    } else {
+                        // その他の場合（currentTypeがポインタ型なら）
+                        needsLoad = true;
+                    }
+
+                    if (needsLoad) {
+                        ptrVal = builder->CreateLoad(ctx.getPtrType(), addr, "ptr_load");
                     }
 
                     // ポインタ + オフセット

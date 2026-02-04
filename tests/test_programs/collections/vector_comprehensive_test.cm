@@ -1,0 +1,147 @@
+// Vector<T>網羅テスト - 構造体とプリミティブ型を含む
+// ジェネリクスの型パラメータ制限を調査
+import std::io::println;
+import std::collections::vector::*;
+
+// テスト用構造体
+struct Point {
+    int x;
+    int y;
+}
+
+struct Person {
+    int id;
+    int age;
+}
+
+struct Large {
+    long a;
+    long b;
+    long c;
+    long d;
+}
+
+int main() {
+    println("=== Vector<T> Comprehensive Test ===");
+    
+    // 1. Vector<int> - プリミティブ型
+    println("1. Vector<int>:");
+    Vector<int> vi;
+    vi.init();
+    vi.push(10);
+    vi.push(20);
+    int v0 = vi.get(0);
+    int v1 = vi.get(1);
+    int len = vi.len();
+    println("  len={len}, [{v0}, {v1}]");
+    vi.release();
+
+    // 2. Vector<long> - 8バイトプリミティブ
+    println("2. Vector<long>:");
+    Vector<long> vl;
+    vl.init();
+    vl.push(100000 as long);
+    vl.push(200000 as long);
+    long l0 = vl.get(0);
+    long l1 = vl.get(1);
+    len = vl.len();
+    println("  len={len}, [{l0}, {l1}]");
+    vl.release();
+
+    // 3. Vector<bool> - 1バイトプリミティブ
+    println("3. Vector<bool>:");
+    Vector<bool> vb;
+    vb.init();
+    vb.push(true);
+    vb.push(false);
+    vb.push(true);
+    bool b0 = vb.get(0);
+    bool b1 = vb.get(1);
+    bool b2 = vb.get(2);
+    len = vb.len();
+    println("  len={len}, [{b0}, {b1}, {b2}]");
+    vb.release();
+
+    // 4. Vector<double> - 8バイト浮動小数点
+    println("4. Vector<double>:");
+    Vector<double> vd;
+    vd.init();
+    vd.push(3.14159);
+    vd.push(2.71828);
+    double d0 = vd.get(0);
+    double d1 = vd.get(1);
+    len = vd.len();
+    println("  len={len}, [{d0}, {d1}]");
+    vd.release();
+
+    // 5. Vector<Point> - 構造体（8バイト）
+    println("5. Vector<Point>:");
+    Vector<Point> vp;
+    vp.init();
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+    Point p2;
+    p2.x = 30;
+    p2.y = 40;
+    vp.push(p1);
+    vp.push(p2);
+    Point got_p1 = vp.get(0);
+    Point got_p2 = vp.get(1);
+    len = vp.len();
+    println("  len={len}");
+    println("  p1: ({got_p1.x}, {got_p1.y})");
+    println("  p2: ({got_p2.x}, {got_p2.y})");
+    vp.release();
+
+    // 6. Vector<Person> - 別の構造体（8バイト）
+    println("6. Vector<Person>:");
+    Vector<Person> vper;
+    vper.init();
+    Person per1;
+    per1.id = 1;
+    per1.age = 25;
+    Person per2;
+    per2.id = 2;
+    per2.age = 30;
+    vper.push(per1);
+    vper.push(per2);
+    Person got_per1 = vper.get(0);
+    Person got_per2 = vper.get(1);
+    len = vper.len();
+    println("  len={len}");
+    println("  per1: id={got_per1.id}, age={got_per1.age}");
+    println("  per2: id={got_per2.id}, age={got_per2.age}");
+    vper.release();
+
+    // 7. Vector<Large> - 大きな構造体（32バイト）
+    println("7. Vector<Large>:");
+    Vector<Large> vlrg;
+    vlrg.init();
+    Large lg1;
+    lg1.a = 1;
+    lg1.b = 2;
+    lg1.c = 3;
+    lg1.d = 4;
+    Large lg2;
+    lg2.a = 10;
+    lg2.b = 20;
+    lg2.c = 30;
+    lg2.d = 40;
+    vlrg.push(lg1);
+    vlrg.push(lg2);
+    Large got_lg1 = vlrg.get(0);
+    Large got_lg2 = vlrg.get(1);
+    len = vlrg.len();
+    println("  len={len}");
+    println("  lg1: ({got_lg1.a}, {got_lg1.b}, {got_lg1.c}, {got_lg1.d})");
+    println("  lg2: ({got_lg2.a}, {got_lg2.b}, {got_lg2.c}, {got_lg2.d})");
+    vlrg.release();
+
+    // Note: Vector<float>とVector<int*>は既知の問題あり
+    // - Vector<float>: 浮動小数点リテラルがdoubleとして解釈される問題
+    // - Vector<int*>: ポインタ型のモノモーフィゼーション問題
+
+    println("=== PASS ===");
+    return 0;
+}

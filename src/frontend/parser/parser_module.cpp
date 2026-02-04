@@ -309,10 +309,9 @@ ast::DeclPtr Parser::parse_export() {
 // Export impl (v4: impl全体のエクスポート)
 // ============================================================
 ast::DeclPtr Parser::parse_impl_export(std::vector<ast::AttributeNode> attributes) {
-    expect(TokenKind::KwImpl);
-
     // impl Type または impl<T> Type<T> または impl Type for Interface
     // これらのメソッドを全てエクスポート対象としてマーク
+    // 注意: parse_impl()がimplキーワードを消費する
     auto impl_decl = parse_impl(std::move(attributes));
 
     if (impl_decl && impl_decl->as<ast::ImplDecl>()) {

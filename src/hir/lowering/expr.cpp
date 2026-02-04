@@ -558,6 +558,23 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
             func_name = "__print__";
         }
 
+        // 静的メソッド呼び出し(Type::method)をType__method形式に変換
+        // モジュールパス(std::io::println)は変換しない
+        // 判定: ::が1つのみで、左側が大文字始まり（型名）の場合のみ変換
+        size_t first_colon = func_name.find("::");
+        if (first_colon != std::string::npos) {
+            size_t second_colon = func_name.find("::", first_colon + 2);
+            // ::が1つだけ存在する場合
+            if (second_colon == std::string::npos) {
+                std::string type_part = func_name.substr(0, first_colon);
+                // 型名は大文字で始まる（Counter::create など）
+                // モジュール名は小文字で始まる（std::io など）
+                if (!type_part.empty() && std::isupper(static_cast<unsigned char>(type_part[0]))) {
+                    func_name.replace(first_colon, 2, "__");
+                }
+            }
+        }
+
         hir->func_name = func_name;
         debug::hir::log(debug::hir::Id::CallTarget, "function: " + func_name, debug::Level::Trace);
 

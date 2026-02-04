@@ -1,3 +1,15 @@
-=== Minimal Vector Test ===
-len: 0
+=== Vector<T> Test ===
+1. Vector<int>:
+  init: len=0, empty=true
+  push 10,20,30: len=3
+  get: [10, 20, 30]
+  set(1,99): [10, 99, 30]
+  pop: 30, len=2
+  push 40,50: len=4
+  clear: len=0, empty=true
+  reuse: len=2, [100, 200]
+  released
+2. Vector<long>:
+  push: len=2, [100000, 200000]
+  released
 === PASS ===

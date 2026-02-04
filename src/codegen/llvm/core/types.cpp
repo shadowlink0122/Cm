@@ -87,9 +87,42 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 for (const auto& typeArg : type->type_args) {
                     if (typeArg) {
                         lookupName += "__";
-                        // 型名を正規化（Pointer<int>ならint*など）
+                        // 型名を正規化（Pointer<int>ならptr_int等）
                         if (typeArg->kind == hir::TypeKind::Struct) {
                             lookupName += typeArg->name;
+                        } else if (typeArg->kind == hir::TypeKind::Pointer) {
+                            // ポインタ型の場合：ptr_xxx 形式でマングリング
+                            lookupName += "ptr_";
+                            if (typeArg->element_type) {
+                                switch (typeArg->element_type->kind) {
+                                    case hir::TypeKind::Int:
+                                        lookupName += "int";
+                                        break;
+                                    case hir::TypeKind::Long:
+                                        lookupName += "long";
+                                        break;
+                                    case hir::TypeKind::Float:
+                                        lookupName += "float";
+                                        break;
+                                    case hir::TypeKind::Double:
+                                        lookupName += "double";
+                                        break;
+                                    case hir::TypeKind::Bool:
+                                        lookupName += "bool";
+                                        break;
+                                    case hir::TypeKind::Char:
+                                        lookupName += "char";
+                                        break;
+                                    case hir::TypeKind::Struct:
+                                        lookupName += typeArg->element_type->name;
+                                        break;
+                                    default:
+                                        lookupName += "void";
+                                        break;
+                                }
+                            } else {
+                                lookupName += "void";
+                            }
                         } else {
                             // プリミティブ型の場合
                             switch (typeArg->kind) {
@@ -191,6 +224,12 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 structTypes[lookupName] = structType;
 
                 return structType;
+            }
+
+            // ポインタ型（*xxx形式）の場合、LLVM opaque ptrを返す
+            if (!lookupName.empty() && lookupName[0] == '*') {
+                // LLVM opaque pointer (ptr)として扱う
+                return llvm::PointerType::get(ctx.getContext(), 0);
             }
 
             // エラーログを追加

@@ -239,14 +239,37 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
     // メソッド実装の場合（is_ctor_impl時もメソッドがあれば処理）
     for (auto& method : impl.methods) {
         auto hir_func = std::make_unique<HirFunction>();
-        hir_func->name = method->name;
+
+        // コンストラクタ判定: メソッド名が構造体名と一致する場合
+        // target_type が "Point<T>" の場合、基本名 "Point" とメソッド名を比較
+        std::string target_base_name = hir_impl->target_type;
+        auto angle_pos = target_base_name.find('<');
+        if (angle_pos != std::string::npos) {
+            target_base_name = target_base_name.substr(0, angle_pos);
+        }
+
+        bool is_ctor = (method->name == target_base_name);
+        if (is_ctor) {
+            // コンストラクタとして__ctor_N形式にマングリング
+            std::string mangled_name = hir_impl->target_type + "__ctor";
+            if (!method->params.empty()) {
+                mangled_name += "_" + std::to_string(method->params.size());
+            }
+            hir_func->name = mangled_name;
+            hir_func->is_constructor = true;
+        } else {
+            hir_func->name = method->name;
+        }
+
         hir_func->return_type = method->return_type;
+        hir_func->is_static = method->is_static;  // staticフラグを継承
 
         for (const auto& gp : hir_impl->generic_params) {
             hir_func->generic_params.push_back(gp);
         }
 
-        if (impl.target_type) {
+        // staticメソッドではselfパラメータを追加しない
+        if (impl.target_type && !method->is_static) {
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
             hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
         }

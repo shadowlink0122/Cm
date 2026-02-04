@@ -379,7 +379,8 @@ struct HirFunction {
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_constructor = false;
     bool is_destructor = false;
-    bool is_overload = false;                          // overloadキーワードの有無
+    bool is_static = false;    // staticメソッド（selfパラメータなし）
+    bool is_overload = false;  // overloadキーワードの有無
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 

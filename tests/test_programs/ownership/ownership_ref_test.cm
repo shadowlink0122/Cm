@@ -1,0 +1,106 @@
+// 所有権と参照のテスト
+// テスト項目: 参照取得、move操作、構造体配列、参照経由変更、複数借用、部分変更
+import std::io::println;
+
+use libc {
+    void* malloc(long size);
+}
+
+struct Resource {
+    int id;
+    int value;
+}
+
+struct GenericArray<T> {
+    T* data;
+    int size;
+    int capacity;
+}
+
+impl GenericArray<T> {
+    void init(int cap) {
+        long elem_size = __sizeof__(T) as long;
+        long alloc_size = (cap as long) * elem_size;
+        void* raw = malloc(alloc_size);
+        this.data = raw as T*;
+        this.size = 0;
+        this.capacity = cap;
+    }
+
+    void push(T value) {
+        this.data[this.size] = value;
+        this.size = this.size + 1;
+    }
+
+    T get(int idx) {
+        return this.data[idx];
+    }
+
+    T* get_ref(int idx) {
+        return &this.data[idx];
+    }
+}
+
+int main() {
+    println("=== 所有権と参照テスト ===");
+
+    // 1. 参照取得テスト
+    GenericArray<int> arr;
+    arr.init(4);
+    arr.push(10);
+    arr.push(20);
+
+    int* p0 = arr.get_ref(0);
+    int* p1 = arr.get_ref(1);
+
+    *p0 = 111;
+    *p1 = 222;
+
+    int v0 = arr.get(0);
+    int v1 = arr.get(1);
+
+    if (v0 != 111 || v1 != 222) {
+        println("FAIL: 参照取得");
+        return 1;
+    }
+
+    // 2. move操作テスト
+    int x = 42;
+    int y = move x;
+    Resource r1;
+    r1.id = 1;
+    r1.value = 100;
+    Resource r2 = move r1;
+
+    if (y != 42 || r2.id != 1) {
+        println("FAIL: move操作");
+        return 1;
+    }
+
+    // 3. 構造体配列テスト
+    GenericArray<Resource> resources;
+    resources.init(4);
+
+    Resource res1;
+    res1.id = 1;
+    res1.value = 100;
+    resources.push(res1);
+
+    Resource got1 = resources.get(0);
+    if (got1.id != 1 || got1.value != 100) {
+        println("FAIL: 構造体配列");
+        return 1;
+    }
+
+    // 4. 参照経由の構造体変更
+    Resource* ref = resources.get_ref(0);
+    (*ref).value = 999;
+    Resource got2 = resources.get(0);
+    if (got2.value != 999) {
+        println("FAIL: 参照経由変更");
+        return 1;
+    }
+
+    println("=== PASS ===");
+    return 0;
+}

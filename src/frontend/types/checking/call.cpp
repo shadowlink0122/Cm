@@ -64,6 +64,116 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
         if (!sym) {
+            // 静的メソッド呼び出しの可能性をチェック: Type::method
+            size_t last_colon = ident->name.rfind("::");
+            if (last_colon != std::string::npos) {
+                std::string type_name = ident->name.substr(0, last_colon);
+                std::string method_name = ident->name.substr(last_colon + 2);
+
+                // 型名からジェネリック型パラメータを抽出（Vec<int>など）
+                // まず直接検索を試みる
+                auto it = type_methods_.find(type_name);
+                if (it == type_methods_.end()) {
+                    // ジェネリック型の場合: Vec<int> -> Vec<T> に変換して検索
+                    size_t lt_pos = type_name.find('<');
+                    if (lt_pos != std::string::npos) {
+                        std::string base_name = type_name.substr(0, lt_pos);
+
+                        // generic_structs_から型パラメータを取得
+                        auto gen_it = generic_structs_.find(base_name);
+                        if (gen_it != generic_structs_.end()) {
+                            // 登録時の型名を構築: Vec<T>
+                            std::string generic_type_name = base_name + "<";
+                            for (size_t i = 0; i < gen_it->second.size(); ++i) {
+                                if (i > 0)
+                                    generic_type_name += ", ";
+                                generic_type_name += gen_it->second[i];
+                            }
+                            generic_type_name += ">";
+
+                            it = type_methods_.find(generic_type_name);
+                        }
+                    }
+                }
+
+                if (it != type_methods_.end()) {
+                    auto method_it = it->second.find(method_name);
+                    if (method_it != it->second.end()) {
+                        const auto& method_info = method_it->second;
+
+                        // 静的メソッドかチェック
+                        if (!method_info.is_static) {
+                            error(current_span_, "Method '" + method_name + "' of type '" +
+                                                     type_name + "' is not a static method");
+                            return ast::make_error();
+                        }
+
+                        // 引数の型チェック
+                        if (call.args.size() != method_info.param_types.size()) {
+                            error(current_span_,
+                                  "Static method '" + ident->name + "' expects " +
+                                      std::to_string(method_info.param_types.size()) +
+                                      " arguments, got " + std::to_string(call.args.size()));
+                        } else {
+                            for (size_t i = 0; i < call.args.size(); ++i) {
+                                auto arg_type = infer_type(*call.args[i]);
+                                if (!types_compatible(method_info.param_types[i], arg_type)) {
+                                    std::string expected =
+                                        ast::type_to_string(*method_info.param_types[i]);
+                                    std::string actual = ast::type_to_string(*arg_type);
+                                    error(current_span_, "Argument type mismatch in call to '" +
+                                                             ident->name + "': expected " +
+                                                             expected + ", got " + actual);
+                                }
+                            }
+                        }
+
+                        // 戻り値型を返す（ジェネリック型パラメータを具体化する必要がある場合がある）
+                        auto return_type = method_info.return_type;
+
+                        // 戻り値型がジェネリック型の場合、具体的な型引数で置き換え
+                        size_t lt_pos = type_name.find('<');
+                        if (lt_pos != std::string::npos && return_type) {
+                            std::string base_name = type_name.substr(0, lt_pos);
+                            auto gen_it = generic_structs_.find(base_name);
+                            if (gen_it != generic_structs_.end()) {
+                                // type_nameから型引数を抽出: Vec<int> -> ["int"]
+                                std::string type_args_str = type_name.substr(lt_pos + 1);
+                                type_args_str = type_args_str.substr(
+                                    0, type_args_str.size() - 1);  // 末尾の > を削除
+
+                                // 型引数をvectorに変換
+                                std::vector<ast::TypePtr> concrete_type_args;
+                                // 簡易パース（カンマ区切り）
+                                std::istringstream iss(type_args_str);
+                                std::string type_arg_name;
+                                while (std::getline(iss, type_arg_name, ',')) {
+                                    // 空白をトリム
+                                    size_t start = type_arg_name.find_first_not_of(" ");
+                                    size_t end = type_arg_name.find_last_not_of(" ");
+                                    if (start != std::string::npos && end != std::string::npos) {
+                                        type_arg_name =
+                                            type_arg_name.substr(start, end - start + 1);
+                                    }
+                                    // 型名を作成
+                                    concrete_type_args.push_back(ast::make_named(type_arg_name));
+                                }
+
+                                // substitute_generic_typeで戻り値型を置換
+                                return_type = substitute_generic_type(return_type, gen_it->second,
+                                                                      concrete_type_args);
+                            }
+                        }
+
+                        debug::tc::log(debug::tc::Id::Resolved,
+                                       "Static method call: " + ident->name +
+                                           "() : " + ast::type_to_string(*return_type),
+                                       debug::Level::Debug);
+                        return return_type;
+                    }
+                }
+            }
+
             error(current_span_, "'" + ident->name + "' is not a function");
             return ast::make_error();
         }

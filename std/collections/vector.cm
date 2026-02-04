@@ -4,8 +4,8 @@ module std.collections.vector;
 
 use libc {
     void* malloc(long size);
-    void* realloc(void* ptr, long size);
     void free(void* ptr);
+    void* memcpy(void* dest, void* src, long n);
 }
 
 // =============================================================
@@ -19,28 +19,34 @@ export struct Vector<T> {
 }
 
 export impl Vector<T> {
-    // コンストラクタ（静的メソッド風）
-    static Vector<T> new() {
-        Vector<T> v;
-        v.data = 0 as T*;
-        v.size = 0;
-        v.cap = 0;
-        return v;
+    // 初期化
+    void init() {
+        void* null_ptr = 0 as void*;
+        this.data = null_ptr as T*;
+        this.size = 0;
+        this.cap = 0;
     }
 
     // 末尾に追加
     void push(T value) {
         if (this.size >= this.cap) {
             int new_cap = this.cap == 0 ? 4 : this.cap * 2;
-            // __sizeof__(T)で型サイズ取得
+            // __sizeof__(T)で型サイズを動的取得
             long elem_size = __sizeof__(T) as long;
-            T* new_data = malloc(new_cap as long * elem_size) as T*;
-            // 既存データをコピー
-            for (int i = 0; i < this.size; i++) {
-                new_data[i] = this.data[i];
+            long alloc_size = (new_cap as long) * elem_size;
+            void* raw_ptr = malloc(alloc_size);
+            T* new_data = raw_ptr as T*;
+            // 既存データをコピー（memcpyで高速コピー）
+            if (this.size > 0) {
+                void* src = this.data as void*;
+                void* dst = new_data as void*;
+                long copy_size = (this.size as long) * elem_size;
+                memcpy(dst, src, copy_size);
             }
-            if (this.data != 0 as T*) {
-                free(this.data as void*);
+            void* old_ptr = this.data as void*;
+            void* null_ptr = 0 as void*;
+            if (old_ptr != null_ptr) {
+                free(old_ptr);
             }
             this.data = new_data;
             this.cap = new_cap;
@@ -88,11 +94,13 @@ export impl Vector<T> {
     }
 
     // メモリ解放（完全リリース）
-    void free() {
-        if (this.data != 0 as T*) {
-            free(this.data as void*);
+    void release() {
+        void* ptr = this.data as void*;
+        void* null_ptr = 0 as void*;
+        if (ptr != null_ptr) {
+            free(ptr);
         }
-        this.data = 0 as T*;
+        this.data = null_ptr as T*;
         this.size = 0;
         this.cap = 0;
     }

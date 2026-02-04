@@ -199,6 +199,16 @@ std::string get_type_name(const hir::TypePtr& type) {
             return "string";
         case hir::TypeKind::Void:
             return "void";
+        case hir::TypeKind::Pointer: {
+            // ポインタ型: ptr_xxx 形式を返す
+            std::string result = "ptr_";
+            if (type->element_type) {
+                result += get_type_name(type->element_type);
+            } else {
+                result += "void";
+            }
+            return result;
+        }
         case hir::TypeKind::Struct:
         case hir::TypeKind::Interface:
         case hir::TypeKind::Generic:
@@ -279,6 +289,14 @@ hir::TypePtr make_type_from_name(const std::string& name) {
     if (name == "void") {
         auto t = hir::make_void();
         t->name = "void";
+        return t;
+    }
+    // ポインタ型（ptr_xxx形式）
+    if (name.size() > 4 && name.substr(0, 4) == "ptr_") {
+        std::string elem_name = name.substr(4);
+        auto elem_type = make_type_from_name(elem_name);
+        auto t = hir::make_pointer(elem_type);
+        t->name = name;
         return t;
     }
     // ユーザー定義型（構造体など）

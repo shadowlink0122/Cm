@@ -1,0 +1,21 @@
+[LLVM] WARNING: Struct type not found: V
+       Available types: Entry__V Entry__long Entry__bool Entry__int HashMap__long HashMap__int HashMap__bool 
+=== HashMap<V> Test ===
+1. HashMap<int>:
+  insert 3 items: len=3
+  get: 1->100, 2->200, 3->300
+  contains: 1=true, 99=false
+  update 2->999: get(2)=999
+  remove(1): contains=false, len=2
+  clear: len=0
+  reuse: len=2, 10->1000, 20->2000
+  released
+2. HashMap<long>:
+  insert 2 items: len=2
+  get: 1->10000, 2->20000
+  released
+3. HashMap<bool>:
+  insert 3 items: len=3
+  get: 1->true, 2->false, 3->true
+  released
+=== PASS ===
