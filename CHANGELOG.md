@@ -2,6 +2,41 @@
 
 Cm言語コンパイラの変更履歴です。
 
+## [0.13.0] - 2026-02-04
+
+### 追加
+
+#### std::io モジュール階層的再構成
+- **モジュール分割**: std/io/を機能別サブモジュール（console/, stream/, file/）に再構成
+- **pure Cm実装**: C++ランタイム依存を排除し、libc直接呼び出しアーキテクチャを実装
+
+#### libc直接呼び出し
+- **use libc構文**: `use libc { ... }` でlibcの関数を直接宣言・呼び出し可能
+
+#### std::thread API（pthread直接使用）
+- **spawn/join/detach**: libcのpthreadを使用したシンプルなスレッドAPI
+- **sleep_ms**: ミリ秒スリープ関数
+
+#### Tagged Union (Enum) の強化
+- **関連データ付きEnum**: `enum Option<T> { Some(T), None }` 形式
+- **パターンマッチング**: `match (opt) { Some(v) => ..., None => ... }`
+
+#### Match式の改善
+- **ガード式**: `x if x > 0 => ...` 形式のパターンガード
+
+### 破壊的変更
+
+#### async/await削除
+- コンパイラレベルのasync/awaitサポートを削除
+- 非同期処理はstd::threadを使用
+
+#### std::fs削除
+- std::fsモジュールを削除、std::io::fileに統合
+
+### テスト
+- インタプリタ: 339/352 PASS
+- LLVM JIT: 337/352 PASS
+
 ## [0.12.0] - 2025-12-24
 
 ### 追加
