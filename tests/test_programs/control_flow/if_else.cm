@@ -1,34 +1,63 @@
-// if-else文のテスト
 import std::io::println;
-int main() {
-    int x = 10;
 
-    // 単純なif文
+int main() {
+    // 基本的なif文
+    println("Basic if statement:");
+    int x = 10;
     if (x > 5) {
-        println(1);
+        println("x is greater than 5");
     }
 
     // if-else文
-    if (x < 5) {
-        println(0);
+    println("\nIf-else statement:");
+    int y = 3;
+    if (y % 2 == 0) {
+        println("y is even");
     } else {
-        println(2);
+        println("y is odd");
     }
 
-    // else if連鎖
-    if (x < 10) {
-        println(0);
-    } else if (x == 10) {
-        println(3);
+    // if-else if-else連鎖
+    println("\nIf-else if-else chain:");
+    int score = 85;
+    if (score >= 90) {
+        println("Grade: A");
+    } else if (score >= 80) {
+        println("Grade: B");
+    } else if (score >= 70) {
+        println("Grade: C");
+    } else if (score >= 60) {
+        println("Grade: D");
     } else {
-        println(0);
+        println("Grade: F");
     }
 
-    // ネストされたif
-    if (x > 0) {
-        if (x <= 10) {
-            println(4);
+    // ネストされたif文
+    println("\nNested if statements:");
+    int a = 10;
+    int b = 20;
+    if (a > 0) {
+        if (b > 0) {
+            println("Both a and b are positive");
+            if (a < b) {
+                println("a is less than b");
+            }
         }
+    }
+
+    // 複雑な条件
+    println("\nComplex conditions:");
+    int age = 25;
+    bool hasLicense = true;
+    if (age >= 18 && hasLicense) {
+        println("Can drive");
+    }
+
+    int temp = 25;
+    if (temp < 0 || temp > 40) {
+        println("Extreme temperature");
+    } else {
+        println("Normal temperature");
     }
 
     return 0;

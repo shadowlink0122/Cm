@@ -1,30 +1,45 @@
-// whileループのテスト
 import std::io::println;
+
 int main() {
     // 基本的なwhileループ
+    println("Basic while loop:");
     int i = 0;
     while (i < 5) {
-        println(i);
-        i = i + 1;
+        println("i = " + i);
+        i++;
     }
 
-    // 条件が最初からfalseの場合
-    int j = 10;
-    while (j < 5) {
-        println(999);
-        // 実行されない
+    // 条件付きwhileループ
+    println("\nConditional while:");
+    int n = 10;
+    while (n > 0) {
+        if (n % 2 == 0) {
+            println(n + " is even");
+        }
+        n--;
     }
 
-    // ネストされたループ
+    // breakを使った無限ループ
+    println("\nInfinite loop with break:");
+    int count = 0;
+    while (true) {
+        println("count = " + count);
+        count++;
+        if (count >= 3) {
+            break;
+        }
+    }
+
+    // ネストされたwhileループ
+    println("\nNested while loops:");
     int x = 0;
-    while (x < 2) {
+    while (x < 3) {
         int y = 0;
         while (y < 3) {
-            int sum = x * 10 + y;
-            println(sum);
-            y = y + 1;
+            println("x=" + x + ", y=" + y);
+            y++;
         }
-        x = x + 1;
+        x++;
     }
 
     return 0;

@@ -1,7 +1,7 @@
 import std::io::println;
 // test_phase2_hierarchy_rebuild.cm - ファイル直接インポートテスト
-import ./phase2_hierarchy_rebuild/io/file::{read};
-import ./phase2_hierarchy_rebuild/io/stream::{open};
+import ./hierarchy_rebuild/io/file::{read};
+import ./hierarchy_rebuild/io/stream::{open};
 
 int main() {
     // 直接インポートした関数を使用
