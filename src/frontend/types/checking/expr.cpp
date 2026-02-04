@@ -544,15 +544,11 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
     // 全armが式形式かブロック形式かを判定
     bool all_expr_form = true;
     bool all_block_form = true;
-    size_t expr_count = 0;
-    size_t block_count = 0;
     for (auto& arm : match.arms) {
         if (arm.is_block_form) {
             all_expr_form = false;
-            block_count++;
         } else {
             all_block_form = false;
-            expr_count++;
         }
     }
 

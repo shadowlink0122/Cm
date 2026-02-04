@@ -97,6 +97,13 @@ MirStatementPtr clone_statement(const MirStatementPtr& stmt) {
         case MirStatement::Nop:
             result->data = std::monostate{};
             break;
+        case MirStatement::Asm:
+            // インラインアセンブリはモノモーフィゼーションでは変更不要
+            // AsmDataはコピー不可（unique_ptrを含む）なので、Nopとして処理
+            // 実際のasm文は元のMIRで保持される
+            result->kind = MirStatement::Nop;
+            result->data = std::monostate{};
+            break;
     }
 
     return result;

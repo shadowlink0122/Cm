@@ -490,6 +490,7 @@ int main(int argc, char* argv[]) {
                 // 型チェック
                 TypeChecker checker;
                 bool type_check_ok = checker.check(program);
+                (void)type_check_ok;  // 警告抑制：将来のエラー処理で使用予定
 
                 // 診断情報を表示
                 SourceLocationManager loc_mgr(code, file);

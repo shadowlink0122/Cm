@@ -1594,7 +1594,8 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::vector<mir::LocalId> outputLocalIds;  // 出力ローカルIDも記録
                 std::string constraints;
                 int outputCount = 0;  // =r の数
-                int inputCount = 0;
+                int inputCount = 0;  // 入力オペランドの数（将来の拡張/デバッグ用）
+                (void)inputCount;  // 現時点では読み取り不要だが、インクリメントは維持
 
                 // =m制約用: メモリ出力はポインタを入力として渡す
                 std::vector<llvm::Value*> memOutputPtrs;  // =m用のポインタ（入力として渡す）
