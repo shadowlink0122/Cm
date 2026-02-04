@@ -454,7 +454,13 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             error(current_span_, "Unknown struct type '" + type_name + "'");
         }
     } else {
-        error(current_span_, "Field access on non-struct type '" + type_name + "'");
+        // ポインタ型の場合は、より具体的なエラーメッセージを表示
+        if (obj_type->kind == ast::TypeKind::Pointer) {
+            error(current_span_, "Cannot use '.' on pointer type '" + type_name +
+                                     "'. Use '->' for field access through pointers.");
+        } else {
+            error(current_span_, "Field access on non-struct type '" + type_name + "'");
+        }
     }
 
     return ast::make_error();
