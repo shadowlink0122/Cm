@@ -85,12 +85,12 @@ ja版とen版を同時に作成すること。
 
 | 機能 | バージョン | チュートリアル | 状態 |
 |-----|-----------|--------------|------|
-| const強化 | v0.12.0 | advanced/const.md | ⚠️ 未作成 |
-| Linter | v0.12.0 | compiler/linter.md | ⚠️ 未作成 |
-| Formatter | v0.12.0 | compiler/formatter.md | ⚠️ 未作成 |
+| const強化 | v0.12.0 | advanced/const.md | ✅ 存在 |
+| Linter | v0.12.0 | compiler/linter.md | ✅ 存在 |
+| Formatter | v0.12.0 | compiler/formatter.md | ✅ 存在 |
 | 末尾呼び出し最適化 | v0.12.0 | compiler/optimization.md | ✅ 存在 |
-| 多次元配列最適化 | v0.12.0 | basics/arrays.md | ✅ 存在（要確認） |
-| スレッド | v0.13.0 | advanced/thread.md | ✅ 作成済み |
-| Enum（関連データ付き） | v0.13.0 | types/enums.md | ✅ 存在（要確認） |
-| Match Guard | v0.13.0 | advanced/match.md | ✅ 存在（要確認） |
-| mustキーワード | v0.13.0 | advanced/must.md | ⚠️ 未作成 |
+| 多次元配列最適化 | v0.12.0 | basics/arrays.md | ✅ 存在 |
+| スレッド | v0.13.0 | advanced/thread.md | ✅ 存在 |
+| Enum（関連データ付き） | v0.13.0 | types/enums.md | ✅ 更新済み |
+| Match Guard | v0.13.0 | advanced/match.md | ✅ 存在 |
+| mustキーワード | v0.13.0 | advanced/must.md | ✅ 存在 |
