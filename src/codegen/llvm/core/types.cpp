@@ -153,6 +153,50 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                                 case hir::TypeKind::String:
                                     lookupName += "string";
                                     break;
+                                case hir::TypeKind::Pointer: {
+                                    // ポインタ型: ptr_xxx 形式で追加
+                                    lookupName += "ptr_";
+                                    if (typeArg->element_type) {
+                                        switch (typeArg->element_type->kind) {
+                                            case hir::TypeKind::Int:
+                                                lookupName += "int";
+                                                break;
+                                            case hir::TypeKind::UInt:
+                                                lookupName += "uint";
+                                                break;
+                                            case hir::TypeKind::Long:
+                                                lookupName += "long";
+                                                break;
+                                            case hir::TypeKind::ULong:
+                                                lookupName += "ulong";
+                                                break;
+                                            case hir::TypeKind::Float:
+                                                lookupName += "float";
+                                                break;
+                                            case hir::TypeKind::Double:
+                                                lookupName += "double";
+                                                break;
+                                            case hir::TypeKind::Bool:
+                                                lookupName += "bool";
+                                                break;
+                                            case hir::TypeKind::Char:
+                                                lookupName += "char";
+                                                break;
+                                            case hir::TypeKind::String:
+                                                lookupName += "string";
+                                                break;
+                                            case hir::TypeKind::Struct:
+                                                lookupName += typeArg->element_type->name;
+                                                break;
+                                            default:
+                                                lookupName += "void";
+                                                break;
+                                        }
+                                    } else {
+                                        lookupName += "void";
+                                    }
+                                    break;
+                                }
                                 default:
                                     // その他の型は型名をそのまま使用
                                     if (!typeArg->name.empty()) {

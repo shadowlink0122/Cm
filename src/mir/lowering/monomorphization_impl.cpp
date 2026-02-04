@@ -1429,6 +1429,100 @@ void Monomorphization::update_type_references(MirProgram& program) {
     if (!hir_struct_defs)
         return;
 
+    // まず、すべてのMIRローカル変数の型名を正規化
+    // PtrContainer__*int -> PtrContainer__ptr_int
+    // また、ポインタ型のelement_type名も正規化
+    for (auto& func : program.functions) {
+        if (!func)
+            continue;
+        for (auto& local : func->locals) {
+            if (!local.type)
+                continue;
+            // 型名にポインタ表記が含まれている場合は正規化
+            if (local.type->name.find("__*") != std::string::npos) {
+                std::string normalized = local.type->name;
+                size_t pos = 0;
+                while ((pos = normalized.find("__*", pos)) != std::string::npos) {
+                    normalized.replace(pos, 3, "__ptr_");
+                    pos += 6;
+                }
+                debug_msg("MONO",
+                          "Normalized type name: " + local.type->name + " -> " + normalized);
+                local.type->name = normalized;
+            }
+            // ポインタ型の場合、element_type名も再帰的に正規化
+            if (local.type->kind == hir::TypeKind::Pointer && local.type->element_type) {
+                auto& elem = local.type->element_type;
+                if (elem->name.find("__*") != std::string::npos) {
+                    std::string normalized = elem->name;
+                    size_t pos = 0;
+                    while ((pos = normalized.find("__*", pos)) != std::string::npos) {
+                        normalized.replace(pos, 3, "__ptr_");
+                        pos += 6;
+                    }
+                    debug_msg("MONO", "Normalized pointer element type: " + elem->name + " -> " +
+                                          normalized);
+                    elem->name = normalized;
+                }
+            }
+        }
+    }
+
+    // MIR構造体名も正規化
+    for (auto& st : program.structs) {
+        if (!st)
+            continue;
+        if (st->name.find("__*") != std::string::npos) {
+            std::string normalized = st->name;
+            size_t pos = 0;
+            while ((pos = normalized.find("__*", pos)) != std::string::npos) {
+                normalized.replace(pos, 3, "__ptr_");
+                pos += 6;
+            }
+            debug_msg("MONO", "Normalized struct name: " + st->name + " -> " + normalized);
+            st->name = normalized;
+        }
+    }
+
+    // MIR関数名も正規化
+    for (auto& func : program.functions) {
+        if (!func)
+            continue;
+        if (func->name.find("__*") != std::string::npos) {
+            std::string normalized = func->name;
+            size_t pos = 0;
+            while ((pos = normalized.find("__*", pos)) != std::string::npos) {
+                normalized.replace(pos, 3, "__ptr_");
+                pos += 6;
+            }
+            debug_msg("MONO", "Normalized function name: " + func->name + " -> " + normalized);
+            func->name = normalized;
+        }
+
+        // 関数内の呼び出しも正規化
+        for (auto& bb : func->basic_blocks) {
+            if (!bb || !bb->terminator)
+                continue;
+            if (bb->terminator->kind == MirTerminator::Call) {
+                auto& call_data = std::get<MirTerminator::CallData>(bb->terminator->data);
+                if (call_data.func && call_data.func->kind == MirOperand::FunctionRef) {
+                    auto& fn_name = std::get<std::string>(call_data.func->data);
+                    if (fn_name.find("__*") != std::string::npos) {
+                        std::string normalized = fn_name;
+                        size_t pos = 0;
+                        while ((pos = normalized.find("__*", pos)) != std::string::npos) {
+                            normalized.replace(pos, 3, "__ptr_");
+                            pos += 6;
+                        }
+                        debug_msg("MONO",
+                                  "Normalized call target: " + fn_name + " -> " + normalized);
+                        fn_name = normalized;
+                    }
+                }
+            }
+        }
+    }
+
     // ジェネリック構造体のリスト
     std::unordered_set<std::string> generic_structs;
     // 各ジェネリック構造体の型パラメータ名のリスト
@@ -1706,6 +1800,28 @@ void Monomorphization::rewrite_generic_calls(
 
                 auto& func_name = std::get<std::string>(call_data.func->data);
 
+                // 0. ポインタ型を含む関数名を正規化
+                // PtrContainer__*int__init -> PtrContainer__ptr_int__init
+                // 再帰的に __* を __ptr_ に置換（ネストしたポインタ対応）
+                {
+                    std::string normalized = func_name;
+                    size_t pos = 0;
+                    while ((pos = normalized.find("__*", pos)) != std::string::npos) {
+                        normalized.replace(pos, 3, "__ptr_");
+                        pos += 6;  // "__ptr_".length()
+                    }
+                    // <*type> 形式も正規化
+                    pos = 0;
+                    while ((pos = normalized.find("<*", pos)) != std::string::npos) {
+                        normalized.replace(pos, 2, "<ptr_");
+                        pos += 5;  // "<ptr_".length()
+                    }
+                    if (normalized != func_name) {
+                        func_name = normalized;
+                        debug_msg("MONO", "Normalized pointer type in call: " + func_name);
+                    }
+                }
+
                 // 1. 単純なジェネリック関数呼び出し（create_node -> create_node__int）
                 auto simple_it = simple_rewrite_map.find(func_name);
                 if (simple_it != simple_rewrite_map.end()) {
@@ -1763,7 +1879,7 @@ void Monomorphization::rewrite_generic_calls(
                     // 型パラメータ名がT以外（Vなど）の場合に対応
                     std::string args_str;
                     for (const auto& arg : type_args) {
-                        args_str += "__" + arg;
+                        args_str += "__" + normalize_type_arg(arg);
                     }
                     std::string direct_name = base_name + args_str + method_suffix;
 

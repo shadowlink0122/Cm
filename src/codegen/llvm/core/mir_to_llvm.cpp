@@ -3059,6 +3059,51 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                         case hir::TypeKind::String:
                                             structName += "string";
                                             break;
+                                        case hir::TypeKind::Pointer: {
+                                            // ポインタ型: ptr_xxx 形式で追加
+                                            structName += "ptr_";
+                                            // 要素型を再帰的に追加
+                                            if (typeArg->element_type) {
+                                                switch (typeArg->element_type->kind) {
+                                                    case hir::TypeKind::Int:
+                                                        structName += "int";
+                                                        break;
+                                                    case hir::TypeKind::UInt:
+                                                        structName += "uint";
+                                                        break;
+                                                    case hir::TypeKind::Long:
+                                                        structName += "long";
+                                                        break;
+                                                    case hir::TypeKind::ULong:
+                                                        structName += "ulong";
+                                                        break;
+                                                    case hir::TypeKind::Float:
+                                                        structName += "float";
+                                                        break;
+                                                    case hir::TypeKind::Double:
+                                                        structName += "double";
+                                                        break;
+                                                    case hir::TypeKind::Bool:
+                                                        structName += "bool";
+                                                        break;
+                                                    case hir::TypeKind::Char:
+                                                        structName += "char";
+                                                        break;
+                                                    case hir::TypeKind::String:
+                                                        structName += "string";
+                                                        break;
+                                                    case hir::TypeKind::Struct:
+                                                        structName += typeArg->element_type->name;
+                                                        break;
+                                                    default:
+                                                        structName += "void";
+                                                        break;
+                                                }
+                                            } else {
+                                                structName += "void";
+                                            }
+                                            break;
+                                        }
                                         default:
                                             if (!typeArg->name.empty()) {
                                                 structName += typeArg->name;

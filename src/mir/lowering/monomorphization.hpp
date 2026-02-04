@@ -150,12 +150,26 @@ class Monomorphization : public MirLoweringBase {
     // main等の呼び出し側で構造体のコピーではなくアドレスを渡すように変更
     void fix_struct_method_self_args(MirProgram& program);
 
+    // ポインタ型名を正規化（*int → ptr_int）
+    // LLVMの型検索と一貫性を保つため
+    std::string normalize_type_arg(const std::string& type_arg) {
+        if (type_arg.empty())
+            return type_arg;
+
+        // *intのような形式をptr_intに変換
+        if (type_arg[0] == '*') {
+            return "ptr_" + normalize_type_arg(type_arg.substr(1));
+        }
+
+        return type_arg;
+    }
+
     // 型名から特殊化構造体名を生成
     std::string make_specialized_struct_name(const std::string& base_name,
                                              const std::vector<std::string>& type_args) {
         std::string result = base_name;
         for (const auto& arg : type_args) {
-            result += "__" + arg;
+            result += "__" + normalize_type_arg(arg);
         }
         return result;
     }
@@ -199,19 +213,19 @@ class Monomorphization : public MirLoweringBase {
             std::string prefix = base_name.substr(0, pos);       // "Container"
             std::string suffix = base_name.substr(end_pos + 1);  // "__print"
 
-            // 型引数を __int__string 形式で連結
+            // 型引数を __int__string 形式で連結（正規化付き）
             std::string args_str;
             for (size_t i = 0; i < type_args.size(); ++i) {
-                args_str += "__" + type_args[i];
+                args_str += "__" + normalize_type_arg(type_args[i]);
             }
 
             return prefix + args_str + suffix;  // "Container__int__print"
         }
 
-        // 通常の場合は末尾に追加
+        // 通常の場合は末尾に追加（正規化付き）
         std::string result = base_name;
         for (const auto& arg : type_args) {
-            result += "__" + arg;
+            result += "__" + normalize_type_arg(arg);
         }
         return result;
     }
