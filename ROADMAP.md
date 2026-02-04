@@ -1,6 +1,6 @@
 # Cm言語 開発ロードマップ
 
-> **過去のバージョン履歴**: [docs/ROADMAP_HISTORY.md](docs/ROADMAP_HISTORY.md)
+> **過去のバージョン履歴**: [docs/archive/legacy/root_docs/ROADMAP_HISTORY.md](docs/archive/legacy/root_docs/ROADMAP_HISTORY.md)
 
 ---
 
