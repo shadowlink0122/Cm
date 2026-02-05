@@ -1,0 +1,11 @@
+=== Simple Queue Test ===
+Pushing items:
+  push(value=100, priority=1)
+  push(value=200, priority=2)
+  push(value=300, priority=3)
+Queue size: 3
+Popping items:
+  pop() = value=100, priority=1
+  pop() = value=200, priority=2
+  pop() = value=300, priority=3
+=== PASS ===

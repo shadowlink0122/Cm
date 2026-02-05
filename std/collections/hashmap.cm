@@ -1,7 +1,5 @@
 // std::collections::hashmap - ジェネリック連想配列
-// HashMap<V> - キーはint固定、値はジェネリックV
-// 注: HashMap<K, V>の2型パラメータはLLVMバックエンドのバグで動作しないため
-//     キーはint固定の1型パラメータ版として実装
+// HashMap<K, V> - キーと値の両方がジェネリック
 module std.collections.hashmap;
 
 use libc {
@@ -10,31 +8,31 @@ use libc {
 }
 
 // =============================================================
-// HashMap<V> - ジェネリック連想配列（線形探索）
-// キー: int固定, 値: ジェネリックV
+// HashMap<K, V> - ジェネリック連想配列（線形探索）
+// キー: ジェネリックK, 値: ジェネリックV
 // 注意: フィールド順序はアライメントを考慮（大きい型を先に）
 // =============================================================
 
-export struct Entry<V> {
-    V value;       // ジェネリック値を先に
-    int key;
+export struct Entry<K, V> {
+    V value;  // ジェネリック値
+    K key;    // ジェネリックキー
     bool occupied;
 }
 
-export struct HashMap<V> {
-    Entry<V>* entries;
+export struct HashMap<K, V> {
+    Entry<K, V>* entries;
     int cap;
     int size;
 }
 
-export impl<V> HashMap<V> {
+export impl<K, V> HashMap<K, V> {
     // コンストラクタ
     void HashMap(int capacity) {
-        // Entryサイズは32バイト固定（十分なサイズ確保）
-        long entry_size = 32;
+        // Entryサイズは64バイト固定（十分なサイズ確保）
+        long entry_size = 64;
         long alloc_size = (capacity as long) * entry_size;
         void* raw_ptr = malloc(alloc_size);
-        this.entries = raw_ptr as Entry<V>*;
+        this.entries = raw_ptr as Entry<K, V>*;
         this.cap = capacity;
         this.size = 0;
         for (int i = 0; i < capacity; i++) {
@@ -42,12 +40,13 @@ export impl<V> HashMap<V> {
         }
     }
 
-    // 挿入
-    void insert(int key, V value) {
-        int h = key;
+    // 挿入（intキー専用ハッシュ）
+    void insert(K key, V value) {
+        // 簡易ハッシュ（intとして扱う）
+        int h = key as int;
         if (h < 0) { h = 0 - h; }
         int idx = h % this.cap;
-        
+
         for (int i = 0; i < this.cap; i++) {
             int pos = (idx + i) % this.cap;
             if (!this.entries[pos].occupied || this.entries[pos].key == key) {
@@ -63,11 +62,11 @@ export impl<V> HashMap<V> {
     }
 
     // 取得
-    V get(int key) {
-        int h = key;
+    V get(K key) {
+        int h = key as int;
         if (h < 0) { h = 0 - h; }
         int idx = h % this.cap;
-        
+
         for (int i = 0; i < this.cap; i++) {
             int pos = (idx + i) % this.cap;
             if (this.entries[pos].occupied && this.entries[pos].key == key) {
@@ -83,11 +82,11 @@ export impl<V> HashMap<V> {
     }
 
     // 存在確認
-    bool contains(int key) {
-        int h = key;
+    bool contains(K key) {
+        int h = key as int;
         if (h < 0) { h = 0 - h; }
         int idx = h % this.cap;
-        
+
         for (int i = 0; i < this.cap; i++) {
             int pos = (idx + i) % this.cap;
             if (this.entries[pos].occupied && this.entries[pos].key == key) {
@@ -101,11 +100,11 @@ export impl<V> HashMap<V> {
     }
 
     // 削除
-    void remove(int key) {
-        int h = key;
+    void remove(K key) {
+        int h = key as int;
         if (h < 0) { h = 0 - h; }
         int idx = h % this.cap;
-        
+
         for (int i = 0; i < this.cap; i++) {
             int pos = (idx + i) % this.cap;
             if (this.entries[pos].occupied && this.entries[pos].key == key) {
@@ -139,7 +138,7 @@ export impl<V> HashMap<V> {
         if (ptr != null_ptr) {
             free(ptr);
         }
-        this.entries = null_ptr as Entry<V>*;
+        this.entries = null_ptr as Entry<K, V>*;
         this.size = 0;
         this.cap = 0;
     }

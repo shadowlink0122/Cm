@@ -1,0 +1,8 @@
+=== Queue Test ===
+1. IntQueue:
+  enqueue 10, 20, 30: len=3
+  dequeue: 10, 20, 30
+  is_empty: true
+  reuse: len=2, dequeue: 100, 200
+  released
+=== PASS ===

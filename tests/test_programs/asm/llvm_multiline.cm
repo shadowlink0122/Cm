@@ -10,9 +10,9 @@ int main() {
     println("\n--- Test 1: Multi-line with backtick ---");
     int val1 = 10;
     __llvm__(`
-        addl $$5, ${+r:val1}
-        sall $$1, ${+r:val1}
-        addl $$3, ${+r:val1}
+    addl $$5, ${+r:val1}
+    sall $$1, ${+r:val1}
+    addl $$3, ${+r:val1}
     `);
     println("val1 (should be 33):");  // (10+5)*2+3 = 33
     println(val1);
@@ -21,9 +21,9 @@ int main() {
     println("\n--- Test 2: Complex multi-line ---");
     int val2 = 100;
     __llvm__(`
-        subl $$50, ${+r:val2}
-        sall $$2, ${+r:val2}
-        addl $$25, ${+r:val2}
+    subl $$50, ${+r:val2}
+    sall $$2, ${+r:val2}
+    addl $$25, ${+r:val2}
     `);
     println("val2 (should be 225):");  // (100-50)*4+25 = 225
     println(val2);
@@ -32,9 +32,9 @@ int main() {
     println("\n--- Test 3: Bit operation chain ---");
     int bits = 0x01;
     __llvm__(`
-        sall $$4, ${+r:bits}
-        orl $$0x0F, ${+r:bits}
-        sall $$4, ${+r:bits}
+    sall $$4, ${+r:bits}
+    orl $$0x0F, ${+r:bits}
+    sall $$4, ${+r:bits}
     `);
     println("bits (should be 496):");  // ((1<<4)|0xF)<<4 = 0x1F0 = 496
     println(bits);
@@ -43,9 +43,9 @@ int main() {
     println("\n--- Test 4: Sign operations ---");
     int sign = 50;
     __llvm__(`
-        negl ${+r:sign}
-        addl $$100, ${+r:sign}
-        negl ${+r:sign}
+    negl ${+r:sign}
+    addl $$100, ${+r:sign}
+    negl ${+r:sign}
     `);
     println("sign (should be -50):");  // -(-50+100) = -50
     println(sign);

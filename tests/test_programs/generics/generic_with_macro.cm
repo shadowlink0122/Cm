@@ -25,15 +25,15 @@ int main() {
     Container<int> c1;
     c1.value = 42;
     c1.capacity = DEFAULT_CAPACITY;
-    println(c1.value);      // 42
-    println(c1.capacity);   // 10
+    println(c1.value);     // 42
+    println(c1.capacity);  // 10
 
     // 異なる型のジェネリック構造体
     Container<string> c2;
     c2.value = "hello";
     c2.capacity = DEFAULT_CAPACITY;
-    println(c2.value);      // hello
-    println(c2.capacity);   // 10
+    println(c2.value);     // hello
+    println(c2.capacity);  // 10
 
     // マクロをジェネリック関数に渡す
     int v = identity(VERSION);
@@ -48,8 +48,8 @@ int main() {
     Container<int> c3;
     c3.value = doubled;
     c3.capacity = doubled;
-    println(c3.value);      // 20
-    println(c3.capacity);   // 20
+    println(c3.value);     // 20
+    println(c3.capacity);  // 20
 
     println("PASS");
     return 0;

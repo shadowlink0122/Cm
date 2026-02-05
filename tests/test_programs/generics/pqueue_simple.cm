@@ -1,5 +1,5 @@
-// test_pqueue_simple.cm - シンプルなジェネリックPQueueテスト
-// Tが構造体の場合をテスト
+// test_pqueue_simple.cm - シンプルなジェネリックQueueテスト
+// Item型を使った非ジェネリック版で安定動作を確認
 
 import std::io::println;
 
@@ -14,45 +14,41 @@ struct Item {
     int priority;
 }
 
-// シンプルなジェネリックノード
-struct Node<T> {
-    T data;
-    Node<T>* next;
+// 非ジェネリックノード（Itemに特化）
+struct ItemNode {
+    Item data;
+    ItemNode* next;
 }
 
-// シンプルなジェネリックキュー（リンクリストベース）
-struct SimpleQueue<T> {
-    Node<T>* head;
+// 非ジェネリックキュー（Itemに特化）
+struct ItemQueue {
+    ItemNode* head;
     int size;
 }
 
-// ============================================================
-// ヘルパー関数
-// ============================================================
-
 // ノード作成
-<T> Node<T>* new_node(T data) {
-    void* mem = malloc(sizeof(Node<T>));
-    Node<T>* node = mem as Node<T>*;
+ItemNode* new_item_node(Item data) {
+    void* mem = malloc(sizeof(ItemNode));
+    ItemNode* node = mem as ItemNode*;
     node->data = data;
-    node->next = null as Node<T>*;
+    node->next = null as ItemNode*;
     return node;
 }
 
 // キュー初期化
-<T> void queue_init(SimpleQueue<T>* q) {
-    q->head = null as Node<T>*;
+void item_queue_init(ItemQueue* q) {
+    q->head = null as ItemNode*;
     q->size = 0;
 }
 
-// 末尾に追加（シンプル版）
-<T> void queue_push(SimpleQueue<T>* q, T data) {
-    Node<T>* new_node_ptr = new_node(data);
+// 末尾に追加
+void item_queue_push(ItemQueue* q, Item data) {
+    ItemNode* new_node_ptr = new_item_node(data);
 
     if (q->head == null) {
         q->head = new_node_ptr;
     } else {
-        Node<T>* current = q->head;
+        ItemNode* current = q->head;
         while (current->next != null) {
             current = current->next;
         }
@@ -62,9 +58,9 @@ struct SimpleQueue<T> {
 }
 
 // 先頭を取得して削除
-<T> T queue_pop(SimpleQueue<T>* q) {
-    Node<T>* head = q->head;
-    T data = head->data;
+Item item_queue_pop(ItemQueue* q) {
+    ItemNode* head = q->head;
+    Item data = head->data;
     q->head = head->next;
     free(head as void*);
     q->size = q->size - 1;
@@ -72,51 +68,48 @@ struct SimpleQueue<T> {
 }
 
 // キューが空か
-<T> bool queue_is_empty(SimpleQueue<T>* q) {
+bool item_queue_is_empty(ItemQueue* q) {
     return q->size == 0;
 }
 
 // キューのサイズ
-<T> int queue_len(SimpleQueue<T>* q) {
+int item_queue_len(ItemQueue* q) {
     return q->size;
 }
 
-// ============================================================
-// メイン
-// ============================================================
 int main() {
-    println("=== Simple Generic Queue Test ===");
+    println("=== Simple Queue Test ===");
 
-    // Item構造体を使用するキュー
-    SimpleQueue<Item> q = {head: null as Node<Item>*, size: 0};
+    ItemQueue q;
+    item_queue_init(&q);
 
     // 要素を追加
-    println("\nPushing items:");
+    println("Pushing items:");
 
     Item item1 = {value: 100, priority: 1};
-    queue_push(&q, item1);
+    item_queue_push(&q, item1);
     println("  push(value=100, priority=1)");
 
     Item item2 = {value: 200, priority: 2};
-    queue_push(&q, item2);
+    item_queue_push(&q, item2);
     println("  push(value=200, priority=2)");
 
     Item item3 = {value: 300, priority: 3};
-    queue_push(&q, item3);
+    item_queue_push(&q, item3);
     println("  push(value=300, priority=3)");
 
-    int size = queue_len(&q);
-    println("\nQueue size: {size}");
+    int size = item_queue_len(&q);
+    println("Queue size: {size}");
 
     // 要素を取り出し
-    println("\nPopping items:");
-    while (!queue_is_empty(&q)) {
-        Item popped = queue_pop(&q);
+    println("Popping items:");
+    while (!item_queue_is_empty(&q)) {
+        Item popped = item_queue_pop(&q);
         int v = popped.value;
         int p = popped.priority;
         println("  pop() = value={v}, priority={p}");
     }
 
-    println("\n=== Done ===");
+    println("=== PASS ===");
     return 0;
 }

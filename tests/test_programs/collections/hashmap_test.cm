@@ -1,85 +1,85 @@
-// std::collections::HashMap<V>テスト
+// std::collections::HashMap<K, V>テスト
 // import std::collections::hashmap を使用
-// 注: HashMap<V>はキー:int固定、値:ジェネリックV
+// HashMap<K, V>は両方がジェネリック
 import std::io::println;
 import std::collections::hashmap::*;
 
 int main() {
-    println("=== HashMap<V> Test ===");
-    
-    // 1. HashMap<int> テスト
-    println("1. HashMap<int>:");
-    HashMap<int> m1(16);
-    
+    println("=== HashMap<K, V> Test ===");
+
+    // 1. HashMap<int, int> テスト
+    println("1. HashMap<int, int>:");
+    HashMap<int, int> m1(16);
+
     m1.insert(1, 100);
     m1.insert(2, 200);
     m1.insert(3, 300);
     int len = m1.len();
     println("  insert 3 items: len={len}");
-    
+
     int v1 = m1.get(1);
     int v2 = m1.get(2);
     int v3 = m1.get(3);
     println("  get: 1->{v1}, 2->{v2}, 3->{v3}");
-    
+
     bool has1 = m1.contains(1);
     bool has99 = m1.contains(99);
     println("  contains: 1={has1}, 99={has99}");
-    
+
     m1.insert(2, 999);
     v2 = m1.get(2);
     println("  update 2->999: get(2)={v2}");
-    
+
     m1.remove(1);
     has1 = m1.contains(1);
     len = m1.len();
     println("  remove(1): contains={has1}, len={len}");
-    
+
     m1.clear();
     len = m1.len();
     println("  clear: len={len}");
-    
+
     m1.insert(10, 1000);
     m1.insert(20, 2000);
     len = m1.len();
     int v10 = m1.get(10);
     int v20 = m1.get(20);
     println("  reuse: len={len}, 10->{v10}, 20->{v20}");
-    
+
     m1.release();
     println("  released");
 
-    // 2. HashMap<long> テスト
-    println("2. HashMap<long>:");
-    HashMap<long> m2(8);
-    
+    // 2. HashMap<int, long> テスト
+    println("2. HashMap<int, long>:");
+    HashMap<int, long> m2(8);
+
     m2.insert(1, 10000 as long);
     m2.insert(2, 20000 as long);
     len = m2.len();
     println("  insert 2 items: len={len}");
-    
+
     long lv1 = m2.get(1);
     long lv2 = m2.get(2);
     println("  get: 1->{lv1}, 2->{lv2}");
-    
+
     m2.release();
     println("  released");
 
-    // 3. HashMap<bool> テスト
-    println("3. HashMap<bool>:");
-    HashMap<bool> m3(8);
-    
+    // 3. HashMap<int, bool> テスト
+    println("3. HashMap<int, bool>:");
+    HashMap<int, bool> m3(8);
+
     m3.insert(1, true);
     m3.insert(2, false);
     m3.insert(3, true);
     len = m3.len();
     println("  insert 3 items: len={len}");
-    
+
     bool b1 = m3.get(1);
     bool b2 = m3.get(2);
     bool b3 = m3.get(3);
     println("  get: 1->{b1}, 2->{b2}, 3->{b3}");
-    
+
     m3.release();
     println("  released");
 

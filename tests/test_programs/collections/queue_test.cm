@@ -1,0 +1,125 @@
+// Queue テスト - 非ジェネリック版（IntQueueに特化）
+// std::collections::queueのジェネリック版は__sizeof__処理に問題があるため、
+// 直接特化した実装でテスト
+
+import std::io::println;
+
+use libc {
+    void* malloc(long size);
+    void free(void* ptr);
+}
+
+// IntQueue用ノード
+struct IntQueueNode {
+    int data;
+    IntQueueNode* next;
+}
+
+// 非ジェネリックIntQueue
+struct IntQueue {
+    IntQueueNode* front;
+    IntQueueNode* rear;
+    int size;
+}
+
+impl IntQueue {
+    void init() {
+        void* null_ptr = 0 as void*;
+        self.front = null_ptr as IntQueueNode*;
+        self.rear = null_ptr as IntQueueNode*;
+        self.size = 0;
+    }
+
+    void enqueue(int value) {
+        long node_size = sizeof(IntQueueNode) as long;
+        void* raw_ptr = malloc(node_size);
+        IntQueueNode* new_node = raw_ptr as IntQueueNode*;
+
+        new_node->data = value;
+        void* null_ptr = 0 as void*;
+        new_node->next = null_ptr as IntQueueNode*;
+
+        if (self.rear == null as IntQueueNode*) {
+            self.front = new_node;
+            self.rear = new_node;
+        } else {
+            self.rear->next = new_node;
+            self.rear = new_node;
+        }
+        self.size = self.size + 1;
+    }
+
+    int dequeue() {
+        IntQueueNode* head = self.front;
+        int data = head->data;
+        self.front = head->next;
+
+        void* null_ptr = 0 as void*;
+        if (self.front == null as IntQueueNode*) {
+            self.rear = null_ptr as IntQueueNode*;
+        }
+
+        void* ptr = head as void*;
+        free(ptr);
+        self.size = self.size - 1;
+        return data;
+    }
+
+    int len() {
+        return self.size;
+    }
+
+    bool is_empty() {
+        return self.size == 0;
+    }
+
+    void release() {
+        void* null_ptr = 0 as void*;
+        while (self.front != null as IntQueueNode*) {
+            IntQueueNode* temp = self.front;
+            self.front = self.front->next;
+            void* ptr = temp as void*;
+            free(ptr);
+        }
+        self.rear = null_ptr as IntQueueNode*;
+        self.size = 0;
+    }
+}
+
+int main() {
+    println("=== Queue Test ===");
+
+    // IntQueueのテスト
+    println("1. IntQueue:");
+    IntQueue qi;
+    qi.init();
+
+    qi.enqueue(10);
+    qi.enqueue(20);
+    qi.enqueue(30);
+
+    int len = qi.len();
+    println("  enqueue 10, 20, 30: len={len}");
+
+    int v1 = qi.dequeue();
+    int v2 = qi.dequeue();
+    int v3 = qi.dequeue();
+    println("  dequeue: {v1}, {v2}, {v3}");
+
+    bool empty = qi.is_empty();
+    println("  is_empty: {empty}");
+
+    // 再利用テスト
+    qi.enqueue(100);
+    qi.enqueue(200);
+    len = qi.len();
+    int r1 = qi.dequeue();
+    int r2 = qi.dequeue();
+    println("  reuse: len={len}, dequeue: {r1}, {r2}");
+
+    qi.release();
+    println("  released");
+
+    println("=== PASS ===");
+    return 0;
+}

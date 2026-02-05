@@ -23,7 +23,7 @@ struct Large {
 
 int main() {
     println("=== Vector<T> Comprehensive Test ===");
-    
+
     // 1. Vector<int> - プリミティブ型
     println("1. Vector<int>:");
     Vector<int> vi;

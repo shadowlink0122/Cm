@@ -80,6 +80,40 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             // 構造体型を検索
             std::string lookupName = type->name;
 
+            // カンマ区切りの型名を正規化（"int, int" → "int__int"）
+            // 複数パラメータジェネリクスの型引数がカンマ区切りで格納されている場合のフォールバック
+            if (lookupName.find(',') != std::string::npos) {
+                std::string normalized;
+                std::string current;
+                for (size_t i = 0; i < lookupName.size(); ++i) {
+                    char c = lookupName[i];
+                    if (c == ',') {
+                        // 空白をトリム
+                        size_t start = current.find_first_not_of(" \t");
+                        size_t end = current.find_last_not_of(" \t");
+                        if (start != std::string::npos && end != std::string::npos) {
+                            if (!normalized.empty())
+                                normalized += "__";
+                            normalized += current.substr(start, end - start + 1);
+                        }
+                        current.clear();
+                    } else {
+                        current += c;
+                    }
+                }
+                // 最後の要素を追加
+                if (!current.empty()) {
+                    size_t start = current.find_first_not_of(" \t");
+                    size_t end = current.find_last_not_of(" \t");
+                    if (start != std::string::npos && end != std::string::npos) {
+                        if (!normalized.empty())
+                            normalized += "__";
+                        normalized += current.substr(start, end - start + 1);
+                    }
+                }
+                lookupName = normalized;
+            }
+
             // ジェネリック構造体の場合、型引数を考慮した名前を生成
             // 例: Node<int> -> Node__int
             // 既にマングリング済み(__含む)の場合はスキップ

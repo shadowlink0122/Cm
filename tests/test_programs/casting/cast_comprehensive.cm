@@ -8,7 +8,7 @@ int main() {
     // 1. 整数型間のキャスト
     // ===========================================
     println("1. Integer type casts:");
-    
+
     int i = 42;
     long l = i as long;
     short s = i as short;
@@ -25,7 +25,7 @@ int main() {
     // 2. 浮動小数点 <-> 整数
     // ===========================================
     println("2. Float/Int casts:");
-    
+
     double d = 3.14159;
     int d_to_i = d as int;
     println("  double 3.14159 -> int: {d_to_i}");
@@ -53,7 +53,7 @@ int main() {
     // 3. bool <-> int
     // ===========================================
     println("3. Bool/Int casts:");
-    
+
     bool btrue = true;
     bool bfalse = false;
     int btrue_i = btrue as int;
@@ -72,11 +72,11 @@ int main() {
     // 4. ポインタキャスト
     // ===========================================
     println("4. Pointer casts:");
-    
+
     int val1 = 111;
     int val2 = 222;
     int val3 = 333;
-    
+
     int* ip = &val1;
     void* vp = ip as void*;
     int* ip2 = vp as int*;
@@ -91,7 +91,7 @@ int main() {
     // 5. 符号なし整数
     // ===========================================
     println("5. Unsigned casts:");
-    
+
     uint ui = 100 as uint;
     int ui_to_i = ui as int;
     println("  uint 100 -> int: {ui_to_i}");
@@ -104,7 +104,7 @@ int main() {
     // 6. char <-> int
     // ===========================================
     println("6. Char/Int casts:");
-    
+
     char c = 'A';
     int c_to_i = c as int;
     println("  'A' -> int: {c_to_i}");
@@ -117,7 +117,7 @@ int main() {
     // 7. 連続キャスト
     // ===========================================
     println("7. Chained casts:");
-    
+
     double d3 = 99.9;
     int d3_i = d3 as int;
     short d3_s = d3_i as short;

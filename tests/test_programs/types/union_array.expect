@@ -1,0 +1,9 @@
+=== Union Array Test ===
+Array filled with mixed int/long types
+Values:
+  arr[0] as int: 42
+  arr[1] as int: 100
+  arr[2] as int: -5
+  arr[3] as long: 1000000
+  arr[4] as long: 2000000
+=== PASS ===

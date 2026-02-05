@@ -46,7 +46,7 @@ int main() {
     Option opt3 = Option::None;
     int result4 = match (opt3) {
         Option::Some(v) if v > 0 => v,
-        _ => -1,   // Noneはワイルドカードで捕捉
+        _ => -1,  // Noneはワイルドカードで捕捉
     };
     println(result4);  // -1
 

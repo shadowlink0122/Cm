@@ -5,54 +5,54 @@ import std::collections::vector::*;
 
 int main() {
     println("=== Vector<T> Test ===");
-    
+
     // 1. Vector<int> テスト
     println("1. Vector<int>:");
     Vector<int> vi;
     vi.init();
-    
+
     int len = vi.len();
     bool empty = vi.is_empty();
     println("  init: len={len}, empty={empty}");
-    
+
     vi.push(10);
     vi.push(20);
     vi.push(30);
     len = vi.len();
     println("  push 10,20,30: len={len}");
-    
+
     int v0 = vi.get(0);
     int v1 = vi.get(1);
     int v2 = vi.get(2);
     println("  get: [{v0}, {v1}, {v2}]");
-    
+
     vi.set(1, 99);
     v0 = vi.get(0);
     v1 = vi.get(1);
     v2 = vi.get(2);
     println("  set(1,99): [{v0}, {v1}, {v2}]");
-    
+
     int popped = vi.pop();
     len = vi.len();
     println("  pop: {popped}, len={len}");
-    
+
     vi.push(40);
     vi.push(50);
     len = vi.len();
     println("  push 40,50: len={len}");
-    
+
     vi.clear();
     len = vi.len();
     empty = vi.is_empty();
     println("  clear: len={len}, empty={empty}");
-    
+
     vi.push(100);
     vi.push(200);
     len = vi.len();
     v0 = vi.get(0);
     v1 = vi.get(1);
     println("  reuse: len={len}, [{v0}, {v1}]");
-    
+
     vi.release();
     println("  released");
 
