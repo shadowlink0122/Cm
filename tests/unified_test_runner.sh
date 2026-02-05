@@ -49,7 +49,8 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # デフォルト値
-BACKEND="interpreter"
+# NOTE: interpreterバックエンドは未実装のため、デフォルトはjit
+BACKEND="jit"
 CATEGORIES=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3

@@ -2327,7 +2327,135 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateIntToPtr(value, targetType, "inttoptr");
             }
             if (sourceType->isPointerTy() && targetType->isIntegerTy()) {
+                // まず、ポインタがタグ付きユニオン構造体を指しているか確認（Union as int等）
+                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                    auto* allocatedType = allocaInst->getAllocatedType();
+                    if (auto* structTy = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                        if (structTy->getNumElements() == 2) {
+                            auto* elem0 = structTy->getElementType(0);
+                            auto* elem1 = structTy->getElementType(1);
+                            if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                                // タグ付きユニオン構造体からの抽出
+                                auto* payloadGEP = builder->CreateStructGEP(structTy, value, 1,
+                                                                            "union_payload_ptr");
+                                // ターゲット型に応じてロード
+                                if (targetType->isIntegerTy(32)) {
+                                    auto* payloadAsInt = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
+                                        "payload_as_i32");
+                                    return builder->CreateLoad(ctx.getI32Type(), payloadAsInt,
+                                                               "i32_from_union_ptr");
+                                } else if (targetType->isIntegerTy(64)) {
+                                    auto* payloadAsLong = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
+                                        "payload_as_i64");
+                                    return builder->CreateLoad(ctx.getI64Type(), payloadAsLong,
+                                                               "i64_from_union_ptr");
+                                } else {
+                                    auto* payloadAsType = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(targetType, 0),
+                                        "payload_as_int");
+                                    return builder->CreateLoad(targetType, payloadAsType,
+                                                               "int_from_union_ptr");
+                                }
+                            }
+                        }
+                    }
+                }
+                // タグ付きユニオンではない場合、通常のポインタ→整数変換
                 return builder->CreatePtrToInt(value, targetType, "ptrtoint");
+            }
+
+            // タグ付きユニオン型への変換（int/long -> IntOrLong等）
+            // targetTypeがStructType {i32, i8[N]}の場合
+            if (auto* structTy = llvm::dyn_cast<llvm::StructType>(targetType)) {
+                // タグ付きユニオン構造体（{i32, i8[N]}）かどうか確認
+                if (structTy->getNumElements() == 2) {
+                    auto* elem0 = structTy->getElementType(0);
+                    auto* elem1 = structTy->getElementType(1);
+                    if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                        // タグ付きユニオンへのキャスト
+                        // 1. 一時allocaを作成
+                        auto* alloca = builder->CreateAlloca(structTy, nullptr, "union_temp");
+
+                        // 2. タグを設定（ソース型に基づいて0または1）
+                        //    int = 0, long = 1として仮定
+                        int32_t tagValue = 0;
+                        if (sourceType->isIntegerTy(64)) {
+                            tagValue = 1;  // long
+                        }
+                        auto* tagGEP = builder->CreateStructGEP(structTy, alloca, 0, "tag_ptr");
+                        builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), tagValue),
+                                             tagGEP);
+
+                        // 3. ペイロードに値をストア（型に合わせてbitcast）
+                        auto* payloadGEP =
+                            builder->CreateStructGEP(structTy, alloca, 1, "payload_ptr");
+                        // payloadは i8[N] なので、適切な型にキャストしてストア
+                        if (sourceType->isIntegerTy(32)) {
+                            auto* payloadAsInt = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
+                                "payload_as_int");
+                            builder->CreateStore(value, payloadAsInt);
+                        } else if (sourceType->isIntegerTy(64)) {
+                            auto* payloadAsLong = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
+                                "payload_as_long");
+                            builder->CreateStore(value, payloadAsLong);
+                        } else {
+                            // その他の整数型は拡張してストア
+                            auto* payloadAsInt = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(sourceType, 0),
+                                "payload_as_type");
+                            builder->CreateStore(value, payloadAsInt);
+                        }
+
+                        // 4. 構造体全体をロードして返す
+                        return builder->CreateLoad(structTy, alloca, "union_load");
+                    }
+                }
+            }
+
+            // タグ付きユニオン型からの変換（IntOrLong -> int/long等）
+            // sourceTypeがStructType {i32, i8[N]}の場合
+            if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {
+                // タグ付きユニオン構造体（{i32, i8[N]}）かどうか確認
+                if (structTy->getNumElements() == 2) {
+                    auto* elem0 = structTy->getElementType(0);
+                    auto* elem1 = structTy->getElementType(1);
+                    if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                        // タグ付きユニオンからのキャスト
+                        // valueは集約型なので、一時allocaにストアしてからアクセス
+                        auto* alloca =
+                            builder->CreateAlloca(structTy, nullptr, "union_extract_temp");
+                        builder->CreateStore(value, alloca);
+
+                        // ペイロードポインタを取得
+                        auto* payloadGEP =
+                            builder->CreateStructGEP(structTy, alloca, 1, "payload_extract_ptr");
+
+                        // ターゲット型に応じてロード
+                        if (targetType->isIntegerTy(32)) {
+                            auto* payloadAsInt = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
+                                "payload_as_int_extract");
+                            return builder->CreateLoad(ctx.getI32Type(), payloadAsInt,
+                                                       "int_from_union");
+                        } else if (targetType->isIntegerTy(64)) {
+                            auto* payloadAsLong = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
+                                "payload_as_long_extract");
+                            return builder->CreateLoad(ctx.getI64Type(), payloadAsLong,
+                                                       "long_from_union");
+                        } else if (targetType->isIntegerTy()) {
+                            // その他の整数型
+                            auto* payloadAsType = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(targetType, 0),
+                                "payload_as_target");
+                            return builder->CreateLoad(targetType, payloadAsType, "val_from_union");
+                        }
+                    }
+                }
             }
 
             return value;

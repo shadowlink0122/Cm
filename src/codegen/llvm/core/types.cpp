@@ -323,16 +323,21 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             }
 
             if (!isGenericTypeParam) {
-                std::cerr << "[LLVM] WARNING: Struct type not found: " << lookupName << "\n";
-                std::cerr << "       Available types: ";
-                for (const auto& [name, _] : structTypes) {
-                    std::cerr << name << " ";
-                }
-                std::cerr << "\n";
+                // フォールバックでタグ付きユニオン構造体を生成するため、警告は抑制
+                // typedef Union (e.g., IntOrLong = int | long) の場合はここに到達する
             }
 
-            // 見つからない場合は不透明型として扱う
-            return llvm::StructType::create(ctx.getContext(), lookupName);
+            // 見つからない場合、typedef Unionの可能性があるため
+            // デフォルトでタグ付きユニオン互換の構造体（{i32, i8[8]}）を生成
+            // これにより int | long のようなシンプルなunionが動作する
+            auto structType = llvm::StructType::create(ctx.getContext(), lookupName);
+            std::vector<llvm::Type*> fieldTypes = {
+                ctx.getI32Type(),                         // tag (field[0])
+                llvm::ArrayType::get(ctx.getI8Type(), 8)  // payload (field[1]) - 8バイト
+            };
+            structType->setBody(fieldTypes);
+            structTypes[lookupName] = structType;  // キャッシュに登録
+            return structType;
         }
         case hir::TypeKind::TypeAlias: {
             // typedefの実際の型がある場合は再帰的に変換
@@ -375,6 +380,89 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             auto funcType = llvm::FunctionType::get(retType, paramTypes, false);
             return llvm::PointerType::get(funcType, 0);
 #endif
+        }
+        case hir::TypeKind::Union: {
+            // Union型 (例: int | long) は tagged union として表現
+            // 構造体: {tag: i32, data: i8[max_payload_size]}
+
+            // 型名が設定されている場合、既存の構造体を探す
+            if (!type->name.empty()) {
+                // まず登録済みの構造体を確認
+                auto it = structTypes.find(type->name);
+                if (it != structTypes.end()) {
+                    return it->second;
+                }
+
+                // 見つからない場合、動的に構造体を生成
+                // 最大ペイロードサイズを計算（UnionVariantsから）
+                uint32_t maxPayloadSize = 8;  // デフォルト8バイト（int/long等）
+
+                // type_argsに含まれる型からサイズを計算
+                if (!type->type_args.empty()) {
+                    for (const auto& variantType : type->type_args) {
+                        if (variantType) {
+                            uint32_t variantSize = 0;
+                            switch (variantType->kind) {
+                                case hir::TypeKind::Long:
+                                case hir::TypeKind::ULong:
+                                case hir::TypeKind::Double:
+                                case hir::TypeKind::UDouble:
+                                case hir::TypeKind::Pointer:
+                                case hir::TypeKind::Reference:
+                                case hir::TypeKind::String:
+                                case hir::TypeKind::CString:
+                                case hir::TypeKind::ISize:
+                                case hir::TypeKind::USize:
+                                    variantSize = 8;
+                                    break;
+                                case hir::TypeKind::Int:
+                                case hir::TypeKind::UInt:
+                                case hir::TypeKind::Float:
+                                case hir::TypeKind::UFloat:
+                                    variantSize = 4;
+                                    break;
+                                case hir::TypeKind::Short:
+                                case hir::TypeKind::UShort:
+                                    variantSize = 2;
+                                    break;
+                                case hir::TypeKind::Bool:
+                                case hir::TypeKind::Tiny:
+                                case hir::TypeKind::UTiny:
+                                case hir::TypeKind::Char:
+                                    variantSize = 1;
+                                    break;
+                                default:
+                                    variantSize = 8;  // 構造体等は8バイト仮定
+                                    break;
+                            }
+                            if (variantSize > maxPayloadSize) {
+                                maxPayloadSize = variantSize;
+                            }
+                        }
+                    }
+                }
+
+                // 構造体を生成して登録
+                auto structType = llvm::StructType::create(ctx.getContext(), type->name);
+                std::vector<llvm::Type*> fieldTypes = {
+                    ctx.getI32Type(),                                      // tag (field[0])
+                    llvm::ArrayType::get(ctx.getI8Type(), maxPayloadSize)  // payload (field[1])
+                };
+                structType->setBody(fieldTypes);
+                structTypes[type->name] = structType;
+
+                return structType;
+            }
+
+            // 名前がない場合は匿名のunion構造体を生成
+            // int | long のような単純なケースはデフォルト8バイト
+            auto structType = llvm::StructType::create(ctx.getContext(), "");
+            std::vector<llvm::Type*> fieldTypes = {
+                ctx.getI32Type(),                         // tag
+                llvm::ArrayType::get(ctx.getI8Type(), 8)  // payload (8バイト)
+            };
+            structType->setBody(fieldTypes);
+            return structType;
         }
         default:
             return ctx.getI32Type();
