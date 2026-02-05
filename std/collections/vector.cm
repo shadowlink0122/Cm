@@ -19,12 +19,12 @@ export struct Vector<T> {
 }
 
 export impl<T> Vector<T> {
-    // 初期化
-    void init() {
+    // コンストラクタ
+    self() {
         void* null_ptr = 0 as void*;
-        this.data = null_ptr as T*;
-        this.size = 0;
-        this.cap = 0;
+        self.data = null_ptr as T*;
+        self.size = 0;
+        self.cap = 0;
     }
 
     // 末尾に追加
@@ -93,15 +93,15 @@ export impl<T> Vector<T> {
         this.size = 0;
     }
 
-    // メモリ解放（完全リリース）
-    void release() {
-        void* ptr = this.data as void*;
+    // デストラクタ
+    ~self() {
+        void* ptr = self.data as void*;
         void* null_ptr = 0 as void*;
         if (ptr != null_ptr) {
             free(ptr);
         }
-        this.data = null_ptr as T*;
-        this.size = 0;
-        this.cap = 0;
+        self.data = null_ptr as T*;
+        self.size = 0;
+        self.cap = 0;
     }
 }

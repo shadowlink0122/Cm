@@ -35,14 +35,6 @@ export impl<T> Queue<T> {
         self.size = 0;
     }
 
-    // 初期化
-    void init() {
-        void* null_ptr = 0 as void*;
-        self.front = null_ptr as QueueNode<T>*;
-        self.rear = null_ptr as QueueNode<T>*;
-        self.size = 0;
-    }
-
     // 末尾に追加（enqueue）
     void enqueue(T value) {
         long node_size = __sizeof__(QueueNode<T>) as long;
@@ -108,8 +100,8 @@ export impl<T> Queue<T> {
         self.size = 0;
     }
 
-    // メモリ解放（完全リリース）
-    void release() {
+    // デストラクタ
+    ~self() {
         self.clear();
     }
 }

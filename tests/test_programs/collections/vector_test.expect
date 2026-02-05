@@ -8,8 +8,8 @@
   push 40,50: len=4
   clear: len=0, empty=true
   reuse: len=2, [100, 200]
-  released
+  destructor called
 2. Vector<long>:
   push: len=2, [100000, 200000]
-  released
+  destructor called
 === PASS ===

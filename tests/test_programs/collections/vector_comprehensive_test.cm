@@ -26,32 +26,27 @@ int main() {
 
     // 1. Vector<int> - プリミティブ型
     println("1. Vector<int>:");
-    Vector<int> vi;
-    vi.init();
+    Vector<int> vi();
     vi.push(10);
     vi.push(20);
     int v0 = vi.get(0);
     int v1 = vi.get(1);
     int len = vi.len();
     println("  len={len}, [{v0}, {v1}]");
-    vi.release();
 
     // 2. Vector<long> - 8バイトプリミティブ
     println("2. Vector<long>:");
-    Vector<long> vl;
-    vl.init();
+    Vector<long> vl();
     vl.push(100000 as long);
     vl.push(200000 as long);
     long l0 = vl.get(0);
     long l1 = vl.get(1);
     len = vl.len();
     println("  len={len}, [{l0}, {l1}]");
-    vl.release();
 
     // 3. Vector<bool> - 1バイトプリミティブ
     println("3. Vector<bool>:");
-    Vector<bool> vb;
-    vb.init();
+    Vector<bool> vb();
     vb.push(true);
     vb.push(false);
     vb.push(true);
@@ -60,24 +55,20 @@ int main() {
     bool b2 = vb.get(2);
     len = vb.len();
     println("  len={len}, [{b0}, {b1}, {b2}]");
-    vb.release();
 
     // 4. Vector<double> - 8バイト浮動小数点
     println("4. Vector<double>:");
-    Vector<double> vd;
-    vd.init();
+    Vector<double> vd();
     vd.push(3.14159);
     vd.push(2.71828);
     double d0 = vd.get(0);
     double d1 = vd.get(1);
     len = vd.len();
     println("  len={len}, [{d0}, {d1}]");
-    vd.release();
 
     // 5. Vector<Point> - 構造体（8バイト）
     println("5. Vector<Point>:");
-    Vector<Point> vp;
-    vp.init();
+    Vector<Point> vp();
     Point p1;
     p1.x = 10;
     p1.y = 20;
@@ -92,12 +83,10 @@ int main() {
     println("  len={len}");
     println("  p1: ({got_p1.x}, {got_p1.y})");
     println("  p2: ({got_p2.x}, {got_p2.y})");
-    vp.release();
 
     // 6. Vector<Person> - 別の構造体（8バイト）
     println("6. Vector<Person>:");
-    Vector<Person> vper;
-    vper.init();
+    Vector<Person> vper();
     Person per1;
     per1.id = 1;
     per1.age = 25;
@@ -112,12 +101,10 @@ int main() {
     println("  len={len}");
     println("  per1: id={got_per1.id}, age={got_per1.age}");
     println("  per2: id={got_per2.id}, age={got_per2.age}");
-    vper.release();
 
     // 7. Vector<Large> - 大きな構造体（32バイト）
     println("7. Vector<Large>:");
-    Vector<Large> vlrg;
-    vlrg.init();
+    Vector<Large> vlrg();
     Large lg1;
     lg1.a = 1;
     lg1.b = 2;
@@ -136,7 +123,6 @@ int main() {
     println("  len={len}");
     println("  lg1: ({got_lg1.a}, {got_lg1.b}, {got_lg1.c}, {got_lg1.d})");
     println("  lg2: ({got_lg2.a}, {got_lg2.b}, {got_lg2.c}, {got_lg2.d})");
-    vlrg.release();
 
     // Note: Vector<float>とVector<int*>は既知の問題あり
     // - Vector<float>: 浮動小数点リテラルがdoubleとして解釈される問題

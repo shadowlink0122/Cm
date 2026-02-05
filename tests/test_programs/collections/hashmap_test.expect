@@ -7,13 +7,13 @@
   remove(1): contains=false, len=2
   clear: len=0
   reuse: len=2, 10->1000, 20->2000
-  released
+  destructor called
 2. HashMap<int, long>:
   insert 2 items: len=2
   get: 1->10000, 2->20000
-  released
+  destructor called
 3. HashMap<int, bool>:
   insert 3 items: len=3
   get: 1->true, 2->false, 3->true
-  released
+  destructor called
 === PASS ===
