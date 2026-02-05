@@ -60,6 +60,10 @@ class Monomorphization : public MirLoweringBase {
         const int MAX_ITERATIONS = 10;  // 無限ループ防止
 
         for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {
+            // デバッグ: イテレーション開始ログ
+            std::cerr << "[MONO-DBG] === Iteration " << iteration << " START ===" << std::endl;
+            std::cerr.flush();
+
             // 特殊化が必要な呼び出しを収集
             // (関数名, 型引数リスト) -> 呼び出し箇所のリスト
             std::map<std::pair<std::string, std::vector<std::string>>,
@@ -67,11 +71,17 @@ class Monomorphization : public MirLoweringBase {
                 needed;
 
             // 全関数の呼び出しをスキャンして特殊化が必要なものを見つける
+            std::cerr << "[MONO-DBG] Scanning " << program.functions.size() << " functions..."
+                      << std::endl;
+            std::cerr.flush();
             for (auto& func : program.functions) {
                 if (func) {
                     scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
                 }
             }
+            std::cerr << "[MONO-DBG] Scan complete. Found " << needed.size()
+                      << " needed specializations" << std::endl;
+            std::cerr.flush();
 
             // 既に生成済みの特殊化を除外
             std::map<std::pair<std::string, std::vector<std::string>>,
