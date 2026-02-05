@@ -109,11 +109,11 @@ AST～MIR層での構造体サポートが、ほぼ完全に実装されてい�
 ## 参考資料
 
 詳細報告書:
-- /Users/shadowlink/Documents/git/Cm/docs/STRUCT_IMPLEMENTATION_STATUS.md
+- docs/STRUCT_IMPLEMENTATION_STATUS.md
   (15KB、図表・コード例多数、詳細解説)
 
 クイックリファレンス:
-- /Users/shadowlink/Documents/git/Cm/docs/STRUCT_QUICK_REFERENCE.md
+- docs/STRUCT_QUICK_REFERENCE.md
   (チェックリスト、デバッグTips、FAQ)
 
 関連ドキュメント:

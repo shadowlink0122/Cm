@@ -15,7 +15,7 @@ String interpolation and format string handling in the Cm language LLVM backend 
 ## Layer 1: HIR-Level String Interpolation Processing
 
 ### Location
-- **File**: `/Users/shadowlink/Documents/git/Cm/src/hir/string_interpolation.hpp`
+- **File**: `src/hir/string_interpolation.hpp`
 - **Namespace**: `cm::hir`
 - **Class**: `StringInterpolationProcessor`
 
@@ -66,7 +66,7 @@ static HirExprPtr createInterpolatedStringExpr(
 ## Layer 2: Format String Parser
 
 ### Location
-- **File**: `/Users/shadowlink/Documents/git/Cm/src/common/format_string.hpp`
+- **File**: `src/common/format_string.hpp`
 - **Namespace**: `cm`
 - **Classes**: `FormatStringParser`, `FormatStringFormatter`
 
@@ -118,7 +118,7 @@ enum class FormatSpec {
 ## Layer 3: LLVM Code Generation
 
 ### Location
-- **File**: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/mir_to_llvm.cpp`
+- **File**: `src/codegen/llvm/mir_to_llvm.cpp`
 - **Class**: `MIRToLLVM`
 
 ### String Output Functions
@@ -269,7 +269,7 @@ else if (std::holds_alternative<std::string>(constant.value)) {
 ## Layer 4: LLVM Context Setup
 
 ### Location
-- **File**: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/context.cpp`
+- **File**: `src/codegen/llvm/context.cpp`
 - **Class**: `LLVMContext`
 
 ### Runtime Function Declarations
@@ -317,8 +317,8 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
 ## Standard Library Bindings
 
 ### Location
-- **File 1**: `/Users/shadowlink/Documents/git/Cm/std/io/mod.cm`
-- **File 2**: `/Users/shadowlink/Documents/git/Cm/std/io_ffi.cm`
+- **File 1**: `std/io/mod.cm`
+- **File 2**: `std/io_ffi.cm`
 
 ### FFI Declarations (io_ffi.cm)
 ```cm

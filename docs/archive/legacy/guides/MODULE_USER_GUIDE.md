@@ -269,7 +269,7 @@ int main() {
 | 変数名 | 説明 | 例 |
 |--------|------|-----|
 | `CM_STD_PATH` | 標準ライブラリのパス | `/usr/local/lib/cm/std` |
-| `CM_MODULE_PATH` | 追加のモジュール検索パス | `/home/user/cm_libs` |
+| `CM_MODULE_PATH` | 追加のモジュール検索パス | `$HOME/cm_libs` |
 
 ## ベストプラクティス
 

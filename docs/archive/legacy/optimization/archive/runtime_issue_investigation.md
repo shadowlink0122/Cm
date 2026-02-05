@@ -60,9 +60,9 @@ int optimizationLevel = 0;  // デフォルトをO0に下げる（最適化に�
 2. 最適化ドキュメントの更新
 
 ## 関連ファイル
-- `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/native/codegen.hpp` - 最適化レベル設定
-- `/Users/shadowlink/Documents/git/Cm/src/mir/optimizations/optimization_pass.hpp` - 最適化パス管理
-- `/Users/shadowlink/Documents/git/Cm/tests/test_programs/dynamic_array/slice_comprehensive.cm` - 問題のテストケース
+- `src/codegen/llvm/native/codegen.hpp` - 最適化レベル設定
+- `src/mir/optimizations/optimization_pass.hpp` - 最適化パス管理
+- `tests/test_programs/dynamic_array/slice_comprehensive.cm` - 問題のテストケース
 
 ## 調査コマンド履歴
 ```bash

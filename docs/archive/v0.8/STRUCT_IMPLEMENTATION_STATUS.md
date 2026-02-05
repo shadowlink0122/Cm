@@ -13,7 +13,7 @@ v0.2.0での構造体機能実装の現状把握と必要な拡張の特定
 ## 1. AST層での構造体実装状況
 
 ### 1.1 構造体定義（struct StructDecl）
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/decl.hpp`
+**ファイル**: `src/frontend/ast/decl.hpp`
 
 #### 定義済みの要素
 ```cpp
@@ -47,7 +47,7 @@ inline DeclPtr make_struct(std::string name, std::vector<Field> fields, Span s =
 ```
 
 ### 1.2 型システムでの構造体型
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/types.hpp`
+**ファイル**: `src/frontend/ast/types.hpp`
 
 #### TypeKind enum
 ```cpp
@@ -71,7 +71,7 @@ struct Type {
 **注意**: コメント `// TODO: 構造体サイズ計算` あり → サイズ計算が未実装
 
 ### 1.3 式ノード（メンバアクセス）
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/expr.hpp`
+**ファイル**: `src/frontend/ast/expr.hpp`
 
 #### MemberExprの定義
 ```cpp
@@ -97,7 +97,7 @@ struct NewExpr {
 
 ## 2. パーサー層での構造体実装
 
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/parser/parser.hpp`
+**ファイル**: `src/frontend/parser/parser.hpp`
 
 ### 2.1 構造体解析
 ```cpp
@@ -151,7 +151,7 @@ ast::DeclPtr parse_struct(bool is_export) {
 
 ## 3. HIR層での構造体実装
 
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/hir/hir_nodes.hpp`
+**ファイル**: `src/hir/hir_nodes.hpp`
 
 ### 3.1 HIR構造体定義
 ```cpp
@@ -180,7 +180,7 @@ struct HirMember {
 ✅ メンバアクセス式を表現可能
 
 ### 3.3 HIRへの降格（AST→HIR）
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/hir/hir_lowering.hpp`
+**ファイル**: `src/hir/hir_lowering.hpp`
 
 ```cpp
 HirDeclPtr lower_struct(ast::StructDecl& st) {
@@ -217,7 +217,7 @@ HirExprPtr lower_member(ast::MemberExpr& mem, TypePtr type) {
 
 ## 4. MIR層での構造体実装
 
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/mir/mir_lowering.hpp`
+**ファイル**: `src/mir/mir_lowering.hpp`
 
 ### 4.1 構造体情報登録
 ```cpp
@@ -313,7 +313,7 @@ struct PlaceProjection {
 
 ## 5. 型チェッカーでの構造体対応
 
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/types/type_checker.hpp`
+**ファイル**: `src/frontend/types/type_checker.hpp`
 
 ### 5.1 構造体型登録
 ```cpp
@@ -336,7 +336,7 @@ void register_declaration(ast::Decl& decl) {
 
 ## 6. 型システムでのサポート
 
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/types.hpp`
+**ファイル**: `src/frontend/ast/types.hpp`
 
 ### 6.1 実装済み機能
 ✅ TypeKind::Struct定義
@@ -360,7 +360,7 @@ inline TypePtr make_named(const std::string& name) {
 ## 7. コードジェネレーション層での対応状況
 
 ### 7.1 LLVM バックエンド
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/*.hpp`
+**ファイル**: `src/codegen/llvm/*.hpp`
 
 **状態**: 基本的な構造体コード生成が必要
 - メンバアクセスのLLVM IRへの変換
@@ -376,7 +376,7 @@ inline TypePtr make_named(const std::string& name) {
 
 ## 8. スコープ管理での構造体対応
 
-**ファイル**: `/Users/shadowlink/Documents/git/Cm/src/frontend/types/scope.hpp`
+**ファイル**: `src/frontend/types/scope.hpp`
 
 ```cpp
 class Scope {
@@ -648,26 +648,26 @@ LLVMバックエンドの完成が最も重要
 ## 付録A: ファイル一覧
 
 ### AST関連
-- `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/decl.hpp` - StructDecl定義
-- `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/types.hpp` - TypeKind::Struct
-- `/Users/shadowlink/Documents/git/Cm/src/frontend/ast/expr.hpp` - MemberExpr
+- `src/frontend/ast/decl.hpp` - StructDecl定義
+- `src/frontend/ast/types.hpp` - TypeKind::Struct
+- `src/frontend/ast/expr.hpp` - MemberExpr
 
 ### パーサー関連
-- `/Users/shadowlink/Documents/git/Cm/src/frontend/parser/parser.hpp` - parse_struct
+- `src/frontend/parser/parser.hpp` - parse_struct
 
 ### HIR関連
-- `/Users/shadowlink/Documents/git/Cm/src/hir/hir_nodes.hpp` - HirStruct
-- `/Users/shadowlink/Documents/git/Cm/src/hir/hir_lowering.hpp` - lower_struct
+- `src/hir/hir_nodes.hpp` - HirStruct
+- `src/hir/hir_lowering.hpp` - lower_struct
 
 ### MIR関連
-- `/Users/shadowlink/Documents/git/Cm/src/mir/mir_nodes.hpp` - PlaceProjection
-- `/Users/shadowlink/Documents/git/Cm/src/mir/mir_lowering.hpp` - register_struct, lower_member
+- `src/mir/mir_nodes.hpp` - PlaceProjection
+- `src/mir/mir_lowering.hpp` - register_struct, lower_member
 
 ### 型チェック関連
-- `/Users/shadowlink/Documents/git/Cm/src/frontend/types/type_checker.hpp` - 型登録
-- `/Users/shadowlink/Documents/git/Cm/src/frontend/types/scope.hpp` - スコープ管理
+- `src/frontend/types/type_checker.hpp` - 型登録
+- `src/frontend/types/scope.hpp` - スコープ管理
 
 ### ドキュメント
-- `/Users/shadowlink/Documents/git/Cm/docs/design/CANONICAL_SPEC.md` - 言語仕様
-- `/Users/shadowlink/Documents/git/Cm/docs/FEATURE_PRIORITY.md` - 優先度リスト
-- `/Users/shadowlink/Documents/git/Cm/examples/impl/01_constructor_example.cm` - 使用例
+- `docs/design/CANONICAL_SPEC.md` - 言語仕様
+- `docs/FEATURE_PRIORITY.md` - 優先度リスト
+- `examples/impl/01_constructor_example.cm` - 使用例

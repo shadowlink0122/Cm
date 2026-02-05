@@ -910,4 +910,35 @@ test-std: test-std-asm
 .PHONY: ts
 ts: test-std
 
+# ========================================
+# Security Check Commands
+# ========================================
+
+# ローカルパス情報チェック（コミット前に必ず実行）
+# 注: .agent/workflows/ は例示コードを含むため除外
+.PHONY: security-check
+security-check:
+	@echo "🔒 Checking for local path information..."
+	@if grep -rn "/Users/[a-zA-Z]\|/home/[a-zA-Z]\|C:\\\\Users\\\\" docs/ --include="*.md" --include="*.txt" --include="*.yaml" 2>/dev/null | grep -v "^.agent/workflows"; then \
+		echo ""; \
+		echo "❌ ERROR: Local path information found!"; \
+		echo "   Please remove all absolute paths before committing."; \
+		echo "   Use: find docs -type f -name '*.md' -exec sed -i '' 's|/Users/username/path/||g' {} \\;"; \
+		exit 1; \
+	else \
+		echo "✅ No local path information found."; \
+	fi
+
+# プレコミットチェック
+.PHONY: pre-commit
+pre-commit: format-check security-check
+	@echo ""
+	@echo "✅ Pre-commit checks passed!"
+
+.PHONY: sc
+sc: security-check
+
+.PHONY: pc
+pc: pre-commit
+
 
