@@ -157,7 +157,7 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Help;
         return opts;
     } else if (cmd == "--version") {
-        std::cout << "Cm言語コンパイラ v0.1.0 (開発版)\n";
+        std::cout << get_version() << "\n";
         std::exit(0);
     } else if (cmd[0] != '-') {
         // 旧形式は使用不可 - ヘルプを表示

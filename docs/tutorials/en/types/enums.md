@@ -120,6 +120,83 @@ int main() {
 
 ---
 
+## Result/Option Pattern
+
+**Since v0.13.0**
+
+Cm supports the Result/Option pattern for error handling and optional values. These are user-defined enums rather than built-in types.
+
+### Result Type
+
+Represents success or failure with a value or error.
+
+```cm
+import std::io::println;
+
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+Result<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return Result::Err("Division by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+int main() {
+    Result<int, string> r = safe_divide(10, 2);
+    match (r) {
+        Result::Ok(v) => { println("Result: {v}"); }
+        Result::Err(e) => { println("Error: {e}"); }
+    }
+    return 0;
+}
+```
+
+### Option Type
+
+Represents the presence or absence of a value.
+
+```cm
+import std::io::println;
+
+enum Option<T> {
+    Some(T),
+    None
+}
+
+Option<int> find_value(int[] arr, int target) {
+    for (int i = 0; i < arr.len(); i++) {
+        if (arr[i] == target) {
+            return Option::Some(i);
+        }
+    }
+    return Option::None;
+}
+
+int main() {
+    int[] data = [1, 2, 3, 4, 5];
+    Option<int> idx = find_value(data, 3);
+    match (idx) {
+        Option::Some(i) => { println("Found at index {i}"); }
+        Option::None => { println("Not found"); }
+    }
+    return 0;
+}
+```
+
+### Why User-Defined?
+
+`Result` and `Option` must be explicitly defined by the user. This provides:
+
+- **Explicitness**: Clear what types are being used
+- **Customization**: Add methods via `impl` blocks
+- **Consistency**: Same treatment as other enums
+
+---
+
 ## Control Flow Integration
 
 ### Using with switch
