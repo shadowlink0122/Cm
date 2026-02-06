@@ -119,12 +119,18 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         // 型名が単一の大文字、または大文字＋数字（T1, T2等）の場合
         // マーカー型情報を持つuintとして返す（モノモーフィゼーション時に再計算）
         bool is_generic_param = false;
-        if (target_type_ptr && target_type_ptr->kind == ast::TypeKind::Generic) {
+        if (target_type_ptr) {
             const std::string& tname = target_type_ptr->name;
-            if (tname.length() == 1 && std::isupper(tname[0])) {
-                is_generic_param = true;
-            } else if (tname.length() == 2 && std::isupper(tname[0]) && std::isdigit(tname[1])) {
-                is_generic_param = true;
+            // TypeKind::Generic または TypeKind::Struct でも
+            // 型名が単一大文字または大文字+数字の場合はジェネリックパラメータとみなす
+            if (target_type_ptr->kind == ast::TypeKind::Generic ||
+                target_type_ptr->kind == ast::TypeKind::Struct) {
+                if (tname.length() == 1 && std::isupper(tname[0])) {
+                    is_generic_param = true;
+                } else if (tname.length() == 2 && std::isupper(tname[0]) &&
+                           std::isdigit(tname[1])) {
+                    is_generic_param = true;
+                }
             }
         }
 

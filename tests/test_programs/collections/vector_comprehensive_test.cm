@@ -24,8 +24,8 @@ int main() {
     Vector<int> vi();
     vi.push(10);
     vi.push(20);
-    int v0 = vi.get(0);
-    int v1 = vi.get(1);
+    int v0 = *vi.get(0);
+    int v1 = *vi.get(1);
     int len = vi.len();
     println("  len={len}, [{v0}, {v1}]");
 
@@ -34,8 +34,8 @@ int main() {
     Vector<long> vl();
     vl.push(100000 as long);
     vl.push(200000 as long);
-    long l0 = vl.get(0);
-    long l1 = vl.get(1);
+    long l0 = *vl.get(0);
+    long l1 = *vl.get(1);
     len = vl.len();
     println("  len={len}, [{l0}, {l1}]");
 
@@ -45,9 +45,9 @@ int main() {
     vb.push(true);
     vb.push(false);
     vb.push(true);
-    bool b0 = vb.get(0);
-    bool b1 = vb.get(1);
-    bool b2 = vb.get(2);
+    bool b0 = *vb.get(0);
+    bool b1 = *vb.get(1);
+    bool b2 = *vb.get(2);
     len = vb.len();
     println("  len={len}, [{b0}, {b1}, {b2}]");
 
@@ -56,8 +56,8 @@ int main() {
     Vector<double> vd();
     vd.push(3.14159);
     vd.push(2.71828);
-    double d0 = vd.get(0);
-    double d1 = vd.get(1);
+    double d0 = *vd.get(0);
+    double d1 = *vd.get(1);
     len = vd.len();
     println("  len={len}, [{d0}, {d1}]");
 
@@ -72,8 +72,8 @@ int main() {
     p2.y = 40;
     vp.push(p1);
     vp.push(p2);
-    Point got_p1 = vp.get(0);
-    Point got_p2 = vp.get(1);
+    Point got_p1 = *vp.get(0);
+    Point got_p2 = *vp.get(1);
     len = vp.len();
     println("  len={len}");
     println("  p1: ({got_p1.x}, {got_p1.y})");
@@ -90,8 +90,8 @@ int main() {
     per2.age = 30;
     vper.push(per1);
     vper.push(per2);
-    Person got_per1 = vper.get(0);
-    Person got_per2 = vper.get(1);
+    Person got_per1 = *vper.get(0);
+    Person got_per2 = *vper.get(1);
     len = vper.len();
     println("  len={len}");
     println("  per1: id={got_per1.id}, age={got_per1.age}");

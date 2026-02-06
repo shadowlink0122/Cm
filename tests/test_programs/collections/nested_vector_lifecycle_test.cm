@@ -48,18 +48,18 @@ int main() {
         return 1;
     }
 
-    // 4. 外側からgetして内側にアクセス
+    // 4. 外側からgetして内側にアクセス（参照を取得）
     println("4. Access inner via get:");
-    Vector<int> row0 = matrix.get(0);
-    int r0len = row0.len();
+    Vector<int>* row0 = matrix.get(0);
+    int r0len = (*row0).len();
     println("  row0.len() = {r0len}");
     if (r0len != 2) {
         println("FAIL: expected 2");
         return 1;
     }
 
-    int v0 = row0.get(0);
-    int v1 = row0.get(1);
+    int v0 = *(*row0).get(0);
+    int v1 = *(*row0).get(1);
     println("  row0: [{v0}, {v1}]");
     if (v0 != 1 || v1 != 2) {
         println("FAIL: expected [1, 2]");
@@ -80,19 +80,19 @@ int main() {
         return 1;
     }
 
-    // 6. 2行目にアクセス
+    // 6. 2行目にアクセス（参照を取得）
     println("6. Access second row:");
-    Vector<int> row1 = matrix.get(1);
-    int r1len = row1.len();
+    Vector<int>* row1 = matrix.get(1);
+    int r1len = (*row1).len();
     println("  row1.len() = {r1len}");
     if (r1len != 3) {
         println("FAIL: expected 3");
         return 1;
     }
 
-    int v10 = row1.get(0);
-    int v11 = row1.get(1);
-    int v12 = row1.get(2);
+    int v10 = *(*row1).get(0);
+    int v11 = *(*row1).get(1);
+    int v12 = *(*row1).get(2);
     println("  row1: [{v10}, {v11}, {v12}]");
     if (v10 != 10 || v11 != 20 || v12 != 30) {
         println("FAIL: expected [10, 20, 30]");
@@ -102,10 +102,10 @@ int main() {
     // 7. 複数操作後の一貫性確認
     println("7. Consistency check:");
 
-    // 再度row0にアクセスして変更されていないこと
-    Vector<int> row0_again = matrix.get(0);
-    int r0v0 = row0_again.get(0);
-    int r0v1 = row0_again.get(1);
+    // 再度row0にアクセスして変更されていないこと（参照を取得）
+    Vector<int>* row0_again = matrix.get(0);
+    int r0v0 = *(*row0_again).get(0);
+    int r0v1 = *(*row0_again).get(1);
     println("  row0 again: [{r0v0}, {r0v1}]");
     if (r0v0 != 1 || r0v1 != 2) {
         println("FAIL: row0 was corrupted");

@@ -238,7 +238,23 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
 void MirLowering::emit_destructors(LoweringContext& ctx) {
     auto destructor_vars = ctx.get_all_destructor_vars();
     for (const auto& [local_id, type_name] : destructor_vars) {
-        std::string dtor_name = type_name + "__dtor";
+        // ネストジェネリック型名の正規化（Vector<int> → Vector__int）
+        std::string normalized_name = type_name;
+        if (normalized_name.find('<') != std::string::npos) {
+            std::string result;
+            for (char c : normalized_name) {
+                if (c == '<' || c == '>') {
+                    if (c == '<')
+                        result += "__";
+                } else if (c == ',' || c == ' ') {
+                    // カンマと空白は省略
+                } else {
+                    result += c;
+                }
+            }
+            normalized_name = result;
+        }
+        std::string dtor_name = normalized_name + "__dtor";
 
         // デストラクタ呼び出しを生成
         std::vector<MirOperandPtr> args;

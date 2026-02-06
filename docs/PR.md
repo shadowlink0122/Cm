@@ -109,6 +109,63 @@ int main() {
 }
 ```
 
+### 7. 再帰的デストラクタとネストジェネリック対応
+
+`Vector<TrackedObject>`のようなネストしたジェネリックコレクションで、要素のデストラクタが正しく呼び出されるようになりました。
+
+```cm
+struct TrackedObject {
+    int id;
+}
+
+impl TrackedObject {
+    ~self() {
+        println("  ~TrackedObject({self.id}) called");
+    }
+}
+
+int main() {
+    {
+        Vector<TrackedObject> objects();
+        objects.push(TrackedObject { id: 100 });
+        objects.push(TrackedObject { id: 200 });
+        // スコープ終了時に~Vector()→各要素の~TrackedObject()が呼ばれる
+    }
+    return 0;
+}
+```
+
+#### 主な修正点:
+- MirRvalue::Ref処理のDeref→Index Projectionシーケンス正常化
+- LLVMエントリブロックのentry_block参照修正
+- ジェネリック型名マングリングの一貫性改善
+
+#### ⚠️ 破壊的変更: Vector.get()の戻り値型変更
+
+`Vector<T>.get()`が値(`T`)ではなくポインタ(`T*`)を返すようになりました。これはDouble Free問題を根本解決するためです。
+
+**修正が必要なコード:**
+```cm
+// 修正前
+int v = vi.get(0);
+
+// 修正後
+int v = *vi.get(0);
+```
+
+#### Double Free修正の詳細
+
+`Vector<Vector<int>>`のようなネストされたコレクションで発生していたDouble Free問題を修正しました。
+
+| 問題 | 原因 | 修正 |
+|-----|------|------|
+| ポインタ比較ハング | `ptr != null_ptr`が`cm_strcmp`に変換 | HIR型チェックで`icmp ne ptr`に修正 |
+| nullデリファレンス | コンストラクタでnullからload | `isRvalueAlloca`チェック追加 |
+| ポインタスケーリング誤り | Struct固定4バイト | Vector=16B, Queue=24B検出 |
+| Double Free | get()がシャドウコピー返却 | get()をT*戻りに変更 |
+
+
+
 ## 🔧 改善点
 
 ### テストインフラストラクチャ
@@ -149,8 +206,8 @@ int main() {
 
 | カテゴリ | 通過 | 失敗 | スキップ |
 |---------|-----|------|---------|
-| インタプリタ | 343 | 0 | 7 |
-| LLVM JIT | 343 | 0 | 7 |
+| インタプリタ | 344 | 0 | 7 |
+| LLVM JIT | 344 | 0 | 7 |
 | JS | 205 | 96 | 51 |
 
 ## 📊 統計
@@ -188,8 +245,8 @@ lseek(fd, 0, SEEK_END);  // MIRでは lseek(fd, 0, 0) になる
 ## ✅ 最終テスト結果
 
 ```
-Total:   350
-Passed:  343
+Total:   351
+Passed:  344
 Failed:  0
 Skipped: 7
 ```

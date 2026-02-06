@@ -7,7 +7,43 @@
 
 namespace cm::mir {
 
-LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, LoweringContext& ctx) {
+LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypePtr& expr_type,
+                                    LoweringContext& ctx) {
+    // sizeof_for_T マーカー型の処理（ジェネリック型パラメータのsizeof）
+    // MIR生成時にはtype_param_mapが空のため解決できない
+    // マーカー型をオペランド型として保持し、モノモフィゼーション時に置換
+    if (expr_type && expr_type->kind == hir::TypeKind::Generic &&
+        expr_type->name.find("sizeof_for_") == 0) {
+        // 型パラメータ解決を試みる（モノモフィ後の特殊化関数で有効）
+        std::string type_param = expr_type->name.substr(11);  // "sizeof_for_" の長さ
+        auto resolved_type = ctx.resolve_type_param(type_param);
+
+        if (resolved_type) {
+            // 解決できた場合は実際のサイズを計算
+            int64_t actual_size = ctx.calculate_type_size(resolved_type);
+            MirConstant constant;
+            constant.type = hir::make_long();
+            constant.value = actual_size;
+            LocalId temp = ctx.new_temp(constant.type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{temp}, MirRvalue::use(MirOperand::constant(constant))));
+            return temp;
+        }
+
+        // 解決できない場合（ジェネリック関数のMIR生成時）
+        // マーカー型を持つ定数を生成し、モノモフィゼーションで後で置換
+        MirConstant constant;
+        constant.type = expr_type;                      // sizeof_for_Tマーカー型を保持
+        constant.value = std::get<int64_t>(lit.value);  // HIRで計算された暫定値
+
+        LocalId temp = ctx.new_temp(hir::make_long());
+        auto operand = MirOperand::constant(constant);
+        operand->type = expr_type;  // オペランドの型にもマーカーを設定
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{temp}, MirRvalue::use(std::move(operand))));
+        return temp;
+    }
+
     // 文字列リテラルの場合、補間が必要かチェック
     if (lit.value.index() == 5) {  // string型のインデックス
         std::string str_val = std::get<std::string>(lit.value);

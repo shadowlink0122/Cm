@@ -6,6 +6,7 @@ int main() {
     println("=== Simple File I/O Test ===");
 
     // テストフォルダ内のデータファイルを使用
+    // 注: テストランナーはテストディレクトリから実行するため、相対パスを使用
     string data_path = "data/simple_io_data.txt";
     string content = "Hello from std::io!";
 

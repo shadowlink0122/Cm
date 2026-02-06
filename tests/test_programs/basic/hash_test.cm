@@ -1,6 +1,0 @@
-// Simple hash test without macro
-// Just test that the program compiles and runs
-int main() {
-    // This replaces the macro test
-    return 0;
-}

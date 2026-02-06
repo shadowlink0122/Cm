@@ -599,27 +599,35 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         // Vector__TrackedObject）
         if (!let.type->type_args.empty()) {
             std::string mangled_name = type_name;
-            for (const auto& arg : let.type->type_args) {
-                mangled_name += "__";
-                // 型引数名を取得（ネストしたジェネリックも対応）
-                std::string arg_name;
-                if (arg && !arg->name.empty()) {
-                    arg_name = arg->name;
-                } else if (arg) {
-                    arg_name = hir::type_to_string(*arg);
+
+            // 再帰的にネストしたジェネリック型引数をマングリングするラムダ
+            std::function<std::string(const hir::TypePtr&)> mangle_type_arg =
+                [&](const hir::TypePtr& arg) -> std::string {
+                if (!arg)
+                    return "";
+
+                std::string result;
+
+                // 基本型名を取得
+                if (!arg->name.empty()) {
+                    result = arg->name;
+                } else {
+                    // プリミティブ型などは型を文字列化
+                    result = hir::type_to_string(*arg);
                 }
-                // <>を削除してマングル化
-                for (char c : arg_name) {
-                    if (c == '<' || c == '>')
-                        continue;
-                    if (c == ',') {
-                        mangled_name += "__";
-                    } else if (c == ' ') {
-                        continue;
-                    } else {
-                        mangled_name += c;
+
+                // ネストしたtype_argsがある場合は再帰的に処理
+                if (!arg->type_args.empty()) {
+                    for (const auto& nested_arg : arg->type_args) {
+                        result += "__" + mangle_type_arg(nested_arg);
                     }
                 }
+
+                return result;
+            };
+
+            for (const auto& arg : let.type->type_args) {
+                mangled_name += "__" + mangle_type_arg(arg);
             }
 
             type_name = mangled_name;
@@ -825,7 +833,24 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
     // デストラクタを呼び出す（逆順）
     auto destructor_vars = ctx.get_all_destructor_vars();
     for (const auto& [local_id, type_name] : destructor_vars) {
-        std::string dtor_name = type_name + "__dtor";
+        // ネストジェネリック型名の正規化（Vector<int> → Vector__int）
+        std::string normalized_name = type_name;
+        if (normalized_name.find('<') != std::string::npos) {
+            std::string result;
+            for (char c : normalized_name) {
+                if (c == '<' || c == '>') {
+                    if (c == '<')
+                        result += "__";
+                    // '>'は省略
+                } else if (c == ',' || c == ' ') {
+                    // カンマと空白は省略
+                } else {
+                    result += c;
+                }
+            }
+            normalized_name = result;
+        }
+        std::string dtor_name = normalized_name + "__dtor";
 
         // デストラクタ呼び出しを生成（selfはポインタとして渡す）
         // ローカル変数の型を取得
@@ -1183,6 +1208,22 @@ void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
                 // ローカル変数の型名がマングル済みならそれを使用
                 actual_type_name = local_decl.type->name;
             }
+        }
+
+        // ネストジェネリック型名の正規化（Vector<int> → Vector__int）
+        if (actual_type_name.find('<') != std::string::npos) {
+            std::string result;
+            for (char c : actual_type_name) {
+                if (c == '<' || c == '>') {
+                    if (c == '<')
+                        result += "__";
+                } else if (c == ',' || c == ' ') {
+                    // カンマと空白は省略
+                } else {
+                    result += c;
+                }
+            }
+            actual_type_name = result;
         }
 
         std::string dtor_name = actual_type_name + "__dtor";

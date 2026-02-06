@@ -55,9 +55,9 @@ export impl<T> Vector<T> {
         this.size = this.size + 1;
     }
 
-    // 取得
-    T get(int index) {
-        return this.data[index];
+    // 取得（参照を返す - 所有権は移動しない）
+    T* get(int index) {
+        return &this.data[index];
     }
 
     // 設定

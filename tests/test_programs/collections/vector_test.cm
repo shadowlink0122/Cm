@@ -20,15 +20,15 @@ int main() {
     len = vi.len();
     println("  push 10,20,30: len={len}");
 
-    int v0 = vi.get(0);
-    int v1 = vi.get(1);
-    int v2 = vi.get(2);
+    int v0 = *vi.get(0);
+    int v1 = *vi.get(1);
+    int v2 = *vi.get(2);
     println("  get: [{v0}, {v1}, {v2}]");
 
     vi.set(1, 99);
-    v0 = vi.get(0);
-    v1 = vi.get(1);
-    v2 = vi.get(2);
+    v0 = *vi.get(0);
+    v1 = *vi.get(1);
+    v2 = *vi.get(2);
     println("  set(1,99): [{v0}, {v1}, {v2}]");
 
     int popped = vi.pop();
@@ -48,8 +48,8 @@ int main() {
     vi.push(100);
     vi.push(200);
     len = vi.len();
-    v0 = vi.get(0);
-    v1 = vi.get(1);
+    v0 = *vi.get(0);
+    v1 = *vi.get(1);
     println("  reuse: len={len}, [{v0}, {v1}]");
 
     // デストラクタが自動的に呼ばれる
@@ -60,8 +60,8 @@ int main() {
     Vector<long> vl();
     vl.push(100000 as long);
     vl.push(200000 as long);
-    long l0 = vl.get(0);
-    long l1 = vl.get(1);
+    long l0 = *vl.get(0);
+    long l1 = *vl.get(1);
     len = vl.len();
     println("  push: len={len}, [{l0}, {l1}]");
     // デストラクタが自動的に呼ばれる

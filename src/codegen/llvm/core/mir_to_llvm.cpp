@@ -1304,7 +1304,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                         if (targetType) {
                             // sourceがポインタで、targetが構造体の場合（構造体のコピー）
-                            if (sourceType->isPointerTy() && targetType->isStructTy()) {
+                            // 重要: rvalueがalloca（スタック上のアドレス）の場合のみloadする
+                            // rvalueがポインタ値（nullポインタを含む）の場合はloadしてはいけない
+                            bool isRvalueAlloca = llvm::isa<llvm::AllocaInst>(rvalue);
+                            if (sourceType->isPointerTy() && targetType->isStructTy() &&
+                                isRvalueAlloca) {
                                 // ポインタからロードして構造体値を取得
                                 rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
                                 sourceType = rvalue->getType();
@@ -2227,7 +2231,54 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                     if (typeArg) {
                                         structLookupName += "__";
                                         if (typeArg->kind == hir::TypeKind::Struct) {
-                                            structLookupName += typeArg->name;
+                                            // ネストジェネリックの場合、再帰的にマングリング
+                                            std::string nestedName = typeArg->name;
+                                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
+                                            if (!typeArg->type_args.empty()) {
+                                                for (const auto& nestedArg : typeArg->type_args) {
+                                                    if (nestedArg) {
+                                                        nestedName += "__";
+                                                        switch (nestedArg->kind) {
+                                                            case hir::TypeKind::Int:
+                                                                nestedName += "int";
+                                                                break;
+                                                            case hir::TypeKind::UInt:
+                                                                nestedName += "uint";
+                                                                break;
+                                                            case hir::TypeKind::Long:
+                                                                nestedName += "long";
+                                                                break;
+                                                            case hir::TypeKind::ULong:
+                                                                nestedName += "ulong";
+                                                                break;
+                                                            case hir::TypeKind::Float:
+                                                                nestedName += "float";
+                                                                break;
+                                                            case hir::TypeKind::Double:
+                                                                nestedName += "double";
+                                                                break;
+                                                            case hir::TypeKind::Bool:
+                                                                nestedName += "bool";
+                                                                break;
+                                                            case hir::TypeKind::Char:
+                                                                nestedName += "char";
+                                                                break;
+                                                            case hir::TypeKind::String:
+                                                                nestedName += "string";
+                                                                break;
+                                                            case hir::TypeKind::Struct:
+                                                                nestedName += nestedArg->name;
+                                                                break;
+                                                            default:
+                                                                if (!nestedArg->name.empty()) {
+                                                                    nestedName += nestedArg->name;
+                                                                }
+                                                                break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            structLookupName += nestedName;
                                         } else {
                                             switch (typeArg->kind) {
                                                 case hir::TypeKind::Int:
@@ -2281,8 +2332,7 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));
                                 indices.push_back(
                                     llvm::ConstantInt::get(ctx.getI32Type(), proj.field_id));
-                                basePtr =
-                                    builder->CreateGEP(it->second, basePtr, indices, "field_ptr");
+                                addr = builder->CreateGEP(it->second, addr, indices, "field_ptr");
                             }
                         }
                     }

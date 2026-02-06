@@ -80,6 +80,42 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             // 構造体型を検索
             std::string lookupName = type->name;
 
+            // <>を含む型名を正規化（"Vector<int>" → "Vector__int"）
+            if (lookupName.find('<') != std::string::npos) {
+                std::string normalized;
+                std::string current;
+                bool inBracket = false;
+                for (size_t i = 0; i < lookupName.size(); ++i) {
+                    char c = lookupName[i];
+                    if (c == '<') {
+                        normalized += current + "__";
+                        current.clear();
+                        inBracket = true;
+                    } else if (c == '>') {
+                        if (!current.empty()) {
+                            normalized += current;
+                        }
+                        current.clear();
+                        inBracket = false;
+                    } else if (c == ',' && inBracket) {
+                        if (!current.empty()) {
+                            size_t start = current.find_first_not_of(" \t");
+                            size_t end = current.find_last_not_of(" \t");
+                            if (start != std::string::npos && end != std::string::npos) {
+                                normalized += current.substr(start, end - start + 1) + "__";
+                            }
+                        }
+                        current.clear();
+                    } else {
+                        current += c;
+                    }
+                }
+                if (!current.empty()) {
+                    normalized += current;
+                }
+                lookupName = normalized;
+            }
+
             // カンマ区切りの型名を正規化（"int, int" → "int__int"）
             // 複数パラメータジェネリクスの型引数がカンマ区切りで格納されている場合のフォールバック
             if (lookupName.find(',') != std::string::npos) {
@@ -117,13 +153,65 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             // ジェネリック構造体の場合、型引数を考慮した名前を生成
             // 例: Node<int> -> Node__int
             // 既にマングリング済み(__含む)の場合はスキップ
-            if (!type->type_args.empty() && lookupName.find("__") == std::string::npos) {
+            // ただし、<>を含む場合はまだ変換が必要
+            bool needsMangling =
+                !type->type_args.empty() && (lookupName.find("__") == std::string::npos ||
+                                             lookupName.find('<') != std::string::npos ||
+                                             lookupName.find('>') != std::string::npos);
+            if (needsMangling) {
                 for (const auto& typeArg : type->type_args) {
                     if (typeArg) {
                         lookupName += "__";
                         // 型名を正規化（Pointer<int>ならptr_int等）
                         if (typeArg->kind == hir::TypeKind::Struct) {
-                            lookupName += typeArg->name;
+                            // ネストジェネリックの場合、再帰的にマングリング
+                            std::string nestedName = typeArg->name;
+                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
+                            if (!typeArg->type_args.empty()) {
+                                for (const auto& nestedArg : typeArg->type_args) {
+                                    if (nestedArg) {
+                                        nestedName += "__";
+                                        switch (nestedArg->kind) {
+                                            case hir::TypeKind::Int:
+                                                nestedName += "int";
+                                                break;
+                                            case hir::TypeKind::UInt:
+                                                nestedName += "uint";
+                                                break;
+                                            case hir::TypeKind::Long:
+                                                nestedName += "long";
+                                                break;
+                                            case hir::TypeKind::ULong:
+                                                nestedName += "ulong";
+                                                break;
+                                            case hir::TypeKind::Float:
+                                                nestedName += "float";
+                                                break;
+                                            case hir::TypeKind::Double:
+                                                nestedName += "double";
+                                                break;
+                                            case hir::TypeKind::Bool:
+                                                nestedName += "bool";
+                                                break;
+                                            case hir::TypeKind::Char:
+                                                nestedName += "char";
+                                                break;
+                                            case hir::TypeKind::String:
+                                                nestedName += "string";
+                                                break;
+                                            case hir::TypeKind::Struct:
+                                                nestedName += nestedArg->name;
+                                                break;
+                                            default:
+                                                if (!nestedArg->name.empty()) {
+                                                    nestedName += nestedArg->name;
+                                                }
+                                                break;
+                                        }
+                                    }
+                                }
+                            }
+                            lookupName += nestedName;
                         } else if (typeArg->kind == hir::TypeKind::Pointer) {
                             // ポインタ型の場合：ptr_xxx 形式でマングリング
                             lookupName += "ptr_";

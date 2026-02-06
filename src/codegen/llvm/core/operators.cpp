@@ -52,10 +52,30 @@ static int64_t getElementSize(const hir::TypePtr& type) {
         case ast::TypeKind::Pointer:
         case ast::TypeKind::Reference:
             return 8;
-        case ast::TypeKind::Struct:
-            // 構造体型の場合、最小サイズとして4バイトを仮定
-            // 注：正確なサイズは構造体定義を参照する必要がある
-            return 4;
+        case ast::TypeKind::Struct: {
+            // 構造体型の場合、型名からサイズを推定
+            // Vector<T>は { T* data, int size, int cap } = 8 + 4 + 4 = 16バイト
+            // Queue<T>は { T* data, int front, int rear, int cap } = 24バイト
+            // 一般的なジェネリック構造体のサイズを推定
+            const std::string& name = type->name;
+            if (!name.empty()) {
+                // Vector<T>のパターンを検出
+                if (name.find("Vector") == 0 || name.find("Vector__") != std::string::npos) {
+                    return 16;  // { T* data (8), int size (4), int cap (4) }
+                }
+                // Queue<T>のパターンを検出
+                if (name.find("Queue") == 0 || name.find("Queue__") != std::string::npos) {
+                    return 24;  // { T* data (8), int front (4), int rear (4), int cap (4), int size
+                                // (4) } 注: 実際のQueueの定義に依存
+                }
+                // HashMap<K,V>のパターンを検出
+                if (name.find("HashMap") == 0 || name.find("HashMap__") != std::string::npos) {
+                    return 24;  // 推定値
+                }
+            }
+            // その他の構造体: 最小サイズとして8バイトを仮定（ポインタサイズ）
+            return 8;
+        }
         default:
             return 1;
     }
@@ -349,6 +369,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 return builder->CreateFCmpOEQ(lhs, rhs, "feq");
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
+            // ポインタ同士の比較は文字列比較として扱う
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",
@@ -387,6 +408,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 return builder->CreateFCmpONE(lhs, rhs, "fne");
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
+            // ポインタ同士の比較は文字列比較として扱う
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",

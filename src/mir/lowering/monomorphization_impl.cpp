@@ -234,10 +234,28 @@ void Monomorphization::scan_generic_calls(
                 if (func_method != method_name)
                     continue;
 
-                // 最初のnum_params個が型引数
+                // メソッド名を除いた残りの部分を型引数として構築
+                // ネストジェネリクス対応: Vector__Vector__int__dtor -> type_args = [Vector__int]
+                // remaining = "Vector__int__dtor" (base_name "Vector" は既に除去済み)
+                // parts = [Vector, int, dtor]
+                // メソッド名 "dtor" を除いた全てを1つの型引数として連結 -> "Vector__int"
                 std::vector<std::string> type_args;
-                for (size_t i = 0; i < num_params; ++i) {
-                    type_args.push_back(parts[i]);
+                size_t type_parts_count = parts.size() - 1;  // メソッド名を除く
+
+                if (type_parts_count > 0 && num_params == 1) {
+                    // 型パラメータが1つの場合：メソッド名以外の全部を1つの型引数として連結
+                    std::string arg;
+                    for (size_t j = 0; j < type_parts_count; ++j) {  // j=0から開始
+                        if (!arg.empty())
+                            arg += "__";
+                        arg += parts[j];
+                    }
+                    type_args.push_back(arg);
+                } else if (type_parts_count >= num_params) {
+                    // 複数型パラメータの場合：各型パラメータに1つずつ割り当て
+                    for (size_t i = 0; i < num_params; ++i) {
+                        type_args.push_back(parts[i]);
+                    }
                 }
 
                 // HIR関数を取得
@@ -1001,6 +1019,48 @@ void Monomorphization::generate_generic_specializations(
                     substitute_place_types(*place);
                 }
             }
+
+            // sizeof_for_Tマーカー型を持つ定数オペランドの値を再計算
+            // ジェネリック型パラメータのsizeofがHIR段階でマーカー型として保存され、
+            // モノモフィゼーション時に実際の型サイズに置換される
+            if (op->kind == MirOperand::Constant) {
+                auto* const_data = std::get_if<MirConstant>(&op->data);
+                if (!const_data)
+                    goto normal_type_subst;
+
+                // MirConstant.typeからマーカーを検出
+                hir::TypePtr marker_type = nullptr;
+                if (const_data->type && const_data->type->kind == hir::TypeKind::Generic &&
+                    const_data->type->name.find("sizeof_for_") == 0) {
+                    marker_type = const_data->type;
+                }
+                // op->typeからもマーカーを検出（両方チェック）
+                else if (op->type && op->type->kind == hir::TypeKind::Generic &&
+                         op->type->name.find("sizeof_for_") == 0) {
+                    marker_type = op->type;
+                }
+
+                if (marker_type) {
+                    // "sizeof_for_T" から "T" を抽出
+                    std::string type_param_name = marker_type->name.substr(11);
+
+                    // type_substから置換後の型を取得
+                    auto param_it = type_subst.find(type_param_name);
+                    if (param_it != type_subst.end()) {
+                        // 置換後の型のサイズを計算
+                        int64_t actual_size = calculate_specialized_type_size(param_it->second);
+
+                        // 定数オペランドの値を更新
+                        const_data->value = actual_size;
+                        const_data->type = hir::make_long();
+                    }
+                    // 型を通常の整数型に変更（マーカーは不要に）
+                    op->type = hir::make_long();
+                    goto normal_type_subst;
+                }
+            }
+
+        normal_type_subst:
             if (op->type) {
                 op->type = substitute_type_in_type(op->type, type_subst, this);
             }
@@ -1161,8 +1221,8 @@ void Monomorphization::generate_generic_specializations(
         // ========== デストラクタループ挿入（Vector<T>等の要素デストラクタ呼び出し） ==========
         // 関数名が__dtorで終わり、type_argsが存在し、要素型にデストラクタがある場合
         if (specialized_name.find("__dtor") != std::string::npos && !type_args.empty()) {
-            // 要素型のデストラクタ名を構築
-            std::string element_type = type_args[0];
+            // 要素型のデストラクタ名を構築（ネストジェネリックの場合は正規化）
+            std::string element_type = normalize_type_arg(type_args[0]);
             std::string element_dtor_name = element_type + "__dtor";
 
             // 要素型にデストラクタが存在するかチェック
@@ -2157,6 +2217,21 @@ void Monomorphization::rewrite_generic_calls(
                                     const auto& elem_type = local_type->element_type;
                                     if (elem_type && !elem_type->name.empty()) {
                                         std::string actual_type = elem_type->name;
+                                        // ネストジェネリック型名の正規化（Vector<int> →
+                                        // Vector__int）
+                                        if (actual_type.find('<') != std::string::npos) {
+                                            std::string result;
+                                            for (char c : actual_type) {
+                                                if (c == '<' || c == '>') {
+                                                    if (c == '<')
+                                                        result += "__";
+                                                } else if (c == ',' || c == ' ') {
+                                                } else {
+                                                    result += c;
+                                                }
+                                            }
+                                            actual_type = result;
+                                        }
                                         // 特殊化された型名からデストラクタ名を構築
                                         std::string specialized_dtor = actual_type + "__dtor";
 
