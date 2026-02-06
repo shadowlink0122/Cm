@@ -47,10 +47,10 @@ namespace cm {
 
 // バージョン情報を取得
 std::string get_version() {
-    std::ifstream version_file(".VERSION");
+    std::ifstream version_file("VERSION");
     if (!version_file.is_open()) {
         // フォールバック
-        return "0.1.0";
+        return "0.13.0";
     }
     std::string version;
     std::getline(version_file, version);

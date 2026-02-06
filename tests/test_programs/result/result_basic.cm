@@ -1,0 +1,38 @@
+// Result型の基本テスト
+import std::io::println;
+import std::result::*;
+
+// 安全な除算関数
+IntResult safe_divide(int a, int b) {
+    if (b == 0) {
+        return int_err("Division by zero");
+    }
+    return int_ok(a / b);
+}
+
+int main() {
+    println("=== Result Basic Test ===");
+    
+    // 成功ケース
+    IntResult r1 = safe_divide(10, 2);
+    if (r1.is_ok()) {
+        int v = r1.unwrap();
+        println("10 / 2 = {v}");
+    }
+    
+    // 失敗ケース  
+    IntResult r2 = safe_divide(10, 0);
+    if (r2.is_err()) {
+        string e = r2.unwrap_err();
+        println("Error: {e}");
+    }
+    
+    // unwrap_or
+    int v1 = r1.unwrap_or(-1);
+    int v2 = r2.unwrap_or(-1);
+    println("r1.unwrap_or(-1) = {v1}");
+    println("r2.unwrap_or(-1) = {v2}");
+    
+    println("=== PASS ===");
+    return 0;
+}

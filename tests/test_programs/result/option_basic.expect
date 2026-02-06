@@ -1,0 +1,6 @@
+=== Option Basic Test ===
+Found even: 4
+No even number found
+o1.unwrap_or(-1) = 4
+o2.unwrap_or(-1) = -1
+=== PASS ===
