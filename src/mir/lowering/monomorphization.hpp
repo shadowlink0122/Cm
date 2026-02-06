@@ -336,10 +336,8 @@ class Monomorphization : public MirLoweringBase {
                 // 構造体定義を探してサイズを計算
                 if (hir_struct_defs && hir_struct_defs->count(type->name)) {
                     const auto* st = hir_struct_defs->at(type->name);
-                    int64_t size = 0;
-                    for (const auto& field : st->fields) {
-                        size += 8;  // 各フィールドをポインタサイズで見積もり
-                    }
+                    // 各フィールドをポインタサイズで見積もり
+                    int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
                     return size > 0 ? size : 8;
                 }
                 // マングリング名の場合、ベース名で検索
@@ -347,10 +345,7 @@ class Monomorphization : public MirLoweringBase {
                     std::string base = type->name.substr(0, type->name.find("__"));
                     if (hir_struct_defs && hir_struct_defs->count(base)) {
                         const auto* st = hir_struct_defs->at(base);
-                        int64_t size = 0;
-                        for (const auto& field : st->fields) {
-                            size += 8;
-                        }
+                        int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
                         return size > 0 ? size : 8;
                     }
                 }

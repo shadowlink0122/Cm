@@ -5,6 +5,7 @@
 #include "nodes.hpp"
 #include "stmt.hpp"
 
+#include <algorithm>
 #include <optional>
 
 namespace cm::ast {
