@@ -20,8 +20,8 @@ int main() {
     println("matrix.len() = {mlen}");
 
     Vector<int>* got = matrix.get(0);
-    int v0 = *(*got).get(0);
-    int v1 = *(*got).get(1);
+    int v0 = *got->get(0);
+    int v1 = *got->get(1);
     println("Row: [{v0}, {v1}]");
 
     println("=== PASS ===");
