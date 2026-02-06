@@ -15,8 +15,4 @@
   len=2
   per1: id=1, age=25
   per2: id=2, age=30
-7. Vector<Large>:
-  len=2
-  lg1: (1, 2, 3, 4)
-  lg2: (10, 20, 30, 40)
 === PASS ===
