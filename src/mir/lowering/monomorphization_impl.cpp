@@ -1158,6 +1158,177 @@ void Monomorphization::generate_generic_specializations(
             }
         }
 
+        // ========== デストラクタループ挿入（Vector<T>等の要素デストラクタ呼び出し） ==========
+        // 関数名が__dtorで終わり、type_argsが存在し、要素型にデストラクタがある場合
+        if (specialized_name.find("__dtor") != std::string::npos && !type_args.empty()) {
+            // 要素型のデストラクタ名を構築
+            std::string element_type = type_args[0];
+            std::string element_dtor_name = element_type + "__dtor";
+
+            // 要素型にデストラクタが存在するかチェック
+            bool has_element_dtor = false;
+            for (const auto& func : program.functions) {
+                if (func && func->name == element_dtor_name) {
+                    has_element_dtor = true;
+                    break;
+                }
+            }
+
+            // デストラクタがある場合のみループを挿入
+            if (has_element_dtor) {
+                debug_msg("MONO", "Inserting destructor loop for " + specialized_name +
+                                      " with element dtor " + element_dtor_name);
+
+                // 元のentry blockを保存
+                BlockId original_entry = specialized->entry_block;
+
+                // 新しいローカル変数を追加
+                LocalId loop_idx_id = static_cast<LocalId>(specialized->locals.size());
+                specialized->locals.emplace_back(loop_idx_id, "_loop_idx", hir::make_ulong(), false,
+                                                 false);
+
+                LocalId elem_size_id = static_cast<LocalId>(specialized->locals.size());
+                specialized->locals.emplace_back(elem_size_id, "_elem_size", hir::make_ulong(),
+                                                 false, false);
+
+                LocalId loop_cond_id = static_cast<LocalId>(specialized->locals.size());
+                specialized->locals.emplace_back(loop_cond_id, "_loop_cond", hir::make_bool(),
+                                                 false, false);
+
+                // 要素型のポインタ型を作成
+                auto element_type_ptr = make_type_from_name(element_type);
+                auto element_ptr_type = hir::make_pointer(element_type_ptr);
+
+                LocalId data_ptr_id = static_cast<LocalId>(specialized->locals.size());
+                specialized->locals.emplace_back(data_ptr_id, "_data_ptr", element_ptr_type, false,
+                                                 false);
+
+                LocalId elem_ptr_id = static_cast<LocalId>(specialized->locals.size());
+                specialized->locals.emplace_back(elem_ptr_id, "_elem_ptr", element_ptr_type, false,
+                                                 false);
+
+                // ブロックIDを割り当て（現在のサイズから順番に）
+                BlockId loop_init_id = static_cast<BlockId>(specialized->basic_blocks.size());
+                BlockId loop_header_id = loop_init_id + 1;
+                BlockId loop_body_id = loop_init_id + 2;
+                BlockId after_dtor_id = loop_init_id + 3;
+
+                // ====== loop_init ブロック ======
+                auto loop_init = std::make_unique<BasicBlock>(loop_init_id);
+
+                // _loop_idx = 0
+                MirConstant zero_const;
+                zero_const.type = hir::make_ulong();
+                zero_const.value = int64_t{0};
+                loop_init->statements.push_back(MirStatement::assign(
+                    MirPlace{loop_idx_id}, MirRvalue::use(MirOperand::constant(zero_const))));
+
+                // _elem_size = (*self).size (field index 1 for Vector)
+                // self は LocalId(1)
+                // 注意: size フィールドは int 型なので、まずint型で読み込んでからulongにキャスト
+                MirPlace self_place{LocalId(1)};
+                MirPlace self_deref = self_place;
+                self_deref.projections.push_back(PlaceProjection::deref());
+                MirPlace size_field = self_deref;
+                size_field.projections.push_back(PlaceProjection::field(1));  // size is field 1
+
+                // int型の一時変数を作成してsizeを読み込む
+                LocalId size_int_id = static_cast<LocalId>(specialized->locals.size());
+                specialized->locals.emplace_back(size_int_id, "_size_int", hir::make_int(), false,
+                                                 false);
+                loop_init->statements.push_back(MirStatement::assign(
+                    MirPlace{size_int_id}, MirRvalue::use(MirOperand::copy(size_field))));
+
+                // int から ulong へのキャスト
+                loop_init->statements.push_back(MirStatement::assign(
+                    MirPlace{elem_size_id},
+                    MirRvalue::cast(MirOperand::copy(MirPlace{size_int_id}), hir::make_ulong())));
+
+                // _data_ptr = (*self).data (field index 0 for Vector)
+                MirPlace data_field = self_deref;
+                data_field.projections.push_back(PlaceProjection::field(0));  // data is field 0
+                loop_init->statements.push_back(MirStatement::assign(
+                    MirPlace{data_ptr_id}, MirRvalue::use(MirOperand::copy(data_field))));
+
+                // goto loop_header
+                loop_init->terminator = MirTerminator::goto_block(loop_header_id);
+                loop_init->successors = {loop_header_id};
+                specialized->basic_blocks.push_back(std::move(loop_init));
+
+                // ====== loop_header ブロック ======
+                auto loop_header = std::make_unique<BasicBlock>(loop_header_id);
+
+                // _loop_cond = _loop_idx < _elem_size
+                loop_header->statements.push_back(MirStatement::assign(
+                    MirPlace{loop_cond_id},
+                    MirRvalue::binary(MirBinaryOp::Lt, MirOperand::copy(MirPlace{loop_idx_id}),
+                                      MirOperand::copy(MirPlace{elem_size_id}))));
+
+                // switch_int _loop_cond: true -> loop_body, false -> original_entry
+                loop_header->terminator = MirTerminator::switch_int(
+                    MirOperand::copy(MirPlace{loop_cond_id}),
+                    {{1, loop_body_id}},  // true -> loop_body
+                    original_entry        // false -> original_entry (free処理など)
+                );
+                loop_header->successors = {loop_body_id, original_entry};
+                specialized->basic_blocks.push_back(std::move(loop_header));
+
+                // ====== loop_body ブロック ======
+                auto loop_body = std::make_unique<BasicBlock>(loop_body_id);
+
+                // _elem_ptr = &(_data_ptr[_loop_idx]) using PlaceProjection::index
+                MirPlace indexed_elem{data_ptr_id};
+                indexed_elem.projections.push_back(PlaceProjection::deref());
+                indexed_elem.projections.push_back(PlaceProjection::index(loop_idx_id));
+                loop_body->statements.push_back(MirStatement::assign(
+                    MirPlace{elem_ptr_id}, MirRvalue::ref(indexed_elem, false)  // immutable ref
+                    ));
+
+                // Call element_dtor(_elem_ptr) -> after_dtor
+                auto dtor_call_term = std::make_unique<MirTerminator>();
+                dtor_call_term->kind = MirTerminator::Call;
+                std::vector<MirOperandPtr> dtor_args;
+                dtor_args.push_back(MirOperand::copy(MirPlace{elem_ptr_id}));
+                dtor_call_term->data = MirTerminator::CallData{
+                    MirOperand::function_ref(element_dtor_name),
+                    std::move(dtor_args),
+                    std::nullopt,  // 戻り値なし（void）
+                    after_dtor_id,
+                    std::nullopt,  // unwind無し
+                    "",
+                    "",
+                    false  // 通常の関数呼び出し
+                };
+                loop_body->terminator = std::move(dtor_call_term);
+                loop_body->successors = {after_dtor_id};
+                specialized->basic_blocks.push_back(std::move(loop_body));
+
+                // ====== after_dtor ブロック ======
+                auto after_dtor = std::make_unique<BasicBlock>(after_dtor_id);
+
+                // _loop_idx = _loop_idx + 1
+                MirConstant one_const;
+                one_const.type = hir::make_ulong();
+                one_const.value = int64_t{1};
+                after_dtor->statements.push_back(MirStatement::assign(
+                    MirPlace{loop_idx_id},
+                    MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace{loop_idx_id}),
+                                      MirOperand::constant(one_const))));
+
+                // goto loop_header
+                after_dtor->terminator = MirTerminator::goto_block(loop_header_id);
+                after_dtor->successors = {loop_header_id};
+                specialized->basic_blocks.push_back(std::move(after_dtor));
+
+                // entry_blockをloop_initに変更
+                specialized->entry_block = loop_init_id;
+
+                debug_msg("MONO", "Destructor loop inserted: entry_block now " +
+                                      std::to_string(loop_init_id) + ", blocks=" +
+                                      std::to_string(specialized->basic_blocks.size()));
+            }
+        }
+
         program.functions.push_back(std::move(specialized));
 
         // 呼び出し箇所を書き換え
@@ -1964,7 +2135,55 @@ void Monomorphization::rewrite_generic_calls(
                     continue;
                 }
 
-                // 2. Container<int>__print のような形式を検出
+                // 2. デストラクタ呼び出し（XXX__dtor形式）の書き換え
+                // Vector__dtor を Vector__TrackedObject__dtor に書き換える
+                if (func_name.size() > 6 && func_name.substr(func_name.size() - 6) == "__dtor") {
+                    // デストラクタ呼び出しを検出
+                    std::string base_type = func_name.substr(0, func_name.size() - 6);
+
+                    // 引数からポインタ型を取得し、型名を推論
+                    if (!call_data.args.empty() && call_data.args[0]) {
+                        // 引数はポインタ型のはずなので、Place型から型情報を取得
+                        if (call_data.args[0]->kind == MirOperand::Copy ||
+                            call_data.args[0]->kind == MirOperand::Move) {
+                            const auto& place = std::get<MirPlace>(call_data.args[0]->data);
+                            LocalId local_id = place.local;
+
+                            // ローカル変数の型を取得
+                            if (local_id < func->locals.size()) {
+                                const auto& local_type = func->locals[local_id].type;
+                                if (local_type && local_type->kind == hir::TypeKind::Pointer) {
+                                    // ポインタの要素型を取得
+                                    const auto& elem_type = local_type->element_type;
+                                    if (elem_type && !elem_type->name.empty()) {
+                                        std::string actual_type = elem_type->name;
+                                        // 特殊化された型名からデストラクタ名を構築
+                                        std::string specialized_dtor = actual_type + "__dtor";
+
+                                        // MIRに特殊化デストラクタが存在するか確認
+                                        bool found = false;
+                                        for (const auto& mir_func : program.functions) {
+                                            if (mir_func && mir_func->name == specialized_dtor) {
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+
+                                        if (found && specialized_dtor != func_name) {
+                                            debug_msg("MONO",
+                                                      "Rewriting destructor call: " + func_name +
+                                                          " -> " + specialized_dtor);
+                                            func_name = specialized_dtor;
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Container<int>__print のような形式を検出
                 auto pos = func_name.find("<");
                 if (pos == std::string::npos)
                     continue;

@@ -1,0 +1,12 @@
+=== Recursive Destructor Verification ===
+1. Creating Vector<TrackedObject>:
+  objects.len() = 3
+  Exiting scope - expect destructor calls:
+  ~TrackedObject(100) called
+  ~TrackedObject(200) called
+  ~TrackedObject(300) called
+
+2. If you see TrackedObject destructor calls above, recursive destruction works!
+   If not, there's still a bug to fix.
+
+=== Test Complete ===

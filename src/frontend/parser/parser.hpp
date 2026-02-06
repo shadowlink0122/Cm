@@ -1221,8 +1221,8 @@ class Parser {
                     type_args.push_back(parse_type());
                 } while (consume_if(TokenKind::Comma));
 
-                // '>' を期待
-                expect(TokenKind::Gt);
+                // '>'を期待（ネストジェネリクス対応: GtGtも分割処理）
+                consume_gt_in_type_context();
 
                 // ジェネリック型として返す
                 auto type = ast::make_named(name);
@@ -1386,6 +1386,33 @@ class Parser {
         }
     }
 
+    // ネストジェネリクス対応: 型パース中に'>'を消費
+    // GtGt（>>）トークンが来た場合、1つの'>'として消費し、残りを保持
+    void consume_gt_in_type_context() {
+        // 前回のGtGtから残った'>'がある場合
+        if (pending_gt_count_ > 0) {
+            pending_gt_count_--;
+            return;
+        }
+
+        // 通常の'>'トークン
+        if (consume_if(TokenKind::Gt)) {
+            return;
+        }
+
+        // '>>'トークン - 分割して処理
+        if (check(TokenKind::GtGt)) {
+            advance();              // GtGtを消費
+            pending_gt_count_ = 1;  // 残りの'>'を保持
+            return;
+        }
+
+        // '>>>'トークンがあればさらに対応（将来の拡張用）
+        // 現時点では未サポート
+
+        error("Expected '>'");
+    }
+
     std::string expect_ident() {
         if (check(TokenKind::Ident)) {
             std::string name(current().get_string());
@@ -1475,6 +1502,7 @@ class Parser {
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
+    int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
 };
 
 }  // namespace cm

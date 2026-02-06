@@ -164,6 +164,8 @@ ast::StmtPtr Parser::parse_stmt() {
                             depth++;
                         else if (tokens_[lookahead].kind == TokenKind::Gt)
                             depth--;
+                        else if (tokens_[lookahead].kind == TokenKind::GtGt)
+                            depth -= 2;  // ネストジェネリクス対応
                         lookahead++;
                     }
                 }
@@ -468,9 +470,11 @@ bool Parser::is_type_start() {
                                     depth++;
                                 else if (tokens_[i].kind == TokenKind::Gt)
                                     depth--;
+                                else if (tokens_[i].kind == TokenKind::GtGt)
+                                    depth -= 2;  // ネストジェネリクス対応
                                 i++;
                             }
-                            if (depth == 0 && i < tokens_.size() &&
+                            if (depth <= 0 && i < tokens_.size() &&
                                 tokens_[i].kind == TokenKind::Ident) {
                                 return true;
                             }
@@ -512,11 +516,14 @@ bool Parser::is_type_start() {
                             depth++;
                         } else if (tokens_[i].kind == TokenKind::Gt) {
                             depth--;
+                        } else if (tokens_[i].kind == TokenKind::GtGt) {
+                            // ネストジェネリクス対応: >> は2つの > として処理
+                            depth -= 2;
                         }
                         i++;
                     }
-                    // depth == 0 なら閉じている
-                    if (depth == 0 && i < tokens_.size()) {
+                    // depth == 0 なら閉じている（depth < 0 は >> で過剰消費した場合）
+                    if (depth <= 0 && i < tokens_.size()) {
                         // ジェネリック型の後に[N]が来る可能性もチェック
                         if (tokens_[i].kind == TokenKind::LBracket) {
                             // [N]をスキップ

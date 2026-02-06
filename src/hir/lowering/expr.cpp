@@ -100,17 +100,47 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         // sizeof(T) または sizeof(expr) をコンパイル時定数として評価
         int64_t size = 0;
         std::string type_name;
+        ast::TypePtr target_type_ptr;
         if (sizeof_expr->target_type) {
             size = calculate_type_size(sizeof_expr->target_type);
             type_name = ast::type_to_string(*sizeof_expr->target_type);
+            target_type_ptr = sizeof_expr->target_type;
         } else if (sizeof_expr->target_expr && sizeof_expr->target_expr->type) {
             size = calculate_type_size(sizeof_expr->target_expr->type);
             type_name = ast::type_to_string(*sizeof_expr->target_expr->type);
+            target_type_ptr = sizeof_expr->target_expr->type;
         }
         debug::hir::log(debug::hir::Id::LiteralLower,
                         "sizeof(" + type_name + ") = " + std::to_string(size), debug::Level::Debug);
         auto lit = std::make_unique<HirLiteral>();
         lit->value = size;
+
+        // ジェネリック型パラメータ（T, U, V, K, E等）を検出
+        // 型名が単一の大文字、または大文字＋数字（T1, T2等）の場合
+        // マーカー型情報を持つuintとして返す（モノモーフィゼーション時に再計算）
+        bool is_generic_param = false;
+        if (target_type_ptr && target_type_ptr->kind == ast::TypeKind::Generic) {
+            const std::string& tname = target_type_ptr->name;
+            if (tname.length() == 1 && std::isupper(tname[0])) {
+                is_generic_param = true;
+            } else if (tname.length() == 2 && std::isupper(tname[0]) && std::isdigit(tname[1])) {
+                is_generic_param = true;
+            }
+        }
+
+        if (is_generic_param) {
+            // ジェネリック型パラメータのsizeofの場合
+            // 特別なマーカー型を作成（sizeof_for_T形式）
+            // モノモーフィゼーション時にこの型を検出して正しいサイズを計算
+            auto marker_type = std::make_shared<ast::Type>(ast::TypeKind::Generic);
+            marker_type->name = "sizeof_for_" + target_type_ptr->name;
+            debug::hir::log(debug::hir::Id::LiteralLower,
+                            "sizeof for generic param: " + target_type_ptr->name +
+                                " (marker: " + marker_type->name + ")",
+                            debug::Level::Debug);
+            return std::make_unique<HirExpr>(std::move(lit), marker_type);
+        }
+
         return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
     } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
         // typeof(expr) - 式の型を返すが、値としては0を返す（型コンテキストで使用）

@@ -44,8 +44,14 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
 
         bool changed = false;
         changed |= apply_constants(func, in_states);
-        changed |= simplify_cfg(func);
-        changed |= remove_unreachable_blocks(func);
+
+        // デストラクタ関数の場合、ブロック削除をスキップ
+        // モノモフィゼーションで生成されたループブロックが誤って到達不可能と判定されることがある
+        bool is_destructor = func.name.find("__dtor") != std::string::npos;
+        if (!is_destructor) {
+            changed |= simplify_cfg(func);
+            changed |= remove_unreachable_blocks(func);
+        }
 
         return changed;
     }

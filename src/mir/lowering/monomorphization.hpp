@@ -161,6 +161,54 @@ class Monomorphization : public MirLoweringBase {
             return "ptr_" + normalize_type_arg(type_arg.substr(1));
         }
 
+        // ネストジェネリクス対応: Vector<int> -> Vector__int, Vector<Vector<int>> ->
+        // Vector__Vector__int
+        auto lt_pos = type_arg.find('<');
+        if (lt_pos != std::string::npos) {
+            auto gt_pos = type_arg.rfind('>');
+            if (gt_pos != std::string::npos && gt_pos > lt_pos) {
+                std::string base_name = type_arg.substr(0, lt_pos);
+                std::string type_args_str = type_arg.substr(lt_pos + 1, gt_pos - lt_pos - 1);
+
+                // カンマで分割（ネストを考慮）
+                std::vector<std::string> type_args;
+                int depth = 0;
+                size_t start = 0;
+                for (size_t i = 0; i < type_args_str.size(); ++i) {
+                    if (type_args_str[i] == '<') {
+                        depth++;
+                    } else if (type_args_str[i] == '>') {
+                        depth--;
+                    } else if (type_args_str[i] == ',' && depth == 0) {
+                        std::string arg = type_args_str.substr(start, i - start);
+                        // 前後の空白をトリム
+                        while (!arg.empty() && arg.front() == ' ')
+                            arg.erase(0, 1);
+                        while (!arg.empty() && arg.back() == ' ')
+                            arg.pop_back();
+                        type_args.push_back(arg);
+                        start = i + 1;
+                    }
+                }
+                // 最後の引数
+                std::string last_arg = type_args_str.substr(start);
+                while (!last_arg.empty() && last_arg.front() == ' ')
+                    last_arg.erase(0, 1);
+                while (!last_arg.empty() && last_arg.back() == ' ')
+                    last_arg.pop_back();
+                if (!last_arg.empty()) {
+                    type_args.push_back(last_arg);
+                }
+
+                // 再帰的にマングリング名を構築
+                std::string result = base_name;
+                for (const auto& arg : type_args) {
+                    result += "__" + normalize_type_arg(arg);
+                }
+                return result;
+            }
+        }
+
         return type_arg;
     }
 

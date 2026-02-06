@@ -63,8 +63,8 @@ class SimplifyControlFlow : public OptimizationPass {
         std::vector<bool> reachable(func.basic_blocks.size(), false);
         std::queue<BlockId> worklist;
 
-        BlockId entry = 0;  // Entry block is always 0? Usually yes.
-        // If entry block is missing/null, something is wrong, but handle it.
+        // エントリーブロックは関数のentry_blockを使用（0とは限らない）
+        BlockId entry = func.entry_block;
         if (entry < func.basic_blocks.size() && func.basic_blocks[entry]) {
             reachable[entry] = true;
             worklist.push(entry);

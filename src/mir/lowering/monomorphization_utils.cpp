@@ -333,6 +333,74 @@ hir::TypePtr make_type_from_name(const std::string& name) {
         t->name = name;
         return t;
     }
+
+    // ネストジェネリクス対応: Vector<int> や Vector<Vector<int>> 形式のパース
+    auto lt_pos = name.find('<');
+    if (lt_pos != std::string::npos) {
+        // ベース型名を抽出
+        std::string base_name = name.substr(0, lt_pos);
+
+        // 型引数部分を抽出（最後の>を除く）
+        auto gt_pos = name.rfind('>');
+        if (gt_pos != std::string::npos && gt_pos > lt_pos) {
+            std::string type_args_str = name.substr(lt_pos + 1, gt_pos - lt_pos - 1);
+
+            // カンマで分割（ネストを考慮）
+            std::vector<std::string> type_args;
+            int depth = 0;
+            size_t start = 0;
+            for (size_t i = 0; i < type_args_str.size(); ++i) {
+                if (type_args_str[i] == '<') {
+                    depth++;
+                } else if (type_args_str[i] == '>') {
+                    depth--;
+                } else if (type_args_str[i] == ',' && depth == 0) {
+                    std::string arg = type_args_str.substr(start, i - start);
+                    // 前後の空白をトリム
+                    while (!arg.empty() && arg.front() == ' ')
+                        arg.erase(0, 1);
+                    while (!arg.empty() && arg.back() == ' ')
+                        arg.pop_back();
+                    type_args.push_back(arg);
+                    start = i + 1;
+                }
+            }
+            // 最後の引数
+            std::string last_arg = type_args_str.substr(start);
+            while (!last_arg.empty() && last_arg.front() == ' ')
+                last_arg.erase(0, 1);
+            while (!last_arg.empty() && last_arg.back() == ' ')
+                last_arg.pop_back();
+            if (!last_arg.empty()) {
+                type_args.push_back(last_arg);
+            }
+
+            // 再帰的に型を構築
+            auto t = hir::make_named(base_name);
+            for (const auto& arg : type_args) {
+                t->type_args.push_back(make_type_from_name(arg));
+            }
+            // ネストジェネリクス対応: type->nameにマングリング済み名前を設定
+            // これにより後の型置換でVector__intという正しい名前が使用される
+            std::string mangled_name = base_name;
+            for (const auto& arg : type_args) {
+                // 再帰的に正規化（Vector<int> -> Vector__int）
+                std::string normalized_arg = arg;
+                auto lt = normalized_arg.find('<');
+                if (lt != std::string::npos) {
+                    // ネストジェネリクスの場合、再帰的にマングリング
+                    auto type_ptr = make_type_from_name(arg);
+                    if (type_ptr) {
+                        normalized_arg = type_ptr->name;
+                    }
+                }
+                mangled_name += "__" + normalized_arg;
+            }
+            t->name = mangled_name;
+            return t;
+        }
+    }
+
     // ユーザー定義型（構造体など）
     return hir::make_named(name);
 }

@@ -19,8 +19,15 @@ class DeadCodeElimination : public OptimizationPass {
     bool run(MirFunction& func) override {
         bool changed = false;
 
-        // 1. 到達不可能ブロックを除去
-        changed |= remove_unreachable_blocks(func);
+        // デストラクタ関数の場合は到達不可能ブロック除去をスキップ
+        // モノモフィゼーションで生成されたデストラクタは複雑なブロック構造を持つ可能性があり、
+        // 誤って到達可能なブロックが削除されることがあるため
+        bool is_destructor = func.name.find("__dtor") != std::string::npos;
+
+        // 1. 到達不可能ブロックを除去（デストラクタ以外のみ）
+        if (!is_destructor) {
+            changed |= remove_unreachable_blocks(func);
+        }
 
         // 2. 使用されていないローカル変数への代入を除去
         changed |= remove_dead_stores(func);

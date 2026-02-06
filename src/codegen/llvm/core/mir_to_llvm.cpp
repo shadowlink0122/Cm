@@ -874,8 +874,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             blocks[i] = llvm::BasicBlock::Create(ctx.getContext(), bbName, currentFunction);
         }
 
-        // 最初のブロックへジャンプ
-        if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+        // 最初のブロック（エントリブロック）へジャンプ
+        // func.entry_blockを使用して正しいエントリポイントにジャンプ
+        mir::BlockId entry = func.entry_block;
+        if (entry < func.basic_blocks.size() && func.basic_blocks[entry]) {
+            builder->CreateBr(blocks[entry]);
+        } else if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+            // フォールバック: entry_blockが無効な場合はブロック0を使用
             builder->CreateBr(blocks[0]);
         }
 
@@ -2154,37 +2159,58 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
 
             llvm::Value* basePtr = locals[local];
 
-            // プロジェクションがある場合（配列要素など）
+            // プロジェクションがある場合
             if (!refData.place.projections.empty()) {
-                for (const auto& proj : refData.place.projections) {
-                    if (proj.kind == mir::ProjectionKind::Index) {
-                        // 配列要素へのアドレス
-                        auto& localInfo = currentMIRFunction->locals[local];
-                        if (localInfo.type && localInfo.type->kind == hir::TypeKind::Array) {
-                            auto elemType = convertType(localInfo.type->element_type);
-                            auto arraySize = localInfo.type->array_size.value_or(0);
-                            auto arrayType = llvm::ArrayType::get(elemType, arraySize);
+                auto& localInfo = currentMIRFunction->locals[local];
+                hir::TypePtr currentType = localInfo.type;
+                llvm::Value* addr = basePtr;
 
-                            llvm::Value* indexVal = nullptr;
-                            if (locals.find(proj.index_local) != locals.end() &&
-                                locals[proj.index_local]) {
-                                auto& idxLocal = currentMIRFunction->locals[proj.index_local];
-                                auto idxType = convertType(idxLocal.type);
-                                indexVal = builder->CreateLoad(idxType, locals[proj.index_local]);
-                                // i64に拡張
-                                if (indexVal->getType()->isIntegerTy() &&
-                                    indexVal->getType()->getIntegerBitWidth() < 64) {
-                                    indexVal = builder->CreateSExt(indexVal, ctx.getI64Type());
-                                }
-                            } else {
-                                indexVal = llvm::ConstantInt::get(ctx.getI64Type(), 0);
+                // Projectionシーケンスを順次処理
+                for (size_t pi = 0; pi < refData.place.projections.size(); ++pi) {
+                    const auto& proj = refData.place.projections[pi];
+
+                    if (proj.kind == mir::ProjectionKind::Deref) {
+                        // ポインタをロード
+                        if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                            addr = builder->CreateLoad(ctx.getPtrType(), addr, "deref_load");
+                            currentType = currentType->element_type;
+                        }
+                    } else if (proj.kind == mir::ProjectionKind::Index) {
+                        // インデックスアクセス
+                        llvm::Value* indexVal = nullptr;
+                        if (locals.find(proj.index_local) != locals.end() &&
+                            locals[proj.index_local]) {
+                            auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                            auto idxType = convertType(idxLocal.type);
+                            indexVal = builder->CreateLoad(idxType, locals[proj.index_local]);
+                            // i64に拡張
+                            if (indexVal->getType()->isIntegerTy() &&
+                                indexVal->getType()->getIntegerBitWidth() < 64) {
+                                indexVal = builder->CreateSExt(indexVal, ctx.getI64Type());
                             }
+                        } else {
+                            indexVal = llvm::ConstantInt::get(ctx.getI64Type(), 0);
+                        }
 
-                            // GEPで配列要素のアドレスを取得
-                            basePtr = builder->CreateGEP(
-                                arrayType, basePtr,
+                        // Array型の場合と、Pointer要素へのアクセス（Deref後）で異なるGEPを生成
+                        if (currentType && currentType->kind == hir::TypeKind::Array) {
+                            // Array型: {0, idx}の2インデックスGEP
+                            auto elemType = convertType(currentType->element_type);
+                            auto arraySize = currentType->array_size.value_or(0);
+                            auto arrayType = llvm::ArrayType::get(elemType, arraySize);
+                            addr = builder->CreateGEP(
+                                arrayType, addr,
                                 {llvm::ConstantInt::get(ctx.getI64Type(), 0), indexVal},
                                 "arr_elem_ptr");
+                            // 型を要素型に更新
+                            currentType = currentType->element_type;
+                        } else {
+                            // Pointer要素へのアクセス（Deref後）: {idx}のみのGEP
+                            llvm::Type* elemType = ctx.getI32Type();  // デフォルト
+                            if (currentType) {
+                                elemType = convertType(currentType);
+                            }
+                            addr = builder->CreateGEP(elemType, addr, indexVal, "idx_elem_ptr");
                         }
                     } else if (proj.kind == mir::ProjectionKind::Field) {
                         // 構造体フィールドへのアドレス
@@ -2261,6 +2287,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         }
                     }
                 }
+                // Projectionシーケンス処理後はaddrを返す
+                return addr;
             }
 
             return basePtr;
@@ -3349,7 +3377,18 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 }
 
                 // ポインタ型の場合は単純なポインタ演算（フラット化不要）
-                if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                // Deref後のLoadInst結果（ポインタ値）へのインデックスアクセスも含む
+                bool isPointerIndexing =
+                    (currentType && currentType->kind == hir::TypeKind::Pointer);
+
+                // Deref後（currentTypeはポインタの要素型）でもaddrがLoadInst結果の場合は
+                // ポインタへのインデックスアクセスとして扱う
+                if (!isPointerIndexing && addr && llvm::isa<llvm::LoadInst>(addr)) {
+                    // LoadInstの結果（ポインタ値）へのインデックスアクセス
+                    isPointerIndexing = true;
+                }
+
+                if (isPointerIndexing) {
                     // インデックス値を取得
                     llvm::Value* indexVal = nullptr;
                     auto idx_it = locals.find(proj.index_local);
@@ -3379,8 +3418,13 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
 
                     // ポインタが指す要素の型を取得
                     llvm::Type* elemType = ctx.getI32Type();  // デフォルト
-                    if (currentType->element_type) {
+                    if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                        currentType->element_type) {
+                        // 通常のポインタ型: element_typeを使用
                         elemType = convertType(currentType->element_type);
+                    } else if (currentType && llvm::isa<llvm::LoadInst>(addr)) {
+                        // Deref後（LoadInst結果へのインデックスアクセス）: currentType自体が要素型
+                        elemType = convertType(currentType);
                     }
 
                     // addrがポインタ変数を格納している場合、まずポインタ値をロード
@@ -3400,6 +3444,9 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         (void)gepInst;  // 未使用警告を抑制
                         // currentType->kind == Pointer はポインタ型フィールドを示す
                         needsLoad = true;
+                    } else if (llvm::isa<llvm::LoadInst>(addr)) {
+                        // LoadInst結果（Deref後）はすでにロード済みなので再ロード不要
+                        needsLoad = false;
                     } else {
                         // その他の場合（currentTypeがポインタ型なら）
                         needsLoad = true;

@@ -594,6 +594,37 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // デストラクタを持つ型の変数を登録
     if (let.type && let.type->kind == hir::TypeKind::Struct) {
         std::string type_name = let.type->name;
+
+        // ジェネリック型の場合、マングル済み名を構築（Vector<TrackedObject> ->
+        // Vector__TrackedObject）
+        if (!let.type->type_args.empty()) {
+            std::string mangled_name = type_name;
+            for (const auto& arg : let.type->type_args) {
+                mangled_name += "__";
+                // 型引数名を取得（ネストしたジェネリックも対応）
+                std::string arg_name;
+                if (arg && !arg->name.empty()) {
+                    arg_name = arg->name;
+                } else if (arg) {
+                    arg_name = hir::type_to_string(*arg);
+                }
+                // <>を削除してマングル化
+                for (char c : arg_name) {
+                    if (c == '<' || c == '>')
+                        continue;
+                    if (c == ',') {
+                        mangled_name += "__";
+                    } else if (c == ' ') {
+                        continue;
+                    } else {
+                        mangled_name += c;
+                    }
+                }
+            }
+
+            type_name = mangled_name;
+        }
+
         if (ctx.has_destructor(type_name)) {
             ctx.register_destructor_var(local, type_name);
         }
@@ -1139,11 +1170,26 @@ void StmtLowering::lower_defer(const hir::HirDefer& defer_stmt, LoweringContext&
 void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
     auto destructor_vars = ctx.get_current_scope_destructor_vars();
     for (const auto& [local_id, type_name] : destructor_vars) {
-        std::string dtor_name = type_name + "__dtor";
+        // 登録時の型名を優先使用（ジェネリック型の場合、マングル済み名が登録されている）
+        // ローカル変数の型名はモノモフィゼーション前なので不正確な場合がある
+        std::string actual_type_name = type_name;
+
+        // 登録時の型名がマングル済み（__を含む）の場合はそのまま使用
+        // そうでない場合はローカル変数の型名を確認
+        if (type_name.find("__") == std::string::npos && local_id < ctx.func->locals.size()) {
+            const auto& local_decl = ctx.func->locals[local_id];
+            if (local_decl.type && !local_decl.type->name.empty() &&
+                local_decl.type->name.find("__") != std::string::npos) {
+                // ローカル変数の型名がマングル済みならそれを使用
+                actual_type_name = local_decl.type->name;
+            }
+        }
+
+        std::string dtor_name = actual_type_name + "__dtor";
 
         // デストラクタ呼び出しを生成（selfはポインタとして渡す）
         hir::TypePtr local_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-        local_type->name = type_name;
+        local_type->name = actual_type_name;
         LocalId ref_temp = ctx.new_temp(hir::make_pointer(local_type));
         ctx.push_statement(
             MirStatement::assign(MirPlace{ref_temp}, MirRvalue::ref(MirPlace{local_id}, false)));

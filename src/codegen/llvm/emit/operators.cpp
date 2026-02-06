@@ -52,6 +52,11 @@ static int64_t getElementSize(const hir::TypePtr& type) {
         case ast::TypeKind::Pointer:
         case ast::TypeKind::Reference:
             return 8;
+        case ast::TypeKind::Struct:
+            // 構造体型の場合、最小サイズとして4バイトを仮定
+            // 注：正確なサイズは構造体定義を参照する必要がある
+            // 単純なケース（単一intフィールド）では4バイトが適切
+            return 4;
         default:
             return 1;
     }

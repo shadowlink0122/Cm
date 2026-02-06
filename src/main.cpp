@@ -907,6 +907,7 @@ int main(int argc, char* argv[]) {
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
+
         if (opts.debug)
             std::cout << "MIR関数数: " << mir.functions.size() << "\n\n" << std::flush;
 
@@ -918,6 +919,7 @@ int main(int argc, char* argv[]) {
         }
 
         // ========== Optimization ==========
+
         if (opts.optimization_level > 0 || opts.show_mir_opt) {
             if (cm::debug::g_debug_mode)
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
@@ -970,9 +972,12 @@ int main(int argc, char* argv[]) {
             if (opts.verbose) {
                 std::cout << "=== JIT Compiler ===" << std::endl;
             }
+
             cm::codegen::jit::JITEngine jit;
+
             // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
             std::setvbuf(stdout, nullptr, _IONBF, 0);
+
             auto result = jit.execute(mir, "main", opts.optimization_level);
 
             if (!result.success) {

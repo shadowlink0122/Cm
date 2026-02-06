@@ -1,0 +1,29 @@
+// ネストジェネリクス最小限テスト
+// Vector<Vector<int>>の基本動作確認
+
+import std::io::println;
+import std::collections::vector::*;
+
+int main() {
+    println("=== Nested Generics Test ===");
+
+    // 1. Vector<Vector<int>>作成
+    Vector<Vector<int>> matrix();
+
+    // 2. Row pushとアクセス
+    Vector<int> row();
+    row.push(1);
+    row.push(2);
+    matrix.push(move row);
+
+    int mlen = matrix.len();
+    println("matrix.len() = {mlen}");
+
+    Vector<int> got = matrix.get(0);
+    int v0 = got.get(0);
+    int v1 = got.get(1);
+    println("Row: [{v0}, {v1}]");
+
+    println("=== PASS ===");
+    return 0;
+}

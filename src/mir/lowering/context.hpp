@@ -252,13 +252,60 @@ class LoweringContext {
     }
 
     // 型がデストラクタを持つか確認
+    // ジェネリック型（Vector__TrackedObject等）や
+    // ベース名（Vector等）の場合、元テンプレート（Vector<T>）のデストラクタ情報も確認する
     bool has_destructor(const std::string& type_name) const {
-        return types_with_destructor.count(type_name) > 0;
+        // 直接登録されている場合
+        if (types_with_destructor.count(type_name) > 0) {
+            return true;
+        }
+
+        // ジェネリック型の場合（Vector__TrackedObject等）、元テンプレート名を抽出してチェック
+        auto underscore_pos = type_name.find("__");
+        if (underscore_pos != std::string::npos) {
+            std::string base_template = type_name.substr(0, underscore_pos);
+            // Vector<T> の形式で登録されているかチェック
+            std::string generic_name = base_template + "<T>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+            // Vector<K, V> の形式もチェック
+            generic_name = base_template + "<K, V>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+            // 単なるベース名でもチェック
+            if (types_with_destructor.count(base_template) > 0) {
+                return true;
+            }
+        }
+
+        // ベース名で渡された場合（例：Vector）、ジェネリックテンプレートをチェック
+        // 型名に<も__も含まれていない場合、ジェネリック版を探す
+        if (type_name.find('<') == std::string::npos && type_name.find("__") == std::string::npos) {
+            // Vector<T> の形式で登録されているかチェック
+            std::string generic_name = type_name + "<T>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+            // Vector<K, V> の形式もチェック
+            generic_name = type_name + "<K, V>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // デストラクタを持つ型として登録
     void register_type_with_destructor(const std::string& type_name) {
         types_with_destructor.insert(type_name);
+    }
+
+    // デストラクタを持つ型のセットを取得
+    const std::unordered_set<std::string>& get_types_with_destructor() const {
+        return types_with_destructor;
     }
 
     // 変数を現在のスコープに登録

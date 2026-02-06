@@ -1,0 +1,18 @@
+=== Nested Vector Lifecycle Test ===
+1. Inner Vector<int> construction:
+  inner1.len() = 2
+2. Outer Vector<Vector<int>> construction:
+  matrix.len() = 0 (empty)
+3. Push inner to outer (with move):
+  matrix.len() = 1
+4. Access inner via get:
+  row0.len() = 2
+  row0: [1, 2]
+5. Add second row:
+  matrix.len() = 2
+6. Access second row:
+  row1.len() = 3
+  row1: [10, 20, 30]
+7. Consistency check:
+  row0 again: [1, 2]
+=== All Nested Vector Lifecycle Tests PASSED ===
