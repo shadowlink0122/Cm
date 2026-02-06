@@ -10,6 +10,7 @@ namespace cm {
 
 TypeChecker::TypeChecker() {
     register_builtin_interfaces();
+    register_builtin_types();  // Result<T, E>, Option<T> 組み込み型
 }
 
 bool TypeChecker::check(ast::Program& program) {
@@ -563,17 +564,30 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     // Tagged Union情報を保存
     enum_defs_[en.name] = &en;
 
+    // ユーザー定義のResult/Optionは組み込み型を上書きするため
+    // type_methods_をクリアする（組み込みメソッドをユーザー実装で上書き可能に）
+    if (en.name == "Result" || en.name == "Option") {
+        type_methods_.erase(en.name);
+    }
+
+    int64_t variant_index = 0;
     for (const auto& member : en.members) {
         std::string full_name = en.name + "::" + member.name;
 
         if (member.has_data()) {
+            // ジェネリックenumの場合でもenum_values_に登録
+            // Tagged Union用のタグ値として使用
+            enum_values_[full_name] = variant_index;
+
             // ジェネリックenumの場合、variantは通常の関数として登録しない
             // （infer_call内のenum constructor処理で処理する）
             if (!en.generic_params.empty()) {
                 debug::tc::log(debug::tc::Id::Resolved,
                                "  " + full_name + "(...) -> " + en.name +
-                                   " [generic variant constructor - deferred]",
+                                   " [generic variant constructor - deferred, tag=" +
+                                   std::to_string(variant_index) + "]",
                                debug::Level::Debug);
+                variant_index++;
                 continue;
             }
 

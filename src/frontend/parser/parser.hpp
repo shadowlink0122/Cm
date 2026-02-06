@@ -777,7 +777,8 @@ class Parser {
                 // デストラクタ: ~self()
                 if (check(TokenKind::Tilde)) {
                     advance();  // consume ~
-                    if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                    if (current().kind == TokenKind::KwSelf ||
+                        (current().kind == TokenKind::Ident && current().get_string() == "self")) {
                         advance();  // consume self
                         expect(TokenKind::LParen);
                         expect(TokenKind::RParen);
@@ -797,7 +798,8 @@ class Parser {
                     }
                 }
                 // コンストラクタ: self() or overload self(...)
-                else if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                else if (current().kind == TokenKind::KwSelf ||
+                         (current().kind == TokenKind::Ident && current().get_string() == "self")) {
                     advance();  // consume self
                     expect(TokenKind::LParen);
                     auto params = parse_params();

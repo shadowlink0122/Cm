@@ -534,7 +534,29 @@ HirExprPtr HirLowering::lower_unary(ast::UnaryExpr& unary, TypePtr type) {
 HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
     debug::hir::log(debug::hir::Id::CallExprLower, "", debug::Level::Debug);
 
-    // enum variantコンストラクタ呼び出しのチェック（例：OptVal::HasVal(42)）
+    // デバッグ: calleeの種類を確認
+    if (call.callee) {
+        if (auto* ident = call.callee->as<ast::IdentExpr>()) {
+            debug::hir::log(debug::hir::Id::CallTarget, "callee is IdentExpr: " + ident->name,
+                            debug::Level::Debug);
+        } else if (auto* member = call.callee->as<ast::MemberExpr>()) {
+            if (auto* obj_ident = member->object->as<ast::IdentExpr>()) {
+                debug::hir::log(debug::hir::Id::CallTarget,
+                                "callee is MemberExpr: " + obj_ident->name + "::" + member->member,
+                                debug::Level::Debug);
+            } else {
+                debug::hir::log(debug::hir::Id::CallTarget,
+                                "callee is MemberExpr with non-IdentExpr object: " + member->member,
+                                debug::Level::Debug);
+            }
+        } else {
+            debug::hir::log(debug::hir::Id::CallTarget, "callee is unknown type",
+                            debug::Level::Debug);
+        }
+    }
+
+    // enum variantコンストラクタ呼び出しのチェック
+    // パターン1: IdentExpr (例：OptVal::HasVal(42) - パーサーが::を含む名前として解析)
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
         auto enum_it = enum_values_.find(ident->name);
         if (enum_it != enum_values_.end()) {
@@ -570,6 +592,36 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
             tagged_union_type->name = "__TaggedUnion_" + enum_construct->enum_name;
 
             return std::make_unique<HirExpr>(std::move(enum_construct), tagged_union_type);
+        }
+    }
+
+    // パターン2: MemberExpr (例：Result::Err - パーサーがResultをIdentでErrをメンバとして解析)
+    if (auto* member = call.callee->as<ast::MemberExpr>()) {
+        if (auto* obj_ident = member->object->as<ast::IdentExpr>()) {
+            // EnumName::VariantName形式を構築
+            std::string full_name = obj_ident->name + "::" + member->member;
+            auto enum_it = enum_values_.find(full_name);
+            if (enum_it != enum_values_.end()) {
+                // Tagged Union: enum variantコンストラクタ呼び出し
+                debug::hir::log(debug::hir::Id::CallTarget,
+                                "enum variant constructor (MemberExpr): " + full_name + " = " +
+                                    std::to_string(enum_it->second),
+                                debug::Level::Debug);
+
+                auto enum_construct = std::make_unique<HirEnumConstruct>();
+                enum_construct->enum_name = obj_ident->name;
+                enum_construct->variant_name = member->member;
+                enum_construct->tag_value = enum_it->second;
+
+                if (!call.args.empty()) {
+                    enum_construct->payload = lower_expr(*call.args[0]);
+                }
+
+                auto tagged_union_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+                tagged_union_type->name = "__TaggedUnion_" + enum_construct->enum_name;
+
+                return std::make_unique<HirExpr>(std::move(enum_construct), tagged_union_type);
+            }
         }
     }
 

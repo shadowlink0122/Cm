@@ -67,6 +67,33 @@ HirProgram HirLowering::lower(ast::Program& program) {
         }
     }
 
+    // 組み込みResult/Option型の完全登録
+    // ユーザー定義型より先に登録されるが、ユーザーが同名のenum/structを定義した場合は上書きされる
+    // 注: enum_defs_/struct_defs_はconst*を期待するため、静的定義を使用
+
+    // ユーザー定義型がない場合のみ登録
+    if (enum_defs_.find("Result") == enum_defs_.end()) {
+        // 組み込みResult<T, E>のenum_values_を登録
+        enum_values_["Result::Ok"] = 0;
+        enum_values_["Result::Err"] = 1;
+        debug::hir::log(debug::hir::Id::NodeCreate, "registered builtin Result::Ok/Err",
+                        debug::Level::Debug);
+    } else {
+        debug::hir::log(debug::hir::Id::NodeCreate, "skipped builtin Result (user-defined exists)",
+                        debug::Level::Debug);
+    }
+
+    if (enum_defs_.find("Option") == enum_defs_.end()) {
+        // 組み込みOption<T>のenum_values_を登録
+        enum_values_["Option::Some"] = 0;
+        enum_values_["Option::None"] = 1;
+        debug::hir::log(debug::hir::Id::NodeCreate, "registered builtin Option::Some/None",
+                        debug::Level::Debug);
+    } else {
+        debug::hir::log(debug::hir::Id::NodeCreate, "skipped builtin Option (user-defined exists)",
+                        debug::Level::Debug);
+    }
+
     // Pass 2: 宣言を変換
     for (auto& decl : program.declarations) {
         if (auto* mod = decl->as<ast::ModuleDecl>()) {

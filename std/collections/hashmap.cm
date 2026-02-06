@@ -46,17 +46,17 @@ export impl<K, V> HashMap<K, V> {
         // 簡易ハッシュ（intとして扱う）
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % this.cap;
+        int idx = h % self.cap;
 
-        for (int i = 0; i < this.cap; i++) {
-            int pos = (idx + i) % this.cap;
-            if (!this.entries[pos].occupied || this.entries[pos].key == key) {
-                if (!this.entries[pos].occupied) {
-                    this.size = this.size + 1;
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (!self.entries[pos].occupied || self.entries[pos].key == key) {
+                if (!self.entries[pos].occupied) {
+                    self.size = self.size + 1;
                 }
-                this.entries[pos].key = key;
-                this.entries[pos].value = value;
-                this.entries[pos].occupied = true;
+                self.entries[pos].key = key;
+                self.entries[pos].value = value;
+                self.entries[pos].occupied = true;
                 return;
             }
         }
@@ -66,14 +66,14 @@ export impl<K, V> HashMap<K, V> {
     V get(K key) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % this.cap;
+        int idx = h % self.cap;
 
-        for (int i = 0; i < this.cap; i++) {
-            int pos = (idx + i) % this.cap;
-            if (this.entries[pos].occupied && this.entries[pos].key == key) {
-                return this.entries[pos].value;
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
+                return self.entries[pos].value;
             }
-            if (!this.entries[pos].occupied) {
+            if (!self.entries[pos].occupied) {
                 break;
             }
         }
@@ -86,14 +86,14 @@ export impl<K, V> HashMap<K, V> {
     bool contains(K key) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % this.cap;
+        int idx = h % self.cap;
 
-        for (int i = 0; i < this.cap; i++) {
-            int pos = (idx + i) % this.cap;
-            if (this.entries[pos].occupied && this.entries[pos].key == key) {
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
                 return true;
             }
-            if (!this.entries[pos].occupied) {
+            if (!self.entries[pos].occupied) {
                 return false;
             }
         }
@@ -104,16 +104,16 @@ export impl<K, V> HashMap<K, V> {
     void remove(K key) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % this.cap;
+        int idx = h % self.cap;
 
-        for (int i = 0; i < this.cap; i++) {
-            int pos = (idx + i) % this.cap;
-            if (this.entries[pos].occupied && this.entries[pos].key == key) {
-                this.entries[pos].occupied = false;
-                this.size = this.size - 1;
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
+                self.entries[pos].occupied = false;
+                self.size = self.size - 1;
                 return;
             }
-            if (!this.entries[pos].occupied) {
+            if (!self.entries[pos].occupied) {
                 return;
             }
         }
@@ -121,15 +121,15 @@ export impl<K, V> HashMap<K, V> {
 
     // サイズ
     int len() {
-        return this.size;
+        return self.size;
     }
 
     // クリア
     void clear() {
-        for (int i = 0; i < this.cap; i++) {
-            this.entries[i].occupied = false;
+        for (int i = 0; i < self.cap; i++) {
+            self.entries[i].occupied = false;
         }
-        this.size = 0;
+        self.size = 0;
     }
 
     // デストラクタ

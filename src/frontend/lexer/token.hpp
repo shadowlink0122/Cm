@@ -61,7 +61,7 @@ enum class TokenKind {
     KwStruct,
     KwSwitch,    // switch statement
     KwTemplate,  // template declaration
-    KwThis,
+    KwSelf,
     KwTrue,
     KwTypedef,   // type alias
     KwTypename,  // template typename

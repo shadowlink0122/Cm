@@ -43,7 +43,7 @@ impl Stdin {
             return IoResult.Ok(0);
         }
 
-        long n = read(this._fd, &buf[0] as void*, buf.len() as long);
+        long n = read(self._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("read failed"));
@@ -60,7 +60,7 @@ impl Stdin {
 
         // 1バイトずつ読み込んで改行を探す
         while (total < 4095) {
-            long n = read(this._fd, &temp_buf[total as int] as void*, 1);
+            long n = read(self._fd, &temp_buf[total as int] as void*, 1);
 
             if (n <= 0) {
                 break;

@@ -119,6 +119,7 @@ class TypeChecker {
     void register_auto_display_impl(const ast::StructDecl& st);
     void register_auto_css_impl(const ast::StructDecl& st);
     void register_builtin_interfaces();
+    void register_builtin_types();  // Result<T, E>, Option<T> 組み込み型
 
     // ============================================================
     // ユーティリティ (utils.cpp)

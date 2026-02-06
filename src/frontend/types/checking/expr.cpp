@@ -195,18 +195,7 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
 ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
     auto sym = scopes_.current().lookup(ident.name);
     if (!sym) {
-        if (!current_impl_target_type_.empty()) {
-            auto struct_it = struct_defs_.find(current_impl_target_type_);
-            if (struct_it != struct_defs_.end()) {
-                for (const auto& field : struct_it->second->fields) {
-                    if (field.name == ident.name) {
-                        debug::tc::log(debug::tc::Id::Resolved,
-                                       "Implicit this field: " + ident.name, debug::Level::Debug);
-                        return field.type;
-                    }
-                }
-            }
-        }
+        // 暗黙的selfは許可しない - 明示的にself.fieldを使用する必要がある
         error(current_span_, "Undefined variable '" + ident.name + "'");
         return ast::make_error();
     }

@@ -15,17 +15,17 @@ export struct Str {
 impl Str {
     // 長さを取得
     long len() {
-        return strlen(this.data);
+        return strlen(self.data);
     }
 
     // 空かどうか
     bool is_empty() {
-        return strlen(this.data) == 0 as long;
+        return strlen(self.data) == 0 as long;
     }
 
     // プリミティブstringに変換
     string as_str() {
-        return this.data;
+        return self.data;
     }
 }
 

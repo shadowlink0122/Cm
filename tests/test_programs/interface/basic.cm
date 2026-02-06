@@ -30,18 +30,15 @@ impl Point for Printable {
 
 impl Point for Getter {
     int get_x() {
-        return x;
-        // 暗黙的this
+        return self.x;
     }
 
     int get_y() {
-        return y;
-        // 暗黙的this
+        return self.y;
     }
 
     int get_sum() {
-        return x + y;
-        // 暗黙的this
+        return self.x + self.y;
     }
 }
 
@@ -67,7 +64,7 @@ int main() {
     p.y = 20;
     p.print();
 
-    // 2. 暗黙的thisアクセス
+    // 2. 明示的selfアクセス
     int vx = p.get_x();
     int vy = p.get_y();
     int vsum = p.get_sum();

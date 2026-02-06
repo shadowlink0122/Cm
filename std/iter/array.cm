@@ -32,14 +32,14 @@ impl IntArrayIterator {
 
     /// 次の要素を取得し、ポインタを進める
     int next() {
-        int value = *self.current;
+        int value = self.current;
         self.current = self.current + 1;
         return value;
     }
 
     /// 次の要素を取得（ポインタは進めない）
     int peek() {
-        return *self.current;
+        return self.current;
     }
 
     /// 残りの要素数を取得
@@ -73,9 +73,9 @@ impl IntArrayIterator {
 // impl<T> ArrayIterator<T> for Iterator<T> {
 //     bool has_next() { return self.current < self.end; }
 //     T next() {
-//         T value = *self.current;
+//         T value = self.current;
 //         self.current = self.current + 1;
 //         return value;
 //     }
-//     T peek() { return *self.current; }
+//     T peek() { return self.current; }
 // }

@@ -96,8 +96,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "switch";
         case TokenKind::KwTemplate:
             return "template";
-        case TokenKind::KwThis:
-            return "this";
+        case TokenKind::KwSelf:
+            return "self";
         case TokenKind::KwTrue:
             return "true";
         case TokenKind::KwTypedef:

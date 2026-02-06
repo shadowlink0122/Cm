@@ -11,7 +11,7 @@ struct DoubleAllocator {
 impl DoubleAllocator for Allocator {
     void* alloc(int size) {
         // サイズを multiplier 倍にして確保
-        int actual_size = size * multiplier;
+        int actual_size = size * self.multiplier;
         return malloc(actual_size);
     }
 
@@ -20,14 +20,14 @@ impl DoubleAllocator for Allocator {
     }
 
     void* reallocate(void* ptr, int new_size) {
-        int actual_size = new_size * multiplier;
+        int actual_size = new_size * self.multiplier;
         void* new_ptr = malloc(actual_size);
         free(ptr);
         return new_ptr;
     }
 
     void* alloc_zeroed(int size) {
-        int actual_size = size * multiplier;
+        int actual_size = size * self.multiplier;
         return malloc(actual_size);
     }
 }

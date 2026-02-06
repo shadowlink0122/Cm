@@ -631,9 +631,9 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_null_literal(Span{start_pos, previous().end});
     }
 
-    // this（impl内でのself参照）
-    if (consume_if(TokenKind::KwThis)) {
-        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'this' reference", debug::Level::Debug);
+    // self（impl内でのself参照）
+    if (consume_if(TokenKind::KwSelf)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Found 'self' reference", debug::Level::Debug);
         return ast::make_ident("self", Span{start_pos, previous().end});
     }
 

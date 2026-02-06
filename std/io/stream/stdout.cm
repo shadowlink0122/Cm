@@ -43,7 +43,7 @@ impl Stdout {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, &buf[0] as void*, buf.len() as long);
+        long n = write(self._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));
@@ -58,7 +58,7 @@ impl Stdout {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, s as void*, s.len() as long);
+        long n = write(self._fd, s as void*, s.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));
@@ -69,7 +69,7 @@ impl Stdout {
 
     /// フラッシュ
     IoResult<int> flush() {
-        int ret = fsync(this._fd);
+        int ret = fsync(self._fd);
         if (ret < 0) {
             return IoResult.Err(IoError.other("fsync failed"));
         }
@@ -100,7 +100,7 @@ impl Stderr {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, &buf[0] as void*, buf.len() as long);
+        long n = write(self._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));
@@ -115,7 +115,7 @@ impl Stderr {
             return IoResult.Ok(0);
         }
 
-        long n = write(this._fd, s as void*, s.len() as long);
+        long n = write(self._fd, s as void*, s.len() as long);
 
         if (n < 0) {
             return IoResult.Err(IoError.other("write failed"));
@@ -126,7 +126,7 @@ impl Stderr {
 
     /// フラッシュ
     IoResult<int> flush() {
-        int ret = fsync(this._fd);
+        int ret = fsync(self._fd);
         if (ret < 0) {
             return IoResult.Err(IoError.other("fsync failed"));
         }

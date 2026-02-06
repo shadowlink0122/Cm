@@ -14,7 +14,7 @@ impl<T, E> Result<T, E> {
     bool is_ok() {
         // matchで判定（ステートメント形式）
         bool result = false;
-        match (this) {
+        match (self) {
             Result::Ok(v) => {
                 result = true;
             }
@@ -26,12 +26,12 @@ impl<T, E> Result<T, E> {
     }
 
     bool is_err() {
-        return !this.is_ok();
+        return !self.is_ok();
     }
 
     T unwrap() {
         T value;
-        match (this) {
+        match (self) {
             Result::Ok(v) => {
                 value = v;
             }
@@ -44,7 +44,7 @@ impl<T, E> Result<T, E> {
 
     T unwrap_or(T default_val) {
         T value = default_val;
-        match (this) {
+        match (self) {
             Result::Ok(v) => {
                 value = v;
             }

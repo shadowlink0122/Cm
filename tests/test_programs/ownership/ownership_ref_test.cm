@@ -22,22 +22,22 @@ impl GenericArray<T> {
         long elem_size = __sizeof__(T) as long;
         long alloc_size = (cap as long) * elem_size;
         void* raw = malloc(alloc_size);
-        this.data = raw as T*;
-        this.size = 0;
-        this.capacity = cap;
+        self.data = raw as T*;
+        self.size = 0;
+        self.capacity = cap;
     }
 
     void push(T value) {
-        this.data[this.size] = value;
-        this.size = this.size + 1;
+        self.data[self.size] = value;
+        self.size = self.size + 1;
     }
 
     T get(int idx) {
-        return this.data[idx];
+        return self.data[idx];
     }
 
     T* get_ref(int idx) {
-        return &this.data[idx];
+        return &self.data[idx];
     }
 }
 

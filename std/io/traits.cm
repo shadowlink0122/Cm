@@ -71,7 +71,7 @@ impl<R : Reader> R {
         utiny[1024] temp;
 
         while (true) {
-            IoResult<int> result = this.read(temp);
+            IoResult<int> result = self.read(temp);
             match result {
                 Ok(n) => {
                     if (n == 0) {

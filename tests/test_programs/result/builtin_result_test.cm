@@ -1,12 +1,13 @@
-// Result型の基本テスト
+// Result型のテスト（ユーザー定義）
 import std::io::println;
-import std::result::*;
 
-// typedefを使ったResult型エイリアス
-typedef IntResult = Result<int, string>;
+// Result型を明示的に定義
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
 
-// 安全な除算関数
-IntResult safe_divide(int a, int b) {
+Result<int, string> safe_divide(int a, int b) {
     if (b == 0) {
         return Result::Err("Division by zero");
     }
@@ -14,22 +15,22 @@ IntResult safe_divide(int a, int b) {
 }
 
 int main() {
-    println("=== Result Basic Test ===");
-    
+    println("=== Result Type Test ===");
+
     // 成功ケース
-    IntResult r1 = safe_divide(10, 2);
+    Result<int, string> r1 = safe_divide(10, 2);
     match (r1) {
         Result::Ok(v) => { println("10 / 2 = {v}"); }
         Result::Err(e) => { println("Error: {e}"); }
     }
-    
+
     // 失敗ケース
-    IntResult r2 = safe_divide(10, 0);
+    Result<int, string> r2 = safe_divide(10, 0);
     match (r2) {
         Result::Ok(v) => { println("10 / 0 = {v}"); }
         Result::Err(e) => { println("Error: {e}"); }
     }
-    
+
     println("=== PASS ===");
     return 0;
 }

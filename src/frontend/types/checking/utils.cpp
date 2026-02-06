@@ -89,7 +89,20 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     // 同じ型
     if (a->kind == b->kind) {
         if (a->kind == ast::TypeKind::Struct) {
-            return a->name == b->name;
+            // 名前が一致しない場合は不一致
+            if (a->name != b->name) {
+                return false;
+            }
+            // ジェネリック型引数の比較（Result<int, string> vs Result<int, int>など）
+            if (a->type_args.size() != b->type_args.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < a->type_args.size(); ++i) {
+                if (!types_compatible(a->type_args[i], b->type_args[i])) {
+                    return false;
+                }
+            }
+            return true;
         }
         if (a->kind == ast::TypeKind::Interface) {
             return a->name == b->name;

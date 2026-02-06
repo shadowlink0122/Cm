@@ -69,12 +69,12 @@ impl IoError {
 
     /// エラーを文字列に変換
     string to_string() {
-        return this.message;
+        return self.message;
     }
 
     /// エラー種別を取得
     IoErrorKind get_kind() {
-        return this.kind;
+        return self.kind;
     }
 }
 
@@ -91,7 +91,7 @@ export enum IoResult<T> {
 impl<T> IoResult<T> {
     /// 成功かどうか
     bool is_ok() {
-        match this {
+        match self {
             Ok(_) => return true;
             Err(_) => return false;
         }
@@ -99,12 +99,12 @@ impl<T> IoResult<T> {
 
     /// 失敗かどうか
     bool is_err() {
-        return !this.is_ok();
+        return !self.is_ok();
     }
 
     /// 成功値を取得（失敗時はパニック）
     T unwrap() {
-        match this {
+        match self {
             Ok(v) => return v;
             Err(e) => panic("IoResult::unwrap called on Err: " + e.message);
         }
@@ -112,7 +112,7 @@ impl<T> IoResult<T> {
 
     /// 成功値を取得、失敗時はデフォルト値
     T unwrap_or(T default_val) {
-        match this {
+        match self {
             Ok(v) => return v;
             Err(_) => return default_val;
         }
@@ -120,7 +120,7 @@ impl<T> IoResult<T> {
 
     /// エラーを取得（成功時はパニック）
     IoError unwrap_err() {
-        match this {
+        match self {
             Ok(_) => panic("IoResult::unwrap_err called on Ok");
             Err(e) => return e;
         }

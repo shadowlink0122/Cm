@@ -1,30 +1,30 @@
 import std::io::println;
-// Result<T, E>型とmatch式の複合テスト
+// MyResult<T, E>型とmatch式の複合テスト
 
 // Result型をstructで表現
-struct Result<T, E> {
+struct MyResult<T, E> {
     bool is_ok;
     T value;
     E error;
 }
 
 // ヘルパー関数
-<T, E> Result<T, E> ok(T value, E dummy_error) {
-    Result<T, E> res;
+<T, E> MyResult<T, E> ok(T value, E dummy_error) {
+    MyResult<T, E> res;
     res.is_ok = true;
     res.value = value;
     return res;
 }
 
-<T, E> Result<T, E> err(T dummy_value, E error) {
-    Result<T, E> res;
+<T, E> MyResult<T, E> err(T dummy_value, E error) {
+    MyResult<T, E> res;
     res.is_ok = false;
     res.error = error;
     return res;
 }
 
 // match式を使ったResult処理
-<T, E> T unwrap_or_match(Result<T, E> res, T default_value) {
+<T, E> T unwrap_or_match(MyResult<T, E> res, T default_value) {
     return match (res.is_ok) {
         true => res.value,
         false => default_value,
@@ -32,7 +32,7 @@ struct Result<T, E> {
 }
 
 // Result状態を整数コードに変換
-<T, E> int result_to_code(Result<T, E> res) {
+<T, E> int result_to_code(MyResult<T, E> res) {
     return match (res.is_ok) {
         true => 0,    // 成功
         false => -1,  // エラー
@@ -40,7 +40,7 @@ struct Result<T, E> {
 }
 
 // 安全な除算
-Result<int, int> safe_divide(int a, int b) {
+MyResult<int, int> safe_divide(int a, int b) {
     if (b == 0) {
         return err(0, -1);
         // エラーコード -1
@@ -49,7 +49,7 @@ Result<int, int> safe_divide(int a, int b) {
 }
 
 // 境界チェック付き配列アクセス（シミュレート）
-Result<int, int> safe_get(int index, int max_index) {
+MyResult<int, int> safe_get(int index, int max_index) {
     if (index < 0) {
         return err(0, -1);
         // index < 0
@@ -64,30 +64,30 @@ Result<int, int> safe_get(int index, int max_index) {
 
 int main() {
     // 正常な除算
-    Result<int, int> r1 = safe_divide(10, 2);
+    MyResult<int, int> r1 = safe_divide(10, 2);
     int v1 = unwrap_or_match(r1, -999);
     int c1 = result_to_code(r1);
     println("safe_divide(10, 2) = {v1}, code = {c1}");
 
     // ゼロ除算
-    Result<int, int> r2 = safe_divide(10, 0);
+    MyResult<int, int> r2 = safe_divide(10, 0);
     int v2 = unwrap_or_match(r2, -999);
     int c2 = result_to_code(r2);
     println("safe_divide(10, 0) = {v2}, code = {c2}");
 
     // 境界チェック - 正常
-    Result<int, int> r3 = safe_get(3, 10);
+    MyResult<int, int> r3 = safe_get(3, 10);
     int v3 = unwrap_or_match(r3, -999);
     println("safe_get(3, 10) = {v3}");
 
     // 境界チェック - 範囲外
-    Result<int, int> r4 = safe_get(15, 10);
+    MyResult<int, int> r4 = safe_get(15, 10);
     int v4 = unwrap_or_match(r4, -999);
     println("safe_get(15, 10) = {v4}");
 
     // 連鎖処理のシミュレート
-    Result<int, int> step1 = safe_divide(100, 2);
-    Result<int, int> step2 = safe_divide(step1.value, 5);
+    MyResult<int, int> step1 = safe_divide(100, 2);
+    MyResult<int, int> step2 = safe_divide(step1.value, 5);
     int final_result = match (step1.is_ok) {
         true => match (step2.is_ok) {
             true => step2.value,

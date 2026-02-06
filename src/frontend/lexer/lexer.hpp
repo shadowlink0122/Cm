@@ -115,7 +115,7 @@ class Lexer {
             {"struct", TokenKind::KwStruct},
             {"switch", TokenKind::KwSwitch},
             {"template", TokenKind::KwTemplate},
-            {"this", TokenKind::KwThis},
+            {"self", TokenKind::KwSelf},
             {"true", TokenKind::KwTrue},
             {"typedef", TokenKind::KwTypedef},
             {"typename", TokenKind::KwTypename},

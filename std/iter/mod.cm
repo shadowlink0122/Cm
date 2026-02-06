@@ -61,13 +61,13 @@ impl IntArrayIterator {
     }
 
     int next() {
-        int value = *self.current;
+        int value = self.current;
         self.current = self.current + 1;
         return value;
     }
 
     int peek() {
-        return *self.current;
+        return self.current;
     }
 
     int remaining() {

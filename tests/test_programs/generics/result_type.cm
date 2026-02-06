@@ -1,51 +1,51 @@
 import std::io::println;
-// Result<T, E>型のテスト
+// MyResult<T, E>型のテスト
 
 // Result型をstructで表現
-struct Result<T, E> {
+struct MyResult<T, E> {
     bool is_ok;
     T value;
     E error;
 }
 
 // ヘルパー関数
-<T, E> Result<T, E> make_ok(T value, E dummy_error) {
-    Result<T, E> res;
+<T, E> MyResult<T, E> make_ok(T value, E dummy_error) {
+    MyResult<T, E> res;
     res.is_ok = true;
     res.value = value;
     return res;
 }
 
-<T, E> Result<T, E> make_err(T dummy_value, E error) {
-    Result<T, E> res;
+<T, E> MyResult<T, E> make_err(T dummy_value, E error) {
+    MyResult<T, E> res;
     res.is_ok = false;
     res.error = error;
     return res;
 }
 
-<T, E> bool is_ok(Result<T, E> res) {
+<T, E> bool is_ok(MyResult<T, E> res) {
     return res.is_ok;
 }
 
-<T, E> bool is_err(Result<T, E> res) {
+<T, E> bool is_err(MyResult<T, E> res) {
     return !res.is_ok;
 }
 
-<T, E> T unwrap_result(Result<T, E> res) {
+<T, E> T unwrap_result(MyResult<T, E> res) {
     if (!res.is_ok) {
         println("Error: unwrap called on Err");
     }
     return res.value;
 }
 
-<T, E> E unwrap_err(Result<T, E> res) {
+<T, E> E unwrap_err(MyResult<T, E> res) {
     if (res.is_ok) {
         println("Error: unwrap_err called on Ok");
     }
     return res.error;
 }
 
-<T, E> T unwrap_or_result(Result<T, E> res, T default_value) {
+<T, E> T unwrap_or_result(MyResult<T, E> res, T default_value) {
     if (res.is_ok) {
         return res.value;
     }
@@ -53,7 +53,7 @@ struct Result<T, E> {
 }
 
 // テスト用の除算関数
-Result<int, string> safe_divide(int a, int b) {
+MyResult<int, string> safe_divide(int a, int b) {
     if (b == 0) {
         return make_err(0, "Division by zero");
     }
@@ -62,14 +62,14 @@ Result<int, string> safe_divide(int a, int b) {
 
 int main() {
     // Ok値のテスト
-    Result<int, string> ok_result = safe_divide(10, 2);
+    MyResult<int, string> ok_result = safe_divide(10, 2);
     bool b1 = is_ok(ok_result);
     println("is_ok(10/2) = {b1}");
     int v1 = unwrap_result(ok_result);
     println("unwrap(10/2) = {v1}");
 
     // Err値のテスト
-    Result<int, string> err_result = safe_divide(10, 0);
+    MyResult<int, string> err_result = safe_divide(10, 0);
     bool b2 = is_err(err_result);
     println("is_err(10/0) = {b2}");
     string e1 = unwrap_err(err_result);

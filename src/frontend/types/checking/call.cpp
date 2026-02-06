@@ -240,6 +240,60 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                 return result_type;
                             }
                         }
+                    } else {
+                        // 組み込み型（Result, Option）: enum_defs_にはないがgeneric_enums_にある
+                        // enum_values_でバリアントを確認
+                        std::string full_variant = type_name + "::" + method_name;
+                        if (enum_values_.count(full_variant) > 0) {
+                            // current_return_type_から型引数を推論
+                            ast::TypePtr result_type = nullptr;
+                            ast::TypePtr resolved_return_type = nullptr;
+                            if (current_return_type_) {
+                                resolved_return_type = resolve_typedef(current_return_type_);
+                            }
+
+                            if (resolved_return_type && resolved_return_type->name == type_name &&
+                                !resolved_return_type->type_args.empty()) {
+                                result_type = resolved_return_type;
+
+                                // 引数の型チェック
+                                if (!call.args.empty()) {
+                                    auto arg_type = infer_type(*call.args[0]);
+                                    auto& type_params = enum_it->second;
+                                    auto& type_args = resolved_return_type->type_args;
+
+                                    // Ok(T) -> type_args[0], Err(E) -> type_args[1]
+                                    // Some(T) -> type_args[0]
+                                    size_t param_idx = 0;
+                                    if (type_name == "Result" && method_name == "Err") {
+                                        param_idx = 1;  // E is the second type param
+                                    }
+                                    if (param_idx < type_args.size()) {
+                                        auto expected_type = type_args[param_idx];
+                                        if (!types_compatible(expected_type, arg_type)) {
+                                            error(current_span_,
+                                                  "Argument type mismatch in '" + ident->name +
+                                                      "': expected " +
+                                                      ast::type_to_string(*expected_type) +
+                                                      ", got " + ast::type_to_string(*arg_type));
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 引数から型を推論
+                                if (!call.args.empty()) {
+                                    infer_type(*call.args[0]);
+                                }
+                                result_type = ast::make_named(type_name);
+                            }
+
+                            debug::tc::log(
+                                debug::tc::Id::Resolved,
+                                "Builtin enum constructor: " + ident->name + "() : " +
+                                    (result_type ? ast::type_to_string(*result_type) : type_name),
+                                debug::Level::Debug);
+                            return result_type;
+                        }
                     }
                 }
 
