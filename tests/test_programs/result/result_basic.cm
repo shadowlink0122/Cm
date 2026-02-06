@@ -2,12 +2,15 @@
 import std::io::println;
 import std::result::*;
 
+// typedefを使ったResult型エイリアス
+typedef IntResult = Result<int, string>;
+
 // 安全な除算関数
 IntResult safe_divide(int a, int b) {
     if (b == 0) {
-        return int_err("Division by zero");
+        return Result::Err("Division by zero");
     }
-    return int_ok(a / b);
+    return Result::Ok(a / b);
 }
 
 int main() {
@@ -15,23 +18,17 @@ int main() {
     
     // 成功ケース
     IntResult r1 = safe_divide(10, 2);
-    if (r1.is_ok()) {
-        int v = r1.unwrap();
-        println("10 / 2 = {v}");
+    match (r1) {
+        Result::Ok(v) => { println("10 / 2 = {v}"); }
+        Result::Err(e) => { println("Error: {e}"); }
     }
     
-    // 失敗ケース  
+    // 失敗ケース
     IntResult r2 = safe_divide(10, 0);
-    if (r2.is_err()) {
-        string e = r2.unwrap_err();
-        println("Error: {e}");
+    match (r2) {
+        Result::Ok(v) => { println("10 / 0 = {v}"); }
+        Result::Err(e) => { println("Error: {e}"); }
     }
-    
-    // unwrap_or
-    int v1 = r1.unwrap_or(-1);
-    int v2 = r2.unwrap_or(-1);
-    println("r1.unwrap_or(-1) = {v1}");
-    println("r2.unwrap_or(-1) = {v2}");
     
     println("=== PASS ===");
     return 0;

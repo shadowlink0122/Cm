@@ -1,180 +1,55 @@
-// std::result - Result型モジュール
-// Result<T, E>は回復可能なエラーを表す型
-// 注意: v0.13.0ではジェネリックenum constructorが未完成のため、
-// 具体型版（IntResult, StringResult等）を提供
+// Result<T, E> enum定義
+// Result型の基本テスト
 module std.result;
 
-// panicはランタイム関数として宣言
 extern "C" void cm_panic(string message);
 
-// ============================================================
-// IntResult - int型の成功/失敗を表すstruct (E = string)
-// ============================================================
-export struct IntResult {
-    bool _is_ok;
-    int _value;
-    string _error;
+// Result<T, E> - 成功/失敗を表すenum
+export enum Result<T, E> {
+    Ok(T),
+    Err(E)
 }
 
-export impl IntResult {
+// Result<T, E> のメソッド
+export impl<T, E> Result<T, E> {
     bool is_ok() {
-        return this._is_ok;
+        match (*this) {
+            Result::Ok(_) => { return true; }
+            Result::Err(_) => { return false; }
+        }
     }
 
     bool is_err() {
-        return !this._is_ok;
+        return !this.is_ok();
     }
 
-    int unwrap() {
-        if (!this._is_ok) {
-            cm_panic("IntResult::unwrap called on Err");
+    T unwrap() {
+        match (*this) {
+            Result::Ok(v) => { return v; }
+            Result::Err(_) => {
+                cm_panic("Result::unwrap called on Err");
+                // ダミー値（到達しない）
+                T dummy;
+                return dummy;
+            }
         }
-        return this._value;
     }
 
-    int unwrap_or(int default_val) {
-        if (this._is_ok) {
-            return this._value;
+    T unwrap_or(T default_val) {
+        match (*this) {
+            Result::Ok(v) => { return v; }
+            Result::Err(_) => { return default_val; }
         }
-        return default_val;
     }
 
-    string unwrap_err() {
-        if (this._is_ok) {
-            cm_panic("IntResult::unwrap_err called on Ok");
+    E unwrap_err() {
+        match (*this) {
+            Result::Ok(_) => {
+                cm_panic("Result::unwrap_err called on Ok");
+                E dummy;
+                return dummy;
+            }
+            Result::Err(e) => { return e; }
         }
-        return this._error;
     }
-
-    int expect(string msg) {
-        if (!this._is_ok) {
-            cm_panic(msg);
-        }
-        return this._value;
-    }
-}
-
-// ヘルパー関数
-export IntResult int_ok(int value) {
-    IntResult r;
-    r._is_ok = true;
-    r._value = value;
-    return r;
-}
-
-export IntResult int_err(string error) {
-    IntResult r;
-    r._is_ok = false;
-    r._error = error;
-    return r;
-}
-
-// ============================================================
-// StringResult - string型の成功/失敗を表すstruct (E = string)
-// ============================================================
-export struct StringResult {
-    bool _is_ok;
-    string _value;
-    string _error;
-}
-
-export impl StringResult {
-    bool is_ok() {
-        return this._is_ok;
-    }
-
-    bool is_err() {
-        return !this._is_ok;
-    }
-
-    string unwrap() {
-        if (!this._is_ok) {
-            cm_panic("StringResult::unwrap called on Err");
-        }
-        return this._value;
-    }
-
-    string unwrap_or(string default_val) {
-        if (this._is_ok) {
-            return this._value;
-        }
-        return default_val;
-    }
-
-    string unwrap_err() {
-        if (this._is_ok) {
-            cm_panic("StringResult::unwrap_err called on Ok");
-        }
-        return this._error;
-    }
-
-    string expect(string msg) {
-        if (!this._is_ok) {
-            cm_panic(msg);
-        }
-        return this._value;
-    }
-}
-
-// ヘルパー関数
-export StringResult str_ok(string value) {
-    StringResult r;
-    r._is_ok = true;
-    r._value = value;
-    return r;
-}
-
-export StringResult str_err(string error) {
-    StringResult r;
-    r._is_ok = false;
-    r._error = error;
-    return r;
-}
-
-// ============================================================
-// BoolResult - bool型の成功/失敗を表すstruct (E = string)
-// ============================================================
-export struct BoolResult {
-    bool _is_ok;
-    bool _value;
-    string _error;
-}
-
-export impl BoolResult {
-    bool is_ok() {
-        return this._is_ok;
-    }
-
-    bool is_err() {
-        return !this._is_ok;
-    }
-
-    bool unwrap() {
-        if (!this._is_ok) {
-            cm_panic("BoolResult::unwrap called on Err");
-        }
-        return this._value;
-    }
-
-    bool unwrap_or(bool default_val) {
-        if (this._is_ok) {
-            return this._value;
-        }
-        return default_val;
-    }
-}
-
-// ヘルパー関数
-export BoolResult bool_ok(bool value) {
-    BoolResult r;
-    r._is_ok = true;
-    r._value = value;
-    return r;
-}
-
-export BoolResult bool_err(string error) {
-    BoolResult r;
-    r._is_ok = false;
-    r._error = error;
-    return r;
 }

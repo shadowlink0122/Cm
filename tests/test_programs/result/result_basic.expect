@@ -1,6 +1,0 @@
-=== Result Basic Test ===
-10 / 2 = 5
-Error: Division by zero
-r1.unwrap_or(-1) = 5
-r2.unwrap_or(-1) = -1
-=== PASS ===

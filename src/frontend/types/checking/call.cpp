@@ -172,6 +172,99 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                         return return_type;
                     }
                 }
+
+                // ============================================================
+                // enum constructor呼び出しのチェック: Result::Ok(value)など
+                // ============================================================
+
+                auto enum_it = generic_enums_.find(type_name);
+                if (enum_it != generic_enums_.end()) {
+                    // ジェネリックenumのコンストラクタ呼び出し
+                    auto enum_def_it = enum_defs_.find(type_name);
+                    if (enum_def_it != enum_defs_.end() && enum_def_it->second) {
+                        const ast::EnumDecl* enum_decl = enum_def_it->second;
+
+                        // メンバ（バリアント）が存在するか確認
+                        for (const auto& member : enum_decl->members) {
+                            if (member.name == method_name) {
+                                // current_return_type_から型引数を推論
+                                ast::TypePtr result_type = nullptr;
+
+                                // typedefを解決してから比較
+                                ast::TypePtr resolved_return_type = nullptr;
+                                if (current_return_type_) {
+                                    resolved_return_type = resolve_typedef(current_return_type_);
+                                }
+
+                                if (resolved_return_type &&
+                                    resolved_return_type->name == type_name &&
+                                    !resolved_return_type->type_args.empty()) {
+                                    // 戻り値型から型引数を取得
+                                    result_type = resolved_return_type;
+
+                                    // 引数の型チェック（バリアントにデータがある場合）
+                                    if (member.has_data() && !call.args.empty()) {
+                                        auto arg_type = infer_type(*call.args[0]);
+                                        // バリアントのデータ型をジェネリックパラメータから解決
+                                        auto& type_params = enum_it->second;
+                                        auto& type_args = resolved_return_type->type_args;
+
+                                        // member.fieldsからデータ型を取得（1フィールドのみサポート）
+                                        if (!member.fields.empty() && member.fields[0].second) {
+                                            auto expected_type = substitute_generic_type(
+                                                member.fields[0].second, type_params, type_args);
+                                            if (!types_compatible(expected_type, arg_type)) {
+                                                error(
+                                                    current_span_,
+                                                    "Argument type mismatch in enum constructor '" +
+                                                        ident->name + "': expected " +
+                                                        ast::type_to_string(*expected_type) +
+                                                        ", got " + ast::type_to_string(*arg_type));
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // 引数から型を推論（Result::Ok(5)のように）
+                                    if (!call.args.empty()) {
+                                        infer_type(*call.args[0]);
+                                    }
+                                    // enum型を返す（型引数なし）
+                                    result_type = ast::make_named(type_name);
+                                }
+
+                                debug::tc::log(debug::tc::Id::Resolved,
+                                               "Enum constructor: " + ident->name + "() : " +
+                                                   (result_type ? ast::type_to_string(*result_type)
+                                                                : type_name),
+                                               debug::Level::Debug);
+                                return result_type;
+                            }
+                        }
+                    }
+                }
+
+                // 非ジェネリックenumもチェック
+                if (enum_names_.count(type_name)) {
+                    auto enum_def_it = enum_defs_.find(type_name);
+                    if (enum_def_it != enum_defs_.end() && enum_def_it->second) {
+                        const ast::EnumDecl* enum_decl = enum_def_it->second;
+                        for (const auto& member : enum_decl->members) {
+                            if (member.name == method_name) {
+                                // 引数チェック
+                                if (member.has_data() && !call.args.empty()) {
+                                    infer_type(*call.args[0]);
+                                }
+
+                                auto result_type = ast::make_named(type_name);
+                                debug::tc::log(debug::tc::Id::Resolved,
+                                               "Enum constructor: " + ident->name +
+                                                   "() : " + ast::type_to_string(*result_type),
+                                               debug::Level::Debug);
+                                return result_type;
+                            }
+                        }
+                    }
+                }
             }
 
             error(current_span_, "'" + ident->name + "' is not a function");

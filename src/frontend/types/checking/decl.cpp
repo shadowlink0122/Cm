@@ -567,6 +567,16 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
         std::string full_name = en.name + "::" + member.name;
 
         if (member.has_data()) {
+            // ジェネリックenumの場合、variantは通常の関数として登録しない
+            // （infer_call内のenum constructor処理で処理する）
+            if (!en.generic_params.empty()) {
+                debug::tc::log(debug::tc::Id::Resolved,
+                               "  " + full_name + "(...) -> " + en.name +
+                                   " [generic variant constructor - deferred]",
+                               debug::Level::Debug);
+                continue;
+            }
+
             // Associated dataを持つVariant: コンストラクタ関数として登録
             std::vector<ast::TypePtr> param_types;
             for (const auto& [field_name, field_type] : member.fields) {
