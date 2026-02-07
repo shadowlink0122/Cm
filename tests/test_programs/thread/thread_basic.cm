@@ -5,6 +5,7 @@ import std::thread::sleep_ms;
 
 // スレッドで実行する関数
 void* worker(void* arg) {
+    sleep_ms(50);
     println("Worker thread started");
     sleep_ms(10);
     println("Worker thread finished");
@@ -17,6 +18,7 @@ int main() {
     // スレッドを生成（関数ポインタをvoid*にキャスト）
     ulong t = spawn(worker as void*);
 
+    // spawnの直後に表示（ワーカーは50ms待つので必ず先に表示される）
     println("Main thread waiting for worker");
 
     // スレッドの終了を待機

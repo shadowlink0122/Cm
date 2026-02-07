@@ -42,7 +42,6 @@ find docs -type f -name "*.md" -exec sed -i '' 's|/Users/<username>/Documents/gi
 - ✅ `src/codegen/llvm/mir_to_llvm.cpp`
 - ✅ `docs/design/architecture.md`
 - ✅ `tests/test_programs/types/union_array.cm`
-- ❌ `/Users/shadowlink/Documents/git/Cm/src/...`
 - ❌ `/home/user/project/docs/...`
 
 ## コミット前チェック

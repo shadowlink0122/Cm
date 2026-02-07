@@ -30,23 +30,17 @@ int main() {
     int i = 0;
     int w = 0;
 
+    // 一時変数（全てLLVMにレジスタ割り当てを委譲）
+    int wi = 0;     // weights[i-1]
+    int vi = 0;     // values[i-1]
+    int dp_prev = 0; // dp[i-1][w]
+    int cand = 0;   // 候補値
+    long idx = 0;   // 64bitインデックス（メモリアクセス用）
+    int tmp2 = 0;   // スクラッチ2
+
     // 2次元DP更新
-    // 最小限の+r制約（i, wのみ）
+    // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
     __asm__(`
-    # callee-savedレジスタを保存
-    pushq %r12
-    pushq %r13
-    pushq %r14
-    pushq %r15
-    pushq %rbx
-
-    # ポインタをr8-r10に保存（r制約）
-    movq ${r:dp_ptr}, %r8
-    movq ${r:w_ptr}, %r12
-    movq ${r:v_ptr}, %r13
-
-    # 定数: n_items=3, capacity=7, row_size=8
-
     # 外側ループ: i = 1
     movl $$1, ${+r:i}
 
@@ -63,55 +57,55 @@ int main() {
     cmpl $$7, ${+r:w}
     jg 4f
 
-    # weights[i-1] を %r14d に取得
-    movl ${+r:i}, %eax
-    decl %eax
-    movslq %eax, %rax
-    movl (%r12, %rax, 4), %r14d
+    # weights[i-1] を取得
+    movl ${+r:i}, ${+r:tmp2}
+    decl ${+r:tmp2}
+    movslq ${+r:tmp2}, ${+r:idx}
+    movl (${r:w_ptr}, ${+r:idx}, 4), ${+r:wi}
 
     # dp[i-1][w]のオフセット計算: (i-1) * 8 + w
-    movl ${+r:i}, %eax
-    decl %eax
-    shll $$3, %eax          # (i-1) * 8
-    addl ${+r:w}, %eax
-    movslq %eax, %rax
-    movl (%r8, %rax, 4), %r15d   # dp[i-1][w]
+    movl ${+r:i}, ${+r:tmp2}
+    decl ${+r:tmp2}
+    shll $$3, ${+r:tmp2}
+    addl ${+r:w}, ${+r:tmp2}
+    movslq ${+r:tmp2}, ${+r:idx}
+    movl (${r:dp_ptr}, ${+r:idx}, 4), ${+r:dp_prev}
 
     # w < weights[i-1] なら dp[i][w] = dp[i-1][w]
-    cmpl %r14d, ${+r:w}
+    cmpl ${+r:wi}, ${+r:w}
     jl 3f
 
-    # values[i-1] を %ebx に取得
-    movl ${+r:i}, %eax
-    decl %eax
-    movslq %eax, %rax
-    movl (%r13, %rax, 4), %ebx
+    # values[i-1] を取得
+    movl ${+r:i}, ${+r:tmp2}
+    decl ${+r:tmp2}
+    movslq ${+r:tmp2}, ${+r:idx}
+    movl (${r:v_ptr}, ${+r:idx}, 4), ${+r:vi}
 
     # dp[i-1][w - weight]のオフセット計算
-    movl ${+r:i}, %eax
-    decl %eax
-    shll $$3, %eax
-    movl ${+r:w}, %ecx
-    subl %r14d, %ecx
-    addl %ecx, %eax
-    movslq %eax, %rax
-    movl (%r8, %rax, 4), %ecx   # dp[i-1][w-weight]
+    movl ${+r:i}, ${+r:tmp2}
+    decl ${+r:tmp2}
+    shll $$3, ${+r:tmp2}
+    movl ${+r:w}, ${+r:cand}
+    subl ${+r:wi}, ${+r:cand}
+    addl ${+r:cand}, ${+r:tmp2}
+    movslq ${+r:tmp2}, ${+r:idx}
+    movl (${r:dp_ptr}, ${+r:idx}, 4), ${+r:cand}
 
     # cand = dp[i-1][w-weight] + value
-    addl %ebx, %ecx
+    addl ${+r:vi}, ${+r:cand}
 
     # new_val = max(dp[i-1][w], cand)
-    cmpl %r15d, %ecx
-    cmovlel %r15d, %ecx
-    movl %ecx, %r15d
+    cmpl ${+r:dp_prev}, ${+r:cand}
+    cmovlel ${+r:dp_prev}, ${+r:cand}
+    movl ${+r:cand}, ${+r:dp_prev}
 
     3:  # store_dp
     # dp[i][w]のオフセット計算: i * 8 + w
-    movl ${+r:i}, %eax
-    shll $$3, %eax
-    addl ${+r:w}, %eax
-    movslq %eax, %rax
-    movl %r15d, (%r8, %rax, 4)   # dp[i][w] = new_val
+    movl ${+r:i}, ${+r:tmp2}
+    shll $$3, ${+r:tmp2}
+    addl ${+r:w}, ${+r:tmp2}
+    movslq ${+r:tmp2}, ${+r:idx}
+    movl ${+r:dp_prev}, (${r:dp_ptr}, ${+r:idx}, 4)
 
     # w++
     incl ${+r:w}
@@ -123,11 +117,6 @@ int main() {
     jmp 1b
 
     5:  # done
-    popq %rbx
-    popq %r15
-    popq %r14
-    popq %r13
-    popq %r12
     `);
 
     // =========================================
@@ -173,22 +162,16 @@ int main() {
     int i = 0;
     int w = 0;
 
-    // ARM64版 ナップサックDP
-    // レジスタ割り当て:
-    //   x8  = dp_ptr
-    //   x9  = w_ptr
-    //   x10 = v_ptr
-    //   w11 = weights[i-1]
-    //   w12 = dp[i-1][w]
-    //   w13 = values[i-1]
-    //   w14 = dp[i-1][w-weight] / cand
-    //   w15 = temp
-    __asm__(`
-    // ポインタをレジスタに保存
-    mov x8, ${r:dp_ptr}
-    mov x9, ${r:w_ptr}
-    mov x10, ${r:v_ptr}
+    // 一時変数（全てLLVMにレジスタ割り当てを委譲）
+    int wi = 0;     // weights[i-1]
+    int vi = 0;     // values[i-1]
+    int dp_prev = 0; // dp[i-1][w]
+    int cand = 0;   // 候補値
+    int tmp = 0;    // スクラッチ
 
+    // ARM64版 ナップサックDP
+    // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
+    __asm__(`
     // 外側ループ: i = 1
     mov ${+r:i}, #1
 
@@ -203,48 +186,48 @@ int main() {
     cmp ${+r:w}, #7
     b.gt 4f
 
-    // weights[i-1] を w11 に取得
-    sub w15, ${+r:i}, #1
-    sxtw x15, w15
-    ldr w11, [x9, x15, lsl #2]
+    // weights[i-1] を取得
+    sub ${+r:tmp}, ${+r:i}, #1
+    sxtw ${+r:tmp}, ${+r:tmp}
+    ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}, lsl #2]
 
     // dp[i-1][w]のオフセット計算: (i-1) * 8 + w
-    sub w15, ${+r:i}, #1
-    lsl w15, w15, #3
-    add w15, w15, ${+r:w}
-    sxtw x15, w15
-    ldr w12, [x8, x15, lsl #2]
+    sub ${+r:tmp}, ${+r:i}, #1
+    lsl ${+r:tmp}, ${+r:tmp}, #3
+    add ${+r:tmp}, ${+r:tmp}, ${+r:w}
+    sxtw ${+r:tmp}, ${+r:tmp}
+    ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, lsl #2]
 
     // w < weights[i-1] なら dp[i][w] = dp[i-1][w]
-    cmp ${+r:w}, w11
+    cmp ${+r:w}, ${+r:wi}
     b.lt 3f
 
-    // values[i-1] を w13 に取得
-    sub w15, ${+r:i}, #1
-    sxtw x15, w15
-    ldr w13, [x10, x15, lsl #2]
+    // values[i-1] を取得
+    sub ${+r:tmp}, ${+r:i}, #1
+    sxtw ${+r:tmp}, ${+r:tmp}
+    ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}, lsl #2]
 
     // dp[i-1][w - weight]のオフセット計算
-    sub w15, ${+r:i}, #1
-    lsl w15, w15, #3
-    sub w14, ${+r:w}, w11
-    add w15, w15, w14
-    sxtw x15, w15
-    ldr w14, [x8, x15, lsl #2]
+    sub ${+r:tmp}, ${+r:i}, #1
+    lsl ${+r:tmp}, ${+r:tmp}, #3
+    sub ${+r:cand}, ${+r:w}, ${+r:wi}
+    add ${+r:tmp}, ${+r:tmp}, ${+r:cand}
+    sxtw ${+r:tmp}, ${+r:tmp}
+    ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}, lsl #2]
 
     // cand = dp[i-1][w-weight] + value
-    add w14, w14, w13
+    add ${+r:cand}, ${+r:cand}, ${+r:vi}
 
     // new_val = max(dp[i-1][w], cand)
-    cmp w14, w12
-    csel w12, w14, w12, gt
+    cmp ${+r:cand}, ${+r:dp_prev}
+    csel ${+r:dp_prev}, ${+r:cand}, ${+r:dp_prev}, gt
 
     3:  // store_dp
     // dp[i][w]のオフセット計算: i * 8 + w
-    lsl w15, ${+r:i}, #3
-    add w15, w15, ${+r:w}
-    sxtw x15, w15
-    str w12, [x8, x15, lsl #2]
+    lsl ${+r:tmp}, ${+r:i}, #3
+    add ${+r:tmp}, ${+r:tmp}, ${+r:w}
+    sxtw ${+r:tmp}, ${+r:tmp}
+    str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, lsl #2]
 
     // w++
     add ${+r:w}, ${+r:w}, #1
