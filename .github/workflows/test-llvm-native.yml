@@ -157,7 +157,9 @@ jobs:
           done
           # FAIL テストの詳細デバッグ: 個別にコンパイル&実行してAnnotation出力
           if [ "${TEST_EXIT_CODE}" -ne 0 ]; then
-            grep '\[FAIL\]' test_output_o0.log | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
+            # ANSIカラーコード除去してからFAIL行を抽出
+            sed 's/\x1b\[[0-9;]*m//g' test_output_o0.log | grep '\[FAIL\]' | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
+              echo "::notice::DEBUG processing: ${test_name}"
               test_file="tests/test_programs/${test_name}.cm"
               expect_file="tests/test_programs/${test_name}.expect"
               if [ -f "$test_file" ]; then
@@ -175,6 +177,8 @@ jobs:
                 else
                   echo "::error::DEBUG ${test_name} | Compile failed: $(echo "$compile_output" | head -5 | tr '\n' '|')"
                 fi
+              else
+                echo "::error::DEBUG ${test_name} | File not found: ${test_file}"
               fi
             done
           fi
@@ -271,7 +275,9 @@ jobs:
           done
           # FAIL テストの詳細デバッグ: 個別にコンパイル&実行してAnnotation出力
           if [ "${TEST_EXIT_CODE}" -ne 0 ]; then
-            grep '\[FAIL\]' test_output_o3.log | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
+            # ANSIカラーコード除去してからFAIL行を抽出
+            sed 's/\x1b\[[0-9;]*m//g' test_output_o3.log | grep '\[FAIL\]' | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
+              echo "::notice::DEBUG processing: ${test_name}"
               test_file="tests/test_programs/${test_name}.cm"
               expect_file="tests/test_programs/${test_name}.expect"
               if [ -f "$test_file" ]; then
@@ -289,6 +295,8 @@ jobs:
                 else
                   echo "::error::DEBUG ${test_name} | Compile failed: $(echo "$compile_output" | head -5 | tr '\n' '|')"
                 fi
+              else
+                echo "::error::DEBUG ${test_name} | File not found: ${test_file}"
               fi
             done
           fi
