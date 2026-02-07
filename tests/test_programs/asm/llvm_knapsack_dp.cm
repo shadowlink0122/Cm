@@ -167,7 +167,7 @@ int main() {
     int vi = 0;     // values[i-1]
     int dp_prev = 0; // dp[i-1][w]
     int cand = 0;   // 候補値
-    int tmp = 0;    // スクラッチ
+    long tmp = 0;   // スクラッチ（ポインタオフセット用のため64bit）
 
     // ARM64版 ナップサックDP
     // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）

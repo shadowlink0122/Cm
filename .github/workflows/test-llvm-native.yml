@@ -155,6 +155,39 @@ jobs:
           grep -E "^(Total|Passed|Failed|Skipped|Status):" test_output_o0.log | while read -r line; do
             echo "::notice::${line}"
           done
+          # FAIL テストの詳細デバッグ: 個別にコンパイル&実行して詳細出力
+          if [ "${TEST_EXIT_CODE}" -ne 0 ]; then
+            echo ""
+            echo "=========================================="
+            echo "FAILED TESTS: 詳細デバッグ"
+            echo "=========================================="
+            grep '\[FAIL\]' test_output_o0.log | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
+              echo ""
+              echo "--- Debug: ${test_name} ---"
+              test_file="tests/test_programs/${test_name}.cm"
+              expect_file="tests/test_programs/${test_name}.expect"
+              if [ -f "$test_file" ]; then
+                echo "[Compile] cm compile -O0 ${test_file}"
+                ./cm compile -O0 "$test_file" -o "/tmp/test_debug_$$" 2>&1 || true
+                if [ -f "/tmp/test_debug_$$" ]; then
+                  echo "[Run] /tmp/test_debug_$$"
+                  actual=$("/tmp/test_debug_$$" 2>&1) || true
+                  echo "Got:"
+                  echo "$actual"
+                  if [ -f "$expect_file" ]; then
+                    echo "Expected:"
+                    cat "$expect_file"
+                    echo "Diff:"
+                    diff <(echo "$actual") "$expect_file" || true
+                  fi
+                  rm -f "/tmp/test_debug_$$"
+                fi
+              else
+                echo "File not found: ${test_file}"
+              fi
+            done
+            echo ""
+          fi
           exit ${TEST_EXIT_CODE}
 
       - name: Upload test logs
@@ -246,6 +279,39 @@ jobs:
           grep -E "^(Total|Passed|Failed|Skipped|Status):" test_output_o3.log | while read -r line; do
             echo "::notice::${line}"
           done
+          # FAIL テストの詳細デバッグ: 個別にコンパイル&実行して詳細出力
+          if [ "${TEST_EXIT_CODE}" -ne 0 ]; then
+            echo ""
+            echo "=========================================="
+            echo "FAILED TESTS: 詳細デバッグ (O3)"
+            echo "=========================================="
+            grep '\[FAIL\]' test_output_o3.log | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
+              echo ""
+              echo "--- Debug: ${test_name} ---"
+              test_file="tests/test_programs/${test_name}.cm"
+              expect_file="tests/test_programs/${test_name}.expect"
+              if [ -f "$test_file" ]; then
+                echo "[Compile] cm compile -O3 ${test_file}"
+                ./cm compile -O3 "$test_file" -o "/tmp/test_debug_$$" 2>&1 || true
+                if [ -f "/tmp/test_debug_$$" ]; then
+                  echo "[Run] /tmp/test_debug_$$"
+                  actual=$("/tmp/test_debug_$$" 2>&1) || true
+                  echo "Got:"
+                  echo "$actual"
+                  if [ -f "$expect_file" ]; then
+                    echo "Expected:"
+                    cat "$expect_file"
+                    echo "Diff:"
+                    diff <(echo "$actual") "$expect_file" || true
+                  fi
+                  rm -f "/tmp/test_debug_$$"
+                fi
+              else
+                echo "File not found: ${test_file}"
+              fi
+            done
+            echo ""
+          fi
           exit ${TEST_EXIT_CODE}
 
       - name: Upload test logs
