@@ -558,9 +558,8 @@ EOJS
             ((FAILED++))
         else
             echo -e "${RED}[FAIL]${NC} $category/$test_name - Wrong exit code (expected 1, got $exit_code)"
-            if [ "$VERBOSE" = true ]; then
-                cat "$output_file"
-            fi
+            echo "  Output:"
+            head -n 10 "$output_file" 2>/dev/null | sed 's/^/    /'
             ((FAILED++))
         fi
     # エラーファイルに期待される出力がある場合（コンパイルエラーテスト等）
@@ -573,12 +572,10 @@ EOJS
                 ((PASSED++))
             else
                 echo -e "${RED}[FAIL]${NC} $category/$test_name - Error output mismatch"
-                if [ "$VERBOSE" = true ]; then
-                    echo "Expected:"
-                    cat "$expect_file"
-                    echo "Got:"
-                    cat "$output_file"
-                fi
+                echo "  Expected:"
+                head -n 5 "$expect_file" 2>/dev/null | sed 's/^/    /'
+                echo "  Got:"
+                head -n 5 "$output_file" 2>/dev/null | sed 's/^/    /'
                 ((FAILED++))
             fi
         else
@@ -589,9 +586,8 @@ EOJS
         # 正常終了が期待される場合
         if [ $exit_code -ne 0 ]; then
             echo -e "${RED}[FAIL]${NC} $category/$test_name - Runtime error (exit code: $exit_code)"
-            if [ "$VERBOSE" = true ]; then
-                cat "$output_file"
-            fi
+            echo "  Output (first 10 lines):"
+            head -n 10 "$output_file" 2>/dev/null | sed 's/^/    /'
             ((FAILED++))
         else
             # 出力を比較
@@ -600,12 +596,12 @@ EOJS
                 ((PASSED++))
             else
                 echo -e "${RED}[FAIL]${NC} $category/$test_name - Output mismatch"
-                if [ "$VERBOSE" = true ]; then
-                    echo "Expected:"
-                    cat "$expect_file"
-                    echo "Got:"
-                    cat "$output_file"
-                fi
+                echo "  Expected:"
+                head -n 5 "$expect_file" 2>/dev/null | sed 's/^/    /'
+                echo "  Got:"
+                head -n 5 "$output_file" 2>/dev/null | sed 's/^/    /'
+                echo "  Diff:"
+                diff -u "$expect_file" "$output_file" 2>/dev/null | head -n 15 | sed 's/^/    /'
                 ((FAILED++))
             fi
         fi
