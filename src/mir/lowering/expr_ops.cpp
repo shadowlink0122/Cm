@@ -534,9 +534,32 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                      rhs_type->kind == hir::TypeKind::ULong) {
                 result_type = hir::make_long();
             }
-            // それ以外は左辺の型を使用
+            // 整数型のinteger promotion: 大きい方の型に昇格
             else {
-                result_type = lhs_type;
+                // 型のサイズ優先度を求めるヘルパー
+                // int/uint(32bit) > short/ushort(16bit) > tiny/utiny(8bit)
+                auto type_rank = [](hir::TypeKind kind) -> int {
+                    switch (kind) {
+                        case hir::TypeKind::Int:
+                        case hir::TypeKind::UInt:
+                            return 3;
+                        case hir::TypeKind::Short:
+                        case hir::TypeKind::UShort:
+                            return 2;
+                        case hir::TypeKind::Tiny:
+                        case hir::TypeKind::UTiny:
+                            return 1;
+                        default:
+                            return 3;  // デフォルトはint相当
+                    }
+                };
+                int lhs_rank = type_rank(lhs_type->kind);
+                int rhs_rank = type_rank(rhs_type->kind);
+                if (lhs_rank >= rhs_rank) {
+                    result_type = lhs_type;
+                } else {
+                    result_type = rhs_type;
+                }
             }
         } else if (lhs_type) {
             result_type = lhs_type;

@@ -5,6 +5,23 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 符号なし型かどうかを判定するヘルパー
+static bool isUnsignedType(const hir::TypePtr& type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case ast::TypeKind::UTiny:
+        case ast::TypeKind::UShort:
+        case ast::TypeKind::UInt:
+        case ast::TypeKind::ULong:
+        case ast::TypeKind::UFloat:
+        case ast::TypeKind::UDouble:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // 浮動小数点型の型昇格（float/doubleの統一）
 static void coerceFloatTypes(llvm::IRBuilder<>* builder, llvm::Value*& lhs, llvm::Value*& rhs) {
     auto lhsType = lhs->getType();
@@ -251,10 +268,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
 
@@ -302,10 +322,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
                 auto lhsBits = lhsType->getIntegerBitWidth();
                 auto rhsBits = rhsType->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhsType, "sext");
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhsType, "zext")
+                                      : builder->CreateSExt(lhs, rhsType, "sext");
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhsType, "sext");
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhsType, "zext")
+                                      : builder->CreateSExt(rhs, lhsType, "sext");
                 }
             }
             return builder->CreateSub(lhs, rhs, "sub");
@@ -319,10 +342,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
             return builder->CreateMul(lhs, rhs, "mul");
@@ -336,10 +362,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
             return builder->CreateSDiv(lhs, rhs, "div");
@@ -353,10 +382,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType(), "sext");
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType(), "sext");
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
             return builder->CreateSRem(lhs, rhs, "mod");
