@@ -100,6 +100,21 @@ jobs:
         run: |
           brew install llvm@${{ matrix.llvm_version }}
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+
+      - name: Debug environment info
+        run: |
+          echo "=== アーキテクチャ情報 ==="
+          uname -m
+          uname -a
+          echo "=== cm バイナリ ==="
+          file ./cm || echo "cm not found at ./cm"
+          echo "=== ランタイムライブラリ ==="
+          ls -la build/lib/ 2>/dev/null || echo "build/lib/ not found"
+          file build/lib/cm_runtime.o 2>/dev/null || echo "cm_runtime.o not found"
+          echo "=== clang 情報 ==="
+          /usr/bin/clang --version 2>/dev/null || echo "/usr/bin/clang not available"
+          echo "=== LLVM情報 ==="
+          llvm-config --version 2>/dev/null || echo "llvm-config not available"
       
       - name: Run LLVM Native Tests (O0)
         id: test_o0
@@ -108,10 +123,34 @@ jobs:
           make tlp0 2>&1 | tee test_output_o0.log
           TEST_EXIT_CODE=${PIPESTATUS[0]}
           echo "test_exit_code=${TEST_EXIT_CODE}" >> $GITHUB_OUTPUT
-          # FAIL行をGitHub Annotationsとして出力
-          grep -E "\[FAIL\]" test_output_o0.log | while read -r line; do
-            echo "::error::${line}"
-          done
+          # FAIL行と後続の詳細（Expected/Got/Diff/Output）をAnnotationに出力
+          # awk スクリプトで [FAIL] 後の詳細行を一緒にキャプチャ
+          awk '
+          /\[FAIL\]/ {
+            fail_line = $0
+            # ANSIカラーコードを除去
+            gsub(/\033\[[0-9;]*m/, "", fail_line)
+            detail = ""
+            collecting = 1
+            next
+          }
+          collecting && /^  (Expected|Got|Diff|Output)/ {
+            line = $0
+            gsub(/\033\[[0-9;]*m/, "", line)
+            detail = detail " | " line
+            next
+          }
+          collecting && !/^  / {
+            # 詳細行が終了、出力
+            print "::error::" fail_line detail
+            collecting = 0
+          }
+          END {
+            if (collecting) {
+              print "::error::" fail_line detail
+            }
+          }
+          ' test_output_o0.log
           # テストサマリーもAnnotationに出力
           grep -E "^(Total|Passed|Failed|Skipped|Status):" test_output_o0.log | while read -r line; do
             echo "::notice::${line}"
@@ -119,7 +158,7 @@ jobs:
           exit ${TEST_EXIT_CODE}
 
       - name: Upload test logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-native-o0-${{ matrix.os }}
@@ -159,6 +198,17 @@ jobs:
         run: |
           brew install llvm@${{ matrix.llvm_version }}
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+
+      - name: Debug environment info
+        run: |
+          echo "=== アーキテクチャ情報 ==="
+          uname -m
+          uname -a
+          echo "=== cm バイナリ ==="
+          file ./cm || echo "cm not found at ./cm"
+          echo "=== ランタイムライブラリ ==="
+          ls -la build/lib/ 2>/dev/null || echo "build/lib/ not found"
+          file build/lib/cm_runtime.o 2>/dev/null || echo "cm_runtime.o not found"
       
       - name: Run LLVM Native Tests (O3)
         id: test_o3
@@ -167,10 +217,31 @@ jobs:
           make tlp3 2>&1 | tee test_output_o3.log
           TEST_EXIT_CODE=${PIPESTATUS[0]}
           echo "test_exit_code=${TEST_EXIT_CODE}" >> $GITHUB_OUTPUT
-          # FAIL行をGitHub Annotationsとして出力
-          grep -E "\[FAIL\]" test_output_o3.log | while read -r line; do
-            echo "::error::${line}"
-          done
+          # FAIL行と後続の詳細（Expected/Got/Diff/Output）をAnnotationに出力
+          awk '
+          /\[FAIL\]/ {
+            fail_line = $0
+            gsub(/\033\[[0-9;]*m/, "", fail_line)
+            detail = ""
+            collecting = 1
+            next
+          }
+          collecting && /^  (Expected|Got|Diff|Output)/ {
+            line = $0
+            gsub(/\033\[[0-9;]*m/, "", line)
+            detail = detail " | " line
+            next
+          }
+          collecting && !/^  / {
+            print "::error::" fail_line detail
+            collecting = 0
+          }
+          END {
+            if (collecting) {
+              print "::error::" fail_line detail
+            }
+          }
+          ' test_output_o3.log
           # テストサマリーもAnnotationに出力
           grep -E "^(Total|Passed|Failed|Skipped|Status):" test_output_o3.log | while read -r line; do
             echo "::notice::${line}"
@@ -178,7 +249,7 @@ jobs:
           exit ${TEST_EXIT_CODE}
 
       - name: Upload test logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-native-o3-${{ matrix.os }}
