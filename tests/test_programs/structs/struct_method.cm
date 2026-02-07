@@ -15,7 +15,7 @@ struct Inner {
 
 impl Inner for Valuable {
     int get_value() {
-        return value;
+        return self.value;
     }
 }
 

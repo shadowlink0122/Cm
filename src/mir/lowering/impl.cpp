@@ -238,7 +238,23 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
 void MirLowering::emit_destructors(LoweringContext& ctx) {
     auto destructor_vars = ctx.get_all_destructor_vars();
     for (const auto& [local_id, type_name] : destructor_vars) {
-        std::string dtor_name = type_name + "__dtor";
+        // ネストジェネリック型名の正規化（Vector<int> → Vector__int）
+        std::string normalized_name = type_name;
+        if (normalized_name.find('<') != std::string::npos) {
+            std::string result;
+            for (char c : normalized_name) {
+                if (c == '<' || c == '>') {
+                    if (c == '<')
+                        result += "__";
+                } else if (c == ',' || c == ' ') {
+                    // カンマと空白は省略
+                } else {
+                    result += c;
+                }
+            }
+            normalized_name = result;
+        }
+        std::string dtor_name = normalized_name + "__dtor";
 
         // デストラクタ呼び出しを生成
         std::vector<MirOperandPtr> args;
@@ -283,9 +299,17 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
             }
 
             // ジェネリックパラメータがある場合、hir_functionsに登録（モノモーフィゼーション用）
-            if (!method->generic_params.empty()) {
+            // メソッド自体のジェネリックパラメータ、impl自体のジェネリックパラメータ、
+            // またはtype_nameがジェネリック型（<を含む）の場合に登録
+            bool has_generic = !method->generic_params.empty() || !impl.generic_params.empty() ||
+                               type_name.find('<') != std::string::npos;
+            if (has_generic) {
                 hir_functions[mir_func->name] = method.get();
-                debug_msg("MIR", "Registered generic impl method: " + mir_func->name);
+                debug_msg("MIR",
+                          "Registered generic impl method: " + mir_func->name +
+                              " (method params: " + std::to_string(method->generic_params.size()) +
+                              ", impl params: " + std::to_string(impl.generic_params.size()) +
+                              ", type_name: " + type_name + ")");
             }
 
             mir_program.functions.push_back(std::move(mir_func));

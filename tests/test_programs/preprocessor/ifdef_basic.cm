@@ -1,0 +1,39 @@
+// 条件付きコンパイル基本テスト
+
+import std::io::println;
+
+int main() {
+    println("=== ifdef test ===");
+
+    // __CM__ は常に定義されている
+    #ifdef __CM__
+        println("ifdef __CM__: ok");
+    #end
+
+    // ifndef テスト
+    #ifndef __UNDEFINED_SYMBOL__
+        println("ifndef undefined: ok");
+    #end
+
+    // ifdef 未定義シンボル → スキップされる
+    #ifdef __UNDEFINED_SYMBOL__
+        println("FAIL: should not reach");
+    #end
+
+    // else テスト
+    #ifdef __UNDEFINED_SYMBOL__
+        println("FAIL: should not reach");
+    #else
+        println("else branch: ok");
+    #end
+
+    // ネストテスト
+    #ifdef __CM__
+        #ifndef __UNDEFINED_SYMBOL__
+            println("nested: ok");
+        #end
+    #end
+
+    println("=== complete ===");
+    return 0;
+}

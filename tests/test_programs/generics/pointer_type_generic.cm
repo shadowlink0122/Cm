@@ -1,0 +1,120 @@
+// ポインタ型ジェネリクスのテスト
+// GenericArray<int*> のようなポインタを型パラメータとして使用
+import std::io::println;
+
+use libc {
+    void* malloc(int size);
+}
+
+// テスト用の構造体
+struct Point {
+    int x;
+    int y;
+}
+
+struct PtrContainer<T> {
+    T* data;
+    int size;
+    int capacity;
+}
+
+impl PtrContainer<T> {
+    void init(int cap) {
+        long elem_size = __sizeof__(T) as long;
+        long alloc_size = (cap as long) * elem_size;
+        void* raw = malloc(alloc_size);
+        self.data = raw as T*;
+        self.size = 0;
+        self.capacity = cap;
+    }
+
+    void push(T value) {
+        self.data[self.size] = value;
+        self.size = self.size + 1;
+    }
+
+    T get(int idx) {
+        return self.data[idx];
+    }
+}
+
+int main() {
+    println("=== ポインタ型ジェネリクステスト ===");
+
+    // 1. int型のコンテナ（基本確認）
+    PtrContainer<int> int_arr;
+    int_arr.init(4);
+    int_arr.push(10);
+    int_arr.push(20);
+
+    if (int_arr.get(0) != 10 || int_arr.get(1) != 20) {
+        println("FAIL: int container");
+        return 1;
+    }
+
+    // 2. ポインタをデータとして格納（int*のコンテナ）
+    int a = 100;
+    int b = 200;
+    int* pa = &a;
+    int* pb = &b;
+
+    PtrContainer<int*> ptr_arr;
+    ptr_arr.init(4);
+    ptr_arr.push(pa);
+    ptr_arr.push(pb);
+
+    int* got_pa = ptr_arr.get(0);
+    int* got_pb = ptr_arr.get(1);
+
+    if (*got_pa != 100 || *got_pb != 200) {
+        println("FAIL: pointer container");
+        return 1;
+    }
+
+    // 参照経由で元のデータを変更
+    *got_pa = 111;
+    *got_pb = 222;
+
+    if (a != 111 || b != 222) {
+        println("FAIL: pointer dereference modify");
+        return 1;
+    }
+
+    // 3. 構造体ポインタ型のテスト
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+    Point p2;
+    p2.x = 30;
+    p2.y = 40;
+
+    PtrContainer<Point*> point_arr;
+    point_arr.init(4);
+    point_arr.push(&p1);
+    point_arr.push(&p2);
+
+    Point* got_p1 = point_arr.get(0);
+    Point* got_p2 = point_arr.get(1);
+
+    if (got_p1->x != 10 || got_p1->y != 20) {
+        println("FAIL: struct pointer container get p1");
+        return 1;
+    }
+
+    if (got_p2->x != 30 || got_p2->y != 40) {
+        println("FAIL: struct pointer container get p2");
+        return 1;
+    }
+
+    // 構造体ポインタ経由で変更
+    got_p1->x = 100;
+    got_p2->y = 400;
+
+    if (p1.x != 100 || p2.y != 400) {
+        println("FAIL: struct pointer modify");
+        return 1;
+    }
+
+    println("=== PASS ===");
+    return 0;
+}

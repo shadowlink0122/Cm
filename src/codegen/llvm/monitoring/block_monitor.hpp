@@ -106,11 +106,14 @@ class BlockMonitor {
 
     // 命令パターンの検出
     void detect_instruction_pattern(const BlockInfo& block) {
-        if (block.hash_history.size() < 20)
+        // インラインアセンブリの複数オペランド処理では、load/storeが繰り返し生成されるため
+        // 誤検出を防ぐために十分な履歴サイズを要求
+        if (block.hash_history.size() < 60)
             return;
 
         // 周期的パターンを検出（周期2〜10）
-        for (size_t period = 2; period <= 10 && period * 3 <= block.hash_history.size(); ++period) {
+        // ただし、短い周期は5回以上の繰り返しが必要（誤検出防止）
+        for (size_t period = 2; period <= 10 && period * 5 <= block.hash_history.size(); ++period) {
             if (is_periodic_pattern(block.hash_history, period)) {
                 throw std::runtime_error("無限ループ検出: ブロック '" + current_block + "' で周期" +
                                          std::to_string(period) + "の命令パターンが検出されました");
@@ -121,14 +124,18 @@ class BlockMonitor {
     // 周期的パターンの検出
     bool is_periodic_pattern(const std::vector<size_t>& history, size_t period) {
         size_t size = history.size();
-        if (size < period * 3)
+        // 5周期分の一致を要求（誤検出防止を強化）
+        if (size < period * 5)
             return false;
 
-        // 最後の3周期分をチェック
-        size_t start = size - period * 3;
+        // 最後の5周期分をチェック
+        size_t start = size - period * 5;
         for (size_t i = 0; i < period; ++i) {
+            // 5周期すべてが一致する必要がある
             if (history[start + i] != history[start + i + period] ||
-                history[start + i] != history[start + i + period * 2]) {
+                history[start + i] != history[start + i + period * 2] ||
+                history[start + i] != history[start + i + period * 3] ||
+                history[start + i] != history[start + i + period * 4]) {
                 return false;
             }
         }

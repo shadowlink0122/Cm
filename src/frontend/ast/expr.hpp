@@ -375,18 +375,27 @@ struct LambdaExpr {
 
 // ============================================================
 // matchパターン（式用）
+// v0.13.0: 範囲パターン(l...r)とORパターン(l | r)をサポート
 // ============================================================
 enum class MatchPatternKind {
-    Literal,     // リテラル値 (42, "hello", true)
-    Variable,    // 変数束縛 (x)
-    Wildcard,    // ワイルドカード (_)
-    EnumVariant  // enum値 (Option::Some, Color::Red)
+    Literal,                 // リテラル値 (42, "hello", true)
+    Variable,                // 変数束縛 (x)
+    Wildcard,                // ワイルドカード (_)
+    EnumVariant,             // enum値 (Option::Some, Color::Red)
+    EnumVariantWithBinding,  // enum値 + バインディング (Option::Some(value))
+    Range,                   // 範囲パターン (1...10)
+    Or                       // ORパターン (1 | 2 | 3)
 };
 
 struct MatchPattern {
     MatchPatternKind kind;
-    ExprPtr value;         // Literal/EnumVariant用
-    std::string var_name;  // Variable用（束縛変数名）
+    ExprPtr value;             // Literal/EnumVariant用
+    std::string var_name;      // Variable用（束縛変数名）
+    std::string enum_variant;  // EnumVariantWithBinding用（バリアント名）
+    std::string binding_name;  // EnumVariantWithBinding用（束縛変数名）
+    ExprPtr range_start;       // Range用（開始値）
+    ExprPtr range_end;         // Range用（終了値）
+    std::vector<std::unique_ptr<MatchPattern>> or_patterns;  // Or用
 
     static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
         auto p = std::make_unique<MatchPattern>();
@@ -414,22 +423,68 @@ struct MatchPattern {
         p->value = std::move(val);
         return p;
     }
+
+    // enum値 + バインディング (Option::Some(value))
+    static std::unique_ptr<MatchPattern> make_enum_variant_with_binding(std::string variant,
+                                                                        std::string binding) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::EnumVariantWithBinding;
+        p->enum_variant = std::move(variant);
+        p->binding_name = std::move(binding);
+        return p;
+    }
+
+    // 範囲パターン (1...10)
+    static std::unique_ptr<MatchPattern> make_range(ExprPtr start, ExprPtr end) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Range;
+        p->range_start = std::move(start);
+        p->range_end = std::move(end);
+        return p;
+    }
+
+    // ORパターン (1 | 2 | 3)
+    static std::unique_ptr<MatchPattern> make_or(
+        std::vector<std::unique_ptr<MatchPattern>> patterns) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Or;
+        p->or_patterns = std::move(patterns);
+        return p;
+    }
 };
 
 // ============================================================
 // matchアーム
+// v0.13.0: 両方の形式をサポート:
+//   - 式形式: pattern => expr (暗黙的にreturn)
+//   - ブロック形式: pattern => { stmts } (明示的なreturn or void)
 // ============================================================
 struct MatchArm {
     std::unique_ptr<MatchPattern> pattern;
-    ExprPtr guard;  // オプショナルなガード条件 (if condition)
-    ExprPtr body;   // アームの本体（式）
+    ExprPtr guard;                    // オプショナルなガード条件 (if condition)
+    ExprPtr expr_body;                // 式形式の本体 (nullptrならブロック形式)
+    std::vector<StmtPtr> block_body;  // ブロック形式の本体
+    bool is_block_form = false;       // trueならブロック形式
 
-    MatchArm(std::unique_ptr<MatchPattern> p, ExprPtr g, ExprPtr b)
-        : pattern(std::move(p)), guard(std::move(g)), body(std::move(b)) {}
+    // 式形式コンストラクタ
+    MatchArm(std::unique_ptr<MatchPattern> p, ExprPtr g, ExprPtr e)
+        : pattern(std::move(p)),
+          guard(std::move(g)),
+          expr_body(std::move(e)),
+          is_block_form(false) {}
+
+    // ブロック形式コンストラクタ
+    MatchArm(std::unique_ptr<MatchPattern> p, ExprPtr g, std::vector<StmtPtr> b)
+        : pattern(std::move(p)),
+          guard(std::move(g)),
+          block_body(std::move(b)),
+          is_block_form(true) {}
 };
 
 // ============================================================
-// match式
+// match文（式として残すが、値を返さない文として使用）
+// v0.13.0: matchは if/switch と同様に制御構文として使用
+// 各armはブロック本体を持ち、returnは関数スコープから戻る
 // ============================================================
 struct MatchExpr {
     ExprPtr scrutinee;           // マッチ対象の式
@@ -455,6 +510,15 @@ struct MoveExpr {
     ExprPtr operand;  // 移動対象の式
 
     explicit MoveExpr(ExprPtr e) : operand(std::move(e)) {}
+};
+
+// ============================================================
+// await式 - Future<T>を待機してTを返す
+// ============================================================
+struct AwaitExpr {
+    ExprPtr operand;  // 待機対象のFuture<T>式
+
+    explicit AwaitExpr(ExprPtr e) : operand(std::move(e)) {}
 };
 
 // ============================================================
@@ -538,6 +602,10 @@ inline ExprPtr make_cast(ExprPtr expr, TypePtr type, Span s = {}) {
 
 inline ExprPtr make_move(ExprPtr expr, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<MoveExpr>(std::move(expr)), s);
+}
+
+inline ExprPtr make_await(ExprPtr expr, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<AwaitExpr>(std::move(expr)), s);
 }
 
 }  // namespace cm::ast

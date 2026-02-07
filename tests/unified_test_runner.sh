@@ -49,7 +49,8 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # デフォルト値
-BACKEND="interpreter"
+# NOTE: interpreterバックエンドは未実装のため、デフォルトはjit
+BACKEND="jit"
 CATEGORIES=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
@@ -192,7 +193,7 @@ run_single_test() {
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
             # ファイルに内容がある場合、バックエンド名でフィルタ
-            if grep -qw "$BACKEND" "$skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND"
                 ((SKIPPED++))
                 return
@@ -208,7 +209,7 @@ run_single_test() {
     # カテゴリ全体の.skipファイルがある場合
     if [ -f "$category_skip_file" ]; then
         if [ -s "$category_skip_file" ]; then
-            if grep -qw "$BACKEND" "$category_skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$category_skip_file" 2>/dev/null; then
                 echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skipped for $BACKEND"
                 ((SKIPPED++))
                 return
@@ -296,7 +297,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run --interpreter -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         jit)
@@ -385,8 +386,8 @@ PY
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
-                # 実行
-                run_with_timeout "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                # テストディレクトリで実行（相対パス解決のため）
+                (cd "$test_dir" && run_with_timeout "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
@@ -557,9 +558,8 @@ EOJS
             ((FAILED++))
         else
             echo -e "${RED}[FAIL]${NC} $category/$test_name - Wrong exit code (expected 1, got $exit_code)"
-            if [ "$VERBOSE" = true ]; then
-                cat "$output_file"
-            fi
+            echo "  Output:"
+            head -n 10 "$output_file" 2>/dev/null | sed 's/^/    /'
             ((FAILED++))
         fi
     # エラーファイルに期待される出力がある場合（コンパイルエラーテスト等）
@@ -572,12 +572,10 @@ EOJS
                 ((PASSED++))
             else
                 echo -e "${RED}[FAIL]${NC} $category/$test_name - Error output mismatch"
-                if [ "$VERBOSE" = true ]; then
-                    echo "Expected:"
-                    cat "$expect_file"
-                    echo "Got:"
-                    cat "$output_file"
-                fi
+                echo "  Expected:"
+                head -n 5 "$expect_file" 2>/dev/null | sed 's/^/    /'
+                echo "  Got:"
+                head -n 5 "$output_file" 2>/dev/null | sed 's/^/    /'
                 ((FAILED++))
             fi
         else
@@ -588,9 +586,8 @@ EOJS
         # 正常終了が期待される場合
         if [ $exit_code -ne 0 ]; then
             echo -e "${RED}[FAIL]${NC} $category/$test_name - Runtime error (exit code: $exit_code)"
-            if [ "$VERBOSE" = true ]; then
-                cat "$output_file"
-            fi
+            echo "  Output (first 10 lines):"
+            head -n 10 "$output_file" 2>/dev/null | sed 's/^/    /'
             ((FAILED++))
         else
             # 出力を比較
@@ -599,12 +596,12 @@ EOJS
                 ((PASSED++))
             else
                 echo -e "${RED}[FAIL]${NC} $category/$test_name - Output mismatch"
-                if [ "$VERBOSE" = true ]; then
-                    echo "Expected:"
-                    cat "$expect_file"
-                    echo "Got:"
-                    cat "$output_file"
-                fi
+                echo "  Expected:"
+                head -n 5 "$expect_file" 2>/dev/null | sed 's/^/    /'
+                echo "  Got:"
+                head -n 5 "$output_file" 2>/dev/null | sed 's/^/    /'
+                echo "  Diff:"
+                diff -u "$expect_file" "$output_file" 2>/dev/null | head -n 15 | sed 's/^/    /'
                 ((FAILED++))
             fi
         fi
@@ -809,7 +806,7 @@ run_parallel_test() {
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
             # ファイルに内容がある場合、バックエンド名でフィルタ
-            if grep -qw "$BACKEND" "$skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo "SKIP:Skipped for $BACKEND" > "$result_file"
                 return
             fi
@@ -823,7 +820,7 @@ run_parallel_test() {
     # カテゴリ全体の.skipファイルがある場合
     if [ -f "$category_skip_file" ]; then
         if [ -s "$category_skip_file" ]; then
-            if grep -qw "$BACKEND" "$category_skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$category_skip_file" 2>/dev/null; then
                 echo "SKIP:Category skipped for $BACKEND" > "$result_file"
                 return
             fi
@@ -901,7 +898,8 @@ PY
             local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
-                "$llvm_exec" > "$output_file" 2>&1 || exit_code=$?
+                # テストディレクトリで実行（相対パス解決のため）
+                (cd "$test_dir" && "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then

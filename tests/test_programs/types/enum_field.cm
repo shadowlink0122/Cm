@@ -5,13 +5,13 @@ enum Status {
     Err = 1
 }
 
-struct Result {
+struct MyResult {
     Status tag;
     int value;
 }
 
 int main() {
-    Result r;
+    MyResult r;
     r.tag = Status::Ok;
     r.value = 42;
 

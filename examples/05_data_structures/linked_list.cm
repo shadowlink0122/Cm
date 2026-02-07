@@ -2,7 +2,7 @@
 // FFIによるヒープ確保を示す
 
 use libc {
-    void* malloc(ulong size);
+    void* malloc(int size);
     void free(void* ptr);
 }
 

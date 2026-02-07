@@ -132,6 +132,10 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                  "': expected '" + ast::type_to_string(*resolved_type) +
                                  "', got '" + ast::type_to_string(*init_type) + "'");
         }
+        // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
+        if (let.init) {
+            check_literal_assignment(resolved_type, let.init.get(), stmt_span);
+        }
         let.type = resolved_type;
         scopes_.current().define(let.name, resolved_type, let.is_const, let.is_static, stmt_span,
                                  const_int_value);

@@ -35,4 +35,8 @@ std::string get_type_name(const hir::TypePtr& type);
 // 型名から正しいTypePtr型を作成するヘルパー
 hir::TypePtr make_type_from_name(const std::string& name);
 
+// 複数パラメータジェネリクス対応: 型引数文字列を分割
+// "T, U" -> ["T", "U"], "int, string" -> ["int", "string"]
+std::vector<std::string> split_type_args(const std::string& type_arg_str);
+
 }  // namespace cm::mir

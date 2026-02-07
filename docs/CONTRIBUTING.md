@@ -1,10 +1,3 @@
----
-layout: default
-title: Contributing
----
-
-[English](CONTRIBUTING.en.html)
-
 # Contributing to Cm
 
 Cm言語プロジェクトへの貢献ガイドです。
@@ -14,34 +7,38 @@ Cm言語プロジェクトへの貢献ガイドです。
 ```
 Cm/
 ├── src/                     # ソースコード
-│   ├── frontend/           # Lexer, Parser, AST
+│   ├── frontend/           # Lexer, Parser, AST, Types
 │   │   ├── lexer/
 │   │   ├── parser/
-│   │   └── ast/
-│   ├── middle/             # HIR, 型検査
-│   │   ├── hir/
-│   │   ├── type_check/
+│   │   ├── ast/
+│   │   └── types/
+│   │       └── checking/   # 型チェック（分割）
+│   ├── hir/                # 高レベル中間表現
 │   │   └── lowering/
-│   ├── backend/            # コード生成, インタプリタ
-│   │   ├── rust/
-│   │   ├── typescript/
-│   │   ├── wasm/
-│   │   └── interpreter/
+│   ├── mir/                # 中レベル中間表現
+│   │   ├── lowering/
+│   │   └── optimizations/
+│   ├── codegen/            # コード生成
+│   │   ├── interpreter/
+│   │   ├── js/
+│   │   └── llvm/
+│   │       ├── native/
+│   │       └── wasm/
+│   ├── diagnostics/        # 診断システム
+│   │   └── definitions/    # エラー/警告/Lint定義
+│   ├── fmt/                # フォーマッタ
 │   └── common/             # 共通ユーティリティ
-│       ├── logger.hpp
-│       ├── diagnostics.hpp
-│       └── span.hpp
 ├── docs/                    # ドキュメント
+│   ├── tutorials/          # チュートリアル（ja/en）
 │   ├── design/             # 設計ドキュメント
-│   ├── spec/               # 言語仕様
-│   └── releases/           # リリースノート
+│   ├── archive/            # アーカイブ
+│   ├── releases/           # リリースノート
+│   └── flyer/              # フライヤー
 ├── tests/                   # テスト
-│   ├── unit/               # 単体テスト
-│   ├── integration/        # 結合テスト
-│   ├── e2e/                # E2Eテスト
-│   └── regression/         # リグレッションテスト
-├── examples/                # サンプルコード
-└── tools/                   # 開発ツール
+│   ├── test_programs/      # Cmテストプログラム
+│   └── *.cpp               # C++ユニットテスト
+├── std/                     # 標準ライブラリ
+└── examples/                # サンプルコード
 ```
 
 ## ファイル命名規約
@@ -61,8 +58,8 @@ Cm/
 
 | 種類 | 規約 | 例 |
 |------|------|-----|
-| 設計ドキュメント | `lowercase.md` | `hir.md` |
-| リリースノート | `vX.Y.Z.md` | `v0.1.0.md` |
+| 設計ドキュメント | `lowercase.md` | `enum_design.md` |
+| リリースノート | `vX.Y.Z.md` | `v0.13.0.md` |
 
 ### テスト
 
@@ -108,6 +105,9 @@ private:
 ```bash
 # clang-formatで自動整形
 clang-format -i src/**/*.cpp src/**/*.hpp
+
+# Cmコードのフォーマット
+./cm fmt <file.cm>
 ```
 
 ---
@@ -123,6 +123,8 @@ main          # 安定版
 ```
 
 ## コミットメッセージ
+
+日本語で記載します。
 
 ```
 <種類>: <要約>
@@ -154,7 +156,7 @@ feat: HIRにパターンマッチを追加
 1. `develop` からブランチを作成
 2. 変更を実装
 3. `cm fmt && cm lint` を実行
-4. テストを追加・実行
+4. テストを追加・実行 (`make tip`)
 5. PRを作成
 
 ### PRテンプレート

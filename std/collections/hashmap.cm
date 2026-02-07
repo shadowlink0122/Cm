@@ -1,0 +1,146 @@
+// std::collections::hashmap - ジェネリック連想配列
+// HashMap<K, V> - キーと値の両方がジェネリック
+module std.collections.hashmap;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+// =============================================================
+// HashMap<K, V> - ジェネリック連想配列（線形探索）
+// キー: ジェネリックK, 値: ジェネリックV
+// 注意: フィールド順序はアライメントを考慮（大きい型を先に）
+// =============================================================
+
+export struct Entry<K, V> {
+    V value;  // ジェネリック値
+    K key;    // ジェネリックキー
+    bool occupied;
+}
+
+export struct HashMap<K, V> {
+    Entry<K, V>* entries;
+    int cap;
+    int size;
+}
+
+export impl<K, V> HashMap<K, V> {
+    // コンストラクタ（デフォルト容量16）
+    self() {
+        int capacity = 16;
+        // Entryサイズは64バイト固定（十分なサイズ確保）
+        long entry_size = 64;
+        long alloc_size = (capacity as long) * entry_size;
+        void* raw_ptr = malloc(alloc_size);
+        self.entries = raw_ptr as Entry<K, V>*;
+        self.cap = capacity;
+        self.size = 0;
+        for (int i = 0; i < capacity; i++) {
+            self.entries[i].occupied = false;
+        }
+    }
+
+    // 挿入（intキー専用ハッシュ）
+    void insert(K key, V value) {
+        // 簡易ハッシュ（intとして扱う）
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % self.cap;
+
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (!self.entries[pos].occupied || self.entries[pos].key == key) {
+                if (!self.entries[pos].occupied) {
+                    self.size = self.size + 1;
+                }
+                self.entries[pos].key = key;
+                self.entries[pos].value = value;
+                self.entries[pos].occupied = true;
+                return;
+            }
+        }
+    }
+
+    // 取得
+    V get(K key) {
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % self.cap;
+
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
+                return self.entries[pos].value;
+            }
+            if (!self.entries[pos].occupied) {
+                break;
+            }
+        }
+        // デフォルト値（型に依存）
+        V default_val;
+        return default_val;
+    }
+
+    // 存在確認
+    bool contains(K key) {
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % self.cap;
+
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
+                return true;
+            }
+            if (!self.entries[pos].occupied) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // 削除
+    void remove(K key) {
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        int idx = h % self.cap;
+
+        for (int i = 0; i < self.cap; i++) {
+            int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
+                self.entries[pos].occupied = false;
+                self.size = self.size - 1;
+                return;
+            }
+            if (!self.entries[pos].occupied) {
+                return;
+            }
+        }
+    }
+
+    // サイズ
+    int len() {
+        return self.size;
+    }
+
+    // クリア
+    void clear() {
+        for (int i = 0; i < self.cap; i++) {
+            self.entries[i].occupied = false;
+        }
+        self.size = 0;
+    }
+
+    // デストラクタ
+    ~self() {
+        void* ptr = self.entries as void*;
+        void* null_ptr = 0 as void*;
+        if (ptr != null_ptr) {
+            free(ptr);
+        }
+        self.entries = null_ptr as Entry<K, V>*;
+        self.size = 0;
+        self.cap = 0;
+    }
+}

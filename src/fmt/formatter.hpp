@@ -325,6 +325,7 @@ class Formatter {
 
         bool in_string = false;
         bool in_char = false;
+        bool in_backtick = false;  // バッククォート（テンプレートリテラル）
         bool in_line_comment = false;
         bool in_block_comment = false;
         char prev_char = 0;
@@ -333,13 +334,18 @@ class Formatter {
             char c = code[i];
             char next_char = (i + 1 < code.size()) ? code[i + 1] : 0;
 
+            // バッククォートリテラルの検出
+            if (!in_line_comment && !in_block_comment && !in_string && !in_char && c == '`') {
+                in_backtick = !in_backtick;
+            }
+
             // 文字列リテラルの検出
-            if (!in_line_comment && !in_block_comment && !in_char && c == '"' &&
+            if (!in_line_comment && !in_block_comment && !in_char && !in_backtick && c == '"' &&
                 prev_char != '\\') {
                 in_string = !in_string;
             }
             // 文字リテラルの検出
-            if (!in_line_comment && !in_block_comment && !in_string && c == '\'' &&
+            if (!in_line_comment && !in_block_comment && !in_string && !in_backtick && c == '\'' &&
                 prev_char != '\\') {
                 in_char = !in_char;
             }
@@ -365,7 +371,7 @@ class Formatter {
             }
 
             // リテラルやコメント内は変更しない
-            if (in_string || in_char || in_line_comment || in_block_comment) {
+            if (in_string || in_char || in_backtick || in_line_comment || in_block_comment) {
                 result += c;
                 prev_char = c;
                 continue;
@@ -380,8 +386,8 @@ class Formatter {
                 continue;
             }
 
-            // パイプの前後に空白を追加 (ただし || は除外)
-            if (c == '|' && prev_char != '|' && next_char != '|') {
+            // パイプの前後に空白を追加 (ただし ||, |= は除外)
+            if (c == '|' && prev_char != '|' && next_char != '|' && next_char != '=') {
                 // 前に空白がない場合
                 if (!result.empty() && result.back() != ' ' && result.back() != '\n' &&
                     result.back() != '(' && result.back() != '[') {
@@ -413,6 +419,7 @@ class Formatter {
 
         bool in_string = false;
         bool in_char = false;
+        bool in_backtick = false;  // バッククォート（テンプレートリテラル）
         bool in_line_comment = false;
         int paren_depth = 0;  // ()の深さ
         int brace_depth = 0;  // {}の深さ（1行クロージャ対応）
@@ -422,16 +429,21 @@ class Formatter {
             char c = code[i];
             char next_char = (i + 1 < code.size()) ? code[i + 1] : 0;
 
+            // バッククォートリテラルの検出
+            if (!in_line_comment && !in_string && !in_char && c == '`') {
+                in_backtick = !in_backtick;
+            }
+
             // 文字列リテラルの検出（変数埋め込み{...}内も考慮）
-            if (!in_line_comment && !in_char && c == '"' && prev_char != '\\') {
+            if (!in_line_comment && !in_char && !in_backtick && c == '"' && prev_char != '\\') {
                 in_string = !in_string;
             }
             // 文字リテラルの検出
-            if (!in_line_comment && !in_string && c == '\'' && prev_char != '\\') {
+            if (!in_line_comment && !in_string && !in_backtick && c == '\'' && prev_char != '\\') {
                 in_char = !in_char;
             }
             // 行コメントの検出
-            if (!in_string && !in_char && c == '/' && next_char == '/') {
+            if (!in_string && !in_char && !in_backtick && c == '/' && next_char == '/') {
                 in_line_comment = true;
             }
             if (c == '\n') {
@@ -441,7 +453,7 @@ class Formatter {
             }
 
             // リテラルやコメント内は変更しない
-            if (in_string || in_char || in_line_comment) {
+            if (in_string || in_char || in_backtick || in_line_comment) {
                 result += c;
                 prev_char = c;
                 continue;

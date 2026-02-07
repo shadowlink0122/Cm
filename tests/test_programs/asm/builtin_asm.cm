@@ -1,0 +1,34 @@
+// tests/test_programs/asm/builtin_asm.cm
+// __asm__ 直接使用テスト
+
+import std::io::println;
+
+int main() {
+#ifdef __x86_64__
+    println("=== builtin_asm test ===");
+
+    // 直接__asm__を使用
+    __asm__("nop");
+    println("__asm__(nop): ok");
+
+    // 複数回
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== complete ===");
+#else
+    // ARM64版
+    println("=== builtin_asm test ===");
+
+    __asm__("nop");
+    println("__asm__(nop): ok");
+
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== complete ===");
+#end
+    return 0;
+}

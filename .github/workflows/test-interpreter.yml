@@ -103,7 +103,7 @@ jobs:
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
       
       - name: Run Interpreter Tests (O0)
-        run: make tip0
+        run: make test-interpreter-o0-parallel
 
   interpreter-o3:
     name: Interpreter O3 (${{ matrix.os }})
@@ -141,4 +141,4 @@ jobs:
           echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
       
       - name: Run Interpreter Tests (O3)
-        run: make tip3
+        run: make test-interpreter-o3-parallel

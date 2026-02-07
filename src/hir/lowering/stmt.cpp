@@ -29,6 +29,8 @@ HirStmtPtr HirLowering::lower_stmt(ast::Stmt& stmt) {
         return std::make_unique<HirStmt>(std::make_unique<HirContinue>());
     } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
         return lower_defer(*defer_stmt);
+    } else if (auto* must_stmt = stmt.as<ast::MustBlockStmt>()) {
+        return lower_must_block(*must_stmt);
     }
     return nullptr;
 }
@@ -40,6 +42,17 @@ HirStmtPtr HirLowering::lower_defer(ast::DeferStmt& defer) {
         hir_defer->body = lower_stmt(*defer.body);
     }
     return std::make_unique<HirStmt>(std::move(hir_defer));
+}
+
+// must {} ブロック（最適化禁止）
+HirStmtPtr HirLowering::lower_must_block(ast::MustBlockStmt& must) {
+    auto hir_must = std::make_unique<HirMustBlock>();
+    for (auto& s : must.body) {
+        if (auto hs = lower_stmt(*s)) {
+            hir_must->body.push_back(std::move(hs));
+        }
+    }
+    return std::make_unique<HirStmt>(std::move(hir_must));
 }
 
 // ブロック文
@@ -152,6 +165,15 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
                 }
             } else {
                 hir_let->init = lower_expr(*let.init);
+            }
+
+            // 初期化式がTagged Union型の場合、変数の型も同様に設定
+            // これによりenum変数がTagged Union構造体として正しく型付けされる
+            if (hir_let->init && hir_let->init->type) {
+                const auto& init_type_name = hir_let->init->type->name;
+                if (init_type_name.find("__TaggedUnion_") == 0) {
+                    hir_let->type = hir_let->init->type;
+                }
             }
         }
     }
@@ -483,9 +505,342 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
     if (!expr_stmt.expr)
         return nullptr;
 
+    // v0.13.0: match式を文としてif-elseチェーンに変換
+    if (auto* match_expr = expr_stmt.expr->as<ast::MatchExpr>()) {
+        return lower_match_as_stmt(*match_expr);
+    }
+
+    // __asm__ / __llvm__ の特別処理
+    if (auto* call = expr_stmt.expr->as<ast::CallExpr>()) {
+        if (auto* ident = call->callee->as<ast::IdentExpr>()) {
+            if (ident->name == "__asm__" || ident->name == "__llvm__") {
+                // 引数から文字列リテラルを取得
+                if (!call->args.empty()) {
+                    if (auto* arg = call->args[0]->as<ast::LiteralExpr>()) {
+                        if (std::holds_alternative<std::string>(arg->value)) {
+                            auto hir_asm = std::make_unique<HirAsm>();
+                            std::string code = std::get<std::string>(arg->value);
+
+                            // ${+r:varname} パターンを検出して展開
+                            // フォーマット: ${constraint:variable}
+                            // 例: ${+r:x} → %0 (制約+r、変数x)
+                            std::string processed_code;
+                            std::string constraints;
+                            std::vector<std::string> operand_vars;
+                            size_t operand_idx = 0;
+
+                            size_t pos = 0;
+                            while (pos < code.size()) {
+                                // ${...} パターンを探す
+                                size_t start = code.find("${", pos);
+                                if (start == std::string::npos) {
+                                    processed_code += code.substr(pos);
+                                    break;
+                                }
+
+                                // ${の前の部分を追加
+                                processed_code += code.substr(pos, start - pos);
+
+                                // }を探す
+                                size_t end = code.find("}", start);
+                                if (end == std::string::npos) {
+                                    processed_code += code.substr(start);
+                                    break;
+                                }
+
+                                // ${...} の内容を解析
+                                std::string inner = code.substr(start + 2, end - start - 2);
+                                size_t colon = inner.find(':');
+                                if (colon != std::string::npos) {
+                                    std::string constraint = inner.substr(0, colon);
+                                    std::string varname = inner.substr(colon + 1);
+
+                                    // 同じ変数名かつ同じ制約が既に登録されているかチェック
+                                    // 注意:
+                                    // 同じ変数でも制約が異なる場合は別オペランドとして登録する
+                                    // これにより ${r:x} と ${=r:x} は別々のオペランドになる
+                                    int existing_idx = -1;
+                                    for (size_t i = 0; i < hir_asm->operands.size(); ++i) {
+                                        if (hir_asm->operands[i].var_name == varname &&
+                                            hir_asm->operands[i].constraint == constraint) {
+                                            existing_idx = static_cast<int>(i);
+                                            break;
+                                        }
+                                    }
+
+                                    if (existing_idx >= 0) {
+                                        // 既存のオペランド番号を再利用
+                                        processed_code += "$" + std::to_string(existing_idx);
+                                    } else {
+                                        // 新規オペランド: 番号を割り当て
+                                        processed_code += "$" + std::to_string(operand_idx);
+
+                                        // 制約文字列に追加
+                                        if (operand_idx > 0)
+                                            constraints += ",";
+                                        constraints += constraint;
+
+                                        // HirAsm.operandsにAsmOperandを格納
+                                        hir_asm->operands.push_back(
+                                            AsmOperand{constraint, varname});
+                                        operand_idx++;
+
+                                        debug::hir::log(
+                                            debug::hir::Id::StmtLower,
+                                            "asm operand: " + constraint + ":" + varname,
+                                            debug::Level::Debug);
+                                    }
+                                } else {
+                                    // 制約なし: そのまま出力
+                                    processed_code += "${" + inner + "}";
+                                }
+
+                                pos = end + 1;
+                            }
+
+                            hir_asm->code = processed_code;
+                            hir_asm->is_must = true;
+
+                            debug::hir::log(debug::hir::Id::StmtLower,
+                                            "__llvm__: " + hir_asm->code + " operands=" +
+                                                std::to_string(hir_asm->operands.size()),
+                                            debug::Level::Debug);
+                            return std::make_unique<HirStmt>(std::move(hir_asm));
+                        }
+                    }
+                }
+                // 引数が不正な場合
+                debug::hir::log(debug::hir::Id::StmtLower,
+                                "__llvm__ requires string literal argument", debug::Level::Error);
+                return nullptr;
+            }
+        }
+    }
+
     auto hir = std::make_unique<HirExprStmt>();
     hir->expr = lower_expr(*expr_stmt.expr);
     return std::make_unique<HirStmt>(std::move(hir));
+}
+
+// v0.13.0: match式を文として処理（if-elseチェーンに変換）
+// 式形式とブロック形式の両方をサポート
+HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
+    debug::hir::log(debug::hir::Id::StmtLower, "Lowering match as statement", debug::Level::Debug);
+
+    // AST段階の元の型名を保存（enum_defs_検索用）
+    std::string original_enum_name;
+    if (match.scrutinee && match.scrutinee->type) {
+        original_enum_name = match.scrutinee->type->name;
+    }
+    // scrutinee->type->nameが空の場合、パターンのenum_variantからenum名を抽出
+    if (original_enum_name.empty()) {
+        for (const auto& arm : match.arms) {
+            if (arm.pattern &&
+                (arm.pattern->kind == ast::MatchPatternKind::EnumVariant ||
+                 arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding)) {
+                const std::string& variant_name = arm.pattern->enum_variant;
+                auto sep = variant_name.rfind("::");
+                if (sep != std::string::npos) {
+                    original_enum_name = variant_name.substr(0, sep);
+                    break;
+                }
+            }
+        }
+    }
+
+    auto scrutinee = lower_expr(*match.scrutinee);
+    auto scrutinee_type = scrutinee->type;
+
+    if (match.arms.empty()) {
+        // 空のmatchは空のブロックを返す
+        return std::make_unique<HirStmt>(std::make_unique<HirBlock>());
+    }
+
+    // matchをif-elseチェーンに変換
+    // 逆順にarmsを処理し、ネストしたif-else構造を構築
+    HirStmtPtr result = nullptr;
+
+    // ワイルドカードアームを探す（else部分になる）
+    std::vector<HirStmtPtr> else_stmts;
+    int wildcard_arm_idx = -1;
+    for (size_t i = 0; i < match.arms.size(); ++i) {
+        if (match.arms[i].pattern->kind == ast::MatchPatternKind::Wildcard) {
+            wildcard_arm_idx = static_cast<int>(i);
+            auto& arm = match.arms[i];
+            if (arm.is_block_form) {
+                // ブロック形式
+                for (auto& stmt : arm.block_body) {
+                    if (auto hir_stmt = lower_stmt(*stmt)) {
+                        else_stmts.push_back(std::move(hir_stmt));
+                    }
+                }
+            } else if (arm.expr_body) {
+                // 式形式（文として実行）
+                auto expr = lower_expr(*arm.expr_body);
+                auto expr_stmt = std::make_unique<HirExprStmt>();
+                expr_stmt->expr = std::move(expr);
+                else_stmts.push_back(std::make_unique<HirStmt>(std::move(expr_stmt)));
+            }
+            break;
+        }
+    }
+
+    // 非ワイルドカードアームを逆順に処理
+    for (int i = static_cast<int>(match.arms.size()) - 1; i >= 0; i--) {
+        if (i == wildcard_arm_idx)
+            continue;  // ワイルドカードはスキップ
+
+        auto& arm = match.arms[i];
+
+        // armのbodyを文のリストとしてlower
+        std::vector<HirStmtPtr> body_stmts;
+
+        // EnumVariantWithBindingパターンの場合、ペイロード抽出を生成
+        if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding) {
+            if (!arm.pattern->binding_name.empty()) {
+                // ペイロード抽出: binding_name = ペイロード値
+                // enum定義からバリアントのフィールド型を取得
+                TypePtr payload_type = scrutinee_type;  // フォールバック
+                std::string variant_name = arm.pattern->enum_variant;
+
+                // 元のenum名でenum定義を検索
+                if (!original_enum_name.empty()) {
+                    auto enum_it = enum_defs_.find(original_enum_name);
+                    if (enum_it != enum_defs_.end() && enum_it->second) {
+                        // バリアント名を取得（Type::Variant形式からVariantを抽出）
+                        auto sep = variant_name.rfind("::");
+                        std::string short_variant = (sep != std::string::npos)
+                                                        ? variant_name.substr(sep + 2)
+                                                        : variant_name;
+                        // enum定義からフィールド型を取得
+                        for (const auto& member : enum_it->second->members) {
+                            if (member.name == short_variant && !member.fields.empty()) {
+                                payload_type = member.fields[0].second;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // HirEnumPayloadノードを生成してペイロード抽出を表現
+                auto payload_extract = std::make_unique<HirEnumPayload>();
+                payload_extract->scrutinee = clone_hir_expr(scrutinee);
+                payload_extract->variant_name = variant_name;
+                payload_extract->payload_type = payload_type;
+
+                auto var_decl = std::make_unique<HirLet>();
+                var_decl->name = arm.pattern->binding_name;
+                var_decl->type = payload_type;
+                var_decl->init =
+                    std::make_unique<HirExpr>(std::move(payload_extract), payload_type);
+                var_decl->is_const = false;
+                body_stmts.push_back(std::make_unique<HirStmt>(std::move(var_decl)));
+            }
+        }
+
+        // Variableパターンの場合もバインディング変数に代入
+        if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::Variable) {
+            if (!arm.pattern->var_name.empty()) {
+                auto var_decl = std::make_unique<HirLet>();
+                var_decl->name = arm.pattern->var_name;
+                var_decl->type = scrutinee_type;
+                var_decl->init = clone_hir_expr(scrutinee);
+                var_decl->is_const = false;
+                body_stmts.push_back(std::make_unique<HirStmt>(std::move(var_decl)));
+            }
+        }
+
+        if (arm.is_block_form) {
+            // ブロック形式
+            for (auto& stmt : arm.block_body) {
+                if (auto hir_stmt = lower_stmt(*stmt)) {
+                    body_stmts.push_back(std::move(hir_stmt));
+                }
+            }
+        } else if (arm.expr_body) {
+            // 式形式（文として実行）
+            auto expr = lower_expr(*arm.expr_body);
+            auto expr_stmt = std::make_unique<HirExprStmt>();
+            expr_stmt->expr = std::move(expr);
+            body_stmts.push_back(std::make_unique<HirStmt>(std::move(expr_stmt)));
+        }
+
+        // 条件を構築
+        auto cond = build_match_condition(scrutinee, scrutinee_type, arm);
+
+        // ガード条件がある場合は結合
+        if (arm.guard) {
+            HirExprPtr guard_cond;
+            // EnumVariantWithBindingの場合、ガード内のバインディング変数をペイロードで置換
+            if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding &&
+                !arm.pattern->binding_name.empty()) {
+                // ペイロード型を取得（677-702行と同じロジック）
+                TypePtr payload_type = scrutinee_type;
+                std::string variant_name = arm.pattern->enum_variant;
+                if (!original_enum_name.empty()) {
+                    auto enum_it = enum_defs_.find(original_enum_name);
+                    if (enum_it != enum_defs_.end() && enum_it->second) {
+                        auto sep = variant_name.rfind("::");
+                        std::string short_variant = (sep != std::string::npos)
+                                                        ? variant_name.substr(sep + 2)
+                                                        : variant_name;
+                        for (const auto& member : enum_it->second->members) {
+                            if (member.name == short_variant && !member.fields.empty()) {
+                                payload_type = member.fields[0].second;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // ペイロード抽出式を生成
+                auto payload_extract = std::make_unique<HirEnumPayload>();
+                payload_extract->scrutinee = clone_hir_expr(scrutinee);
+                payload_extract->variant_name = variant_name;
+                payload_extract->payload_type = payload_type;
+                auto payload_expr =
+                    std::make_unique<HirExpr>(std::move(payload_extract), payload_type);
+                // ガード内のバインディング変数をペイロードで置換
+                guard_cond = lower_guard_with_binding(*arm.guard, arm.pattern->binding_name,
+                                                      payload_expr, payload_type);
+            } else {
+                guard_cond = lower_expr(*arm.guard);
+            }
+            auto combined = std::make_unique<HirBinary>();
+            combined->op = HirBinaryOp::And;
+            combined->lhs = std::move(cond);
+            combined->rhs = std::move(guard_cond);
+            cond = std::make_unique<HirExpr>(std::move(combined), ast::make_bool());
+        }
+
+        // if文を構築
+        auto if_stmt = std::make_unique<HirIf>();
+        if_stmt->cond = std::move(cond);
+        if_stmt->then_block = std::move(body_stmts);
+
+        // else部分（前に処理したarmの結果、または最後のワイルドカード）
+        if (result) {
+            if_stmt->else_block.push_back(std::move(result));
+        } else if (!else_stmts.empty()) {
+            if_stmt->else_block = std::move(else_stmts);
+            else_stmts.clear();  // 使用済み
+        }
+
+        result = std::make_unique<HirStmt>(std::move(if_stmt));
+    }
+
+    // resultがない場合（ワイルドカードのみの場合）
+    if (!result && !else_stmts.empty()) {
+        auto block = std::make_unique<HirBlock>();
+        block->stmts = std::move(else_stmts);
+        return std::make_unique<HirStmt>(std::move(block));
+    }
+
+    if (!result) {
+        // 空のブロックを返す
+        return std::make_unique<HirStmt>(std::make_unique<HirBlock>());
+    }
+
+    return result;
 }
 
 }  // namespace cm::hir

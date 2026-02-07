@@ -1,0 +1,16 @@
+=== Queue<T> Test ===
+1. Queue<int>:
+  enqueue 10, 20, 30: len=3
+  dequeue: 10, 20, 30
+  is_empty: true
+  reuse: len=2, dequeue: 100, 200
+  destructor called
+2. Queue<long>:
+  enqueue 2 items: len=2
+  dequeue: 1000, 2000
+  destructor called
+3. Queue<bool>:
+  enqueue 3 items: len=3
+  dequeue: true, false, true
+  destructor called
+=== PASS ===

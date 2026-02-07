@@ -1,0 +1,37 @@
+// テスト: 最小限のmalloc/freeとポインタ操作
+
+import std::io::println;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+struct TNode {
+    int value;
+    TNode* next;
+}
+
+int main() {
+    println("=== Minimal malloc test ===");
+
+    // 1. malloc でノードを確保
+    println("Step 1: Allocating node...");
+    void* mem = malloc(sizeof(TNode));
+    println("Step 2: Casting...");
+    TNode* node = mem as TNode*;
+
+    println("Step 3: Setting value...");
+    node->value = 42;
+    node->next = null as TNode*;
+
+    println("Step 4: Reading value...");
+    int v = node->value;
+    println("Node value: {v}");
+
+    println("Step 5: Freeing...");
+    free(node as void*);
+
+    println("=== Done ===");
+    return 0;
+}

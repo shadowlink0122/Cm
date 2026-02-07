@@ -1,0 +1,44 @@
+// std/core/string.cm - String構造体
+// プリミティブstringをラップし、便利なメソッドを提供
+module std.core.string;
+
+use libc {
+    long strlen(string s);
+}
+
+// Str構造体 - stringのラッパー（Stringはキーワードと競合を避けるため）
+export struct Str {
+    string data;
+}
+
+// Str構造体のメソッド
+impl Str {
+    // 長さを取得
+    long len() {
+        return strlen(self.data);
+    }
+
+    // 空かどうか
+    bool is_empty() {
+        return strlen(self.data) == 0 as long;
+    }
+
+    // プリミティブstringに変換
+    string as_str() {
+        return self.data;
+    }
+}
+
+// コンストラクタ関数
+export Str str(string s) {
+    return Str { data: s };
+}
+
+// ヘルパー関数（プリミティブstring用）
+export long len(string s) {
+    return strlen(s);
+}
+
+export bool is_empty(string s) {
+    return strlen(s) == 0 as long;
+}

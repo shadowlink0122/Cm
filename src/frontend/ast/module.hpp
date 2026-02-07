@@ -159,19 +159,30 @@ struct MacroParam {
 
 struct MacroDecl {
     enum Kind {
-        Function,   // 関数風マクロ
-        Attribute,  // アトリビュートマクロ
-        Procedural  // プロシージャマクロ
+        Function,    // 関数風マクロ
+        Attribute,   // アトリビュートマクロ
+        Procedural,  // プロシージャマクロ
+        Constant     // v0.13.0: 型付き定数マクロ
     };
 
     Kind kind;
     std::string name;
-    std::vector<MacroParam> params;         // マクロパラメータ
-    std::vector<StmtPtr> body;              // マクロ本体
+    std::vector<MacroParam> params;         // マクロパラメータ（Function用）
+    std::vector<StmtPtr> body;              // マクロ本体（Function用）
     std::vector<AttributeNode> attributes;  // マクロ属性
 
+    // v0.13.0: 型付き定数マクロ用フィールド
+    TypePtr type;              // 定数の型
+    ExprPtr value;             // 定数の値
+    bool is_exported = false;  // エクスポートフラグ
+
+    // 関数マクロ用コンストラクタ（既存）
     MacroDecl(Kind k, std::string n, std::vector<MacroParam> p, std::vector<StmtPtr> b)
         : kind(k), name(std::move(n)), params(std::move(p)), body(std::move(b)) {}
+
+    // v0.13.0: 型付き定数マクロ用コンストラクタ
+    MacroDecl(std::string n, TypePtr t, ExprPtr v)
+        : kind(Constant), name(std::move(n)), type(std::move(t)), value(std::move(v)) {}
 };
 
 // ============================================================

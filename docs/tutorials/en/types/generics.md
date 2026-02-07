@@ -78,6 +78,42 @@ int main() {
 }
 ```
 
+## Generic Collections and RAII
+
+Generic collections (like `Vector<T>`) have `self()` constructors and `~self()` destructors.
+
+```cm
+import std::collections::vector::*;
+
+struct TrackedObject {
+    int id;
+}
+
+impl TrackedObject {
+    ~self() {
+        println("~TrackedObject({self.id})");
+    }
+}
+
+int main() {
+    {
+        Vector<TrackedObject> objects();  // Constructor call
+        objects.push(TrackedObject { id: 100 });
+        objects.push(TrackedObject { id: 200 });
+        // On scope exit:
+        // 1. ~Vector() is called
+        // 2. ~TrackedObject() is called for each element
+    }
+    return 0;
+}
+```
+
+**Output:**
+```
+~TrackedObject(100)
+~TrackedObject(200)
+```
+
 ---
 
 **Previous:** [typedef](typedef.html)  

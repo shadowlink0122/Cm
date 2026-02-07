@@ -5,6 +5,23 @@
 
 namespace cm::codegen::llvm_backend {
 
+// 符号なし型かどうかを判定するヘルパー
+static bool isUnsignedType(const hir::TypePtr& type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case ast::TypeKind::UTiny:
+        case ast::TypeKind::UShort:
+        case ast::TypeKind::UInt:
+        case ast::TypeKind::ULong:
+        case ast::TypeKind::UFloat:
+        case ast::TypeKind::UDouble:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // 浮動小数点型の型昇格（float/doubleの統一）
 static void coerceFloatTypes(llvm::IRBuilder<>* builder, llvm::Value*& lhs, llvm::Value*& rhs) {
     auto lhsType = lhs->getType();
@@ -52,6 +69,30 @@ static int64_t getElementSize(const hir::TypePtr& type) {
         case ast::TypeKind::Pointer:
         case ast::TypeKind::Reference:
             return 8;
+        case ast::TypeKind::Struct: {
+            // 構造体型の場合、型名からサイズを推定
+            // Vector<T>は { T* data, int size, int cap } = 8 + 4 + 4 = 16バイト
+            // Queue<T>は { T* data, int front, int rear, int cap } = 24バイト
+            // 一般的なジェネリック構造体のサイズを推定
+            const std::string& name = type->name;
+            if (!name.empty()) {
+                // Vector<T>のパターンを検出
+                if (name.find("Vector") == 0 || name.find("Vector__") != std::string::npos) {
+                    return 16;  // { T* data (8), int size (4), int cap (4) }
+                }
+                // Queue<T>のパターンを検出
+                if (name.find("Queue") == 0 || name.find("Queue__") != std::string::npos) {
+                    return 24;  // { T* data (8), int front (4), int rear (4), int cap (4), int size
+                                // (4) } 注: 実際のQueueの定義に依存
+                }
+                // HashMap<K,V>のパターンを検出
+                if (name.find("HashMap") == 0 || name.find("HashMap__") != std::string::npos) {
+                    return 24;  // 推定値
+                }
+            }
+            // その他の構造体: 最小サイズとして8バイトを仮定（ポインタサイズ）
+            return 8;
+        }
         default:
             return 1;
     }
@@ -223,6 +264,20 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 return builder->CreateCall(concatFunc, {lhsPtr, rhsPtr});
             }
 
+            // 整数型のビット幅を揃える（long + int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
+
             return builder->CreateAdd(lhs, rhs, "add");
         }
         case mir::MirBinaryOp::Sub: {
@@ -263,12 +318,38 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFSub(lhs, rhs, "fsub");
             }
+            // 整数型のビット幅を揃える（long - int 等）
+            if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
+                auto lhsBits = lhsType->getIntegerBitWidth();
+                auto rhsBits = rhsType->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhsType, "zext")
+                                      : builder->CreateSExt(lhs, rhsType, "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhsType, "zext")
+                                      : builder->CreateSExt(rhs, lhsType, "sext");
+                }
+            }
             return builder->CreateSub(lhs, rhs, "sub");
         }
         case mir::MirBinaryOp::Mul: {
             if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFMul(lhs, rhs, "fmul");
+            }
+            // 整数型のビット幅を揃える（long * int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
             }
             return builder->CreateMul(lhs, rhs, "mul");
         }
@@ -277,12 +358,38 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFDiv(lhs, rhs, "fdiv");
             }
+            // 整数型のビット幅を揃える（long / int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
             return builder->CreateSDiv(lhs, rhs, "div");
         }
         case mir::MirBinaryOp::Mod: {
             if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFRem(lhs, rhs, "fmod");
+            }
+            // 整数型のビット幅を揃える（long % int 等）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
             }
             return builder->CreateSRem(lhs, rhs, "mod");
         }
@@ -294,6 +401,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 return builder->CreateFCmpOEQ(lhs, rhs, "feq");
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
+            // ポインタ同士の比較は文字列比較として扱う
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",
@@ -332,6 +440,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 return builder->CreateFCmpONE(lhs, rhs, "fne");
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
+            // ポインタ同士の比較は文字列比較として扱う
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",

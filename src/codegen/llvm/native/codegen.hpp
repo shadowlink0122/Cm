@@ -69,12 +69,12 @@ class LLVMCodeGen {
 
     /// MIRプログラムをコンパイル
     void compile(const mir::MirProgram& program) {
-        // std::cerr << "[LLVM-CG] compile() start" << std::endl;
+        // // std::cerr << "[LLVM-CG] compile() start" << std::endl;
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMStart);
 
         // インポートの有無を記録（最適化時に使用）
         hasImports = !program.imports.empty();
-        // std::cerr << "[LLVM-CG] hasImports=" << hasImports
+        // // std::cerr << "[LLVM-CG] hasImports=" << hasImports
         //           << " (imports.size=" << program.imports.size() << ")" << std::endl;
         if (hasImports) {
             cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit,
@@ -82,7 +82,7 @@ class LLVMCodeGen {
         }
 
         // 0. MIRレベルでのパターン検出と最適化レベル調整
-        // std::cerr << "[LLVM-CG] step 0: MIR pattern detection" << std::endl;
+        // // std::cerr << "[LLVM-CG] step 0: MIR pattern detection" << std::endl;
         int adjusted_level =
             MIRPatternDetector::adjustOptimizationLevel(program, options.optimizationLevel);
         if (adjusted_level != options.optimizationLevel) {
@@ -94,7 +94,7 @@ class LLVMCodeGen {
         }
 
         // 1. 初期化
-        // std::cerr << "[LLVM-CG] step 1: initialize" << std::endl;
+        // // std::cerr << "[LLVM-CG] step 1: initialize" << std::endl;
         initialize(program.filename);
 
         // 2. MIR → LLVM IR 変換
@@ -107,9 +107,10 @@ class LLVMCodeGen {
         if (options.verifyIR) {
             verifyModule();
         }
+        // std::cerr << "[LLVM-CG] step 3 done" << std::endl;
 
         // 3.5. 最適化前のパターン検出と調整
-        // std::cerr << "[LLVM-CG] step 3.5: pattern detection" << std::endl;
+        // // std::cerr << "[LLVM-CG] step 3.5: pattern detection" << std::endl;
         if (options.optimizationLevel > 0) {
             // 問題のあるパターンを検出して最適化レベルを調整
             int adjusted_level = OptimizationPassLimiter::adjustOptimizationLevel(
@@ -127,13 +128,15 @@ class LLVMCodeGen {
         // 4. 最適化
         // std::cerr << "[LLVM-CG] step 4: optimize" << std::endl;
         optimize();
+        // std::cerr << "[LLVM-CG] step 4 done" << std::endl;
 
         // 5. 出力
         // std::cerr << "[LLVM-CG] step 5: emit" << std::endl;
         emit();
+        // std::cerr << "[LLVM-CG] step 5 done" << std::endl;
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEnd);
-        // std::cerr << "[LLVM-CG] compile() complete" << std::endl;
+        // // std::cerr << "[LLVM-CG] compile() complete" << std::endl;
     }
 
     /// LLVM IR を文字列として取得（デバッグ用）
@@ -493,7 +496,8 @@ class LLVMCodeGen {
             // macOSではシステムのclangを使用してリンク
             // Homebrew LLVMのclangはSDKパスを認識しないため、/usr/bin/clangを使用
             // -dead_strip: 未使用関数を削除
-            linkCmd = "/usr/bin/clang -Wl,-dead_strip ";
+            // -mmacosx-version-min: 最小macOSバージョンを指定してリンカ警告を回避
+            linkCmd = "/usr/bin/clang -mmacosx-version-min=15.0 -Wl,-dead_strip ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }

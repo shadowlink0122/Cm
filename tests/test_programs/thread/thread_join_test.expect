@@ -1,0 +1,8 @@
+Test: join
+Worker: start
+Worker: done
+Destructor: 10
+Result: 10
+Test: detach
+Worker: start
+Main: exit

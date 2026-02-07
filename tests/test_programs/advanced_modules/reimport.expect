@@ -1,0 +1,5 @@
+Testing reimport prevention:
+Vector<int>: len=2, values=[10, 20]
+Vector<int> (second): len=1, value=100
+Success: Multiple imports work correctly
+=== PASS ===

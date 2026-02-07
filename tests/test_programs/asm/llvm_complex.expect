@@ -1,0 +1,37 @@
+=== Complex LLVM ASM Test ===
+
+--- Test 1: Read-write add ---
+x (should be 100):
+100
+
+--- Test 2: Multiple independent ops ---
+p (should be 15):
+15
+q (should be 30):
+30
+
+--- Test 3: Chained computation ---
+val (should be 45):
+45
+
+--- Test 4: NEG operation ---
+neg (should be -42):
+-42
+
+--- Test 5: Bit operations ---
+bits (should be 255):
+255
+
+--- Test 6: Shift operations ---
+shift (should be 16):
+16
+
+--- Test 7: Subtraction ---
+sub (should be 70):
+70
+
+--- Test 8: XOR clear ---
+xor_val (should be 0):
+0
+
+=== All tests completed! ===

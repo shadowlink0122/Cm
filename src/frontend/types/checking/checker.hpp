@@ -119,6 +119,7 @@ class TypeChecker {
     void register_auto_display_impl(const ast::StructDecl& st);
     void register_auto_css_impl(const ast::StructDecl& st);
     void register_builtin_interfaces();
+    void register_builtin_types();  // Result<T, E>, Option<T> 組み込み型
 
     // ============================================================
     // ユーティリティ (utils.cpp)
@@ -132,6 +133,10 @@ class TypeChecker {
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
+
+    // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
+    // 代入先がLiteralUnion型の場合、代入する値が許容リテラルに含まれるかチェック
+    bool check_literal_assignment(ast::TypePtr target_type, ast::Expr* init_expr, Span span);
 
     // コンパイル時定数評価（const強化）
     std::optional<int64_t> evaluate_const_expr(ast::Expr& expr);
@@ -190,6 +195,12 @@ class TypeChecker {
 
     // enum名のセット
     std::unordered_set<std::string> enum_names_;
+
+    // ジェネリックenumの登録情報（enum名 → ジェネリックパラメータリスト）
+    std::unordered_map<std::string, std::vector<std::string>> generic_enums_;
+
+    // enum定義のキャッシュ（Tagged Union用）
+    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;
 
     // typedef定義のキャッシュ (エイリアス名 -> 実際の型)
     std::unordered_map<std::string, ast::TypePtr> typedef_defs_;

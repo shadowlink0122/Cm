@@ -369,13 +369,15 @@ struct MirStatement {
         StorageLive,  // 変数の有効範囲開始
         StorageDead,  // 変数の有効範囲終了
         Nop,          // 何もしない（最適化で削除される）
+        Asm,          // インラインアセンブリ
     };
 
     Kind kind;
     Span span;
+    bool no_opt = false;  // 最適化禁止フラグ（must{}ブロック内の文）
 
     // デフォルトコンストラクタ
-    MirStatement() : kind(Nop), data(std::monostate{}) {}
+    MirStatement() : kind(Nop), no_opt(false), data(std::monostate{}) {}
 
     struct AssignData {
         MirPlace place;
@@ -386,8 +388,34 @@ struct MirStatement {
         LocalId local;
     };
 
+    // asmオペランド（制約+ローカル変数IDまたは定数値）
+    struct MirAsmOperand {
+        std::string constraint;  // "+r", "=r", "r", "i", "n", etc.
+        LocalId local_id;        // 変数のローカルID（is_constant=falseの場合）
+        bool is_constant;        // 定数値かどうか（i,n制約用）
+        int64_t const_value;     // 定数値（is_constant=trueの場合）
+
+        // デフォルトコンストラクタ
+        MirAsmOperand() : local_id(0), is_constant(false), const_value(0) {}
+
+        // 変数用コンストラクタ
+        MirAsmOperand(std::string c, LocalId id)
+            : constraint(std::move(c)), local_id(id), is_constant(false), const_value(0) {}
+
+        // 定数用コンストラクタ
+        MirAsmOperand(std::string c, int64_t val)
+            : constraint(std::move(c)), local_id(0), is_constant(true), const_value(val) {}
+    };
+
+    struct AsmData {
+        std::string code;
+        bool is_must;  // must修飾（最適化抑制）
+        std::vector<std::string> clobbers;
+        std::vector<MirAsmOperand> operands;  // オペランド情報
+    };
+
     std::variant<std::monostate,  // Nop
-                 AssignData, StorageData>
+                 AssignData, StorageData, AsmData>
         data;
 
     static MirStatementPtr assign(MirPlace place, MirRvaluePtr rvalue, Span s = {}) {
@@ -411,6 +439,17 @@ struct MirStatement {
         stmt->kind = StorageDead;
         stmt->span = s;
         stmt->data = StorageData{local};
+        return stmt;
+    }
+
+    // インラインアセンブリ用
+    static MirStatementPtr asm_stmt(std::string code, bool is_must = true,
+                                    std::vector<MirAsmOperand> operands = {},
+                                    std::vector<std::string> clobbers = {}, Span s = {}) {
+        auto stmt = std::make_unique<MirStatement>();
+        stmt->kind = Asm;
+        stmt->span = s;
+        stmt->data = AsmData{std::move(code), is_must, std::move(clobbers), std::move(operands)};
         return stmt;
     }
 };
@@ -457,6 +496,9 @@ struct MirTerminator {
 
         // 末尾呼び出し最適化（LLVM tail call attribute）
         bool is_tail_call = false;  // 末尾位置の自己呼び出し
+
+        // async関数をawaitで呼び出しているか（同期実行する）
+        bool is_awaited = false;
     };
 
     std::variant<std::monostate,  // Return, Unreachable
@@ -670,6 +712,80 @@ struct MirStruct {
 
 using MirStructPtr = std::unique_ptr<MirStruct>;
 
+// ============================================================
+// Enum定義（Tagged Union対応）
+// ============================================================
+struct MirEnumMember {
+    std::string name;
+    int64_t tag_value;  // タグ値（バリアントを識別）
+    // Associated data フィールド（Tagged Union用）
+    std::vector<std::pair<std::string, hir::TypePtr>> fields;
+
+    // Associated dataを持つかどうか
+    bool has_data() const { return !fields.empty(); }
+};
+
+struct MirEnum {
+    std::string name;
+    std::string module_path;
+    bool is_export = false;
+    std::vector<MirEnumMember> members;
+
+    // Tagged Unionかどうか（dataを持つメンバーがあるか）
+    bool is_tagged_union() const {
+        for (const auto& m : members) {
+            if (m.has_data())
+                return true;
+        }
+        return false;
+    }
+
+    // 最大ペイロードサイズを計算（Tagged Union用）
+    uint32_t max_payload_size() const {
+        uint32_t maxSize = 0;
+        for (const auto& member : members) {
+            uint32_t memberSize = 0;
+            for (const auto& [name, type] : member.fields) {
+                if (!type)
+                    continue;
+                switch (type->kind) {
+                    case hir::TypeKind::Bool:
+                    case hir::TypeKind::Char:
+                    case hir::TypeKind::Tiny:
+                    case hir::TypeKind::UTiny:
+                        memberSize += 1;
+                        break;
+                    case hir::TypeKind::Short:
+                    case hir::TypeKind::UShort:
+                        memberSize += 2;
+                        break;
+                    case hir::TypeKind::Int:
+                    case hir::TypeKind::UInt:
+                    case hir::TypeKind::Float:
+                        memberSize += 4;
+                        break;
+                    case hir::TypeKind::Long:
+                    case hir::TypeKind::ULong:
+                    case hir::TypeKind::Double:
+                    case hir::TypeKind::Pointer:
+                    case hir::TypeKind::String:
+                        memberSize += 8;
+                        break;
+                    default:
+                        memberSize += 8;  // デフォルトはポインタサイズ
+                        break;
+                }
+            }
+            if (memberSize > maxSize) {
+                maxSize = memberSize;
+            }
+        }
+        return maxSize;
+    }
+};
+
+using MirEnumPtr = std::unique_ptr<MirEnum>;
+
 // インターフェースメソッド定義
 struct MirInterfaceMethod {
     std::string name;
@@ -749,6 +865,7 @@ using MirModulePtr = std::unique_ptr<MirModule>;
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
     std::vector<MirStructPtr> structs;        // 構造体定義
+    std::vector<MirEnumPtr> enums;            // enum定義（Tagged Union含む）
     std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
     std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
     std::vector<MirModulePtr> modules;        // モジュール

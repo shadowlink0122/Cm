@@ -29,7 +29,6 @@ enum class TokenKind {
     KwContinue,
     KwDefault,  // switch default
     KwDefer,    // defer statement
-    KwDelete,
     KwElse,
     KwEnum,
     KwExport,
@@ -48,9 +47,9 @@ enum class TokenKind {
     KwMatch,
     KwModule,  // module declaration
     KwMove,    // move ownership
+    KwMust,    // must execute (no optimization) for inline asm
     KwMutable,
     KwNamespace,  // namespace declaration
-    KwNew,
     KwNull,
     KwOperator,  // operator overloading in interface/impl
     KwOverload,  // function overloading
@@ -62,7 +61,7 @@ enum class TokenKind {
     KwStruct,
     KwSwitch,    // switch statement
     KwTemplate,  // template declaration
-    KwThis,
+    KwSelf,
     KwTrue,
     KwTypedef,   // type alias
     KwTypename,  // template typename

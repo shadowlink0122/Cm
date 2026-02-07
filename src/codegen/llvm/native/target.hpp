@@ -10,10 +10,12 @@
 #include "../core/context.hpp"
 #include "safe_codegen.hpp"
 
+#include <cstdlib>  // exit()
 #include <fstream>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/ErrorHandling.h>  // install_fatal_error_handler
 #include <llvm/Support/FileSystem.h>
 #if LLVM_VERSION_MAJOR >= 16
 #include <llvm/TargetParser/Host.h>
@@ -26,6 +28,15 @@
 #include <llvm/Target/TargetOptions.h>
 
 namespace cm::codegen::llvm_backend {
+
+// LLVMのFatal Errorで即時終了（ハング防止）
+inline void llvmFatalErrorHandler(void* /*user_data*/, const char* message, bool gen_crash_diag) {
+    std::cerr << "\n[LLVM Fatal Error] " << message << std::endl;
+    if (gen_crash_diag) {
+        std::cerr << "[LLVM] Please report this bug.\n";
+    }
+    std::exit(1);  // 即時終了
+}
 
 /// ターゲットマネージャ
 class TargetManager {
@@ -57,6 +68,13 @@ class TargetManager {
     void initialize() {
         if (initialized)
             return;
+
+        // LLVM Fatal Error Handlerを設定（エラー時に即時終了してハングを防止）
+        static bool errorHandlerInstalled = false;
+        if (!errorHandlerInstalled) {
+            llvm::install_fatal_error_handler(llvmFatalErrorHandler, nullptr);
+            errorHandlerInstalled = true;
+        }
 
         // LLVM ターゲット初期化
         llvm::InitializeAllTargetInfos();

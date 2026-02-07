@@ -103,14 +103,33 @@ run_test() {
         return
     fi
 
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
-
-    # .expectファイルの存在チェック
-    if [ ! -f "$expect_file" ]; then
-        echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No .expect file"
+    # .skipファイルチェック
+    local skip_file="${test_file%.cm}.skip"
+    if [ -f "$skip_file" ]; then
+        echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists"
         SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
         return
     fi
+
+    # .expectまたは.errorファイルの存在チェック
+    local error_expect_file="${test_file%.cm}.error"
+    local has_expect=0
+    local has_error=0
+    
+    if [ -f "$expect_file" ]; then
+        has_expect=1
+    fi
+    if [ -f "$error_expect_file" ]; then
+        has_error=1
+    fi
+    
+    if [ $has_expect -eq 0 ] && [ $has_error -eq 0 ]; then
+        echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No expect/error file"
+        SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
+        return
+    fi
+
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
 
     # テスト実行
     local output_file="/tmp/cm_test_$$.out"
@@ -198,15 +217,34 @@ run_test() {
     esac
 
     # 結果比較
+    # .errorファイルがある場合はエラー出力をチェック
+    if [ $has_error -eq 1 ]; then
+        # エラーが期待されているケース
+        local expected_error=$(cat "$error_expect_file")
+        if grep -q "$expected_error" "$output_file" 2>/dev/null; then
+            echo -e "${GREEN}[PASS]${NC} $category/$test_name (expected error)"
+            PASSED_TESTS=$((PASSED_TESTS + 1))
+        else
+            echo -e "${RED}[FAIL]${NC} $category/$test_name - Error output mismatch"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+            FAILED_FILES+=("$test_file")
+            if [ $VERBOSE -eq 1 ]; then
+                echo "  Expected error containing:"
+                head -n 3 "$error_expect_file" | sed 's/^/    /'
+                echo "  Got:"
+                head -n 5 "$output_file" | sed 's/^/    /'
+            fi
+        fi
     # return.cmのような非ゼロ終了コードが意図的な場合を考慮
-    if [ $error_code -ne 0 ] && ! grep -q "エラー" "$expect_file" && [ -s "$expect_file" ]; then
+    elif [ $error_code -ne 0 ] && ! grep -q "エラー" "$expect_file" && [ -s "$expect_file" ]; then
         # 実行エラーかつ期待値にエラーが含まれていない、かつexpectファイルが空でない
         echo -e "${RED}[FAIL]${NC} $category/$test_name - Runtime error (exit code: $error_code)"
         FAILED_TESTS=$((FAILED_TESTS + 1))
         FAILED_FILES+=("$test_file")
         if [ $VERBOSE -eq 1 ]; then
-            echo "  Output:"
-            cat "$output_file" | sed 's/^/    /'
+            echo "  --- Error output (first 5 lines) ---"
+            head -n 5 "$output_file" | sed 's/^/  /'
+            echo "  ---"
         fi
     elif diff -q "$output_file" "$expect_file" > /dev/null 2>&1; then
         echo -e "${GREEN}[PASS]${NC} $category/$test_name"

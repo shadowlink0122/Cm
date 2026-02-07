@@ -316,4 +316,93 @@ void TypeChecker::register_auto_css_impl(const ast::StructDecl& st) {
                    debug::Level::Debug);
 }
 
+void TypeChecker::register_builtin_types() {
+    // ============================================================
+    // Result<T, E> - 成功/失敗を表すenum
+    // ============================================================
+    {
+        // ジェネリックenumとして登録
+        generic_enums_["Result"] = {"T", "E"};
+        enum_names_.insert("Result");
+
+        // バリアントを登録: Ok(T), Err(E)
+        enum_values_["Result::Ok"] = 0;
+        enum_values_["Result::Err"] = 1;
+
+        // メソッドを登録
+        // is_ok() -> bool
+        MethodInfo is_ok;
+        is_ok.name = "is_ok";
+        is_ok.return_type = ast::make_bool();
+        type_methods_["Result"]["is_ok"] = is_ok;
+
+        // is_err() -> bool
+        MethodInfo is_err;
+        is_err.name = "is_err";
+        is_err.return_type = ast::make_bool();
+        type_methods_["Result"]["is_err"] = is_err;
+
+        // unwrap() -> T
+        MethodInfo unwrap;
+        unwrap.name = "unwrap";
+        unwrap.return_type = ast::make_generic_param("T");
+        type_methods_["Result"]["unwrap"] = unwrap;
+
+        // unwrap_or(default: T) -> T
+        MethodInfo unwrap_or;
+        unwrap_or.name = "unwrap_or";
+        unwrap_or.return_type = ast::make_generic_param("T");
+        unwrap_or.param_types.push_back(ast::make_generic_param("T"));
+        type_methods_["Result"]["unwrap_or"] = unwrap_or;
+
+        // unwrap_err() -> E
+        MethodInfo unwrap_err;
+        unwrap_err.name = "unwrap_err";
+        unwrap_err.return_type = ast::make_generic_param("E");
+        type_methods_["Result"]["unwrap_err"] = unwrap_err;
+    }
+
+    // ============================================================
+    // Option<T> - 値の有無を表すenum
+    // ============================================================
+    {
+        // ジェネリックenumとして登録
+        generic_enums_["Option"] = {"T"};
+        enum_names_.insert("Option");
+
+        // バリアントを登録: Some(T), None
+        enum_values_["Option::Some"] = 0;
+        enum_values_["Option::None"] = 1;
+
+        // メソッドを登録
+        // is_some() -> bool
+        MethodInfo is_some;
+        is_some.name = "is_some";
+        is_some.return_type = ast::make_bool();
+        type_methods_["Option"]["is_some"] = is_some;
+
+        // is_none() -> bool
+        MethodInfo is_none;
+        is_none.name = "is_none";
+        is_none.return_type = ast::make_bool();
+        type_methods_["Option"]["is_none"] = is_none;
+
+        // unwrap() -> T
+        MethodInfo unwrap;
+        unwrap.name = "unwrap";
+        unwrap.return_type = ast::make_generic_param("T");
+        type_methods_["Option"]["unwrap"] = unwrap;
+
+        // unwrap_or(default: T) -> T
+        MethodInfo unwrap_or;
+        unwrap_or.name = "unwrap_or";
+        unwrap_or.return_type = ast::make_generic_param("T");
+        unwrap_or.param_types.push_back(ast::make_generic_param("T"));
+        type_methods_["Option"]["unwrap_or"] = unwrap_or;
+    }
+
+    debug::tc::log(debug::tc::Id::Resolved, "Registered builtin types: Result<T, E>, Option<T>",
+                   debug::Level::Debug);
+}
+
 }  // namespace cm

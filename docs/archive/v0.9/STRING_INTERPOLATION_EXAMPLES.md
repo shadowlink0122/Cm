@@ -243,7 +243,7 @@ declare ptr @cm_format_double(double)
 
 ### HIR String Interpolation Processing
 
-**File**: `/Users/shadowlink/Documents/git/Cm/src/hir/string_interpolation.hpp`
+**File**: `src/hir/string_interpolation.hpp`
 
 **Key Functions**:
 
@@ -367,7 +367,7 @@ declare ptr @cm_format_double(double)
 
 ### LLVM Code Generation
 
-**File**: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/mir_to_llvm.cpp`
+**File**: `src/codegen/llvm/mir_to_llvm.cpp`
 
 #### Print/Println Handling (Lines 298-369)
 
@@ -482,7 +482,7 @@ else if (std::holds_alternative<std::string>(constant.value)) {
 
 ### Format String Parser
 
-**File**: `/Users/shadowlink/Documents/git/Cm/src/common/format_string.hpp`
+**File**: `src/common/format_string.hpp`
 
 #### Placeholder Parsing (Lines 63-120)
 

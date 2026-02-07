@@ -1,0 +1,113 @@
+// Vector<T>メソッドチェーンテスト
+// ジェネリックコレクションでのメソッド連鎖が正しく動作することを検証
+// 注意: Hazard #5.15により、get()の結果を中間変数に保存する必要がある
+
+import std::io::println;
+import std::collections::vector::*;
+
+// テスト用構造体（トップレベルで定義）
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    println("=== Vector Method Chain Test ===");
+
+    // 1. 基本的なメソッド呼び出しチェーン
+    println("1. Basic method calls:");
+    Vector<int> vi();
+    vi.push(10);
+    vi.push(20);
+    vi.push(30);
+
+    int len = vi.len();
+    println("  len() = {len}");
+    if (len != 3) {
+        println("FAIL: expected 3");
+        return 1;
+    }
+
+    // 2. push後のlen（変更操作のチェーン）
+    println("2. Push then len:");
+    vi.push(40);
+    len = vi.len();
+    println("  after push(40): len = {len}");
+    if (len != 4) {
+        println("FAIL: expected 4");
+        return 1;
+    }
+
+    // 3. get/setの連続呼び出し
+    println("3. Get/Set sequence:");
+    int v0 = *vi.get(0);
+    vi.set(0, v0 + 100);
+    int v0_after = *vi.get(0);
+    println("  v0 before=10, after={v0_after}");
+    if (v0_after != 110) {
+        println("FAIL: expected 110");
+        return 1;
+    }
+
+    // 4. Vector<Point>でのメソッドチェーン
+    println("4. Vector<Point> method calls:");
+    Vector<Point> vp();
+    Point p1;
+    p1.x = 1;
+    p1.y = 2;
+    vp.push(p1);
+
+    Point p2;
+    p2.x = 3;
+    p2.y = 4;
+    vp.push(p2);
+
+    int plen = vp.len();
+    println("  vp.len() = {plen}");
+    if (plen != 2) {
+        println("FAIL: expected 2");
+        return 1;
+    }
+
+    // getの結果を中間変数に取得（Hazard #5.15回避）
+    Point got = *vp.get(0);
+    println("  vp.get(0) = ({got.x}, {got.y})");
+    if (got.x != 1 || got.y != 2) {
+        println("FAIL: expected (1, 2)");
+        return 1;
+    }
+
+    // 5. pop/push連続操作
+    println("5. Pop/Push sequence:");
+    int popped = vi.pop();
+    println("  popped = {popped}");
+    vi.push(50);
+    int last = *vi.get(3);
+    println("  after push(50), get(3) = {last}");
+    if (last != 50) {
+        println("FAIL: expected 50");
+        return 1;
+    }
+
+    // 6. clear後の再利用
+    println("6. Clear and reuse:");
+    vi.clear();
+    bool empty = vi.is_empty();
+    println("  is_empty() = {empty}");
+    if (!empty) {
+        println("FAIL: expected true");
+        return 1;
+    }
+
+    vi.push(999);
+    int new_len = vi.len();
+    int new_val = *vi.get(0);
+    println("  after push(999): len={new_len}, get(0)={new_val}");
+    if (new_len != 1 || new_val != 999) {
+        println("FAIL: expected len=1, val=999");
+        return 1;
+    }
+
+    println("=== All Vector Method Chain Tests PASSED ===");
+    return 0;
+}

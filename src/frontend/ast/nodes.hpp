@@ -56,6 +56,7 @@ struct LambdaExpr;
 struct MatchExpr;
 struct CastExpr;
 struct MoveExpr;
+struct AwaitExpr;
 
 // 式の種類
 using ExprKind =
@@ -67,7 +68,7 @@ using ExprKind =
                  std::unique_ptr<AlignofExpr>, std::unique_ptr<TypenameOfExpr>,
                  std::unique_ptr<StructLiteralExpr>, std::unique_ptr<ArrayLiteralExpr>,
                  std::unique_ptr<LambdaExpr>, std::unique_ptr<MatchExpr>, std::unique_ptr<CastExpr>,
-                 std::unique_ptr<MoveExpr>>;
+                 std::unique_ptr<MoveExpr>, std::unique_ptr<AwaitExpr>>;
 
 struct Expr : Node {
     ExprKind kind;
@@ -109,13 +110,15 @@ struct SwitchStmt;
 struct BreakStmt;
 struct ContinueStmt;
 struct DeferStmt;
+struct MustBlockStmt;  // must {} ブロック（最適化禁止）
 
 using StmtKind =
     std::variant<std::unique_ptr<LetStmt>, std::unique_ptr<ExprStmt>, std::unique_ptr<ReturnStmt>,
                  std::unique_ptr<IfStmt>, std::unique_ptr<ForStmt>, std::unique_ptr<ForInStmt>,
                  std::unique_ptr<WhileStmt>, std::unique_ptr<BlockStmt>,
                  std::unique_ptr<SwitchStmt>, std::unique_ptr<BreakStmt>,
-                 std::unique_ptr<ContinueStmt>, std::unique_ptr<DeferStmt>>;
+                 std::unique_ptr<ContinueStmt>, std::unique_ptr<DeferStmt>,
+                 std::unique_ptr<MustBlockStmt>>;
 
 struct Stmt : Node {
     StmtKind kind;

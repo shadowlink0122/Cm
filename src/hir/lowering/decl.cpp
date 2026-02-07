@@ -27,6 +27,9 @@ HirDeclPtr HirLowering::lower_decl(ast::Decl& decl) {
         return lower_module(*mod);
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         return lower_extern_block(*extern_block);
+    } else if (auto* macro = decl.as<ast::MacroDecl>()) {
+        // v0.13.0: 型付きマクロをconst変数として処理
+        return lower_macro(*macro);
     }
     return nullptr;
 }
@@ -236,14 +239,37 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
     // メソッド実装の場合（is_ctor_impl時もメソッドがあれば処理）
     for (auto& method : impl.methods) {
         auto hir_func = std::make_unique<HirFunction>();
-        hir_func->name = method->name;
+
+        // コンストラクタ判定: メソッド名が構造体名と一致する場合
+        // target_type が "Point<T>" の場合、基本名 "Point" とメソッド名を比較
+        std::string target_base_name = hir_impl->target_type;
+        auto angle_pos = target_base_name.find('<');
+        if (angle_pos != std::string::npos) {
+            target_base_name = target_base_name.substr(0, angle_pos);
+        }
+
+        bool is_ctor = (method->name == target_base_name);
+        if (is_ctor) {
+            // コンストラクタとして__ctor_N形式にマングリング
+            std::string mangled_name = hir_impl->target_type + "__ctor";
+            if (!method->params.empty()) {
+                mangled_name += "_" + std::to_string(method->params.size());
+            }
+            hir_func->name = mangled_name;
+            hir_func->is_constructor = true;
+        } else {
+            hir_func->name = method->name;
+        }
+
         hir_func->return_type = method->return_type;
+        hir_func->is_static = method->is_static;  // staticフラグを継承
 
         for (const auto& gp : hir_impl->generic_params) {
             hir_func->generic_params.push_back(gp);
         }
 
-        if (impl.target_type) {
+        // staticメソッドではselfパラメータを追加しない
+        if (impl.target_type && !method->is_static) {
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
             hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
         }
@@ -292,8 +318,9 @@ HirDeclPtr HirLowering::lower_import(ast::ImportDecl& imp) {
     hir_imp->path = imp.path.segments;
     hir_imp->alias = "";
 
-    // std::io::println -> __println__ へのエイリアス登録
+    // std::io からのインポート
     std::string path_str = imp.path.to_string();
+
     if (path_str == "std::io::println") {
         import_aliases_["println"] = "__println__";
     } else if (path_str == "std::io::print") {
@@ -354,7 +381,7 @@ HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
     return std::make_unique<HirDecl>(std::move(hir_imp));
 }
 
-// Enum
+// Enum（Associated Data対応）
 HirDeclPtr HirLowering::lower_enum(ast::EnumDecl& en) {
     debug::hir::log(debug::hir::Id::NodeCreate, "enum " + en.name, debug::Level::Debug);
 
@@ -366,6 +393,19 @@ HirDeclPtr HirLowering::lower_enum(ast::EnumDecl& en) {
         HirEnumMember hir_member;
         hir_member.name = member.name;
         hir_member.value = member.value.value_or(0);
+
+        // Associated data フィールドをコピー
+        for (const auto& [field_name, field_type] : member.fields) {
+            hir_member.fields.emplace_back(field_name, field_type);
+        }
+
+        if (hir_member.has_data()) {
+            debug::hir::log(debug::hir::Id::NodeCreate,
+                            "  " + member.name + "(...) with " +
+                                std::to_string(hir_member.fields.size()) + " fields",
+                            debug::Level::Trace);
+        }
+
         hir_enum->members.push_back(std::move(hir_member));
     }
 
@@ -408,6 +448,104 @@ HirDeclPtr HirLowering::lower_module(ast::ModuleDecl& mod) {
     debug::hir::log(debug::hir::Id::NodeCreate, "namespace " + namespace_name, debug::Level::Debug);
 
     return nullptr;
+}
+
+// v0.13.0: マクロ定義（型付きマクロ = const変数として処理）
+HirDeclPtr HirLowering::lower_macro(ast::MacroDecl& macro) {
+    // 定数マクロのみサポート
+    if (macro.kind != ast::MacroDecl::Kind::Constant) {
+        debug::hir::log(debug::hir::Id::NodeCreate, "skipping non-constant macro: " + macro.name,
+                        debug::Level::Debug);
+        return nullptr;
+    }
+
+    debug::hir::log(debug::hir::Id::NodeCreate, "const macro " + macro.name, debug::Level::Debug);
+
+    // v0.13.0: マクロ値を取得してmacro_*_values_に登録（定数展開用）
+    if (macro.value) {
+        // ラムダ式マクロの場合は関数として登録
+        if (auto* lambda = macro.value->as<ast::LambdaExpr>()) {
+            debug::hir::log(debug::hir::Id::NodeCreate,
+                            "registered lambda macro as function: " + macro.name,
+                            debug::Level::Debug);
+
+            // ラムダ式をHirFunctionとして登録
+            auto hir_func = std::make_unique<HirFunction>();
+            hir_func->name = macro.name;
+            hir_func->return_type = lambda->return_type ? lambda->return_type : ast::make_void();
+
+            // パラメータをコピー
+            for (const auto& param : lambda->params) {
+                HirParam hir_param;
+                hir_param.name = param.name;
+                hir_param.type = param.type;
+                hir_func->params.push_back(std::move(hir_param));
+            }
+
+            // ボディをlower
+            if (lambda->is_expr_body()) {
+                // 式形式: => expr を return expr; として処理
+                auto& expr_body = std::get<ast::ExprPtr>(lambda->body);
+                auto ret_stmt = std::make_unique<HirReturn>();
+                ret_stmt->value = lower_expr(*expr_body);
+                auto hir_stmt = std::make_unique<HirStmt>(std::move(ret_stmt));
+                hir_func->body.push_back(std::move(hir_stmt));
+            } else {
+                // ステートメントブロック形式
+                auto& stmts = std::get<std::vector<ast::StmtPtr>>(lambda->body);
+                for (const auto& stmt : stmts) {
+                    hir_func->body.push_back(lower_stmt(*stmt));
+                }
+            }
+
+            // lambda_functions_に追加（既存の仕組みを再利用）
+            lambda_functions_.push_back(std::move(hir_func));
+
+            return nullptr;  // グローバル変数ではなく関数として登録したのでnull
+        }
+
+        if (auto* lit = macro.value->as<ast::LiteralExpr>()) {
+            // int型
+            if (std::holds_alternative<int64_t>(lit->value)) {
+                int64_t val = std::get<int64_t>(lit->value);
+                macro_values_[macro.name] = val;
+                debug::hir::log(debug::hir::Id::NodeCreate,
+                                "registered int macro: " + macro.name + " = " + std::to_string(val),
+                                debug::Level::Debug);
+            }
+            // string型
+            else if (std::holds_alternative<std::string>(lit->value)) {
+                std::string val = std::get<std::string>(lit->value);
+                macro_string_values_[macro.name] = val;
+                debug::hir::log(debug::hir::Id::NodeCreate,
+                                "registered string macro: " + macro.name + " = \"" + val + "\"",
+                                debug::Level::Debug);
+            }
+            // bool型
+            else if (std::holds_alternative<bool>(lit->value)) {
+                bool val = std::get<bool>(lit->value);
+                macro_bool_values_[macro.name] = val;
+                debug::hir::log(
+                    debug::hir::Id::NodeCreate,
+                    "registered bool macro: " + macro.name + " = " + (val ? "true" : "false"),
+                    debug::Level::Debug);
+            }
+        }
+    }
+
+    // マクロをconst変数（HirGlobalVar）として変換
+    auto hir_global = std::make_unique<HirGlobalVar>();
+    hir_global->name = macro.name;
+    hir_global->type = macro.type;
+    hir_global->is_const = true;  // マクロは常にconst
+    hir_global->is_export = macro.is_exported;
+
+    // 値をlower
+    if (macro.value) {
+        hir_global->init = lower_expr(*macro.value);
+    }
+
+    return std::make_unique<HirDecl>(std::move(hir_global));
 }
 
 }  // namespace cm::hir

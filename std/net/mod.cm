@@ -1,0 +1,308 @@
+// std::net - ネットワークモジュール
+module std.net;
+
+import std.core.async::{Poll, Future, Context};
+
+// ============================================================
+// ソケットアドレス
+// ============================================================
+
+struct IpAddr {
+    int[4] octets;  // IPv4: [a, b, c, d]
+}
+
+impl IpAddr {
+    static IpAddr v4(int a, int b, int c, int d) {
+        return IpAddr { octets: [a, b, c, d] };
+    }
+
+    static IpAddr localhost() {
+        return IpAddr::v4(127, 0, 0, 1);
+    }
+
+    static IpAddr any() {
+        return IpAddr::v4(0, 0, 0, 0);
+    }
+
+    string to_string() {
+        return "{self.octets[0]}.{self.octets[1]}.{self.octets[2]}.{self.octets[3]}";
+    }
+}
+
+struct SocketAddr {
+    IpAddr ip;
+    int port;
+}
+
+impl SocketAddr {
+    static SocketAddr new(IpAddr ip, int port) {
+        return SocketAddr { ip: ip, port: port };
+    }
+
+    static SocketAddr from_string(string addr) {
+        // 簡易パーサー（例: "127.0.0.1:8080"）
+        // 実際の実装ではより堅牢なパースが必要
+        return SocketAddr::new(IpAddr::localhost(), 8080);
+    }
+
+    string to_string() {
+        return "{self.ip.to_string()}:{self.port}";
+    }
+}
+
+// ============================================================
+// エラー型
+// ============================================================
+
+enum NetError {
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionClosed,
+    Timeout,
+    AddrInUse,
+    AddrNotAvailable,
+    PermissionDenied,
+    InvalidInput,
+    WouldBlock,
+    Other(string)
+}
+
+// ============================================================
+// Result型（ネットワーク操作用）
+// ============================================================
+
+enum NetResult<T> {
+    Ok(T),
+    Err(NetError)
+}
+
+// ============================================================
+// 外部C関数宣言（ソケットAPI）
+// ============================================================
+
+extern "C" int socket_create(int domain, int type, int protocol);
+extern "C" int socket_bind(int sockfd, void* addr, int addrlen);
+extern "C" int socket_listen(int sockfd, int backlog);
+extern "C" int socket_accept(int sockfd, void* addr, int* addrlen);
+extern "C" int socket_connect(int sockfd, void* addr, int addrlen);
+extern "C" int socket_read(int sockfd, void* buf, int len);
+extern "C" int socket_write(int sockfd, void* buf, int len);
+extern "C" int socket_close(int sockfd);
+extern "C" int socket_set_nonblocking(int sockfd, bool nonblocking);
+extern "C" int socket_set_reuseaddr(int sockfd, bool reuseaddr);
+extern "C" int socket_get_error(int sockfd);
+
+// ============================================================
+// TcpStream - TCP接続ストリーム
+// ============================================================
+
+struct TcpStream {
+    int fd;
+    SocketAddr peer_addr;
+    bool connected;
+}
+
+impl TcpStream {
+    // アドレスに接続
+    static NetResult<TcpStream> connect(string addr) {
+        SocketAddr sock_addr = SocketAddr::from_string(addr);
+        return TcpStream::connect_addr(sock_addr);
+    }
+
+    static NetResult<TcpStream> connect_addr(SocketAddr addr) {
+        int fd = socket_create(2, 1, 0);  // AF_INET, SOCK_STREAM, 0
+        if (fd < 0) {
+            return NetResult::Err(NetError::Other("Failed to create socket"));
+        }
+
+        // TODO: 実際の接続処理
+        // int result = socket_connect(fd, ...);
+
+        return NetResult::Ok(TcpStream {
+            fd: fd,
+            peer_addr: addr,
+            connected: true
+        });
+    }
+
+    // データを読み取り
+    NetResult<int> read(char* buf, int len) {
+        if (!self.connected) {
+            return NetResult::Err(NetError::ConnectionClosed);
+        }
+
+        int bytes_read = socket_read(self.fd, buf, len);
+        if (bytes_read < 0) {
+            return NetResult::Err(NetError::Other("Read failed"));
+        }
+        return NetResult::Ok(bytes_read);
+    }
+
+    // データを書き込み
+    NetResult<int> write(const char* buf, int len) {
+        if (!self.connected) {
+            return NetResult::Err(NetError::ConnectionClosed);
+        }
+
+        int bytes_written = socket_write(self.fd, buf, len);
+        if (bytes_written < 0) {
+            return NetResult::Err(NetError::Other("Write failed"));
+        }
+        return NetResult::Ok(bytes_written);
+    }
+
+    // 文字列を書き込み
+    NetResult<int> write_string(string data) {
+        return self.write(data.c_str(), data.len());
+    }
+
+    // 全データを読み取って文字列として返す
+    NetResult<string> read_to_string() {
+        char[4096] buf;
+        string result = "";
+
+        while (true) {
+            int bytes = socket_read(self.fd, &buf, 4096);
+            if (bytes <= 0) {
+                break;
+            }
+            // bufからbytesバイトをresultに追加
+            for (int i = 0; i < bytes; i++) {
+                result = result + buf[i];
+            }
+        }
+
+        return NetResult::Ok(result);
+    }
+
+    // 接続を閉じる
+    void close() {
+        if (self.connected) {
+            socket_close(self.fd);
+            self.connected = false;
+        }
+    }
+
+    // ピアアドレスを取得
+    SocketAddr peer_addr() {
+        return self.peer_addr;
+    }
+}
+
+// ============================================================
+// TcpListener - TCPリスナー
+// ============================================================
+
+struct TcpListener {
+    int fd;
+    SocketAddr local_addr;
+    bool listening;
+}
+
+impl TcpListener {
+    // アドレスにバインド
+    static NetResult<TcpListener> bind(string addr) {
+        SocketAddr sock_addr = SocketAddr::from_string(addr);
+        return TcpListener::bind_addr(sock_addr);
+    }
+
+    static NetResult<TcpListener> bind_addr(SocketAddr addr) {
+        int fd = socket_create(2, 1, 0);  // AF_INET, SOCK_STREAM, 0
+        if (fd < 0) {
+            return NetResult::Err(NetError::Other("Failed to create socket"));
+        }
+
+        socket_set_reuseaddr(fd, true);
+
+        // TODO: 実際のバインド処理
+        // socket_bind(fd, ...);
+        // socket_listen(fd, 128);
+
+        return NetResult::Ok(TcpListener {
+            fd: fd,
+            local_addr: addr,
+            listening: true
+        });
+    }
+
+    // 新しい接続を受け入れ
+    NetResult<TcpStream> accept() {
+        if (!self.listening) {
+            return NetResult::Err(NetError::Other("Not listening"));
+        }
+
+        int client_fd = socket_accept(self.fd, null, null);
+        if (client_fd < 0) {
+            return NetResult::Err(NetError::Other("Accept failed"));
+        }
+
+        return NetResult::Ok(TcpStream {
+            fd: client_fd,
+            peer_addr: SocketAddr::new(IpAddr::any(), 0),
+            connected: true
+        });
+    }
+
+    // リスナーを閉じる
+    void close() {
+        if (self.listening) {
+            socket_close(self.fd);
+            self.listening = false;
+        }
+    }
+
+    // ローカルアドレスを取得
+    SocketAddr local_addr() {
+        return self.local_addr;
+    }
+}
+
+// ============================================================
+// 非同期版 (Futures)
+// ============================================================
+
+// 非同期接続Future
+struct TcpConnectFuture {
+    string addr;
+    bool started;
+    int fd;
+}
+
+impl TcpConnectFuture for Future<NetResult<TcpStream>> {
+    Poll<NetResult<TcpStream>> poll(Context* cx) {
+        if (!self.started) {
+            self.started = true;
+            // ノンブロッキング接続を開始
+            self.fd = socket_create(2, 1, 0);
+            socket_set_nonblocking(self.fd, true);
+            // connect()を呼び出し
+        }
+
+        // 接続状態をチェック
+        int err = socket_get_error(self.fd);
+        if (err == 0) {
+            // 接続成功
+            SocketAddr addr = SocketAddr::from_string(self.addr);
+            return Poll::Ready(NetResult::Ok(TcpStream {
+                fd: self.fd,
+                peer_addr: addr,
+                connected: true
+            }));
+        } else if (err == -1) {
+            // まだ進行中
+            return Poll::Pending;
+        } else {
+            // エラー
+            return Poll::Ready(NetResult::Err(NetError::ConnectionRefused));
+        }
+    }
+}
+
+// 非同期接続
+export TcpConnectFuture tcp_connect(string addr) {
+    return TcpConnectFuture {
+        addr: addr,
+        started: false,
+        fd: -1
+    };
+}

@@ -1,153 +1,282 @@
-[English](MODULE_SYSTEM.en.html)
+[English](module_system.en.html)
 
-# Cmモジュールシステム実装まとめ
+# Cmモジュールシステム設計
 
-## 🎯 実装完了項目
+## 概要
 
-### 1. レクサー拡張
-- ✅ 新キーワード追加: `module`, `import`, `export`, `from`, `as`
-- ✅ トークン定義とマッピング更新
+Cm言語のモジュールシステムは、OS依存の機能を外部モジュールとして分離し、ポータブルなコア言語を実現します。
 
-### 2. AST拡張
-- ✅ モジュール関連ノード定義 (`src/frontend/ast/module.hpp`)
-  - `ModulePath`: モジュールパス表現
-  - `ImportDecl`: import文
-  - `ExportDecl`: export文
-  - `FromDecl`: from
-  - `AsDecl`: as
-  - `ModuleDecl`: module宣言
+## 設計原則
 
-### 3. 標準ライブラリ構造
-```
-std/
-├── core/          # OS非依存のコア機能
-│   └── mod.cm     # Option, Result, 基本トレイト
-├── io/            # 入出力
-│   ├── mod.cm     # print, println関数
-│   └── file.cm    # ファイル操作
-├── collections/   # コレクション
-│   └── vec.cm     # 動的配列Vec<T>
-```
+1. **明示的な依存関係**: すべての外部依存は`import`で明示
+2. **名前空間の分離**: モジュールごとに独立した名前空間
+3. **遅延バインディング**: 実行環境に応じて適切な実装を選択
+4. **マクロによる拡張**: コンパイル時のメタプログラミング
 
-## 📝 モジュール構文
+## モジュール構文
 
-### Import文
+### 1. Import文
+
 ```cm
-// 基本インポート
+// 単一インポート
 import std.io;
 
 // 選択的インポート
-import std.io.{print, println};
+import std.io.{print, println, eprint};
 
-// エイリアス
+// エイリアス付きインポート
 import std.collections.HashMap as Map;
 
-// ワイルドカード（非推奨）
+// ワイルドカードインポート（非推奨）
 import std.io.*;
+
+// マクロのインポート
+import std.macros.{derive, test};
 ```
 
-### Export文
+### 2. Export文
+
 ```cm
 // 関数のエクスポート
-export int add(int a, int b) { ... }
+export fn add(a: int, b: int) -> int {
+    return a + b;
+}
 
 // 型のエクスポート
-export struct Point { x: f64, y: f64 }
-
-// リストエクスポート
-export { foo, bar, baz };
+export struct Point {
+    x: float,
+    y: float,
+}
 
 // 再エクスポート
 export { Vec, HashMap } from std.collections;
+
+// モジュール全体の再エクスポート
+export * from std.io;
 ```
 
-### Module宣言
+### 3. モジュール定義
+
 ```cm
-module math.geometry;
+// ファイル: std/io.cm
+module std.io;
 
-// モジュール内の定義...
-```
+// 外部関数宣言（実装はランタイムが提供）
+@[extern("cm_print")]
+fn print_impl(s: string) -> void;
 
-## 🏗️ アーキテクチャ
+// パブリックAPI
+export fn print(s: string) -> void {
+    print_impl(s);
+}
 
-### モジュール解決プロセス
-1. **インポート解析**: ソースからimport文を抽出
-2. **パス解決**: モジュールファイルを検索
-   - カレントディレクトリ
-   - プロジェクトルート
-   - 標準ライブラリ（CM_STD_PATH）
-   - 依存ライブラリ（.cm/deps/）
-3. **循環依存チェック**: 依存グラフを構築
-4. **順次コンパイル**: 依存順にコンパイル
-5. **シンボル登録**: エクスポートを名前空間に登録
-
-プラットフォーム別実装:
-- **Unix/Linux**: システムコール直接呼び出し
-- **Windows**: Win32 API
-- **WebAssembly**: WASM imports
-- **Rust**: 標準ライブラリバインディング
-
-## 📊 実装状況
-
-### ✅ 完了
-- レクサーのキーワード追加
-- AST定義（モジュール関連ノード）
-- 標準ライブラリ構造設計
-- 基本モジュール実装:
-  - `std.core`: 基本型とトレイト
-  - `std.io`: 入出力関数
-  - `std.collections.vec`: 動的配列
-  - `std.macros`: 標準マクロ
-- サンプルプログラム
-
-### 🚧 未実装
-- パーサーのモジュール構文対応
-- モジュール解決エンジン
-- HIR/MIRでのモジュール表現
-- 名前空間管理
-- マクロ展開エンジン
-- FFIランタイムバインディング
-
-## 📁 サンプルプログラム
-
-### 08_modules.cm
-標準ライブラリの使用例:
-```cm
-import std.io.{println};
-import std.collections.Vec;
-import std.core.{Option, Result};
-
-int main() {
-    auto vec = Vec::new();
-    vec.push(42);
-    println("Vector length: {vec.len()}");
+export fn println(s: string) -> void {
+    print_impl(s);
+    print_impl("\n");
 }
 ```
 
-### 09_custom_module.cm
-カスタムモジュールの定義:
-```cm
-module math.geometry;
+## マクロシステム
 
-export struct Point { double x, double y }
-export double distance(&Point p1, &Point p2) { ... }
+### 1. マクロ定義
+
+```cm
+// 関数風マクロ
+@[macro]
+export fn assert!(condition: expr, message: string = "") {
+    if (!$condition) {
+        panic!("Assertion failed: " + $message);
+    }
+}
+
+// アトリビュートマクロ
+@[macro]
+export fn derive(traits: string...) -> fn(type: Type) -> void {
+    // 型に対してトレイトを自動実装
+    for trait in traits {
+        implement_trait($type, trait);
+    }
+}
+
+// プロシージャマクロ
+@[proc_macro]
+export fn sql!(query: string) -> expr {
+    // SQL文字列をコンパイル時に検証・変換
+    return parse_sql(query);
+}
 ```
 
-## 🎯 設計方針
+### 2. マクロ使用
 
-1. **明示的な依存関係**: すべての外部依存を明示的にimport
-2. **OS機能の分離**: print等のOS機能は外部モジュール化
-3. **プラットフォーム独立**: コア言語はOS非依存
-4. **遅延バインディング**: 実行環境で適切な実装を選択
-5. **衛生的マクロ**: 名前衝突を避ける設計
+```cm
+import std.macros.{assert, derive};
 
-## 🚀 次のステップ
+@[derive("Debug", "Clone", "PartialEq")]
+struct User {
+    id: int,
+    name: string,
+}
 
-1. パーサーを拡張してimport/export構文をサポート
-2. モジュール解決エンジンの実装
-3. HIRでモジュール情報を保持
-4. 名前空間とシンボルテーブルの実装
-5. マクロ展開パスの実装
-6. FFIランタイムの実装
+fn main() {
+    let x = 10;
+    assert!(x > 0, "x must be positive");
 
-これにより、Cm言語は完全にモジュール化され、OS依存機能を外部ライブラリとして分離した、ポータブルな言語となります。
+    // プロシージャマクロ
+    let result = sql!("SELECT * FROM users WHERE id = ?");
+}
+```
+
+## 標準ライブラリ構造
+
+```
+std/
+├── core/           # コア機能（OS非依存）
+│   ├── types.cm    # 基本型定義
+│   ├── ops.cm      # 演算子オーバーロード
+│   └── mem.cm      # メモリ管理
+│
+├── io/             # 入出力（OS依存）
+│   ├── mod.cm      # モジュール定義
+│   ├── print.cm    # 出力関数
+│   ├── file.cm     # ファイル操作
+│   └── stdin.cm    # 標準入力
+│
+├── collections/    # データ構造
+│   ├── vec.cm      # 動的配列
+│   ├── map.cm      # ハッシュマップ
+│   └── set.cm      # セット
+│
+├── sys/            # システム依存
+│   ├── unix.cm     # Unix系OS
+│   ├── windows.cm  # Windows
+│   └── wasm.cm     # WebAssembly
+│
+└── macros/         # 標準マクロ
+    ├── derive.cm   # 自動導出
+    ├── test.cm     # テスト用
+    └── debug.cm    # デバッグ用
+```
+
+## 実装計画
+
+### Phase 1: 基本モジュール機能
+1. import/export構文のパース
+2. モジュール名前空間の実装
+3. 基本的な名前解決
+
+### Phase 2: 外部関数インターフェース
+1. `@[extern]`アトリビュートの実装
+2. ランタイムとのバインディング機構
+3. プラットフォーム固有の実装切り替え
+
+### Phase 3: マクロシステム
+1. マクロ定義のパース
+2. マクロ展開エンジン
+3. 衛生的マクロの実装
+
+### Phase 4: 標準ライブラリ
+1. std.coreの実装
+2. std.ioの実装
+3. std.collectionsの実装
+
+## モジュール解決アルゴリズム
+
+```
+1. ソースファイルからimport文を抽出
+2. モジュールパスを解決:
+   - カレントディレクトリ
+   - プロジェクトルート
+   - 標準ライブラリパス（CM_STD_PATH）
+   - 依存ライブラリパス（.cm/deps/）
+3. 循環依存をチェック
+4. 依存グラフの順にコンパイル
+5. シンボルテーブルにエクスポートを登録
+```
+
+## コンパイル時の動作
+
+```cm
+// main.cm
+import std.io.{print, println};
+
+fn main() {
+    println("Hello, World!");
+}
+```
+
+コンパイル時の変換:
+
+1. **パース段階**: import文を認識、ASTに追加
+2. **名前解決**: std.io.printlnをstd/io.cmから解決
+3. **HIR変換**: 完全修飾名に変換（std::io::println）
+4. **MIR変換**: 外部関数呼び出しに変換
+5. **コード生成**:
+   - Rust: `std_io::println("Hello, World!")`
+   - WASM: `cm_runtime.println("Hello, World!")`
+   - ネイティブ: リンク時に解決
+
+## プラットフォーム別実装
+
+### Unix/Linux
+```cm
+// std/sys/unix.cm
+@[cfg(target_os = "linux")]
+@[extern("write")]
+fn sys_write(fd: int, buf: *const u8, count: usize) -> isize;
+
+export fn print_impl(s: string) -> void {
+    sys_write(1, s.as_ptr(), s.len());
+}
+```
+
+### Windows
+```cm
+// std/sys/windows.cm
+@[cfg(target_os = "windows")]
+@[extern("WriteConsoleW")]
+fn WriteConsoleW(handle: *void, buf: *const u16, len: u32, written: *mut u32, reserved: *void) -> bool;
+
+export fn print_impl(s: string) -> void {
+    // UTF-16変換とWriteConsoleW呼び出し
+}
+```
+
+### WebAssembly
+```cm
+// std/sys/wasm.cm
+@[cfg(target_arch = "wasm32")]
+@[wasm_import("console", "log")]
+fn console_log(s: string) -> void;
+
+export fn print_impl(s: string) -> void {
+    console_log(s);
+}
+```
+
+## エラー処理
+
+```cm
+// モジュールが見つからない
+Error: Cannot find module 'std.foo'
+  --> main.cm:1:8
+  |
+1 | import std.foo;
+  |        ^^^^^^^
+  | help: did you mean 'std.io'?
+
+// 循環依存
+Error: Circular dependency detected
+  --> a.cm:1:8
+  |
+1 | import b;
+  |        ^
+  | note: b.cm imports a.cm at line 2
+
+// エクスポートされていないシンボル
+Error: 'internal_func' is not exported from module 'std.io'
+  --> main.cm:3:12
+  |
+3 |     std.io.internal_func();
+  |            ^^^^^^^^^^^^^
+  | help: available exports: print, println, eprint
+```

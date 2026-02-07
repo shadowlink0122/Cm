@@ -1,0 +1,176 @@
+// LLVMインラインアセンブリ制約テスト
+// =r（出力レジスタ）, +r（読み書きレジスタ）などをテスト
+
+import std::io::println;
+
+int main() {
+#ifdef __x86_64__
+    println("=== LLVM Constraint Test ===");
+
+    // --- Test 1: =r (output only) ---
+    println("\n--- Test 1: =r (output only) ---");
+    int out1 = 0;
+    __asm__("movl $$42, ${=r:out1}");
+    println("out1 (should be 42):");
+    println(out1);
+
+    // --- Test 2: +r (read-write) add ---
+    println("\n--- Test 2: +r (read-write) add ---");
+    int rw = 10;
+    __asm__("addl $$5, ${+r:rw}");
+    println("rw (should be 15):");
+    println(rw);
+
+    // --- Test 3: =r with immediate ---
+    println("\n--- Test 3: =r with immediate ---");
+    int imm = 0;
+    __asm__("movl $$999, ${=r:imm}");
+    println("imm (should be 999):");
+    println(imm);
+
+    // --- Test 4: +r subtraction ---
+    println("\n--- Test 4: +r subtraction ---");
+    int sub = 100;
+    __asm__("subl $$30, ${+r:sub}");
+    println("sub (should be 70):");
+    println(sub);
+
+    // --- Test 5: +r bit shift ---
+    println("\n--- Test 5: +r bit shift ---");
+    int shift = 1;
+    __asm__("shll $$4, ${+r:shift}");
+    println("shift (should be 16):");
+    println(shift);
+
+    // --- Test 6: +r negation ---
+    println("\n--- Test 6: +r negation ---");
+    int neg = 50;
+    __asm__("negl ${+r:neg}");
+    println("neg (should be -50):");
+    println(neg);
+
+    // --- Test 7: +r OR operation ---
+    println("\n--- Test 7: +r OR operation ---");
+    int orv = 0xF0;
+    __asm__("orl $$0x0F, ${+r:orv}");
+    println("orv (should be 255):");
+    println(orv);
+
+    // --- Test 8: +r AND operation ---
+    println("\n--- Test 8: +r AND operation ---");
+    int andv = 0xFF;
+    __asm__("andl $$0x0F, ${+r:andv}");
+    println("andv (should be 15):");
+    println(andv);
+
+    // --- Test 9: =r then +r sequence ---
+    println("\n--- Test 9: =r then +r sequence ---");
+    int seq = 0;
+    __asm__("movl $$50, ${=r:seq}");
+    __asm__("addl $$25, ${+r:seq}");
+    println("seq (should be 75):");
+    println(seq);
+
+    // --- Test 10: Independent multiple vars ---
+    println("\n--- Test 10: Independent multiple vars ---");
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    __asm__("movl $$11, ${=r:x}");
+    __asm__("movl $$22, ${=r:y}");
+    __asm__("movl $$33, ${=r:z}");
+    println("x (should be 11):");
+    println(x);
+    println("y (should be 22):");
+    println(y);
+    println("z (should be 33):");
+    println(z);
+
+    println("\n=== All tests completed! ===");
+#else
+    // ARM64版
+    println("=== LLVM Constraint Test ===");
+
+    // --- Test 1: =r (output only) ---
+    println("\n--- Test 1: =r (output only) ---");
+    int out1 = 0;
+    __asm__("mov ${=r:out1}, #42");
+    println("out1 (should be 42):");
+    println(out1);
+
+    // --- Test 2: +r (read-write) add ---
+    println("\n--- Test 2: +r (read-write) add ---");
+    int rw = 10;
+    __asm__("add ${+r:rw}, ${+r:rw}, #5");
+    println("rw (should be 15):");
+    println(rw);
+
+    // --- Test 3: =r with immediate ---
+    println("\n--- Test 3: =r with immediate ---");
+    int imm = 0;
+    __asm__("mov ${=r:imm}, #999");
+    println("imm (should be 999):");
+    println(imm);
+
+    // --- Test 4: +r subtraction ---
+    println("\n--- Test 4: +r subtraction ---");
+    int sub = 100;
+    __asm__("sub ${+r:sub}, ${+r:sub}, #30");
+    println("sub (should be 70):");
+    println(sub);
+
+    // --- Test 5: +r bit shift ---
+    println("\n--- Test 5: +r bit shift ---");
+    int shift = 1;
+    __asm__("lsl ${+r:shift}, ${+r:shift}, #4");
+    println("shift (should be 16):");
+    println(shift);
+
+    // --- Test 6: +r negation ---
+    println("\n--- Test 6: +r negation ---");
+    int neg = 50;
+    __asm__("neg ${+r:neg}, ${+r:neg}");
+    println("neg (should be -50):");
+    println(neg);
+
+    // --- Test 7: +r OR operation ---
+    println("\n--- Test 7: +r OR operation ---");
+    int orv = 0xF0;
+    __asm__("orr ${+r:orv}, ${+r:orv}, #0x0F");
+    println("orv (should be 255):");
+    println(orv);
+
+    // --- Test 8: +r AND operation ---
+    println("\n--- Test 8: +r AND operation ---");
+    int andv = 0xFF;
+    __asm__("and ${+r:andv}, ${+r:andv}, #0x0F");
+    println("andv (should be 15):");
+    println(andv);
+
+    // --- Test 9: =r then +r sequence ---
+    println("\n--- Test 9: =r then +r sequence ---");
+    int seq = 0;
+    __asm__("mov ${=r:seq}, #50");
+    __asm__("add ${+r:seq}, ${+r:seq}, #25");
+    println("seq (should be 75):");
+    println(seq);
+
+    // --- Test 10: Independent multiple vars ---
+    println("\n--- Test 10: Independent multiple vars ---");
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    __asm__("mov ${=r:x}, #11");
+    __asm__("mov ${=r:y}, #22");
+    __asm__("mov ${=r:z}, #33");
+    println("x (should be 11):");
+    println(x);
+    println("y (should be 22):");
+    println(y);
+    println("z (should be 33):");
+    println(z);
+
+    println("\n=== All tests completed! ===");
+#end
+    return 0;
+}

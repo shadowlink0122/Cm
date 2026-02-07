@@ -1,0 +1,228 @@
+// std::io::console::input - 標準入力
+// v0.13.0: libc syscall直接呼び出し（Cランタイム非依存）
+module std.io.console.input;
+
+// ============================================================
+// libc syscall
+// ============================================================
+
+use libc {
+    long read(int fd, void* buf, long count);
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+// ファイルディスクリプタ
+const int STDIN_FD = 0;
+
+// バッファサイズ
+const int INPUT_BUFFER_SIZE = 4096;
+
+// ============================================================
+// input 関数
+// ============================================================
+
+/// 標準入力から1行読み取り（改行は除去）
+/// 注意: 返された文字列はヒープ上に確保されるため、
+/// 明示的な解放は不要（GCまたはランタイムが管理）
+export string input() {
+    // 一時バッファ（スタック上）
+    utiny[4096] temp_buf;
+    long total = 0;
+
+    // 1バイトずつ読み込んで改行を探す
+    while (total < 4095) {
+        long n = read(STDIN_FD, &temp_buf[total as int] as void*, 1);
+
+        if (n <= 0) {
+            // EOF または エラー
+            break;
+        }
+
+        if (temp_buf[total as int] == 10) {  // '\n' = 10
+            break;
+        }
+
+        total = total + 1;
+    }
+
+    // ヒープにバッファを確保してコピー
+    void* heap_buf = malloc(total + 1);
+    char* result = heap_buf as char*;
+
+    // データをコピー
+    int i = 0;
+    while (i < total as int) {
+        result[i] = temp_buf[i] as char;
+        i = i + 1;
+    }
+    result[total as int] = 0 as char;  // null終端
+
+    return result as string;
+}
+
+/// 標準入力から整数を読み取り
+export int input_int() {
+    string line = input();
+    return parse_int(line);
+}
+
+/// 標準入力からlong読み取り
+export long input_long() {
+    string line = input();
+    return parse_long(line);
+}
+
+/// 標準入力からdouble読み取り
+export double input_double() {
+    string line = input();
+    return parse_double(line);
+}
+
+/// 標準入力からbool読み取り
+/// "true", "1", "yes" -> true, その他 -> false
+export bool input_bool() {
+    string line = input();
+    if (line == "true" || line == "1" || line == "yes") {
+        return true;
+    }
+    return false;
+}
+
+/// 標準入力から文字列を読み取り（inputのエイリアス）
+export string input_string() {
+    return input();
+}
+
+// ============================================================
+// 文字列パース関数（純粋Cm実装）
+// ============================================================
+
+/// 文字列を整数に変換
+int parse_int(string s) {
+    int result = 0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return 0;
+    }
+
+    // 符号チェック
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    // 数字を処理
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {  // '0' = 48, '9' = 57
+            result = result * 10 + (c - 48);
+        } else {
+            // 非数字文字で終了
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return result;
+}
+
+/// 文字列をlongに変換
+long parse_long(string s) {
+    long result = 0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return 0;
+    }
+
+    // 符号チェック
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    // 数字を処理
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result * 10 + (c - 48) as long;
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return result;
+}
+
+/// 文字列をdoubleに変換（簡易実装）
+double parse_double(string s) {
+    // 整数部と小数部を分離
+    double result = 0.0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return 0.0;
+    }
+
+    // 符号チェック
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    // 整数部
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result * 10.0 + (c - 48) as double;
+        } else if (c == 46) {  // '.'
+            i = i + 1;
+            break;
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    // 小数部
+    double fraction = 0.1;
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result + (c - 48) as double * fraction;
+            fraction = fraction * 0.1;
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return result;
+}

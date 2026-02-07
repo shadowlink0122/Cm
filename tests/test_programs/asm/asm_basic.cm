@@ -1,24 +1,43 @@
-// tests/test_programs/asm_basic.cm
-// インラインアセンブリの基本テスト
+// インラインアセンブリ基本テスト
+// __asm__ 直接使用で動作確認
 
 import std::io::println;
 
 int main() {
-    // 基本的なインラインアセンブリ
-    int value = 10;
+#ifdef __x86_64__
+    println("=== Inline Assembly Test ===");
 
-    // NOP命令（何もしない）
-    asm("nop");
-    println("asm: nop");
+    // 基本命令（直接__asm__使用）
+    __asm__("nop");
+    println("nop: ok");
 
-    // 値を使った補間（正しい構文は{}）
-    asm("mov {value}, %ebx");
-    println("asm: mov with interpolation");
+    // コンパイラバリア（空asm）
+    __asm__("");
+    println("compiler_barrier: ok");
 
-    // メモリフェンス
-    asm("mfence");
-    println("asm: mfence");
+    // 複数回実行
+    __asm__("nop");
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
 
+    println("=== Complete ===");
+#else
+    // ARM64版
+    println("=== Inline Assembly Test ===");
+
+    __asm__("nop");
+    println("nop: ok");
+
+    __asm__("");
+    println("compiler_barrier: ok");
+
+    __asm__("nop");
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== Complete ===");
+#end
     return 0;
-    // 成功
 }

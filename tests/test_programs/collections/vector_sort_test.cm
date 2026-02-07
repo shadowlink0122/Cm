@@ -1,0 +1,93 @@
+// Vector<T>::sort テスト
+import std::io::println;
+import std::collections::vector::*;
+
+int main() {
+    println("=== Vector Sort Test ===");
+
+    // 1. Vector<int> ソート
+    println("1. Vector<int> sort:");
+    Vector<int> vi();
+    vi.push(5);
+    vi.push(3);
+    vi.push(8);
+    vi.push(1);
+    vi.push(4);
+    vi.push(2);
+    vi.push(7);
+    vi.push(6);
+    vi.sort();
+
+    bool sorted = true;
+    for (int i = 1; i < vi.len(); i++) {
+        if (*vi.get(i - 1) > *vi.get(i)) {
+            sorted = false;
+            break;
+        }
+    }
+    int v0 = *vi.get(0);
+    int v1 = *vi.get(1);
+    int v2 = *vi.get(2);
+    int v7 = *vi.get(7);
+    println("  sorted={sorted}");
+    println("  [{v0}, {v1}, {v2}, ..., {v7}]");
+
+    // 2. 空ベクトルのソート（クラッシュしないこと）
+    println("2. Empty sort:");
+    Vector<int> empty();
+    empty.sort();
+    println("  ok (no crash)");
+
+    // 3. 1要素のソート
+    println("3. Single element sort:");
+    Vector<int> single();
+    single.push(42);
+    single.sort();
+    int s0 = *single.get(0);
+    println("  [{s0}]");
+
+    // 4. 既にソート済みの配列
+    println("4. Already sorted:");
+    Vector<int> already();
+    already.push(1);
+    already.push(2);
+    already.push(3);
+    already.sort();
+    int a0 = *already.get(0);
+    int a1 = *already.get(1);
+    int a2 = *already.get(2);
+    println("  [{a0}, {a1}, {a2}]");
+
+    // 5. 逆順の配列
+    println("5. Reverse sorted:");
+    Vector<int> rev();
+    rev.push(5);
+    rev.push(4);
+    rev.push(3);
+    rev.push(2);
+    rev.push(1);
+    rev.sort();
+    int r0 = *rev.get(0);
+    int r1 = *rev.get(1);
+    int r4 = *rev.get(4);
+    println("  [{r0}, {r1}, ..., {r4}]");
+
+    // 6. 重複要素
+    println("6. Duplicates:");
+    Vector<int> dup();
+    dup.push(3);
+    dup.push(1);
+    dup.push(3);
+    dup.push(2);
+    dup.push(1);
+    dup.sort();
+    int d0 = *dup.get(0);
+    int d1 = *dup.get(1);
+    int d2 = *dup.get(2);
+    int d3 = *dup.get(3);
+    int d4 = *dup.get(4);
+    println("  [{d0}, {d1}, {d2}, {d3}, {d4}]");
+
+    println("=== PASS ===");
+    return 0;
+}

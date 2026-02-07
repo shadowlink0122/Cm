@@ -1,0 +1,4 @@
+=== Nested Generics Test ===
+matrix.len() = 1
+Row: [1, 2]
+=== PASS ===

@@ -1,0 +1,81 @@
+// インラインASMの入力/出力オペランド テスト
+
+import std::io::println;
+
+int main() {
+#ifdef __x86_64__
+    // === テスト1: 基本的なr + =r制約（コピー） ===
+    int src1 = 100;
+    int dst1 = 0;
+    __asm__("movl ${r:src1}, ${=r:dst1}");
+    println(dst1);  // 100
+
+    // === テスト2: 即値を=rへ ===
+    int result = 0;
+    __asm__("movl $$10, ${=r:result}");
+    println(result);  // 10
+
+    // === テスト3: +rで加算 ===
+    int val = 50;
+    __asm__("addl $$10, ${+r:val}");
+    println(val);  // 60
+
+    // === テスト4: =rで即値、2つの出力 ===
+    int a = 0;
+    int b = 0;
+    __asm__("movl $$111, ${=r:a}");
+    __asm__("movl $$222, ${=r:b}");
+    println(a);  // 111
+    println(b);  // 222
+
+    // === テスト5: シフト演算 ===
+    int shift = 1;
+    __asm__("shll $$3, ${+r:shift}");
+    println(shift);  // 8
+
+    // === テスト6: r入力を=rへ（値コピー） ===
+    int orig = 42;
+    int copy = 0;
+    __asm__("movl ${r:orig}, ${=r:copy}");
+    println(copy);  // 42
+
+#else
+    // ARM64版
+    // === テスト1: 基本的なr + =r制約（コピー） ===
+    int src1 = 100;
+    int dst1 = 0;
+    __asm__("mov ${=r:dst1}, ${r:src1}");
+    println(dst1);  // 100
+
+    // === テスト2: 即値を=rへ ===
+    int result = 0;
+    __asm__("mov ${=r:result}, #10");
+    println(result);  // 10
+
+    // === テスト3: +rで加算 ===
+    int val = 50;
+    __asm__("add ${+r:val}, ${+r:val}, #10");
+    println(val);  // 60
+
+    // === テスト4: =rで即値、2つの出力 ===
+    int a = 0;
+    int b = 0;
+    __asm__("mov ${=r:a}, #111");
+    __asm__("mov ${=r:b}, #222");
+    println(a);  // 111
+    println(b);  // 222
+
+    // === テスト5: シフト演算 ===
+    int shift = 1;
+    __asm__("lsl ${+r:shift}, ${+r:shift}, #3");
+    println(shift);  // 8
+
+    // === テスト6: r入力を=rへ（値コピー） ===
+    int orig = 42;
+    int copy = 0;
+    __asm__("mov ${=r:copy}, ${r:orig}");
+    println(copy);  // 42
+
+#end
+    return 0;
+}

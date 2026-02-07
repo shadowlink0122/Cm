@@ -603,6 +603,8 @@ format:
 	@echo "Formatting C++ code..."
 	@find src tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
 		-exec clang-format -i -style=file {} \;
+	@echo "Formatting Cm code..."
+	@find tests/test_programs std -type f -name "*.cm" -exec ./cm fmt {} \;
 	@echo "✅ Format complete!"
 
 .PHONY: format-check
@@ -876,3 +878,67 @@ bench-clean:
 
 # デフォルトファイル設定
 FILE ?=
+
+# ========================================
+# Standard Library Test Commands
+# ========================================
+
+# std::asm テスト
+.PHONY: test-std-asm-basic
+test-std-asm-basic:
+	@echo "Running std::asm/basic tests..."
+	@mkdir -p .tmp
+	@$(CM) run tests/std/asm/basic.cm > .tmp/asm_basic.out 2>&1 || true
+	@diff -u tests/std/asm/basic.expect .tmp/asm_basic.out && echo "✅ asm/basic passed!" || echo "❌ asm/basic failed!"
+
+.PHONY: test-std-asm
+test-std-asm: test-std-asm-basic
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All std::asm tests completed!"
+	@echo "=========================================="
+
+# すべてのstdライブラリテストを実行
+.PHONY: test-std
+test-std: test-std-asm
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All std library tests completed!"
+	@echo "=========================================="
+
+# Shortcuts
+.PHONY: ts
+ts: test-std
+
+# ========================================
+# Security Check Commands
+# ========================================
+
+# ローカルパス情報チェック（コミット前に必ず実行）
+# 注: .agent/workflows/ は例示コードを含むため除外
+.PHONY: security-check
+security-check:
+	@echo "🔒 Checking for local path information..."
+	@if grep -rn "/Users/[a-zA-Z]\|/home/[a-zA-Z]\|C:\\\\Users\\\\" docs/ --include="*.md" --include="*.txt" --include="*.yaml" 2>/dev/null | grep -v "^.agent/workflows"; then \
+		echo ""; \
+		echo "❌ ERROR: Local path information found!"; \
+		echo "   Please remove all absolute paths before committing."; \
+		echo "   Use: find docs -type f -name '*.md' -exec sed -i '' 's|/Users/username/path/||g' {} \\;"; \
+		exit 1; \
+	else \
+		echo "✅ No local path information found."; \
+	fi
+
+# プレコミットチェック
+.PHONY: pre-commit
+pre-commit: format-check security-check
+	@echo ""
+	@echo "✅ Pre-commit checks passed!"
+
+.PHONY: sc
+sc: security-check
+
+.PHONY: pc
+pc: pre-commit
+
+

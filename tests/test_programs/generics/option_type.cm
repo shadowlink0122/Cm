@@ -1,43 +1,43 @@
 import std::io::println;
-// Option<T>型のテスト
+// MyOption<T>型のテスト
 
 // Option型をstructで表現
-struct Option<T> {
+struct MyOption<T> {
     bool is_some;
     T value;
 }
 
 // ヘルパー関数
-<T> Option<T> make_some(T value) {
-    Option<T> opt;
+<T> MyOption<T> make_some(T value) {
+    MyOption<T> opt;
     opt.is_some = true;
     opt.value = value;
     return opt;
 }
 
 // None を返す（引数から型推論）
-<T> Option<T> make_none_like(T dummy) {
-    Option<T> opt;
+<T> MyOption<T> make_none_like(T dummy) {
+    MyOption<T> opt;
     opt.is_some = false;
     return opt;
 }
 
-<T> bool is_some(Option<T> opt) {
+<T> bool is_some(MyOption<T> opt) {
     return opt.is_some;
 }
 
-<T> bool is_none(Option<T> opt) {
+<T> bool is_none(MyOption<T> opt) {
     return !opt.is_some;
 }
 
-<T> T unwrap(Option<T> opt) {
+<T> T unwrap(MyOption<T> opt) {
     if (!opt.is_some) {
         println("Error: unwrap called on None");
     }
     return opt.value;
 }
 
-<T> T unwrap_or(Option<T> opt, T default_value) {
+<T> T unwrap_or(MyOption<T> opt, T default_value) {
     if (opt.is_some) {
         return opt.value;
     }
@@ -46,21 +46,21 @@ struct Option<T> {
 
 int main() {
     // Some値のテスト
-    Option<int> some_int = make_some(42);
+    MyOption<int> some_int = make_some(42);
     bool b1 = is_some(some_int);
     println("is_some(some_int) = {b1}");
     int v1 = unwrap(some_int);
     println("unwrap(some_int) = {v1}");
 
     // None値のテスト（0から型推論）
-    Option<int> none_int = make_none_like(0);
+    MyOption<int> none_int = make_none_like(0);
     bool b2 = is_none(none_int);
     println("is_none(none_int) = {b2}");
     int v2 = unwrap_or(none_int, 0);
     println("unwrap_or(none_int, 0) = {v2}");
 
     // 文字列オプション
-    Option<string> some_str = make_some("Hello");
+    MyOption<string> some_str = make_some("Hello");
     string v3 = unwrap(some_str);
     println("unwrap(some_str) = {v3}");
 

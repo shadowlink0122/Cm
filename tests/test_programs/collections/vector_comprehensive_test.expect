@@ -1,0 +1,18 @@
+=== Vector<T> Comprehensive Test ===
+1. Vector<int>:
+  len=2, [10, 20]
+2. Vector<long>:
+  len=2, [100000, 200000]
+3. Vector<bool>:
+  len=3, [true, false, true]
+4. Vector<double>:
+  len=2, [3.14159, 2.71828]
+5. Vector<Point>:
+  len=2
+  p1: (10, 20)
+  p2: (30, 40)
+6. Vector<Person>:
+  len=2
+  per1: id=1, age=25
+  per2: id=2, age=30
+=== PASS ===

@@ -6,8 +6,10 @@
 #include "../../../common/debug/codegen.hpp"
 #include "../monitoring/compilation_guard.hpp"
 
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -456,6 +458,33 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         structType->setBody(fieldTypes);
     }
 
+    // enum型を処理（Tagged Unionは構造体として生成）
+    for (const auto& enumPtr : program.enums) {
+        if (!enumPtr)
+            continue;
+        const auto& enumDef = *enumPtr;
+        enumDefs[enumDef.name] = &enumDef;
+
+        // Tagged Unionの場合は構造体型を生成
+        if (enumDef.is_tagged_union()) {
+            // Tagged Union: { i32 tag, i8[N] payload }
+            // Nは最大ペイロードサイズ
+            uint32_t maxPayloadSize = enumDef.max_payload_size();
+            if (maxPayloadSize == 0)
+                maxPayloadSize = 8;  // 最低8バイト
+
+            std::vector<llvm::Type*> enumFieldTypes;
+            enumFieldTypes.push_back(ctx.getI32Type());  // tag
+            enumFieldTypes.push_back(
+                llvm::ArrayType::get(ctx.getI8Type(), maxPayloadSize));  // payload
+
+            auto enumStructType = llvm::StructType::create(ctx.getContext(), enumFieldTypes,
+                                                           enumDef.name + "_tagged");
+            enumTypes[enumDef.name] = enumStructType;
+        }
+        // シンプルなenumはi32として扱う（enumTypes追加なし）
+    }
+
     // インターフェース型（fat pointer）を定義
     // std::cerr << "[MIR2LLVM] Creating interface fat pointer types...\n";
     for (const auto& iface : program.interfaces) {
@@ -475,6 +504,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             continue;
         }
         declaredFunctions.insert(funcId);
+
         auto llvmFunc = convertFunctionSignature(*func);
         functions[funcId] = llvmFunc;
     }
@@ -534,7 +564,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
             func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||
-            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0) {
+            func.name.find("cm_file_") == 0 || func.name.find("cm_read_") == 0 ||
+            func.name.find("cm_io_") == 0) {
             return;
         }
 
@@ -555,6 +586,30 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         blocks.clear();
         allocatedLocals.clear();
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
+
+        // asm出力オペランドを持つ変数を事前スキャンしてallocatedLocalsに登録
+        // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
+        std::set<unsigned int> asmOutputLocals;
+        for (size_t bbIdx = 0; bbIdx < func.basic_blocks.size(); ++bbIdx) {
+            const auto& bb = func.basic_blocks[bbIdx];
+            // DCEで削除されたブロックはスキップ
+            if (!bb) {
+                continue;
+            }
+            for (size_t stmtIdx = 0; stmtIdx < bb->statements.size(); ++stmtIdx) {
+                const auto& stmt = bb->statements[stmtIdx];
+                if (stmt->kind == mir::MirStatement::Asm) {
+                    auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+                    for (const auto& operand : asmData.operands) {
+                        // 出力オペランド（=r, +r）を検出
+                        if (!operand.constraint.empty() &&
+                            (operand.constraint[0] == '=' || operand.constraint[0] == '+')) {
+                            asmOutputLocals.insert(operand.local_id);
+                        }
+                    }
+                }
+            }
+        }
 
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
@@ -619,20 +674,30 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     if (local.type->kind == hir::TypeKind::Void) {
                         continue;
                     }
+
+                    // asm出力オペランド変数はSSA形式ではなくalloca強制
+                    bool isAsmOutput = asmOutputLocals.count(static_cast<unsigned int>(i)) > 0;
+
                     // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
-                    if (local.type->kind == hir::TypeKind::Function ||
-                        (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
-                         local.type->element_type->kind == hir::TypeKind::Function)) {
+                    // ただしasm出力変数は例外
+                    if (!isAsmOutput &&
+                        (local.type->kind == hir::TypeKind::Function ||
+                         (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
+                          local.type->element_type->kind == hir::TypeKind::Function))) {
                         continue;
                     }
                     // 配列へのポインタ型の一時変数はアロケーションしない（SSA形式で扱う）
-                    if (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
+                    // ただしasm出力変数は例外
+                    if (!isAsmOutput && local.type->kind == hir::TypeKind::Pointer &&
+                        local.type->element_type &&
                         local.type->element_type->kind == hir::TypeKind::Array &&
                         !local.is_user_variable) {
                         continue;
                     }
                     // 文字列型の一時変数はアロケーションしない（直接値を使用）
-                    if (local.type->kind == hir::TypeKind::String && !local.is_user_variable) {
+                    // ただしasm出力変数は例外
+                    if (!isAsmOutput && local.type->kind == hir::TypeKind::String &&
+                        !local.is_user_variable) {
                         continue;
                     }
 
@@ -666,6 +731,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         }
 
                         // cm_slice_new呼び出しでスライスを初期化
+                        // std::cerr << "[MIR2LLVM]     Local " << i
+                        //           << " is slice, calling cm_slice_new\n";
                         auto sliceNewFunc = declareExternalFunction("cm_slice_new");
                         auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
                         auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
@@ -807,8 +874,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             blocks[i] = llvm::BasicBlock::Create(ctx.getContext(), bbName, currentFunction);
         }
 
-        // 最初のブロックへジャンプ
-        if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+        // 最初のブロック（エントリブロック）へジャンプ
+        // func.entry_blockを使用して正しいエントリポイントにジャンプ
+        mir::BlockId entry = func.entry_block;
+        if (entry < func.basic_blocks.size() && func.basic_blocks[entry]) {
+            builder->CreateBr(blocks[entry]);
+        } else if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+            // フォールバック: entry_blockが無効な場合はブロック0を使用
             builder->CreateBr(blocks[0]);
         }
 
@@ -1027,6 +1099,67 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 }
                 debug_msg("MIR", msg);
             }
+
+            // Tagged Unionペイロード読み込みの特別処理
+            // rvalueがUse/Copyで、ソースがTagged Unionのfield[1]かつターゲットが構造体の場合
+            // memcpyを使用して直接コピー
+            if (assign.rvalue->kind == mir::MirRvalue::Use) {
+                auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                        useData.operand->kind == mir::MirOperand::Move)) {
+                    auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
+
+                    // ソースがTagged Unionのfield[1]か確認
+                    bool isSrcTaggedUnionPayload = false;
+                    if (!srcPlace.projections.empty() &&
+                        srcPlace.projections.back().kind == mir::ProjectionKind::Field &&
+                        srcPlace.projections.back().field_id == 1) {
+                        if (currentMIRFunction &&
+                            srcPlace.local < currentMIRFunction->locals.size()) {
+                            auto& srcLocal = currentMIRFunction->locals[srcPlace.local];
+                            if (srcLocal.type && srcLocal.type->name.find("__TaggedUnion_") == 0) {
+                                isSrcTaggedUnionPayload = true;
+                            }
+                        }
+                    }
+
+                    // ターゲットが構造体型か確認
+                    bool isTargetStruct = false;
+                    hir::TypePtr targetType = nullptr;
+                    if (currentMIRFunction &&
+                        assign.place.local < currentMIRFunction->locals.size()) {
+                        targetType = currentMIRFunction->locals[assign.place.local].type;
+                        if (targetType && targetType->kind == hir::TypeKind::Struct) {
+                            isTargetStruct = true;
+                        }
+                    }
+
+                    // Tagged Unionペイロードから構造体へのコピー -> memcpy
+                    if (isSrcTaggedUnionPayload && isTargetStruct) {
+                        // ソースアドレス（Tagged Unionのfield[1] = i8配列）
+                        auto srcAddr = convertPlaceToAddress(srcPlace);
+
+                        // ターゲットアドレス（構造体ローカル）
+                        auto destAddr = locals[assign.place.local];
+                        if (!destAddr && allocatedLocals.count(assign.place.local) > 0) {
+                            destAddr = locals[assign.place.local];
+                        }
+
+                        if (srcAddr && destAddr) {
+                            // 構造体サイズを取得
+                            auto llvmTargetType = convertType(targetType);
+                            auto dataLayout = module->getDataLayout();
+                            auto structSize = dataLayout.getTypeAllocSize(llvmTargetType);
+
+                            // memcpy: dest=構造体ローカル, src=i8配列, size=構造体サイズ
+                            builder->CreateMemCpy(destAddr, llvm::MaybeAlign(), srcAddr,
+                                                  llvm::MaybeAlign(), structSize);
+                            break;
+                        }
+                    }
+                }
+            }
+
             auto rvalue = convertRvalue(*assign.rvalue);
             if (rvalue) {
                 // 関数参照の特別処理
@@ -1171,7 +1304,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                         if (targetType) {
                             // sourceがポインタで、targetが構造体の場合（構造体のコピー）
-                            if (sourceType->isPointerTy() && targetType->isStructTy()) {
+                            // 重要: rvalueがalloca（スタック上のアドレス）の場合のみloadする
+                            // rvalueがポインタ値（nullポインタを含む）の場合はloadしてはいけない
+                            bool isRvalueAlloca = llvm::isa<llvm::AllocaInst>(rvalue);
+                            if (sourceType->isPointerTy() && targetType->isStructTy() &&
+                                isRvalueAlloca) {
                                 // ポインタからロードして構造体値を取得
                                 rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
                                 sourceType = rvalue->getType();
@@ -1352,8 +1489,83 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                 }
                             }
 
-                            // Store操作を実行
-                            builder->CreateStore(rvalue, addr);
+                            // Tagged Unionペイロードへの書き込みを検出
+                            // field[1]への書き込みで、ターゲットがi8配列の場合はmemcpyを使用
+                            bool isTaggedUnionPayload = false;
+                            bool isFieldProj = !assign.place.projections.empty() &&
+                                               assign.place.projections.back().kind ==
+                                                   mir::ProjectionKind::Field &&
+                                               assign.place.projections.back().field_id == 1;
+
+                            if (isFieldProj) {
+                                // 親がTagged Union型か確認
+                                if (currentMIRFunction &&
+                                    assign.place.local < currentMIRFunction->locals.size()) {
+                                    auto& local = currentMIRFunction->locals[assign.place.local];
+                                    if (local.type &&
+                                        local.type->name.find("__TaggedUnion_") == 0) {
+                                        isTaggedUnionPayload = true;
+                                    }
+                                }
+                            }
+
+                            // rvalueが構造体値、またはallocaポインタで構造体を指す場合
+                            bool isStructPayload = rvalue->getType()->isStructTy();
+                            llvm::Type* structType = nullptr;
+                            if (!isStructPayload && rvalue->getType()->isPointerTy()) {
+                                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(rvalue)) {
+                                    if (allocaInst->getAllocatedType()->isStructTy()) {
+                                        isStructPayload = true;
+                                        structType = allocaInst->getAllocatedType();
+                                    }
+                                }
+                            }
+                            if (!structType && isStructPayload) {
+                                structType = rvalue->getType();
+                            }
+
+                            // Index projectionがあるか確認（配列要素への代入）
+                            bool hasIndexProjection = false;
+                            for (const auto& proj : assign.place.projections) {
+                                if (proj.kind == mir::ProjectionKind::Index) {
+                                    hasIndexProjection = true;
+                                    break;
+                                }
+                            }
+
+                            // 構造体代入でmemcpyを使用する条件:
+                            // 1. Tagged Unionペイロードへの書き込み
+                            // 2. 配列要素（Index projection）への構造体代入
+                            bool needsStructCopy =
+                                (isTaggedUnionPayload && isStructPayload && structType) ||
+                                (hasIndexProjection && isStructPayload && structType);
+
+                            if (needsStructCopy) {
+                                // 構造体ペイロードの場合: memcpyを使用
+                                llvm::Value* srcPtr = rvalue;
+                                if (!rvalue->getType()->isPointerTy()) {
+                                    // 一時的なallocaを作成してstoreし、そのポインタを使用
+                                    auto tempAlloca = builder->CreateAlloca(rvalue->getType(),
+                                                                            nullptr, "tmp_payload");
+                                    builder->CreateStore(rvalue, tempAlloca);
+                                    srcPtr = tempAlloca;
+                                }
+
+                                // ペイロードサイズを取得
+                                auto dataLayout = module->getDataLayout();
+                                auto payloadSize = dataLayout.getTypeAllocSize(structType);
+
+                                // memcpy: dest=addr, src=srcPtr, size=payloadSize
+                                builder->CreateMemCpy(addr, llvm::MaybeAlign(), srcPtr,
+                                                      llvm::MaybeAlign(), payloadSize);
+                            } else {
+                                // 通常のStore操作を実行
+                                // asm出力で変更される変数へのstoreはvolatileにして最適化を防止
+                                auto* storeInst = builder->CreateStore(rvalue, addr);
+                                if (isAllocated) {
+                                    storeInst->setVolatile(true);
+                                }
+                            }
                         }
                     } else {
                         // addr取得失敗: フォールバックとしてlocalsに直接格納（SSA形式）
@@ -1362,6 +1574,559 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 } else {
                     // SSA形式：allocaがない変数に直接値を格納
                     locals[assign.place.local] = rvalue;
+                }
+            }
+            break;
+        }
+        case mir::MirStatement::Asm: {
+            // インラインアセンブリ
+            auto& asmData = std::get<mir::MirStatement::AsmData>(stmt.data);
+            debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code +
+                                      " operands=" + std::to_string(asmData.operands.size()));
+
+            if (asmData.operands.empty()) {
+                // オペランドなし: シンプルなasm
+                auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                std::string constraints = asmData.is_must ? "~{memory}" : "";
+                auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
+                                                       asmData.is_must  // hasSideEffects
+                );
+                builder->CreateCall(asmFuncTy, inlineAsm);
+            } else {
+                // オペランド付き: 制約文字列とオペランドを生成
+                // 出力/入出力オペランドを分類
+                // LLVMの制約形式: 出力制約,tied入力,純粋入力の順
+                std::vector<llvm::Type*> inputTypes;
+                std::vector<llvm::Value*> inputValues;
+                std::vector<llvm::Value*> outputPtrs;      // 出力先ポインタ（=r用）
+                std::vector<llvm::Type*> outputTypes;      // 出力オペランドの型（=r用）
+                std::vector<mir::LocalId> outputLocalIds;  // 出力ローカルIDも記録
+                std::string constraints;
+                int outputCount = 0;  // =r の数
+                int inputCount = 0;  // 入力オペランドの数（将来の拡張/デバッグ用）
+                (void)inputCount;  // 現時点では読み取り不要だが、インクリメントは維持
+
+                // AArch64ターゲット判定とオペランド型記録
+                // LLVMのAArch64バックエンドがi32に対してxレジスタを割り当てる場合があるため、
+                // :w修飾子を付与して32bitレジスタ(w)を強制する
+                std::string asmTriple = module->getTargetTriple();
+                bool isAArch64Target = (asmTriple.find("aarch64") != std::string::npos ||
+                                        asmTriple.find("arm64") != std::string::npos);
+                std::map<size_t, llvm::Type*> operandElemTypes;  // オペランドindex→LLVM型
+                std::map<size_t, bool> operandIsMemory;          // メモリ制約かどうか
+
+                // =m制約用: メモリ出力はポインタを入力として渡す
+                std::vector<llvm::Value*> memOutputPtrs;  // =m用のポインタ（入力として渡す）
+                std::vector<llvm::Type*> memOutputTypes;  // =m用の要素型（elementtype属性用）
+                std::vector<mir::LocalId> memOutputLocalIds;
+                std::vector<std::string> memOutputConstraints;
+
+                // m入力制約用: ポインタを渡し、elementtype属性が必要
+                std::vector<size_t> memInputIndices;  // pureInputValues内でのm制約インデックス
+                std::vector<llvm::Type*> memInputTypes;  // m入力の要素型（elementtype属性用）
+                // +m tied入力用: 同様にelementtype属性が必要
+                std::vector<size_t> memTiedInputIndices;  // tiedInputValues内での+m制約インデックス
+                std::vector<llvm::Type*> memTiedInputTypes;  // +m入力の要素型
+
+                // 2パス方式で入力値を収集
+                // 第1パス: +rのtied入力を収集（出力順）
+                // 第2パス: 純粋な入力(r,m)を収集
+                std::vector<llvm::Value*> tiedInputValues;
+                std::vector<llvm::Type*> tiedInputTypes;
+                std::vector<llvm::Value*> pureInputValues;
+                std::vector<llvm::Type*> pureInputTypes;
+
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    auto& operand = asmData.operands[i];
+
+                    // 定数オペランドの場合（macro/const）
+                    if (operand.is_constant) {
+                        // i,n制約: 定数値をConstantIntとして生成
+                        llvm::Value* constVal =
+                            llvm::ConstantInt::get(ctx.getI64Type(), operand.const_value);
+                        pureInputValues.push_back(constVal);
+                        pureInputTypes.push_back(constVal->getType());
+                        debug_msg("llvm_asm", "[ASM] const operand: " + operand.constraint + " = " +
+                                                  std::to_string(operand.const_value));
+                        continue;
+                    }
+
+                    // ローカル変数を取得（localsはstd::map）
+                    llvm::Value* localPtr = nullptr;
+                    if (locals.count(operand.local_id) > 0 && locals[operand.local_id]) {
+                        localPtr = locals[operand.local_id];
+                    }
+
+                    if (!localPtr)
+                        continue;
+
+                    // ローカル変数の実際の型を取得
+                    llvm::Type* elemType = ctx.getI32Type();  // デフォルトint型
+                    if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(localPtr)) {
+                        // allocaから実際の型を取得
+                        elemType = allocaInst->getAllocatedType();
+                    }
+                    // AArch64用: オペランドの型とメモリ制約を記録
+                    operandElemTypes[i] = elemType;
+                    operandIsMemory[i] = (operand.constraint.find('m') != std::string::npos);
+                    bool hasOutput = operand.constraint[0] == '=' || operand.constraint[0] == '+';
+                    bool isPureInput = operand.constraint[0] != '=' && operand.constraint[0] != '+';
+                    bool isTiedInput = operand.constraint[0] == '+';
+
+                    // ローカル変数から値をロード
+                    auto loadValue = [&]() -> llvm::Value* {
+                        if (llvm::isa<llvm::PointerType>(localPtr->getType()) ||
+                            llvm::isa<llvm::AllocaInst>(localPtr)) {
+                            auto* loadInst = builder->CreateLoad(elemType, localPtr);
+                            if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
+                                li->setVolatile(true);
+                            }
+                            return loadInst;
+                        }
+                        return localPtr;
+                    };
+
+                    if (isTiedInput) {
+                        // +r, +m: tied入力 - 先に入力値を収集
+                        bool isMemoryTied = (operand.constraint.find('m') != std::string::npos);
+                        if (isMemoryTied) {
+                            // +m: ポインタを渡す（メモリ出力と同様）
+                            // tiedInputValues内でのインデックスを記録（後でelementtype追加用）
+                            memTiedInputIndices.push_back(tiedInputValues.size());
+                            memTiedInputTypes.push_back(elemType);  // 要素型を記録
+                            tiedInputValues.push_back(localPtr);
+                            tiedInputTypes.push_back(localPtr->getType());
+                        } else {
+                            // +r: 値をロードして渡す
+                            auto* val = loadValue();
+                            tiedInputValues.push_back(val);
+                            tiedInputTypes.push_back(val->getType());
+                        }
+                    } else if (isPureInput) {
+                        // 制約の種類によって値の渡し方を変える
+                        std::string constraintType = operand.constraint;
+                        bool isMemoryConstraint = (constraintType.find('m') != std::string::npos);
+                        bool isImmediateConstraint =
+                            (constraintType.find('i') != std::string::npos ||
+                             constraintType.find('n') != std::string::npos);
+                        bool isGeneralConstraint = (constraintType.find('g') != std::string::npos);
+
+                        if (isMemoryConstraint) {
+                            // m制約: ポインタ（アドレス）を渡す
+                            // pureInputValues内でのインデックスを記録（後でelementtype追加用）
+                            memInputIndices.push_back(pureInputValues.size());
+                            memInputTypes.push_back(elemType);  // 要素型を記録
+                            pureInputValues.push_back(localPtr);
+                            pureInputTypes.push_back(localPtr->getType());
+                        } else if (isImmediateConstraint) {
+                            // i,n制約: 即値（値をロードして渡す、LLVMが定数最適化）
+                            auto* val = loadValue();
+                            pureInputValues.push_back(val);
+                            pureInputTypes.push_back(val->getType());
+                        } else if (isGeneralConstraint) {
+                            // g制約: 汎用オペランド（レジスタ、メモリ、即値のいずれか）
+                            // 値をロードして渡す（LLVMが最適な方法を選択）
+                            auto* val = loadValue();
+                            pureInputValues.push_back(val);
+                            pureInputTypes.push_back(val->getType());
+                        } else {
+                            // r制約: 値をロードして渡す
+                            auto* val = loadValue();
+                            pureInputValues.push_back(val);
+                            pureInputTypes.push_back(val->getType());
+                        }
+                    }
+
+                    if (hasOutput) {
+                        // 制約の種類をチェック: =m (メモリ出力) か =r (レジスタ出力) か
+                        std::string constraintType = operand.constraint;
+                        bool isMemOutput = (constraintType.find('m') != std::string::npos);
+
+                        if (isMemOutput) {
+                            // =m 制約: メモリ出力
+                            // LLVMではメモリ出力はポインタを入力として渡す（void型）
+                            // 出力オペランドの場合、ストア可能なポインタが必要
+                            if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
+                                !llvm::isa<llvm::GlobalVariable>(localPtr) &&
+                                !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
+                                auto* alloca =
+                                    builder->CreateAlloca(elemType, nullptr, "asm_mem_out");
+                                localPtr = alloca;
+                                allocatedLocals.insert(operand.local_id);
+                            }
+                            // メモリ出力として記録（後で入力に追加）
+                            memOutputPtrs.push_back(localPtr);
+                            memOutputTypes.push_back(elemType);  // 要素型を記録
+                            memOutputLocalIds.push_back(operand.local_id);
+                            // 制約文字列を記録（=m → *m として変換）
+                            if (operand.constraint[0] == '=') {
+                                memOutputConstraints.push_back("=*m");
+                            } else {  // +m
+                                memOutputConstraints.push_back("+*m");
+                            }
+                        } else {
+                            // =r 制約: レジスタ出力（従来通り）
+                            if (!llvm::isa<llvm::AllocaInst>(localPtr) &&
+                                !llvm::isa<llvm::GlobalVariable>(localPtr) &&
+                                !llvm::isa<llvm::GetElementPtrInst>(localPtr)) {
+                                auto* alloca =
+                                    builder->CreateAlloca(elemType, nullptr, "asm_out_tmp");
+                                if (isTiedInput && !tiedInputValues.empty()) {
+                                    auto* initStore =
+                                        builder->CreateStore(tiedInputValues.back(), alloca);
+                                    initStore->setVolatile(true);
+                                }
+                                localPtr = alloca;
+                                allocatedLocals.insert(operand.local_id);
+                            }
+                            outputPtrs.push_back(localPtr);
+                            outputTypes.push_back(elemType);  // 出力の型を記録
+                            outputLocalIds.push_back(operand.local_id);
+                            outputCount++;
+                        }
+                    }
+
+                    if (!constraints.empty())
+                        constraints += ",";
+                    constraints += operand.constraint;
+                }
+
+                // 入力値をLLVM順序で結合: 純粋入力 → tied入力 → メモリ出力
+                // 制約文字列の順序と一致させる（r,... → 0,1,... → *m,...）
+                for (size_t i = 0; i < pureInputValues.size(); ++i) {
+                    inputValues.push_back(pureInputValues[i]);
+                    inputTypes.push_back(pureInputTypes[i]);
+                    inputCount++;
+                }
+                for (size_t i = 0; i < tiedInputValues.size(); ++i) {
+                    inputValues.push_back(tiedInputValues[i]);
+                    inputTypes.push_back(tiedInputTypes[i]);
+                    inputCount++;
+                }
+                // メモリ出力ポインタを入力として追加（=m, +m制約用）
+                for (size_t i = 0; i < memOutputPtrs.size(); ++i) {
+                    inputValues.push_back(memOutputPtrs[i]);
+                    inputTypes.push_back(memOutputPtrs[i]->getType());
+                    inputCount++;
+                }
+
+                // 制約文字列をLLVM形式に変換
+                // LLVMの制約形式: 出力制約,入力制約の順
+                // オペランド番号はこの順序に対応するため、再マッピングが必要
+                // +rは「=r」（出力）と「0」（入力をtie）に分解する
+                std::string outputConstraints;
+                std::string inputConstraints;
+
+                // オペランド番号の再マッピング表（元の番号→LLVM番号）
+                std::map<size_t, size_t> operandRemap;
+                size_t llvmOutputIdx = 0;  // 出力オペランドのLLVMインデックス
+                size_t llvmInputIdx = 0;  // 入力オペランドを数える（出力の後に来る）
+
+                // まず出力オペランドを処理（=r のみ、=m は除外）
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+
+                    if (operand.constraint[0] == '+' || operand.constraint[0] == '=') {
+                        // メモリ出力(=m, +m)は出力制約に含めない（入力として処理）
+                        bool isMemOutput = (operand.constraint.find('m') != std::string::npos);
+                        if (isMemOutput) {
+                            // メモリ出力はスキップ（後で入力として追加）
+                            continue;
+                        }
+
+                        // =r または +r: 出力オペランド
+                        operandRemap[i] = llvmOutputIdx;
+                        llvmOutputIdx++;
+
+                        if (operand.constraint[0] == '+') {
+                            if (!outputConstraints.empty())
+                                outputConstraints += ",";
+                            outputConstraints += "=" + operand.constraint.substr(1);
+                        } else {
+                            if (!outputConstraints.empty())
+                                outputConstraints += ",";
+                            outputConstraints += operand.constraint;
+                        }
+                    }
+                }
+
+                // 次に入力オペランドを処理
+                // inputValuesの構築順序と一致させるため:
+                // 1. 純粋入力（r, m等）
+                // 2. tied入力（+r）
+                // 3. メモリ出力（=m, +m）
+
+                // 1. 純粋入力を先に処理
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+
+                    // 純粋な入力（r, m等）のみ処理
+                    if (operand.constraint[0] != '+' && operand.constraint[0] != '=') {
+                        operandRemap[i] = llvmOutputIdx + llvmInputIdx;
+                        llvmInputIdx++;
+                        if (!inputConstraints.empty())
+                            inputConstraints += ",";
+                        // m制約は*m（間接メモリ）に変換
+                        if (operand.constraint.find('m') != std::string::npos) {
+                            inputConstraints += "*m";
+                        } else {
+                            inputConstraints += operand.constraint;
+                        }
+                    }
+                }
+
+                // 2. tied入力（+r）を処理
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+
+                    if (operand.constraint[0] == '+') {
+                        // +r: 入力としてtied（出力番号を参照）
+                        // ただし+mはスキップ（メモリ出力として別処理）
+                        if (operand.constraint.find('m') == std::string::npos) {
+                            if (!inputConstraints.empty())
+                                inputConstraints += ",";
+                            inputConstraints += std::to_string(operandRemap[i]);
+                        }
+                    }
+                }
+
+                // 3. メモリ出力の制約を入力制約に追加（=*m形式）
+                // メモリ出力のオペランド番号も再マッピング
+                size_t memOutputStartIdx = llvmOutputIdx + llvmInputIdx;
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    const auto& operand = asmData.operands[i];
+                    if ((operand.constraint[0] == '=' || operand.constraint[0] == '+') &&
+                        operand.constraint.find('m') != std::string::npos) {
+                        // メモリ出力のオペランド番号を設定
+                        operandRemap[i] = memOutputStartIdx++;
+                        if (!inputConstraints.empty())
+                            inputConstraints += ",";
+                        // =m → "*m" (indirect memory), +m も同様
+                        inputConstraints += "*m";
+                    }
+                }
+
+                // 最終制約: 出力,入力の順
+                std::string llvmConstraints = outputConstraints;
+                if (!inputConstraints.empty()) {
+                    if (!llvmConstraints.empty()) {
+                        llvmConstraints += ",";
+                    }
+                    llvmConstraints += inputConstraints;
+                }
+
+                // clobberリストを追加（~{memory}, ~{eax}等）
+                // is_must=trueの場合はデフォルトで~{memory}を追加
+                if (asmData.is_must && !llvmConstraints.empty()) {
+                    // clobbers配列に~{memory}がなければ追加
+                    bool hasMemoryClobber = false;
+                    for (const auto& clob : asmData.clobbers) {
+                        if (clob == "memory" || clob == "~{memory}") {
+                            hasMemoryClobber = true;
+                            break;
+                        }
+                    }
+                    if (!hasMemoryClobber) {
+                        llvmConstraints += ",~{memory}";
+                    }
+                }
+                // 明示的なclobbersを追加
+                for (const auto& clob : asmData.clobbers) {
+                    if (!llvmConstraints.empty()) {
+                        llvmConstraints += ",";
+                    }
+                    // ~{...}形式でなければ追加
+                    if (clob.substr(0, 2) == "~{") {
+                        llvmConstraints += clob;
+                    } else {
+                        llvmConstraints += "~{" + clob + "}";
+                    }
+                }
+
+                // asmコード内のオペランド番号を更新
+                // 2段階方式: まず一時プレースホルダーに置換、次に最終番号に置換
+                // これにより$0→$1と$1→$0のような交差置換が正しく処理される
+                std::string remappedCode = asmData.code;
+
+                // 第1段階: $N を一時プレースホルダー __TMP_N__ に置換
+                // ただし $$N（即値エスケープ）はスキップする
+                for (int i = static_cast<int>(asmData.operands.size()) - 1; i >= 0; --i) {
+                    std::string oldPattern = "$" + std::to_string(i);
+                    std::string tempPattern = "__TMP_" + std::to_string(i) + "__";
+                    size_t pos = 0;
+                    while ((pos = remappedCode.find(oldPattern, pos)) != std::string::npos) {
+                        // $$N（即値エスケープ）の場合はスキップ
+                        if (pos > 0 && remappedCode[pos - 1] == '$') {
+                            pos++;
+                            continue;
+                        }
+                        size_t afterNum = pos + oldPattern.length();
+                        if (afterNum < remappedCode.length() &&
+                            std::isdigit(remappedCode[afterNum])) {
+                            pos++;
+                            continue;
+                        }
+                        remappedCode.replace(pos, oldPattern.length(), tempPattern);
+                        pos += tempPattern.length();
+                    }
+                }
+
+                // 第2段階: __TMP_N__ を最終的な$REMAP[N]に置換
+                // AArch64ターゲットの場合、i32以下の型のレジスタオペランドに:w修飾子を付与
+                // これによりLLVMがxレジスタではなくwレジスタ(32bit)を使用する
+                for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                    std::string tempPattern = "__TMP_" + std::to_string(i) + "__";
+                    std::string newPattern;
+                    // AArch64 + i32以下 + 非メモリ制約の場合に :w 修飾子を付与
+                    bool needsWModifier = false;
+                    if (isAArch64Target && !operandIsMemory[i]) {
+                        auto typeIt = operandElemTypes.find(i);
+                        if (typeIt != operandElemTypes.end()) {
+                            llvm::Type* opType = typeIt->second;
+                            if (opType->isIntegerTy() && opType->getIntegerBitWidth() <= 32) {
+                                needsWModifier = true;
+                            }
+                        }
+                    }
+                    if (needsWModifier) {
+                        newPattern = "${" + std::to_string(operandRemap[i]) + ":w}";
+                    } else {
+                        newPattern = "$" + std::to_string(operandRemap[i]);
+                    }
+                    size_t pos = 0;
+                    while ((pos = remappedCode.find(tempPattern, pos)) != std::string::npos) {
+                        remappedCode.replace(pos, tempPattern.length(), newPattern);
+                        pos += newPattern.length();
+                    }
+                }
+
+                constraints = llvmConstraints;  // 変換後の制約を使用
+
+                if (outputCount > 0) {
+                    // 出力がある場合: 戻り値型を設定
+                    llvm::Type* retType;
+                    if (outputCount == 1) {
+                        // 単一出力: 直接その型を返す
+                        retType = !outputTypes.empty() ? outputTypes[0] : ctx.getI32Type();
+                    } else {
+                        // 複数出力: 構造体型を返す
+                        retType = llvm::StructType::get(ctx.getContext(), outputTypes);
+                    }
+
+                    auto* asmFuncTy = llvm::FunctionType::get(retType, inputTypes, false);
+                    // 出力オペランドがある場合は常にsideeffect=trueにして最適化を抑制
+                    auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints,
+                                                           true /* hasSideEffects */);
+                    auto* result = builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
+
+                    // 出力結果を各ローカル変数にstoreする
+                    for (size_t i = 0; i < outputLocalIds.size() && i < outputPtrs.size(); ++i) {
+                        auto local_id = outputLocalIds[i];
+                        auto* outputPtr = outputPtrs[i];
+
+                        if (!outputPtr)
+                            continue;
+
+                        llvm::Value* outputValue;
+                        if (outputCount == 1) {
+                            // 単一出力: 結果をそのまま使用
+                            outputValue = result;
+                        } else {
+                            // 複数出力: 構造体からextractvalueで取り出す
+                            outputValue =
+                                builder->CreateExtractValue(result, {static_cast<unsigned>(i)});
+                        }
+
+                        // 出力ポインタがある場合はvolatile store
+                        if (llvm::isa<llvm::PointerType>(outputPtr->getType())) {
+                            auto* storeInst = builder->CreateStore(outputValue, outputPtr);
+                            storeInst->setVolatile(true);
+                            // allocatedLocalsに追加してvolatile loadを強制
+                            allocatedLocals.insert(local_id);
+                        } else {
+                            // 直接SSA値として格納（fallback）
+                            locals[local_id] = outputValue;
+                        }
+                    }
+
+                    // m入力制約にelementtype属性を追加（*m間接メモリ用）
+                    if (!memInputIndices.empty()) {
+                        if (auto* callInst = llvm::dyn_cast<llvm::CallInst>(result)) {
+                            size_t pureInputStartArgIdx = tiedInputValues.size();
+                            for (size_t i = 0; i < memInputIndices.size(); ++i) {
+                                size_t pureIdx = memInputIndices[i];
+                                size_t argIdx = pureInputStartArgIdx + pureIdx;
+                                // オペランドの実際の型を使用
+                                llvm::Type* memElemType = (i < memInputTypes.size())
+                                                              ? memInputTypes[i]
+                                                              : ctx.getI32Type();
+                                auto elemTypeAttr = llvm::Attribute::get(
+                                    ctx.getContext(), llvm::Attribute::ElementType, memElemType);
+                                callInst->addParamAttr(argIdx, elemTypeAttr);
+                            }
+                        }
+                    }
+                } else if (!inputValues.empty()) {
+                    // 入力のみ: 戻り値なし
+                    auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), inputTypes, false);
+                    auto* inlineAsm =
+                        llvm::InlineAsm::get(asmFuncTy, remappedCode, constraints, asmData.is_must);
+                    auto* callInst = builder->CreateCall(asmFuncTy, inlineAsm, inputValues);
+
+                    // メモリ出力ポインタ（*m制約）にelementtype属性を追加
+                    // LLVM 17ではindirect memory制約にはelementtype属性が必要
+                    if (!memOutputPtrs.empty()) {
+                        // メモリ出力のインデックス計算: tied入力 + pure入力 + memOutputIdx
+                        size_t memOutputStartArgIdx =
+                            tiedInputValues.size() + pureInputValues.size();
+                        for (size_t i = 0; i < memOutputPtrs.size(); ++i) {
+                            size_t argIdx = memOutputStartArgIdx + i;
+                            // オペランドの実際の型を使用
+                            llvm::Type* memElemType =
+                                (i < memOutputTypes.size()) ? memOutputTypes[i] : ctx.getI32Type();
+                            auto elemTypeAttr = llvm::Attribute::get(
+                                ctx.getContext(), llvm::Attribute::ElementType, memElemType);
+                            callInst->addParamAttr(argIdx, elemTypeAttr);
+                        }
+
+                        // メモリ出力のローカル変数をallocatedLocalsに追加
+                        for (const auto& local_id : memOutputLocalIds) {
+                            allocatedLocals.insert(local_id);
+                        }
+                    }
+
+                    // m入力制約にもelementtype属性を追加（*m間接メモリ用）
+                    if (!memInputIndices.empty()) {
+                        // memInputIndicesはpureInputValues内でのインデックス
+                        // 実際のCallInst引数インデックス: tied入力 + pureInputIndex
+                        size_t pureInputStartArgIdx = tiedInputValues.size();
+                        for (size_t i = 0; i < memInputIndices.size(); ++i) {
+                            size_t pureIdx = memInputIndices[i];
+                            size_t argIdx = pureInputStartArgIdx + pureIdx;
+                            // オペランドの実際の型を使用
+                            llvm::Type* memElemType =
+                                (i < memInputTypes.size()) ? memInputTypes[i] : ctx.getI32Type();
+                            auto elemTypeAttr = llvm::Attribute::get(
+                                ctx.getContext(), llvm::Attribute::ElementType, memElemType);
+                            callInst->addParamAttr(argIdx, elemTypeAttr);
+                        }
+                    }
+
+                    // +m tied入力にもelementtype属性を追加
+                    if (!memTiedInputIndices.empty()) {
+                        // memTiedInputIndicesはtiedInputValues内でのインデックス
+                        // 実際のCallInst引数インデックス: tiedInputIndex （先頭から）
+                        for (size_t i = 0; i < memTiedInputIndices.size(); ++i) {
+                            size_t tiedIdx = memTiedInputIndices[i];
+                            // オペランドの実際の型を使用
+                            llvm::Type* memElemType = (i < memTiedInputTypes.size())
+                                                          ? memTiedInputTypes[i]
+                                                          : ctx.getI32Type();
+                            auto elemTypeAttr = llvm::Attribute::get(
+                                ctx.getContext(), llvm::Attribute::ElementType, memElemType);
+                            callInst->addParamAttr(tiedIdx, elemTypeAttr);
+                        }
+                    }
                 }
             }
             break;
@@ -1428,37 +2193,65 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
 
             llvm::Value* basePtr = locals[local];
 
-            // プロジェクションがある場合（配列要素など）
+            // プロジェクションがある場合
             if (!refData.place.projections.empty()) {
-                for (const auto& proj : refData.place.projections) {
-                    if (proj.kind == mir::ProjectionKind::Index) {
-                        // 配列要素へのアドレス
-                        auto& localInfo = currentMIRFunction->locals[local];
-                        if (localInfo.type && localInfo.type->kind == hir::TypeKind::Array) {
-                            auto elemType = convertType(localInfo.type->element_type);
-                            auto arraySize = localInfo.type->array_size.value_or(0);
-                            auto arrayType = llvm::ArrayType::get(elemType, arraySize);
+                auto& localInfo = currentMIRFunction->locals[local];
+                hir::TypePtr currentType = localInfo.type;
+                llvm::Value* addr = basePtr;
 
-                            llvm::Value* indexVal = nullptr;
-                            if (locals.find(proj.index_local) != locals.end() &&
-                                locals[proj.index_local]) {
-                                auto& idxLocal = currentMIRFunction->locals[proj.index_local];
-                                auto idxType = convertType(idxLocal.type);
-                                indexVal = builder->CreateLoad(idxType, locals[proj.index_local]);
-                                // i64に拡張
-                                if (indexVal->getType()->isIntegerTy() &&
-                                    indexVal->getType()->getIntegerBitWidth() < 64) {
-                                    indexVal = builder->CreateSExt(indexVal, ctx.getI64Type());
-                                }
-                            } else {
-                                indexVal = llvm::ConstantInt::get(ctx.getI64Type(), 0);
+                // Projectionシーケンスを順次処理
+                for (size_t pi = 0; pi < refData.place.projections.size(); ++pi) {
+                    const auto& proj = refData.place.projections[pi];
+
+                    if (proj.kind == mir::ProjectionKind::Deref) {
+                        // ポインタをロード
+                        if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                            addr = builder->CreateLoad(ctx.getPtrType(), addr, "deref_load");
+                            currentType = currentType->element_type;
+                        }
+                    } else if (proj.kind == mir::ProjectionKind::Index) {
+                        // ポインタ型の場合、Indexの前に暗黙のDerefが必要
+                        // MIR生成で Deref が省略されるケース（p[0]等）に対応
+                        if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                            addr = builder->CreateLoad(ctx.getPtrType(), addr, "implicit_deref");
+                            currentType = currentType->element_type;
+                        }
+
+                        // インデックスアクセス
+                        llvm::Value* indexVal = nullptr;
+                        if (locals.find(proj.index_local) != locals.end() &&
+                            locals[proj.index_local]) {
+                            auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                            auto idxType = convertType(idxLocal.type);
+                            indexVal = builder->CreateLoad(idxType, locals[proj.index_local]);
+                            // i64に拡張
+                            if (indexVal->getType()->isIntegerTy() &&
+                                indexVal->getType()->getIntegerBitWidth() < 64) {
+                                indexVal = builder->CreateSExt(indexVal, ctx.getI64Type());
                             }
+                        } else {
+                            indexVal = llvm::ConstantInt::get(ctx.getI64Type(), 0);
+                        }
 
-                            // GEPで配列要素のアドレスを取得
-                            basePtr = builder->CreateGEP(
-                                arrayType, basePtr,
+                        // Array型の場合と、Pointer要素へのアクセス（Deref後）で異なるGEPを生成
+                        if (currentType && currentType->kind == hir::TypeKind::Array) {
+                            // Array型: {0, idx}の2インデックスGEP
+                            auto elemType = convertType(currentType->element_type);
+                            auto arraySize = currentType->array_size.value_or(0);
+                            auto arrayType = llvm::ArrayType::get(elemType, arraySize);
+                            addr = builder->CreateGEP(
+                                arrayType, addr,
                                 {llvm::ConstantInt::get(ctx.getI64Type(), 0), indexVal},
                                 "arr_elem_ptr");
+                            // 型を要素型に更新
+                            currentType = currentType->element_type;
+                        } else {
+                            // Pointer要素へのアクセス（Deref後）: {idx}のみのGEP
+                            llvm::Type* elemType = ctx.getI32Type();  // デフォルト
+                            if (currentType) {
+                                elemType = convertType(currentType);
+                            }
+                            addr = builder->CreateGEP(elemType, addr, indexVal, "idx_elem_ptr");
                         }
                     } else if (proj.kind == mir::ProjectionKind::Field) {
                         // 構造体フィールドへのアドレス
@@ -1475,7 +2268,54 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                     if (typeArg) {
                                         structLookupName += "__";
                                         if (typeArg->kind == hir::TypeKind::Struct) {
-                                            structLookupName += typeArg->name;
+                                            // ネストジェネリックの場合、再帰的にマングリング
+                                            std::string nestedName = typeArg->name;
+                                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
+                                            if (!typeArg->type_args.empty()) {
+                                                for (const auto& nestedArg : typeArg->type_args) {
+                                                    if (nestedArg) {
+                                                        nestedName += "__";
+                                                        switch (nestedArg->kind) {
+                                                            case hir::TypeKind::Int:
+                                                                nestedName += "int";
+                                                                break;
+                                                            case hir::TypeKind::UInt:
+                                                                nestedName += "uint";
+                                                                break;
+                                                            case hir::TypeKind::Long:
+                                                                nestedName += "long";
+                                                                break;
+                                                            case hir::TypeKind::ULong:
+                                                                nestedName += "ulong";
+                                                                break;
+                                                            case hir::TypeKind::Float:
+                                                                nestedName += "float";
+                                                                break;
+                                                            case hir::TypeKind::Double:
+                                                                nestedName += "double";
+                                                                break;
+                                                            case hir::TypeKind::Bool:
+                                                                nestedName += "bool";
+                                                                break;
+                                                            case hir::TypeKind::Char:
+                                                                nestedName += "char";
+                                                                break;
+                                                            case hir::TypeKind::String:
+                                                                nestedName += "string";
+                                                                break;
+                                                            case hir::TypeKind::Struct:
+                                                                nestedName += nestedArg->name;
+                                                                break;
+                                                            default:
+                                                                if (!nestedArg->name.empty()) {
+                                                                    nestedName += nestedArg->name;
+                                                                }
+                                                                break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            structLookupName += nestedName;
                                         } else {
                                             switch (typeArg->kind) {
                                                 case hir::TypeKind::Int:
@@ -1529,12 +2369,13 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                 indices.push_back(llvm::ConstantInt::get(ctx.getI32Type(), 0));
                                 indices.push_back(
                                     llvm::ConstantInt::get(ctx.getI32Type(), proj.field_id));
-                                basePtr =
-                                    builder->CreateGEP(it->second, basePtr, indices, "field_ptr");
+                                addr = builder->CreateGEP(it->second, addr, indices, "field_ptr");
                             }
                         }
                     }
                 }
+                // Projectionシーケンス処理後はaddrを返す
+                return addr;
             }
 
             return basePtr;
@@ -1601,7 +2442,135 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateIntToPtr(value, targetType, "inttoptr");
             }
             if (sourceType->isPointerTy() && targetType->isIntegerTy()) {
+                // まず、ポインタがタグ付きユニオン構造体を指しているか確認（Union as int等）
+                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                    auto* allocatedType = allocaInst->getAllocatedType();
+                    if (auto* structTy = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                        if (structTy->getNumElements() == 2) {
+                            auto* elem0 = structTy->getElementType(0);
+                            auto* elem1 = structTy->getElementType(1);
+                            if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                                // タグ付きユニオン構造体からの抽出
+                                auto* payloadGEP = builder->CreateStructGEP(structTy, value, 1,
+                                                                            "union_payload_ptr");
+                                // ターゲット型に応じてロード
+                                if (targetType->isIntegerTy(32)) {
+                                    auto* payloadAsInt = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
+                                        "payload_as_i32");
+                                    return builder->CreateLoad(ctx.getI32Type(), payloadAsInt,
+                                                               "i32_from_union_ptr");
+                                } else if (targetType->isIntegerTy(64)) {
+                                    auto* payloadAsLong = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
+                                        "payload_as_i64");
+                                    return builder->CreateLoad(ctx.getI64Type(), payloadAsLong,
+                                                               "i64_from_union_ptr");
+                                } else {
+                                    auto* payloadAsType = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(targetType, 0),
+                                        "payload_as_int");
+                                    return builder->CreateLoad(targetType, payloadAsType,
+                                                               "int_from_union_ptr");
+                                }
+                            }
+                        }
+                    }
+                }
+                // タグ付きユニオンではない場合、通常のポインタ→整数変換
                 return builder->CreatePtrToInt(value, targetType, "ptrtoint");
+            }
+
+            // タグ付きユニオン型への変換（int/long -> IntOrLong等）
+            // targetTypeがStructType {i32, i8[N]}の場合
+            if (auto* structTy = llvm::dyn_cast<llvm::StructType>(targetType)) {
+                // タグ付きユニオン構造体（{i32, i8[N]}）かどうか確認
+                if (structTy->getNumElements() == 2) {
+                    auto* elem0 = structTy->getElementType(0);
+                    auto* elem1 = structTy->getElementType(1);
+                    if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                        // タグ付きユニオンへのキャスト
+                        // 1. 一時allocaを作成
+                        auto* alloca = builder->CreateAlloca(structTy, nullptr, "union_temp");
+
+                        // 2. タグを設定（ソース型に基づいて0または1）
+                        //    int = 0, long = 1として仮定
+                        int32_t tagValue = 0;
+                        if (sourceType->isIntegerTy(64)) {
+                            tagValue = 1;  // long
+                        }
+                        auto* tagGEP = builder->CreateStructGEP(structTy, alloca, 0, "tag_ptr");
+                        builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), tagValue),
+                                             tagGEP);
+
+                        // 3. ペイロードに値をストア（型に合わせてbitcast）
+                        auto* payloadGEP =
+                            builder->CreateStructGEP(structTy, alloca, 1, "payload_ptr");
+                        // payloadは i8[N] なので、適切な型にキャストしてストア
+                        if (sourceType->isIntegerTy(32)) {
+                            auto* payloadAsInt = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
+                                "payload_as_int");
+                            builder->CreateStore(value, payloadAsInt);
+                        } else if (sourceType->isIntegerTy(64)) {
+                            auto* payloadAsLong = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
+                                "payload_as_long");
+                            builder->CreateStore(value, payloadAsLong);
+                        } else {
+                            // その他の整数型は拡張してストア
+                            auto* payloadAsInt = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(sourceType, 0),
+                                "payload_as_type");
+                            builder->CreateStore(value, payloadAsInt);
+                        }
+
+                        // 4. 構造体全体をロードして返す
+                        return builder->CreateLoad(structTy, alloca, "union_load");
+                    }
+                }
+            }
+
+            // タグ付きユニオン型からの変換（IntOrLong -> int/long等）
+            // sourceTypeがStructType {i32, i8[N]}の場合
+            if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {
+                // タグ付きユニオン構造体（{i32, i8[N]}）かどうか確認
+                if (structTy->getNumElements() == 2) {
+                    auto* elem0 = structTy->getElementType(0);
+                    auto* elem1 = structTy->getElementType(1);
+                    if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                        // タグ付きユニオンからのキャスト
+                        // valueは集約型なので、一時allocaにストアしてからアクセス
+                        auto* alloca =
+                            builder->CreateAlloca(structTy, nullptr, "union_extract_temp");
+                        builder->CreateStore(value, alloca);
+
+                        // ペイロードポインタを取得
+                        auto* payloadGEP =
+                            builder->CreateStructGEP(structTy, alloca, 1, "payload_extract_ptr");
+
+                        // ターゲット型に応じてロード
+                        if (targetType->isIntegerTy(32)) {
+                            auto* payloadAsInt = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
+                                "payload_as_int_extract");
+                            return builder->CreateLoad(ctx.getI32Type(), payloadAsInt,
+                                                       "int_from_union");
+                        } else if (targetType->isIntegerTy(64)) {
+                            auto* payloadAsLong = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
+                                "payload_as_long_extract");
+                            return builder->CreateLoad(ctx.getI64Type(), payloadAsLong,
+                                                       "long_from_union");
+                        } else if (targetType->isIntegerTy()) {
+                            // その他の整数型
+                            auto* payloadAsType = builder->CreateBitCast(
+                                payloadGEP, llvm::PointerType::get(targetType, 0),
+                                "payload_as_target");
+                            return builder->CreateLoad(targetType, payloadAsType, "val_from_union");
+                        }
+                    }
+                }
             }
 
             return value;
@@ -1888,74 +2857,88 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                             if (currentType->kind == hir::TypeKind::Struct ||
                                 currentType->kind == hir::TypeKind::Generic) {
                                 std::string lookupName = currentType->name;
-                                auto structIt = structDefs.find(lookupName);
 
-                                // フォールバック: 関数名から構造体名を推論
-                                // Container__int__get → Container__int
-                                if (structIt == structDefs.end() && currentMIRFunction) {
-                                    const auto& funcName = currentMIRFunction->name;
-                                    size_t lastDunder = funcName.rfind("__");
-                                    if (lastDunder != std::string::npos && lastDunder > 0) {
-                                        std::string inferredStruct = funcName.substr(0, lastDunder);
-                                        structIt = structDefs.find(inferredStruct);
-                                        if (structIt != structDefs.end()) {
-                                            lookupName = inferredStruct;
+                                // Tagged Union構造体の特別処理
+                                // __TaggedUnion_* 構造体は {i32 tag, i32 payload} 形式
+                                if (lookupName.find("__TaggedUnion_") == 0) {
+                                    // field[0] = タグ (int), field[1] = ペイロード (int)
+                                    if (proj.field_id == 0) {
+                                        currentType = hir::make_int();
+                                    } else if (proj.field_id == 1) {
+                                        currentType = hir::make_int();
+                                    }
+                                } else {
+                                    auto structIt = structDefs.find(lookupName);
+
+                                    // フォールバック: 関数名から構造体名を推論
+                                    // Container__int__get → Container__int
+                                    if (structIt == structDefs.end() && currentMIRFunction) {
+                                        const auto& funcName = currentMIRFunction->name;
+                                        size_t lastDunder = funcName.rfind("__");
+                                        if (lastDunder != std::string::npos && lastDunder > 0) {
+                                            std::string inferredStruct =
+                                                funcName.substr(0, lastDunder);
+                                            structIt = structDefs.find(inferredStruct);
+                                            if (structIt != structDefs.end()) {
+                                                lookupName = inferredStruct;
+                                            }
                                         }
                                     }
-                                }
 
-                                if (structIt != structDefs.end()) {
-                                    auto& fields = structIt->second->fields;
-                                    if (proj.field_id < fields.size()) {
-                                        currentType = fields[proj.field_id].type;
+                                    if (structIt != structDefs.end()) {
+                                        auto& fields = structIt->second->fields;
+                                        if (proj.field_id < fields.size()) {
+                                            currentType = fields[proj.field_id].type;
 
-                                        // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
-                                        // 例: Box__intのvalue: T -> int
-                                        if (currentType && currentType->name.length() <= 2 &&
-                                            !currentType->name.empty()) {
-                                            // ベースローカルの型名からマングリング名を抽出
-                                            auto& baseLocal =
-                                                currentMIRFunction->locals[place.local].type;
-                                            std::string mangledName;
-                                            if (baseLocal) {
-                                                if (!baseLocal->type_args.empty() &&
-                                                    baseLocal->type_args[0]) {
-                                                    // type_argsがある場合は直接使用
-                                                    currentType = baseLocal->type_args[0];
-                                                } else if (baseLocal->name.find("__") !=
-                                                           std::string::npos) {
-                                                    // マングリング名から型引数を抽出 (Box__int ->
-                                                    // int)
-                                                    mangledName = baseLocal->name;
-                                                    size_t pos = mangledName.find("__");
-                                                    std::string typeArg =
-                                                        mangledName.substr(pos + 2);
-                                                    size_t nextPos = typeArg.find("__");
-                                                    if (nextPos != std::string::npos) {
-                                                        typeArg = typeArg.substr(0, nextPos);
-                                                    }
-                                                    if (!typeArg.empty()) {
-                                                        if (typeArg == "int")
-                                                            currentType = hir::make_int();
-                                                        else if (typeArg == "uint")
-                                                            currentType = hir::make_uint();
-                                                        else if (typeArg == "long")
-                                                            currentType = hir::make_long();
-                                                        else if (typeArg == "ulong")
-                                                            currentType = hir::make_ulong();
-                                                        else if (typeArg == "float")
-                                                            currentType = hir::make_float();
-                                                        else if (typeArg == "double")
-                                                            currentType = hir::make_double();
-                                                        else if (typeArg == "bool")
-                                                            currentType = hir::make_bool();
-                                                        else if (typeArg == "string")
-                                                            currentType = hir::make_string();
-                                                        else {
-                                                            auto st = std::make_shared<hir::Type>(
-                                                                hir::TypeKind::Struct);
-                                                            st->name = typeArg;
-                                                            currentType = st;
+                                            // フィールド型がジェネリックパラメータ(T等)の場合、マングリング名から具体型に置換
+                                            // 例: Box__intのvalue: T -> int
+                                            if (currentType && currentType->name.length() <= 2 &&
+                                                !currentType->name.empty()) {
+                                                // ベースローカルの型名からマングリング名を抽出
+                                                auto& baseLocal =
+                                                    currentMIRFunction->locals[place.local].type;
+                                                std::string mangledName;
+                                                if (baseLocal) {
+                                                    if (!baseLocal->type_args.empty() &&
+                                                        baseLocal->type_args[0]) {
+                                                        // type_argsがある場合は直接使用
+                                                        currentType = baseLocal->type_args[0];
+                                                    } else if (baseLocal->name.find("__") !=
+                                                               std::string::npos) {
+                                                        // マングリング名から型引数を抽出 (Box__int
+                                                        // -> int)
+                                                        mangledName = baseLocal->name;
+                                                        size_t pos = mangledName.find("__");
+                                                        std::string typeArg =
+                                                            mangledName.substr(pos + 2);
+                                                        size_t nextPos = typeArg.find("__");
+                                                        if (nextPos != std::string::npos) {
+                                                            typeArg = typeArg.substr(0, nextPos);
+                                                        }
+                                                        if (!typeArg.empty()) {
+                                                            if (typeArg == "int")
+                                                                currentType = hir::make_int();
+                                                            else if (typeArg == "uint")
+                                                                currentType = hir::make_uint();
+                                                            else if (typeArg == "long")
+                                                                currentType = hir::make_long();
+                                                            else if (typeArg == "ulong")
+                                                                currentType = hir::make_ulong();
+                                                            else if (typeArg == "float")
+                                                                currentType = hir::make_float();
+                                                            else if (typeArg == "double")
+                                                                currentType = hir::make_double();
+                                                            else if (typeArg == "bool")
+                                                                currentType = hir::make_bool();
+                                                            else if (typeArg == "string")
+                                                                currentType = hir::make_string();
+                                                            else {
+                                                                auto st =
+                                                                    std::make_shared<hir::Type>(
+                                                                        hir::TypeKind::Struct);
+                                                                st->name = typeArg;
+                                                                currentType = st;
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -2049,6 +3032,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             // 通常のローカル変数
             auto local = place.local;
             auto val = locals[local];
+
             // デバッグ: main関数でのコピー操作を確認
             if (cm::debug::g_debug_mode && currentMIRFunction &&
                 currentMIRFunction->name == "main" && local <= 2) {
@@ -2138,7 +3122,15 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 }
 
                 // スカラー型の場合はロード
-                return builder->CreateLoad(allocatedType, val, "load");
+                // asm出力で変更される可能性がある変数はvolatile loadで最適化を防止
+                auto* loadInst = builder->CreateLoad(allocatedType, val, "load");
+                if (allocatedLocals.count(local) > 0) {
+                    // asm影響変数: volatile loadで最適化を抑制
+                    if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
+                        li->setVolatile(true);
+                    }
+                }
+                return loadInst;
             }
             // static変数（GlobalVariable）の場合もロードが必要
             if (val && llvm::isa<llvm::GlobalVariable>(val)) {
@@ -2311,6 +3303,51 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                         case hir::TypeKind::String:
                                             structName += "string";
                                             break;
+                                        case hir::TypeKind::Pointer: {
+                                            // ポインタ型: ptr_xxx 形式で追加
+                                            structName += "ptr_";
+                                            // 要素型を再帰的に追加
+                                            if (typeArg->element_type) {
+                                                switch (typeArg->element_type->kind) {
+                                                    case hir::TypeKind::Int:
+                                                        structName += "int";
+                                                        break;
+                                                    case hir::TypeKind::UInt:
+                                                        structName += "uint";
+                                                        break;
+                                                    case hir::TypeKind::Long:
+                                                        structName += "long";
+                                                        break;
+                                                    case hir::TypeKind::ULong:
+                                                        structName += "ulong";
+                                                        break;
+                                                    case hir::TypeKind::Float:
+                                                        structName += "float";
+                                                        break;
+                                                    case hir::TypeKind::Double:
+                                                        structName += "double";
+                                                        break;
+                                                    case hir::TypeKind::Bool:
+                                                        structName += "bool";
+                                                        break;
+                                                    case hir::TypeKind::Char:
+                                                        structName += "char";
+                                                        break;
+                                                    case hir::TypeKind::String:
+                                                        structName += "string";
+                                                        break;
+                                                    case hir::TypeKind::Struct:
+                                                        structName += typeArg->element_type->name;
+                                                        break;
+                                                    default:
+                                                        structName += "void";
+                                                        break;
+                                                }
+                                            } else {
+                                                structName += "void";
+                                            }
+                                            break;
+                                        }
                                         default:
                                             if (!typeArg->name.empty()) {
                                                 structName += typeArg->name;
@@ -2427,7 +3464,25 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 }
 
                 // ポインタ型の場合は単純なポインタ演算（フラット化不要）
-                if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                // Deref後のLoadInst結果（ポインタ値）へのインデックスアクセスも含む
+                bool isPointerIndexing =
+                    (currentType && currentType->kind == hir::TypeKind::Pointer);
+
+                // Deref後（currentTypeはポインタの要素型）でもaddrがLoadInst結果の場合は
+                // ポインタへのインデックスアクセスとして扱う
+                if (!isPointerIndexing && addr && llvm::isa<llvm::LoadInst>(addr)) {
+                    // LoadInstの結果（ポインタ値）へのインデックスアクセス
+                    isPointerIndexing = true;
+                }
+
+                // Deref後にaddrがArgument（ポインタ引数、needsLoad=falseでDerefスキップ）の場合
+                // currentTypeはelement_type（int等）だがaddrはポインタ値 → ポインタIndexing
+                if (!isPointerIndexing && addr && llvm::isa<llvm::Argument>(addr) && projIdx > 0 &&
+                    place.projections[projIdx - 1].kind == mir::ProjectionKind::Deref) {
+                    isPointerIndexing = true;
+                }
+
+                if (isPointerIndexing) {
                     // インデックス値を取得
                     llvm::Value* indexVal = nullptr;
                     auto idx_it = locals.find(proj.index_local);
@@ -2457,18 +3512,45 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
 
                     // ポインタが指す要素の型を取得
                     llvm::Type* elemType = ctx.getI32Type();  // デフォルト
-                    if (currentType->element_type) {
+                    if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                        currentType->element_type) {
+                        // 通常のポインタ型: element_typeを使用
                         elemType = convertType(currentType->element_type);
+                    } else if (currentType && llvm::isa<llvm::LoadInst>(addr)) {
+                        // Deref後（LoadInst結果へのインデックスアクセス）: currentType自体が要素型
+                        elemType = convertType(currentType);
                     }
 
-                    // addrがポインタ変数のallocaの場合、まずポインタ値をロード
+                    // addrがポインタ変数を格納している場合、まずポインタ値をロード
+                    // これはField projection後（構造体のポインタフィールドへのGEP）にも適用される
                     llvm::Value* ptrVal = addr;
+                    bool needsLoad = false;
+
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(addr)) {
                         auto allocType = allocaInst->getAllocatedType();
-                        // allocaがポインタ型を格納している場合、ポインタ値をロード
+                        // allocaがポインタ型を格納している場合
                         if (allocType->isPointerTy() || allocType == ctx.getPtrType()) {
-                            ptrVal = builder->CreateLoad(ctx.getPtrType(), addr, "ptr_load");
+                            needsLoad = true;
                         }
+                    } else if (auto gepInst = llvm::dyn_cast<llvm::GetElementPtrInst>(addr)) {
+                        // GEP結果がポインタフィールドへのアドレスの場合
+                        // currentTypeがPointerなら、このアドレスからポインタ値をロード
+                        (void)gepInst;  // 未使用警告を抑制
+                        // currentType->kind == Pointer はポインタ型フィールドを示す
+                        needsLoad = true;
+                    } else if (llvm::isa<llvm::LoadInst>(addr)) {
+                        // LoadInst結果（Deref後）はすでにロード済みなので再ロード不要
+                        needsLoad = false;
+                    } else if (llvm::isa<llvm::Argument>(addr)) {
+                        // ポインタ引数（Deref後）はすでにポインタ値なので再ロード不要
+                        needsLoad = false;
+                    } else {
+                        // その他の場合（currentTypeがポインタ型なら）
+                        needsLoad = true;
+                    }
+
+                    if (needsLoad) {
+                        ptrVal = builder->CreateLoad(ctx.getPtrType(), addr, "ptr_load");
                     }
 
                     // ポインタ + オフセット

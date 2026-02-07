@@ -1,0 +1,149 @@
+// std::io::stream::stdout - 標準出力ストリーム
+// v0.13.0: libc syscall直接呼び出し
+module std.io.stream.stdout;
+
+import std.io.error::{IoResult, IoError, IoErrorKind};
+
+// ============================================================
+// libc syscall
+// ============================================================
+
+use libc {
+    long write(int fd, void* buf, long count);
+    int fsync(int fd);
+}
+
+// ============================================================
+// 定数
+// ============================================================
+
+const int STDOUT_FD = 1;
+const int STDERR_FD = 2;
+
+// ============================================================
+// Stdout構造体
+// ============================================================
+
+/// 標準出力ストリーム
+export struct Stdout {
+    int _fd;
+}
+
+impl Stdout {
+    /// 新しいStdoutインスタンスを作成
+    Stdout new() {
+        Stdout s;
+        s._fd = STDOUT_FD;
+        return s;
+    }
+
+    /// バッファからデータを書き込む
+    IoResult<int> write_bytes(utiny[] buf) {
+        if (buf.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(self._fd, &buf[0] as void*, buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// 文字列を書き込む
+    IoResult<int> write_str(string s) {
+        if (s.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(self._fd, s as void*, s.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// フラッシュ
+    IoResult<int> flush() {
+        int ret = fsync(self._fd);
+        if (ret < 0) {
+            return IoResult.Err(IoError.other("fsync failed"));
+        }
+        return IoResult.Ok(0);
+    }
+}
+
+// ============================================================
+// Stderr構造体
+// ============================================================
+
+/// 標準エラー出力ストリーム
+export struct Stderr {
+    int _fd;
+}
+
+impl Stderr {
+    /// 新しいStderrインスタンスを作成
+    Stderr new() {
+        Stderr s;
+        s._fd = STDERR_FD;
+        return s;
+    }
+
+    /// バッファからデータを書き込む
+    IoResult<int> write_bytes(utiny[] buf) {
+        if (buf.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(self._fd, &buf[0] as void*, buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// 文字列を書き込む
+    IoResult<int> write_str(string s) {
+        if (s.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = write(self._fd, s as void*, s.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// フラッシュ
+    IoResult<int> flush() {
+        int ret = fsync(self._fd);
+        if (ret < 0) {
+            return IoResult.Err(IoError.other("fsync failed"));
+        }
+        return IoResult.Ok(0);
+    }
+}
+
+// ============================================================
+// グローバルアクセサ
+// ============================================================
+
+/// 標準出力を取得
+export Stdout stdout() {
+    return Stdout.new();
+}
+
+/// 標準エラー出力を取得
+export Stderr stderr() {
+    return Stderr.new();
+}

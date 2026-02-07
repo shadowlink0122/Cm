@@ -18,9 +18,19 @@ HirProgram HirLowering::lower(ast::Program& program) {
         } else if (auto* func = decl->as<ast::FunctionDecl>()) {
             func_defs_[func->name] = func;
         } else if (auto* en = decl->as<ast::EnumDecl>()) {
+            // v0.13.0: enum定義を登録（Tagged Union用）
+            enum_defs_[en->name] = en;
+            int64_t auto_value = 0;
             for (const auto& member : en->members) {
+                std::string full_name = en->name + "::" + member.name;
                 if (member.value.has_value()) {
-                    enum_values_[en->name + "::" + member.name] = *member.value;
+                    // 明示的な値がある場合はそれを使用
+                    enum_values_[full_name] = *member.value;
+                    auto_value = *member.value + 1;
+                } else {
+                    // 値がない場合は自動割り当て（Associated Dataを持つvariantも含む）
+                    enum_values_[full_name] = auto_value;
+                    auto_value++;
                 }
             }
         } else if (auto* td = decl->as<ast::TypedefDecl>()) {
@@ -55,6 +65,33 @@ HirProgram HirLowering::lower(ast::Program& program) {
                 }
             }
         }
+    }
+
+    // 組み込みResult/Option型の完全登録
+    // ユーザー定義型より先に登録されるが、ユーザーが同名のenum/structを定義した場合は上書きされる
+    // 注: enum_defs_/struct_defs_はconst*を期待するため、静的定義を使用
+
+    // ユーザー定義型がない場合のみ登録
+    if (enum_defs_.find("Result") == enum_defs_.end()) {
+        // 組み込みResult<T, E>のenum_values_を登録
+        enum_values_["Result::Ok"] = 0;
+        enum_values_["Result::Err"] = 1;
+        debug::hir::log(debug::hir::Id::NodeCreate, "registered builtin Result::Ok/Err",
+                        debug::Level::Debug);
+    } else {
+        debug::hir::log(debug::hir::Id::NodeCreate, "skipped builtin Result (user-defined exists)",
+                        debug::Level::Debug);
+    }
+
+    if (enum_defs_.find("Option") == enum_defs_.end()) {
+        // 組み込みOption<T>のenum_values_を登録
+        enum_values_["Option::Some"] = 0;
+        enum_values_["Option::None"] = 1;
+        debug::hir::log(debug::hir::Id::NodeCreate, "registered builtin Option::Some/None",
+                        debug::Level::Debug);
+    } else {
+        debug::hir::log(debug::hir::Id::NodeCreate, "skipped builtin Option (user-defined exists)",
+                        debug::Level::Debug);
     }
 
     // Pass 2: 宣言を変換

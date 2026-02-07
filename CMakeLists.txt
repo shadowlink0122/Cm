@@ -145,6 +145,7 @@ set(CM_SOURCES
     src/frontend/types/checking/auto_impl.cpp
     src/frontend/types/checking/utils.cpp
     src/preprocessor/import.cpp
+    src/preprocessor/conditional.cpp
     src/module/resolver.cpp
     # Lint configuration
     src/lint/config.cpp

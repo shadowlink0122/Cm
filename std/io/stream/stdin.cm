@@ -1,0 +1,99 @@
+// std::io::stream::stdin - 標準入力ストリーム
+// v0.13.0: libc syscall直接呼び出し
+module std.io.stream.stdin;
+
+import std.io.error::{IoResult, IoError, IoErrorKind};
+
+// ============================================================
+// libc syscall
+// ============================================================
+
+use libc {
+    long read(int fd, void* buf, long count);
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+// ============================================================
+// 定数
+// ============================================================
+
+const int STDIN_FD = 0;
+
+// ============================================================
+// Stdin構造体
+// ============================================================
+
+/// 標準入力ストリーム
+export struct Stdin {
+    int _fd;
+}
+
+impl Stdin {
+    /// 新しいStdinインスタンスを作成
+    Stdin new() {
+        Stdin s;
+        s._fd = STDIN_FD;
+        return s;
+    }
+
+    /// バッファにデータを読み込む
+    IoResult<int> read_bytes(utiny[] buf) {
+        if (buf.len() == 0) {
+            return IoResult.Ok(0);
+        }
+
+        long n = read(self._fd, &buf[0] as void*, buf.len() as long);
+
+        if (n < 0) {
+            return IoResult.Err(IoError.other("read failed"));
+        }
+
+        return IoResult.Ok(n as int);
+    }
+
+    /// 1行読み取り（改行を含まない）
+    IoResult<string> read_line() {
+        // 一時バッファ（スタック上）
+        utiny[4096] temp_buf;
+        long total = 0;
+
+        // 1バイトずつ読み込んで改行を探す
+        while (total < 4095) {
+            long n = read(self._fd, &temp_buf[total as int] as void*, 1);
+
+            if (n <= 0) {
+                break;
+            }
+
+            if (temp_buf[total as int] == 10) {  // '\n' = 10
+                break;
+            }
+
+            total = total + 1;
+        }
+
+        // ヒープにバッファを確保してコピー
+        void* heap_buf = malloc(total + 1);
+        char* result = heap_buf as char*;
+
+        // データをコピー
+        int i = 0;
+        while (i < total as int) {
+            result[i] = temp_buf[i] as char;
+            i = i + 1;
+        }
+        result[total as int] = 0 as char;  // null終端
+
+        return IoResult.Ok(result as string);
+    }
+}
+
+// ============================================================
+// グローバルアクセサ
+// ============================================================
+
+/// 標準入力を取得
+export Stdin stdin() {
+    return Stdin.new();
+}

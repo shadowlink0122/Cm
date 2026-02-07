@@ -24,6 +24,7 @@ struct MethodInfo {
     std::vector<ast::TypePtr> param_types;
     ast::TypePtr return_type;
     ast::Visibility visibility = ast::Visibility::Export;  // デフォルトは公開
+    bool is_static = false;                                // 静的メソッドかどうか
 };
 
 // TypeCheckerの前方宣言

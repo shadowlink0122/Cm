@@ -1,0 +1,32 @@
+// 構造体フィールドを持つenum match抽出テスト
+// 設計: 複数値は構造体で包む、matchはステートメント形式
+import std::io::println;
+
+// 座標構造体
+struct Coord {
+    int x;
+    int y;
+}
+
+// Point enum（各バリアントは1つのフィールドのみ）
+enum Point {
+    Origin,
+    Coord(Coord)
+}
+
+int main() {
+    Point p = Point::Coord(Coord { x: 10, y: 20 });
+
+    // matchで値抽出（ステートメント形式）
+    match (p) {
+        Point::Origin => {
+            println("origin");
+        }
+        Point::Coord(c) => {
+            int sum = c.x + c.y;
+            println("x={c.x}, y={c.y}, sum={sum}");
+        }
+    }
+
+    return 0;
+}

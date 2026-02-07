@@ -1,0 +1,115 @@
+// test_pqueue_simple.cm - シンプルなジェネリックQueueテスト
+// Item型を使った非ジェネリック版で安定動作を確認
+
+import std::io::println;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+// テスト用の構造体（優先度を持つ要素）
+struct Item {
+    int value;
+    int priority;
+}
+
+// 非ジェネリックノード（Itemに特化）
+struct ItemNode {
+    Item data;
+    ItemNode* next;
+}
+
+// 非ジェネリックキュー（Itemに特化）
+struct ItemQueue {
+    ItemNode* head;
+    int size;
+}
+
+// ノード作成
+ItemNode* new_item_node(Item data) {
+    void* mem = malloc(sizeof(ItemNode));
+    ItemNode* node = mem as ItemNode*;
+    node->data = data;
+    node->next = null as ItemNode*;
+    return node;
+}
+
+// キュー初期化
+void item_queue_init(ItemQueue* q) {
+    q->head = null as ItemNode*;
+    q->size = 0;
+}
+
+// 末尾に追加
+void item_queue_push(ItemQueue* q, Item data) {
+    ItemNode* new_node_ptr = new_item_node(data);
+
+    if (q->head == null) {
+        q->head = new_node_ptr;
+    } else {
+        ItemNode* current = q->head;
+        while (current->next != null) {
+            current = current->next;
+        }
+        current->next = new_node_ptr;
+    }
+    q->size = q->size + 1;
+}
+
+// 先頭を取得して削除
+Item item_queue_pop(ItemQueue* q) {
+    ItemNode* head = q->head;
+    Item data = head->data;
+    q->head = head->next;
+    free(head as void*);
+    q->size = q->size - 1;
+    return data;
+}
+
+// キューが空か
+bool item_queue_is_empty(ItemQueue* q) {
+    return q->size == 0;
+}
+
+// キューのサイズ
+int item_queue_len(ItemQueue* q) {
+    return q->size;
+}
+
+int main() {
+    println("=== Simple Queue Test ===");
+
+    ItemQueue q;
+    item_queue_init(&q);
+
+    // 要素を追加
+    println("Pushing items:");
+
+    Item item1 = {value: 100, priority: 1};
+    item_queue_push(&q, item1);
+    println("  push(value=100, priority=1)");
+
+    Item item2 = {value: 200, priority: 2};
+    item_queue_push(&q, item2);
+    println("  push(value=200, priority=2)");
+
+    Item item3 = {value: 300, priority: 3};
+    item_queue_push(&q, item3);
+    println("  push(value=300, priority=3)");
+
+    int size = item_queue_len(&q);
+    println("Queue size: {size}");
+
+    // 要素を取り出し
+    println("Popping items:");
+    while (!item_queue_is_empty(&q)) {
+        Item popped = item_queue_pop(&q);
+        int v = popped.value;
+        int p = popped.priority;
+        println("  pop() = value={v}, priority={p}");
+    }
+
+    println("=== PASS ===");
+    return 0;
+}

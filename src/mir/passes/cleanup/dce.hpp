@@ -19,8 +19,15 @@ class DeadCodeElimination : public OptimizationPass {
     bool run(MirFunction& func) override {
         bool changed = false;
 
-        // 1. 到達不可能ブロックを除去
-        changed |= remove_unreachable_blocks(func);
+        // デストラクタ関数の場合は到達不可能ブロック除去をスキップ
+        // モノモフィゼーションで生成されたデストラクタは複雑なブロック構造を持つ可能性があり、
+        // 誤って到達可能なブロックが削除されることがあるため
+        bool is_destructor = func.name.find("__dtor") != std::string::npos;
+
+        // 1. 到達不可能ブロックを除去（デストラクタ以外のみ）
+        if (!is_destructor) {
+            changed |= remove_unreachable_blocks(func);
+        }
 
         // 2. 使用されていないローカル変数への代入を除去
         changed |= remove_dead_stores(func);
@@ -111,6 +118,12 @@ class DeadCodeElimination : public OptimizationPass {
             while (it != stmts.end()) {
                 bool should_remove = false;
 
+                // no_optフラグがtrueの場合は最適化スキップ
+                if ((*it)->no_opt) {
+                    ++it;
+                    continue;
+                }
+
                 if ((*it)->kind == MirStatement::Assign) {
                     auto& assign_data = std::get<MirStatement::AssignData>((*it)->data);
 
@@ -200,6 +213,12 @@ class DeadCodeElimination : public OptimizationPass {
         if (stmt.kind == MirStatement::Assign) {
             const auto& assign_data = std::get<MirStatement::AssignData>(stmt.data);
 
+            // mustブロック内の代入はターゲット変数自体も使用済みとしてマーク
+            // （デッドストア扱いを防止）
+            if (stmt.no_opt) {
+                used.insert(assign_data.place.local);
+            }
+
             // 右辺から使用を収集
             if (assign_data.rvalue) {
                 collect_used_locals_in_rvalue(*assign_data.rvalue, used);
@@ -217,6 +236,12 @@ class DeadCodeElimination : public OptimizationPass {
             // フィールドプロジェクションがある場合も、ベース変数が使用される
             if (!assign_data.place.projections.empty()) {
                 used.insert(assign_data.place.local);
+            }
+        } else if (stmt.kind == MirStatement::Asm) {
+            // ASMステートメントのオペランド変数は使用されているとマーク
+            const auto& asm_data = std::get<MirStatement::AsmData>(stmt.data);
+            for (const auto& operand : asm_data.operands) {
+                used.insert(operand.local_id);
             }
         }
     }

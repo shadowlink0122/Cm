@@ -2588,10 +2588,12 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         std::move(args),
         MirPlace{result},  // 戻り値の格納先
         success_block,
-        std::nullopt,  // unwind無し
-        std::string(),
-        std::string(),
-        false  // 通常の関数呼び出し
+        std::nullopt,    // unwind無し
+        std::string(),   // interface_name
+        std::string(),   // method_name
+        false,           // is_virtual
+        false,           // is_tail_call
+        call.is_awaited  // is_awaited
     };
 
     if (is_virtual) {

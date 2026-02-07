@@ -10,6 +10,7 @@ namespace cm {
 
 TypeChecker::TypeChecker() {
     register_builtin_interfaces();
+    register_builtin_types();  // Result<T, E>, Option<T> 組み込み型
 }
 
 bool TypeChecker::check(ast::Program& program) {
@@ -263,6 +264,80 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
                                gv->name + " : " + ast::type_to_string(*var_type),
                            debug::Level::Debug);
         }
+    } else if (auto* macro = decl.as<ast::MacroDecl>()) {
+        // v0.13.0: 型付きマクロを処理
+        if (macro->kind == ast::MacroDecl::Kind::Constant) {
+            current_span_ = decl.span;
+
+            // v0.13.0: ラムダ式マクロの場合は関数として登録
+            if (macro->value) {
+                if (auto* lambda = macro->value->as<ast::LambdaExpr>()) {
+                    // パラメータ型を収集
+                    std::vector<ast::TypePtr> param_types;
+                    for (const auto& param : lambda->params) {
+                        param_types.push_back(param.type);
+                    }
+
+                    // 戻り値型を決定
+                    ast::TypePtr return_type = lambda->return_type;
+                    if (!return_type) {
+                        // 式本体の場合、式の型を推論するためにスコープを作成
+                        if (lambda->is_expr_body()) {
+                            // 一時的なスコープを作成してパラメータを登録
+                            scopes_.push();
+                            for (const auto& param : lambda->params) {
+                                scopes_.current().define(param.name, param.type, false, false,
+                                                         decl.span, std::nullopt);
+                            }
+                            return_type = infer_type(*std::get<ast::ExprPtr>(lambda->body));
+                            scopes_.pop();
+                        } else {
+                            return_type = ast::make_void();
+                        }
+                    }
+
+                    // 関数として登録
+                    scopes_.global().define_function(macro->name, std::move(param_types),
+                                                     return_type);
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Macro function: " + macro->name + " -> " +
+                                       ast::type_to_string(*return_type),
+                                   debug::Level::Debug);
+                    return;  // 処理完了
+                }
+            }
+
+            // リテラル定数マクロの場合
+            std::optional<int64_t> const_int_value = std::nullopt;
+
+            // マクロの値を評価
+            if (macro->value) {
+                const_int_value = evaluate_const_expr(*macro->value);
+                if (const_int_value) {
+                    debug::tc::log(
+                        debug::tc::Id::TypeInfer,
+                        "Macro const: " + macro->name + " = " + std::to_string(*const_int_value),
+                        debug::Level::Debug);
+                }
+            }
+
+            // 初期化式の型チェック
+            ast::TypePtr init_type;
+            if (macro->value) {
+                init_type = infer_type(*macro->value);
+            }
+
+            // 型を決定
+            ast::TypePtr var_type = macro->type ? resolve_typedef(macro->type) : init_type;
+            if (var_type) {
+                scopes_.global().define(macro->name, var_type, true /* is_const */, false,
+                                        decl.span, const_int_value);
+                debug::tc::log(
+                    debug::tc::Id::Resolved,
+                    "Macro const: " + macro->name + " : " + ast::type_to_string(*var_type),
+                    debug::Level::Debug);
+            }
+        }
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         for (const auto& func : extern_block->declarations) {
             std::vector<ast::TypePtr> param_types;
@@ -383,6 +458,7 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
         info.name = method->name;
         info.return_type = method->return_type;
         info.visibility = method->visibility;
+        info.is_static = method->is_static;  // 静的メソッドフラグを設定
         for (const auto& param : method->params) {
             info.param_types.push_back(param.type);
         }
@@ -472,16 +548,72 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     debug::tc::log(debug::tc::Id::Resolved, "Registering enum: " + en.name, debug::Level::Debug);
 
     enum_names_.insert(en.name);
-    scopes_.global().define(en.name, ast::make_int());
 
+    // ジェネリックenumの場合は型パラメータを登録
+    if (!en.generic_params.empty()) {
+        generic_enums_[en.name] = en.generic_params;
+        debug::tc::log(debug::tc::Id::Resolved,
+                       "Generic enum: " + en.name + " with " +
+                           std::to_string(en.generic_params.size()) + " type params",
+                       debug::Level::Debug);
+    }
+
+    // 基本型として登録
+    scopes_.global().define(en.name, ast::make_named(en.name));
+
+    // Tagged Union情報を保存
+    enum_defs_[en.name] = &en;
+
+    // ユーザー定義のResult/Optionは組み込み型を上書きするため
+    // type_methods_をクリアする（組み込みメソッドをユーザー実装で上書き可能に）
+    if (en.name == "Result" || en.name == "Option") {
+        type_methods_.erase(en.name);
+    }
+
+    int64_t variant_index = 0;
     for (const auto& member : en.members) {
         std::string full_name = en.name + "::" + member.name;
-        int64_t value = member.value.value_or(0);
-        enum_values_[full_name] = value;
-        scopes_.global().define(full_name, ast::make_int());
 
-        debug::tc::log(debug::tc::Id::Resolved, "  " + full_name + " = " + std::to_string(value),
-                       debug::Level::Debug);
+        if (member.has_data()) {
+            // ジェネリックenumの場合でもenum_values_に登録
+            // Tagged Union用のタグ値として使用
+            enum_values_[full_name] = variant_index;
+
+            // ジェネリックenumの場合、variantは通常の関数として登録しない
+            // （infer_call内のenum constructor処理で処理する）
+            if (!en.generic_params.empty()) {
+                debug::tc::log(debug::tc::Id::Resolved,
+                               "  " + full_name + "(...) -> " + en.name +
+                                   " [generic variant constructor - deferred, tag=" +
+                                   std::to_string(variant_index) + "]",
+                               debug::Level::Debug);
+                variant_index++;
+                continue;
+            }
+
+            // Associated dataを持つVariant: コンストラクタ関数として登録
+            std::vector<ast::TypePtr> param_types;
+            for (const auto& [field_name, field_type] : member.fields) {
+                param_types.push_back(field_type);
+            }
+
+            // 戻り値型はenum型
+            ast::TypePtr return_type = ast::make_named(en.name);
+
+            scopes_.global().define_function(full_name, std::move(param_types), return_type);
+
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "  " + full_name + "(...) -> " + en.name + " [variant constructor]",
+                           debug::Level::Debug);
+        } else {
+            // シンプルなVariant: 整数定数として登録
+            int64_t value = member.value.value_or(0);
+            enum_values_[full_name] = value;
+            scopes_.global().define(full_name, ast::make_int());
+
+            debug::tc::log(debug::tc::Id::Resolved,
+                           "  " + full_name + " = " + std::to_string(value), debug::Level::Debug);
+        }
     }
 }
 
@@ -494,6 +626,7 @@ void TypeChecker::register_typedef(ast::TypedefDecl& td) {
 void TypeChecker::check_import(ast::ImportDecl& import) {
     std::string path_str = import.path.to_string();
 
+    // std::io からのインポート
     if (path_str == "std::io") {
         for (const auto& item : import.items) {
             if (item.name == "println" || item.name.empty()) {
@@ -505,6 +638,7 @@ void TypeChecker::check_import(ast::ImportDecl& import) {
         }
     } else if (import.path.segments.size() >= 3 && import.path.segments[0] == "std" &&
                import.path.segments[1] == "io") {
+        // std::io::println / std::io::print
         if (import.path.segments[2] == "println") {
             register_println();
         } else if (import.path.segments[2] == "print") {

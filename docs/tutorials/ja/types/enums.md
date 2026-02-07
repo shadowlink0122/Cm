@@ -68,6 +68,136 @@ int main() {
 
 ---
 
+## 関連データ付きEnum（Tagged Union）
+
+**v0.13.0以降**
+
+Cmでは、各バリアントに関連データを持つ列挙型（Tagged Union）を定義できます。
+
+### 基本的な定義
+
+```cm
+enum Message {
+    Quit,                      // データなし
+    Move { int x; int y; },    // 構造体風データ
+    Write(string),             // タプル風データ
+    ChangeColor(int, int, int) // 複数の値
+}
+
+int main() {
+    Message m1 = Message::Quit;
+    Message m2 = Message::Move { x: 10, y: 20 };
+    Message m3 = Message::Write("Hello");
+    Message m4 = Message::ChangeColor(255, 128, 0);
+    return 0;
+}
+```
+
+### matchでの分解
+
+関連データ付きEnumは `match` 式でデータを取り出せます。
+
+```cm
+enum Shape {
+    Circle(int),           // 半径
+    Rectangle(int, int),   // 幅, 高さ
+    Point
+}
+
+void describe_shape(Shape s) {
+    match (s) {
+        Shape::Circle(r) => println("Circle with radius {}", r),
+        Shape::Rectangle(w, h) => println("Rectangle {}x{}", w, h),
+        Shape::Point => println("A point"),
+    }
+}
+
+int main() {
+    Shape c = Shape::Circle(5);
+    describe_shape(c);  // Circle with radius 5
+    return 0;
+}
+```
+
+---
+
+## Result/Optionパターン
+
+**v0.13.0以降**
+
+Cmでは、エラーハンドリングや値の有無を表現するために、`Result<T, E>`と`Option<T>`パターンを使用できます。これらは言語組み込みではなく、ユーザーが明示的にenum定義します。
+
+### Result型
+
+処理の成功/失敗と値またはエラーを表現します。
+
+```cm
+import std::io::println;
+
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+Result<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return Result::Err("Division by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+int main() {
+    Result<int, string> r = safe_divide(10, 2);
+    match (r) {
+        Result::Ok(v) => { println("Result: {v}"); }
+        Result::Err(e) => { println("Error: {e}"); }
+    }
+    return 0;
+}
+```
+
+### Option型
+
+値があるかないかを表現します。
+
+```cm
+import std::io::println;
+
+enum Option<T> {
+    Some(T),
+    None
+}
+
+Option<int> find_value(int[] arr, int target) {
+    for (int i = 0; i < arr.len(); i++) {
+        if (arr[i] == target) {
+            return Option::Some(i);
+        }
+    }
+    return Option::None;
+}
+
+int main() {
+    int[] data = [1, 2, 3, 4, 5];
+    Option<int> idx = find_value(data, 3);
+    match (idx) {
+        Option::Some(i) => { println("Found at index {i}"); }
+        Option::None => { println("Not found"); }
+    }
+    return 0;
+}
+```
+
+### なぜユーザー定義か？
+
+`Result`と`Option`はユーザーが明示的にenum定義する必要があります。これにより：
+
+- **明示性**: コードで使用している型が明確
+- **カスタマイズ可能**: `impl`ブロックでメソッドを追加可能
+- **一貫性**: 他のenumと同じ扱い
+
+---
+
 ## 制御構文での利用
 
 ### switch文での利用

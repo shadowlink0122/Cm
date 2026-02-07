@@ -1,0 +1,260 @@
+// std::io::stream::buffered - バッファリングI/O
+// v0.13.0: BufReader, BufWriter実装
+module std.io.stream.buffered;
+
+import std.io.error::{IoResult, IoError, IoErrorKind};
+
+// ============================================================
+// libc syscall
+// ============================================================
+
+use libc {
+    long read(int fd, void* buf, long count);
+    long write(int fd, void* buf, long count);
+}
+
+// ============================================================
+// 定数
+// ============================================================
+
+// デフォルトバッファサイズ(4KB)
+const int DEFAULT_BUF_SIZE = 4096;
+
+// ============================================================
+// BufReader - バッファリング読み取り
+// ============================================================
+
+/// バッファリング読み取り構造体
+export struct BufReader {
+    int _fd;           // ファイルディスクリプタ
+    utiny[4096] _buf;  // 内部バッファ
+    int _pos;          // 現在の読み取り位置
+    int _cap;          // バッファ内の有効データ量
+}
+
+impl BufReader {
+    /// ファイルディスクリプタからBufReaderを作成
+    BufReader from_fd(int fd) {
+        BufReader r;
+        r._fd = fd;
+        r._pos = 0;
+        r._cap = 0;
+        return r;
+    }
+
+    /// バッファをフィル（内部バッファにデータを読み込む）
+    IoResult<int> fill_buf() {
+        // バッファが空の場合のみリフィル
+        if (self._pos >= self._cap) {
+            utiny* buf_ptr = &self._buf[0];
+            long n = read(self._fd, buf_ptr as void*, DEFAULT_BUF_SIZE as long);
+            if (n < 0) {
+                return IoResult.Err(IoError.other("read failed"));
+            }
+            self._pos = 0;
+            self._cap = n;
+            return IoResult.Ok(n);
+        }
+        return IoResult.Ok(self._cap - self._pos);
+    }
+
+    /// バッファから指定バイト数を読み取り
+    IoResult<int> read(utiny[] dest) {
+        int dest_len = dest.len() as int;
+        if (dest_len == 0) {
+            return IoResult.Ok(0);
+        }
+
+        // バッファが空ならフィル
+        if (self._pos >= self._cap) {
+            IoResult<int> fill_result = self.fill_buf();
+            match fill_result {
+                Err(e) => return IoResult.Err(e);
+                Ok(n) => {
+                    if (n == 0) {
+                        // EOF
+                        return IoResult.Ok(0);
+                    }
+                }
+            }
+        }
+
+        // バッファから読み取り
+        int available = self._cap - self._pos;
+        int to_copy = (dest_len < available) ? dest_len : available;
+
+        // バイトコピー
+        for (int i = 0; i < to_copy; i++) {
+            dest[i] = self._buf[self._pos + i];
+        }
+        self._pos = self._pos + to_copy;
+
+        return IoResult.Ok(to_copy);
+    }
+
+    /// 1行読み取り（改行文字を含まない）
+    IoResult<string> read_line() {
+        // 簡易実装：改行まで読み取り
+        utiny[1024] line_buf;
+        int line_pos = 0;
+
+        while (line_pos < 1023) {
+            // バッファフィル
+            if (self._pos >= self._cap) {
+                IoResult<int> fill_result = self.fill_buf();
+                match fill_result {
+                    Err(e) => return IoResult.Err(e);
+                    Ok(n) => {
+                        if (n == 0) {
+                            // EOF - 残りを返す
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 改行を探す
+            utiny c = self._buf[self._pos];
+            self._pos = self._pos + 1;
+
+            if (c == '\n' as utiny) {
+                break;
+            }
+            if (c == '\r' as utiny) {
+                // \r\nの場合は\nもスキップ
+                if (self._pos < self._cap && self._buf[self._pos] == '\n' as utiny) {
+                    self._pos = self._pos + 1;
+                }
+                break;
+            }
+
+            line_buf[line_pos] = c;
+            line_pos = line_pos + 1;
+        }
+
+        // 文字列に変換
+        // 簡易実装：バッファを文字列として返す
+        utiny* str_ptr = &line_buf[0];
+        string result = str_ptr as string;
+        return IoResult.Ok(result);
+    }
+
+    /// バッファ内の残りデータ量
+    int buffered() {
+        return self._cap - self._pos;
+    }
+}
+
+// ============================================================
+// BufWriter - バッファリング書き込み
+// ============================================================
+
+/// バッファリング書き込み構造体
+export struct BufWriter {
+    int _fd;           // ファイルディスクリプタ
+    utiny[4096] _buf;  // 内部バッファ
+    int _len;          // バッファ内のデータ量
+}
+
+impl BufWriter {
+    /// ファイルディスクリプタからBufWriterを作成
+    BufWriter from_fd(int fd) {
+        BufWriter w;
+        w._fd = fd;
+        w._len = 0;
+        return w;
+    }
+
+    /// バッファにデータを書き込み
+    IoResult<int> write(utiny[] src) {
+        int src_len = src.len() as int;
+        if (src_len == 0) {
+            return IoResult.Ok(0);
+        }
+
+        // バッファに収まる場合
+        int available = DEFAULT_BUF_SIZE - self._len;
+        if (src_len <= available) {
+            for (int i = 0; i < src_len; i++) {
+                self._buf[self._len + i] = src[i];
+            }
+            self._len = self._len + src_len;
+            return IoResult.Ok(src_len);
+        }
+
+        // バッファをフラッシュしてから書き込み
+        IoResult<int> flush_result = self.flush();
+        match flush_result {
+            Err(e) => return IoResult.Err(e);
+            Ok(_) => {}
+        }
+
+        // 大きなデータは直接書き込み
+        if (src_len >= DEFAULT_BUF_SIZE) {
+            utiny* src_ptr = &src[0];
+            long n = write(self._fd, src_ptr as void*, src_len as long);
+            if (n < 0) {
+                return IoResult.Err(IoError.other("write failed"));
+            }
+            return IoResult.Ok(n);
+        }
+
+        // 小さなデータはバッファに格納
+        for (int i = 0; i < src_len; i++) {
+            self._buf[i] = src[i];
+        }
+        self._len = src_len;
+        return IoResult.Ok(src_len);
+    }
+
+    /// 文字列を書き込み
+    IoResult<int> write_str(string s) {
+        // 文字列をバイト配列として扱う
+        int len = s.len() as int;
+        utiny* ptr = s as utiny*;
+
+        // バッファに収まる場合
+        int available = DEFAULT_BUF_SIZE - self._len;
+        if (len <= available) {
+            for (int i = 0; i < len; i++) {
+                self._buf[self._len + i] = ptr[i];
+            }
+            self._len = self._len + len;
+            return IoResult.Ok(len);
+        }
+
+        // バッファをフラッシュしてから書き込み
+        IoResult<int> flush_result = self.flush();
+        match flush_result {
+            Err(e) => return IoResult.Err(e);
+            Ok(_) => {}
+        }
+
+        long n = write(self._fd, ptr as void*, len as long);
+        if (n < 0) {
+            return IoResult.Err(IoError.other("write failed"));
+        }
+        return IoResult.Ok(n);
+    }
+
+    /// バッファをフラッシュ（ディスクに書き出し）
+    IoResult<int> flush() {
+        if (self._len == 0) {
+            return IoResult.Ok(0);
+        }
+
+        utiny* buf_ptr = &self._buf[0];
+        long n = write(self._fd, buf_ptr as void*, self._len as long);
+        if (n < 0) {
+            return IoResult.Err(IoError.other("flush failed"));
+        }
+
+        self._len = 0;
+        return IoResult.Ok(n);
+    }
+
+    /// バッファ内のデータ量
+    int buffered() {
+        return self._len;
+    }
+}

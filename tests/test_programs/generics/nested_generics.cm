@@ -2,7 +2,7 @@ import std::io::println;
 // ネストしたジェネリクスと型引数のテスト
 
 // ジェネリックなOptionタイプ
-struct Option<T> {
+struct MyOption<T> {
     bool has_value;
     T value;
 }
@@ -25,11 +25,11 @@ struct Pair<T, U> {
 
 int main() {
     // Option型のテスト (手動で値を設定)
-    Option<int> some_value;
+    MyOption<int> some_value;
     some_value.has_value = true;
     some_value.value = 42;
 
-    Option<int> no_value;
+    MyOption<int> no_value;
     no_value.has_value = false;
     no_value.value = 0;
 

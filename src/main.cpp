@@ -26,6 +26,7 @@
 #include "mir/passes/core/manager.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
+#include "preprocessor/conditional.hpp"
 #include "preprocessor/import.hpp"
 
 #include <cstdlib>
@@ -47,10 +48,10 @@ namespace cm {
 
 // バージョン情報を取得
 std::string get_version() {
-    std::ifstream version_file(".VERSION");
+    std::ifstream version_file("VERSION");
     if (!version_file.is_open()) {
         // フォールバック
-        return "0.1.0";
+        return "0.13.0";
     }
     std::string version;
     std::getline(version_file, version);
@@ -70,6 +71,7 @@ struct Options {
     bool show_hir = false;
     bool show_mir = false;
     bool show_mir_opt = false;
+    bool show_lir_opt = false;  // 最適化後のLLVM IRを表示
     bool emit_llvm = false;
     bool emit_js = false;         // JavaScript生成
     std::string target = "";      // ターゲット (native, wasm, js, web)
@@ -116,7 +118,8 @@ void print_help(const char* program_name) {
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
     std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
-    std::cout << "  --mir-opt             最適化後のMIRを表示\n\n";
+    std::cout << "  --mir-opt             最適化後のMIRを表示\n";
+    std::cout << "  --lir-opt             最適化後のLLVM IRを表示（codegen直前）\n\n";
     std::cout << "その他のオプション:\n";
     std::cout << "  --lang=ja             日本語デバッグメッセージ\n";
     std::cout << "  --version             バージョン情報を表示\n\n";
@@ -155,7 +158,7 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Help;
         return opts;
     } else if (cmd == "--version") {
-        std::cout << "Cm言語コンパイラ v0.1.0 (開発版)\n";
+        std::cout << get_version() << "\n";
         std::exit(0);
     } else if (cmd[0] != '-') {
         // 旧形式は使用不可 - ヘルプを表示
@@ -184,6 +187,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.show_mir = true;
         } else if (arg == "--mir-opt") {
             opts.show_mir_opt = true;
+        } else if (arg == "--lir-opt") {
+            opts.show_lir_opt = true;
         } else if (arg == "--emit-llvm") {
             opts.emit_llvm = true;
         } else if (arg == "--emit-js") {
@@ -465,6 +470,10 @@ int main(int argc, char* argv[]) {
 
                 code = preprocess_result.processed_source;
 
+                // 条件付きコンパイル
+                preprocessor::ConditionalPreprocessor conditional;
+                code = conditional.process(code);
+
                 // パース
                 Lexer lexer(code);
                 auto tokens = lexer.tokenize();
@@ -486,6 +495,7 @@ int main(int argc, char* argv[]) {
                 // 型チェック
                 TypeChecker checker;
                 bool type_check_ok = checker.check(program);
+                (void)type_check_ok;  // 警告抑制：将来のエラー処理で使用予定
 
                 // 診断情報を表示
                 SourceLocationManager loc_mgr(code, file);
@@ -688,6 +698,19 @@ int main(int argc, char* argv[]) {
 
         // プリプロセス後のコードを使用
         code = preprocess_result.processed_source;
+
+        // ========== Conditional Preprocessor ==========
+        if (opts.debug)
+            std::cout << "=== Conditional Preprocessor ===\n";
+        preprocessor::ConditionalPreprocessor conditional;
+        code = conditional.process(code);
+        if (opts.debug) {
+            std::cout << "定義済みシンボル: ";
+            for (const auto& def : conditional.definitions()) {
+                std::cout << def << " ";
+            }
+            std::cout << "\n";
+        }
 
         // デバッグ時はプリプロセス後のコードを出力
         if (opts.debug) {
@@ -902,6 +925,7 @@ int main(int argc, char* argv[]) {
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
+
         if (opts.debug)
             std::cout << "MIR関数数: " << mir.functions.size() << "\n\n" << std::flush;
 
@@ -909,10 +933,11 @@ int main(int argc, char* argv[]) {
         if (opts.show_mir && !opts.show_mir_opt) {
             std::cout << "=== MIR (最適化前) ===\n";
             mir::MirPrinter printer;
-            printer.print(mir);
+            printer.print(mir, std::cout);
         }
 
         // ========== Optimization ==========
+
         if (opts.optimization_level > 0 || opts.show_mir_opt) {
             if (cm::debug::g_debug_mode)
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
@@ -952,9 +977,10 @@ int main(int argc, char* argv[]) {
 
         // MIRを表示（最適化後）
         if (opts.show_mir_opt) {
-            std::cout << "=== MIR (最適化後) ===\n";
+            std::cout << "=== MIR (最適化後) ===" << std::endl;
             mir::MirPrinter printer;
-            printer.print(mir);
+            printer.print(mir, std::cout);
+            return 0;
         }
 
         // ========== Backend ==========
@@ -964,9 +990,12 @@ int main(int argc, char* argv[]) {
             if (opts.verbose) {
                 std::cout << "=== JIT Compiler ===" << std::endl;
             }
+
             cm::codegen::jit::JITEngine jit;
+
             // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
             std::setvbuf(stdout, nullptr, _IONBF, 0);
+
             auto result = jit.execute(mir, "main", opts.optimization_level);
 
             if (!result.success) {
@@ -1093,6 +1122,14 @@ int main(int argc, char* argv[]) {
                     codegen.compile(mir);
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
+
+                    // --lir-opt: 最適化後のLLVM IRを表示
+                    if (opts.show_lir_opt) {
+                        std::cout << "=== LLVM IR (最適化後) ===\n";
+                        std::cout << codegen.getIRString();
+                        std::cout << "========================\n";
+                        return 0;
+                    }
 
                     if (opts.verbose) {
                         std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";

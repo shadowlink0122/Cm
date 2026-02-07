@@ -50,8 +50,24 @@ TargetConfig TargetConfig::getNative() {
         }
     }
 
+    // ターゲットトリプルを取得し、macOSバージョンを正規化
+    std::string triple = llvm::sys::getDefaultTargetTriple();
+#ifdef __APPLE__
+    // macOSトリプルのバージョンを15.0に正規化してリンカ警告を回避
+    // ユーザーがmacOS 15.x以降を使用している前提
+    size_t macosxPos = triple.find("-macosx");
+    if (macosxPos != std::string::npos) {
+        size_t versionStart = macosxPos + 7;  // "-macosx"の長さ
+        size_t versionEnd = triple.find_first_not_of("0123456789.", versionStart);
+        if (versionEnd == std::string::npos) {
+            versionEnd = triple.length();
+        }
+        triple = triple.substr(0, versionStart) + "15.0" + triple.substr(versionEnd);
+    }
+#endif
+
     return {.target = BuildTarget::Native,
-            .triple = llvm::sys::getDefaultTargetTriple(),
+            .triple = triple,
             .cpu = cpu,
             .features = featureStr,
             .dataLayout = "",  // 後で設定
@@ -197,12 +213,59 @@ void LLVMContext::setupStd() {
     // 標準ライブラリ関数
     declareRuntimeFunctions();
 
+    // WASM32ではsize_t = i32、ネイティブではsize_t = i64
+    auto sizeTy = (targetConfig.target == BuildTarget::Wasm) ? i32Ty : i64Ty;
+
     // malloc/free
-    auto mallocType = llvm::FunctionType::get(ptrTy, {i64Ty}, false);
+    auto mallocType = llvm::FunctionType::get(ptrTy, {sizeTy}, false);
     module->getOrInsertFunction("malloc", mallocType);
 
     auto freeType = llvm::FunctionType::get(voidTy, {ptrTy}, false);
     module->getOrInsertFunction("free", freeType);
+
+    // calloc (WASM互換)
+    auto callocType = llvm::FunctionType::get(ptrTy, {sizeTy, sizeTy}, false);
+    module->getOrInsertFunction("calloc", callocType);
+
+    // realloc (WASM互換)
+    auto reallocType = llvm::FunctionType::get(ptrTy, {ptrTy, sizeTy}, false);
+    module->getOrInsertFunction("realloc", reallocType);
+
+    // memcpy/memmove/memset (WASM互換)
+    auto memcpyType = llvm::FunctionType::get(ptrTy, {ptrTy, ptrTy, sizeTy}, false);
+    module->getOrInsertFunction("memcpy", memcpyType);
+    module->getOrInsertFunction("memmove", memcpyType);
+
+    auto memsetType = llvm::FunctionType::get(ptrTy, {ptrTy, i32Ty, sizeTy}, false);
+    module->getOrInsertFunction("memset", memsetType);
+
+    // ============================================================
+    // POSIX I/O 関数宣言（libc経由）
+    // ============================================================
+
+    // ssize_t read(int fd, void* buf, size_t count)
+    auto readType = llvm::FunctionType::get(sizeTy, {i32Ty, ptrTy, sizeTy}, false);
+    module->getOrInsertFunction("read", readType);
+
+    // ssize_t write(int fd, const void* buf, size_t count)
+    auto writeType = llvm::FunctionType::get(sizeTy, {i32Ty, ptrTy, sizeTy}, false);
+    module->getOrInsertFunction("write", writeType);
+
+    // int open(const char* pathname, int flags, mode_t mode)
+    auto openType = llvm::FunctionType::get(i32Ty, {ptrTy, i32Ty, i32Ty}, false);
+    module->getOrInsertFunction("open", openType);
+
+    // int close(int fd)
+    auto closeType = llvm::FunctionType::get(i32Ty, {i32Ty}, false);
+    module->getOrInsertFunction("close", closeType);
+
+    // off_t lseek(int fd, off_t offset, int whence)
+    auto lseekType = llvm::FunctionType::get(sizeTy, {i32Ty, sizeTy, i32Ty}, false);
+    module->getOrInsertFunction("lseek", lseekType);
+
+    // int fsync(int fd)
+    auto fsyncType = llvm::FunctionType::get(i32Ty, {i32Ty}, false);
+    module->getOrInsertFunction("fsync", fsyncType);
 
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMRuntime, "std mode",
                             cm::debug::Level::Debug);

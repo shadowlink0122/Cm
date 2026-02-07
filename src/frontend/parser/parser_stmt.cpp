@@ -58,6 +58,13 @@ ast::StmtPtr Parser::parse_stmt() {
         return ast::make_while(std::move(cond), std::move(body), Span{start_pos, previous().end});
     }
 
+    // must {} ブロック（最適化禁止）
+    if (consume_if(TokenKind::KwMust)) {
+        debug::par::log(debug::par::Id::Stmt, "must block", debug::Level::Trace);
+        auto body = parse_block();
+        return ast::make_must(std::move(body), Span{start_pos, previous().end});
+    }
+
     // switch
     if (consume_if(TokenKind::KwSwitch)) {
         expect(TokenKind::LParen);
@@ -98,6 +105,14 @@ ast::StmtPtr Parser::parse_stmt() {
 
         expect(TokenKind::RBrace);
         return ast::make_switch(std::move(expr), std::move(cases), Span{start_pos, previous().end});
+    }
+
+    // v0.13.0: match文（セミコロン不要のブロックベース構文）
+    if (consume_if(TokenKind::KwMatch)) {
+        debug::par::log(debug::par::Id::Stmt, "match statement", debug::Level::Trace);
+        auto match_expr = parse_match_expr(start_pos);
+        // ExprStmtとしてラップ（セミコロンは不要）
+        return ast::make_expr_stmt(std::move(match_expr), Span{start_pos, previous().end});
     }
 
     // for
@@ -149,6 +164,8 @@ ast::StmtPtr Parser::parse_stmt() {
                             depth++;
                         else if (tokens_[lookahead].kind == TokenKind::Gt)
                             depth--;
+                        else if (tokens_[lookahead].kind == TokenKind::GtGt)
+                            depth -= 2;  // ネストジェネリクス対応
                         lookahead++;
                     }
                 }
@@ -453,9 +470,11 @@ bool Parser::is_type_start() {
                                     depth++;
                                 else if (tokens_[i].kind == TokenKind::Gt)
                                     depth--;
+                                else if (tokens_[i].kind == TokenKind::GtGt)
+                                    depth -= 2;  // ネストジェネリクス対応
                                 i++;
                             }
-                            if (depth == 0 && i < tokens_.size() &&
+                            if (depth <= 0 && i < tokens_.size() &&
                                 tokens_[i].kind == TokenKind::Ident) {
                                 return true;
                             }
@@ -497,11 +516,14 @@ bool Parser::is_type_start() {
                             depth++;
                         } else if (tokens_[i].kind == TokenKind::Gt) {
                             depth--;
+                        } else if (tokens_[i].kind == TokenKind::GtGt) {
+                            // ネストジェネリクス対応: >> は2つの > として処理
+                            depth -= 2;
                         }
                         i++;
                     }
-                    // depth == 0 なら閉じている
-                    if (depth == 0 && i < tokens_.size()) {
+                    // depth == 0 なら閉じている（depth < 0 は >> で過剰消費した場合）
+                    if (depth <= 0 && i < tokens_.size()) {
                         // ジェネリック型の後に[N]が来る可能性もチェック
                         if (tokens_[i].kind == TokenKind::LBracket) {
                             // [N]をスキップ

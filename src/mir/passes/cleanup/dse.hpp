@@ -39,6 +39,20 @@ class DeadStoreElimination : public OptimizationPass {
             if (stmt->kind == MirStatement::Nop)
                 continue;
 
+            // no_optフラグがtrueの場合は最適化スキップ
+            // mustブロック内の文はデッドストア削除の対象外
+            if (stmt->no_opt) {
+                // ただし、mustブロック内の代入による使用はマークする
+                if (stmt->kind == MirStatement::Assign) {
+                    auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                    if (assign_data.place.projections.empty()) {
+                        // 前の定義を「生きている」としてマーク（削除しない）
+                        last_def.erase(assign_data.place.local);
+                    }
+                }
+                continue;
+            }
+
             // 1. 文で使用される変数を収集
             std::unordered_set<LocalId> used;
             bool uses_deref = false;
@@ -66,11 +80,14 @@ class DeadStoreElimination : public OptimizationPass {
                     // 以前の定義があり、かつその定義以降に使用されていない場合
                     auto it = last_def.find(target);
                     if (it != last_def.end()) {
-                        // 以前の定義はデッドストア
-                        // 副作用がないことを確認
-                        it->second->kind = MirStatement::Nop;
-                        it->second->data = std::monostate{};
-                        changed = true;
+                        // 以前の定義がno_optの場合は削除しない
+                        if (!it->second->no_opt) {
+                            // 以前の定義はデッドストア
+                            // 副作用がないことを確認
+                            it->second->kind = MirStatement::Nop;
+                            it->second->data = std::monostate{};
+                            changed = true;
+                        }
                     }
 
                     // 新しい定義を登録（副作用がない場合のみ追跡）
@@ -88,10 +105,13 @@ class DeadStoreElimination : public OptimizationPass {
                 if (stmt->kind == MirStatement::StorageDead) {
                     auto it = last_def.find(storage_data.local);
                     if (it != last_def.end()) {
-                        // Dead store
-                        it->second->kind = MirStatement::Nop;
-                        it->second->data = std::monostate{};
-                        changed = true;
+                        // no_optの場合は削除しない
+                        if (!it->second->no_opt) {
+                            // Dead store
+                            it->second->kind = MirStatement::Nop;
+                            it->second->data = std::monostate{};
+                            changed = true;
+                        }
                         last_def.erase(it);
                     }
                 } else {

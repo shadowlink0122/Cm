@@ -1,0 +1,140 @@
+// 複雑なLLVMインラインアセンブリテスト
+// 複数オペランド、様々な制約をテスト
+
+int main() {
+#ifdef __x86_64__
+    println("=== Complex LLVM ASM Test ===");
+
+    // --- Test 1: Read-write add ---
+    println("\n--- Test 1: Read-write add ---");
+    int x = 90;
+    __asm__("addl $$10, ${+r:x}");
+    println("x (should be 100):");
+    println(x);
+
+    // --- Test 2: Multiple independent ops ---
+    println("\n--- Test 2: Multiple independent ops ---");
+    int p = 10;
+    int q = 20;
+    __asm__("addl $$5, ${+r:p}");
+    __asm__("addl $$10, ${+r:q}");
+    println("p (should be 15):");
+    println(p);
+    println("q (should be 30):");
+    println(q);
+
+    // --- Test 3: Chained computation ---
+    println("\n--- Test 3: Chained computation ---");
+    int val = 10;
+    __asm__("addl $$5, ${+r:val}");    // 15
+    __asm__("sall $$1, ${+r:val}");    // 30
+    __asm__("addl $$15, ${+r:val}");   // 45
+    println("val (should be 45):");
+    println(val);
+
+    // --- Test 4: NEG operation ---
+    println("\n--- Test 4: NEG operation ---");
+    int neg = 42;
+    __asm__("negl ${+r:neg}");
+    println("neg (should be -42):");
+    println(neg);
+
+    // --- Test 5: Bit operations ---
+    println("\n--- Test 5: Bit operations ---");
+    int bits = 0xF0;
+    __asm__("orl $$0x0F, ${+r:bits}");
+    println("bits (should be 255):");
+    println(bits);
+
+    // --- Test 6: Shift operations ---
+    println("\n--- Test 6: Shift operations ---");
+    int shift = 1;
+    __asm__("shll $$4, ${+r:shift}");
+    println("shift (should be 16):");
+    println(shift);
+
+    // --- Test 7: Subtraction ---
+    println("\n--- Test 7: Subtraction ---");
+    int sub = 100;
+    __asm__("subl $$30, ${+r:sub}");
+    println("sub (should be 70):");
+    println(sub);
+
+    // --- Test 8: XOR clear ---
+    println("\n--- Test 8: XOR clear ---");
+    int xor_val = 12345;
+    __asm__("xorl ${+r:xor_val}, ${+r:xor_val}");
+    println("xor_val (should be 0):");
+    println(xor_val);
+
+    println("\n=== All tests completed! ===");
+#else
+    // ARM64版
+    println("=== Complex LLVM ASM Test ===");
+
+    // --- Test 1: Read-write add ---
+    println("\n--- Test 1: Read-write add ---");
+    int x = 90;
+    __asm__("add ${+r:x}, ${+r:x}, #10");
+    println("x (should be 100):");
+    println(x);
+
+    // --- Test 2: Multiple independent ops ---
+    println("\n--- Test 2: Multiple independent ops ---");
+    int p = 10;
+    int q = 20;
+    __asm__("add ${+r:p}, ${+r:p}, #5");
+    __asm__("add ${+r:q}, ${+r:q}, #10");
+    println("p (should be 15):");
+    println(p);
+    println("q (should be 30):");
+    println(q);
+
+    // --- Test 3: Chained computation ---
+    println("\n--- Test 3: Chained computation ---");
+    int val = 10;
+    __asm__("add ${+r:val}, ${+r:val}, #5");     // 15
+    __asm__("lsl ${+r:val}, ${+r:val}, #1");      // 30
+    __asm__("add ${+r:val}, ${+r:val}, #15");     // 45
+    println("val (should be 45):");
+    println(val);
+
+    // --- Test 4: NEG operation ---
+    println("\n--- Test 4: NEG operation ---");
+    int neg = 42;
+    __asm__("neg ${+r:neg}, ${+r:neg}");
+    println("neg (should be -42):");
+    println(neg);
+
+    // --- Test 5: Bit operations ---
+    println("\n--- Test 5: Bit operations ---");
+    int bits = 0xF0;
+    __asm__("orr ${+r:bits}, ${+r:bits}, #0x0F");
+    println("bits (should be 255):");
+    println(bits);
+
+    // --- Test 6: Shift operations ---
+    println("\n--- Test 6: Shift operations ---");
+    int shift = 1;
+    __asm__("lsl ${+r:shift}, ${+r:shift}, #4");
+    println("shift (should be 16):");
+    println(shift);
+
+    // --- Test 7: Subtraction ---
+    println("\n--- Test 7: Subtraction ---");
+    int sub = 100;
+    __asm__("sub ${+r:sub}, ${+r:sub}, #30");
+    println("sub (should be 70):");
+    println(sub);
+
+    // --- Test 8: XOR clear ---
+    println("\n--- Test 8: XOR clear ---");
+    int xor_val = 12345;
+    __asm__("eor ${+r:xor_val}, ${+r:xor_val}, ${+r:xor_val}");
+    println("xor_val (should be 0):");
+    println(xor_val);
+
+    println("\n=== All tests completed! ===");
+#end
+    return 0;
+}

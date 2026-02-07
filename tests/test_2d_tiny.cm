@@ -1,7 +1,0 @@
-import std::io;
-int main() {
-    int[10][10] a;
-    a[2][3] = 42;
-    println("{a[2][3]}");
-    return 0;
-}

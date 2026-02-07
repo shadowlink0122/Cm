@@ -171,11 +171,30 @@ class MirLoweringBase {
         return type;
     }
 
-    // enum定義を登録
+    // enum定義を登録（MirEnumも作成してmir_programに追加）
     void register_enum(const hir::HirEnum& e) {
+        // enum_defsに登録（値マッピング用）
         for (const auto& member : e.members) {
             enum_defs[e.name][member.name] = member.value;
         }
+
+        // MirEnumを作成してmir_programに追加
+        auto mir_enum = std::make_unique<MirEnum>();
+        mir_enum->name = e.name;
+        mir_enum->is_export = e.is_export;
+
+        for (const auto& member : e.members) {
+            MirEnumMember mir_member;
+            mir_member.name = member.name;
+            mir_member.tag_value = member.value;
+            // Associated dataフィールドをコピー
+            for (const auto& [field_name, field_type] : member.fields) {
+                mir_member.fields.emplace_back(field_name, field_type);
+            }
+            mir_enum->members.push_back(std::move(mir_member));
+        }
+
+        mir_program.enums.push_back(std::move(mir_enum));
     }
 
     // グローバルconst変数を登録

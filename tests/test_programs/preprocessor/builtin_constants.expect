@@ -1,0 +1,5 @@
+=== builtin constants test ===
+---
+pass: 22
+fail: 0
+=== complete ===

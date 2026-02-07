@@ -7,7 +7,43 @@
 
 namespace cm::mir {
 
-LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, LoweringContext& ctx) {
+LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypePtr& expr_type,
+                                    LoweringContext& ctx) {
+    // sizeof_for_T マーカー型の処理（ジェネリック型パラメータのsizeof）
+    // MIR生成時にはtype_param_mapが空のため解決できない
+    // マーカー型をオペランド型として保持し、モノモフィゼーション時に置換
+    if (expr_type && expr_type->kind == hir::TypeKind::Generic &&
+        expr_type->name.find("sizeof_for_") == 0) {
+        // 型パラメータ解決を試みる（モノモフィ後の特殊化関数で有効）
+        std::string type_param = expr_type->name.substr(11);  // "sizeof_for_" の長さ
+        auto resolved_type = ctx.resolve_type_param(type_param);
+
+        if (resolved_type) {
+            // 解決できた場合は実際のサイズを計算
+            int64_t actual_size = ctx.calculate_type_size(resolved_type);
+            MirConstant constant;
+            constant.type = hir::make_long();
+            constant.value = actual_size;
+            LocalId temp = ctx.new_temp(constant.type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{temp}, MirRvalue::use(MirOperand::constant(constant))));
+            return temp;
+        }
+
+        // 解決できない場合（ジェネリック関数のMIR生成時）
+        // マーカー型を持つ定数を生成し、モノモフィゼーションで後で置換
+        MirConstant constant;
+        constant.type = expr_type;                      // sizeof_for_Tマーカー型を保持
+        constant.value = std::get<int64_t>(lit.value);  // HIRで計算された暫定値
+
+        LocalId temp = ctx.new_temp(hir::make_long());
+        auto operand = MirOperand::constant(constant);
+        operand->type = expr_type;  // オペランドの型にもマーカーを設定
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{temp}, MirRvalue::use(std::move(operand))));
+        return temp;
+    }
+
     // 文字列リテラルの場合、補間が必要かチェック
     if (lit.value.index() == 5) {  // string型のインデックス
         std::string str_val = std::get<std::string>(lit.value);
@@ -460,7 +496,28 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
             base_name = base_name.substr(0, mangled_pos);
         }
 
-        auto field_idx = ctx.get_field_index(base_name, field_name);
+        // Tagged Union構造体の特別処理
+        // __TaggedUnion_*の場合、または enum_defs に登録されている enum型の場合
+        // __tagはfield[0]、__payloadはfield[1]
+        std::optional<size_t> field_idx = std::nullopt;
+        bool is_tagged_union = (current_type->name.find("__TaggedUnion_") == 0);
+
+        // enum_defs に登録されている場合もTagged Unionとして扱う
+        if (!is_tagged_union && ctx.enum_defs && ctx.enum_defs->count(current_type->name)) {
+            is_tagged_union = true;
+        }
+
+        if (is_tagged_union) {
+            if (field_name == "__tag") {
+                field_idx = 0;
+            } else if (field_name == "__payload") {
+                field_idx = 1;
+            }
+        }
+
+        if (!field_idx) {
+            field_idx = ctx.get_field_index(base_name, field_name);
+        }
         if (!field_idx) {
             // マングリング前の名前でも見つからない場合、元の名前で再試行
             field_idx = ctx.get_field_index(original_base, field_name);
@@ -710,8 +767,18 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         elem_type = current_type ? current_type : hir::make_int();
     }
 
-    // フォールバック: HIR型情報がnullの場合、MIRローカル変数の型から判定
-    if (!is_slice && array < ctx.func->locals.size()) {
+    // フォールバック: HIR型情報がnull、またはelement_typeがジェネリック型の場合、
+    // MIRローカル変数の型から判定
+    // ジェネリック関数内での ptr[i] アクセスでは、HIRの型がまだ T* のままなので
+    // モノモーフ化後のMIRローカル変数の型を使用する必要がある
+    bool needs_fallback =
+        !is_slice &&
+        (!elem_type || elem_type->kind == hir::TypeKind::Generic ||
+         elem_type->name == "T" ||  // 一般的なジェネリック型パラメータ
+         (elem_type->name.length() == 1 && std::isupper(elem_type->name[0]))  // 単一大文字
+        );
+
+    if (needs_fallback && array < ctx.func->locals.size()) {
         hir::TypePtr array_type = ctx.func->locals[array].type;
         if (array_type && (array_type->kind == hir::TypeKind::Array ||
                            array_type->kind == hir::TypeKind::Pointer)) {
@@ -735,7 +802,10 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                     break;
                 }
             }
-            elem_type = current_type ? current_type : hir::make_int();
+            // MIRローカル変数から具象型が取得できた場合のみ更新
+            if (current_type && current_type->kind != hir::TypeKind::Generic) {
+                elem_type = current_type;
+            }
         }
     }
 
@@ -791,8 +861,28 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
     // 多次元配列最適化: 連続するIndex projectionを生成
     // a[i][j][k] → place.projections = [Index(i), Index(j), Index(k)]
     MirPlace place{array};
+
+    // ポインタ型の「変数」に対するインデックスアクセスの場合、Index前にDerefが必要
+    // p[0] → place.projections = [Deref, Index(0)]
+    // ただし self.data[idx] のようなメンバーアクセス経由は、lower_expressionで
+    // 既にポインタ値がtemp変数にロードされているため、Derefは不要
+    bool is_var_ref = index_expr.object && std::holds_alternative<std::unique_ptr<hir::HirVarRef>>(
+                                               index_expr.object->kind);
+    if (is_var_ref && index_expr.object && index_expr.object->type &&
+        index_expr.object->type->kind == hir::TypeKind::Pointer) {
+        place.projections.push_back(PlaceProjection::deref());
+    } else if (is_var_ref && !is_slice && array < ctx.func->locals.size()) {
+        // MIRローカル変数の型からもポインタ型を検出（VarRefの場合のみ）
+        auto& array_local = ctx.func->locals[array];
+        if (array_local.type && array_local.type->kind == hir::TypeKind::Pointer) {
+            place.projections.push_back(PlaceProjection::deref());
+        }
+    }
+
     for (LocalId idx_local : index_locals) {
-        place.projections.push_back(PlaceProjection::index(idx_local));
+        // ポインタ経由のインデックスアクセス時にresult_type（elem_type）を設定
+        // これによりモノモーフ化でsubstitute_place_typesがジェネリック型を具象型に置換可能
+        place.projections.push_back(PlaceProjection::index(idx_local, elem_type));
     }
 
     ctx.push_statement(
@@ -1156,6 +1246,75 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // キャスト命令を生成
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type)));
+
+    return result;
+}
+
+// enumバリアントコンストラクタのlowering
+// Tagged Union: {tag, payload}構造体を生成
+// field[0] = タグ値（i32）、field[1] = ペイロード（型に応じて）
+LocalId ExprLowering::lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx) {
+    debug_msg("MIR", "Lowering enum construct: " + ec.enum_name + "::" + ec.variant_name);
+
+    // Tagged Union型（2フィールド構造体）を作成
+    // 型名: "__TaggedUnion_{enum_name}"
+    std::string tagged_union_name = "__TaggedUnion_" + ec.enum_name;
+    hir::TypePtr union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+    union_type->name = tagged_union_name;
+
+    // 結果用の変数を作成
+    LocalId result = ctx.new_temp(union_type);
+
+    // field[0] = タグ値
+    MirConstant tag_const;
+    tag_const.type = hir::make_int();
+    tag_const.value = ec.tag_value;
+
+    MirPlace tag_place{result};
+    tag_place.projections.push_back(PlaceProjection::field(0));
+    ctx.push_statement(
+        MirStatement::assign(tag_place, MirRvalue::use(MirOperand::constant(tag_const))));
+
+    // field[1] = ペイロード値（ペイロードがある場合）
+    if (ec.payload) {
+        LocalId payload_local = lower_expression(*ec.payload, ctx);
+
+        MirPlace payload_place{result};
+        payload_place.projections.push_back(PlaceProjection::field(1));
+        ctx.push_statement(MirStatement::assign(
+            payload_place, MirRvalue::use(MirOperand::copy(MirPlace{payload_local}))));
+    } else {
+        // ペイロードがない場合はデフォルト値（0）を設定
+        MirConstant zero_const;
+        zero_const.type = hir::make_int();
+        zero_const.value = int64_t(0);
+
+        MirPlace payload_place{result};
+        payload_place.projections.push_back(PlaceProjection::field(1));
+        ctx.push_statement(
+            MirStatement::assign(payload_place, MirRvalue::use(MirOperand::constant(zero_const))));
+    }
+
+    return result;
+}
+
+// enumペイロード抽出のlowering
+// match式でバインディング変数に代入するペイロード値を取得
+// scrutinee.field[1]からペイロードを抽出
+LocalId ExprLowering::lower_enum_payload(const hir::HirEnumPayload& ep, LoweringContext& ctx) {
+    debug_msg("MIR", "Lowering enum payload extract for variant: " + ep.variant_name);
+
+    // scrutineeをlowering
+    LocalId scrutinee_local = lower_expression(*ep.scrutinee, ctx);
+
+    // ペイロード型で結果を作成
+    LocalId result = ctx.new_temp(ep.payload_type);
+
+    // scrutinee.field[1]（ペイロード）を抽出
+    MirPlace payload_place{scrutinee_local};
+    payload_place.projections.push_back(PlaceProjection::field(1));
+    ctx.push_statement(
+        MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(payload_place))));
 
     return result;
 }

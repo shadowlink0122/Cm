@@ -18,7 +18,7 @@ class ExprLowering : public MirLoweringBase {
                 using T = std::decay_t<decltype(expr_ptr)>;
 
                 if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLiteral>>) {
-                    return lower_literal(*expr_ptr, ctx);
+                    return lower_literal(*expr_ptr, expr.type, ctx);
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirVarRef>>) {
                     return lower_var_ref(*expr_ptr, expr.type, ctx);
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirBinary>>) {
@@ -43,6 +43,10 @@ class ExprLowering : public MirLoweringBase {
                     return ctx.new_temp(hir::make_error());
                 } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirCast>>) {
                     return lower_cast(*expr_ptr, ctx);
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirEnumConstruct>>) {
+                    return lower_enum_construct(*expr_ptr, ctx);
+                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirEnumPayload>>) {
+                    return lower_enum_payload(*expr_ptr, ctx);
                 } else {
                     // 未実装の式種別
                     return ctx.new_temp(hir::make_error());
@@ -52,7 +56,8 @@ class ExprLowering : public MirLoweringBase {
     }
 
     // 各式タイプのlowering
-    LocalId lower_literal(const hir::HirLiteral& lit, LoweringContext& ctx);
+    LocalId lower_literal(const hir::HirLiteral& lit, const hir::TypePtr& expr_type,
+                          LoweringContext& ctx);
     LocalId lower_var_ref(const hir::HirVarRef& var, const hir::TypePtr& expr_type,
                           LoweringContext& ctx);
     LocalId lower_binary(const hir::HirBinary& bin, LoweringContext& ctx);
@@ -66,6 +71,8 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_array_literal(const hir::HirArrayLiteral& lit, const hir::TypePtr& expected_type,
                                 LoweringContext& ctx);
     LocalId lower_cast(const hir::HirCast& cast, LoweringContext& ctx);
+    LocalId lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx);
+    LocalId lower_enum_payload(const hir::HirEnumPayload& ep, LoweringContext& ctx);
 
     // メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
     // 成功時はtrue、失敗時はfalseを返す

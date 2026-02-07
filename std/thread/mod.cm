@@ -1,0 +1,65 @@
+// std/thread/mod.cm - スレッドモジュール
+// libcのpthreadを直接使用
+module std.thread;
+
+// ============================================================
+// libc FFI宣言
+// ============================================================
+
+use libc {
+    void usleep(uint usec);
+
+    // pthread関数（POSIXスレッド）
+    int pthread_create(ulong* thread, void* attr, void* start_routine, void* arg);
+    int pthread_join(ulong thread, void** retval);
+    int pthread_detach(ulong thread);
+    ulong pthread_self();
+}
+
+// ============================================================
+// Thread API（シンプル版）
+// スレッドハンドルはulongとして直接扱う
+// ============================================================
+
+// 新しいスレッドを生成
+// fn: スレッドで実行する関数（void*を返す関数）
+// 戻り値: スレッドハンドル（pthread_t）
+export ulong spawn(void* fn) {
+    ulong thread_id = 0;
+    void* null_ptr = 0 as void*;
+    pthread_create(&thread_id, null_ptr, fn, null_ptr);
+    return thread_id;
+}
+
+// スレッドの終了を待機し、結果を取得
+// handle: スレッドハンドル
+// 戻り値: スレッド関数の戻り値（int）
+export int join(ulong handle) {
+    void* result = 0 as void*;
+    pthread_join(handle, &result);
+    return result as int;
+}
+
+// スレッドをデタッチ（バックグラウンド実行）
+export void detach(ulong handle) {
+    pthread_detach(handle);
+}
+
+// 現在のスレッドIDを取得
+export ulong current_id() {
+    return pthread_self();
+}
+
+// ============================================================
+// スリープ関数
+// ============================================================
+
+// 現在のスレッドをスリープ（ミリ秒）
+export void sleep_ms(int ms) {
+    usleep((ms * 1000) as uint);
+}
+
+// 現在のスレッドをスリープ（秒）
+export void sleep(int seconds) {
+    usleep((seconds * 1000000) as uint);
+}

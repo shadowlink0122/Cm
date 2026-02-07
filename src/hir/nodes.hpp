@@ -99,6 +99,7 @@ struct HirCall {
     std::vector<HirExprPtr> captured_args;  // キャプチャされた変数の値
     bool is_indirect = false;               // 関数ポインタ経由の呼び出し
     bool is_closure = false;                // クロージャ呼び出しか
+    bool is_awaited = false;                // await式で呼び出されているか
 };
 
 // 配列アクセス
@@ -158,13 +159,31 @@ struct HirCast {
     TypePtr target_type;
 };
 
+// enumバリアントコンストラクタ（Tagged Union用）
+// 例: Option::Some(42) → { tag: 1, payload: 42 }
+struct HirEnumConstruct {
+    std::string enum_name;     // enum型名
+    std::string variant_name;  // バリアント名
+    int64_t tag_value;         // タグ値
+    HirExprPtr payload;        // ペイロード式（nullptrなら引数なし）
+};
+
+// enumペイロード抽出（Tagged Union用）
+// match式のバインディング変数で使用: value = extract_payload(scrutinee)
+struct HirEnumPayload {
+    HirExprPtr scrutinee;      // Tagged Union式
+    std::string variant_name;  // 期待するバリアント名
+    TypePtr payload_type;      // ペイロードの型
+};
+
 // 式の種類
 using HirExprKind =
     std::variant<std::unique_ptr<HirLiteral>, std::unique_ptr<HirVarRef>,
                  std::unique_ptr<HirBinary>, std::unique_ptr<HirUnary>, std::unique_ptr<HirCall>,
                  std::unique_ptr<HirIndex>, std::unique_ptr<HirMember>, std::unique_ptr<HirTernary>,
                  std::unique_ptr<HirStructLiteral>, std::unique_ptr<HirArrayLiteral>,
-                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>>;
+                 std::unique_ptr<HirLambda>, std::unique_ptr<HirCast>,
+                 std::unique_ptr<HirEnumConstruct>, std::unique_ptr<HirEnumPayload>>;
 
 struct HirExpr {
     HirExprKind kind;
@@ -278,12 +297,45 @@ struct HirSwitch {
     std::vector<HirSwitchCase> cases;
 };
 
+// asmオペランド（制約+変数名または定数値）
+struct AsmOperand {
+    std::string constraint;  // "+r", "=r", "r", "i", "n", etc.
+    std::string var_name;    // 変数名（is_constant=falseの場合）
+    bool is_constant;        // 定数値かどうか（i,n制約用）
+    int64_t const_value;     // 定数値（is_constant=trueの場合）
+
+    // デフォルトコンストラクタ
+    AsmOperand() : is_constant(false), const_value(0) {}
+
+    // 変数用コンストラクタ
+    AsmOperand(std::string c, std::string v)
+        : constraint(std::move(c)), var_name(std::move(v)), is_constant(false), const_value(0) {}
+
+    // 定数用コンストラクタ
+    AsmOperand(std::string c, int64_t val)
+        : constraint(std::move(c)), is_constant(true), const_value(val) {}
+};
+
+// インラインアセンブリ
+struct HirAsm {
+    std::string code;                   // アセンブリコード（%0, %1... に変換済み）
+    bool is_must;                       // must修飾（最適化抑制）
+    std::vector<std::string> clobbers;  // 破壊レジスタ
+    std::vector<AsmOperand> operands;   // オペランド（制約+変数名）
+};
+
+// must {} ブロック（最適化禁止）
+struct HirMustBlock {
+    std::vector<HirStmtPtr> body;  // ブロック内の文
+};
+
 using HirStmtKind =
     std::variant<std::unique_ptr<HirLet>, std::unique_ptr<HirAssign>, std::unique_ptr<HirReturn>,
                  std::unique_ptr<HirIf>, std::unique_ptr<HirLoop>, std::unique_ptr<HirWhile>,
                  std::unique_ptr<HirFor>, std::unique_ptr<HirBreak>, std::unique_ptr<HirContinue>,
                  std::unique_ptr<HirDefer>, std::unique_ptr<HirExprStmt>, std::unique_ptr<HirBlock>,
-                 std::unique_ptr<HirSwitch>>;
+                 std::unique_ptr<HirSwitch>, std::unique_ptr<HirAsm>,
+                 std::unique_ptr<HirMustBlock>>;
 
 struct HirStmt {
     HirStmtKind kind;
@@ -327,7 +379,8 @@ struct HirFunction {
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_constructor = false;
     bool is_destructor = false;
-    bool is_overload = false;                          // overloadキーワードの有無
+    bool is_static = false;    // staticメソッド（selfパラメータなし）
+    bool is_overload = false;  // overloadキーワードの有無
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 
@@ -435,10 +488,15 @@ struct HirImport {
     std::string alias;
 };
 
-// Enumメンバ
+// Enumメンバ（Associated Data対応）
 struct HirEnumMember {
     std::string name;
     int64_t value;
+    // Associated data フィールド（Tagged Union用）
+    std::vector<std::pair<std::string, TypePtr>> fields;
+
+    // Associated dataを持つかどうか
+    bool has_data() const { return !fields.empty(); }
 };
 
 // Enum定義

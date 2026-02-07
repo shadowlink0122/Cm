@@ -29,7 +29,19 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // 新しいローカル変数を作成
     // is_const = true なら変更不可、false なら変更可能
     // is_static = true なら関数呼び出し間で値が保持される
-    LocalId local = ctx.new_local(let.name, let.type, !let.is_const, true, let.is_static);
+
+    // enum型の場合、Tagged Union構造体型に変換
+    // enum型は型名がenum_defsに登録されている
+    hir::TypePtr actual_type = let.type;
+
+    if (let.type && !let.type->name.empty() && ctx.enum_defs &&
+        ctx.enum_defs->count(let.type->name)) {
+        auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+        tagged_union_type->name = "__TaggedUnion_" + let.type->name;
+        actual_type = tagged_union_type;
+    }
+
+    LocalId local = ctx.new_local(let.name, actual_type, !let.is_const, true, let.is_static);
 
     // 変数をスコープに登録
     ctx.register_variable(let.name, local);
@@ -582,6 +594,45 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // デストラクタを持つ型の変数を登録
     if (let.type && let.type->kind == hir::TypeKind::Struct) {
         std::string type_name = let.type->name;
+
+        // ジェネリック型の場合、マングル済み名を構築（Vector<TrackedObject> ->
+        // Vector__TrackedObject）
+        if (!let.type->type_args.empty()) {
+            std::string mangled_name = type_name;
+
+            // 再帰的にネストしたジェネリック型引数をマングリングするラムダ
+            std::function<std::string(const hir::TypePtr&)> mangle_type_arg =
+                [&](const hir::TypePtr& arg) -> std::string {
+                if (!arg)
+                    return "";
+
+                std::string result;
+
+                // 基本型名を取得
+                if (!arg->name.empty()) {
+                    result = arg->name;
+                } else {
+                    // プリミティブ型などは型を文字列化
+                    result = hir::type_to_string(*arg);
+                }
+
+                // ネストしたtype_argsがある場合は再帰的に処理
+                if (!arg->type_args.empty()) {
+                    for (const auto& nested_arg : arg->type_args) {
+                        result += "__" + mangle_type_arg(nested_arg);
+                    }
+                }
+
+                return result;
+            };
+
+            for (const auto& arg : let.type->type_args) {
+                mangled_name += "__" + mangle_type_arg(arg);
+            }
+
+            type_name = mangled_name;
+        }
+
         if (ctx.has_destructor(type_name)) {
             ctx.register_destructor_var(local, type_name);
         }
@@ -782,7 +833,24 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
     // デストラクタを呼び出す（逆順）
     auto destructor_vars = ctx.get_all_destructor_vars();
     for (const auto& [local_id, type_name] : destructor_vars) {
-        std::string dtor_name = type_name + "__dtor";
+        // ネストジェネリック型名の正規化（Vector<int> → Vector__int）
+        std::string normalized_name = type_name;
+        if (normalized_name.find('<') != std::string::npos) {
+            std::string result;
+            for (char c : normalized_name) {
+                if (c == '<' || c == '>') {
+                    if (c == '<')
+                        result += "__";
+                    // '>'は省略
+                } else if (c == ',' || c == ' ') {
+                    // カンマと空白は省略
+                } else {
+                    result += c;
+                }
+            }
+            normalized_name = result;
+        }
+        std::string dtor_name = normalized_name + "__dtor";
 
         // デストラクタ呼び出しを生成（selfはポインタとして渡す）
         // ローカル変数の型を取得
@@ -1127,11 +1195,42 @@ void StmtLowering::lower_defer(const hir::HirDefer& defer_stmt, LoweringContext&
 void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
     auto destructor_vars = ctx.get_current_scope_destructor_vars();
     for (const auto& [local_id, type_name] : destructor_vars) {
-        std::string dtor_name = type_name + "__dtor";
+        // 登録時の型名を優先使用（ジェネリック型の場合、マングル済み名が登録されている）
+        // ローカル変数の型名はモノモフィゼーション前なので不正確な場合がある
+        std::string actual_type_name = type_name;
+
+        // 登録時の型名がマングル済み（__を含む）の場合はそのまま使用
+        // そうでない場合はローカル変数の型名を確認
+        if (type_name.find("__") == std::string::npos && local_id < ctx.func->locals.size()) {
+            const auto& local_decl = ctx.func->locals[local_id];
+            if (local_decl.type && !local_decl.type->name.empty() &&
+                local_decl.type->name.find("__") != std::string::npos) {
+                // ローカル変数の型名がマングル済みならそれを使用
+                actual_type_name = local_decl.type->name;
+            }
+        }
+
+        // ネストジェネリック型名の正規化（Vector<int> → Vector__int）
+        if (actual_type_name.find('<') != std::string::npos) {
+            std::string result;
+            for (char c : actual_type_name) {
+                if (c == '<' || c == '>') {
+                    if (c == '<')
+                        result += "__";
+                } else if (c == ',' || c == ' ') {
+                    // カンマと空白は省略
+                } else {
+                    result += c;
+                }
+            }
+            actual_type_name = result;
+        }
+
+        std::string dtor_name = actual_type_name + "__dtor";
 
         // デストラクタ呼び出しを生成（selfはポインタとして渡す）
         hir::TypePtr local_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-        local_type->name = type_name;
+        local_type->name = actual_type_name;
         LocalId ref_temp = ctx.new_temp(hir::make_pointer(local_type));
         ctx.push_statement(
             MirStatement::assign(MirPlace{ref_temp}, MirRvalue::ref(MirPlace{local_id}, false)));
@@ -1155,6 +1254,97 @@ void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(success_block);
     }
+}
+
+// インラインアセンブリのlowering
+void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) {
+    debug_msg("mir_asm", "[MIR] lower_asm: " + asm_stmt.code +
+                             " operands=" + std::to_string(asm_stmt.operands.size()));
+
+    // オペランドを変換: 変数名 → LocalId、またはmacro/const → 定数値
+    std::vector<MirStatement::MirAsmOperand> mir_operands;
+    for (const auto& operand : asm_stmt.operands) {
+        // HIRレベルで既に定数として解決されている場合
+        if (operand.is_constant) {
+            mir_operands.push_back(
+                MirStatement::MirAsmOperand(operand.constraint, operand.const_value));
+            debug_msg("mir_asm", "[MIR] operand: " + operand.constraint +
+                                     " -> const_value=" + std::to_string(operand.const_value));
+            continue;
+        }
+
+        // i/n制約の場合は優先的にconst_valueを検索
+        bool isImmediateConstraint = (operand.constraint.find('i') != std::string::npos ||
+                                      operand.constraint.find('n') != std::string::npos);
+
+        if (isImmediateConstraint) {
+            // i/n制約: 定数値が必要なので優先的にconst_valueを検索
+            auto const_val_opt = ctx.get_const_value(operand.var_name);
+            if (const_val_opt) {
+                // 定数値を取得（整数のみサポート）
+                int64_t val = 0;
+                if (std::holds_alternative<int64_t>(const_val_opt->value)) {
+                    val = std::get<int64_t>(const_val_opt->value);
+                } else if (std::holds_alternative<double>(const_val_opt->value)) {
+                    val = static_cast<int64_t>(std::get<double>(const_val_opt->value));
+                }
+                mir_operands.push_back(MirStatement::MirAsmOperand(operand.constraint, val));
+                debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" +
+                                         operand.var_name +
+                                         " -> const_value=" + std::to_string(val));
+                continue;  // 次のオペランドへ
+            }
+            // const_valueが見つからない場合はエラー（i/n制約には定数が必要）
+            debug_msg("mir_asm",
+                      "[MIR] WARNING: i/n constraint requires constant: " + operand.var_name);
+        }
+
+        // 変数名をローカル変数テーブルから検索
+        auto local_id_opt = ctx.resolve_variable(operand.var_name);
+        if (local_id_opt) {
+            mir_operands.push_back(MirStatement::MirAsmOperand(operand.constraint, *local_id_opt));
+            debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" + operand.var_name +
+                                     " -> local_id=" + std::to_string(*local_id_opt));
+        } else {
+            // 変数が見つからない場合、macro/const定数として検索
+            auto const_val_opt = ctx.get_const_value(operand.var_name);
+            if (const_val_opt) {
+                // 定数値を取得（整数のみサポート）
+                int64_t val = 0;
+                if (std::holds_alternative<int64_t>(const_val_opt->value)) {
+                    val = std::get<int64_t>(const_val_opt->value);
+                } else if (std::holds_alternative<double>(const_val_opt->value)) {
+                    val = static_cast<int64_t>(std::get<double>(const_val_opt->value));
+                }
+                mir_operands.push_back(MirStatement::MirAsmOperand(operand.constraint, val));
+                debug_msg("mir_asm", "[MIR] operand: " + operand.constraint + ":" +
+                                         operand.var_name +
+                                         " -> const_value=" + std::to_string(val));
+            } else {
+                debug_msg("mir_asm",
+                          "[MIR] WARNING: variable or constant not found: " + operand.var_name);
+            }
+        }
+    }
+
+    ctx.push_statement(MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must,
+                                              std::move(mir_operands), asm_stmt.clobbers));
+}
+
+// must {} ブロックのlowering（最適化禁止）
+void StmtLowering::lower_must_block(const hir::HirMustBlock& must_block, LoweringContext& ctx) {
+    debug_msg("mir_must", "[MIR] lower_must_block");
+
+    // mustブロック開始：最適化禁止フラグをON
+    ctx.in_must_block = true;
+
+    // mustブロック内の各文をlowering
+    for (const auto& stmt : must_block.body) {
+        lower_statement(*stmt, ctx);
+    }
+
+    // mustブロック終了：最適化禁止フラグをOFF
+    ctx.in_must_block = false;
 }
 
 }  // namespace cm::mir

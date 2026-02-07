@@ -7,7 +7,7 @@ title: Project Structure
 
 # Cm言語 プロジェクト構造
 
-*最終更新: 2025年1月*
+*最終更新: 2026年2月*
 
 ## ディレクトリ構成
 
@@ -33,11 +33,15 @@ Cm/
 │   │   └── optimizations/   # 最適化パス
 │   ├── codegen/             # コード生成
 │   │   ├── interpreter/     # MIRインタプリタ
+│   │   ├── js/              # JavaScriptバックエンド
 │   │   └── llvm/            # LLVMバックエンド
 │   │       ├── native/      # ネイティブコード生成
 │   │       └── wasm/        # WebAssemblyコード生成
 │   ├── preprocessor/        # プリプロセッサ
 │   │   └── import.*         # import処理、ソースマップ
+│   ├── diagnostics/         # 診断システム
+│   │   └── definitions/     # エラー/警告/Lint定義
+│   ├── fmt/                 # フォーマッタ
 │   └── module/              # モジュール解決
 │
 ├── tests/                   # テストファイル
@@ -55,19 +59,20 @@ Cm/
 │   └── *.cpp                # C++ユニットテスト
 │
 ├── docs/                    # ドキュメント
-│   ├── design/              # 設計文書
-│   │   └── MODULE_SYSTEM_FINAL.md
-│   ├── spec/                # 言語仕様
-│   ├── guides/              # ガイド
-│   ├── tutorials/           # チュートリアル
-│   └── archive/             # アーカイブ済み文書
+│   ├── tutorials/           # チュートリアル（ja/en）
+│   ├── design/              # 設計文書（v0.13.0, v0.14.0）
+│   ├── archive/             # アーカイブ済み文書
+│   ├── flyer/               # フライヤー
+│   └── releases/            # リリースノート
 │
 ├── std/                     # 標準ライブラリ
 │
 ├── examples/                # サンプルコード
 │
 ├── scripts/                 # ユーティリティスクリプト
-│   └── run_tests.sh         # テスト実行スクリプト
+│   ├── test-in-docker.sh    # Docker CI環境テスト
+│   ├── docker-shell.sh      # 対話シェル
+│   └── validate_bnf.py      # BNF検証
 │
 ├── build/                   # ビルド出力（.gitignore）
 │
@@ -75,7 +80,6 @@ Cm/
 ├── Makefile                 # テスト実行用
 ├── ROADMAP.md               # 開発ロードマップ
 ├── README.md                # プロジェクト説明
-├── CLAUDE.md                # AI開発ガイド
 ├── CONTRIBUTING.md          # 貢献ガイド
 └── CHANGELOG.md             # 変更履歴
 ```
@@ -99,11 +103,11 @@ MIR Lowering (CFG構築)
     ↓
 最適化 (定数畳み込み、DCE等)
     ↓
-┌─────────────────────────────────────┐
-│         コード生成                    │
-├─────────────────────────────────────┤
-│ インタプリタ │ LLVM Native │  WASM   │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│              コード生成                           │
+├─────────────────────────────────────────────────┤
+│ インタプリタ │ JIT │ LLVM Native │ WASM │ JS   │
+└─────────────────────────────────────────────────┘
 ```
 
 ## ルールと規約
@@ -138,14 +142,17 @@ MIR Lowering (CFG構築)
 # C++ユニットテスト
 ctest --test-dir build
 
-# インタプリタテスト (203テスト)
+# インタプリタテスト（パラレル）
 make tip
 
-# LLVMテスト
+# LLVMテスト（パラレル）
 make tlp
 
 # WASMテスト
 make tlwp
+
+# JSテスト
+make tjp
 
 # 全テスト
 make tall

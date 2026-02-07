@@ -534,9 +534,32 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                      rhs_type->kind == hir::TypeKind::ULong) {
                 result_type = hir::make_long();
             }
-            // それ以外は左辺の型を使用
+            // 整数型のinteger promotion: 大きい方の型に昇格
             else {
-                result_type = lhs_type;
+                // 型のサイズ優先度を求めるヘルパー
+                // int/uint(32bit) > short/ushort(16bit) > tiny/utiny(8bit)
+                auto type_rank = [](hir::TypeKind kind) -> int {
+                    switch (kind) {
+                        case hir::TypeKind::Int:
+                        case hir::TypeKind::UInt:
+                            return 3;
+                        case hir::TypeKind::Short:
+                        case hir::TypeKind::UShort:
+                            return 2;
+                        case hir::TypeKind::Tiny:
+                        case hir::TypeKind::UTiny:
+                            return 1;
+                        default:
+                            return 3;  // デフォルトはint相当
+                    }
+                };
+                int lhs_rank = type_rank(lhs_type->kind);
+                int rhs_rank = type_rank(rhs_type->kind);
+                if (lhs_rank >= rhs_rank) {
+                    result_type = lhs_type;
+                } else {
+                    result_type = rhs_type;
+                }
             }
         } else if (lhs_type) {
             result_type = lhs_type;
@@ -679,6 +702,40 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
 
         // インデックスアクセスの場合（&arr[i]）
         if (auto index = std::get_if<std::unique_ptr<hir::HirIndex>>(&unary.operand->kind)) {
+            // オブジェクトの型を確認
+            hir::TypePtr obj_type = (*index)->object ? (*index)->object->type : nullptr;
+
+            // ポインタ型へのインデックスアクセスの場合（&ptr[i] → ptr + i）
+            // これは this.data[idx] のようなケースで、dataがポインタ型の場合
+            if (obj_type && obj_type->kind == hir::TypeKind::Pointer) {
+                // ポインタ値を取得
+                LocalId ptr_val = lower_expression(*(*index)->object, ctx);
+                // インデックス値を取得
+                LocalId idx_val = lower_expression(*(*index)->index, ctx);
+
+                // 結果の型（元のポインタ型と同じ）
+                hir::TypePtr result_type = obj_type;
+                LocalId result = ctx.new_temp(result_type);
+
+                // ポインタ算術 (ptr + idx) を生成
+                auto ptr_op = std::make_unique<MirOperand>();
+                ptr_op->kind = MirOperand::Copy;
+                ptr_op->data = MirPlace{ptr_val};
+
+                auto idx_op = std::make_unique<MirOperand>();
+                idx_op->kind = MirOperand::Copy;
+                idx_op->data = MirPlace{idx_val};
+
+                auto add_rvalue = std::make_unique<MirRvalue>();
+                add_rvalue->kind = MirRvalue::BinaryOp;
+                add_rvalue->data = MirRvalue::BinaryOpData{MirBinaryOp::Add, std::move(ptr_op),
+                                                           std::move(idx_op), result_type};
+
+                ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(add_rvalue)));
+                return result;
+            }
+
+            // 配列型の場合は従来の処理
             // 配列を取得
             LocalId array;
             if (auto* var_ref =

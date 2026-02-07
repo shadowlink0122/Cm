@@ -1,5 +1,5 @@
-// LLVM Native用のmap/filterテスト（std::io使用なし）
-// 戻り値で結果を確認
+// LLVM Native用のmap/filterテスト
+import std::io::println;
 
 int double_it(int x) {
     return x * 2;
@@ -15,19 +15,21 @@ int main() {
     // mapテスト
     int[] mapped = arr.map(double_it);
     int map_len = mapped.len();
+    println("map_len = {map_len}");
     if (map_len != 5) {
+        println("FAIL: map");
         return 1;
-        // map失敗
     }
 
     // filterテスト
     int[] filtered = arr.filter(is_even);
     int filter_len = filtered.len();
+    println("filter_len = {filter_len}");
     if (filter_len != 2) {
+        println("FAIL: filter");
         return 2;
-        // filter失敗
     }
 
+    println("PASS: map/filter");
     return 0;
-    // 成功
 }

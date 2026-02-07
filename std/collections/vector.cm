@@ -1,0 +1,122 @@
+// std::collections::vector - ジェネリック動的配列
+// Vector<T> - 任意の型Tを格納できる動的配列
+module std.collections.vector;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+    void* memcpy(void* dest, void* src, int n);
+}
+
+// =============================================================
+// Vector<T> - ジェネリック動的配列
+// =============================================================
+
+export struct Vector<T> {
+    T* data;
+    int size;
+    int cap;
+}
+
+export impl<T> Vector<T> {
+    // コンストラクタ
+    self() {
+        void* null_ptr = 0 as void*;
+        self.data = null_ptr as T*;
+        self.size = 0;
+        self.cap = 0;
+    }
+
+    // 末尾に追加
+    void push(T value) {
+        if (self.size >= self.cap) {
+            int new_cap = self.cap == 0 ? 4 : self.cap * 2;
+            // __sizeof__(T)で型サイズを動的取得
+            long elem_size = __sizeof__(T) as long;
+            long alloc_size = (new_cap as long) * elem_size;
+            void* raw_ptr = malloc(alloc_size);
+            T* new_data = raw_ptr as T*;
+            // 既存データをコピー（memcpyで高速コピー）
+            if (self.size > 0) {
+                void* src = self.data as void*;
+                void* dst = new_data as void*;
+                long copy_size = (self.size as long) * elem_size;
+                memcpy(dst, src, copy_size);
+            }
+            void* old_ptr = self.data as void*;
+            void* null_ptr = 0 as void*;
+            if (old_ptr != null_ptr) {
+                free(old_ptr);
+            }
+            self.data = new_data;
+            self.cap = new_cap;
+        }
+        self.data[self.size] = value;
+        self.size = self.size + 1;
+    }
+
+    // 取得（参照を返す - 所有権は移動しない）
+    T* get(int index) {
+        return &self.data[index];
+    }
+
+    // 設定
+    void set(int index, T value) {
+        if (index >= 0 && index < self.size) {
+            self.data[index] = value;
+        }
+    }
+
+    // 長さ
+    int len() {
+        return self.size;
+    }
+
+    // 容量
+    int capacity() {
+        return self.cap;
+    }
+
+    // 末尾削除
+    T pop() {
+        self.size = self.size - 1;
+        return self.data[self.size];
+    }
+
+    // 空チェック
+    bool is_empty() {
+        return self.size == 0;
+    }
+
+    // クリア（データは保持、サイズのみリセット）
+    void clear() {
+        self.size = 0;
+    }
+
+    // ソート（昇順、バブルソート）
+    // プリミティブ型（int, long, double等）で動作
+    void sort() {
+        int n = self.size;
+        for (int i = 0; i < n - 1; i++) {
+            for (int j = 0; j < n - i - 1; j++) {
+                if (self.data[j] > self.data[j + 1]) {
+                    T temp = self.data[j];
+                    self.data[j] = self.data[j + 1];
+                    self.data[j + 1] = temp;
+                }
+            }
+        }
+    }
+
+    // デストラクタ
+    ~self() {
+        void* ptr = self.data as void*;
+        void* null_ptr = 0 as void*;
+        if (ptr != null_ptr) {
+            free(ptr);
+        }
+        self.data = null_ptr as T*;
+        self.size = 0;
+        self.cap = 0;
+    }
+}

@@ -1,0 +1,324 @@
+// std::net::http - HTTPクライアントモジュール
+module std.net.http;
+
+import std.net::{TcpStream, NetResult, NetError, SocketAddr, IpAddr};
+import std.core.async::{Poll, Future, Context};
+
+// ============================================================
+// HTTPメソッド
+// ============================================================
+
+enum HttpMethod {
+    GET,
+    POST,
+    PUT,
+    DELETE,
+    PATCH,
+    HEAD,
+    OPTIONS
+}
+
+impl HttpMethod {
+    string to_string() {
+        match (self) {
+            HttpMethod::GET => return "GET",
+            HttpMethod::POST => return "POST",
+            HttpMethod::PUT => return "PUT",
+            HttpMethod::DELETE => return "DELETE",
+            HttpMethod::PATCH => return "PATCH",
+            HttpMethod::HEAD => return "HEAD",
+            HttpMethod::OPTIONS => return "OPTIONS"
+        }
+    }
+}
+
+// ============================================================
+// HTTPヘッダー
+// ============================================================
+
+struct HttpHeader {
+    string name;
+    string value;
+}
+
+struct HttpHeaders {
+    HttpHeader[] headers;
+}
+
+impl HttpHeaders {
+    static HttpHeaders new() {
+        return HttpHeaders { headers: [] };
+    }
+
+    void set(string name, string value) {
+        // 既存のヘッダーを更新または追加
+        for (int i = 0; i < self.headers.len(); i++) {
+            if (self.headers[i].name == name) {
+                self.headers[i].value = value;
+                return;
+            }
+        }
+        self.headers.push(HttpHeader { name: name, value: value });
+    }
+
+    string? get(string name) {
+        for (int i = 0; i < self.headers.len(); i++) {
+            if (self.headers[i].name == name) {
+                return self.headers[i].value;
+            }
+        }
+        return null;
+    }
+
+    void remove(string name) {
+        HttpHeader[] new_headers = [];
+        for (int i = 0; i < self.headers.len(); i++) {
+            if (self.headers[i].name != name) {
+                new_headers.push(self.headers[i]);
+            }
+        }
+        self.headers = new_headers;
+    }
+}
+
+// ============================================================
+// HTTPリクエスト
+// ============================================================
+
+struct HttpRequest {
+    HttpMethod method;
+    string url;
+    HttpHeaders headers;
+    string body;
+}
+
+impl HttpRequest {
+    // GETリクエストを作成
+    static HttpRequest get(string url) {
+        HttpRequest req = HttpRequest {
+            method: HttpMethod::GET,
+            url: url,
+            headers: HttpHeaders::new(),
+            body: ""
+        };
+        req.headers.set("User-Agent", "Cm/0.13.0");
+        req.headers.set("Accept", "*/*");
+        return req;
+    }
+
+    // POSTリクエストを作成
+    static HttpRequest post(string url, string body) {
+        HttpRequest req = HttpRequest {
+            method: HttpMethod::POST,
+            url: url,
+            headers: HttpHeaders::new(),
+            body: body
+        };
+        req.headers.set("User-Agent", "Cm/0.13.0");
+        req.headers.set("Content-Type", "application/x-www-form-urlencoded");
+        req.headers.set("Content-Length", "{body.len()}");
+        return req;
+    }
+
+    // ヘッダーを追加
+    HttpRequest header(string name, string value) {
+        self.headers.set(name, value);
+        return self;
+    }
+
+    // JSONボディを設定
+    HttpRequest json(string json_body) {
+        self.body = json_body;
+        self.headers.set("Content-Type", "application/json");
+        self.headers.set("Content-Length", "{json_body.len()}");
+        return self;
+    }
+
+    // リクエストをHTTP/1.1形式の文字列に変換
+    string to_http_string(string host, string path) {
+        string result = "{self.method.to_string()} {path} HTTP/1.1\r\n";
+        result = result + "Host: {host}\r\n";
+
+        for (int i = 0; i < self.headers.headers.len(); i++) {
+            HttpHeader h = self.headers.headers[i];
+            result = result + "{h.name}: {h.value}\r\n";
+        }
+
+        result = result + "\r\n";
+
+        if (self.body.len() > 0) {
+            result = result + self.body;
+        }
+
+        return result;
+    }
+}
+
+// ============================================================
+// HTTPレスポンス
+// ============================================================
+
+struct HttpResponse {
+    int status_code;
+    string status_text;
+    HttpHeaders headers;
+    string body;
+}
+
+impl HttpResponse {
+    // レスポンスをパース（簡易版）
+    static HttpResponse parse(string raw) {
+        // TODO: 実際のHTTPレスポンスパーサー
+        // 現在は簡易実装
+        HttpResponse resp = HttpResponse {
+            status_code: 200,
+            status_text: "OK",
+            headers: HttpHeaders::new(),
+            body: raw
+        };
+
+        // ステータスラインをパース
+        // ヘッダーをパース
+        // ボディを抽出
+
+        return resp;
+    }
+
+    int status() {
+        return self.status_code;
+    }
+
+    string body_text() {
+        return self.body;
+    }
+
+    bool is_success() {
+        return self.status_code >= 200 && self.status_code < 300;
+    }
+
+    bool is_error() {
+        return self.status_code >= 400;
+    }
+}
+
+// ============================================================
+// HTTPエラー
+// ============================================================
+
+enum HttpError {
+    ConnectionFailed(string),
+    Timeout,
+    InvalidUrl(string),
+    InvalidResponse,
+    TlsError(string),
+    Other(string)
+}
+
+enum HttpResult<T> {
+    Ok(T),
+    Err(HttpError)
+}
+
+// ============================================================
+// HTTPクライアント
+// ============================================================
+
+struct HttpClient {
+    int timeout_ms;
+    HttpHeaders default_headers;
+}
+
+impl HttpClient {
+    static HttpClient new() {
+        return HttpClient {
+            timeout_ms: 30000,
+            default_headers: HttpHeaders::new()
+        };
+    }
+
+    HttpClient timeout(int ms) {
+        self.timeout_ms = ms;
+        return self;
+    }
+
+    HttpClient default_header(string name, string value) {
+        self.default_headers.set(name, value);
+        return self;
+    }
+
+    // GETリクエストを送信
+    HttpResult<HttpResponse> get(string url) {
+        HttpRequest req = HttpRequest::get(url);
+        return self.send(req);
+    }
+
+    // POSTリクエストを送信
+    HttpResult<HttpResponse> post(string url, string body) {
+        HttpRequest req = HttpRequest::post(url, body);
+        return self.send(req);
+    }
+
+    // リクエストを送信
+    HttpResult<HttpResponse> send(HttpRequest request) {
+        // URLをパース（簡易版）
+        // 例: "http://example.com:80/path" -> host="example.com", port=80, path="/path"
+        string host = "example.com";
+        int port = 80;
+        string path = "/";
+
+        // TODO: 実際のURLパーサー
+
+        // TCP接続
+        NetResult<TcpStream> conn_result = TcpStream::connect_addr(
+        SocketAddr::new(IpAddr::localhost(), port)
+        );
+
+        match (conn_result) {
+            NetResult::Err(e) => {
+                return HttpResult::Err(HttpError::ConnectionFailed("Failed to connect"));
+            },
+            NetResult::Ok(stream) => {
+                // リクエストを送信
+                string http_request = request.to_http_string(host, path);
+                stream.write_string(http_request);
+
+                // レスポンスを読み取り
+                NetResult<string> read_result = stream.read_to_string();
+                stream.close();
+
+                match (read_result) {
+                    NetResult::Err(e) => {
+                        return HttpResult::Err(HttpError::Other("Failed to read response"));
+                    },
+                    NetResult::Ok(raw_response) => {
+                        HttpResponse response = HttpResponse::parse(raw_response);
+                        return HttpResult::Ok(response);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// 便利関数
+// ============================================================
+
+// シンプルなGETリクエスト
+export HttpResult<HttpResponse> get(string url) {
+    HttpClient client = HttpClient::new();
+    return client.get(url);
+}
+
+// シンプルなPOSTリクエスト
+export HttpResult<HttpResponse> post(string url, string body) {
+    HttpClient client = HttpClient::new();
+    return client.post(url, body);
+}
+
+// JSON POSTリクエスト
+export HttpResult<HttpResponse> post_json(string url, string json) {
+    HttpClient client = HttpClient::new();
+    HttpRequest req = HttpRequest::post(url, json).json(json);
+    return client.send(req);
+}

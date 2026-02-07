@@ -8,11 +8,31 @@ namespace cm {
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
-        // 組み込み関数の特別処理（printlnはstd::io::printlnからインポート）
-        if (ident->name == "__println__" || ident->name == "__print__" ||
-            ident->name == "println" || ident->name == "print") {
+        // __asm__ / __llvm__ intrinsic - インラインアセンブリ
+        // __asm__: ネイティブアセンブリ（x86, ARM64等）- 推奨
+        // __llvm__: 後方互換性のため残す（将来はLLVM IR対応予定）
+        if (ident->name == "__asm__" || ident->name == "__llvm__") {
+            if (call.args.size() != 1) {
+                error(current_span_, ident->name + " requires exactly 1 argument (assembly code)");
+                return ast::make_error();
+            }
+            // 引数が文字列リテラルであることを確認
+            if (auto* lit = call.args[0]->as<ast::LiteralExpr>()) {
+                if (!std::holds_alternative<std::string>(lit->value)) {
+                    error(current_span_, ident->name + " argument must be a string literal");
+                    return ast::make_error();
+                }
+            } else {
+                error(current_span_, ident->name + " argument must be a string literal");
+                return ast::make_error();
+            }
+            return ast::make_void();
+        }
+
+        // 組み込み関数の特別処理（printlnはstd::io::printlnからインポート推奨だが互換性のため残す）
+        if (ident->name == "println" || ident->name == "print") {
             // println() は引数なしでも許可（空行出力）
-            if (ident->name != "println" && ident->name != "__println__" && call.args.empty()) {
+            if (ident->name == "print" && call.args.empty()) {
                 error(current_span_, "'" + ident->name + "' requires at least 1 argument");
                 return ast::make_error();
             }
@@ -46,6 +66,264 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
         if (!sym) {
+            // 静的メソッド呼び出しの可能性をチェック: Type::method
+            size_t last_colon = ident->name.rfind("::");
+            if (last_colon != std::string::npos) {
+                std::string type_name = ident->name.substr(0, last_colon);
+                std::string method_name = ident->name.substr(last_colon + 2);
+
+                // 型名からジェネリック型パラメータを抽出（Vec<int>など）
+                // まず直接検索を試みる
+                auto it = type_methods_.find(type_name);
+                if (it == type_methods_.end()) {
+                    // ジェネリック型の場合: Vec<int> -> Vec<T> に変換して検索
+                    size_t lt_pos = type_name.find('<');
+                    if (lt_pos != std::string::npos) {
+                        std::string base_name = type_name.substr(0, lt_pos);
+
+                        // generic_structs_から型パラメータを取得
+                        auto gen_it = generic_structs_.find(base_name);
+                        if (gen_it != generic_structs_.end()) {
+                            // 登録時の型名を構築: Vec<T>
+                            std::string generic_type_name = base_name + "<";
+                            for (size_t i = 0; i < gen_it->second.size(); ++i) {
+                                if (i > 0)
+                                    generic_type_name += ", ";
+                                generic_type_name += gen_it->second[i];
+                            }
+                            generic_type_name += ">";
+
+                            it = type_methods_.find(generic_type_name);
+                        }
+                    }
+                }
+
+                if (it != type_methods_.end()) {
+                    auto method_it = it->second.find(method_name);
+                    if (method_it != it->second.end()) {
+                        const auto& method_info = method_it->second;
+
+                        // 静的メソッドかチェック
+                        if (!method_info.is_static) {
+                            error(current_span_, "Method '" + method_name + "' of type '" +
+                                                     type_name + "' is not a static method");
+                            return ast::make_error();
+                        }
+
+                        // 引数の型チェック
+                        if (call.args.size() != method_info.param_types.size()) {
+                            error(current_span_,
+                                  "Static method '" + ident->name + "' expects " +
+                                      std::to_string(method_info.param_types.size()) +
+                                      " arguments, got " + std::to_string(call.args.size()));
+                        } else {
+                            for (size_t i = 0; i < call.args.size(); ++i) {
+                                auto arg_type = infer_type(*call.args[i]);
+                                if (!types_compatible(method_info.param_types[i], arg_type)) {
+                                    std::string expected =
+                                        ast::type_to_string(*method_info.param_types[i]);
+                                    std::string actual = ast::type_to_string(*arg_type);
+                                    error(current_span_, "Argument type mismatch in call to '" +
+                                                             ident->name + "': expected " +
+                                                             expected + ", got " + actual);
+                                }
+                            }
+                        }
+
+                        // 戻り値型を返す（ジェネリック型パラメータを具体化する必要がある場合がある）
+                        auto return_type = method_info.return_type;
+
+                        // 戻り値型がジェネリック型の場合、具体的な型引数で置き換え
+                        size_t lt_pos = type_name.find('<');
+                        if (lt_pos != std::string::npos && return_type) {
+                            std::string base_name = type_name.substr(0, lt_pos);
+                            auto gen_it = generic_structs_.find(base_name);
+                            if (gen_it != generic_structs_.end()) {
+                                // type_nameから型引数を抽出: Vec<int> -> ["int"]
+                                std::string type_args_str = type_name.substr(lt_pos + 1);
+                                type_args_str = type_args_str.substr(
+                                    0, type_args_str.size() - 1);  // 末尾の > を削除
+
+                                // 型引数をvectorに変換
+                                std::vector<ast::TypePtr> concrete_type_args;
+                                // 簡易パース（カンマ区切り）
+                                std::istringstream iss(type_args_str);
+                                std::string type_arg_name;
+                                while (std::getline(iss, type_arg_name, ',')) {
+                                    // 空白をトリム
+                                    size_t start = type_arg_name.find_first_not_of(" ");
+                                    size_t end = type_arg_name.find_last_not_of(" ");
+                                    if (start != std::string::npos && end != std::string::npos) {
+                                        type_arg_name =
+                                            type_arg_name.substr(start, end - start + 1);
+                                    }
+                                    // 型名を作成
+                                    concrete_type_args.push_back(ast::make_named(type_arg_name));
+                                }
+
+                                // substitute_generic_typeで戻り値型を置換
+                                return_type = substitute_generic_type(return_type, gen_it->second,
+                                                                      concrete_type_args);
+                            }
+                        }
+
+                        debug::tc::log(debug::tc::Id::Resolved,
+                                       "Static method call: " + ident->name +
+                                           "() : " + ast::type_to_string(*return_type),
+                                       debug::Level::Debug);
+                        return return_type;
+                    }
+                }
+
+                // ============================================================
+                // enum constructor呼び出しのチェック: Result::Ok(value)など
+                // ============================================================
+
+                auto enum_it = generic_enums_.find(type_name);
+                if (enum_it != generic_enums_.end()) {
+                    // ジェネリックenumのコンストラクタ呼び出し
+                    auto enum_def_it = enum_defs_.find(type_name);
+                    if (enum_def_it != enum_defs_.end() && enum_def_it->second) {
+                        const ast::EnumDecl* enum_decl = enum_def_it->second;
+
+                        // メンバ（バリアント）が存在するか確認
+                        for (const auto& member : enum_decl->members) {
+                            if (member.name == method_name) {
+                                // current_return_type_から型引数を推論
+                                ast::TypePtr result_type = nullptr;
+
+                                // typedefを解決してから比較
+                                ast::TypePtr resolved_return_type = nullptr;
+                                if (current_return_type_) {
+                                    resolved_return_type = resolve_typedef(current_return_type_);
+                                }
+
+                                if (resolved_return_type &&
+                                    resolved_return_type->name == type_name &&
+                                    !resolved_return_type->type_args.empty()) {
+                                    // 戻り値型から型引数を取得
+                                    result_type = resolved_return_type;
+
+                                    // 引数の型チェック（バリアントにデータがある場合）
+                                    if (member.has_data() && !call.args.empty()) {
+                                        auto arg_type = infer_type(*call.args[0]);
+                                        // バリアントのデータ型をジェネリックパラメータから解決
+                                        auto& type_params = enum_it->second;
+                                        auto& type_args = resolved_return_type->type_args;
+
+                                        // member.fieldsからデータ型を取得（1フィールドのみサポート）
+                                        if (!member.fields.empty() && member.fields[0].second) {
+                                            auto expected_type = substitute_generic_type(
+                                                member.fields[0].second, type_params, type_args);
+                                            if (!types_compatible(expected_type, arg_type)) {
+                                                error(
+                                                    current_span_,
+                                                    "Argument type mismatch in enum constructor '" +
+                                                        ident->name + "': expected " +
+                                                        ast::type_to_string(*expected_type) +
+                                                        ", got " + ast::type_to_string(*arg_type));
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // 引数から型を推論（Result::Ok(5)のように）
+                                    if (!call.args.empty()) {
+                                        infer_type(*call.args[0]);
+                                    }
+                                    // enum型を返す（型引数なし）
+                                    result_type = ast::make_named(type_name);
+                                }
+
+                                debug::tc::log(debug::tc::Id::Resolved,
+                                               "Enum constructor: " + ident->name + "() : " +
+                                                   (result_type ? ast::type_to_string(*result_type)
+                                                                : type_name),
+                                               debug::Level::Debug);
+                                return result_type;
+                            }
+                        }
+                    } else {
+                        // 組み込み型（Result, Option）: enum_defs_にはないがgeneric_enums_にある
+                        // enum_values_でバリアントを確認
+                        std::string full_variant = type_name + "::" + method_name;
+                        if (enum_values_.count(full_variant) > 0) {
+                            // current_return_type_から型引数を推論
+                            ast::TypePtr result_type = nullptr;
+                            ast::TypePtr resolved_return_type = nullptr;
+                            if (current_return_type_) {
+                                resolved_return_type = resolve_typedef(current_return_type_);
+                            }
+
+                            if (resolved_return_type && resolved_return_type->name == type_name &&
+                                !resolved_return_type->type_args.empty()) {
+                                result_type = resolved_return_type;
+
+                                // 引数の型チェック
+                                if (!call.args.empty()) {
+                                    auto arg_type = infer_type(*call.args[0]);
+                                    auto& type_params = enum_it->second;
+                                    (void)type_params;  // 将来使用予定
+                                    auto& type_args = resolved_return_type->type_args;
+
+                                    // Ok(T) -> type_args[0], Err(E) -> type_args[1]
+                                    // Some(T) -> type_args[0]
+                                    size_t param_idx = 0;
+                                    if (type_name == "Result" && method_name == "Err") {
+                                        param_idx = 1;  // E is the second type param
+                                    }
+                                    if (param_idx < type_args.size()) {
+                                        auto expected_type = type_args[param_idx];
+                                        if (!types_compatible(expected_type, arg_type)) {
+                                            error(current_span_,
+                                                  "Argument type mismatch in '" + ident->name +
+                                                      "': expected " +
+                                                      ast::type_to_string(*expected_type) +
+                                                      ", got " + ast::type_to_string(*arg_type));
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 引数から型を推論
+                                if (!call.args.empty()) {
+                                    infer_type(*call.args[0]);
+                                }
+                                result_type = ast::make_named(type_name);
+                            }
+
+                            debug::tc::log(
+                                debug::tc::Id::Resolved,
+                                "Builtin enum constructor: " + ident->name + "() : " +
+                                    (result_type ? ast::type_to_string(*result_type) : type_name),
+                                debug::Level::Debug);
+                            return result_type;
+                        }
+                    }
+                }
+
+                // 非ジェネリックenumもチェック
+                if (enum_names_.count(type_name)) {
+                    auto enum_def_it = enum_defs_.find(type_name);
+                    if (enum_def_it != enum_defs_.end() && enum_def_it->second) {
+                        const ast::EnumDecl* enum_decl = enum_def_it->second;
+                        for (const auto& member : enum_decl->members) {
+                            if (member.name == method_name) {
+                                // 引数チェック
+                                if (member.has_data() && !call.args.empty()) {
+                                    infer_type(*call.args[0]);
+                                }
+
+                                auto result_type = ast::make_named(type_name);
+                                debug::tc::log(debug::tc::Id::Resolved,
+                                               "Enum constructor: " + ident->name +
+                                                   "() : " + ast::type_to_string(*result_type),
+                                               debug::Level::Debug);
+                                return result_type;
+                            }
+                        }
+                    }
+                }
+            }
+
             error(current_span_, "'" + ident->name + "' is not a function");
             return ast::make_error();
         }
@@ -326,7 +604,13 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             error(current_span_, "Unknown struct type '" + type_name + "'");
         }
     } else {
-        error(current_span_, "Field access on non-struct type '" + type_name + "'");
+        // ポインタ型の場合は、より具体的なエラーメッセージを表示
+        if (obj_type->kind == ast::TypeKind::Pointer) {
+            error(current_span_, "Cannot use '.' on pointer type '" + type_name +
+                                     "'. Use '->' for field access through pointers.");
+        } else {
+            error(current_span_, "Field access on non-struct type '" + type_name + "'");
+        }
     }
 
     return ast::make_error();

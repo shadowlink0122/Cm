@@ -1,0 +1,52 @@
+// thread_join_test.cm - join/detachの動作確認テスト
+import std::thread::spawn;
+import std::thread::join;
+import std::thread::detach;
+import std::thread::sleep_ms;
+
+// デストラクタを持つ構造体
+struct BusyCounter {
+    int loop_count;
+}
+
+impl BusyCounter {
+    ~self() {
+        print("Destructor: ");
+        println(self.loop_count);
+    }
+}
+
+// ワーカー（10回ループ x 100ms = 1000ms）
+void* worker(void* arg) {
+    println("Worker: start");
+
+    BusyCounter c = BusyCounter{ loop_count: 0 };
+
+    int i = 0;
+    while (i < 10) {
+        must { c.loop_count = i + 1; }
+        sleep_ms(100);
+        i = i + 1;
+    }
+
+    println("Worker: done");
+    return c.loop_count as void*;
+}
+
+int main() {
+    // Test 1: join - スレッド完了まで待機
+    println("Test: join");
+    ulong t1 = spawn(worker as void*);
+    int result = join(t1);
+    print("Result: ");
+    println(result);
+
+    // Test 2: detach - スレッドは中断される
+    println("Test: detach");
+    ulong t2 = spawn(worker as void*);
+    detach(t2);
+    sleep_ms(50);
+    println("Main: exit");
+
+    return 0;
+}

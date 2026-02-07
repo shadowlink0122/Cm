@@ -72,9 +72,21 @@ class LoweringContext {
     // グローバルconst変数の値 - 親クラスから参照
     const std::unordered_map<std::string, MirConstant>* global_const_values = nullptr;
 
+    // must{}ブロック内かどうか（最適化禁止フラグ）
+    bool in_must_block = false;
+
     // const変数の値のキャッシュ (変数名 -> 定数値)
     // 文字列補間で使用するため、const変数の初期値を保持
     std::unordered_map<std::string, MirConstant> const_values;
+
+    // enumペイロードキャッシュ（Tagged Union用）
+    // HirEnumConstructでペイロードをloweringした際に保存し、
+    // HirEnumPayloadで取得する
+    std::optional<LocalId> last_enum_payload_local;
+
+    // ジェネリック型パラメータのマッピング（T -> 具体型）
+    // モノモフィゼーション時に設定され、sizeof_for_T等で使用
+    std::unordered_map<std::string, hir::TypePtr> type_param_map;
 
     explicit LoweringContext(MirFunction* f) : func(f) {
         // 初期スコープを作成
@@ -115,6 +127,10 @@ class LoweringContext {
     void push_statement(MirStatementPtr stmt) {
         auto* block = get_current_block();
         if (block) {
+            // must{}ブロック内の文は最適化禁止
+            if (in_must_block) {
+                stmt->no_opt = true;
+            }
             // デバッグ: ステートメント追加前の状態
             if (current_block == 0 && stmt->kind == MirStatement::Assign) {
                 auto& assign = std::get<MirStatement::AssignData>(stmt->data);
@@ -240,13 +256,126 @@ class LoweringContext {
     }
 
     // 型がデストラクタを持つか確認
+    // ジェネリック型（Vector__TrackedObject等）や
+    // ベース名（Vector等）の場合、元テンプレート（Vector<T>）のデストラクタ情報も確認する
     bool has_destructor(const std::string& type_name) const {
-        return types_with_destructor.count(type_name) > 0;
+        // 直接登録されている場合
+        if (types_with_destructor.count(type_name) > 0) {
+            return true;
+        }
+
+        // ジェネリック型の場合（Vector__TrackedObject等）、元テンプレート名を抽出してチェック
+        auto underscore_pos = type_name.find("__");
+        if (underscore_pos != std::string::npos) {
+            std::string base_template = type_name.substr(0, underscore_pos);
+            // Vector<T> の形式で登録されているかチェック
+            std::string generic_name = base_template + "<T>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+            // Vector<K, V> の形式もチェック
+            generic_name = base_template + "<K, V>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+            // 単なるベース名でもチェック
+            if (types_with_destructor.count(base_template) > 0) {
+                return true;
+            }
+        }
+
+        // ベース名で渡された場合（例：Vector）、ジェネリックテンプレートをチェック
+        // 型名に<も__も含まれていない場合、ジェネリック版を探す
+        if (type_name.find('<') == std::string::npos && type_name.find("__") == std::string::npos) {
+            // Vector<T> の形式で登録されているかチェック
+            std::string generic_name = type_name + "<T>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+            // Vector<K, V> の形式もチェック
+            generic_name = type_name + "<K, V>";
+            if (types_with_destructor.count(generic_name) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // デストラクタを持つ型として登録
     void register_type_with_destructor(const std::string& type_name) {
         types_with_destructor.insert(type_name);
+    }
+
+    // ジェネリック型パラメータを解決（sizeof_for_T用）
+    hir::TypePtr resolve_type_param(const std::string& param_name) const {
+        auto it = type_param_map.find(param_name);
+        if (it != type_param_map.end()) {
+            return it->second;
+        }
+        return nullptr;
+    }
+
+    // 型サイズを計算（sizeof_for_Tマーカー処理用）
+    int64_t calculate_type_size(const hir::TypePtr& type) const {
+        if (!type)
+            return 8;  // デフォルトはポインタサイズ
+
+        switch (type->kind) {
+            case hir::TypeKind::Bool:
+            case hir::TypeKind::Tiny:
+            case hir::TypeKind::UTiny:
+            case hir::TypeKind::Char:
+                return 1;
+            case hir::TypeKind::Short:
+            case hir::TypeKind::UShort:
+                return 2;
+            case hir::TypeKind::Int:
+            case hir::TypeKind::UInt:
+            case hir::TypeKind::Float:
+            case hir::TypeKind::UFloat:
+                return 4;
+            case hir::TypeKind::Long:
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::Double:
+            case hir::TypeKind::UDouble:
+                return 8;
+            case hir::TypeKind::Pointer:
+            case hir::TypeKind::Reference:
+            case hir::TypeKind::String:
+                return 8;
+            case hir::TypeKind::Struct: {
+                // 構造体定義を探してサイズを計算
+                if (struct_defs && struct_defs->count(type->name)) {
+                    const auto* st = struct_defs->at(type->name);
+                    // 各フィールドをポインタサイズで見積もり
+                    int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
+                    return size > 0 ? size : 8;
+                }
+                // マングリング名の場合、ベース名で検索
+                if (type->name.find("__") != std::string::npos) {
+                    std::string base = type->name.substr(0, type->name.find("__"));
+                    if (struct_defs && struct_defs->count(base)) {
+                        const auto* st = struct_defs->at(base);
+                        int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
+                        return size > 0 ? size : 8;
+                    }
+                }
+                return 8;
+            }
+            case hir::TypeKind::Array:
+                if (type->element_type && type->array_size.has_value()) {
+                    return calculate_type_size(type->element_type) * type->array_size.value();
+                }
+                return 8;
+            default:
+                return 8;
+        }
+    }
+
+    // デストラクタを持つ型のセットを取得
+    const std::unordered_set<std::string>& get_types_with_destructor() const {
+        return types_with_destructor;
     }
 
     // 変数を現在のスコープに登録

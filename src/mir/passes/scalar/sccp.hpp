@@ -44,8 +44,14 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
 
         bool changed = false;
         changed |= apply_constants(func, in_states);
-        changed |= simplify_cfg(func);
-        changed |= remove_unreachable_blocks(func);
+
+        // デストラクタ関数の場合、ブロック削除をスキップ
+        // モノモフィゼーションで生成されたループブロックが誤って到達不可能と判定されることがある
+        bool is_destructor = func.name.find("__dtor") != std::string::npos;
+        if (!is_destructor) {
+            changed |= simplify_cfg(func);
+            changed |= remove_unreachable_blocks(func);
+        }
 
         return changed;
     }
@@ -262,7 +268,32 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             if (!stmt) {
                 continue;
             }
+
+            // Asmステートメント: 出力オペランドの変数をOverdefinedにマーク
+            // インラインアセンブリは実行時に変数を変更するため、定数伝播を抑制
+            if (stmt->kind == MirStatement::Asm) {
+                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                for (const auto& operand : asm_data.operands) {
+                    // 出力オペランド（+r, =rなど）は定数として扱えない
+                    if (!operand.constraint.empty() &&
+                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                        if (operand.local_id < state.size()) {
+                            state[operand.local_id] = {LatticeKind::Overdefined, {}};
+                        }
+                    }
+                }
+                continue;
+            }
+
             if (stmt->kind != MirStatement::Assign) {
+                continue;
+            }
+            // no_optフラグがtrueの場合は最適化スキップ（Overdefinedとして扱う）
+            if (stmt->no_opt) {
+                const auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                if (assign_data.place.local < state.size()) {
+                    state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                }
                 continue;
             }
             const auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
@@ -599,7 +630,32 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
                 if (!stmt) {
                     continue;
                 }
+
+                // ASMステートメント: 出力オペランドをOverdefinedにマーク
+                if (stmt->kind == MirStatement::Asm) {
+                    const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                    for (const auto& operand : asm_data.operands) {
+                        if (!operand.constraint.empty() &&
+                            (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                            if (operand.local_id < state.size()) {
+                                state[operand.local_id] = {LatticeKind::Overdefined, {}};
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 if (stmt->kind != MirStatement::Assign) {
+                    continue;
+                }
+                // no_optフラグがtrueの場合は定数置換をスキップするが、
+                // 代入先変数はOverdefinedにする（後続の参照で誤った定数が使われないよう）
+                if (stmt->no_opt) {
+                    auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
+                    if (assign_data.place.projections.empty() &&
+                        assign_data.place.local < state.size()) {
+                        state[assign_data.place.local] = {LatticeKind::Overdefined, {}};
+                    }
                     continue;
                 }
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);

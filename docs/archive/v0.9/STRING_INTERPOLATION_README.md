@@ -91,23 +91,23 @@ Key Sections:
 
 #### How String Interpolation is Detected
 - See: STRING_INTERPOLATION_LLVM.md → Layer 1 → Interpolation Detection
-- Code: `/Users/shadowlink/Documents/git/Cm/src/hir/string_interpolation.hpp:23-39`
+- Code: `src/hir/string_interpolation.hpp:23-39`
 
 #### How Placeholders are Parsed
 - See: STRING_INTERPOLATION_LLVM.md → Layer 2 → Parsing Support
-- Code: `/Users/shadowlink/Documents/git/Cm/src/common/format_string.hpp:63-120`
+- Code: `src/common/format_string.hpp:63-120`
 
 #### How println Calls are Code Generated
 - See: STRING_INTERPOLATION_LLVM.md → Layer 3 → String Output Functions
-- Code: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/mir_to_llvm.cpp:298-369`
+- Code: `src/codegen/llvm/mir_to_llvm.cpp:298-369`
 
 #### How String Concatenation Works
 - See: STRING_INTERPOLATION_LLVM.md → Layer 3 → String Concatenation
-- Code: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/mir_to_llvm.cpp:556-615`
+- Code: `src/codegen/llvm/mir_to_llvm.cpp:556-615`
 
 #### Runtime Function Declarations
 - See: STRING_INTERPOLATION_LLVM.md → Layer 4
-- Code: `/Users/shadowlink/Documents/git/Cm/src/codegen/llvm/context.cpp:135-215`
+- Code: `src/codegen/llvm/context.cpp:135-215`
 
 #### Memory Management Details
 - See: STRING_INTERPOLATION_ARCHITECTURE.md → Memory Management
@@ -127,30 +127,30 @@ Key Sections:
 
 ```
 Source Code Files:
-├── /Users/shadowlink/Documents/git/Cm/src/hir/string_interpolation.hpp
+├── src/hir/string_interpolation.hpp
 │   ├── StringInterpolationProcessor class
 │   ├── hasInterpolation()
 │   ├── extractInterpolations()
 │   ├── splitInterpolatedString()
 │   └── createInterpolatedStringExpr()
 │
-├── /Users/shadowlink/Documents/git/Cm/src/common/format_string.hpp
+├── src/common/format_string.hpp
 │   ├── FormatStringParser class
 │   ├── FormatStringFormatter class
 │   ├── Placeholder struct
 │   └── FormatSpec enum
 │
-├── /Users/shadowlink/Documents/git/Cm/src/codegen/llvm/mir_to_llvm.cpp
+├── src/codegen/llvm/mir_to_llvm.cpp
 │   ├── convertTerminator() - print/println special handling (298-369)
 │   ├── convertBinaryOp() - string concatenation (556-615)
 │   ├── convertConstant() - string literals (540-548)
 │   └── declareExternalFunction() - printf (717-747)
 │
-├── /Users/shadowlink/Documents/git/Cm/src/codegen/llvm/context.cpp
+├── src/codegen/llvm/context.cpp
 │   ├── declareRuntimeFunctions() (135-154)
 │   └── setupStd() (201-215)
 │
-└── /Users/shadowlink/Documents/git/Cm/std/
+└── std/
     ├── io/mod.cm - Wrapper functions
     └── io_ffi.cm - FFI declarations
 ```
@@ -340,9 +340,9 @@ When modifying string interpolation handling:
 ## Additional Resources
 
 ### Internal Documents
-- `/Users/shadowlink/Documents/git/Cm/docs/design/CANONICAL_SPEC.md` - Language specification
-- `/Users/shadowlink/Documents/git/Cm/docs/design/architecture.md` - System architecture
-- `/Users/shadowlink/Documents/git/Cm/docs/PROJECT_STRUCTURE.md` - Project organization
+- `docs/design/CANONICAL_SPEC.md` - Language specification
+- `docs/design/architecture.md` - System architecture
+- `docs/PROJECT_STRUCTURE.md` - Project organization
 
 ### External References
 - LLVM Documentation: https://llvm.org/docs/

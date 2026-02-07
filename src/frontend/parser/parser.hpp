@@ -139,15 +139,19 @@ class Parser {
                 // 既に正しい位置にいる
                 return parse_impl_export(std::move(attrs));
             }
+            // v0.13.0: export macro
+            if (check(TokenKind::KwMacro)) {
+                return parse_macro(true);
+            }
 
-            // export function (型から始まる関数の場合)
-            if (is_type_start()) {
+            // export function (型から始まる関数、または修飾子から始まる関数の場合)
+            // 修飾子: static, inline
+            if (is_type_start() || check(TokenKind::KwStatic) || check(TokenKind::KwInline)) {
                 // 修飾子を収集
                 bool is_static = consume_if(TokenKind::KwStatic);
                 bool is_inline = consume_if(TokenKind::KwInline);
-                bool is_async = consume_if(TokenKind::KwAsync);
 
-                return parse_function(true, is_static, is_inline, is_async, std::move(attrs));
+                return parse_function(true, is_static, is_inline, std::move(attrs));
             }
 
             // それ以外は分離エクスポート (export NAME1, NAME2;)
@@ -166,7 +170,6 @@ class Parser {
         // 修飾子を収集
         bool is_static = consume_if(TokenKind::KwStatic);
         bool is_inline = consume_if(TokenKind::KwInline);
-        bool is_async = consume_if(TokenKind::KwAsync);
 
         // struct
         if (check(TokenKind::KwStruct)) {
@@ -210,36 +213,9 @@ class Parser {
             advance();  // consume '#'
 
             if (check(TokenKind::KwMacro)) {
-                // マクロは未実装
-                error("Macro definitions (#macro) are not yet implemented");
-                // マクロ定義全体をスキップ
-                advance();  // consume 'macro'
-
-                // 安全なスキップ: 最大100トークンまでスキップ
-                int token_count = 0;
-                int brace_count = 0;
-                bool in_block = false;
-
-                while (!is_at_end() && token_count < 100) {
-                    if (current().kind == TokenKind::LBrace) {
-                        in_block = true;
-                        brace_count++;
-                    } else if (current().kind == TokenKind::RBrace && in_block) {
-                        brace_count--;
-                        if (brace_count == 0) {
-                            advance();  // consume final '}'
-                            break;
-                        }
-                    }
-                    advance();
-                    token_count++;
-                }
-
-                // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
-                if (token_count >= 100) {
-                    error("Failed to skip macro definition - too many tokens");
-                }
-                return nullptr;
+                // v0.13.0: #macro も型付きマクロとして処理
+                // 注: #hashはすでに消費されているので、macroのみ処理
+                return parse_macro(false);
             }
 
             // その他のディレクティブ（#test, #bench, #deprecated等）
@@ -266,37 +242,10 @@ class Parser {
             return nullptr;
         }
 
-        // macro (旧構文 - 互換性のため)
+        // macro (v0.13.0: 型付きマクロ)
+        // 構文: macro TYPE NAME = EXPR;
         if (check(TokenKind::KwMacro)) {
-            // マクロは未実装
-            error("Macro definitions (macro keyword) are not yet implemented");
-            advance();  // consume 'macro'
-
-            // 安全なスキップ: 最大100トークンまでスキップ
-            int token_count = 0;
-            int brace_count = 0;
-            bool in_block = false;
-
-            while (!is_at_end() && token_count < 100) {
-                if (current().kind == TokenKind::LBrace) {
-                    in_block = true;
-                    brace_count++;
-                } else if (current().kind == TokenKind::RBrace && in_block) {
-                    brace_count--;
-                    if (brace_count == 0) {
-                        advance();  // consume final '}'
-                        break;
-                    }
-                }
-                advance();
-                token_count++;
-            }
-
-            // もし100トークン以上スキップしようとした場合は、次の宣言まで進む
-            if (token_count >= 100) {
-                error("Failed to skip macro definition - too many tokens");
-            }
-            return nullptr;
+            return parse_macro(false);
         }
 
         // constexpr
@@ -305,11 +254,11 @@ class Parser {
         }
 
         // 関数 (型 名前 ...)
-        return parse_function(false, is_static, is_inline, is_async, std::move(attrs));
+        return parse_function(false, is_static, is_inline, std::move(attrs));
     }
 
     // 関数定義
-    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline, bool is_async,
+    ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline,
                                 std::vector<ast::AttributeNode> attributes = {}) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
@@ -359,7 +308,6 @@ class Parser {
         func->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         func->is_static = is_static;
         func->is_inline = is_inline;
-        func->is_async = is_async;
         func->attributes = std::move(attributes);
 
         return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
@@ -770,11 +718,12 @@ class Parser {
                         op_impl->body = parse_block();
                         decl->operators.push_back(std::move(op_impl));
                     } else {
-                        // private修飾子をチェック
+                        // private/static修飾子をチェック
                         bool is_private = consume_if(TokenKind::KwPrivate);
+                        bool is_static = consume_if(TokenKind::KwStatic);
 
                         auto func =
-                            parse_function(false, false, false, false, std::move(method_attrs));
+                            parse_function(false, is_static, false, std::move(method_attrs));
                         if (auto* f = func->as<ast::FunctionDecl>()) {
                             // privateメソッドの場合はvisibilityを設定
                             if (is_private) {
@@ -828,7 +777,8 @@ class Parser {
                 // デストラクタ: ~self()
                 if (check(TokenKind::Tilde)) {
                     advance();  // consume ~
-                    if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                    if (current().kind == TokenKind::KwSelf ||
+                        (current().kind == TokenKind::Ident && current().get_string() == "self")) {
                         advance();  // consume self
                         expect(TokenKind::LParen);
                         expect(TokenKind::RParen);
@@ -848,7 +798,8 @@ class Parser {
                     }
                 }
                 // コンストラクタ: self() or overload self(...)
-                else if (current().kind == TokenKind::Ident && current().get_string() == "self") {
+                else if (current().kind == TokenKind::KwSelf ||
+                         (current().kind == TokenKind::Ident && current().get_string() == "self")) {
                     advance();  // consume self
                     expect(TokenKind::LParen);
                     auto params = parse_params();
@@ -869,10 +820,11 @@ class Parser {
                         method_attrs.push_back(parse_attribute());
                     }
 
-                    // private修飾子をチェック
+                    // private/static修飾子をチェック
                     bool is_private = consume_if(TokenKind::KwPrivate);
+                    bool is_static = consume_if(TokenKind::KwStatic);
 
-                    auto func = parse_function(false, false, false, false, std::move(method_attrs));
+                    auto func = parse_function(false, is_static, false, std::move(method_attrs));
                     if (auto* f = func->as<ast::FunctionDecl>()) {
                         if (is_private) {
                             f->visibility = ast::Visibility::Private;
@@ -969,6 +921,7 @@ class Parser {
     ast::ExprPtr parse_lambda_body(std::vector<ast::Param> params, uint32_t start_pos);
     ast::ExprPtr parse_match_expr(uint32_t start_pos);
     std::unique_ptr<ast::MatchPattern> parse_match_pattern();
+    std::unique_ptr<ast::MatchPattern> parse_match_pattern_element();
 
     // ジェネリックパラメータ（<T>, <T: Interface>, <T: I + J>, <T: I | J>, <T, U>）をパース
     // すべての制約はインターフェース境界として解釈される
@@ -1270,8 +1223,8 @@ class Parser {
                     type_args.push_back(parse_type());
                 } while (consume_if(TokenKind::Comma));
 
-                // '>' を期待
-                expect(TokenKind::Gt);
+                // '>'を期待（ネストジェネリクス対応: GtGtも分割処理）
+                consume_gt_in_type_context();
 
                 // ジェネリック型として返す
                 auto type = ast::make_named(name);
@@ -1379,7 +1332,7 @@ class Parser {
     ast::DeclPtr parse_import_stmt(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_export();
     ast::DeclPtr parse_use(std::vector<ast::AttributeNode> attributes = {});
-    ast::DeclPtr parse_macro();
+    ast::DeclPtr parse_macro(bool is_exported = false);
     ast::DeclPtr parse_extern(std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_extern_decl(std::vector<ast::AttributeNode> attributes = {});
     std::unique_ptr<ast::FunctionDecl> parse_extern_func_decl();
@@ -1433,6 +1386,33 @@ class Parser {
         if (!consume_if(kind)) {
             error(std::string("Expected '") + token_kind_to_string(kind) + "'");
         }
+    }
+
+    // ネストジェネリクス対応: 型パース中に'>'を消費
+    // GtGt（>>）トークンが来た場合、1つの'>'として消費し、残りを保持
+    void consume_gt_in_type_context() {
+        // 前回のGtGtから残った'>'がある場合
+        if (pending_gt_count_ > 0) {
+            pending_gt_count_--;
+            return;
+        }
+
+        // 通常の'>'トークン
+        if (consume_if(TokenKind::Gt)) {
+            return;
+        }
+
+        // '>>'トークン - 分割して処理
+        if (check(TokenKind::GtGt)) {
+            advance();              // GtGtを消費
+            pending_gt_count_ = 1;  // 残りの'>'を保持
+            return;
+        }
+
+        // '>>>'トークンがあればさらに対応（将来の拡張用）
+        // 現時点では未サポート
+
+        error("Expected '>'");
     }
 
     std::string expect_ident() {
@@ -1524,6 +1504,7 @@ class Parser {
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
+    int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
 };
 
 }  // namespace cm

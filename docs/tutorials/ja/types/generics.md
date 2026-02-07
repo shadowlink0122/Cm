@@ -78,6 +78,42 @@ int main() {
 }
 ```
 
+## ジェネリックコレクションのRAII
+
+ジェネリックコレクション（`Vector<T>`など）は、`self()`コンストラクタと`~self()`デストラクタを持ちます。
+
+```cm
+import std::collections::vector::*;
+
+struct TrackedObject {
+    int id;
+}
+
+impl TrackedObject {
+    ~self() {
+        println("~TrackedObject({self.id})");
+    }
+}
+
+int main() {
+    {
+        Vector<TrackedObject> objects();  // コンストラクタ呼び出し
+        objects.push(TrackedObject { id: 100 });
+        objects.push(TrackedObject { id: 200 });
+        // スコープ終了時:
+        // 1. ~Vector()が呼ばれる
+        // 2. 各要素の~TrackedObject()が呼ばれる
+    }
+    return 0;
+}
+```
+
+**出力:**
+```
+~TrackedObject(100)
+~TrackedObject(200)
+```
+
 ---
 
 **前の章:** [typedef](typedef.html)  

@@ -1,0 +1,107 @@
+// std::collections::queue - ジェネリックキュー（FIFO）
+// Queue<T> - 任意の型Tを格納できるFIFOキュー
+module std.collections.queue;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+// =============================================================
+// QueueNode<T> - キューの内部ノード
+// =============================================================
+
+struct QueueNode<T> {
+    T data;
+    QueueNode<T>* next;
+}
+
+// =============================================================
+// Queue<T> - ジェネリックFIFOキュー
+// =============================================================
+
+export struct Queue<T> {
+    QueueNode<T>* front;
+    QueueNode<T>* rear;
+    int size;
+}
+
+export impl<T> Queue<T> {
+    // コンストラクタ
+    self() {
+        void* null_ptr = 0 as void*;
+        self.front = null_ptr as QueueNode<T>*;
+        self.rear = null_ptr as QueueNode<T>*;
+        self.size = 0;
+    }
+
+    // 末尾に追加（enqueue）
+    void enqueue(T value) {
+        long node_size = __sizeof__(QueueNode<T>) as long;
+        void* raw_ptr = malloc(node_size);
+        QueueNode<T>* new_node = raw_ptr as QueueNode<T>*;
+
+        new_node->data = value;
+        void* null_ptr = 0 as void*;
+        new_node->next = null_ptr as QueueNode<T>*;
+
+        if (self.rear == null as QueueNode<T>*) {
+            self.front = new_node;
+            self.rear = new_node;
+        } else {
+            self.rear->next = new_node;
+            self.rear = new_node;
+        }
+        self.size = self.size + 1;
+    }
+
+    // 先頭を取得して削除（dequeue）
+    T dequeue() {
+        QueueNode<T>* head = self.front;
+        T data = head->data;
+        self.front = head->next;
+
+        void* null_ptr = 0 as void*;
+        if (self.front == null as QueueNode<T>*) {
+            self.rear = null_ptr as QueueNode<T>*;
+        }
+
+        void* ptr = head as void*;
+        free(ptr);
+        self.size = self.size - 1;
+        return data;
+    }
+
+    // 先頭を参照（削除しない）
+    T peek() {
+        return self.front->data;
+    }
+
+    // 長さ
+    int len() {
+        return self.size;
+    }
+
+    // 空チェック
+    bool is_empty() {
+        return self.size == 0;
+    }
+
+    // クリア（全要素削除）
+    void clear() {
+        void* null_ptr = 0 as void*;
+        while (self.front != null as QueueNode<T>*) {
+            QueueNode<T>* temp = self.front;
+            self.front = self.front->next;
+            void* ptr = temp as void*;
+            free(ptr);
+        }
+        self.rear = null_ptr as QueueNode<T>*;
+        self.size = 0;
+    }
+
+    // デストラクタ
+    ~self() {
+        self.clear();
+    }
+}
