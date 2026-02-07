@@ -1,0 +1,81 @@
+// result_methods.cm - CmResult型の動作テスト
+import std::io::println;
+
+struct CmResult<T, E> {
+    bool is_ok;
+    T value;
+    E error;
+}
+
+<T, E> CmResult<T, E> make_ok(T value, E dummy) {
+    CmResult<T, E> r;
+    r.is_ok = true;
+    r.value = value;
+    return r;
+}
+
+<T, E> CmResult<T, E> make_err(T dummy, E error) {
+    CmResult<T, E> r;
+    r.is_ok = false;
+    r.error = error;
+    return r;
+}
+
+<T, E> T result_unwrap(CmResult<T, E> r) {
+    return r.value;
+}
+
+<T, E> E result_unwrap_err(CmResult<T, E> r) {
+    return r.error;
+}
+
+<T, E> T result_unwrap_or(CmResult<T, E> r, T default_value) {
+    if (r.is_ok) {
+        return r.value;
+    }
+    return default_value;
+}
+
+CmResult<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return make_err(0, "Division by zero");
+    }
+    return make_ok(a / b, "");
+}
+
+int main() {
+    println("=== CmResult Test ===");
+
+    // is_ok テスト
+    CmResult<int, string> r1 = safe_divide(10, 2);
+    bool b1 = r1.is_ok;
+    println("r1 is_ok: {b1}");
+
+    CmResult<int, string> r2 = safe_divide(10, 0);
+    bool b2 = r2.is_ok;
+    println("r2 is_ok: {b2}");
+
+    // unwrap テスト
+    int v1 = result_unwrap(r1);
+    println("r1 unwrap: {v1}");
+
+    // unwrap_or テスト
+    int v2 = result_unwrap_or(r2, -1);
+    println("r2 unwrap_or: {v2}");
+
+    // unwrap_err テスト
+    string e1 = result_unwrap_err(r2);
+    println("r2 unwrap_err: {e1}");
+
+    // チェイン テスト
+    CmResult<int, string> r3 = safe_divide(100, 5);
+    if (r3.is_ok) {
+        int v3 = result_unwrap(r3);
+        CmResult<int, string> r4 = safe_divide(v3, 2);
+        int v4 = result_unwrap(r4);
+        println("100 / 5 / 2 = {v4}");
+    }
+
+    println("=== Done ===");
+    return 0;
+}

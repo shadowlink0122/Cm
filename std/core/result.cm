@@ -1,0 +1,60 @@
+// std::core::result - Result型定義
+// すべてのstdモジュールで使用する統一エラーハンドリング型
+//
+// 注意: ジェネリックenum版Result型はHazard #34（match内の型解決問題）
+// により現時点で不安定。struct方式で実装する。
+// コンパイラ組み込みの"Result"名と衝突するため、内部名はCmResultを使用。
+module std.core.result;
+
+// ============================================================
+// CmResult<T, E> - 成功または失敗を表す型
+// ============================================================
+//
+// 使用パターン:
+//   CmResult<int, string> r = make_ok(42, "");
+//   if (r.is_ok) {
+//       int v = r.value;
+//   }
+//
+// ヘルパー関数:
+//   make_ok(value, dummy_error) - 成功値を生成
+//   make_err(dummy_value, error) - 失敗値を生成
+//   result_unwrap(r)             - 成功値を取得
+//   result_unwrap_err(r)         - 失敗値を取得
+//   result_unwrap_or(r, default) - 成功値またはデフォルト値
+// ============================================================
+
+struct CmResult<T, E> {
+    bool is_ok;
+    T value;
+    E error;
+}
+
+<T, E> CmResult<T, E> make_ok(T value, E dummy) {
+    CmResult<T, E> r;
+    r.is_ok = true;
+    r.value = value;
+    return r;
+}
+
+<T, E> CmResult<T, E> make_err(T dummy, E error) {
+    CmResult<T, E> r;
+    r.is_ok = false;
+    r.error = error;
+    return r;
+}
+
+<T, E> T result_unwrap(CmResult<T, E> r) {
+    return r.value;
+}
+
+<T, E> E result_unwrap_err(CmResult<T, E> r) {
+    return r.error;
+}
+
+<T, E> T result_unwrap_or(CmResult<T, E> r, T default_value) {
+    if (r.is_ok) {
+        return r.value;
+    }
+    return default_value;
+}
