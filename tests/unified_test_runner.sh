@@ -297,7 +297,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run --interpreter -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         jit)
