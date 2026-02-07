@@ -13,6 +13,23 @@ int main() {
     __asm__("subl $$20, ${+m:val2}");  // 100 - 20 = 80
     println(val2);                      // 80
 
+#else
+    // ARM64版
+    // +m制約はARM64では直接対応しないため、ldr/add/str に分解
+    int readwrite_val = 10;
+    int temp1 = 0;
+    __asm__("ldr ${=r:temp1}, ${m:readwrite_val}");
+    __asm__("add ${+r:temp1}, ${+r:temp1}, #5");
+    __asm__("str ${r:temp1}, ${=m:readwrite_val}");
+    println(readwrite_val);  // 15
+
+    int val2 = 100;
+    int temp2 = 0;
+    __asm__("ldr ${=r:temp2}, ${m:val2}");
+    __asm__("sub ${+r:temp2}, ${+r:temp2}, #20");
+    __asm__("str ${r:temp2}, ${=m:val2}");
+    println(val2);  // 80
+
 #end
     return 0;
 }

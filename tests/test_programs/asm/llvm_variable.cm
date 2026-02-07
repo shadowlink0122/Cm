@@ -19,6 +19,18 @@ int main() {
     println("Result (should be 60):");
     println(x);
 
+#else
+    // ARM64版
+    println("=== LLVM Operand Test ===");
+
+    int x = 50;
+
+    // ARM64: add wN, wN, #imm
+    __asm__("add ${+r:x}, ${+r:x}, #10");
+
+    println("Result (should be 60):");
+    println(x);
+
 #end
     return 0;
 }

@@ -26,6 +26,27 @@ int main() {
     }
 
     println("=== All Tests Passed ===");
+#else
+    // ARM64版（nopは共通命令）
+    println("=== must {} Block Test ===");
+
+    int x = 0;
+    must {
+        x = 10;
+        x = 20;
+    }
+    if (x == 20) {
+        println("must block basic: PASS");
+    } else {
+        println("must block basic: FAIL");
+    }
+
+    must {
+        __asm__("nop");
+        println("asm inside must: PASS");
+    }
+
+    println("=== All Tests Passed ===");
 #end
     return 0;
 }

@@ -24,6 +24,29 @@ int main() {
     __asm__("movl ${r:val2}, ${=m:b}");
     println(a + b);  // 30
 
+#else
+    // ARM64版
+    // === テスト1: =mでメモリに書き込み ===
+    int mem_val = 0;
+    int src = 100;
+    __asm__("str ${r:src}, ${=m:mem_val}");
+    println(mem_val);  // 100
+
+    // === テスト2: rで読み込み、=mで書き込み ===
+    int source = 200;
+    int dest = 0;
+    __asm__("str ${r:source}, ${=m:dest}");
+    println(dest);  // 200
+
+    // === テスト3: 複数のメモリ出力 ===
+    int a = 0;
+    int b = 0;
+    int val1 = 10;
+    int val2 = 20;
+    __asm__("str ${r:val1}, ${=m:a}");
+    __asm__("str ${r:val2}, ${=m:b}");
+    println(a + b);  // 30
+
 #end
     return 0;
 }

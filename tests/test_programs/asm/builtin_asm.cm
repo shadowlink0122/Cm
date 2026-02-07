@@ -17,6 +17,18 @@ int main() {
     println("multiple: ok");
 
     println("=== complete ===");
+#else
+    // ARM64版
+    println("=== builtin_asm test ===");
+
+    __asm__("nop");
+    println("__asm__(nop): ok");
+
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== complete ===");
 #end
     return 0;
 }

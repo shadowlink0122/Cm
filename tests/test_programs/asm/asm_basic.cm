@@ -22,6 +22,22 @@ int main() {
     println("multiple: ok");
 
     println("=== Complete ===");
+#else
+    // ARM64版
+    println("=== Inline Assembly Test ===");
+
+    __asm__("nop");
+    println("nop: ok");
+
+    __asm__("");
+    println("compiler_barrier: ok");
+
+    __asm__("nop");
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== Complete ===");
 #end
     return 0;
 }

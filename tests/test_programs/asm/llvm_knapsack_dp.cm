@@ -150,6 +150,129 @@ int main() {
         println(dp[31]);
     }
 
+#else
+    // ARM64版
+    println("=== Pure LLVM Knapsack DP (2D Array) ===");
+    println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
+    println("Capacity: 7");
+
+    int[32] dp = [
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    int[3] weights = [2, 3, 4];
+    int[3] values = [3, 4, 5];
+
+    int* dp_ptr = &dp[0];
+    int* w_ptr = &weights[0];
+    int* v_ptr = &values[0];
+
+    int i = 0;
+    int w = 0;
+
+    // ARM64版 ナップサックDP
+    // レジスタ割り当て:
+    //   x8  = dp_ptr
+    //   x9  = w_ptr
+    //   x10 = v_ptr
+    //   w11 = weights[i-1]
+    //   w12 = dp[i-1][w]
+    //   w13 = values[i-1]
+    //   w14 = dp[i-1][w-weight] / cand
+    //   w15 = temp
+    __asm__(`
+    // ポインタをレジスタに保存
+    mov x8, ${r:dp_ptr}
+    mov x9, ${r:w_ptr}
+    mov x10, ${r:v_ptr}
+
+    // 外側ループ: i = 1
+    mov ${+r:i}, #1
+
+    1:  // outer_loop
+    cmp ${+r:i}, #3
+    b.gt 5f
+
+    // 内側ループ: w = 0
+    mov ${+r:w}, #0
+
+    2:  // inner_loop
+    cmp ${+r:w}, #7
+    b.gt 4f
+
+    // weights[i-1] を w11 に取得
+    sub w15, ${+r:i}, #1
+    sxtw x15, w15
+    ldr w11, [x9, x15, lsl #2]
+
+    // dp[i-1][w]のオフセット計算: (i-1) * 8 + w
+    sub w15, ${+r:i}, #1
+    lsl w15, w15, #3
+    add w15, w15, ${+r:w}
+    sxtw x15, w15
+    ldr w12, [x8, x15, lsl #2]
+
+    // w < weights[i-1] なら dp[i][w] = dp[i-1][w]
+    cmp ${+r:w}, w11
+    b.lt 3f
+
+    // values[i-1] を w13 に取得
+    sub w15, ${+r:i}, #1
+    sxtw x15, w15
+    ldr w13, [x10, x15, lsl #2]
+
+    // dp[i-1][w - weight]のオフセット計算
+    sub w15, ${+r:i}, #1
+    lsl w15, w15, #3
+    sub w14, ${+r:w}, w11
+    add w15, w15, w14
+    sxtw x15, w15
+    ldr w14, [x8, x15, lsl #2]
+
+    // cand = dp[i-1][w-weight] + value
+    add w14, w14, w13
+
+    // new_val = max(dp[i-1][w], cand)
+    cmp w14, w12
+    csel w12, w14, w12, gt
+
+    3:  // store_dp
+    // dp[i][w]のオフセット計算: i * 8 + w
+    lsl w15, ${+r:i}, #3
+    add w15, w15, ${+r:w}
+    sxtw x15, w15
+    str w12, [x8, x15, lsl #2]
+
+    // w++
+    add ${+r:w}, ${+r:w}, #1
+    b 2b
+
+    4:  // next_item
+    add ${+r:i}, ${+r:i}, #1
+    b 1b
+
+    5:  // done
+    `);
+
+    println("\n=== 2D DP Table (last row) ===");
+    for (int k = 2; k <= 7; k++) {
+        print("dp[3][");
+        print(k);
+        print("]=");
+        println(dp[24 + k]);
+    }
+
+    println("\n=== Verification ===");
+    if (dp[31] == 9) {
+        println("Knapsack DP: PASS (optimal = 9)");
+    } else {
+        print("Expected 9, got ");
+        println(dp[31]);
+    }
+
 #end
     return 0;
 }
