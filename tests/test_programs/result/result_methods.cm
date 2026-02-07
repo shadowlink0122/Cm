@@ -1,40 +1,7 @@
-// result_methods.cm - CmResult型の動作テスト
+// result_methods.cm - CmResult型のimportテスト
+// std::core::resultからインポートして使用
 import std::io::println;
-
-struct CmResult<T, E> {
-    bool is_ok;
-    T value;
-    E error;
-}
-
-<T, E> CmResult<T, E> make_ok(T value, E dummy) {
-    CmResult<T, E> r;
-    r.is_ok = true;
-    r.value = value;
-    return r;
-}
-
-<T, E> CmResult<T, E> make_err(T dummy, E error) {
-    CmResult<T, E> r;
-    r.is_ok = false;
-    r.error = error;
-    return r;
-}
-
-<T, E> T result_unwrap(CmResult<T, E> r) {
-    return r.value;
-}
-
-<T, E> E result_unwrap_err(CmResult<T, E> r) {
-    return r.error;
-}
-
-<T, E> T result_unwrap_or(CmResult<T, E> r, T default_value) {
-    if (r.is_ok) {
-        return r.value;
-    }
-    return default_value;
-}
+import std::core::result::*;
 
 CmResult<int, string> safe_divide(int a, int b) {
     if (b == 0) {
