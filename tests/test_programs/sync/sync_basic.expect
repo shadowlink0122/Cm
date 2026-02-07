@@ -1,0 +1,13 @@
+=== Sync Basic Test ===
+mutex initialized
+mutex locked
+mutex unlocked
+mutex try_lock: success
+mutex destroyed
+rwlock initialized
+rwlock read locked
+rwlock read unlocked
+rwlock write locked
+rwlock write unlocked
+rwlock destroyed
+=== Done ===

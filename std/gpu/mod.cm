@@ -1,0 +1,91 @@
+// std/gpu/mod.cm - GPU(Metal)コンピュートモジュール
+// Apple Metal Framework を使用したGPGPU演算
+// M1以上のApple Siliconで動作
+module std.gpu;
+
+// ============================================================
+// C++ backing extern宣言（内部使用）
+// ============================================================
+
+extern "C" long gpu_device_create();
+extern "C" void gpu_device_destroy(long device);
+extern "C" string gpu_device_name(long device);
+extern "C" long gpu_buffer_create(long device, long size);
+extern "C" void gpu_buffer_destroy(long buffer);
+extern "C" void gpu_buffer_write(long buffer, void* data, long size);
+extern "C" void gpu_buffer_read(long buffer, void* data, long size);
+extern "C" long gpu_kernel_create(long device, string source, string func_name);
+extern "C" void gpu_kernel_destroy(long kernel);
+extern "C" void gpu_dispatch(long kernel, long buf_a, long buf_b, long buf_out, long count);
+extern "C" void gpu_dispatch_1(long kernel, long buf, long count);
+extern "C" void gpu_dispatch_2(long kernel, long buf_in, long buf_out, long count);
+
+// ============================================================
+// Export API — ラッパー関数
+// ============================================================
+
+// デバイス管理
+export long device_create() {
+    return gpu_device_create();
+}
+
+export void device_destroy(long device) {
+    gpu_device_destroy(device);
+}
+
+export string device_name(long device) {
+    return gpu_device_name(device);
+}
+
+// バッファ管理
+export long buffer_create(long device, long size) {
+    return gpu_buffer_create(device, size);
+}
+
+export void buffer_destroy(long buffer) {
+    gpu_buffer_destroy(buffer);
+}
+
+export void buffer_write(long buffer, void* data, long size) {
+    gpu_buffer_write(buffer, data, size);
+}
+
+export void buffer_read(long buffer, void* data, long size) {
+    gpu_buffer_read(buffer, data, size);
+}
+
+// カーネル管理
+export long kernel_create(long device, string source, string func_name) {
+    return gpu_kernel_create(device, source, func_name);
+}
+
+export void kernel_destroy(long kernel) {
+    gpu_kernel_destroy(kernel);
+}
+
+// カーネル実行
+export void dispatch(long kernel, long buf_a, long buf_b, long buf_out, long count) {
+    gpu_dispatch(kernel, buf_a, buf_b, buf_out, count);
+}
+
+export void dispatch_1(long kernel, long buf, long count) {
+    gpu_dispatch_1(kernel, buf, count);
+}
+
+export void dispatch_2(long kernel, long buf_in, long buf_out, long count) {
+    gpu_dispatch_2(kernel, buf_in, buf_out, count);
+}
+
+// ============================================================
+// ヘルパー関数
+// ============================================================
+
+// デバイスが利用可能かチェック
+export bool is_available() {
+    long dev = gpu_device_create();
+    if (dev == 0) {
+        return false;
+    }
+    gpu_device_destroy(dev);
+    return true;
+}

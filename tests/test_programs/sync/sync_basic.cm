@@ -1,0 +1,75 @@
+// sync_basic.cm - 同期プリミティブ ランタイムテスト
+// std::sync::mutex の低レベルAPI経由で同期プリミティブの動作を検証
+import std::io::println;
+import std::sync::mutex::mutex_init;
+import std::sync::mutex::mutex_lock;
+import std::sync::mutex::mutex_unlock;
+import std::sync::mutex::mutex_destroy;
+import std::sync::mutex::mutex_trylock;
+import std::sync::mutex::rwlock_init;
+import std::sync::mutex::rwlock_rdlock;
+import std::sync::mutex::rwlock_wrlock;
+import std::sync::mutex::rwlock_unlock;
+import std::sync::mutex::rwlock_destroy;
+
+// RawMutex = long[8] (pthread_mutex_tを格納するバッファ)
+struct RawMutex {
+    long[8] _opaque;
+}
+
+// RawRwLock = long[8] (pthread_rwlock_tを格納するバッファ)
+struct RawRwLock {
+    long[8] _opaque;
+}
+
+int main() {
+    println("=== Sync Basic Test ===");
+
+    // ============================================================
+    // Mutex テスト (シングルスレッド)
+    // ============================================================
+    RawMutex mtx;
+    mutex_init(&mtx);
+    println("mutex initialized");
+
+    mutex_lock(&mtx);
+    println("mutex locked");
+
+    mutex_unlock(&mtx);
+    println("mutex unlocked");
+
+    // try_lock テスト（成功するはず）
+    int try_result = mutex_trylock(&mtx);
+    if (try_result == 0) {
+        println("mutex try_lock: success");
+        mutex_unlock(&mtx);
+    } else {
+        println("mutex try_lock: failed");
+    }
+
+    mutex_destroy(&mtx);
+    println("mutex destroyed");
+
+    // ============================================================
+    // RwLock テスト (シングルスレッド)
+    // ============================================================
+    RawRwLock rwl;
+    rwlock_init(&rwl);
+    println("rwlock initialized");
+
+    rwlock_rdlock(&rwl);
+    println("rwlock read locked");
+    rwlock_unlock(&rwl);
+    println("rwlock read unlocked");
+
+    rwlock_wrlock(&rwl);
+    println("rwlock write locked");
+    rwlock_unlock(&rwl);
+    println("rwlock write unlocked");
+
+    rwlock_destroy(&rwl);
+    println("rwlock destroyed");
+
+    println("=== Done ===");
+    return 0;
+}

@@ -877,6 +877,29 @@ ast::ExprPtr Parser::parse_primary() {
                                 "Generic static method call: " + qualified_name,
                                 debug::Level::Debug);
                 return ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
+            } else if (found_close && check(TokenKind::LParen)) {
+                // ジェネリック関数呼び出しパターン: size_of<WorkerArg>()
+                // 位置を戻して型引数を正しくパース
+                pos_ = saved_pos;
+                advance();  // < を消費
+
+                std::string type_args_str = "<";
+                do {
+                    auto type_arg = parse_type();
+                    type_args_str += ast::type_to_string(*type_arg);
+                    if (consume_if(TokenKind::Comma)) {
+                        type_args_str += ", ";
+                    }
+                } while (!check(TokenKind::Gt) && !is_at_end());
+                expect(TokenKind::Gt);
+                type_args_str += ">";
+
+                // ジェネリック関数名を構築: size_of<WorkerArg>
+                std::string generic_name = name + type_args_str;
+
+                debug::par::log(debug::par::Id::IdentifierRef,
+                                "Generic function call: " + generic_name, debug::Level::Debug);
+                return ast::make_ident(std::move(generic_name), Span{start_pos, previous().end});
             } else {
                 // パターンに合致しない場合は位置を戻して通常の識別子として処理
                 pos_ = saved_pos;

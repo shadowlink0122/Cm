@@ -1,0 +1,117 @@
+// gpu_basic.cm - GPU(Metal) ベクトル加算テスト
+// Metal Compute Shaderで配列の要素ごとの加算を実行
+// Note: Cm int=64bit, Metal int=32bit のため long/int64_t で統一
+// Note: JITのLLVMエイリアス分析回避のため malloc(ヒープ)を使用
+import std::io::println;
+import std::gpu::device_create;
+import std::gpu::device_destroy;
+import std::gpu::buffer_create;
+import std::gpu::buffer_destroy;
+import std::gpu::buffer_write;
+import std::gpu::buffer_read;
+import std::gpu::kernel_create;
+import std::gpu::kernel_destroy;
+import std::gpu::dispatch;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+int main() {
+    println("=== GPU Basic Test ===");
+
+    // デバイス作成
+    long device = device_create();
+    if (device == 0) {
+        println("SKIP: Metal device not available");
+        return 0;
+    }
+    println("GPU device available");
+
+    // テストデータ: 4要素のlong配列 (8bytes x 4 = 32bytes)
+    long buf_size = 32;
+
+    // 入力バッファ作成
+    long buf_a = buffer_create(device, buf_size);
+    long buf_b = buffer_create(device, buf_size);
+    long buf_out = buffer_create(device, buf_size);
+
+    // 入力データをヒープに確保
+    // a = [1, 2, 3, 4], b = [10, 20, 30, 40]
+    void* src_a = malloc(32);
+    void* src_b = malloc(32);
+
+    long* pa = src_a as long*;
+    pa[0] = 1;
+    pa[1] = 2;
+    pa[2] = 3;
+    pa[3] = 4;
+
+    long* pb = src_b as long*;
+    pb[0] = 10;
+    pb[1] = 20;
+    pb[2] = 30;
+    pb[3] = 40;
+
+    buffer_write(buf_a, src_a, buf_size);
+    buffer_write(buf_b, src_b, buf_size);
+
+    // Metal Shading Language: ベクトル加算カーネル (long = int64_t)
+    string shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add(device const long* a [[buffer(0)]],\n                       device const long* b [[buffer(1)]],\n                       device long* result [[buffer(2)]],\n                       uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
+
+    long kernel = kernel_create(device, shader, "vector_add");
+    if (kernel == 0) {
+        println("FAIL: kernel creation failed");
+        free(src_a);
+        free(src_b);
+        buffer_destroy(buf_a);
+        buffer_destroy(buf_b);
+        buffer_destroy(buf_out);
+        device_destroy(device);
+        return 1;
+    }
+    println("kernel created");
+
+    // カーネル実行
+    dispatch(kernel, buf_a, buf_b, buf_out, 4);
+    println("kernel dispatched");
+
+    // 結果読み取り（ヒープに読み出し）
+    void* dst = malloc(32);
+    buffer_read(buf_out, dst, buf_size);
+
+    long* result = dst as long*;
+
+    // 検証: result[i] = a[i] + b[i]
+    // result = [11, 22, 33, 44]
+    int passed = 0;
+    if (result[0] == 11) { passed = passed + 1; }
+    if (result[1] == 22) { passed = passed + 1; }
+    if (result[2] == 33) { passed = passed + 1; }
+    if (result[3] == 44) { passed = passed + 1; }
+
+    println("result[0]: {result[0]}");
+    println("result[1]: {result[1]}");
+    println("result[2]: {result[2]}");
+    println("result[3]: {result[3]}");
+
+    if (passed == 4) {
+        println("PASS: vector addition correct");
+    } else {
+        println("FAIL: incorrect results");
+    }
+
+    // クリーンアップ
+    free(src_a);
+    free(src_b);
+    free(dst);
+    kernel_destroy(kernel);
+    buffer_destroy(buf_a);
+    buffer_destroy(buf_b);
+    buffer_destroy(buf_out);
+    device_destroy(device);
+
+    println("=== Done ===");
+    return 0;
+}

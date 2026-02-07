@@ -807,12 +807,11 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
             R"(export\s+const\s+(?:int|float|double|bool|char|string|uint)\s+(\w+)\s*=)");
         // impl: export impl Type for Interface (implはexportが付かないこともある)
         std::regex impl_regex(R"(^\s*(?:export\s+)?impl\s+(\w+)\s+for\s+(\w+))");
-        // 関数/構造体など: export [static] [inline] [async] (type|struct|interface|enum) name
-        // typeは組み込み型またはユーザー定義型（識別子）
-        // 修飾子: static, inline, async をオプションでサポート
+        // 関数/構造体など: export [extern "C"] [<T>] [static] [inline] [async]
+        // (type|struct|interface|enum) name
+        // ジェネリック関数: export <T> uint size_of() もマッチ
         std::regex export_regex(
-            R"(export\s+(?:static\s+)?(?:inline\s+)?(?:async\s+)?(?:int|void|float|double|bool|char|string|uint|struct|interface|enum|\w+\*?)\s+(\w+))");
-
+            R"(export\s+(?:extern\s+"C"\s+)?(?:<[^>]+>\s+)?(?:static\s+)?(?:inline\s+)?(?:async\s+)?(?:int|void|float|double|bool|char|string|uint|struct|interface|enum|\w+\*?)\s+(\w+))");
         bool matched = false;
 
         // まず定数パターンを試す
@@ -959,7 +958,16 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
             continue;
         }
 
-        // Note: exportキーワードは保持する
+        // ジェネリック関数の export <T> type name() から export を除去
+        // パーサーは export <T> 構文を未サポートのため
+        // 例: "export <T> uint size_of()" → "<T> uint size_of()"
+        std::regex export_generic_regex(R"((\s*)export\s+(<[^>]+>\s+))");
+        std::smatch gen_match;
+        if (std::regex_search(line, gen_match, export_generic_regex)) {
+            line = std::regex_replace(line, export_generic_regex, "$1$2");
+        }
+
+        // Note: 通常のexportキーワードは保持する
         // 以前はエクスポートされた宣言からexportを削除していたが、
         // これにより関数定義がパーサーで変数宣言として誤認識される問題があった
         // パーサーはexportキーワードを適切に処理するため、削除不要
@@ -1517,21 +1525,50 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
     std::replace(full_filename.begin(), full_filename.end(), ':', '/');
 
     // モジュールパス（最後のセグメントが小文字始まりの場合、それは関数/変数名）
+    // ただし、完全パスに対応するファイルが存在する場合はモジュールとして扱う
     std::string module_path = full_filename;
     if (segments.size() >= 3) {
         // 最後のセグメントが小文字始まりなら、関数/変数名として扱う
         const std::string& last_segment = segments.back();
         if (!last_segment.empty() && std::islower(last_segment[0])) {
-            // モジュールパスは最後の1つ手前まで
-            module_path = "";
-            for (size_t i = 0; i < segments.size() - 1; ++i) {
-                if (i > 0)
-                    module_path += "/";
-                module_path += segments[i];
+            // まずフルパスがモジュールファイルとして存在するかチェック
+            // (例: std/sync/mutex.cm が存在するなら mutex はモジュール名)
+            bool full_path_exists = false;
+            if (!current_file.empty()) {
+                auto check_path = current_file.parent_path() / (full_filename + ".cm");
+                if (std::filesystem::exists(check_path)) {
+                    full_path_exists = true;
+                }
             }
-            if (debug_mode) {
-                std::cout << "[PREPROCESSOR] Selective import detected, module path: "
-                          << module_path << "\n";
+            if (!full_path_exists) {
+                for (const auto& sp : search_paths) {
+                    auto check_path = sp / (full_filename + ".cm");
+                    if (std::filesystem::exists(check_path)) {
+                        full_path_exists = true;
+                        break;
+                    }
+                }
+            }
+
+            if (full_path_exists) {
+                // フルパスがファイルとして存在する → 最後のセグメントもモジュール名
+                // module_path はそのまま full_filename を維持
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Full path exists as module file, keeping: "
+                              << module_path << "\n";
+                }
+            } else {
+                // フルパスが存在しない → 最後のセグメントは関数/変数名
+                module_path = "";
+                for (size_t i = 0; i < segments.size() - 1; ++i) {
+                    if (i > 0)
+                        module_path += "/";
+                    module_path += segments[i];
+                }
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Selective import detected, module path: "
+                              << module_path << "\n";
+                }
             }
         }
     }
@@ -1566,50 +1603,104 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
                     return entry;
                 }
             }
-        }
 
-        // 1. 完全パス（std/io/file.cm など）を最初に試す
-        //    サブモジュールへの直接アクセスを優先
-        auto full_path = current_dir / (full_filename + ".cm");
-        if (std::filesystem::exists(full_path)) {
-            if (debug_mode) {
-                std::cout << "[PREPROCESSOR] Found full path module: " << full_path << "\n";
+            // サブモジュールが見つからない場合、ルートへのフォールバックは行わない
+            // (import std::nonexistent::foo が std/mod.cm に解決されるのを防ぐ)
+            // 検索パスも試行する（下の for ループに委ねる）
+        } else {
+            // 非選択的インポート: ルートフォールバックを通常通り試行
+
+            // 1. 完全パス（std/io/file.cm など）を最初に試す
+            //    サブモジュールへの直接アクセスを優先
+            auto full_path = current_dir / (full_filename + ".cm");
+            if (std::filesystem::exists(full_path)) {
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Found full path module: " << full_path << "\n";
+                }
+                return std::filesystem::canonical(full_path);
             }
-            return std::filesystem::canonical(full_path);
-        }
 
-        // 2. ルートコンポーネントのファイル（std.cm）を試す
-        //    これは再エクスポートベースの解決に必要
-        auto root_path = current_dir / (root_filename + ".cm");
-        if (std::filesystem::exists(root_path)) {
-            if (debug_mode) {
-                std::cout << "[PREPROCESSOR] Found root module: " << root_path << "\n";
+            // 2. ルートコンポーネントのファイル（std.cm）を試す
+            //    これは再エクスポートベースの解決に必要
+            auto root_path = current_dir / (root_filename + ".cm");
+            if (std::filesystem::exists(root_path)) {
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Found root module: " << root_path << "\n";
+                }
+                return std::filesystem::canonical(root_path);
             }
-            return std::filesystem::canonical(root_path);
-        }
 
-        // 3. ルートディレクトリ内のエントリーポイント（std/std.cm）
-        auto root_dir_path = current_dir / root_filename;
-        if (std::filesystem::exists(root_dir_path) &&
-            std::filesystem::is_directory(root_dir_path)) {
-            auto entry = find_module_entry_point(root_dir_path);
-            if (!entry.empty()) {
-                return entry;
+            // 3. ルートディレクトリ内のエントリーポイント（std/std.cm）
+            //    ただし2セグメント以上の場合、サブモジュールが実在するか検証
+            auto root_dir_path = current_dir / root_filename;
+            if (std::filesystem::exists(root_dir_path) &&
+                std::filesystem::is_directory(root_dir_path)) {
+                // サブモジュール存在チェック: std::io → std/io.cm or std/io/ が必要
+                bool submodule_valid = true;
+                if (segments.size() >= 2) {
+                    auto sub_file = root_dir_path / (segments[1] + ".cm");
+                    auto sub_dir = root_dir_path / segments[1];
+                    if (!std::filesystem::exists(sub_file) &&
+                        !(std::filesystem::exists(sub_dir) &&
+                          std::filesystem::is_directory(sub_dir))) {
+                        submodule_valid = false;
+                        if (debug_mode) {
+                            std::cout << "[PREPROCESSOR] Submodule '" << segments[1]
+                                      << "' not found in " << root_dir_path << "\n";
+                        }
+                    }
+                }
+                if (submodule_valid) {
+                    auto entry = find_module_entry_point(root_dir_path);
+                    if (!entry.empty()) {
+                        return entry;
+                    }
+                }
             }
-        }
 
-        // 4. ディレクトリ内のエントリーポイント（std/io/io.cm など）
-        auto dir_path = current_dir / full_filename;
-        if (std::filesystem::exists(dir_path) && std::filesystem::is_directory(dir_path)) {
-            auto entry = find_module_entry_point(dir_path);
-            if (!entry.empty()) {
-                return entry;
+            // 4. ディレクトリ内のエントリーポイント（std/io/io.cm など）
+            auto dir_path = current_dir / full_filename;
+            if (std::filesystem::exists(dir_path) && std::filesystem::is_directory(dir_path)) {
+                auto entry = find_module_entry_point(dir_path);
+                if (!entry.empty()) {
+                    return entry;
+                }
             }
         }
     }
 
     // 検索パスから探す
     for (const auto& search_path : search_paths) {
+        // 選択的インポート（3セグメント以上）の場合、module_pathを優先
+        if (segments.size() >= 3 && module_path != full_filename) {
+            // 1. モジュールパス（std/nonexistent.cm など）を試す
+            auto mod_file_path = search_path / (module_path + ".cm");
+            if (std::filesystem::exists(mod_file_path)) {
+                if (debug_mode) {
+                    std::cout << "[PREPROCESSOR] Found module file in search path: "
+                              << mod_file_path << "\n";
+                }
+                return std::filesystem::canonical(mod_file_path);
+            }
+
+            // 2. ディレクトリ内のエントリーポイント（std/mem/mod.cm など）
+            auto mod_dir_path = search_path / module_path;
+            if (std::filesystem::exists(mod_dir_path) &&
+                std::filesystem::is_directory(mod_dir_path)) {
+                auto entry = find_module_entry_point(mod_dir_path);
+                if (!entry.empty()) {
+                    if (debug_mode) {
+                        std::cout << "[PREPROCESSOR] Found module entry point in search path: "
+                                  << entry << "\n";
+                    }
+                    return entry;
+                }
+            }
+
+            // サブモジュールが見つからない場合、ルートへのフォールバックは行わない
+            continue;
+        }
+
         // 1. 完全パスを最優先で試す (std/io/file.cm など)
         auto full_path = search_path / (full_filename + ".cm");
         if (std::filesystem::exists(full_path)) {
@@ -1639,12 +1730,24 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
         }
 
         // 4. ルートディレクトリ内のエントリーポイント
+        //    ただし2セグメント以上の場合、サブモジュールが実在するか検証
         auto root_dir_path = search_path / root_filename;
         if (std::filesystem::exists(root_dir_path) &&
             std::filesystem::is_directory(root_dir_path)) {
-            auto entry = find_module_entry_point(root_dir_path);
-            if (!entry.empty()) {
-                return entry;
+            bool submodule_valid = true;
+            if (segments.size() >= 2) {
+                auto sub_file = root_dir_path / (segments[1] + ".cm");
+                auto sub_dir = root_dir_path / segments[1];
+                if (!std::filesystem::exists(sub_file) &&
+                    !(std::filesystem::exists(sub_dir) && std::filesystem::is_directory(sub_dir))) {
+                    submodule_valid = false;
+                }
+            }
+            if (submodule_valid) {
+                auto entry = find_module_entry_point(root_dir_path);
+                if (!entry.empty()) {
+                    return entry;
+                }
             }
         }
     }

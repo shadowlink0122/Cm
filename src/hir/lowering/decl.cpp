@@ -60,6 +60,7 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     hir_func->name = func.name;
     hir_func->return_type = func.return_type;
     hir_func->is_export = func.visibility == ast::Visibility::Export;
+    hir_func->is_extern = func.is_extern;  // externフラグを伝播
 
     // ジェネリックパラメータを処理
     for (const auto& param_name : func.generic_params) {

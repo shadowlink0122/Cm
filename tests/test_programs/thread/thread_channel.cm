@@ -1,0 +1,67 @@
+// thread_channel.cm - Producer-Consumer チャネルテスト
+// プロデューサースレッドがチャネルに値を送信し
+// メインスレッド（コンシューマー）が受信・集計
+import std::io::println;
+import std::sync::channel::create;
+import std::sync::channel::send;
+import std::sync::channel::recv;
+import std::sync::channel::close;
+import std::sync::channel::destroy;
+import std::thread::spawn_with_arg;
+import std::thread::join_all;
+
+// プロデューサー: チャネルに1〜5の値を送信
+void* producer(void* arg) {
+    long ch = arg as long;
+    int i = 1;
+    while (i <= 5) {
+        send(ch, i as long);
+        i = i + 1;
+    }
+    // 送信完了後にクローズ
+    close(ch);
+    return 0 as void*;
+}
+
+int main() {
+    println("=== Thread Channel Test ===");
+
+    // チャネル作成（バッファサイズ2 — バックプレッシャーテスト）
+    long ch = create(2);
+    println("channel created");
+
+    // プロデューサースレッド生成（join_all使用）
+    ulong[1] threads;
+    threads[0] = spawn_with_arg(&producer as void*, ch as void*);
+
+    // コンシューマー: チャネルから値を受信して合計
+    long sum = 0;
+    int count = 0;
+
+    while (count < 5) {
+        long value = 0;
+        int ret = recv(ch, &value);
+        if (ret != 0) {
+            break;
+        }
+        sum = sum + value;
+        count = count + 1;
+    }
+
+    // プロデューサー待機
+    join_all(threads as ulong*, 1);
+
+    println("received {count} values");
+    println("sum: {sum}");
+
+    // 1+2+3+4+5 = 15
+    if (sum == 15 && count == 5) {
+        println("PASS: producer-consumer correct");
+    } else {
+        println("FAIL: incorrect results");
+    }
+
+    destroy(ch);
+    println("=== Done ===");
+    return 0;
+}

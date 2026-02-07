@@ -68,9 +68,10 @@ if(CM_USE_LLVM)
         if(CM_LLVM_STATIC)
             target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
         else()
-            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
             get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
             message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
+            link_directories(${LLVM_LIBRARY_DIR})
+            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
             set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
             set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
             set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -207,7 +208,18 @@ if(CM_USE_LLVM)
         src/codegen/llvm/native/target.cpp
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
+        # std バッキング実装（C/C++/Obj-C++）
+        std/sync/sync_runtime.cpp
+        std/sync/channel_runtime.cpp
+        std/thread/thread_runtime.cpp
     )
+
+    # Apple環境: GPU(Metal)バッキング実装を追加
+    if(APPLE)
+        list(APPEND CM_SOURCES
+            std/gpu/gpu_runtime.mm
+        )
+    endif()
 endif()
 
 add_executable(cm ${CM_SOURCES})
@@ -216,11 +228,19 @@ target_link_libraries(cm PRIVATE cm_frontend)
 # Link LLVM backend if enabled
 if(CM_USE_LLVM)
     target_link_libraries(cm PRIVATE cm_llvm_backend)
+
+    # Apple: Metal/Foundation フレームワークをリンク（GPU演算サポート）
+    if(APPLE)
+        target_link_libraries(cm PRIVATE
+            "-framework Metal"
+            "-framework Foundation"
+        )
+    endif()
     
-    # Linux: JITがホストプロセスからシンボルを解決できるように
-    # ランタイムシンボル（cm_print_*, cm_format_*など）をエクスポート
+    # JITがホストプロセスからシンボルを解決できるように
+    # ランタイムシンボル（cm_print_*, cm_format_*, gpu_*など）をエクスポート
+    set_target_properties(cm PROPERTIES ENABLE_EXPORTS ON)
     if(UNIX AND NOT APPLE)
-        set_target_properties(cm PROPERTIES ENABLE_EXPORTS ON)
         target_link_options(cm PRIVATE "-rdynamic")
     endif()
     

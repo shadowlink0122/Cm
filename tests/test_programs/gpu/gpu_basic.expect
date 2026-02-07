@@ -1,0 +1,10 @@
+=== GPU Basic Test ===
+GPU device available
+kernel created
+kernel dispatched
+result[0]: 11
+result[1]: 22
+result[2]: 33
+result[3]: 44
+PASS: vector addition correct
+=== Done ===

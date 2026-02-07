@@ -55,6 +55,47 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return infer_generic_call(call, ident->name, gen_it->second);
         }
 
+        // 明示的型引数付きジェネリック関数呼び出し: size_of<WorkerArg>()
+        // パーサーが "size_of<WorkerArg>" という識別子名を生成するケース
+        size_t lt_pos = ident->name.find('<');
+        if (lt_pos != std::string::npos && ident->name.back() == '>') {
+            std::string base_name = ident->name.substr(0, lt_pos);
+            auto base_gen_it = generic_functions_.find(base_name);
+            if (base_gen_it != generic_functions_.end()) {
+                // 型引数文字列を抽出: "WorkerArg" from "size_of<WorkerArg>"
+                std::string type_args_str = ident->name.substr(lt_pos + 1);
+                type_args_str =
+                    type_args_str.substr(0, type_args_str.size() - 1);  // 末尾の > を削除
+
+                // 型引数をパースしてcallに設定
+                std::vector<ast::TypePtr> explicit_type_args;
+                std::istringstream iss(type_args_str);
+                std::string type_arg_name;
+                while (std::getline(iss, type_arg_name, ',')) {
+                    // 空白をトリム
+                    size_t start = type_arg_name.find_first_not_of(" ");
+                    size_t end = type_arg_name.find_last_not_of(" ");
+                    if (start != std::string::npos && end != std::string::npos) {
+                        type_arg_name = type_arg_name.substr(start, end - start + 1);
+                    }
+                    explicit_type_args.push_back(ast::make_named(type_arg_name));
+                }
+
+                // 明示的型引数を設定
+                call.ordered_type_args = explicit_type_args;
+                std::unordered_map<std::string, ast::TypePtr> inferred;
+                for (size_t i = 0; i < base_gen_it->second.size() && i < explicit_type_args.size();
+                     ++i) {
+                    inferred[base_gen_it->second[i]] = explicit_type_args[i];
+                }
+                call.inferred_type_args = inferred;
+
+                // 呼び出し名をベース名に変更してモノモーフィゼーションエンジンに委ねる
+                ident->name = base_name;
+                return infer_generic_call(call, base_name, base_gen_it->second);
+            }
+        }
+
         // 構造体のコンストラクタ呼び出しかチェック
         if (get_struct(ident->name) != nullptr) {
             for (auto& arg : call.args) {
