@@ -159,20 +159,20 @@ int main() {
     int* w_ptr = &weights[0];
     int* v_ptr = &values[0];
 
+    // ループ変数と一時変数は全てint(32bit)で統一
+    // AArch64での:w修飾子により全オペランドがwレジスタ(32bit)に
+    // ldr/strではsxtwで符号拡張してアドレス計算する
     int i = 0;
     int w = 0;
-
-    // 一時変数（全てLLVMにレジスタ割り当てを委譲）
     int wi = 0;     // weights[i-1]
     int vi = 0;     // values[i-1]
     int dp_prev = 0; // dp[i-1][w]
     int cand = 0;   // 候補値
-    long tmp = 0;   // スクラッチ（ポインタオフセット用のため64bit）
+    int tmp = 0;    // スクラッチ
 
     // ARM64版 ナップサックDP
-    // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
-    // 注: LLVMがint変数にxレジスタを割り当てる場合があるため、
-    //      ldr/strのlsl #2スケーリングを使わず手動バイトオフセット計算にする
+    // :w修飾子で全変数がwレジスタになるため、
+    // ldr/strの[base, offset]ではsxtwで32→64bit拡張が必要
     __asm__(`
     // 外側ループ: i = 1
     mov ${+r:i}, #1
@@ -191,14 +191,14 @@ int main() {
     // weights[i-1] を取得
     sub ${+r:tmp}, ${+r:i}, #1
     lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}]
+    ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}, sxtw]
 
     // dp[i-1][w]のオフセット計算: ((i-1) * 8 + w) * 4
     sub ${+r:tmp}, ${+r:i}, #1
     lsl ${+r:tmp}, ${+r:tmp}, #3
     add ${+r:tmp}, ${+r:tmp}, ${+r:w}
     lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}]
+    ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
 
     // w < weights[i-1] なら dp[i][w] = dp[i-1][w]
     cmp ${+r:w}, ${+r:wi}
@@ -207,7 +207,7 @@ int main() {
     // values[i-1] を取得
     sub ${+r:tmp}, ${+r:i}, #1
     lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}]
+    ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}, sxtw]
 
     // dp[i-1][w - weight]のオフセット計算
     sub ${+r:tmp}, ${+r:i}, #1
@@ -215,7 +215,7 @@ int main() {
     sub ${+r:cand}, ${+r:w}, ${+r:wi}
     add ${+r:tmp}, ${+r:tmp}, ${+r:cand}
     lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}]
+    ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
 
     // cand = dp[i-1][w-weight] + value
     add ${+r:cand}, ${+r:cand}, ${+r:vi}
@@ -229,7 +229,7 @@ int main() {
     lsl ${+r:tmp}, ${+r:i}, #3
     add ${+r:tmp}, ${+r:tmp}, ${+r:w}
     lsl ${+r:tmp}, ${+r:tmp}, #2
-    str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}]
+    str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
 
     // w++
     add ${+r:w}, ${+r:w}, #1
