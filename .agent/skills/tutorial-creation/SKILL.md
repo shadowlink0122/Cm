@@ -94,3 +94,4 @@ ja版とen版を同時に作成すること。
 | Enum（関連データ付き） | v0.13.0 | types/enums.md | ✅ 更新済み |
 | Match Guard | v0.13.0 | advanced/match.md | ✅ 存在 |
 | mustキーワード | v0.13.0 | advanced/must.md | ✅ 存在 |
+| プリプロセッサ | v0.13.0 | compiler/preprocessor.md | ✅ 存在 |

@@ -67,6 +67,7 @@ Estimated Time: 2 hours
    - [Usage](compiler/usage.html) - Commands and options
    - [LLVM Backend](compiler/llvm.html) - Native compilation
    - [WASM Backend](compiler/wasm.html) - WebAssembly output
+   - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
 
 ### Path 5: Learning Internals (For Developers)
 
