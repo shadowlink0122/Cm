@@ -193,7 +193,7 @@ run_single_test() {
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
             # ファイルに内容がある場合、バックエンド名でフィルタ
-            if grep -qw "$BACKEND" "$skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND"
                 ((SKIPPED++))
                 return
@@ -209,7 +209,7 @@ run_single_test() {
     # カテゴリ全体の.skipファイルがある場合
     if [ -f "$category_skip_file" ]; then
         if [ -s "$category_skip_file" ]; then
-            if grep -qw "$BACKEND" "$category_skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$category_skip_file" 2>/dev/null; then
                 echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skipped for $BACKEND"
                 ((SKIPPED++))
                 return
@@ -806,7 +806,7 @@ run_parallel_test() {
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
             # ファイルに内容がある場合、バックエンド名でフィルタ
-            if grep -qw "$BACKEND" "$skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo "SKIP:Skipped for $BACKEND" > "$result_file"
                 return
             fi
@@ -820,7 +820,7 @@ run_parallel_test() {
     # カテゴリ全体の.skipファイルがある場合
     if [ -f "$category_skip_file" ]; then
         if [ -s "$category_skip_file" ]; then
-            if grep -qw "$BACKEND" "$category_skip_file" 2>/dev/null; then
+            if grep -qx "$BACKEND" "$category_skip_file" 2>/dev/null; then
                 echo "SKIP:Category skipped for $BACKEND" > "$result_file"
                 return
             fi

@@ -12,7 +12,7 @@ use libc {
     int open(string path, int flags, int mode);
     int close(int fd);
     long lseek(int fd, long offset, int whence);
-    void* malloc(long size);
+    void* malloc(int size);
     void free(void* ptr);
     long strlen(string s);
 }

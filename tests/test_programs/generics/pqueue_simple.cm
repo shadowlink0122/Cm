@@ -4,7 +4,7 @@
 import std::io::println;
 
 use libc {
-    void* malloc(ulong size);
+    void* malloc(int size);
     void free(void* ptr);
 }
 

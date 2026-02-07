@@ -3,9 +3,9 @@
 module std.collections.vector;
 
 use libc {
-    void* malloc(long size);
+    void* malloc(int size);
     void free(void* ptr);
-    void* memcpy(void* dest, void* src, long n);
+    void* memcpy(void* dest, void* src, int n);
 }
 
 // =============================================================

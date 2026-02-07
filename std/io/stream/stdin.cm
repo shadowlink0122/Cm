@@ -10,7 +10,7 @@ import std.io.error::{IoResult, IoError, IoErrorKind};
 
 use libc {
     long read(int fd, void* buf, long count);
-    void* malloc(long size);
+    void* malloc(int size);
     void free(void* ptr);
 }
 

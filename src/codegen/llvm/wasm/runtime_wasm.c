@@ -7,37 +7,37 @@
 //
 // This file includes both components and provides the WASI entry point
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdarg.h>
 
 // Forward declaration of main function
 int main();
 
 // WASI imports
-__attribute__((import_module("wasi_snapshot_preview1"), import_name("proc_exit")))
-void __wasi_proc_exit(int exit_code) __attribute__((noreturn));
+__attribute__((import_module("wasi_snapshot_preview1"), import_name("proc_exit"))) void
+__wasi_proc_exit(int exit_code) __attribute__((noreturn));
 
-__attribute__((import_module("wasi_snapshot_preview1"), import_name("fd_write")))
-int __wasi_fd_write_direct(int fd, const void* iovs, size_t iovs_len, size_t* nwritten);
+__attribute__((import_module("wasi_snapshot_preview1"), import_name("fd_write"))) int
+__wasi_fd_write_direct(int fd, const void* iovs, size_t iovs_len, size_t* nwritten);
 
 // ============================================================
 // Memory operations (memcpy, memcmp, memmove, memset)
 // These must be defined before including runtime_slice.c
 // ============================================================
-void* memcpy(void* dest, const void* src, size_t n) {
+void* memcpy(void* dest, const void* src, int32_t n) {
     char* d = (char*)dest;
     const char* s = (const char*)src;
-    for (size_t i = 0; i < n; i++) {
+    for (int32_t i = 0; i < n; i++) {
         d[i] = s[i];
     }
     return dest;
 }
 
-int memcmp(const void* s1, const void* s2, size_t n) {
+int memcmp(const void* s1, const void* s2, int32_t n) {
     const unsigned char* p1 = (const unsigned char*)s1;
     const unsigned char* p2 = (const unsigned char*)s2;
-    for (size_t i = 0; i < n; i++) {
+    for (int32_t i = 0; i < n; i++) {
         if (p1[i] != p2[i]) {
             return (int)p1[i] - (int)p2[i];
         }
@@ -45,24 +45,24 @@ int memcmp(const void* s1, const void* s2, size_t n) {
     return 0;
 }
 
-void* memmove(void* dest, const void* src, size_t n) {
+void* memmove(void* dest, const void* src, int32_t n) {
     char* d = (char*)dest;
     const char* s = (const char*)src;
     if (d < s) {
-        for (size_t i = 0; i < n; i++) {
+        for (int32_t i = 0; i < n; i++) {
             d[i] = s[i];
         }
     } else {
-        for (size_t i = n; i > 0; i--) {
+        for (int32_t i = n; i > 0; i--) {
             d[i - 1] = s[i - 1];
         }
     }
     return dest;
 }
 
-void* memset(void* s, int c, size_t n) {
+void* memset(void* s, int c, int32_t n) {
     unsigned char* p = (unsigned char*)s;
-    for (size_t i = 0; i < n; i++) {
+    for (int32_t i = 0; i < n; i++) {
         p[i] = (unsigned char)c;
     }
     return s;
@@ -86,27 +86,30 @@ char* cm_concat_strings(const char* s1, const char* s2) {
 
 // puts - output string with newline
 int puts(const char* s) {
-    if (!s) return -1;
+    if (!s)
+        return -1;
     cm_println_string(s);
     return 0;
 }
 
 // strlen - returns uint64_t to match Cm's usize type
 uint64_t strlen(const char* s) {
-    if (!s) return 0;
+    if (!s)
+        return 0;
     return (uint64_t)wasm_strlen(s);
 }
 
 // printf - simplified implementation
 int printf(const char* format, ...) {
-    if (!format) return -1;
-    
+    if (!format)
+        return -1;
+
     va_list args;
     va_start(args, format);
-    
+
     int written = 0;
     const char* p = format;
-    
+
     while (*p) {
         if (*p == '%' && *(p + 1)) {
             p++;
@@ -162,13 +165,14 @@ int printf(const char* format, ...) {
         }
         p++;
     }
-    
+
     va_end(args);
     return written;
 }
 
 // ============================================================
 // Memory allocation (wrapping wasm_alloc from runtime_format.c)
+// Cm言語のint型はWASM32ではi32なのでint32_tで受ける
 // ============================================================
 void* malloc(int32_t size) {
     return wasm_alloc((size_t)size);

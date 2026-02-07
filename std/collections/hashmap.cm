@@ -3,7 +3,7 @@
 module std.collections.hashmap;
 
 use libc {
-    void* malloc(long size);
+    void* malloc(int size);
     void free(void* ptr);
 }
 

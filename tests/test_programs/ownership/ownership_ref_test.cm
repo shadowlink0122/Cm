@@ -3,7 +3,7 @@
 import std::io::println;
 
 use libc {
-    void* malloc(long size);
+    void* malloc(int size);
 }
 
 struct Resource {

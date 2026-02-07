@@ -5,7 +5,7 @@ import std::io::println;
 import std::io::print;
 
 use libc {
-    void* malloc(ulong size);
+    void* malloc(int size);
     void free(void* ptr);
 }
 

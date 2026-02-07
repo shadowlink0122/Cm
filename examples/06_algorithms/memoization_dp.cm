@@ -2,7 +2,7 @@
 // 再帰 + メモ化によるDP実装を示す
 
 use libc {
-    void* malloc(ulong size);
+    void* malloc(int size);
     void free(void* ptr);
 }
 

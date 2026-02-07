@@ -213,23 +213,42 @@ void LLVMContext::setupStd() {
     // 標準ライブラリ関数
     declareRuntimeFunctions();
 
+    // WASM32ではsize_t = i32、ネイティブではsize_t = i64
+    auto sizeTy = (targetConfig.target == BuildTarget::Wasm) ? i32Ty : i64Ty;
+
     // malloc/free
-    auto mallocType = llvm::FunctionType::get(ptrTy, {i64Ty}, false);
+    auto mallocType = llvm::FunctionType::get(ptrTy, {sizeTy}, false);
     module->getOrInsertFunction("malloc", mallocType);
 
     auto freeType = llvm::FunctionType::get(voidTy, {ptrTy}, false);
     module->getOrInsertFunction("free", freeType);
+
+    // calloc (WASM互換)
+    auto callocType = llvm::FunctionType::get(ptrTy, {sizeTy, sizeTy}, false);
+    module->getOrInsertFunction("calloc", callocType);
+
+    // realloc (WASM互換)
+    auto reallocType = llvm::FunctionType::get(ptrTy, {ptrTy, sizeTy}, false);
+    module->getOrInsertFunction("realloc", reallocType);
+
+    // memcpy/memmove/memset (WASM互換)
+    auto memcpyType = llvm::FunctionType::get(ptrTy, {ptrTy, ptrTy, sizeTy}, false);
+    module->getOrInsertFunction("memcpy", memcpyType);
+    module->getOrInsertFunction("memmove", memcpyType);
+
+    auto memsetType = llvm::FunctionType::get(ptrTy, {ptrTy, i32Ty, sizeTy}, false);
+    module->getOrInsertFunction("memset", memsetType);
 
     // ============================================================
     // POSIX I/O 関数宣言（libc経由）
     // ============================================================
 
     // ssize_t read(int fd, void* buf, size_t count)
-    auto readType = llvm::FunctionType::get(i64Ty, {i32Ty, ptrTy, i64Ty}, false);
+    auto readType = llvm::FunctionType::get(sizeTy, {i32Ty, ptrTy, sizeTy}, false);
     module->getOrInsertFunction("read", readType);
 
     // ssize_t write(int fd, const void* buf, size_t count)
-    auto writeType = llvm::FunctionType::get(i64Ty, {i32Ty, ptrTy, i64Ty}, false);
+    auto writeType = llvm::FunctionType::get(sizeTy, {i32Ty, ptrTy, sizeTy}, false);
     module->getOrInsertFunction("write", writeType);
 
     // int open(const char* pathname, int flags, mode_t mode)
@@ -241,7 +260,7 @@ void LLVMContext::setupStd() {
     module->getOrInsertFunction("close", closeType);
 
     // off_t lseek(int fd, off_t offset, int whence)
-    auto lseekType = llvm::FunctionType::get(i64Ty, {i32Ty, i64Ty, i32Ty}, false);
+    auto lseekType = llvm::FunctionType::get(sizeTy, {i32Ty, sizeTy, i32Ty}, false);
     module->getOrInsertFunction("lseek", lseekType);
 
     // int fsync(int fd)
