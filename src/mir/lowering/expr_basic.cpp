@@ -861,6 +861,24 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
     // 多次元配列最適化: 連続するIndex projectionを生成
     // a[i][j][k] → place.projections = [Index(i), Index(j), Index(k)]
     MirPlace place{array};
+
+    // ポインタ型の「変数」に対するインデックスアクセスの場合、Index前にDerefが必要
+    // p[0] → place.projections = [Deref, Index(0)]
+    // ただし self.data[idx] のようなメンバーアクセス経由は、lower_expressionで
+    // 既にポインタ値がtemp変数にロードされているため、Derefは不要
+    bool is_var_ref = index_expr.object && std::holds_alternative<std::unique_ptr<hir::HirVarRef>>(
+                                               index_expr.object->kind);
+    if (is_var_ref && index_expr.object && index_expr.object->type &&
+        index_expr.object->type->kind == hir::TypeKind::Pointer) {
+        place.projections.push_back(PlaceProjection::deref());
+    } else if (is_var_ref && !is_slice && array < ctx.func->locals.size()) {
+        // MIRローカル変数の型からもポインタ型を検出（VarRefの場合のみ）
+        auto& array_local = ctx.func->locals[array];
+        if (array_local.type && array_local.type->kind == hir::TypeKind::Pointer) {
+            place.projections.push_back(PlaceProjection::deref());
+        }
+    }
+
     for (LocalId idx_local : index_locals) {
         // ポインタ経由のインデックスアクセス時にresult_type（elem_type）を設定
         // これによりモノモーフ化でsubstitute_place_typesがジェネリック型を具象型に置換可能

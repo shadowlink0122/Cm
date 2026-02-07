@@ -2180,6 +2180,13 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                             currentType = currentType->element_type;
                         }
                     } else if (proj.kind == mir::ProjectionKind::Index) {
+                        // ポインタ型の場合、Indexの前に暗黙のDerefが必要
+                        // MIR生成で Deref が省略されるケース（p[0]等）に対応
+                        if (currentType && currentType->kind == hir::TypeKind::Pointer) {
+                            addr = builder->CreateLoad(ctx.getPtrType(), addr, "implicit_deref");
+                            currentType = currentType->element_type;
+                        }
+
                         // インデックスアクセス
                         llvm::Value* indexVal = nullptr;
                         if (locals.find(proj.index_local) != locals.end() &&
@@ -3438,6 +3445,13 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     isPointerIndexing = true;
                 }
 
+                // Deref後にaddrがArgument（ポインタ引数、needsLoad=falseでDerefスキップ）の場合
+                // currentTypeはelement_type（int等）だがaddrはポインタ値 → ポインタIndexing
+                if (!isPointerIndexing && addr && llvm::isa<llvm::Argument>(addr) && projIdx > 0 &&
+                    place.projections[projIdx - 1].kind == mir::ProjectionKind::Deref) {
+                    isPointerIndexing = true;
+                }
+
                 if (isPointerIndexing) {
                     // インデックス値を取得
                     llvm::Value* indexVal = nullptr;
@@ -3496,6 +3510,9 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         needsLoad = true;
                     } else if (llvm::isa<llvm::LoadInst>(addr)) {
                         // LoadInst結果（Deref後）はすでにロード済みなので再ロード不要
+                        needsLoad = false;
+                    } else if (llvm::isa<llvm::Argument>(addr)) {
+                        // ポインタ引数（Deref後）はすでにポインタ値なので再ロード不要
                         needsLoad = false;
                     } else {
                         // その他の場合（currentTypeがポインタ型なら）
