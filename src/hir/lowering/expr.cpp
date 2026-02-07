@@ -2079,45 +2079,52 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
         case ast::MatchPatternKind::EnumVariant: {
             // scrutineeがint型（単純enum）の場合は直接値比較
             // scrutineeがTagged Union型の場合は__tagアクセス
-            auto pattern_value = lower_expr(*pattern.value);
             HirExprPtr lhs_expr;
 
             // パターン値からenum名を抽出してassociated dataを持つかチェック
             bool is_tagged_union = false;
+            std::string variant_full_name;
             if (pattern.value) {
                 if (auto* member = pattern.value->as<ast::MemberExpr>()) {
                     // MemberExpr形式: Enum.Variant
                     if (auto* obj = member->object->as<ast::IdentExpr>()) {
                         std::string enum_name = obj->name;
+                        variant_full_name = enum_name + "::" + member->member;
                         auto it = enum_defs_.find(enum_name);
                         if (it != enum_defs_.end() && it->second) {
-                            // enumがassociated dataを持つかチェック
-                            for (const auto& m : it->second->members) {
-                                if (!m.fields.empty()) {
-                                    is_tagged_union = true;
-                                    break;
-                                }
-                            }
+                            is_tagged_union = it->second->is_tagged_union();
                         }
                     }
                 } else if (auto* ident = pattern.value->as<ast::IdentExpr>()) {
                     // IdentExpr形式: EnumName::Variant（::を含む場合）
-                    std::string full_name = ident->name;
-                    size_t pos = full_name.find("::");
+                    variant_full_name = ident->name;
+                    size_t pos = ident->name.find("::");
                     if (pos != std::string::npos) {
-                        std::string enum_name = full_name.substr(0, pos);
+                        std::string enum_name = ident->name.substr(0, pos);
                         auto it = enum_defs_.find(enum_name);
                         if (it != enum_defs_.end() && it->second) {
-                            // enumがassociated dataを持つかチェック
-                            for (const auto& m : it->second->members) {
-                                if (!m.fields.empty()) {
-                                    is_tagged_union = true;
-                                    break;
-                                }
-                            }
+                            is_tagged_union = it->second->is_tagged_union();
                         }
                     }
                 }
+            }
+
+            // パターン値を生成
+            HirExprPtr pattern_value;
+            if (is_tagged_union && !variant_full_name.empty()) {
+                // Tagged Union: タグ値を直接intリテラルとして生成
+                // lower_exprを使うとHirEnumConstruct(構造体型)が返され、
+                // __tag(int)との比較で型不一致になる
+                auto ev_it = enum_values_.find(variant_full_name);
+                if (ev_it != enum_values_.end()) {
+                    auto tag_lit = std::make_unique<HirLiteral>();
+                    tag_lit->value = ev_it->second;
+                    pattern_value = std::make_unique<HirExpr>(std::move(tag_lit), ast::make_int());
+                } else {
+                    pattern_value = lower_expr(*pattern.value);
+                }
+            } else {
+                pattern_value = lower_expr(*pattern.value);
             }
 
             if (is_tagged_union) {
@@ -2146,8 +2153,21 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
             tag_access->member = "__tag";  // tagフィールド
             auto tag_expr = std::make_unique<HirExpr>(std::move(tag_access), make_int());
 
-            auto enum_variant_ident = ast::make_ident(pattern.enum_variant, {});
-            auto pattern_value = lower_expr(*enum_variant_ident);
+            // タグ値を直接intリテラルとして生成
+            // lower_exprを使うとTagged Union型のHirEnumConstructが返されるため、
+            // __tag(int)との比較で型不一致になる
+            HirExprPtr pattern_value;
+            auto ev_it = enum_values_.find(pattern.enum_variant);
+            if (ev_it != enum_values_.end()) {
+                auto tag_lit = std::make_unique<HirLiteral>();
+                tag_lit->value = ev_it->second;
+                pattern_value = std::make_unique<HirExpr>(std::move(tag_lit), ast::make_int());
+            } else {
+                // フォールバック: lower_exprを使用
+                auto enum_variant_ident = ast::make_ident(pattern.enum_variant, {});
+                pattern_value = lower_expr(*enum_variant_ident);
+            }
+
             auto cond = std::make_unique<HirBinary>();
             cond->op = HirBinaryOp::Eq;
             cond->lhs = std::move(tag_expr);
