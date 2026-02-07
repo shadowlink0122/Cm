@@ -471,10 +471,12 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
         // 右辺がenum参照（例：Option::Some）かチェック
         std::string rhs_enum_name;
         bool rhs_is_enum_tag = false;
+        int64_t rhs_tag_value = 0;
         if (auto* rhs_ident = binary.right->as<ast::IdentExpr>()) {
             auto enum_it = enum_values_.find(rhs_ident->name);
             if (enum_it != enum_values_.end()) {
                 rhs_is_enum_tag = true;
+                rhs_tag_value = enum_it->second;
                 // enum名を抽出（例：Option::Some -> Option）
                 auto sep = rhs_ident->name.find("::");
                 if (sep != std::string::npos) {
@@ -492,15 +494,21 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
                     debug::hir::log(debug::hir::Id::BinaryExprLower,
                                     "Enum comparison: extracting tag from variable",
                                     debug::Level::Debug);
-                    // タグ抽出: lhs.0 == rhs_tag_value
+                    // タグ抽出: lhs.__tag == rhs_tag_value
                     auto member = std::make_unique<HirMember>();
                     member->object = lower_expr(*binary.left);
                     member->member = "__tag";  // Tagged Unionのタグフィールド
 
+                    // タグ値を直接intリテラルとして生成
+                    // lower_expr(binary.right)を使うとTagged Union型の
+                    // HirEnumConstructが返されるため、int比較に使用不可
+                    auto tag_lit = std::make_unique<HirLiteral>();
+                    tag_lit->value = rhs_tag_value;
+
                     auto hir = std::make_unique<HirBinary>();
                     hir->op = (binary.op == ast::BinaryOp::Eq) ? HirBinaryOp::Eq : HirBinaryOp::Ne;
                     hir->lhs = std::make_unique<HirExpr>(std::move(member), ast::make_int());
-                    hir->rhs = lower_expr(*binary.right);  // enumタグ値（int）
+                    hir->rhs = std::make_unique<HirExpr>(std::move(tag_lit), ast::make_int());
                     return std::make_unique<HirExpr>(std::move(hir), type);
                 }
             }
@@ -509,10 +517,12 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
         // 逆順: 左辺がenum参照、右辺がenum変数
         std::string lhs_enum_name;
         bool lhs_is_enum_tag = false;
+        int64_t lhs_tag_value = 0;
         if (auto* lhs_ident = binary.left->as<ast::IdentExpr>()) {
             auto enum_it = enum_values_.find(lhs_ident->name);
             if (enum_it != enum_values_.end()) {
                 lhs_is_enum_tag = true;
+                lhs_tag_value = enum_it->second;
                 auto sep = lhs_ident->name.find("::");
                 if (sep != std::string::npos) {
                     lhs_enum_name = lhs_ident->name.substr(0, sep);
@@ -530,9 +540,13 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
                     member->object = lower_expr(*binary.right);
                     member->member = "__tag";  // Tagged Unionのタグフィールド
 
+                    // タグ値を直接intリテラルとして生成
+                    auto tag_lit = std::make_unique<HirLiteral>();
+                    tag_lit->value = lhs_tag_value;
+
                     auto hir = std::make_unique<HirBinary>();
                     hir->op = (binary.op == ast::BinaryOp::Eq) ? HirBinaryOp::Eq : HirBinaryOp::Ne;
-                    hir->lhs = lower_expr(*binary.left);  // enumタグ値（int）
+                    hir->lhs = std::make_unique<HirExpr>(std::move(tag_lit), ast::make_int());
                     hir->rhs = std::make_unique<HirExpr>(std::move(member), ast::make_int());
                     return std::make_unique<HirExpr>(std::move(hir), type);
                 }
