@@ -1,5 +1,6 @@
 // 組み込み定数 網羅テスト
 // 全組み込み定数の存在と #ifdef/#ifndef の正確な動作を検証
+// 注: 出力はプラットフォーム非依存（pass/failカウントのみ）
 
 import std::io::println;
 
@@ -12,138 +13,107 @@ int main() {
     // ===== コンパイラ情報 =====
     // __CM__ は常に定義されている
     #ifdef __CM__
-        println("__CM__: defined (ok)");
         pass = pass + 1;
     #else
-        println("__CM__: NOT defined (FAIL)");
+        println("FAIL: __CM__ not defined");
         fail = fail + 1;
     #end
 
     // ===== アーキテクチャ検出 =====
-    // x86_64 環境のテスト
+    // x86_64 か arm64 のどちらか1つが定義される
     #ifdef __x86_64__
-        println("__x86_64__: defined");
         pass = pass + 1;
     #else
-        println("__x86_64__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __x86__
-        println("__x86__: defined");
         pass = pass + 1;
     #else
-        println("__x86__: not defined");
         pass = pass + 1;
     #end
 
     // ARM64 環境のテスト
     #ifdef __arm64__
-        println("__arm64__: defined");
         pass = pass + 1;
     #else
-        println("__arm64__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __aarch64__
-        println("__aarch64__: defined");
         pass = pass + 1;
     #else
-        println("__aarch64__: not defined");
         pass = pass + 1;
     #end
 
     // i386 テスト
     #ifdef __i386__
-        println("__i386__: defined");
         pass = pass + 1;
     #else
-        println("__i386__: not defined");
         pass = pass + 1;
     #end
 
     // RISC-V テスト
     #ifdef __riscv__
-        println("__riscv__: defined");
         pass = pass + 1;
     #else
-        println("__riscv__: not defined");
         pass = pass + 1;
     #end
 
     // ===== OS検出 =====
     #ifdef __macos__
-        println("__macos__: defined");
         pass = pass + 1;
     #else
-        println("__macos__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __apple__
-        println("__apple__: defined");
         pass = pass + 1;
     #else
-        println("__apple__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __linux__
-        println("__linux__: defined");
         pass = pass + 1;
     #else
-        println("__linux__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __unix__
-        println("__unix__: defined");
         pass = pass + 1;
     #else
-        println("__unix__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __windows__
-        println("__windows__: defined");
         pass = pass + 1;
     #else
-        println("__windows__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __freebsd__
-        println("__freebsd__: defined");
         pass = pass + 1;
     #else
-        println("__freebsd__: not defined");
         pass = pass + 1;
     #end
 
     // ===== ポインタサイズ =====
     #ifdef __64BIT__
-        println("__64BIT__: defined");
         pass = pass + 1;
     #else
-        println("__64BIT__: not defined");
         pass = pass + 1;
     #end
 
     #ifdef __32BIT__
-        println("__32BIT__: defined");
         pass = pass + 1;
     #else
-        println("__32BIT__: not defined");
         pass = pass + 1;
     #end
 
     // ===== デバッグモード =====
     #ifdef __DEBUG__
-        println("__DEBUG__: defined");
         pass = pass + 1;
     #else
-        println("__DEBUG__: not defined");
         pass = pass + 1;
     #end
 
@@ -158,10 +128,9 @@ int main() {
     #end
     // どちらか一方のみが定義される
     if (arch_count == 1) {
-        println("arch exclusivity: ok (one arch defined)");
         pass = pass + 1;
     } else {
-        println("arch exclusivity: FAIL");
+        println("FAIL: arch exclusivity");
         fail = fail + 1;
     }
 
@@ -174,33 +143,29 @@ int main() {
         bits_count = bits_count + 1;
     #end
     if (bits_count == 1) {
-        println("bits exclusivity: ok (one size defined)");
         pass = pass + 1;
     } else {
-        println("bits exclusivity: FAIL");
+        println("FAIL: bits exclusivity");
         fail = fail + 1;
     }
 
     // ===== 未定義シンボルの確認 =====
     #ifdef __UNDEFINED_SYMBOL_12345__
-        println("undefined symbol: FAIL (should not be defined)");
+        println("FAIL: undefined symbol should not be defined");
         fail = fail + 1;
     #else
-        println("undefined symbol: ok (not defined)");
         pass = pass + 1;
     #end
 
     // ===== ifndef 連携テスト =====
     #ifndef __CM__
-        println("ifndef __CM__: FAIL (should be defined)");
+        println("FAIL: ifndef __CM__ should be defined");
         fail = fail + 1;
     #else
-        println("ifndef __CM__ else: ok");
         pass = pass + 1;
     #end
 
     #ifndef __NONEXISTENT__
-        println("ifndef __NONEXISTENT__: ok (not defined)");
         pass = pass + 1;
     #end
 
@@ -208,12 +173,10 @@ int main() {
     #ifdef __CM__
         #ifdef __64BIT__
             #ifndef __NONEXISTENT__
-                println("deep nest (3 levels): ok");
                 pass = pass + 1;
             #end
         #else
             #ifndef __NONEXISTENT__
-                println("deep nest (3 levels, 32bit): ok");
                 pass = pass + 1;
             #end
         #end
