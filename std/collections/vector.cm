@@ -93,6 +93,21 @@ export impl<T> Vector<T> {
         self.size = 0;
     }
 
+    // ソート（昇順、バブルソート）
+    // プリミティブ型（int, long, double等）で動作
+    void sort() {
+        int n = self.size;
+        for (int i = 0; i < n - 1; i++) {
+            for (int j = 0; j < n - i - 1; j++) {
+                if (self.data[j] > self.data[j + 1]) {
+                    T temp = self.data[j];
+                    self.data[j] = self.data[j + 1];
+                    self.data[j + 1] = temp;
+                }
+            }
+        }
+    }
+
     // デストラクタ
     ~self() {
         void* ptr = self.data as void*;
