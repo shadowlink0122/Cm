@@ -25,6 +25,41 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
             debug::hir::log(debug::hir::Id::IdentifierRef,
                             "enum value: " + ident->name + " = " + std::to_string(it->second),
                             debug::Level::Debug);
+
+            // Tagged Union enumの場合はHirEnumConstructを生成
+            // これにより、Option::Noneのようなペイロードなしバリアントも
+            // __TaggedUnion_型で正しく初期化される（tag + payload）
+            std::string enum_name;
+            std::string variant_name;
+            auto sep = ident->name.find("::");
+            if (sep != std::string::npos) {
+                enum_name = ident->name.substr(0, sep);
+                variant_name = ident->name.substr(sep + 2);
+            }
+
+            bool is_tagged = false;
+            if (!enum_name.empty()) {
+                auto def_it = enum_defs_.find(enum_name);
+                if (def_it != enum_defs_.end() && def_it->second) {
+                    is_tagged = def_it->second->is_tagged_union();
+                }
+            }
+
+            if (is_tagged) {
+                // Tagged Union: HirEnumConstructを生成（ペイロードなし）
+                auto enum_construct = std::make_unique<HirEnumConstruct>();
+                enum_construct->enum_name = enum_name;
+                enum_construct->variant_name = variant_name;
+                enum_construct->tag_value = it->second;
+                // ペイロードなし（payload = nullptr）
+
+                auto tagged_union_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+                tagged_union_type->name = "__TaggedUnion_" + enum_name;
+
+                return std::make_unique<HirExpr>(std::move(enum_construct), tagged_union_type);
+            }
+
+            // 通常のenum（Tagged Unionでない）はintリテラルとして処理
             auto lit = std::make_unique<HirLiteral>();
             lit->value = it->second;
             return std::make_unique<HirExpr>(std::move(lit), ast::make_int());

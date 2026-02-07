@@ -119,7 +119,12 @@ int main() {
     // テスト5: セミコロン区切り（1行形式）
     println("\n--- Test 5: Semicolon separated ---");
     int seq = 5;
-    __asm__("add ${+r:seq}, ${+r:seq}, #10; lsl ${+r:seq}, ${+r:seq}, #1; sub ${+r:seq}, ${+r:seq}, #5");
+    // ARM64ではセミコロンがコメント文字のため、改行で区切る
+    __asm__(`
+    add ${+r:seq}, ${+r:seq}, #10
+    lsl ${+r:seq}, ${+r:seq}, #1
+    sub ${+r:seq}, ${+r:seq}, #5
+    `);
     println("seq (should be 25):");  // (5+10)*2-5 = 25
     println(seq);
 
