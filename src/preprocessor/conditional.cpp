@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <sstream>
+#include <vector>
 
 namespace cm::preprocessor {
 

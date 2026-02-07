@@ -262,6 +262,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                 if (!call.args.empty()) {
                                     auto arg_type = infer_type(*call.args[0]);
                                     auto& type_params = enum_it->second;
+                                    (void)type_params;  // 将来使用予定
                                     auto& type_args = resolved_return_type->type_args;
 
                                     // Ok(T) -> type_args[0], Err(E) -> type_args[1]
