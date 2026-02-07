@@ -171,6 +171,8 @@ int main() {
 
     // ARM64版 ナップサックDP
     // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
+    // 注: LLVMがint変数にxレジスタを割り当てる場合があるため、
+    //      ldr/strのlsl #2スケーリングを使わず手動バイトオフセット計算にする
     __asm__(`
     // 外側ループ: i = 1
     mov ${+r:i}, #1
@@ -188,15 +190,15 @@ int main() {
 
     // weights[i-1] を取得
     sub ${+r:tmp}, ${+r:i}, #1
-    sxtw ${+r:tmp}, ${+r:tmp}
-    ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}, lsl #2]
+    lsl ${+r:tmp}, ${+r:tmp}, #2
+    ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}]
 
-    // dp[i-1][w]のオフセット計算: (i-1) * 8 + w
+    // dp[i-1][w]のオフセット計算: ((i-1) * 8 + w) * 4
     sub ${+r:tmp}, ${+r:i}, #1
     lsl ${+r:tmp}, ${+r:tmp}, #3
     add ${+r:tmp}, ${+r:tmp}, ${+r:w}
-    sxtw ${+r:tmp}, ${+r:tmp}
-    ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, lsl #2]
+    lsl ${+r:tmp}, ${+r:tmp}, #2
+    ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}]
 
     // w < weights[i-1] なら dp[i][w] = dp[i-1][w]
     cmp ${+r:w}, ${+r:wi}
@@ -204,16 +206,16 @@ int main() {
 
     // values[i-1] を取得
     sub ${+r:tmp}, ${+r:i}, #1
-    sxtw ${+r:tmp}, ${+r:tmp}
-    ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}, lsl #2]
+    lsl ${+r:tmp}, ${+r:tmp}, #2
+    ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}]
 
     // dp[i-1][w - weight]のオフセット計算
     sub ${+r:tmp}, ${+r:i}, #1
     lsl ${+r:tmp}, ${+r:tmp}, #3
     sub ${+r:cand}, ${+r:w}, ${+r:wi}
     add ${+r:tmp}, ${+r:tmp}, ${+r:cand}
-    sxtw ${+r:tmp}, ${+r:tmp}
-    ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}, lsl #2]
+    lsl ${+r:tmp}, ${+r:tmp}, #2
+    ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}]
 
     // cand = dp[i-1][w-weight] + value
     add ${+r:cand}, ${+r:cand}, ${+r:vi}
@@ -223,11 +225,11 @@ int main() {
     csel ${+r:dp_prev}, ${+r:cand}, ${+r:dp_prev}, gt
 
     3:  // store_dp
-    // dp[i][w]のオフセット計算: i * 8 + w
+    // dp[i][w]のオフセット計算: (i * 8 + w) * 4
     lsl ${+r:tmp}, ${+r:i}, #3
     add ${+r:tmp}, ${+r:tmp}, ${+r:w}
-    sxtw ${+r:tmp}, ${+r:tmp}
-    str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, lsl #2]
+    lsl ${+r:tmp}, ${+r:tmp}, #2
+    str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}]
 
     // w++
     add ${+r:w}, ${+r:w}, #1

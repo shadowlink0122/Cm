@@ -1606,6 +1606,15 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 int inputCount = 0;  // 入力オペランドの数（将来の拡張/デバッグ用）
                 (void)inputCount;  // 現時点では読み取り不要だが、インクリメントは維持
 
+                // AArch64ターゲット判定とオペランド型記録
+                // LLVMのAArch64バックエンドがi32に対してxレジスタを割り当てる場合があるため、
+                // :w修飾子を付与して32bitレジスタ(w)を強制する
+                std::string asmTriple = module->getTargetTriple();
+                bool isAArch64Target = (asmTriple.find("aarch64") != std::string::npos ||
+                                        asmTriple.find("arm64") != std::string::npos);
+                std::map<size_t, llvm::Type*> operandElemTypes;  // オペランドindex→LLVM型
+                std::map<size_t, bool> operandIsMemory;          // メモリ制約かどうか
+
                 // =m制約用: メモリ出力はポインタを入力として渡す
                 std::vector<llvm::Value*> memOutputPtrs;  // =m用のポインタ（入力として渡す）
                 std::vector<llvm::Type*> memOutputTypes;  // =m用の要素型（elementtype属性用）
@@ -1657,6 +1666,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         // allocaから実際の型を取得
                         elemType = allocaInst->getAllocatedType();
                     }
+                    // AArch64用: オペランドの型とメモリ制約を記録
+                    operandElemTypes[i] = elemType;
+                    operandIsMemory[i] = (operand.constraint.find('m') != std::string::npos);
                     bool hasOutput = operand.constraint[0] == '=' || operand.constraint[0] == '+';
                     bool isPureInput = operand.constraint[0] != '=' && operand.constraint[0] != '+';
                     bool isTiedInput = operand.constraint[0] == '+';
@@ -1960,9 +1972,27 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 }
 
                 // 第2段階: __TMP_N__ を最終的な$REMAP[N]に置換
+                // AArch64ターゲットの場合、i32以下の型のレジスタオペランドに:w修飾子を付与
+                // これによりLLVMがxレジスタではなくwレジスタ(32bit)を使用する
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {
                     std::string tempPattern = "__TMP_" + std::to_string(i) + "__";
-                    std::string newPattern = "$" + std::to_string(operandRemap[i]);
+                    std::string newPattern;
+                    // AArch64 + i32以下 + 非メモリ制約の場合に :w 修飾子を付与
+                    bool needsWModifier = false;
+                    if (isAArch64Target && !operandIsMemory[i]) {
+                        auto typeIt = operandElemTypes.find(i);
+                        if (typeIt != operandElemTypes.end()) {
+                            llvm::Type* opType = typeIt->second;
+                            if (opType->isIntegerTy() && opType->getIntegerBitWidth() <= 32) {
+                                needsWModifier = true;
+                            }
+                        }
+                    }
+                    if (needsWModifier) {
+                        newPattern = "${" + std::to_string(operandRemap[i]) + ":w}";
+                    } else {
+                        newPattern = "$" + std::to_string(operandRemap[i]);
+                    }
                     size_t pos = 0;
                     while ((pos = remappedCode.find(tempPattern, pos)) != std::string::npos) {
                         remappedCode.replace(pos, tempPattern.length(), newPattern);
