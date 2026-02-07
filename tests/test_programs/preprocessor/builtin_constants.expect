@@ -1,0 +1,27 @@
+=== builtin constants test ===
+__CM__: defined (ok)
+__x86_64__: defined
+__x86__: defined
+__arm64__: not defined
+__aarch64__: not defined
+__i386__: not defined
+__riscv__: not defined
+__macos__: defined
+__apple__: defined
+__linux__: not defined
+__unix__: defined
+__windows__: not defined
+__freebsd__: not defined
+__64BIT__: defined
+__32BIT__: not defined
+__DEBUG__: defined
+arch exclusivity: ok (one arch defined)
+bits exclusivity: ok (one size defined)
+undefined symbol: ok (not defined)
+ifndef __CM__ else: ok
+ifndef __NONEXISTENT__: ok (not defined)
+deep nest (3 levels): ok
+---
+pass: 22
+fail: 0
+=== complete ===

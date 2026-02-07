@@ -26,6 +26,7 @@
 #include "mir/passes/core/manager.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
+#include "preprocessor/conditional.hpp"
 #include "preprocessor/import.hpp"
 
 #include <cstdlib>
@@ -469,6 +470,10 @@ int main(int argc, char* argv[]) {
 
                 code = preprocess_result.processed_source;
 
+                // 条件付きコンパイル
+                preprocessor::ConditionalPreprocessor conditional;
+                code = conditional.process(code);
+
                 // パース
                 Lexer lexer(code);
                 auto tokens = lexer.tokenize();
@@ -693,6 +698,19 @@ int main(int argc, char* argv[]) {
 
         // プリプロセス後のコードを使用
         code = preprocess_result.processed_source;
+
+        // ========== Conditional Preprocessor ==========
+        if (opts.debug)
+            std::cout << "=== Conditional Preprocessor ===\n";
+        preprocessor::ConditionalPreprocessor conditional;
+        code = conditional.process(code);
+        if (opts.debug) {
+            std::cout << "定義済みシンボル: ";
+            for (const auto& def : conditional.definitions()) {
+                std::cout << def << " ";
+            }
+            std::cout << "\n";
+        }
 
         // デバッグ時はプリプロセス後のコードを出力
         if (opts.debug) {

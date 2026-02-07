@@ -4,12 +4,13 @@
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     println("=== Multi-line LLVM ASM Test ===");
 
     // テスト1: バッククォートでの複数行アセンブリ
     println("\n--- Test 1: Multi-line with backtick ---");
     int val1 = 10;
-    __llvm__(`
+    __asm__(`
     addl $$5, ${+r:val1}
     sall $$1, ${+r:val1}
     addl $$3, ${+r:val1}
@@ -20,7 +21,7 @@ int main() {
     // テスト2: より複雑な複数行計算
     println("\n--- Test 2: Complex multi-line ---");
     int val2 = 100;
-    __llvm__(`
+    __asm__(`
     subl $$50, ${+r:val2}
     sall $$2, ${+r:val2}
     addl $$25, ${+r:val2}
@@ -31,7 +32,7 @@ int main() {
     // テスト3: ビット操作の連鎖
     println("\n--- Test 3: Bit operation chain ---");
     int bits = 0x01;
-    __llvm__(`
+    __asm__(`
     sall $$4, ${+r:bits}
     orl $$0x0F, ${+r:bits}
     sall $$4, ${+r:bits}
@@ -42,7 +43,7 @@ int main() {
     // テスト4: 符号操作
     println("\n--- Test 4: Sign operations ---");
     int sign = 50;
-    __llvm__(`
+    __asm__(`
     negl ${+r:sign}
     addl $$100, ${+r:sign}
     negl ${+r:sign}
@@ -53,19 +54,20 @@ int main() {
     // テスト5: セミコロン区切り（1行形式）
     println("\n--- Test 5: Semicolon separated ---");
     int seq = 5;
-    __llvm__("addl $$10, ${+r:seq}; sall $$1, ${+r:seq}; subl $$5, ${+r:seq}");
+    __asm__("addl $$10, ${+r:seq}; sall $$1, ${+r:seq}; subl $$5, ${+r:seq}");
     println("seq (should be 25):");  // (5+10)*2-5 = 25
     println(seq);
 
-    // テスト6: 連続した独立した__llvm__呼び出し
+    // テスト6: 連続した独立した__asm__呼び出し
     println("\n--- Test 6: Sequential separate calls ---");
     int multi = 8;
-    __llvm__("addl $$2, ${+r:multi}");   // 10
-    __llvm__("sall $$2, ${+r:multi}");   // 40
-    __llvm__("subl $$10, ${+r:multi}");  // 30
+    __asm__("addl $$2, ${+r:multi}");   // 10
+    __asm__("sall $$2, ${+r:multi}");   // 40
+    __asm__("subl $$10, ${+r:multi}");  // 30
     println("multi (should be 30):");
     println(multi);
 
     println("\n=== All tests completed! ===");
+#end
     return 0;
 }

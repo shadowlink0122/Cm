@@ -510,10 +510,10 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
         return lower_match_as_stmt(*match_expr);
     }
 
-    // __llvm__ の特別処理
+    // __asm__ / __llvm__ の特別処理
     if (auto* call = expr_stmt.expr->as<ast::CallExpr>()) {
         if (auto* ident = call->callee->as<ast::IdentExpr>()) {
-            if (ident->name == "__llvm__") {
+            if (ident->name == "__asm__" || ident->name == "__llvm__") {
                 // 引数から文字列リテラルを取得
                 if (!call->args.empty()) {
                     if (auto* arg = call->args[0]->as<ast::LiteralExpr>()) {

@@ -3,6 +3,7 @@
 // println以外は全てLLVMインラインアセンブリで実装
 
 int main() {
+#ifdef __x86_64__
     println("=== Pure LLVM Knapsack DP (2D Array) ===");
     println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
     println("Capacity: 7");
@@ -31,7 +32,7 @@ int main() {
 
     // 2次元DP更新
     // 最小限の+r制約（i, wのみ）
-    __llvm__(`
+    __asm__(`
     # callee-savedレジスタを保存
     pushq %r12
     pushq %r13
@@ -149,5 +150,6 @@ int main() {
         println(dp[31]);
     }
 
+#end
     return 0;
 }

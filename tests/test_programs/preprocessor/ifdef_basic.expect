@@ -1,0 +1,6 @@
+=== ifdef test ===
+ifdef __CM__: ok
+ifndef undefined: ok
+else branch: ok
+nested: ok
+=== complete ===

@@ -1,4 +1,4 @@
 === builtin_asm test ===
-__llvm__(nop): ok
+__asm__(nop): ok
 multiple: ok
 === complete ===

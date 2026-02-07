@@ -4,69 +4,70 @@
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     println("=== LLVM Constraint Test ===");
 
     // テスト1: =r（出力のみ）- 定数をレジスタに設定
     println("\n--- Test 1: =r (output only) ---");
     int out1 = 0;
-    __llvm__("movl $$42, ${=r:out1}");
+    __asm__("movl $$42, ${=r:out1}");
     println("out1 (should be 42):");
     println(out1);
 
     // テスト2: +r（読み書き）- 加算
     println("\n--- Test 2: +r (read-write) add ---");
     int rw = 10;
-    __llvm__("addl $$5, ${+r:rw}");
+    __asm__("addl $$5, ${+r:rw}");
     println("rw (should be 15):");
     println(rw);
 
     // テスト3: =r で即値をロード
     println("\n--- Test 3: =r with immediate ---");
     int imm = 0;
-    __llvm__("movl $$999, ${=r:imm}");
+    __asm__("movl $$999, ${=r:imm}");
     println("imm (should be 999):");
     println(imm);
 
     // テスト4: +r で減算
     println("\n--- Test 4: +r subtraction ---");
     int sub = 100;
-    __llvm__("subl $$30, ${+r:sub}");
+    __asm__("subl $$30, ${+r:sub}");
     println("sub (should be 70):");
     println(sub);
 
     // テスト5: +r でビットシフト
     println("\n--- Test 5: +r bit shift ---");
     int shift = 1;
-    __llvm__("sall $$4, ${+r:shift}");
+    __asm__("sall $$4, ${+r:shift}");
     println("shift (should be 16):");
     println(shift);
 
     // テスト6: +r でNEG
     println("\n--- Test 6: +r negation ---");
     int neg = 50;
-    __llvm__("negl ${+r:neg}");
+    __asm__("negl ${+r:neg}");
     println("neg (should be -50):");
     println(neg);
 
     // テスト7: +r でOR演算
     println("\n--- Test 7: +r OR operation ---");
     int orv = 0x0F;
-    __llvm__("orl $$0xF0, ${+r:orv}");
+    __asm__("orl $$0xF0, ${+r:orv}");
     println("orv (should be 255):");
     println(orv);
 
     // テスト8: +r でAND演算
     println("\n--- Test 8: +r AND operation ---");
     int andv = 0xFF;
-    __llvm__("andl $$0x0F, ${+r:andv}");
+    __asm__("andl $$0x0F, ${+r:andv}");
     println("andv (should be 15):");
     println(andv);
 
     // テスト9: =r → +r の連続使用
     println("\n--- Test 9: =r then +r sequence ---");
     int seq = 0;
-    __llvm__("movl $$50, ${=r:seq}");
-    __llvm__("addl $$25, ${+r:seq}");
+    __asm__("movl $$50, ${=r:seq}");
+    __asm__("addl $$25, ${+r:seq}");
     println("seq (should be 75):");
     println(seq);
 
@@ -75,9 +76,9 @@ int main() {
     int x = 10;
     int y = 20;
     int z = 30;
-    __llvm__("addl $$1, ${+r:x}");
-    __llvm__("addl $$2, ${+r:y}");
-    __llvm__("addl $$3, ${+r:z}");
+    __asm__("addl $$1, ${+r:x}");
+    __asm__("addl $$2, ${+r:y}");
+    __asm__("addl $$3, ${+r:z}");
     println("x (should be 11):");
     println(x);
     println("y (should be 22):");
@@ -86,5 +87,6 @@ int main() {
     println(z);
 
     println("\n=== All tests completed! ===");
+#end
     return 0;
 }

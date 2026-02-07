@@ -1,20 +1,22 @@
 // tests/test_programs/asm/builtin_asm.cm
-// __llvm__ 直接使用テスト
+// __asm__ 直接使用テスト
 
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     println("=== builtin_asm test ===");
 
-    // 直接__llvm__を使用
-    __llvm__("nop");
-    println("__llvm__(nop): ok");
+    // 直接__asm__を使用
+    __asm__("nop");
+    println("__asm__(nop): ok");
 
     // 複数回
-    __llvm__("nop");
-    __llvm__("nop");
+    __asm__("nop");
+    __asm__("nop");
     println("multiple: ok");
 
     println("=== complete ===");
+#end
     return 0;
 }

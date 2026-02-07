@@ -4,6 +4,7 @@
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     println("=== must {} Block Test ===");
 
     // 基本的なmustブロック（asmなし）
@@ -20,10 +21,11 @@ int main() {
 
     // asmはmustブロック外で実行
     must {
-        __llvm__("nop");
+        __asm__("nop");
         println("asm inside must: PASS");
     }
 
     println("=== All Tests Passed ===");
+#end
     return 0;
 }

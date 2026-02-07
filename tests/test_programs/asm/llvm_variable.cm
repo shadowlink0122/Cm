@@ -1,10 +1,11 @@
-// __llvm__ オペランドテスト
+// __asm__ オペランドテスト
 // 変数オペランドを使ったインラインアセンブリ
 // 注: O3最適化では結果が正しく伝播しない問題あり（O0では動作）
 
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     println("=== LLVM Operand Test ===");
 
     // 変数初期化
@@ -12,11 +13,12 @@ int main() {
 
     // x86_64 AT&T構文: addl $imm, %reg
     // ${+r:x}が$0に変換される
-    __llvm__("addl $$10, ${+r:x}");
+    __asm__("addl $$10, ${+r:x}");
 
     // asm結果を直接表示
     println("Result (should be 60):");
     println(x);
 
+#end
     return 0;
 }

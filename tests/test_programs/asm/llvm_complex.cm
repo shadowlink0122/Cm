@@ -2,12 +2,13 @@
 // 複数オペランド、様々な制約をテスト
 
 int main() {
+#ifdef __x86_64__
     println("=== Complex LLVM ASM Test ===");
 
     // テスト1: 読み書き両方のオペランドで加算
     println("\n--- Test 1: Read-write add ---");
     int x = 25;
-    __llvm__("addl $$75, ${+r:x}");  // x += 75
+    __asm__("addl $$75, ${+r:x}");  // x += 75
     println("x (should be 100):");
     println(x);
 
@@ -15,8 +16,8 @@ int main() {
     println("\n--- Test 2: Multiple independent ops ---");
     int p = 10;
     int q = 20;
-    __llvm__("addl $$5, ${+r:p}");   // p += 5 = 15
-    __llvm__("addl $$10, ${+r:q}");  // q += 10 = 30
+    __asm__("addl $$5, ${+r:p}");   // p += 5 = 15
+    __asm__("addl $$10, ${+r:q}");  // q += 10 = 30
     println("p (should be 15):");
     println(p);
     println("q (should be 30):");
@@ -25,47 +26,48 @@ int main() {
     // テスト3: 計算結果の連鎖
     println("\n--- Test 3: Chained computation ---");
     int val = 10;
-    __llvm__("addl $$10, ${+r:val}");  // val = 20
-    __llvm__("sall $$1, ${+r:val}");   // val = 40 (shift left by 1)
-    __llvm__("addl $$5, ${+r:val}");   // val = 45
+    __asm__("addl $$10, ${+r:val}");  // val = 20
+    __asm__("sall $$1, ${+r:val}");   // val = 40 (shift left by 1)
+    __asm__("addl $$5, ${+r:val}");   // val = 45
     println("val (should be 45):");
     println(val);
 
     // テスト4: NEG (符号反転)
     println("\n--- Test 4: NEG operation ---");
     int neg = 42;
-    __llvm__("negl ${+r:neg}");  // neg = -42
+    __asm__("negl ${+r:neg}");  // neg = -42
     println("neg (should be -42):");
     println(neg);
 
     // テスト5: ビット操作
     println("\n--- Test 5: Bit operations ---");
     int bits = 0x0F;
-    __llvm__("orl $$0xF0, ${+r:bits}");  // bits |= 0xF0 = 0xFF
+    __asm__("orl $$0xF0, ${+r:bits}");  // bits |= 0xF0 = 0xFF
     println("bits (should be 255):");
     println(bits);
 
     // テスト6: シフト操作
     println("\n--- Test 6: Shift operations ---");
     int shift = 1;
-    __llvm__("sall $$4, ${+r:shift}");  // shift = 1 << 4 = 16
+    __asm__("sall $$4, ${+r:shift}");  // shift = 1 << 4 = 16
     println("shift (should be 16):");
     println(shift);
 
     // テスト7: 減算
     println("\n--- Test 7: Subtraction ---");
     int sub = 100;
-    __llvm__("subl $$30, ${+r:sub}");  // sub -= 30 = 70
+    __asm__("subl $$30, ${+r:sub}");  // sub -= 30 = 70
     println("sub (should be 70):");
     println(sub);
 
     // テスト8: XOR（ゼロクリア）
     println("\n--- Test 8: XOR clear ---");
     int xor_val = 12345;
-    __llvm__("xorl ${+r:xor_val}, ${+r:xor_val}");  // xor_val ^= xor_val = 0
+    __asm__("xorl ${+r:xor_val}, ${+r:xor_val}");  // xor_val ^= xor_val = 0
     println("xor_val (should be 0):");
     println(xor_val);
 
     println("\n=== All tests completed! ===");
+#end
     return 0;
 }

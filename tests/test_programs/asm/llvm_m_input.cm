@@ -2,17 +2,19 @@
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     // === テスト1: mでメモリから読み込み ===
     int mem_val = 42;
     int result = 0;
-    __llvm__("movl ${m:mem_val}, ${=r:result}");
+    __asm__("movl ${m:mem_val}, ${=r:result}");
     println(result);  // 42
 
     // === テスト2: 別の値をメモリから読み込み ===
     int src = 100;
     int dst = 0;
-    __llvm__("movl ${m:src}, ${=r:dst}");
+    __asm__("movl ${m:src}, ${=r:dst}");
     println(dst);  // 100
 
+#end
     return 0;
 }

@@ -2,15 +2,17 @@
 import std::io::println;
 
 int main() {
+#ifdef __x86_64__
     // +m: 入力と出力の両方を同じメモリで行う
     int readwrite_val = 10;
-    __llvm__("addl $$5, ${+m:readwrite_val}");  // 10 + 5 = 15
+    __asm__("addl $$5, ${+m:readwrite_val}");  // 10 + 5 = 15
     println(readwrite_val);                     // 15
 
     // もう一度テスト
     int val2 = 100;
-    __llvm__("subl $$20, ${+m:val2}");  // 100 - 20 = 80
+    __asm__("subl $$20, ${+m:val2}");  // 100 - 20 = 80
     println(val2);                      // 80
 
+#end
     return 0;
 }
