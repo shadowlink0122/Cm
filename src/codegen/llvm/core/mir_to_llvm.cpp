@@ -746,7 +746,9 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 auto localIdx = func.arg_locals[argIdx];
                 // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用
                 // （C ABIで16バイト以下の構造体はレジスタ渡しされる）
-                if (arg.getType()->isStructTy()) {
+                if (arg.getType()->isStructTy() || arg.getType()->isArrayTy()) {
+                    // 構造体・配列の値渡しパラメータの場合、allocaに格納してポインタとして使用
+                    // （構造体: C ABIで16バイト以下はレジスタ渡し、配列: GEP操作にポインタが必要）
                     auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
                                                         "arg_" + std::to_string(argIdx) + "_stack");
                     builder->CreateStore(&arg, alloca);
