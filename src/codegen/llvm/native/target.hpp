@@ -366,18 +366,58 @@ SECTIONS
 
 /// TargetConfig::getNative() 実装
 inline TargetConfig TargetConfig::getNative() {
-    auto triple = llvm::sys::getDefaultTargetTriple();
-    auto cpu = llvm::sys::getHostCPUName().str();
+    auto hostTriple = llvm::sys::getDefaultTargetTriple();
+    auto hostCpu = llvm::sys::getHostCPUName().str();
+
+#ifdef CM_DEFAULT_TARGET_ARCH
+    // ビルド時に指定されたターゲットアーキテクチャを使用
+    std::string targetArch = CM_DEFAULT_TARGET_ARCH;
+
+    // ホストアーキテクチャと異なる場合、トリプルを書き換え
+    bool isArm64 = (targetArch == "arm64" || targetArch == "aarch64");
+    bool isX86 = (targetArch == "x86_64");
+
+    std::string triple = hostTriple;
+    std::string cpu = hostCpu;
+
+    if (isArm64 && hostTriple.find("x86_64") != std::string::npos) {
+        // x86_64ホスト上でARM64ターゲット
+        auto pos = triple.find("x86_64");
+        if (pos != std::string::npos) {
+            triple.replace(pos, 6, "aarch64");
+        }
+        cpu = "generic";
+    } else if (isX86 && (hostTriple.find("arm64") != std::string::npos ||
+                         hostTriple.find("aarch64") != std::string::npos)) {
+        // ARM64ホスト上でx86_64ターゲット
+        auto pos = triple.find("arm64");
+        if (pos != std::string::npos) {
+            triple.replace(pos, 5, "x86_64");
+        } else {
+            pos = triple.find("aarch64");
+            if (pos != std::string::npos) {
+                triple.replace(pos, 7, "x86_64");
+            }
+        }
+        cpu = "generic";
+    }
+#else
+    std::string triple = hostTriple;
+    std::string cpu = hostCpu;
+#endif
 
     // CPUの機能フラグを取得（SSE, AVX, NEON等）してSIMDベクトル化を有効にする
     llvm::StringMap<bool> features;
     llvm::sys::getHostCPUFeatures(features);
     std::string featureStr;
-    for (const auto& feature : features) {
-        if (feature.second) {  // 機能が有効な場合
-            if (!featureStr.empty())
-                featureStr += ",";
-            featureStr += "+" + feature.first().str();
+    // ホストと同一アーキの場合のみCPU機能を利用
+    if (cpu != "generic") {
+        for (const auto& feature : features) {
+            if (feature.second) {  // 機能が有効な場合
+                if (!featureStr.empty())
+                    featureStr += ",";
+                featureStr += "+" + feature.first().str();
+            }
         }
     }
 

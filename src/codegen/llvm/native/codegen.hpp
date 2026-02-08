@@ -503,6 +503,10 @@ class LLVMCodeGen {
 #ifdef __APPLE__
             // macOSではシステムのclangを使用してリンク
             linkCmd = "/usr/bin/clang++ -mmacosx-version-min=15.0 -Wl,-dead_strip ";
+#ifdef CM_DEFAULT_TARGET_ARCH
+            // ビルド時指定のターゲットアーキテクチャを使用
+            linkCmd += "-arch " + std::string(CM_DEFAULT_TARGET_ARCH) + " ";
+#endif
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
