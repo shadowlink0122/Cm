@@ -458,6 +458,130 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         structType->setBody(fieldTypes);
     }
 
+    // パス3: インポートモジュールのstruct型を動的に推論・登録
+    // program.structsに含まれないが、関数のメソッドとして参照されるstruct型を
+    // 関数bodyのフィールドプロジェクションから推論して登録する
+    {
+        // 全関数のローカル型から参照されるstruct名を収集
+        std::unordered_map<std::string, const mir::MirFunction*> missingStructFunctions;
+        for (const auto& func : program.functions) {
+            if (!func)
+                continue;
+            // メソッド名パターン: StructName__method
+            const auto& funcName = func->name;
+            size_t lastDunder = funcName.rfind("__");
+            if (lastDunder == std::string::npos || lastDunder == 0)
+                continue;
+
+            std::string structName = funcName.substr(0, lastDunder);
+            // 既に登録済みならスキップ
+            if (structTypes.count(structName) > 0)
+                continue;
+            // ジェネリック型パラメータパターン（__T__, __K__等）はスキップ
+            if (structName.find("__T__") != std::string::npos ||
+                structName.find("__K__") != std::string::npos ||
+                structName.find("__V__") != std::string::npos)
+                continue;
+
+            // 最初のパラメータが*StructNameであることを確認
+            if (func->arg_locals.size() >= 1) {
+                auto firstArgLocal = func->arg_locals[0];
+                if (firstArgLocal < func->locals.size()) {
+                    const auto& localType = func->locals[firstArgLocal].type;
+                    if (localType && localType->kind == hir::TypeKind::Pointer &&
+                        localType->element_type &&
+                        localType->element_type->kind == hir::TypeKind::Struct &&
+                        localType->element_type->name == structName) {
+                        missingStructFunctions[structName] = func.get();
+                    }
+                }
+            }
+        }
+
+        // 欠落struct型を関数bodyのフィールドプロジェクションから推論
+        for (const auto& [structName, func] : missingStructFunctions) {
+            // フィールドプロジェクションを解析してフィールド数と型を推論
+            // _1.*.N = copy(rhs) パターンを検出
+            std::map<uint32_t, hir::TypePtr> fieldTypeMap;
+
+            for (const auto& bb : func->basic_blocks) {
+                if (!bb)
+                    continue;
+                for (const auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Assign)
+                        continue;
+                    const auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    const auto& place = assign.place;
+
+                    // _1.*.N パターン（selfへのフィールド書き込み）を検出
+                    if (place.projections.size() >= 2 &&
+                        place.projections[0].kind == mir::ProjectionKind::Deref &&
+                        place.projections[1].kind == mir::ProjectionKind::Field) {
+                        uint32_t fieldId = place.projections[1].field_id;
+
+                        // rvalueの型からフィールド型を推論
+                        if (assign.rvalue && assign.rvalue->kind == mir::MirRvalue::Use) {
+                            const auto& useData =
+                                std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                            if (useData.operand) {
+                                hir::TypePtr rhsType = nullptr;
+                                if (useData.operand->type) {
+                                    rhsType = useData.operand->type;
+                                } else if (useData.operand->kind == mir::MirOperand::Copy ||
+                                           useData.operand->kind == mir::MirOperand::Move) {
+                                    const auto* rhsPlace =
+                                        std::get_if<mir::MirPlace>(&useData.operand->data);
+                                    if (rhsPlace && rhsPlace->local < func->locals.size()) {
+                                        rhsType = func->locals[rhsPlace->local].type;
+                                    }
+                                } else if (useData.operand->kind == mir::MirOperand::Constant) {
+                                    const auto* c =
+                                        std::get_if<mir::MirConstant>(&useData.operand->data);
+                                    if (c && c->type) {
+                                        rhsType = c->type;
+                                    }
+                                }
+                                if (rhsType && fieldTypeMap.find(fieldId) == fieldTypeMap.end()) {
+                                    fieldTypeMap[fieldId] = rhsType;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (fieldTypeMap.empty())
+                continue;
+
+            // フィールド数を決定（最大fieldId + 1）
+            uint32_t numFields = 0;
+            for (const auto& [fid, _] : fieldTypeMap) {
+                if (fid + 1 > numFields)
+                    numFields = fid + 1;
+            }
+
+            // LLVM構造体型を作成
+            std::vector<llvm::Type*> fieldTypes;
+            for (uint32_t i = 0; i < numFields; ++i) {
+                auto it = fieldTypeMap.find(i);
+                if (it != fieldTypeMap.end() && it->second) {
+                    fieldTypes.push_back(convertType(it->second));
+                } else {
+                    // 型が不明なフィールドはi32として扱う
+                    fieldTypes.push_back(ctx.getI32Type());
+                }
+            }
+
+            auto newStructType = llvm::StructType::create(ctx.getContext(), fieldTypes, structName);
+            structTypes[structName] = newStructType;
+
+            if (cm::debug::g_debug_mode) {
+                std::cerr << "[MIR2LLVM] 動的推論: struct " << structName
+                          << " (フィールド数: " << numFields << ")" << std::endl;
+            }
+        }
+    }
+
     // enum型を処理（Tagged Unionは構造体として生成）
     for (const auto& enumPtr : program.enums) {
         if (!enumPtr)
@@ -2975,6 +3099,17 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
                     if (!fieldType) {
                         // フォールバック: i32として扱う
+                        std::cerr << "[DEBUG] fieldType fallback to i32 in "
+                                  << (currentMIRFunction ? currentMIRFunction->name : "?")
+                                  << " local=" << place.local
+                                  << " projections=" << place.projections.size();
+                        if (currentType) {
+                            std::cerr << " currentType=" << currentType->name
+                                      << " kind=" << static_cast<int>(currentType->kind);
+                        } else {
+                            std::cerr << " currentType=null";
+                        }
+                        std::cerr << "\n";
                         fieldType = ctx.getI32Type();
                     }
 

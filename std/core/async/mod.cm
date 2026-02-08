@@ -1,0 +1,68 @@
+// std/core/async/mod.cm - 非同期ランタイムモジュール
+// C実装(runtime_async.c + runtime_event_loop.c)のCmラッパー
+// シングルスレッド非同期エグゼキュータ基盤を提供
+module std.core.async;
+
+// ============================================================
+// C runtime extern宣言
+// ============================================================
+
+// 時刻
+extern "C" ulong cm_now_ms();
+
+// スリープ — 指定ミリ秒待機するFutureを返す
+// 注意: この関数はLLVMバックエンド経由で呼ばれる
+// Cmからは直接呼べない（Future*ポインタ型がCm側で表現できないため）
+
+// エグゼキュータ操作（LLVMランタイム内部）
+// これらはasync/await構文から自動生成されるコードが使用する
+
+// ============================================================
+// Export API — Cmから直接使用可能な関数
+// ============================================================
+
+// 現在時刻を取得（ミリ秒、エポックまたはモノトニック）
+export ulong now_ms() {
+    return cm_now_ms();
+}
+
+// スリープ（ブロッキング版 — std::thread::sleep_msの代替）
+// 注意: これは非同期ではなく、スレッドをブロックする
+// 非同期版はasync/await構文経由で使用
+use libc {
+    int usleep(int usec);
+}
+
+export void sleep_ms(int ms) {
+    usleep(ms * 1000);
+}
+
+export void sleep_sec(int sec) {
+    usleep(sec * 1000000);
+}
+
+// ============================================================
+// 簡易タイマーAPI
+// ============================================================
+
+// 経過時間を計測するタイマー
+export struct Timer {
+    ulong start;
+}
+
+impl Timer {
+    // タイマーを開始
+    export static Timer start() {
+        return Timer { start: cm_now_ms() };
+    }
+
+    // 経過時間を取得（ミリ秒）
+    export ulong elapsed_ms() {
+        return cm_now_ms() - self.start;
+    }
+
+    // リセット
+    export void reset() {
+        self.start = cm_now_ms();
+    }
+}

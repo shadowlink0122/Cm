@@ -30,6 +30,7 @@ static const int HTTP_GET = 0;
 static const int HTTP_POST = 1;
 static const int HTTP_PUT = 2;
 static const int HTTP_DELETE = 3;
+static const int HTTP_PATCH = 4;
 
 // ============================================================
 // 内部構造体
@@ -42,6 +43,9 @@ struct CmHttpRequest {
     std::string path;
     std::map<std::string, std::string> headers;
     std::string body;
+    int timeout_ms;         // タイムアウト（ミリ秒、0=無制限）
+    bool follow_redirects;  // リダイレクト自動追跡
+    int max_redirects;      // 最大リダイレクト回数
 };
 
 struct CmHttpResponse {
@@ -68,6 +72,8 @@ static const char* method_string(int method) {
             return "PUT";
         case HTTP_DELETE:
             return "DELETE";
+        case HTTP_PATCH:
+            return "PATCH";
         default:
             return "GET";
     }
@@ -371,6 +377,9 @@ int64_t cm_http_request_create() {
     req->method = HTTP_GET;
     req->port = 80;
     req->path = "/";
+    req->timeout_ms = 0;
+    req->follow_redirects = true;
+    req->max_redirects = 5;
     return reinterpret_cast<int64_t>(req);
 }
 
@@ -998,6 +1007,218 @@ int64_t cm_http_test_server_start(int32_t port, int32_t max_requests) {
 
     close(fd);
     return 0;
+}
+
+// ============================================================
+// URLパース
+// ============================================================
+
+// URL文字列を解析してscheme/host/port/pathに分離
+// url: "http://example.com:8080/api/v1" or "https://example.com/path"
+// 戻り値: パースされたURL情報ハンドル（失敗時0）
+
+struct CmParsedUrl {
+    std::string scheme;
+    std::string host;
+    int port;
+    std::string path;
+};
+
+int64_t cm_http_parse_url(const char* url) {
+    if (!url)
+        return 0;
+
+    auto* parsed = new CmParsedUrl();
+    std::string url_str(url);
+
+    // scheme
+    size_t scheme_end = url_str.find("://");
+    if (scheme_end == std::string::npos) {
+        parsed->scheme = "http";
+        scheme_end = 0;
+    } else {
+        parsed->scheme = url_str.substr(0, scheme_end);
+        scheme_end += 3;  // "://" をスキップ
+    }
+
+    // host[:port]/path
+    std::string rest = url_str.substr(scheme_end);
+    size_t path_start = rest.find('/');
+    std::string host_port;
+    if (path_start == std::string::npos) {
+        host_port = rest;
+        parsed->path = "/";
+    } else {
+        host_port = rest.substr(0, path_start);
+        parsed->path = rest.substr(path_start);
+    }
+
+    // port
+    size_t port_sep = host_port.find(':');
+    if (port_sep == std::string::npos) {
+        parsed->host = host_port;
+        parsed->port = (parsed->scheme == "https") ? 443 : 80;
+    } else {
+        parsed->host = host_port.substr(0, port_sep);
+        parsed->port = std::stoi(host_port.substr(port_sep + 1));
+    }
+
+    return reinterpret_cast<int64_t>(parsed);
+}
+
+// パース結果取得
+const char* cm_http_parsed_scheme(int64_t handle) {
+    auto* p = reinterpret_cast<CmParsedUrl*>(handle);
+    return p ? strdup(p->scheme.c_str()) : nullptr;
+}
+
+const char* cm_http_parsed_host(int64_t handle) {
+    auto* p = reinterpret_cast<CmParsedUrl*>(handle);
+    return p ? strdup(p->host.c_str()) : nullptr;
+}
+
+int32_t cm_http_parsed_port(int64_t handle) {
+    auto* p = reinterpret_cast<CmParsedUrl*>(handle);
+    return p ? static_cast<int32_t>(p->port) : 0;
+}
+
+const char* cm_http_parsed_path(int64_t handle) {
+    auto* p = reinterpret_cast<CmParsedUrl*>(handle);
+    return p ? strdup(p->path.c_str()) : nullptr;
+}
+
+void cm_http_parsed_url_destroy(int64_t handle) {
+    auto* p = reinterpret_cast<CmParsedUrl*>(handle);
+    delete p;
+}
+
+// ============================================================
+// タイムアウト設定
+// ============================================================
+
+void cm_http_request_set_timeout(int64_t handle, int32_t timeout_ms) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (req)
+        req->timeout_ms = timeout_ms;
+}
+
+// ============================================================
+// リダイレクト設定
+// ============================================================
+
+void cm_http_request_set_follow_redirects(int64_t handle, int32_t follow) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (req)
+        req->follow_redirects = (follow != 0);
+}
+
+void cm_http_request_set_max_redirects(int64_t handle, int32_t max_redirects) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (req)
+        req->max_redirects = max_redirects;
+}
+
+// ============================================================
+// 認証
+// ============================================================
+
+// Basic認証ヘッダーを設定
+void cm_http_request_set_basic_auth(int64_t handle, const char* user, const char* pass) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (!req || !user || !pass)
+        return;
+
+    // Base64エンコード（簡易実装）
+    std::string creds = std::string(user) + ":" + std::string(pass);
+    static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int val = 0, valb = -6;
+    for (unsigned char c : creds) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded.push_back(b64[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6)
+        encoded.push_back(b64[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (encoded.size() % 4)
+        encoded.push_back('=');
+
+    req->headers["Authorization"] = "Basic " + encoded;
+}
+
+// Bearerトークン認証ヘッダーを設定
+void cm_http_request_set_bearer_auth(int64_t handle, const char* token) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (!req || !token)
+        return;
+    req->headers["Authorization"] = std::string("Bearer ") + token;
+}
+
+// ============================================================
+// Content-Type簡易設定
+// ============================================================
+
+void cm_http_request_set_content_type(int64_t handle, const char* content_type) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (!req || !content_type)
+        return;
+    req->headers["Content-Type"] = content_type;
+}
+
+// JSON Content-Type設定
+void cm_http_request_set_json(int64_t handle) {
+    auto* req = reinterpret_cast<CmHttpRequest*>(handle);
+    if (!req)
+        return;
+    req->headers["Content-Type"] = "application/json";
+}
+
+// ============================================================
+// レスポンス追加情報
+// ============================================================
+
+// Content-Typeヘッダーを取得
+const char* cm_http_response_content_type(int64_t handle) {
+    auto* resp = reinterpret_cast<CmHttpResponse*>(handle);
+    if (!resp)
+        return nullptr;
+    auto it = resp->headers.find("content-type");
+    if (it == resp->headers.end()) {
+        it = resp->headers.find("Content-Type");
+    }
+    if (it != resp->headers.end()) {
+        return strdup(it->second.c_str());
+    }
+    return nullptr;
+}
+
+// Locationヘッダーを取得（リダイレクト先URL）
+const char* cm_http_response_location(int64_t handle) {
+    auto* resp = reinterpret_cast<CmHttpResponse*>(handle);
+    if (!resp)
+        return nullptr;
+    auto it = resp->headers.find("location");
+    if (it == resp->headers.end()) {
+        it = resp->headers.find("Location");
+    }
+    if (it != resp->headers.end()) {
+        return strdup(it->second.c_str());
+    }
+    return nullptr;
+}
+
+// ステータスコードがリダイレクトかどうか
+int32_t cm_http_response_is_redirect(int64_t handle) {
+    auto* resp = reinterpret_cast<CmHttpResponse*>(handle);
+    if (!resp)
+        return 0;
+    return (resp->status_code == 301 || resp->status_code == 302 || resp->status_code == 303 ||
+            resp->status_code == 307 || resp->status_code == 308)
+               ? 1
+               : 0;
 }
 
 }  // extern "C"

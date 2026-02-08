@@ -281,3 +281,100 @@ export impl HttpServerRequest {
         self._handle = 0;
     }
 }
+
+// ============================================================
+// Phase 2 追加機能 C++ backing extern宣言
+// ============================================================
+
+// URLパース
+extern "C" long cm_http_parse_url(string url);
+extern "C" string cm_http_parsed_scheme(long handle);
+extern "C" string cm_http_parsed_host(long handle);
+extern "C" int cm_http_parsed_port(long handle);
+extern "C" string cm_http_parsed_path(long handle);
+extern "C" void cm_http_parsed_url_destroy(long handle);
+
+// リクエスト拡張
+extern "C" void cm_http_request_set_timeout(long handle, int timeout_ms);
+extern "C" void cm_http_request_set_follow_redirects(long handle, int follow);
+extern "C" void cm_http_request_set_max_redirects(long handle, int max_redirects);
+extern "C" void cm_http_request_set_basic_auth(long handle, string user, string pass);
+extern "C" void cm_http_request_set_bearer_auth(long handle, string token);
+extern "C" void cm_http_request_set_content_type(long handle, string content_type);
+extern "C" void cm_http_request_set_json(long handle);
+
+// レスポンス拡張
+extern "C" string cm_http_response_content_type(long handle);
+extern "C" string cm_http_response_location(long handle);
+extern "C" int cm_http_response_is_redirect(long handle);
+
+// ============================================================
+// PATCHメソッド定数
+// ============================================================
+
+export int METHOD_PATCH()  { return 4; }
+
+// ============================================================
+// URLパースAPI
+// ============================================================
+
+export struct ParsedUrl {
+    string scheme;
+    string host;
+    int port;
+    string path;
+}
+
+// URLを解析してParsedUrlを返す
+export ParsedUrl parse_url(string url) {
+    long handle = cm_http_parse_url(url);
+    ParsedUrl parsed;
+    parsed.scheme = cm_http_parsed_scheme(handle);
+    parsed.host = cm_http_parsed_host(handle);
+    parsed.port = cm_http_parsed_port(handle);
+    parsed.path = cm_http_parsed_path(handle);
+    cm_http_parsed_url_destroy(handle);
+    return parsed;
+}
+
+// ============================================================
+// HttpRequest拡張メソッド（Phase 2追加）
+// ============================================================
+// 既存のHttpRequestに以下のメソッドを追加:
+
+impl HttpRequest {
+    // タイムアウト設定（ミリ秒）
+    void set_timeout(int timeout_ms) {
+        cm_http_request_set_timeout(self._handle, timeout_ms);
+    }
+
+    // リダイレクト追跡設定
+    void set_follow_redirects(int follow) {
+        cm_http_request_set_follow_redirects(self._handle, follow);
+    }
+
+    // 最大リダイレクト回数設定
+    void set_max_redirects(int max_redirects) {
+        cm_http_request_set_max_redirects(self._handle, max_redirects);
+    }
+
+    // Basic認証
+    void set_basic_auth(string user, string pass) {
+        cm_http_request_set_basic_auth(self._handle, user, pass);
+    }
+
+    // Bearer認証
+    void set_bearer_auth(string token) {
+        cm_http_request_set_bearer_auth(self._handle, token);
+    }
+
+    // Content-Type設定
+    void set_content_type(string content_type) {
+        cm_http_request_set_content_type(self._handle, content_type);
+    }
+
+    // JSON Content-Typeを設定
+    void set_json() {
+        cm_http_request_set_json(self._handle);
+    }
+}

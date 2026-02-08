@@ -442,4 +442,192 @@ void cm_tcp_poll_destroy(int64_t poll_handle) {
     free(ph);
 }
 
+// ============================================================
+// UDPソケット操作
+// ============================================================
+
+// UDPソケットを作成
+// 戻り値: ソケットFD（失敗時-1）
+int64_t cm_udp_create() {
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        perror("[net] UDP socket creation failed");
+        return -1;
+    }
+    return static_cast<int64_t>(fd);
+}
+
+// UDPソケットを指定ポートにバインド
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_udp_bind(int64_t fd, int32_t port) {
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(static_cast<uint16_t>(port));
+
+    if (bind(static_cast<int>(fd), (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("[net] UDP bind failed");
+        return -1;
+    }
+    return 0;
+}
+
+// UDPデータグラム送信
+// host_ptr: 送信先ホスト名/IPアドレス（C文字列のポインタをlongで受け取り）
+// port: 送信先ポート
+// buf_ptr: 送信データバッファ（ポインタをlongで受け取り）
+// size: 送信データサイズ
+// 戻り値: 送信バイト数（-1=エラー）
+int32_t cm_udp_sendto(int64_t fd, int64_t host_ptr, int32_t port, int64_t buf_ptr, int32_t size) {
+    const char* host = reinterpret_cast<const char*>(host_ptr);
+
+    struct sockaddr_in dest_addr;
+    memset(&dest_addr, 0, sizeof(dest_addr));
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(static_cast<uint16_t>(port));
+
+    // IPアドレスまたはホスト名で解決
+    if (inet_pton(AF_INET, host, &dest_addr.sin_addr) <= 0) {
+        // ホスト名の場合はDNS解決
+        struct addrinfo hints, *result;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        if (getaddrinfo(host, nullptr, &hints, &result) != 0) {
+            return -1;
+        }
+        memcpy(&dest_addr.sin_addr, &((struct sockaddr_in*)result->ai_addr)->sin_addr,
+               sizeof(struct in_addr));
+        freeaddrinfo(result);
+    }
+
+    const void* buf = reinterpret_cast<const void*>(buf_ptr);
+    ssize_t sent = sendto(static_cast<int>(fd), buf, static_cast<size_t>(size), 0,
+                          (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+    return static_cast<int32_t>(sent);
+}
+
+// UDPデータグラム受信
+// buf_ptr: 受信バッファ（ポインタをlongで受け取り）
+// size: バッファサイズ
+// 戻り値: 受信バイト数（-1=エラー、0=タイムアウト）
+int32_t cm_udp_recvfrom(int64_t fd, int64_t buf_ptr, int32_t size) {
+    void* buf = reinterpret_cast<void*>(buf_ptr);
+    struct sockaddr_in from_addr;
+    socklen_t from_len = sizeof(from_addr);
+
+    ssize_t received = recvfrom(static_cast<int>(fd), buf, static_cast<size_t>(size), 0,
+                                (struct sockaddr*)&from_addr, &from_len);
+    return static_cast<int32_t>(received);
+}
+
+// UDPソケットクローズ
+void cm_udp_close(int64_t fd) {
+    close(static_cast<int>(fd));
+}
+
+// UDPブロードキャスト有効化
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_udp_set_broadcast(int64_t fd) {
+    int opt = 1;
+    if (setsockopt(static_cast<int>(fd), SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// ============================================================
+// DNS解決
+// ============================================================
+
+// ホスト名をIPアドレス文字列に解決
+// 戻り値: IPアドレス文字列（strdup、失敗時はNULL）
+char* cm_dns_resolve(const char* hostname) {
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(hostname, nullptr, &hints, &result) != 0) {
+        return nullptr;
+    }
+
+    char ip_str[INET_ADDRSTRLEN];
+    struct sockaddr_in* addr = (struct sockaddr_in*)result->ai_addr;
+    inet_ntop(AF_INET, &addr->sin_addr, ip_str, sizeof(ip_str));
+    freeaddrinfo(result);
+
+    return strdup(ip_str);
+}
+
+// ============================================================
+// ソケットオプション
+// ============================================================
+
+// 送受信タイムアウト設定（ミリ秒）
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_socket_set_timeout(int64_t fd, int32_t timeout_ms) {
+    struct timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+    int s = static_cast<int>(fd);
+    if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        return -1;
+    }
+    if (setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// アドレス再利用設定（SO_REUSEADDR）
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_socket_set_reuse_addr(int64_t fd) {
+    int opt = 1;
+    if (setsockopt(static_cast<int>(fd), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// TCP_NODELAY設定（Nagleアルゴリズム無効化）
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_socket_set_nodelay(int64_t fd) {
+    int opt = 1;
+    if (setsockopt(static_cast<int>(fd), IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// SO_KEEPALIVE設定
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_socket_set_keepalive(int64_t fd) {
+    int opt = 1;
+    if (setsockopt(static_cast<int>(fd), SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// 受信バッファサイズ設定
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_socket_set_recv_buffer(int64_t fd, int32_t size) {
+    if (setsockopt(static_cast<int>(fd), SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// 送信バッファサイズ設定
+// 戻り値: 0=成功, -1=失敗
+int32_t cm_socket_set_send_buffer(int64_t fd, int32_t size) {
+    if (setsockopt(static_cast<int>(fd), SOL_SOCKET, SO_SNDBUF, &size, sizeof(size)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
 }  // extern "C"

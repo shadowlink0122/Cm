@@ -138,3 +138,102 @@ export bool is_available() {
     gpu_device_destroy(dev);
     return true;
 }
+
+// ============================================================
+// Phase 3 追加機能 C++ backing extern宣言
+// ============================================================
+
+// Int32 バッファ操作
+extern "C" long gpu_buffer_create_ints(long device, long count);
+extern "C" void gpu_buffer_write_ints(long buffer, int* data, long count);
+extern "C" void gpu_buffer_read_ints(long buffer, int* data, long count);
+
+// バッファユーティリティ
+extern "C" long gpu_buffer_size(long buffer);
+extern "C" void gpu_buffer_copy(long src, long dst, long size);
+extern "C" void gpu_buffer_zero(long buffer);
+
+// デバイス情報
+extern "C" long gpu_device_max_threads(long device);
+extern "C" long gpu_device_memory_size(long device);
+
+// グリッドdispatch
+extern "C" void gpu_dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x, long group_x);
+
+// 非同期dispatch
+extern "C" long gpu_dispatch_async(long kernel, long buf_a, long buf_b, long buf_out, long count);
+extern "C" void gpu_command_wait(long cmd);
+extern "C" int gpu_command_is_completed(long cmd);
+
+// ============================================================
+// Int32 バッファ API
+// ============================================================
+
+export long buffer_create_ints(long device, long count) {
+    return gpu_buffer_create_ints(device, count);
+}
+
+export void buffer_write_ints(long buffer, int* data, long count) {
+    gpu_buffer_write_ints(buffer, data, count);
+}
+
+export void buffer_read_ints(long buffer, int* data, long count) {
+    gpu_buffer_read_ints(buffer, data, count);
+}
+
+// ============================================================
+// バッファユーティリティ API
+// ============================================================
+
+export long buffer_size(long buffer) {
+    return gpu_buffer_size(buffer);
+}
+
+export void buffer_copy(long src, long dst, long size) {
+    gpu_buffer_copy(src, dst, size);
+}
+
+export void buffer_zero(long buffer) {
+    gpu_buffer_zero(buffer);
+}
+
+// ============================================================
+// デバイス情報 API
+// ============================================================
+
+export long device_max_threads(long device) {
+    return gpu_device_max_threads(device);
+}
+
+export long device_memory_size(long device) {
+    return gpu_device_memory_size(device);
+}
+
+// ============================================================
+// グリッドdispatch API
+// ============================================================
+
+// スレッドグループサイズを明示指定してdispatch
+// group_x=0の場合はカーネル最大値を自動使用
+export void dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x, long group_x) {
+    gpu_dispatch_grid(kernel, buf_a, buf_b, buf_out, grid_x, group_x);
+}
+
+// ============================================================
+// 非同期dispatch API
+// ============================================================
+
+// GPUカーネルを非同期実行し、コマンドハンドルを返す
+export long dispatch_async(long kernel, long buf_a, long buf_b, long buf_out, long count) {
+    return gpu_dispatch_async(kernel, buf_a, buf_b, buf_out, count);
+}
+
+// コマンドバッファ完了待機
+export void command_wait(long cmd) {
+    gpu_command_wait(cmd);
+}
+
+// コマンドバッファが完了しているかチェック
+export bool command_is_completed(long cmd) {
+    return gpu_command_is_completed(cmd) != 0;
+}

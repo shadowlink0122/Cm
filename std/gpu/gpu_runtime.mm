@@ -409,3 +409,244 @@ void gpu_dispatch_n(int64_t kernel_handle, int64_t *buffers,
 }
 
 } // extern "C"
+
+// ============================================================
+// Int32 バッファ操作（整数カーネル用）
+// ============================================================
+
+extern "C" {
+
+// int32配列用バッファ作成
+int64_t gpu_buffer_create_ints(int64_t device_handle, int64_t count) {
+  if (device_handle == 0 || count <= 0)
+    return 0;
+  GpuDevice *ctx = (GpuDevice *)device_handle;
+  int64_t size = count * sizeof(int32_t);
+
+  @autoreleasepool {
+    id<MTLBuffer> buffer =
+        [ctx->device newBufferWithLength:(NSUInteger)size
+                                 options:MTLResourceStorageModeShared];
+    if (!buffer)
+      return 0;
+
+    GpuBuffer *buf = (GpuBuffer *)malloc(sizeof(GpuBuffer));
+    buf->buffer = buffer;
+    buf->size = (size_t)size;
+    return (int64_t)buf;
+  }
+}
+
+// int32配列をGPUバッファに書き込み
+void gpu_buffer_write_ints(int64_t buffer_handle, int32_t *data,
+                           int64_t count) {
+  if (buffer_handle == 0 || data == NULL || count <= 0)
+    return;
+  GpuBuffer *buf = (GpuBuffer *)buffer_handle;
+  size_t copy_size = (size_t)(count * sizeof(int32_t));
+  if (copy_size > buf->size)
+    copy_size = buf->size;
+  memcpy([buf->buffer contents], data, copy_size);
+}
+
+// GPUバッファからint32配列を読み出し
+void gpu_buffer_read_ints(int64_t buffer_handle, int32_t *data, int64_t count) {
+  if (buffer_handle == 0 || data == NULL || count <= 0)
+    return;
+  GpuBuffer *buf = (GpuBuffer *)buffer_handle;
+  size_t copy_size = (size_t)(count * sizeof(int32_t));
+  if (copy_size > buf->size)
+    copy_size = buf->size;
+  memcpy(data, [buf->buffer contents], copy_size);
+}
+
+// ============================================================
+// バッファユーティリティ
+// ============================================================
+
+// バッファサイズ取得（バイト単位）
+int64_t gpu_buffer_size(int64_t buffer_handle) {
+  if (buffer_handle == 0)
+    return 0;
+  GpuBuffer *buf = (GpuBuffer *)buffer_handle;
+  return (int64_t)buf->size;
+}
+
+// バッファ間コピー（GPU側メモリ内）
+void gpu_buffer_copy(int64_t src_handle, int64_t dst_handle, int64_t size) {
+  if (src_handle == 0 || dst_handle == 0 || size <= 0)
+    return;
+  GpuBuffer *src = (GpuBuffer *)src_handle;
+  GpuBuffer *dst = (GpuBuffer *)dst_handle;
+  size_t copy_size = (size_t)size;
+  if (copy_size > src->size)
+    copy_size = src->size;
+  if (copy_size > dst->size)
+    copy_size = dst->size;
+  memcpy([dst->buffer contents], [src->buffer contents], copy_size);
+}
+
+// バッファをゼロクリア
+void gpu_buffer_zero(int64_t buffer_handle) {
+  if (buffer_handle == 0)
+    return;
+  GpuBuffer *buf = (GpuBuffer *)buffer_handle;
+  memset([buf->buffer contents], 0, buf -> size);
+}
+
+// ============================================================
+// デバイス情報
+// ============================================================
+
+// デバイスの最大スレッドグループサイズを取得
+int64_t gpu_device_max_threads(int64_t device_handle) {
+  if (device_handle == 0)
+    return 0;
+  GpuDevice *ctx = (GpuDevice *)device_handle;
+  // デフォルトカーネルの情報がないため、デバイスの推奨値を返す
+  return (int64_t)[ctx->device maxThreadsPerThreadgroup].width;
+}
+
+// デバイスのメモリサイズ取得（バイト単位）
+int64_t gpu_device_memory_size(int64_t device_handle) {
+  if (device_handle == 0)
+    return 0;
+  GpuDevice *ctx = (GpuDevice *)device_handle;
+  return (int64_t)[ctx->device recommendedMaxWorkingSetSize];
+}
+
+// ============================================================
+// グリッドサイズ指定ディスパッチ
+// ============================================================
+
+// 1Dグリッド指定dispatch（スレッドグループサイズ明示）
+void gpu_dispatch_grid(int64_t kernel_handle, int64_t buf_a_handle,
+                       int64_t buf_b_handle, int64_t buf_out_handle,
+                       int64_t grid_x, int64_t group_x) {
+  if (kernel_handle == 0 || grid_x <= 0)
+    return;
+
+  GpuKernel *kernel = (GpuKernel *)kernel_handle;
+  GpuBuffer *buf_a = buf_a_handle ? (GpuBuffer *)buf_a_handle : NULL;
+  GpuBuffer *buf_b = buf_b_handle ? (GpuBuffer *)buf_b_handle : NULL;
+  GpuBuffer *buf_out = buf_out_handle ? (GpuBuffer *)buf_out_handle : NULL;
+
+  @autoreleasepool {
+    id<MTLCommandBuffer> commandBuffer = [kernel->commandQueue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder =
+        [commandBuffer computeCommandEncoder];
+
+    [encoder setComputePipelineState:kernel->pipeline];
+
+    int idx = 0;
+    if (buf_a)
+      [encoder setBuffer:buf_a->buffer offset:0 atIndex:idx++];
+    if (buf_b)
+      [encoder setBuffer:buf_b->buffer offset:0 atIndex:idx++];
+    if (buf_out)
+      [encoder setBuffer:buf_out->buffer offset:0 atIndex:idx++];
+
+    // group_xが0の場合はカーネルの最大値を使用
+    NSUInteger gs = (group_x > 0)
+                        ? (NSUInteger)group_x
+                        : kernel->pipeline.maxTotalThreadsPerThreadgroup;
+    if (gs > (NSUInteger)grid_x)
+      gs = (NSUInteger)grid_x;
+
+    MTLSize gridSize = MTLSizeMake((NSUInteger)grid_x, 1, 1);
+    MTLSize groupSize = MTLSizeMake(gs, 1, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:groupSize];
+    [encoder endEncoding];
+
+    [commandBuffer commit];
+    [commandBuffer waitUntilCompleted];
+
+    if ([commandBuffer error]) {
+      fprintf(stderr, "[gpu] grid dispatch エラー: %s\n",
+              [[[commandBuffer error] localizedDescription] UTF8String]);
+    }
+  }
+}
+
+// ============================================================
+// 非同期ディスパッチ
+// ============================================================
+
+// コマンドバッファハンドル構造体
+typedef struct {
+  id<MTLCommandBuffer> cmdBuf;
+} GpuCommandHandle;
+
+// 非同期dispatch — コマンドバッファを返す（waitせず）
+int64_t gpu_dispatch_async(int64_t kernel_handle, int64_t buf_a_handle,
+                           int64_t buf_b_handle, int64_t buf_out_handle,
+                           int64_t count) {
+  if (kernel_handle == 0 || count <= 0)
+    return 0;
+
+  GpuKernel *kernel = (GpuKernel *)kernel_handle;
+  GpuBuffer *buf_a = buf_a_handle ? (GpuBuffer *)buf_a_handle : NULL;
+  GpuBuffer *buf_b = buf_b_handle ? (GpuBuffer *)buf_b_handle : NULL;
+  GpuBuffer *buf_out = buf_out_handle ? (GpuBuffer *)buf_out_handle : NULL;
+
+  @autoreleasepool {
+    id<MTLCommandBuffer> commandBuffer = [kernel->commandQueue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder =
+        [commandBuffer computeCommandEncoder];
+
+    [encoder setComputePipelineState:kernel->pipeline];
+
+    int idx = 0;
+    if (buf_a)
+      [encoder setBuffer:buf_a->buffer offset:0 atIndex:idx++];
+    if (buf_b)
+      [encoder setBuffer:buf_b->buffer offset:0 atIndex:idx++];
+    if (buf_out)
+      [encoder setBuffer:buf_out->buffer offset:0 atIndex:idx++];
+
+    NSUInteger threadGroupSize = kernel->pipeline.maxTotalThreadsPerThreadgroup;
+    if (threadGroupSize > (NSUInteger)count)
+      threadGroupSize = (NSUInteger)count;
+
+    MTLSize gridSize = MTLSizeMake((NSUInteger)count, 1, 1);
+    MTLSize groupSize = MTLSizeMake(threadGroupSize, 1, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:groupSize];
+    [encoder endEncoding];
+
+    [commandBuffer commit];
+
+    // コマンドハンドルを作成して返す（waitしない）
+    GpuCommandHandle *handle =
+        (GpuCommandHandle *)malloc(sizeof(GpuCommandHandle));
+    handle->cmdBuf = commandBuffer;
+    return (int64_t)handle;
+  }
+}
+
+// コマンドバッファの完了を待機
+void gpu_command_wait(int64_t cmd_handle) {
+  if (cmd_handle == 0)
+    return;
+  GpuCommandHandle *handle = (GpuCommandHandle *)cmd_handle;
+  [handle->cmdBuf waitUntilCompleted];
+
+  if ([handle->cmdBuf error]) {
+    fprintf(stderr, "[gpu] async dispatch エラー: %s\n",
+            [[[handle->cmdBuf error] localizedDescription] UTF8String]);
+  }
+
+  handle->cmdBuf = nil;
+  free(handle);
+}
+
+// コマンドバッファが完了しているかチェック
+int32_t gpu_command_is_completed(int64_t cmd_handle) {
+  if (cmd_handle == 0)
+    return 1; // NULLは完了扱い
+  GpuCommandHandle *handle = (GpuCommandHandle *)cmd_handle;
+  return ([handle->cmdBuf status] == MTLCommandBufferStatusCompleted) ? 1 : 0;
+}
+
+} // extern "C"

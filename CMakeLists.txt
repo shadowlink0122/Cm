@@ -355,6 +355,81 @@ if(CM_USE_LLVM)
             )
         endif()
 
+        # stdランタイムを個別オブジェクトファイルとしてビルド（LLVM Nativeリンク用）
+        # --- Net Runtime ---
+        set(CM_NET_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/net/net_runtime.cpp)
+        set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
+        add_custom_command(
+            OUTPUT ${CM_NET_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_NET_RUNTIME_SOURCE}
+                    -o ${CM_NET_RUNTIME_OUTPUT} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_NET_RUNTIME_SOURCE}
+            COMMENT "Building Cm net runtime library"
+        )
+
+        # --- Sync Runtime (sync + channel を1つのアーカイブに) ---
+        set(CM_SYNC_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/sync_runtime.cpp)
+        set(CM_CHANNEL_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/channel_runtime.cpp)
+        set(CM_SYNC_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime_obj.o)
+        set(CM_CHANNEL_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_channel_runtime_obj.o)
+        set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
+        add_custom_command(
+            OUTPUT ${CM_SYNC_RUNTIME_OBJ}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_SYNC_RUNTIME_SOURCE}
+                    -o ${CM_SYNC_RUNTIME_OBJ} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_SYNC_RUNTIME_SOURCE}
+            COMMENT "Building Cm sync runtime object"
+        )
+        add_custom_command(
+            OUTPUT ${CM_CHANNEL_RUNTIME_OBJ}
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_CHANNEL_RUNTIME_SOURCE}
+                    -o ${CM_CHANNEL_RUNTIME_OBJ} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_CHANNEL_RUNTIME_SOURCE}
+            COMMENT "Building Cm channel runtime object"
+        )
+        add_custom_command(
+            OUTPUT ${CM_SYNC_RUNTIME_OUTPUT}
+            COMMAND ar rcs ${CM_SYNC_RUNTIME_OUTPUT} ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
+            DEPENDS ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
+            COMMENT "Creating Cm sync runtime archive"
+        )
+
+        # --- Thread Runtime ---
+        set(CM_THREAD_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/thread/thread_runtime.cpp)
+        set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
+        add_custom_command(
+            OUTPUT ${CM_THREAD_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_THREAD_RUNTIME_SOURCE}
+                    -o ${CM_THREAD_RUNTIME_OUTPUT} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_THREAD_RUNTIME_SOURCE}
+            COMMENT "Building Cm thread runtime library"
+        )
+
+        # --- HTTP Runtime ---
+        set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/http/http_runtime.cpp)
+        set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
+        # OpenSSLが見つかった場合はHTTPSサポート付きでビルド
+        set(CM_HTTP_EXTRA_FLAGS "")
+        if(OpenSSL_FOUND)
+            set(CM_HTTP_EXTRA_FLAGS "-DCM_HAS_OPENSSL -I${OPENSSL_INCLUDE_DIR}")
+        endif()
+        add_custom_command(
+            OUTPUT ${CM_HTTP_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_HTTP_RUNTIME_SOURCE}
+                    -o ${CM_HTTP_RUNTIME_OUTPUT} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_HTTP_EXTRA_FLAGS} ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_HTTP_RUNTIME_SOURCE}
+            COMMENT "Building Cm HTTP runtime library"
+        )
+
         # Build WASM runtime library
         set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
         set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
@@ -370,10 +445,22 @@ if(CM_USE_LLVM)
         )
 
         # ランタイムターゲット
+        set(CM_STD_RUNTIME_DEPS
+            ${CM_NET_RUNTIME_OUTPUT}
+            ${CM_SYNC_RUNTIME_OUTPUT}
+            ${CM_THREAD_RUNTIME_OUTPUT}
+            ${CM_HTTP_RUNTIME_OUTPUT}
+        )
         if(APPLE)
-            add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT} ${CM_GPU_RUNTIME_OUTPUT})
+            add_custom_target(cm_runtime ALL DEPENDS
+                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT} ${CM_GPU_RUNTIME_OUTPUT}
+                ${CM_STD_RUNTIME_DEPS}
+            )
         else()
-            add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
+            add_custom_target(cm_runtime ALL DEPENDS
+                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT}
+                ${CM_STD_RUNTIME_DEPS}
+            )
         endif()
         add_dependencies(cm cm_runtime)
         
@@ -387,11 +474,19 @@ if(CM_USE_LLVM)
                 CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
                 CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
                 CM_GPU_RUNTIME_PATH="${CM_GPU_RUNTIME_OUTPUT}"
+                CM_NET_RUNTIME_PATH="${CM_NET_RUNTIME_OUTPUT}"
+                CM_SYNC_RUNTIME_PATH="${CM_SYNC_RUNTIME_OUTPUT}"
+                CM_THREAD_RUNTIME_PATH="${CM_THREAD_RUNTIME_OUTPUT}"
+                CM_HTTP_RUNTIME_PATH="${CM_HTTP_RUNTIME_OUTPUT}"
             )
         else()
             target_compile_definitions(cm PRIVATE
                 CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
                 CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+                CM_NET_RUNTIME_PATH="${CM_NET_RUNTIME_OUTPUT}"
+                CM_SYNC_RUNTIME_PATH="${CM_SYNC_RUNTIME_OUTPUT}"
+                CM_THREAD_RUNTIME_PATH="${CM_THREAD_RUNTIME_OUTPUT}"
+                CM_HTTP_RUNTIME_PATH="${CM_HTTP_RUNTIME_OUTPUT}"
             )
         endif()
     else()

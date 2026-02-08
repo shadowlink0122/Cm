@@ -132,3 +132,103 @@ export int poll_get_events(long poll_handle, int index) {
 export void poll_destroy(long poll_handle) {
     cm_tcp_poll_destroy(poll_handle);
 }
+
+// ============================================================
+// UDP C++ backing extern宣言
+// ============================================================
+
+extern "C" long cm_udp_create();
+extern "C" int cm_udp_bind(long fd, int port);
+extern "C" int cm_udp_sendto(long fd, long host_ptr, int port, long buf_ptr, int size);
+extern "C" int cm_udp_recvfrom(long fd, long buf_ptr, int size);
+extern "C" void cm_udp_close(long fd);
+extern "C" int cm_udp_set_broadcast(long fd);
+
+// DNS解決
+extern "C" string cm_dns_resolve(string hostname);
+
+// ソケットオプション
+extern "C" int cm_socket_set_timeout(long fd, int timeout_ms);
+extern "C" int cm_socket_set_reuse_addr(long fd);
+extern "C" int cm_socket_set_nodelay(long fd);
+extern "C" int cm_socket_set_keepalive(long fd);
+extern "C" int cm_socket_set_recv_buffer(long fd, int size);
+extern "C" int cm_socket_set_send_buffer(long fd, int size);
+
+// ============================================================
+// UDP API
+// ============================================================
+
+// UDPソケットを作成
+export long udp_create() {
+    return cm_udp_create();
+}
+
+// UDPソケットをポートにバインド
+export int udp_bind(long fd, int port) {
+    return cm_udp_bind(fd, port);
+}
+
+// UDPデータグラム送信
+export int udp_sendto(long fd, long host_ptr, int port, long buf_ptr, int size) {
+    return cm_udp_sendto(fd, host_ptr, port, buf_ptr, size);
+}
+
+// UDPデータグラム受信
+export int udp_recvfrom(long fd, long buf_ptr, int size) {
+    return cm_udp_recvfrom(fd, buf_ptr, size);
+}
+
+// UDPソケットクローズ
+export void udp_close(long fd) {
+    cm_udp_close(fd);
+}
+
+// UDPブロードキャスト有効化
+export int udp_set_broadcast(long fd) {
+    return cm_udp_set_broadcast(fd);
+}
+
+// ============================================================
+// DNS API
+// ============================================================
+
+// ホスト名をIPアドレスに解決
+export string dns_resolve(string hostname) {
+    return cm_dns_resolve(hostname);
+}
+
+// ============================================================
+// ソケットオプション API
+// TCP/UDPの両方で使用可能
+// ============================================================
+
+// 送受信タイムアウト設定（ミリ秒）
+export int socket_set_timeout(long fd, int timeout_ms) {
+    return cm_socket_set_timeout(fd, timeout_ms);
+}
+
+// アドレス再利用（TIME_WAIT中のポート再利用）
+export int socket_set_reuse_addr(long fd) {
+    return cm_socket_set_reuse_addr(fd);
+}
+
+// Nagleアルゴリズム無効化（低レイテンシ通信用）
+export int socket_set_nodelay(long fd) {
+    return cm_socket_set_nodelay(fd);
+}
+
+// KeepAlive有効化
+export int socket_set_keepalive(long fd) {
+    return cm_socket_set_keepalive(fd);
+}
+
+// 受信バッファサイズ設定
+export int socket_set_recv_buffer(long fd, int size) {
+    return cm_socket_set_recv_buffer(fd, size);
+}
+
+// 送信バッファサイズ設定
+export int socket_set_send_buffer(long fd, int size) {
+    return cm_socket_set_send_buffer(fd, size);
+}
