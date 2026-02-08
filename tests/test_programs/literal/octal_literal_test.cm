@@ -1,0 +1,37 @@
+// octalリテラルテスト — 0oプレフィックスによる8進数
+import std::io::println;
+
+int main() {
+    // 基本的なoctalリテラル
+    int a = 0o10;       // 8
+    int b = 0o644;      // 420
+    int c = 0o777;      // 511
+    int d = 0o0;        // 0
+    int e = 0o1;        // 1
+
+    println("a = {a}");
+    println("b = {b}");
+    println("c = {c}");
+    println("d = {d}");
+    println("e = {e}");
+
+    // 大文字プレフィックス
+    int f = 0O17;       // 15
+    println("f = {f}");
+
+    // ビット演算との組み合わせ
+    int perm = 0o755;   // rwxr-xr-x = 493
+    println("perm = {perm}");
+
+    // 他の基数との比較
+    int hex_val = 0xFF;     // 255
+    int bin_val = 0b1010;   // 10
+    int oct_val = 0o377;    // 255
+    println("hex={hex_val} bin={bin_val} oct={oct_val}");
+
+    if (hex_val == oct_val) {
+        println("PASS: 0xFF == 0o377");
+    }
+
+    return 0;
+}

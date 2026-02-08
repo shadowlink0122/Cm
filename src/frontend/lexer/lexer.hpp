@@ -225,6 +225,22 @@ class Lexer {
             return Token(TokenKind::IntLiteral, start, pos_, val);
         }
 
+        // 8進数チェック (0o/0Oプレフィックス)
+        if (source_[start] == '0' && (peek() == 'o' || peek() == 'O')) {
+            debug::lex::log(debug::lex::Id::Number, "detected octal prefix", debug::Level::Trace);
+            advance();
+            while (!is_at_end() && is_octal_digit(peek())) {
+                debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()),
+                                debug::Level::Trace);
+                advance();
+            }
+            std::string text(source_.substr(start + 2, pos_ - start - 2));
+            int64_t val = std::stoll(text, nullptr, 8);
+            debug::lex::log(debug::lex::Id::Number, "0o" + text + " = " + std::to_string(val),
+                            debug::Level::Debug);
+            return Token(TokenKind::IntLiteral, start, pos_, val);
+        }
+
         // 2進数チェック
         if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
             debug::lex::log(debug::lex::Id::BinaryNumber, "detected binary prefix",
@@ -543,6 +559,7 @@ class Lexer {
     static bool is_hex_digit(char c) {
         return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
+    static bool is_octal_digit(char c) { return c >= '0' && c <= '7'; }
     static bool is_alnum(char c) { return is_alpha(c) || is_digit(c); }
 
     std::string normalize_raw_indent(std::string value) {

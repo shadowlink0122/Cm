@@ -6,6 +6,106 @@
 
 namespace cm::mir {
 
+// コンパイル時定数評価（const folding）
+// HIR式がコンパイル時に評価可能な場合、MirConstantを返す
+static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, LoweringContext& ctx) {
+    // リテラルの場合
+    if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr.kind)) {
+        if (*lit) {
+            MirConstant c;
+            c.type = expr.type ? expr.type : hir::make_int();
+            c.value = (*lit)->value;
+            return c;
+        }
+    }
+
+    // 変数参照の場合（既登録のconst変数を伝搬）
+    if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
+        if (*var) {
+            auto cv = ctx.get_const_value((*var)->name);
+            if (cv)
+                return *cv;
+        }
+    }
+
+    // 単項マイナスの場合
+    if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&expr.kind)) {
+        if (*unary && (*unary)->op == hir::HirUnaryOp::Neg && (*unary)->operand) {
+            auto inner = try_const_eval(*(*unary)->operand, ctx);
+            if (inner && std::holds_alternative<int64_t>(inner->value)) {
+                MirConstant c;
+                c.type = inner->type;
+                c.value = -std::get<int64_t>(inner->value);
+                return c;
+            }
+        }
+    }
+
+    // 二項演算の場合（ビット演算、算術演算）
+    if (auto* bin = std::get_if<std::unique_ptr<hir::HirBinary>>(&expr.kind)) {
+        if (*bin && (*bin)->lhs && (*bin)->rhs) {
+            auto lhs = try_const_eval(*(*bin)->lhs, ctx);
+            auto rhs = try_const_eval(*(*bin)->rhs, ctx);
+            if (lhs && rhs && std::holds_alternative<int64_t>(lhs->value) &&
+                std::holds_alternative<int64_t>(rhs->value)) {
+                int64_t l = std::get<int64_t>(lhs->value);
+                int64_t r = std::get<int64_t>(rhs->value);
+                int64_t result = 0;
+                bool ok = true;
+                switch ((*bin)->op) {
+                    case hir::HirBinaryOp::Add:
+                        result = l + r;
+                        break;
+                    case hir::HirBinaryOp::Sub:
+                        result = l - r;
+                        break;
+                    case hir::HirBinaryOp::Mul:
+                        result = l * r;
+                        break;
+                    case hir::HirBinaryOp::Div:
+                        if (r != 0)
+                            result = l / r;
+                        else
+                            ok = false;
+                        break;
+                    case hir::HirBinaryOp::Mod:
+                        if (r != 0)
+                            result = l % r;
+                        else
+                            ok = false;
+                        break;
+                    case hir::HirBinaryOp::BitAnd:
+                        result = l & r;
+                        break;
+                    case hir::HirBinaryOp::BitOr:
+                        result = l | r;
+                        break;
+                    case hir::HirBinaryOp::BitXor:
+                        result = l ^ r;
+                        break;
+                    case hir::HirBinaryOp::Shl:
+                        result = l << r;
+                        break;
+                    case hir::HirBinaryOp::Shr:
+                        result = l >> r;
+                        break;
+                    default:
+                        ok = false;
+                        break;
+                }
+                if (ok) {
+                    MirConstant c;
+                    c.type = lhs->type;
+                    c.value = result;
+                    return c;
+                }
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 // let文のlowering
 void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // move初期化の場合、新しいローカルを作成せずエイリアスとして登録（真のゼロコストmove）
@@ -52,16 +152,13 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                   "[MIR] Registered variable '" + let.name + "' as local " + std::to_string(local));
     }
 
-    // const変数の場合、初期値が定数リテラルならその値を保存
-    // これにより文字列補間でconst変数の値を直接使用できる
+    // const変数の場合、初期値をコンパイル時評価して保存
+    // リテラル、const参照、二項演算（ビット演算含む）に対応
     if (let.is_const && let.init) {
-        if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&let.init->kind)) {
-            if (*lit) {
-                MirConstant const_val;
-                const_val.type = let.type;
-                const_val.value = (*lit)->value;
-                ctx.register_const_value(let.name, const_val);
-            }
+        auto const_val = try_const_eval(*let.init, ctx);
+        if (const_val) {
+            const_val->type = let.type ? let.type : const_val->type;
+            ctx.register_const_value(let.name, *const_val);
         }
     }
 
