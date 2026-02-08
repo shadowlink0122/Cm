@@ -9,11 +9,11 @@ import std::sync::mutex::mutex_lock;
 import std::sync::mutex::mutex_unlock;
 import std::sync::mutex::mutex_destroy;
 import std::thread::spawn_with_arg;
-import std::thread::join_all;
+import std::thread::join;
 
 // 共有データ構造:
 // メモリレイアウト: [mutex_buf: 64bytes][counter: 4bytes]
-// offset 0: mutex (long[8])
+// offset 0: mutex (pthread_mutex_t = 64bytes)
 // offset 64: counter (int)
 
 // 各スレッドが実行する関数
@@ -46,22 +46,23 @@ int main() {
     int* counter_ptr = (shared as long + 64) as int*;
     *counter_ptr = 0;
 
-    // 4スレッド一括起動・待機
-    ulong[4] threads;
-    threads[0] = spawn_with_arg(&worker as void*, shared);
-    threads[1] = spawn_with_arg(&worker as void*, shared);
-    threads[2] = spawn_with_arg(&worker as void*, shared);
-    threads[3] = spawn_with_arg(&worker as void*, shared);
-    join_all(threads as ulong*, 4);
+    // 4スレッド起動・個別待機
+    // ※ join_allはJIT環境でスタック配列ポインタ変換の問題があるため個別joinを使用
+    ulong t0 = spawn_with_arg(&worker as void*, shared);
+    ulong t1 = spawn_with_arg(&worker as void*, shared);
+    ulong t2 = spawn_with_arg(&worker as void*, shared);
+    ulong t3 = spawn_with_arg(&worker as void*, shared);
+    join(t0);
+    join(t1);
+    join(t2);
+    join(t3);
 
-    // 検証: スレッドが正常に実行されたことを確認
-    // JIT環境ではmutexの同期が完全でない場合があるため
-    // カウンタが0より大きいことのみ検証
+    // 検証: 4スレッド × 1000回 = 4000
     int result = *counter_ptr;
-    if (result > 0) {
+    if (result == 4000) {
         println("threads completed successfully");
     } else {
-        println("FAIL: no thread execution");
+        println("FAIL: expected 4000, got {result}");
     }
 
     mutex_destroy(shared);
