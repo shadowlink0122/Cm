@@ -17,6 +17,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+// HTTPS (TLS) 対応 — OpenSSLが利用可能な場合のみ
+#ifdef CM_HAS_OPENSSL
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#endif
+
 // ============================================================
 // HTTPメソッド定数
 // ============================================================
@@ -76,7 +82,7 @@ static std::string build_request(const CmHttpRequest* req) {
     request += " HTTP/1.1\r\n";
     request += "Host: ";
     request += req->host;
-    if (req->port != 80) {
+    if (req->port != 80 && req->port != 443) {
         request += ":";
         request += std::to_string(req->port);
     }
@@ -243,6 +249,116 @@ static int tcp_connect_and_communicate(const std::string& host, int port,
     return 0;
 }
 
+// ============================================================
+// TLS (HTTPS) 通信
+// ============================================================
+#ifdef CM_HAS_OPENSSL
+
+// OpenSSL初期化（プロセスで1度だけ）
+static SSL_CTX* get_ssl_context() {
+    static SSL_CTX* ctx = nullptr;
+    if (!ctx) {
+        const SSL_METHOD* method = TLS_client_method();
+        ctx = SSL_CTX_new(method);
+        if (ctx) {
+            // システムのCA証明書を読み込み
+            SSL_CTX_set_default_verify_paths(ctx);
+            // TLS 1.2以上を要求
+            SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+        }
+    }
+    return ctx;
+}
+
+// TLS接続してデータ送受信
+static int tls_connect_and_communicate(const std::string& host, int port,
+                                       const std::string& request, std::string& response) {
+    // TCP接続
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    std::string port_str = std::to_string(port);
+    if (getaddrinfo(host.c_str(), port_str.c_str(), &hints, &result) != 0) {
+        return -1;  // DNS解決失敗
+    }
+
+    int fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (fd < 0) {
+        freeaddrinfo(result);
+        return -2;  // ソケット作成失敗
+    }
+
+    if (connect(fd, result->ai_addr, result->ai_addrlen) < 0) {
+        close(fd);
+        freeaddrinfo(result);
+        return -3;  // 接続拒否
+    }
+    freeaddrinfo(result);
+
+    // SSL コンテキスト取得
+    SSL_CTX* ctx = get_ssl_context();
+    if (!ctx) {
+        close(fd);
+        return -5;  // SSL初期化失敗
+    }
+
+    // SSL接続作成
+    SSL* ssl = SSL_new(ctx);
+    if (!ssl) {
+        close(fd);
+        return -5;
+    }
+
+    // SNI (Server Name Indication) 設定
+    SSL_set_tlsext_host_name(ssl, host.c_str());
+    SSL_set_fd(ssl, fd);
+
+    // TLSハンドシェイク
+    if (SSL_connect(ssl) <= 0) {
+        SSL_free(ssl);
+        close(fd);
+        return -6;  // TLSハンドシェイク失敗
+    }
+
+    // リクエスト送信
+    const char* data = request.c_str();
+    int total = static_cast<int>(request.size());
+    int sent = 0;
+    while (sent < total) {
+        int n = SSL_write(ssl, data + sent, total - sent);
+        if (n <= 0) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            close(fd);
+            return -4;  // 送信失敗
+        }
+        sent += n;
+    }
+
+    // レスポンス受信
+    char buf[4096];
+    response.clear();
+    while (true) {
+        int n = SSL_read(ssl, buf, sizeof(buf) - 1);
+        if (n <= 0)
+            break;
+        buf[n] = '\0';
+        response.append(buf, n);
+        if (response.size() > 65536)
+            break;
+    }
+
+    // クリーンアップ
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    close(fd);
+    return 0;
+}
+
+#endif  // CM_HAS_OPENSSL
+
 extern "C" {
 
 // ============================================================
@@ -316,9 +432,18 @@ int64_t cm_http_execute(int64_t req_handle) {
     // リクエスト文字列を構築
     std::string request_str = build_request(req);
 
-    // TCP通信
+    // 通信（ポート443の場合はTLS、それ以外はTCP）
     std::string raw_response;
-    int err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response);
+    int err;
+#ifdef CM_HAS_OPENSSL
+    if (req->port == 443) {
+        err = tls_connect_and_communicate(req->host, req->port, request_str, raw_response);
+    } else {
+        err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response);
+    }
+#else
+    err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response);
+#endif
     if (err != 0) {
         auto* resp = new CmHttpResponse();
         resp->is_error = true;
@@ -336,6 +461,13 @@ int64_t cm_http_execute(int64_t req_handle) {
                 break;
             case -4:
                 resp->error_message = "Failed to send request";
+                break;
+            case -5:
+                resp->error_message = "TLS initialization failed";
+                break;
+            case -6:
+                resp->error_message =
+                    "TLS handshake failed: " + req->host + ":" + std::to_string(req->port);
                 break;
             default:
                 resp->error_message = "Unknown network error";

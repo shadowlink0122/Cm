@@ -90,6 +90,21 @@ int main() {
     } else {
         println("TEST5: FAIL (expected connection failure)");
     }
+    // ============================================================
+    // テスト6: HTTPS google.com — TLS通信
+    // ============================================================
+    HttpClient https_client;
+    https_client.init("www.google.com", 443);
+    HttpResponse r6 = https_client.get("/");
+    if (r6.is_ok == 1) {
+        if (r6.status == 200) {
+            println("TEST6: PASS (HTTPS google.com -> 200)");
+        } else {
+            println("TEST6: PASS (HTTPS google.com -> {r6.status})");
+        }
+    } else {
+        println("TEST6: FAIL ({r6.err_msg})");
+    }
 
     println("=== Done ===");
     return 0;

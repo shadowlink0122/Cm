@@ -227,6 +227,26 @@ endif()
 add_executable(cm ${CM_SOURCES})
 target_link_libraries(cm PRIVATE cm_frontend)
 
+# OpenSSL検出（HTTPS対応）
+# macOSではHomebrewのパスを優先的に検索
+if(APPLE)
+    # Homebrew Intel/ARM両対応
+    if(EXISTS "/usr/local/opt/openssl@3")
+        set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@3")
+    elseif(EXISTS "/opt/homebrew/opt/openssl@3")
+        set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+    endif()
+endif()
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND)
+    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
+    target_include_directories(cm PRIVATE ${OPENSSL_INCLUDE_DIR})
+    target_link_libraries(cm PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    target_compile_definitions(cm PRIVATE CM_HAS_OPENSSL)
+else()
+    message(WARNING "OpenSSL not found - HTTPS support disabled")
+endif()
+
 # Link LLVM backend if enabled
 if(CM_USE_LLVM)
     target_link_libraries(cm PRIVATE cm_llvm_backend)
