@@ -125,3 +125,7 @@ Use `--lir-opt` to check optimized LLVM IR:
 ## Related Topics
 
 - [Threads](thread.md) - Multi-threaded programming
+
+---
+
+**Last Updated:** 2026-02-08

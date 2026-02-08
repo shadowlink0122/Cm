@@ -52,3 +52,7 @@ int main() {
 
 **Previous:** [Function Pointers](function-pointers.html)  
 **Next:** [Compiler Usage](../compiler/usage.html)
+
+---
+
+**Last Updated:** 2026-02-08

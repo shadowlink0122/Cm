@@ -283,3 +283,7 @@ impl Person for Eq {
 
 **Previous:** [match Expression](match.html)  
 **Next:** [Operator Overloading](operators.html)
+
+---
+
+**Last Updated:** 2026-02-08

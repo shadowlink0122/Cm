@@ -13,10 +13,10 @@ nav_order: 1
 ## 🚀 Quick Links
 
 - [📚 Getting Started](QUICKSTART.html)
-- [📖 Tutorials](tutorials/en/)
+- [📖 Tutorials](tutorials/en/index.html)
 - [📋 Release Notes](releases/)
 - [🏗️ Project Structure](PROJECT_STRUCTURE.html)
-- [🎯 Roadmap](../../ROADMAP.md)
+- [🎯 Roadmap](../ROADMAP.html)
 
 ---
 
@@ -24,11 +24,12 @@ nav_order: 1
 
 ### For Users
 
-- **[Tutorials](tutorials/en/)** - Step-by-step learning guide
-  - [Basics](tutorials/en/basics/) - Variables, functions, control flow
-  - [Types](tutorials/en/types/) - Structs, enums, interfaces
-  - [Advanced](tutorials/en/advanced/) - Generics, macros, match
-  - [Compiler](tutorials/en/compiler/) - LLVM backend, optimization
+- **[Tutorials](tutorials/en/index.html)** - Step-by-step learning guide
+  - [Basics](tutorials/en/basics/introduction.html) - Variables, functions, control flow
+  - [Types](tutorials/en/types/structs.html) - Structs, enums, interfaces
+  - [Advanced](tutorials/en/advanced/match.html) - Generics, macros, match
+  - [Compiler](tutorials/en/compiler/usage.html) - LLVM backend, optimization
+  - [Standard Library](tutorials/ja/stdlib/) - HTTP, Networking, Threading, GPU
 
 - **[Quick Start Guide](QUICKSTART.html)** - Get started in 5 minutes
 
@@ -42,35 +43,48 @@ nav_order: 1
 ### Release Information
 
 - **[Release Notes](releases/)** - Version history and changelogs
-- **[Feature Reference](features/)** - Current implementation status
-- **[Roadmap](../../ROADMAP.md)** - Future plans
+- **[Feature Reference](FEATURES.html)** - Current implementation status
+- **[Roadmap](../ROADMAP.html)** - Future plans
 
 ---
 
 ## 🎯 Language Features
 
-### ✅ Implemented (v0.11.0)
+### ✅ Language Core (v0.13.1)
 
 - **C++ Style Syntax** - Familiar and readable
 - **Strong Type System** - Compile-time safety
 - **Generics** - Type-safe generic programming
 - **Interfaces** - Trait-based polymorphism
-- **LLVM Backend** - Native code generation
-- **WASM Support** - WebAssembly backend
-- **Pattern Matching** - Powerful match expressions
-- **Zero-cost Abstractions** - Performance without overhead
+- **Pattern Matching** - Powerful match expressions with guards
+- **Inline Assembly** - `__asm__` for hardware access
+- **Conditional Compilation** - `#ifdef`/`#ifndef` directives
+
+### ✅ Backends
+
+- **LLVM Native** - ARM64/x86_64 native code generation
+- **WASM** - WebAssembly backend
+
+### ✅ Standard Library (Native)
+
+- **Collections** - `Vector<T>`, `Queue<T>`, `HashMap<K,V>`
+- **Threading** - `std::thread`, `Mutex`, `Channel`
+- **Networking** - `std::http` (HTTP/HTTPS, OpenSSL integration)
+- **GPU** - `std::gpu` (Apple Metal backend)
 
 ### 🔄 In Progress
 
-- **Standard Library** - Core utilities and data structures
-- **Module System** - Enhanced package management
-- **Ownership System** - Memory safety without GC (v0.11.0+)
+- **Package Management** - `cm pkg init/add`
+- **Ownership System** - Borrow checker improvements
+- **JS Backend** - JavaScript code generation (planned for v0.14.0)
 
 ---
 
 ## 💡 Example Code
 
 ```cm
+import std::io::println;
+
 // Hello World
 int main() { println("Hello, Cm!"); return 0; }
 
@@ -133,11 +147,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - [GitHub Repository](https://github.com/shadowlink0122/Cm)
 - [Issue Tracker](https://github.com/shadowlink0122/Cm/issues)
-- [Discussions](https://github.com/shadowlink0122/Cm/discussions)
+- [Roadmap](../ROADMAP.html)
 
 ---
 
-**Last Updated:** v0.11.0 (January 2026)
+**Last Updated:** v0.13.1 (February 2026)
 
 © 2025-2026 Cm Language Project
 

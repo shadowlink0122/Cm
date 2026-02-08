@@ -133,3 +133,6 @@ Person[] people = [
 
 - [配列](../basics/arrays.html) - 配列の基礎
 - [ラムダ式](lambda.html) - 無名関数の詳細
+---
+
+**Last Updated:** 2026-02-08

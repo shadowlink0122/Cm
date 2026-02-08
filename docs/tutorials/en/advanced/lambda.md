@@ -117,3 +117,6 @@ people.sort((Person a, Person b) => {
 
 - [関数ポインタ](function-pointers.html) - 関数の詳細
 - [スライス型](slices.html) - 高階関数の詳細
+---
+
+**Last Updated:** 2026-02-08

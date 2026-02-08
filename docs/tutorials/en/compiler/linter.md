@@ -104,3 +104,7 @@ warning: unused variable 'x'
 ## Related Topics
 
 - [Formatter](formatter.md) - Code formatter
+
+---
+
+**Last Updated:** 2026-02-08

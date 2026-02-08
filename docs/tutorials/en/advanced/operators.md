@@ -91,3 +91,7 @@ impl Point for Ord {
 
 **Previous:** [with Keyword](with-keyword.html)  
 **Next:** [Function Pointers](function-pointers.html)
+
+---
+
+**Last Updated:** 2026-02-08

@@ -4,57 +4,51 @@
 
 このディレクトリには、Cm言語処理系の設計に関するドキュメントが含まれています。
 
+**最終更新:** 2026-02-08
+
 ## ドキュメント一覧
 
-### 全体設計
+### 言語仕様
 
 | ドキュメント | 説明 |
 |-------------|------|
-| [architecture.md](architecture.html) | コンパイラパイプライン全体設計 |
+| [CANONICAL_SPEC.md](CANONICAL_SPEC.html) | 正式言語仕様 |
+| [cm_grammar.md](cm_grammar.html) | EBNF文法定義 |
 
-### 中間表現 (IR)
-
-| ドキュメント | 説明 |
-|-------------|------|
-| [hir.md](hir.html) | HIR: 高レベル中間表現 |
-| [mir.md](mir.html) | MIR: 中レベル中間表現（SSA、CFG） |
-| [lir.md](lir.html) | LIR: 低レベル中間表現 |
-
-### コード生成
+### v0.14.0 設計（計画中）
 
 | ドキュメント | 説明 |
 |-------------|------|
-| [codegen/README.md](codegen/README.html) | Codegenアーキテクチャ |
-| [codegen/rust.md](codegen/rust.html) | Rust変換規則 |
-| [codegen/typescript.md](codegen/typescript.html) | TypeScript変換、React連携 |
-| [codegen/wasm.md](codegen/wasm.html) | WASM生成 |
-| [interpreter.md](interpreter.html) | インタプリタ/JIT設計 |
+| [v0.14.0/baremetal.md](v0.14.0/baremetal.html) | ベアメタル対応設計 |
+| [v0.14.0/uefi_hello_world_roadmap.md](v0.14.0/uefi_hello_world_roadmap.html) | UEFI Hello Worldロードマップ |
 
-### プラットフォーム
+### v0.13.1 設計
 
 | ドキュメント | 説明 |
 |-------------|------|
-| [ffi.md](ffi.html) | C/Rust FFI |
-| [baremetal.md](baremetal.html) | Bare-metal/OS開発 |
-| [wasm_runtime.md](wasm_runtime.html) | WASM環境、React/Vue連携 |
+| [v0.13.1/001_overview.md](v0.13.1/001_overview.html) | v0.13.1概要 |
 
-### ツール・品質
+### v0.13.0 設計
 
 | ドキュメント | 説明 |
 |-------------|------|
-| [backends.md](backends.html) | マルチバックエンド設計 |
-| [package_manager.md](package_manager.html) | gen パッケージマネージャ |
-| [debug.md](debug.html) | デバッグモード |
-| [testing.md](testing.html) | テスト戦略 |
-| [technical_challenges.md](technical_challenges.html) | 技術的課題と解決策 |
-| [async.md](async.html) | 非同期処理 (Future型) |
-| [platform.md](platform.html) | プラットフォーム・ターゲット設計 |
-| [derive.md](derive.html) | 自動実装 (Debug, Clone, Default等) |
-| [editor.md](editor.html) | エディタ拡張、シンタックスハイライト |
+| [v0.13.0/001_technical_comparison.md](v0.13.0/001_technical_comparison.html) | 技術比較 |
+| [v0.13.0/002_implementation_plan.md](v0.13.0/002_implementation_plan.html) | 実装計画 |
+| [v0.13.0/enum_design.md](v0.13.0/enum_design.html) | Enum設計 |
+| [v0.13.0/language_extensions.md](v0.13.0/language_extensions.html) | 言語拡張 |
+| [v0.13.0/breaking_changes_analysis.md](v0.13.0/breaking_changes_analysis.html) | 破壊的変更分析 |
+| [v0.13.0/std_asm_library.md](v0.13.0/std_asm_library.html) | std::asmライブラリ |
+| [v0.13.0/typed_macros_and_concurrency.md](v0.13.0/typed_macros_and_concurrency.html) | 型付きマクロと並行処理 |
+| [v0.13.0/exportable_macros.md](v0.13.0/exportable_macros.html) | エクスポート可能マクロ |
+| [v0.13.0/package_manager.md](v0.13.0/package_manager.html) | パッケージマネージャ |
+
+### 過去のバージョン
+
+v0.12.0以前の設計ドキュメントは [リリースノート](../releases/) を参照してください。
 
 ## 設計原則
 
 1. **クロスバックエンド一致**: インタプリタとコンパイラで同一結果
-2. **マルチプラットフォーム**: Windows/macOS/Linux対応
+2. **マルチプラットフォーム**: macOS/Linux対応（ARM64/x86_64）
 3. **拡張性**: 新バックエンドの追加容易
 4. **良いエラーメッセージ**: ソース位置情報の保持

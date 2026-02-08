@@ -313,3 +313,7 @@ int main() {
 
 **Previous:** [Arrays](arrays.html)  
 **Next:** [Modules](modules.html)
+
+---
+
+**Last Updated:** 2026-02-08

@@ -59,3 +59,6 @@ cm compile program.cm -g -o program
 
 **Previous:** [Compiler Usage](usage.html)  
 **Next:** [WASM Backend](wasm.html)
+---
+
+**Last Updated:** 2026-02-08

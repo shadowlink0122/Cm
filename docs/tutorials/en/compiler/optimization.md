@@ -212,3 +212,6 @@ cm build --dump-mir main.cm
 
 - [LLVMバックエンド](llvm.html) - LLVMによる追加最適化
 - [WASMバックエンド](wasm.html) - WebAssembly向け最適化
+---
+
+**Last Updated:** 2026-02-08

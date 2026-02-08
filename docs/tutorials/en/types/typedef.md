@@ -51,3 +51,7 @@ typedef Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 **Previous:** [Enums](enums.html)  
 **Next:** [Generics](generics.html)
+
+---
+
+**Last Updated:** 2026-02-08

@@ -264,3 +264,7 @@ int main() {
 
 **前の章:** [Hello, World!](hello-world.html)  
 **次の章:** [演算子](operators.html)
+
+---
+
+**最終更新:** 2026-02-08

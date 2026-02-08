@@ -1,0 +1,7 @@
+=== Union Array Tuple Test ===
+id: 42
+flag1: true
+flag2: false
+17/5 = 3, ok=true
+div0 = 0, ok=false
+=== Done ===

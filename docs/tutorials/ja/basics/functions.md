@@ -210,3 +210,6 @@ overload int foo(double x) { ... } // OK
 
 **前の章:** [制御構文](control-flow.html)  
 **次の章:** [配列](arrays.html)
+---
+
+**最終更新:** 2026-02-08

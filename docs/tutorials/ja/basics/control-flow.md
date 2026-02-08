@@ -582,3 +582,6 @@ bool is_prime(int n) {
 
 **前の章:** [演算子](operators.html)  
 **次の章:** [関数](functions.html)
+---
+
+**最終更新:** 2026-02-08

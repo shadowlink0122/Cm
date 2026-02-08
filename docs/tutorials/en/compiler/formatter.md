@@ -139,3 +139,7 @@ To check code style in CI:
 ## Related Topics
 
 - [Linter](linter.md) - Static analysis tool
+
+---
+
+**Last Updated:** 2026-02-08

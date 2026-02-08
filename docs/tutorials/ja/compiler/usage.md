@@ -153,3 +153,7 @@ gdb ./program_debug
 
 **前の章:** [文字列操作](../advanced/strings.html)  
 **次の章:** [LLVMバックエンド](llvm.html)
+
+---
+
+**最終更新:** 2026-02-08

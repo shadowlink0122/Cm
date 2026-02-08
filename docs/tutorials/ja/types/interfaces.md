@@ -217,3 +217,6 @@ impl Circle for Shape {
 
 **前の章:** [ジェネリクス](generics.html)  
 **次の章:** [型制約](constraints.html)
+---
+
+**最終更新:** 2026-02-08

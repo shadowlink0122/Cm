@@ -326,3 +326,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 **前の章:** [はじめに](introduction.html)  
 **次の章:** [Hello, World!](hello-world.html)
+---
+
+**最終更新:** 2026-02-08

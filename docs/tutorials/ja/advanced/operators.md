@@ -91,3 +91,7 @@ impl Point for Ord {
 
 **前の章:** [with自動実装](with-keyword.html)  
 **次の章:** [関数ポインタ](function-pointers.html)
+
+---
+
+**最終更新:** 2026-02-08
