@@ -1,0 +1,96 @@
+// http_external_test.cm - HTTP 外部通信テスト
+// 実際の外部サーバへのHTTPリクエストを検証
+// httpbin.org: テスト用HTTP API (HTTP port 80対応)
+import std::io::println;
+import std::http::*;
+
+int main() {
+    println("=== HTTP External Communication Test ===");
+
+    // ============================================================
+    // テスト1: GET httpbin.org/get — 外部サーバへの基本通信
+    // ============================================================
+    HttpClient client;
+    client.init("httpbin.org", 80);
+
+    HttpResponse r1 = client.get("/get");
+    if (r1.is_ok == 1) {
+        if (r1.status == 200) {
+            println("TEST1: PASS (GET httpbin.org/get -> 200)");
+        } else {
+            println("TEST1: FAIL (status={r1.status})");
+        }
+    } else {
+        println("TEST1: FAIL ({r1.err_msg})");
+    }
+
+    // ============================================================
+    // テスト2: POST httpbin.org/post — JSONボディ送信
+    // ============================================================
+    HttpRequest req;
+    req.init();
+    req.set_method(METHOD_POST());
+    req.set_url("httpbin.org", 80, "/post");
+    req.set_header("Content-Type", "application/json");
+    req.set_body("{\"language\": \"Cm\", \"version\": \"0.14\"}");
+    HttpResponse r2 = req.execute();
+
+    if (r2.is_ok == 1) {
+        if (r2.status == 200) {
+            println("TEST2: PASS (POST httpbin.org/post -> 200)");
+        } else {
+            println("TEST2: FAIL (status={r2.status})");
+        }
+    } else {
+        println("TEST2: FAIL ({r2.err_msg})");
+    }
+
+    // ============================================================
+    // テスト3: GET httpbin.org/status/404 — HTTPエラーステータス
+    // ============================================================
+    HttpResponse r3 = client.get("/status/404");
+    if (r3.is_ok == 1) {
+        if (r3.status == 404) {
+            println("TEST3: PASS (GET /status/404 -> 404)");
+        } else {
+            println("TEST3: FAIL (expected 404, got {r3.status})");
+        }
+    } else {
+        println("TEST3: FAIL ({r3.err_msg})");
+    }
+
+    // ============================================================
+    // テスト4: GET httpbin.org/headers — ヘッダー確認
+    // ============================================================
+    HttpRequest req4;
+    req4.init();
+    req4.set_method(METHOD_GET());
+    req4.set_url("httpbin.org", 80, "/headers");
+    req4.set_header("X-Custom-Header", "CmLang");
+    HttpResponse r4 = req4.execute();
+
+    if (r4.is_ok == 1) {
+        if (r4.status == 200) {
+            println("TEST4: PASS (GET /headers -> 200)");
+        } else {
+            println("TEST4: FAIL (status={r4.status})");
+        }
+    } else {
+        println("TEST4: FAIL ({r4.err_msg})");
+    }
+
+    // ============================================================
+    // テスト5: 接続拒否テスト（localhostの未使用ポート）
+    // ============================================================
+    HttpClient bad_client;
+    bad_client.init("127.0.0.1", 19999);  // 未使用ポート → 即connection refused
+    HttpResponse r5 = bad_client.get("/");
+    if (r5.is_ok == 0) {
+        println("TEST5: PASS (connection refused handled)");
+    } else {
+        println("TEST5: FAIL (expected connection failure)");
+    }
+
+    println("=== Done ===");
+    return 0;
+}

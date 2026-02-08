@@ -14,6 +14,18 @@ extern "C" long gpu_buffer_create(long device, long size);
 extern "C" void gpu_buffer_destroy(long buffer);
 extern "C" void gpu_buffer_write(long buffer, void* data, long size);
 extern "C" void gpu_buffer_read(long buffer, void* data, long size);
+
+// Long バッファ操作（JITエイリアス分析回避版）
+extern "C" void gpu_buffer_write_longs(long buffer, long* data, long count);
+extern "C" void gpu_buffer_read_longs(long buffer, long* data, long count);
+
+// Float バッファ操作（Cm long ↔ GPU float 変換）
+extern "C" long gpu_buffer_create_floats(long device, long count);
+extern "C" void gpu_buffer_write_floats(long buffer, long* data, long count);
+extern "C" void gpu_buffer_read_floats(long buffer, long* data, long count);
+extern "C" long gpu_float_to_bits(double value);
+extern "C" double gpu_bits_to_float(long bits);
+
 extern "C" long gpu_kernel_create(long device, string source, string func_name);
 extern "C" void gpu_kernel_destroy(long kernel);
 extern "C" void gpu_dispatch(long kernel, long buf_a, long buf_b, long buf_out, long count);
@@ -53,6 +65,37 @@ export void buffer_write(long buffer, void* data, long size) {
 
 export void buffer_read(long buffer, void* data, long size) {
     gpu_buffer_read(buffer, data, size);
+}
+
+// Long バッファ操作
+export void buffer_write_longs(long buffer, long* data, long count) {
+    gpu_buffer_write_longs(buffer, data, count);
+}
+
+export void buffer_read_longs(long buffer, long* data, long count) {
+    gpu_buffer_read_longs(buffer, data, count);
+}
+
+// Float バッファ操作
+export long buffer_create_floats(long device, long count) {
+    return gpu_buffer_create_floats(device, count);
+}
+
+export void buffer_write_floats(long buffer, long* data, long count) {
+    gpu_buffer_write_floats(buffer, data, count);
+}
+
+export void buffer_read_floats(long buffer, long* data, long count) {
+    gpu_buffer_read_floats(buffer, data, count);
+}
+
+// IEEE754 float ↔ long 変換ヘルパー
+export long float_to_bits(double value) {
+    return gpu_float_to_bits(value);
+}
+
+export double bits_to_float(long bits) {
+    return gpu_bits_to_float(bits);
 }
 
 // カーネル管理

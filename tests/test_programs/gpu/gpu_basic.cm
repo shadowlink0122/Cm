@@ -1,22 +1,22 @@
 // gpu_basic.cm - GPU(Metal) ベクトル加算テスト
-// Metal Compute Shaderで配列の要素ごとの加算を実行
-// Note: Cm int=64bit, Metal int=32bit のため long/int64_t で統一
-// Note: JITのLLVMエイリアス分析回避のため malloc(ヒープ)を使用
+// 配列リテラルを使用、longとfloat両方のベクトル加算を検証
 import std::io::println;
 import std::gpu::device_create;
 import std::gpu::device_destroy;
 import std::gpu::buffer_create;
+import std::gpu::buffer_create_floats;
 import std::gpu::buffer_destroy;
 import std::gpu::buffer_write;
 import std::gpu::buffer_read;
+import std::gpu::buffer_write_longs;
+import std::gpu::buffer_read_longs;
+import std::gpu::buffer_write_floats;
+import std::gpu::buffer_read_floats;
+import std::gpu::float_to_bits;
+import std::gpu::bits_to_float;
 import std::gpu::kernel_create;
 import std::gpu::kernel_destroy;
 import std::gpu::dispatch;
-
-use libc {
-    void* malloc(int size);
-    void free(void* ptr);
-}
 
 int main() {
     println("=== GPU Basic Test ===");
@@ -29,87 +29,124 @@ int main() {
     }
     println("GPU device available");
 
-    // テストデータ: 4要素のlong配列 (8bytes x 4 = 32bytes)
-    long buf_size = 32;
+    // ============================================================
+    // テスト1: Long ベクトル加算（配列リテラル使用）
+    // ============================================================
+    println("--- Test 1: Long Vector Addition ---");
 
-    // 入力バッファ作成
+    // 配列リテラルで入力データを定義
+    long[4] a = [1, 2, 3, 4];
+    long[4] b = [10, 20, 30, 40];
+    long[4] result = [0, 0, 0, 0];
+
+    long buf_size = 32;  // 4 x 8bytes = 32bytes
     long buf_a = buffer_create(device, buf_size);
     long buf_b = buffer_create(device, buf_size);
     long buf_out = buffer_create(device, buf_size);
 
-    // 入力データをヒープに確保
-    // a = [1, 2, 3, 4], b = [10, 20, 30, 40]
-    void* src_a = malloc(32);
-    void* src_b = malloc(32);
+    buffer_write_longs(buf_a, &a[0], 4);
+    buffer_write_longs(buf_b, &b[0], 4);
 
-    long* pa = src_a as long*;
-    pa[0] = 1;
-    pa[1] = 2;
-    pa[2] = 3;
-    pa[3] = 4;
+    // Metal Shader: longベクトル加算
+    string long_shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add(device const long* a [[buffer(0)]],\n                       device const long* b [[buffer(1)]],\n                       device long* result [[buffer(2)]],\n                       uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
 
-    long* pb = src_b as long*;
-    pb[0] = 10;
-    pb[1] = 20;
-    pb[2] = 30;
-    pb[3] = 40;
-
-    buffer_write(buf_a, src_a, buf_size);
-    buffer_write(buf_b, src_b, buf_size);
-
-    // Metal Shading Language: ベクトル加算カーネル (long = int64_t)
-    string shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add(device const long* a [[buffer(0)]],\n                       device const long* b [[buffer(1)]],\n                       device long* result [[buffer(2)]],\n                       uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
-
-    long kernel = kernel_create(device, shader, "vector_add");
-    if (kernel == 0) {
-        println("FAIL: kernel creation failed");
-        free(src_a);
-        free(src_b);
-        buffer_destroy(buf_a);
-        buffer_destroy(buf_b);
-        buffer_destroy(buf_out);
-        device_destroy(device);
+    long kernel1 = kernel_create(device, long_shader, "vector_add");
+    if (kernel1 == 0) {
+        println("FAIL: long kernel creation failed");
         return 1;
     }
-    println("kernel created");
 
-    // カーネル実行
-    dispatch(kernel, buf_a, buf_b, buf_out, 4);
-    println("kernel dispatched");
+    dispatch(kernel1, buf_a, buf_b, buf_out, 4);
 
-    // 結果読み取り（ヒープに読み出し）
-    void* dst = malloc(32);
-    buffer_read(buf_out, dst, buf_size);
-
-    long* result = dst as long*;
-
-    // 検証: result[i] = a[i] + b[i]
-    // result = [11, 22, 33, 44]
-    int passed = 0;
-    if (result[0] == 11) { passed = passed + 1; }
-    if (result[1] == 22) { passed = passed + 1; }
-    if (result[2] == 33) { passed = passed + 1; }
-    if (result[3] == 44) { passed = passed + 1; }
+    buffer_read_longs(buf_out, &result[0], 4);
 
     println("result[0]: {result[0]}");
     println("result[1]: {result[1]}");
     println("result[2]: {result[2]}");
     println("result[3]: {result[3]}");
 
+    int passed = 0;
+    if (result[0] == 11) { passed = passed + 1; }
+    if (result[1] == 22) { passed = passed + 1; }
+    if (result[2] == 33) { passed = passed + 1; }
+    if (result[3] == 44) { passed = passed + 1; }
+
     if (passed == 4) {
-        println("PASS: vector addition correct");
+        println("PASS: long vector addition correct");
     } else {
-        println("FAIL: incorrect results");
+        println("FAIL: long vector addition ({passed}/4)");
     }
 
-    // クリーンアップ
-    free(src_a);
-    free(src_b);
-    free(dst);
-    kernel_destroy(kernel);
+    kernel_destroy(kernel1);
     buffer_destroy(buf_a);
     buffer_destroy(buf_b);
     buffer_destroy(buf_out);
+
+    // ============================================================
+    // テスト2: Float ベクトル加算（float_to_bits/bits_to_float使用）
+    // ============================================================
+    println("--- Test 2: Float Vector Addition ---");
+
+    // float値をbit patternに変換して配列リテラルで定義
+    long[4] fa = [float_to_bits(1.5), float_to_bits(2.5), float_to_bits(3.5), float_to_bits(4.5)];
+    long[4] fb = [float_to_bits(10.0), float_to_bits(20.0), float_to_bits(30.0), float_to_bits(40.0)];
+    long[4] fresult = [0, 0, 0, 0];
+
+    // float用バッファ作成 (4個のfloat = 16bytes)
+    long fbuf_a = buffer_create_floats(device, 4);
+    long fbuf_b = buffer_create_floats(device, 4);
+    long fbuf_out = buffer_create_floats(device, 4);
+
+    buffer_write_floats(fbuf_a, &fa[0], 4);
+    buffer_write_floats(fbuf_b, &fb[0], 4);
+
+    // Metal Shader: floatベクトル加算
+    string float_shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add_f(device const float* a [[buffer(0)]],\n                         device const float* b [[buffer(1)]],\n                         device float* result [[buffer(2)]],\n                         uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
+
+    long kernel2 = kernel_create(device, float_shader, "vector_add_f");
+    if (kernel2 == 0) {
+        println("FAIL: float kernel creation failed");
+        return 1;
+    }
+
+    dispatch(kernel2, fbuf_a, fbuf_b, fbuf_out, 4);
+
+    buffer_read_floats(fbuf_out, &fresult[0], 4);
+
+    // floatの結果を表示
+    double r0 = bits_to_float(fresult[0]);
+    double r1 = bits_to_float(fresult[1]);
+    double r2 = bits_to_float(fresult[2]);
+    double r3 = bits_to_float(fresult[3]);
+
+    // 結果の整数部を取得して表示 (1.5+10.0=11.5, 2.5+20.0=22.5, ...)
+    int ir0 = r0 as int;
+    int ir1 = r1 as int;
+    int ir2 = r2 as int;
+    int ir3 = r3 as int;
+
+    println("float result[0]: {ir0} (expect 11)");
+    println("float result[1]: {ir1} (expect 22)");
+    println("float result[2]: {ir2} (expect 33)");
+    println("float result[3]: {ir3} (expect 44)");
+
+    int fpassed = 0;
+    if (ir0 == 11) { fpassed = fpassed + 1; }
+    if (ir1 == 22) { fpassed = fpassed + 1; }
+    if (ir2 == 33) { fpassed = fpassed + 1; }
+    if (ir3 == 44) { fpassed = fpassed + 1; }
+
+    if (fpassed == 4) {
+        println("PASS: float vector addition correct");
+    } else {
+        println("FAIL: float vector addition ({fpassed}/4)");
+    }
+
+    // クリーンアップ
+    kernel_destroy(kernel2);
+    buffer_destroy(fbuf_a);
+    buffer_destroy(fbuf_b);
+    buffer_destroy(fbuf_out);
     device_destroy(device);
 
     println("=== Done ===");
