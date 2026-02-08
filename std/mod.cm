@@ -10,6 +10,8 @@
 //   std::sync        - 同期プリミティブ (Mutex, RwLock, Atomic)
 //   std::mem         - メモリ管理
 //   std::iter        - イテレータ
+//   std::net         - ネットワーク (TCP通信, イベント多重化)
+//   std::http        - HTTPクライアント (REST API)
 //
 // 使用例:
 //   import std::io::println;

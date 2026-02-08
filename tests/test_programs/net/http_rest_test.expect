@@ -1,0 +1,21 @@
+=== HTTP REST API Test ===
+GET /api/hello: 200
+Body: {"message": "Hello, World!"}
+TEST1: PASS
+POST /api/echo: 200
+Body: {"name": "Cm"}
+TEST2: PASS
+PUT /api/update: 200
+Body: {"updated": true}
+TEST3: PASS
+DELETE /api/remove: 200
+Body: {"deleted": true}
+TEST4: PASS
+GET /api/not_found: 404
+Body: {"reason": "Not Found"}
+TEST5: PASS (404 correctly returned)
+Connection refused: Connection refused: 127.0.0.1:19999
+TEST6: PASS (refused handled)
+Async GET results: 200, 200
+TEST7: PASS (async requests OK)
+=== Done ===

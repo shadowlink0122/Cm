@@ -1,0 +1,283 @@
+// std/http/mod.cm - HTTPクライアント/サーバモジュール
+// struct + impl パターンによるオブジェクト指向API
+//
+// 使用例:
+//   HttpClient client;
+//   client.init("localhost", 8080);
+//   HttpResponse resp = client.get("/api/data");
+//   if (resp.is_ok == 1) {
+//       println("Status: {resp.status}");
+//       println("Body: {resp.body}");
+//   } else {
+//       println("Failed: {resp.err_msg}");
+//   }
+module std.http;
+
+// ============================================================
+// C++ backing extern宣言（内部API、すべてlong handle）
+// ============================================================
+
+// 簡易API（内部使用: handleを返す）
+extern "C" long cm_http_get(string host, int port, string path);
+extern "C" long cm_http_post(string host, int port, string path, string body);
+extern "C" long cm_http_put(string host, int port, string path, string body);
+extern "C" long cm_http_delete(string host, int port, string path);
+
+// レスポンスアクセス（内部使用: handleから値を取得）
+extern "C" int cm_http_response_status(long handle);
+extern "C" string cm_http_response_body(long handle);
+extern "C" string cm_http_response_header(long handle, string key);
+extern "C" int cm_http_response_is_error(long handle);
+extern "C" string cm_http_error_message(long handle);
+extern "C" void cm_http_response_destroy(long handle);
+
+// リクエストビルダー（内部使用）
+extern "C" long cm_http_request_create();
+extern "C" void cm_http_request_set_method(long handle, int method);
+extern "C" void cm_http_request_set_url(long handle, string host, int port, string path);
+extern "C" void cm_http_request_set_header(long handle, string key, string value);
+extern "C" void cm_http_request_set_body(long handle, string body);
+extern "C" long cm_http_execute(long req_handle);
+extern "C" void cm_http_request_destroy(long handle);
+
+// テスト用ミニサーバ
+extern "C" long cm_http_test_server_start(int port, int max_requests);
+
+// ============================================================
+// HTTPメソッド定数
+// ============================================================
+
+export int METHOD_GET()    { return 0; }
+export int METHOD_POST()   { return 1; }
+export int METHOD_PUT()    { return 2; }
+export int METHOD_DELETE() { return 3; }
+
+// ============================================================
+// HttpResponse - Result型パターンのレスポンス構造体
+// ============================================================
+// 成功時: is_ok=1, status=200等, body=レスポンスボディ
+// 失敗時: is_ok=0, status=-1, err_msg=エラーメッセージ
+
+export struct HttpResponse {
+    int status;
+    int is_ok;
+    string body;
+    string err_msg;
+}
+
+// ============================================================
+// 内部ヘルパー: C++ハンドルからHttpResponseを構築
+// ============================================================
+
+HttpResponse build_response(long handle) {
+    HttpResponse resp;
+    int is_err = cm_http_response_is_error(handle);
+    if (is_err == 1) {
+        resp.is_ok = 0;
+        resp.status = -1;
+        resp.body = "";
+        resp.err_msg = cm_http_error_message(handle);
+    } else {
+        resp.is_ok = 1;
+        resp.status = cm_http_response_status(handle);
+        resp.body = cm_http_response_body(handle);
+        resp.err_msg = "";
+    }
+    cm_http_response_destroy(handle);
+    return resp;
+}
+
+// ============================================================
+// HttpClient - RESTクライアント
+// ============================================================
+// ホストとポートを保持し、各HTTPメソッドをインスタンスメソッドで提供
+// メモリ管理は内部で完結。ユーザーはdestroyを呼ぶ必要なし。
+
+export struct HttpClient {
+    string _host;
+    int _port;
+}
+
+export impl HttpClient {
+    // 初期化: ホストとポートを設定
+    void init(string host, int port) {
+        self._host = host;
+        self._port = port;
+    }
+
+    // GETリクエスト
+    HttpResponse get(string path) {
+        long handle = cm_http_get(self._host, self._port, path);
+        return build_response(handle);
+    }
+
+    // POSTリクエスト（JSON bodyあり）
+    HttpResponse post(string path, string body) {
+        long handle = cm_http_post(self._host, self._port, path, body);
+        return build_response(handle);
+    }
+
+    // PUTリクエスト
+    HttpResponse put(string path, string body) {
+        long handle = cm_http_put(self._host, self._port, path, body);
+        return build_response(handle);
+    }
+
+    // DELETEリクエスト
+    HttpResponse delete_req(string path) {
+        long handle = cm_http_delete(self._host, self._port, path);
+        return build_response(handle);
+    }
+}
+
+// ============================================================
+// HttpRequest - カスタムリクエストビルダー
+// ============================================================
+// カスタムヘッダーを設定したい場合に使用
+// ビルダーパターン: init → set_* → execute
+
+export struct HttpRequest {
+    long _handle;
+}
+
+export impl HttpRequest {
+    // 空リクエストを作成
+    void init() {
+        self._handle = cm_http_request_create();
+    }
+
+    // メソッド設定 (METHOD_GET, METHOD_POST等)
+    void set_method(int method) {
+        cm_http_request_set_method(self._handle, method);
+    }
+
+    // URL設定
+    void set_url(string host, int port, string path) {
+        cm_http_request_set_url(self._handle, host, port, path);
+    }
+
+    // ヘッダー追加
+    void set_header(string key, string value) {
+        cm_http_request_set_header(self._handle, key, value);
+    }
+
+    // ボディ設定
+    void set_body(string body) {
+        cm_http_request_set_body(self._handle, body);
+    }
+
+    // リクエスト実行してHttpResponseを返す
+    // 注意: 実行後は_handleが解放されるため、再利用不可
+    HttpResponse execute() {
+        long resp_handle = cm_http_execute(self._handle);
+        cm_http_request_destroy(self._handle);
+        self._handle = 0;
+        return build_response(resp_handle);
+    }
+}
+
+// ============================================================
+// HTTPサーバ C++ backing extern宣言
+// ============================================================
+
+extern "C" long cm_http_server_create(int port);
+extern "C" void cm_http_server_close(long handle);
+extern "C" long cm_http_server_accept(long server_fd);
+extern "C" string cm_http_server_req_method(long handle);
+extern "C" string cm_http_server_req_path(long handle);
+extern "C" string cm_http_server_req_body(long handle);
+extern "C" string cm_http_server_req_header(long handle, string key);
+extern "C" void cm_http_server_respond(long handle, int status, string body);
+extern "C" void cm_http_server_req_destroy(long handle);
+
+// ============================================================
+// HttpServer - HTTPサーバ
+// ============================================================
+// accept()でクライアント接続をブロッキング待機
+// 受信したリクエストはHttpServerRequestとして返される
+// Cm側でルーティング・レスポンス制御が可能
+//
+// 使用例:
+//   HttpServer server;
+//   server.init(8080);
+//   server.listen();
+//   for (int i = 0; i < 10; i++) {
+//       HttpServerRequest req = server.accept();
+//       if (req.method() == "GET" && req.path() == "/api/hello") {
+//           req.respond(200, "{\"message\": \"Hello!\"}");
+//       } else {
+//           req.respond(404, "{\"reason\": \"Not Found\"}");
+//       }
+//   }
+//   server.close();
+
+export struct HttpServer {
+    long _handle;
+    int _port;
+}
+
+export impl HttpServer {
+    // ポートを設定
+    void init(int port) {
+        self._port = port;
+        self._handle = 0;
+    }
+
+    // bind+listen でサーバソケットを起動
+    void listen() {
+        self._handle = cm_http_server_create(self._port);
+    }
+
+    // クライアント接続を受け付けてリクエストを返す（ブロッキング）
+    HttpServerRequest accept() {
+        long req_handle = cm_http_server_accept(self._handle);
+        HttpServerRequest req;
+        req._handle = req_handle;
+        return req;
+    }
+
+    // サーバソケットをクローズ
+    void close() {
+        cm_http_server_close(self._handle);
+        self._handle = 0;
+    }
+}
+
+// ============================================================
+// HttpServerRequest - 受信したHTTPリクエスト
+// ============================================================
+// server.accept() で取得。method(), path(), body() でリクエスト情報を取得。
+// respond() でHTTPレスポンスを送信（内部で接続もクローズ）。
+
+export struct HttpServerRequest {
+    long _handle;
+}
+
+export impl HttpServerRequest {
+    // HTTPメソッド取得 ("GET", "POST", "PUT", "DELETE")
+    string method() {
+        return cm_http_server_req_method(self._handle);
+    }
+
+    // リクエストパス取得 ("/api/hello" 等)
+    string path() {
+        return cm_http_server_req_path(self._handle);
+    }
+
+    // リクエストボディ取得
+    string body() {
+        return cm_http_server_req_body(self._handle);
+    }
+
+    // ヘッダー値取得
+    string header(string key) {
+        return cm_http_server_req_header(self._handle, key);
+    }
+
+    // レスポンス送信（接続もクローズ）
+    // 注意: 一度respondを呼んだ後はリクエストは無効
+    void respond(int status, string body) {
+        cm_http_server_respond(self._handle, status, body);
+        self._handle = 0;
+    }
+}

@@ -1,0 +1,111 @@
+// tcp_echo.cm - TCPエコーサーバ/クライアント テスト
+// サーバスレッドでaccept→echo、メインスレッドから2クライアント送受信
+// サーバスレッドの出力は最小限にし、メインスレッドでのみ結果出力
+
+import std::io::println;
+import std::net::tcp_listen;
+import std::net::tcp_accept;
+import std::net::tcp_connect;
+import std::net::tcp_read;
+import std::net::tcp_write;
+import std::net::tcp_close;
+import std::net::buf_create;
+import std::net::buf_set;
+import std::net::buf_get;
+import std::net::buf_destroy;
+import std::thread::spawn;
+import std::thread::join;
+import std::thread::sleep_ms;
+
+// サーバスレッド: 2クライアント分を順次accept→echo→close（出力なし）
+void* server_thread(void* arg) {
+    long server_fd = tcp_listen(18234);
+    if (server_fd < 0) {
+        return 0 as void*;
+    }
+
+    // クライアント1を処理
+    long c1 = tcp_accept(server_fd);
+    if (c1 >= 0) {
+        long buf1 = buf_create(256);
+        int n1 = tcp_read(c1, buf1, 255);
+        if (n1 > 0) {
+            tcp_write(c1, buf1, n1);
+        }
+        buf_destroy(buf1);
+        tcp_close(c1);
+    }
+
+    // クライアント2を処理
+    long c2 = tcp_accept(server_fd);
+    if (c2 >= 0) {
+        long buf2 = buf_create(256);
+        int n2 = tcp_read(c2, buf2, 255);
+        if (n2 > 0) {
+            tcp_write(c2, buf2, n2);
+        }
+        buf_destroy(buf2);
+        tcp_close(c2);
+    }
+
+    tcp_close(server_fd);
+    return 0 as void*;
+}
+
+int main() {
+    println("=== TCP Echo Test ===");
+
+    // サーバスレッド起動
+    ulong server = spawn(server_thread as void*);
+    sleep_ms(100);
+
+    // クライアント1: "Hi!" (72, 105, 33) 送信→エコー検証
+    long fd1 = tcp_connect("127.0.0.1" as long, 18234);
+    if (fd1 < 0) {
+        println("CLIENT1: connect failed");
+    } else {
+        long msg1 = buf_create(4);
+        buf_set(msg1, 0, 72);   // H
+        buf_set(msg1, 1, 105);  // i
+        buf_set(msg1, 2, 33);   // !
+        tcp_write(fd1, msg1, 3);
+        buf_destroy(msg1);
+        sleep_ms(50);
+        long rbuf1 = buf_create(256);
+        int n1 = tcp_read(fd1, rbuf1, 255);
+        if (n1 == 3 && buf_get(rbuf1, 0) == 72 && buf_get(rbuf1, 1) == 105 && buf_get(rbuf1, 2) == 33) {
+            println("CLIENT1: echo OK");
+        } else {
+            println("CLIENT1: echo FAIL (n={n1})");
+        }
+        buf_destroy(rbuf1);
+        tcp_close(fd1);
+    }
+
+    // クライアント2: "ABC" (65, 66, 67) 送信→エコー検証
+    long fd2 = tcp_connect("127.0.0.1" as long, 18234);
+    if (fd2 < 0) {
+        println("CLIENT2: connect failed");
+    } else {
+        long msg2 = buf_create(4);
+        buf_set(msg2, 0, 65);  // A
+        buf_set(msg2, 1, 66);  // B
+        buf_set(msg2, 2, 67);  // C
+        tcp_write(fd2, msg2, 3);
+        buf_destroy(msg2);
+        sleep_ms(50);
+        long rbuf2 = buf_create(256);
+        int n2 = tcp_read(fd2, rbuf2, 255);
+        if (n2 == 3 && buf_get(rbuf2, 0) == 65 && buf_get(rbuf2, 1) == 66 && buf_get(rbuf2, 2) == 67) {
+            println("CLIENT2: echo OK");
+        } else {
+            println("CLIENT2: echo FAIL (n={n2})");
+        }
+        buf_destroy(rbuf2);
+        tcp_close(fd2);
+    }
+
+    join(server);
+    println("=== Done ===");
+    return 0;
+}

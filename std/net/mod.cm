@@ -1,0 +1,134 @@
+// std/net/mod.cm - ネットワークモジュール
+// TCP通信 + イベント多重化（kqueue/poll）
+// C++ backing (net_runtime.cpp) を使用
+// Note: Cmコンパイラの制約によりextern "C"関数のポインタパラメータは
+//       long(opaque handle)として渡し、C++側でキャストする
+module std.net;
+
+// ============================================================
+// C++ backing extern宣言（すべてスカラ型）
+// ============================================================
+
+extern "C" long cm_tcp_listen(int port);
+extern "C" long cm_tcp_accept(long server_fd);
+extern "C" long cm_tcp_connect(long host_ptr, int port);
+extern "C" int cm_tcp_read(long fd, long buf_ptr, int size);
+extern "C" int cm_tcp_write(long fd, long buf_ptr, int size);
+extern "C" void cm_tcp_close(long fd);
+extern "C" int cm_tcp_set_nonblocking(long fd);
+extern "C" long cm_buf_create(int size);
+extern "C" void cm_buf_set(long buf, int index, int value);
+extern "C" int cm_buf_get(long buf, int index);
+extern "C" void cm_buf_destroy(long buf);
+extern "C" long cm_tcp_poll_create();
+extern "C" int cm_tcp_poll_add(long poll_handle, long fd, int events);
+extern "C" int cm_tcp_poll_remove(long poll_handle, long fd);
+extern "C" int cm_tcp_poll_wait(long poll_handle, int timeout_ms);
+extern "C" long cm_tcp_poll_get_fd(long poll_handle, int index);
+extern "C" int cm_tcp_poll_get_events(long poll_handle, int index);
+extern "C" void cm_tcp_poll_destroy(long poll_handle);
+
+// ============================================================
+// イベント定数（関数形式で取得）
+// ============================================================
+
+export int poll_read_flag()  { return 1; }
+export int poll_write_flag() { return 2; }
+export int poll_error_flag() { return 4; }
+export int poll_hup_flag()   { return 8; }
+
+// ============================================================
+// TCP API
+// ============================================================
+
+// TCPサーバソケットを作成し、指定ポートでリッスン
+export long tcp_listen(int port) {
+    return cm_tcp_listen(port);
+}
+
+// クライアント接続を受け付ける（ブロッキング）
+export long tcp_accept(long server_fd) {
+    return cm_tcp_accept(server_fd);
+}
+
+// TCPクライアント接続
+export long tcp_connect(long host_ptr, int port) {
+    return cm_tcp_connect(host_ptr, port);
+}
+
+// ソケットからデータ読み取り（buf_ptrはバッファのアドレス）
+export int tcp_read(long fd, long buf_ptr, int size) {
+    return cm_tcp_read(fd, buf_ptr, size);
+}
+
+// ソケットにデータ書き込み（buf_ptrはバッファのアドレス）
+export int tcp_write(long fd, long buf_ptr, int size) {
+    return cm_tcp_write(fd, buf_ptr, size);
+}
+
+// ソケットクローズ
+export void tcp_close(long fd) {
+    cm_tcp_close(fd);
+}
+
+// ソケットをノンブロッキングに設定
+export int tcp_set_nonblocking(long fd) {
+    return cm_tcp_set_nonblocking(fd);
+}
+
+// ============================================================
+// バッファ操作 API
+// byte配列のアドレスキャスト制限を回避するためのヘルパー
+// ============================================================
+
+// ヒープバッファを作成（longハンドルとして返す）
+export long buf_create(int size) {
+    return cm_buf_create(size);
+}
+
+// バッファの指定位置にバイトを書き込み
+export void buf_set(long buf, int index, int value) {
+    cm_buf_set(buf, index, value);
+}
+
+// バッファの指定位置からバイトを読み取り
+export int buf_get(long buf, int index) {
+    return cm_buf_get(buf, index);
+}
+
+// バッファを破棄
+export void buf_destroy(long buf) {
+    cm_buf_destroy(buf);
+}
+
+// ============================================================
+// イベント多重化 API
+// ============================================================
+
+export long poll_create() {
+    return cm_tcp_poll_create();
+}
+
+export int poll_add(long poll_handle, long fd, int events) {
+    return cm_tcp_poll_add(poll_handle, fd, events);
+}
+
+export int poll_remove(long poll_handle, long fd) {
+    return cm_tcp_poll_remove(poll_handle, fd);
+}
+
+export int poll_wait(long poll_handle, int timeout_ms) {
+    return cm_tcp_poll_wait(poll_handle, timeout_ms);
+}
+
+export long poll_get_fd(long poll_handle, int index) {
+    return cm_tcp_poll_get_fd(poll_handle, index);
+}
+
+export int poll_get_events(long poll_handle, int index) {
+    return cm_tcp_poll_get_events(poll_handle, index);
+}
+
+export void poll_destroy(long poll_handle) {
+    cm_tcp_poll_destroy(poll_handle);
+}

@@ -212,6 +212,8 @@ if(CM_USE_LLVM)
         std/sync/sync_runtime.cpp
         std/sync/channel_runtime.cpp
         std/thread/thread_runtime.cpp
+        std/net/net_runtime.cpp
+        std/http/http_runtime.cpp
     )
 
     # Apple環境: GPU(Metal)バッキング実装を追加
