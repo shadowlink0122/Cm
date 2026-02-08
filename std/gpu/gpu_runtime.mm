@@ -269,4 +269,51 @@ void gpu_dispatch_2(int64_t kernel_handle, int64_t buf_in_handle,
   gpu_dispatch(kernel_handle, buf_in_handle, buf_out_handle, 0, count);
 }
 
+// N個のバッファ版ディスパッチ（ニューラルネット等の複雑なカーネル用）
+// buffers: バッファハンドルの配列, buffer_count: バッファ数
+void gpu_dispatch_n(int64_t kernel_handle, int64_t *buffers,
+                    int64_t buffer_count, int64_t count) {
+  if (kernel_handle == 0 || count <= 0)
+    return;
+
+  GpuKernel *kernel = (GpuKernel *)kernel_handle;
+
+  @autoreleasepool {
+    id<MTLCommandBuffer> commandBuffer = [kernel->commandQueue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder =
+        [commandBuffer computeCommandEncoder];
+
+    [encoder setComputePipelineState:kernel->pipeline];
+
+    // N個のバッファをバインド
+    for (int64_t i = 0; i < buffer_count; i++) {
+      if (buffers[i] != 0) {
+        GpuBuffer *buf = (GpuBuffer *)buffers[i];
+        [encoder setBuffer:buf->buffer offset:0 atIndex:(NSUInteger)i];
+      }
+    }
+
+    // スレッドグループサイズを計算
+    NSUInteger threadGroupSize = kernel->pipeline.maxTotalThreadsPerThreadgroup;
+    if (threadGroupSize > (NSUInteger)count) {
+      threadGroupSize = (NSUInteger)count;
+    }
+
+    MTLSize gridSize = MTLSizeMake((NSUInteger)count, 1, 1);
+    MTLSize groupSize = MTLSizeMake(threadGroupSize, 1, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:groupSize];
+    [encoder endEncoding];
+
+    [commandBuffer commit];
+    [commandBuffer waitUntilCompleted];
+
+    // エラーチェック
+    if ([commandBuffer error]) {
+      fprintf(stderr, "[gpu] 実行エラー: %s\n",
+              [[[commandBuffer error] localizedDescription] UTF8String]);
+    }
+  }
+}
+
 } // extern "C"

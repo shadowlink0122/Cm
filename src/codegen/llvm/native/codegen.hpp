@@ -472,6 +472,9 @@ class LLVMCodeGen {
         std::string objFile = options.outputFile + ".o";
         targetManager->emitObjectFile(context->getModule(), objFile);
 
+        // GPU関数の使用を検出
+        bool needsGPU = checkForGPUUsage();
+
         // リンカ呼び出し
         std::string linkCmd;
 
@@ -480,31 +483,34 @@ class LLVMCodeGen {
             linkCmd = "arm-none-eabi-ld -T link.ld " + objFile + " -o " + options.outputFile;
         } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
             // WebAssembly：wasm-ld使用
-            // WASMランタイムライブラリのパスを検索
             std::string runtimePath = findRuntimeLibrary();
-            // WASI用：_startはランタイムから提供される
-            // --allow-undefined: FFI関数（JavaScript等）を未定義のままリンク可能に
             linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath +
                       " -o " + options.outputFile;
         } else {
             // ネイティブ：システムリンカ使用
-
-            // Cmランタイムライブラリのパスを検索
             std::string runtimePath = findRuntimeLibrary();
 
 #ifdef __APPLE__
             // macOSではシステムのclangを使用してリンク
-            // Homebrew LLVMのclangはSDKパスを認識しないため、/usr/bin/clangを使用
-            // -dead_strip: 未使用関数を削除
-            // -mmacosx-version-min: 最小macOSバージョンを指定してリンカ警告を回避
-            linkCmd = "/usr/bin/clang -mmacosx-version-min=15.0 -Wl,-dead_strip ";
+            linkCmd = "/usr/bin/clang++ -mmacosx-version-min=15.0 -Wl,-dead_strip ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
-            linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
+            linkCmd += objFile + " " + runtimePath;
+
+            // GPU使用時: GPUランタイム + Metal/Foundationフレームワークをリンク
+            if (needsGPU) {
+                std::string gpuRuntimePath = findGPURuntimeLibrary();
+                if (!gpuRuntimePath.empty()) {
+                    linkCmd += " " + gpuRuntimePath;
+                    linkCmd += " -framework Metal -framework Foundation";
+                    linkCmd += " -lc++";  // C++標準ライブラリ（ObjC++ランタイム用）
+                }
+            }
+
+            linkCmd += " -o " + options.outputFile;
 #else
-            // Linuxでもclangを使用（crt0.oなどが自動的にリンクされる）
-            // --gc-sections: 未使用セクションを削除
+            // Linuxでもclangを使用
             linkCmd = "clang -Wl,--gc-sections ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
@@ -607,6 +613,43 @@ class LLVMCodeGen {
         }
 
         return outputPath;
+    }
+
+    /// GPU関数の使用を検出
+    bool checkForGPUUsage() const {
+        for (const auto& func : context->getModule()) {
+            if (func.isDeclaration()) {
+                std::string name = func.getName().str();
+                if (name.find("gpu_") == 0) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "GPU function detected: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// GPUランタイムライブラリのパスを検索
+    std::string findGPURuntimeLibrary() {
+#ifdef CM_GPU_RUNTIME_PATH
+        if (std::filesystem::exists(CM_GPU_RUNTIME_PATH)) {
+            return CM_GPU_RUNTIME_PATH;
+        }
+#endif
+        // フォールバック
+        std::vector<std::string> searchPaths = {
+            "build/lib/cm_gpu_runtime.o",
+            "./build/lib/cm_gpu_runtime.o",
+            "../build/lib/cm_gpu_runtime.o",
+        };
+        for (const auto& path : searchPaths) {
+            if (std::filesystem::exists(path)) {
+                return path;
+            }
+        }
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError, "GPU runtime library not found");
+        return "";
     }
 
     /// インポートされた外部関数があるかチェック

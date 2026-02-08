@@ -320,6 +320,20 @@ if(CM_USE_LLVM)
             COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
         )
 
+        # Apple環境: GPUランタイムを別途ビルド（ネイティブコンパイル用）
+        if(APPLE)
+            set(CM_GPU_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/gpu/gpu_runtime.mm)
+            set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
+            add_custom_command(
+                OUTPUT ${CM_GPU_RUNTIME_OUTPUT}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+                COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_GPU_RUNTIME_SOURCE}
+                        -o ${CM_GPU_RUNTIME_OUTPUT} -O2 -std=c++17
+                        -fobjc-arc ${CM_RUNTIME_ARCH_FLAG}
+                DEPENDS ${CM_GPU_RUNTIME_SOURCE}
+                COMMENT "Building Cm GPU runtime library (Metal)"
+            )
+        endif()
 
         # Build WASM runtime library
         set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
@@ -335,7 +349,12 @@ if(CM_USE_LLVM)
             COMMENT "Building Cm WASM runtime library"
         )
 
-        add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
+        # ランタイムターゲット
+        if(APPLE)
+            add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT} ${CM_GPU_RUNTIME_OUTPUT})
+        else()
+            add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
+        endif()
         add_dependencies(cm cm_runtime)
         
         # ランタイムライブラリをcm実行ファイルにリンク（JIT用）
@@ -343,10 +362,18 @@ if(CM_USE_LLVM)
         target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
         
         # ランタイムライブラリのパスをコンパイル時に埋め込む
-        target_compile_definitions(cm PRIVATE
-            CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
-            CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
-        )
+        if(APPLE)
+            target_compile_definitions(cm PRIVATE
+                CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+                CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+                CM_GPU_RUNTIME_PATH="${CM_GPU_RUNTIME_OUTPUT}"
+            )
+        else()
+            target_compile_definitions(cm PRIVATE
+                CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+                CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+            )
+        endif()
     else()
         # Windows: ランタイムライブラリなし（ダミーパス）
         message(WARNING "Runtime library build is not supported on Windows/MSVC")

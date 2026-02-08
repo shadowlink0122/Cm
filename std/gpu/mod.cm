@@ -19,6 +19,7 @@ extern "C" void gpu_kernel_destroy(long kernel);
 extern "C" void gpu_dispatch(long kernel, long buf_a, long buf_b, long buf_out, long count);
 extern "C" void gpu_dispatch_1(long kernel, long buf, long count);
 extern "C" void gpu_dispatch_2(long kernel, long buf_in, long buf_out, long count);
+extern "C" void gpu_dispatch_n(long kernel, long* buffers, long buffer_count, long count);
 
 // ============================================================
 // Export API — ラッパー関数
@@ -74,6 +75,11 @@ export void dispatch_1(long kernel, long buf, long count) {
 
 export void dispatch_2(long kernel, long buf_in, long buf_out, long count) {
     gpu_dispatch_2(kernel, buf_in, buf_out, count);
+}
+
+// N個バッファ版 — ニューラルネット等の複雑なカーネル用
+export void dispatch_n(long kernel, long* buffers, long buffer_count, long count) {
+    gpu_dispatch_n(kernel, buffers, buffer_count, count);
 }
 
 // ============================================================
