@@ -1,0 +1,15 @@
+=== Thread Communication Test ===
+--- Test 1: Producer-Consumer ---
+received: 30 messages
+TEST1: PASS
+--- Test 2: Atomic Counter ---
+atomic counter: 400
+TEST2: PASS
+--- Test 3: Fan-out/Fan-in ---
+fan-out result sum: 110
+TEST3: PASS
+--- Test 4: Atomic Flag Control ---
+flag set to RUN
+flag set to STOP
+TEST4: PASS (flag counter > 0)
+=== Done ===
