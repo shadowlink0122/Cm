@@ -8,6 +8,8 @@ nav_order: 1
 
 **A modern systems programming language with C++ syntax and Rust-inspired features**
 
+> **Supported Platforms**: macOS (ARM64) / Ubuntu (x86_64) | [Details](QUICKSTART.html)
+
 ---
 
 ## 🚀 Quick Links
@@ -16,7 +18,6 @@ nav_order: 1
 - [📖 Tutorials](tutorials/en/index.html)
 - [📋 Release Notes](releases/)
 - [🏗️ Project Structure](PROJECT_STRUCTURE.html)
-- [🎯 Roadmap](../ROADMAP.html)
 
 ---
 
@@ -44,7 +45,6 @@ nav_order: 1
 
 - **[Release Notes](releases/)** - Version history and changelogs
 - **[Feature Reference](FEATURES.html)** - Current implementation status
-- **[Roadmap](../ROADMAP.html)** - Future plans
 
 ---
 
@@ -147,7 +147,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - [GitHub Repository](https://github.com/shadowlink0122/Cm)
 - [Issue Tracker](https://github.com/shadowlink0122/Cm/issues)
-- [Roadmap](../ROADMAP.html)
 
 ---
 

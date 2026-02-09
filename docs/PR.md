@@ -4,7 +4,7 @@
 
 ## 概要
 
-v0.13.1は**GPU/Metal対応**、**ARM64ネイティブビルド**、**標準ライブラリ安定化**、**HTTPS対応**、**リテラル型完全サポート**に焦点を当てた大規模アップデートです。テスト数363 PASS / 0 FAILの安定ベースラインを達成しました。
+v0.13.1は**GPU/Metal対応**、**ARM64ネイティブビルド**、**標準ライブラリ安定化**、**HTTPS対応**、**リテラル型完全サポート**に焦点を当てた大規模アップデートです。さらに**OpenSSLリンカパスのアーキテクチャ対応修正**、**WASMテスト安定化**、**サポート環境の明確化**、**CI環境の固定化**を行いました。
 
 ## 🎯 主要な新機能
 
@@ -142,6 +142,51 @@ void print_values(Value[3] vals) {
 
 ---
 
+## 🔧 ビルド・インフラ改善
+
+### OpenSSLリンカパスのアーキテクチャ対応修正
+
+ネイティブビルド時のOpenSSLリンクで、ARM64環境にもかかわらずx86_64版のパスを参照するバグを修正しました。
+
+| 問題 | 原因 | 修正 |
+|-----|------|------|
+| ARM64でOpenSSLリンクエラー | `brew --prefix openssl`がx86_64パスを返す | アーキテクチャに応じたパス優先参照に変更 |
+
+- ARM64: `/opt/homebrew/opt/openssl@3` を優先
+- x86_64: `/usr/local/opt/openssl@3` を優先
+- フォールバック: `brew --prefix openssl@3`
+
+### WASMテスト安定化
+
+WASMバックエンドで未サポートのネイティブAPI（sync, net, gpu）を使うテストに`.skip`ファイルを追加し、WASMテスト全体が0 FAILになりました。
+
+### サポート環境の明確化
+
+ドキュメントにサポート環境を明記しました:
+
+| OS | アーキテクチャ | ステータス |
+|----|-------------|----------|
+| **macOS 14+** | ARM64 (Apple Silicon) | ✅ 完全サポート |
+| **Ubuntu 22.04** | x86_64 | ✅ 完全サポート |
+| Windows | - | ❌ 未サポート |
+
+- README.md、QUICKSTART.md、index.md（日英）、setup.md からWindows記述を削除
+- アーキテクチャ別インストール手順を追加（macOS ARM64/Intel分割）
+
+### CI環境の固定化
+
+全CIワークフローで明示的なOS/アーキテクチャ指定を導入:
+
+| 変更前 | 変更後 | アーキテクチャ |
+|--------|--------|---------------|
+| `macos-latest` | `macos-14` | ARM64 |
+| `ubuntu-latest` | `ubuntu-22.04` | x86_64 |
+
+- CMake構成に `-DCM_TARGET_ARCH=${{ matrix.arch }}` を追加
+- 対象: ci.yml, test-interpreter.yml, test-llvm-native.yml, test-llvm-wasm.yml, unit-tests.yml, benchmark.yml
+
+---
+
 ## 🔧 チュートリアル・ドキュメント改善
 
 ### 新規チュートリアル
@@ -192,18 +237,35 @@ void print_values(Value[3] vals) {
 | `src/codegen/llvm/core/mir_to_llvm.cpp` | Union Cast安全性改善 |
 | `src/codegen/llvm/core/types.cpp` | 型変換ロジック改善 |
 | `src/codegen/llvm/core/utils.cpp` | ユーティリティ追加 |
-| `src/codegen/llvm/native/codegen.hpp` | ARM64フラグ対応 |
+| `src/codegen/llvm/native/codegen.hpp` | ARM64フラグ対応、OpenSSLパスのアーキテクチャ対応 |
 | `src/codegen/llvm/native/target.hpp` | ARM64トリプル対応 |
 | `src/frontend/lexer/lexer.hpp` | Octalリテラルサポート |
 | `src/frontend/parser/parser_expr.cpp` | パーサー改善 |
 | `src/frontend/types/checking/call.cpp` | 型チェック改善 |
 
-### ビルドシステム
+### ビルドシステム・CI
 
 | ファイル | 変更内容 |
 |---------|---------|
 | `CMakeLists.txt` | ARM64自動検出、LLVM/OpenSSLパス設定 |
 | `Makefile` | マルチアーキテクチャ自動環境設定 |
+| `.github/workflows/ci.yml` | macos-14/ubuntu-22.04固定、CM_TARGET_ARCH追加 |
+| `.github/workflows/test-interpreter.yml` | 同上 |
+| `.github/workflows/test-llvm-native.yml` | 同上 |
+| `.github/workflows/test-llvm-wasm.yml` | 同上 |
+| `.github/workflows/unit-tests.yml` | 同上 |
+| `.github/workflows/benchmark.yml` | ubuntu-22.04固定 |
+
+### ドキュメント
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `README.md` | サポート環境テーブル追加、CIマトリクス更新 |
+| `docs/QUICKSTART.md` | サポート環境テーブル追加 |
+| `docs/index.md` | サポート環境注記追加 |
+| `docs/index.en.md` | Supported Platforms注記追加 |
+| `docs/tutorials/ja/basics/setup.md` | macOS ARM64/Intel分割、Windows削除 |
+| `docs/ROADMAP.md` | 削除 |
 
 ---
 
@@ -252,5 +314,5 @@ void print_values(Value[3] vals) {
 
 ---
 
-**リリース日**: 2026年2月9日
+**リリース日**: 2026年2月10日
 **バージョン**: v0.13.1

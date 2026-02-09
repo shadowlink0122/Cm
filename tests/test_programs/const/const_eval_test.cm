@@ -7,25 +7,25 @@ const int B = 2;
 const int C = 4;
 
 // constビット演算
-const int AB = A | B;       // 3
-const int ABC = A | B | C;  // 7
-const int MASK = 0xFF & 0x0F; // 15
+const int AB = A | B;          // 3
+const int ABC = A | B | C;     // 7
+const int MASK = 0xFF & 0x0F;  // 15
 
 // const参照
-const int D = AB;           // 3 (const伝搬)
+const int D = AB;  // 3 (const伝搬)
 
 // const算術
 const int SUM = A + B + C;  // 7
 const int PROD = B * C;     // 8
 
 // constシフト
-const int SHIFTED = 1 << 8; // 256
+const int SHIFTED = 1 << 8;  // 256
 
 // hexとconst組み合わせ
-const int FLAGS = 0x01 | 0x02 | 0x04; // 7
+const int FLAGS = 0x01 | 0x02 | 0x04;  // 7
 
 // ネストした二項演算
-const int COMPLEX = (A | B) & (C | 0x08); // 0
+const int COMPLEX = (A | B) & (C | 0x08);  // 0
 
 // negation
 const int NEG = -42;
@@ -45,11 +45,11 @@ int main() {
     // ローカルconstも同様にfolding
     const int LOCAL_A = 10;
     const int LOCAL_B = 20;
-    const int LOCAL_C = LOCAL_A | LOCAL_B; // 30
+    const int LOCAL_C = LOCAL_A | LOCAL_B;  // 30
     println("LOCAL_C = {LOCAL_C}");
 
     // ローカルconstシフト
-    const int LOCAL_SHIFT = 1 << 4; // 16
+    const int LOCAL_SHIFT = 1 << 4;  // 16
     println("LOCAL_SHIFT = {LOCAL_SHIFT}");
 
     return 0;

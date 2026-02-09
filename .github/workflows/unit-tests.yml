@@ -20,10 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             llvm_version: "17"
-          - os: macos-latest
+            arch: x86_64
+          - os: macos-14
             llvm_version: "17"
+            arch: arm64
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -61,6 +63,7 @@ jobs:
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCM_USE_LLVM=ON \
+            -DCM_TARGET_ARCH=${{ matrix.arch }} \
             -DBUILD_TESTING=ON
       
       - name: Build
@@ -85,11 +88,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-14]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             llvm_version: "17"
-          - os: macos-latest
+          - os: macos-14
             llvm_version: "17"
     runs-on: ${{ matrix.os }}
     
@@ -131,11 +134,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-14]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             llvm_version: "17"
-          - os: macos-latest
+          - os: macos-14
             llvm_version: "17"
     runs-on: ${{ matrix.os }}
     
@@ -177,11 +180,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-14]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             llvm_version: "17"
-          - os: macos-latest
+          - os: macos-14
             llvm_version: "17"
     runs-on: ${{ matrix.os }}
     
@@ -223,11 +226,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-14]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             llvm_version: "17"
-          - os: macos-latest
+          - os: macos-14
             llvm_version: "17"
     runs-on: ${{ matrix.os }}
     

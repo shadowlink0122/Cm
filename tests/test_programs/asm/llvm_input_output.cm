@@ -3,7 +3,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     // === テスト1: 基本的なr + =r制約（コピー） ===
     int src1 = 100;
     int dst1 = 0;
@@ -39,7 +39,7 @@ int main() {
     __asm__("movl ${r:orig}, ${=r:copy}");
     println(copy);  // 42
 
-#else
+    #else
     // ARM64版
     // === テスト1: 基本的なr + =r制約（コピー） ===
     int src1 = 100;
@@ -76,6 +76,6 @@ int main() {
     __asm__("mov ${=r:copy}, ${r:orig}");
     println(copy);  // 42
 
-#end
+    #end
     return 0;
 }

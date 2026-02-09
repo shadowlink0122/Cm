@@ -2,7 +2,7 @@
 // 複数オペランド、様々な制約をテスト
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== Complex LLVM ASM Test ===");
 
     // --- Test 1: Read-write add ---
@@ -26,9 +26,9 @@ int main() {
     // --- Test 3: Chained computation ---
     println("\n--- Test 3: Chained computation ---");
     int val = 10;
-    __asm__("addl $$5, ${+r:val}");    // 15
-    __asm__("sall $$1, ${+r:val}");    // 30
-    __asm__("addl $$15, ${+r:val}");   // 45
+    __asm__("addl $$5, ${+r:val}");   // 15
+    __asm__("sall $$1, ${+r:val}");   // 30
+    __asm__("addl $$15, ${+r:val}");  // 45
     println("val (should be 45):");
     println(val);
 
@@ -68,7 +68,7 @@ int main() {
     println(xor_val);
 
     println("\n=== All tests completed! ===");
-#else
+    #else
     // ARM64版
     println("=== Complex LLVM ASM Test ===");
 
@@ -93,9 +93,9 @@ int main() {
     // --- Test 3: Chained computation ---
     println("\n--- Test 3: Chained computation ---");
     int val = 10;
-    __asm__("add ${+r:val}, ${+r:val}, #5");     // 15
-    __asm__("lsl ${+r:val}, ${+r:val}, #1");      // 30
-    __asm__("add ${+r:val}, ${+r:val}, #15");     // 45
+    __asm__("add ${+r:val}, ${+r:val}, #5");   // 15
+    __asm__("lsl ${+r:val}, ${+r:val}, #1");   // 30
+    __asm__("add ${+r:val}, ${+r:val}, #15");  // 45
     println("val (should be 45):");
     println(val);
 
@@ -135,6 +135,6 @@ int main() {
     println(xor_val);
 
     println("\n=== All tests completed! ===");
-#end
+    #end
     return 0;
 }

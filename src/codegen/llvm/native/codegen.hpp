@@ -552,18 +552,38 @@ class LLVMCodeGen {
                     linkCmd += " " + httpRuntimePath;
                 }
                 // OpenSSL (libssl/libcrypto) をリンク
-                // Homebrewのパスを検出
+                // ターゲットアーキテクチャに応じたHomebrewパスを使用
+                // ARM64: /opt/homebrew/opt/openssl@3
+                // x86_64: /usr/local/opt/openssl@3
                 std::string opensslPrefix;
-                FILE* pipe = popen("brew --prefix openssl 2>/dev/null", "r");
-                if (pipe) {
-                    char buffer[256];
-                    if (fgets(buffer, sizeof(buffer), pipe)) {
-                        opensslPrefix = buffer;
-                        // 末尾改行を除去
-                        while (!opensslPrefix.empty() && opensslPrefix.back() == '\n')
-                            opensslPrefix.pop_back();
+#ifdef CM_DEFAULT_TARGET_ARCH
+                std::string targetArch = CM_DEFAULT_TARGET_ARCH;
+#else
+                std::string targetArch = "arm64";
+#endif
+                if (targetArch == "arm64") {
+                    // Apple Silicon: /opt/homebrew を優先
+                    if (std::filesystem::exists("/opt/homebrew/opt/openssl@3/lib")) {
+                        opensslPrefix = "/opt/homebrew/opt/openssl@3";
                     }
-                    pclose(pipe);
+                } else {
+                    // Intel: /usr/local を優先
+                    if (std::filesystem::exists("/usr/local/opt/openssl@3/lib")) {
+                        opensslPrefix = "/usr/local/opt/openssl@3";
+                    }
+                }
+                // フォールバック: brew --prefix で検出
+                if (opensslPrefix.empty()) {
+                    FILE* pipe = popen("brew --prefix openssl@3 2>/dev/null", "r");
+                    if (pipe) {
+                        char buffer[256];
+                        if (fgets(buffer, sizeof(buffer), pipe)) {
+                            opensslPrefix = buffer;
+                            while (!opensslPrefix.empty() && opensslPrefix.back() == '\n')
+                                opensslPrefix.pop_back();
+                        }
+                        pclose(pipe);
+                    }
                 }
                 if (!opensslPrefix.empty()) {
                     linkCmd += " -L" + opensslPrefix + "/lib";

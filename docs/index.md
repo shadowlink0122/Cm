@@ -8,6 +8,8 @@ nav_order: 1
 
 **C++の構文とRustにインスパイアされた機能を併せ持つ、モダンなシステムプログラミング言語**
 
+> **サポート環境**: macOS (ARM64) / Ubuntu (x86_64) | [詳細](QUICKSTART.html)
+
 ---
 
 ## 🚀 クイックリンク
@@ -16,7 +18,6 @@ nav_order: 1
 - [📖 チュートリアル](tutorials/ja/index.html)
 - [📋 リリースノート](releases/)
 - [🏗️ プロジェクト構造](PROJECT_STRUCTURE.html)
-- [🎯 ロードマップ](ROADMAP.html)
 
 ---
 
@@ -44,7 +45,6 @@ nav_order: 1
 
 - **[リリースノート](releases/)** - バージョン履歴と変更ログ
 - **[機能リファレンス](FEATURES.html)** - 現在の実装状況
-- **[ロードマップ](ROADMAP.html)** - 将来の計画
 
 ---
 
@@ -147,7 +147,6 @@ ctest --test-dir build
 
 - [GitHub リポジトリ](https://github.com/shadowlink0122/Cm)
 - [課題トラッカー](https://github.com/shadowlink0122/Cm/issues)
-- [ロードマップ](ROADMAP.html)
 
 ---
 

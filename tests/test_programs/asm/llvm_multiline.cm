@@ -4,7 +4,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== Multi-line LLVM ASM Test ===");
 
     // テスト1: バッククォートでの複数行アセンブリ
@@ -68,7 +68,7 @@ int main() {
     println(multi);
 
     println("\n=== All tests completed! ===");
-#else
+    #else
     // ARM64版
     println("=== Multi-line LLVM ASM Test ===");
 
@@ -131,13 +131,13 @@ int main() {
     // テスト6: 連続した独立した__asm__呼び出し
     println("\n--- Test 6: Sequential separate calls ---");
     int multi = 8;
-    __asm__("add ${+r:multi}, ${+r:multi}, #2");    // 10
-    __asm__("lsl ${+r:multi}, ${+r:multi}, #2");    // 40
-    __asm__("sub ${+r:multi}, ${+r:multi}, #10");   // 30
+    __asm__("add ${+r:multi}, ${+r:multi}, #2");   // 10
+    __asm__("lsl ${+r:multi}, ${+r:multi}, #2");   // 40
+    __asm__("sub ${+r:multi}, ${+r:multi}, #10");  // 30
     println("multi (should be 30):");
     println(multi);
 
     println("\n=== All tests completed! ===");
-#end
+    #end
     return 0;
 }

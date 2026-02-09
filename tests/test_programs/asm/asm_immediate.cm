@@ -5,7 +5,7 @@ macro int CONST_42 = 42;
 macro int CONST_100 = 100;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== i,n Constraint Test ===");
 
     // === i制約: macro定数 ===
@@ -40,7 +40,7 @@ int main() {
     }
 
     println("=== All Tests Passed ===");
-#else
+    #else
     // ARM64版
     println("=== i,n Constraint Test ===");
 
@@ -76,6 +76,6 @@ int main() {
     }
 
     println("=== All Tests Passed ===");
-#end
+    #end
     return 0;
 }

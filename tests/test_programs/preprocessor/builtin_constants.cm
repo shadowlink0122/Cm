@@ -13,118 +13,118 @@ int main() {
     // ===== コンパイラ情報 =====
     // __CM__ は常に定義されている
     #ifdef __CM__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        println("FAIL: __CM__ not defined");
-        fail = fail + 1;
+    println("FAIL: __CM__ not defined");
+    fail = fail + 1;
     #end
 
     // ===== アーキテクチャ検出 =====
     // x86_64 か arm64 のどちらか1つが定義される
     #ifdef __x86_64__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __x86__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ARM64 環境のテスト
     #ifdef __arm64__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __aarch64__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // i386 テスト
     #ifdef __i386__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // RISC-V テスト
     #ifdef __riscv__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ===== OS検出 =====
     #ifdef __macos__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __apple__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __linux__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __unix__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __windows__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __freebsd__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ===== ポインタサイズ =====
     #ifdef __64BIT__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifdef __32BIT__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ===== デバッグモード =====
     #ifdef __DEBUG__
-        pass = pass + 1;
+    pass = pass + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ===== 排他性チェック =====
     // x86_64 と arm64 は同時に定義されないはず
     int arch_count = 0;
     #ifdef __x86_64__
-        arch_count = arch_count + 1;
+    arch_count = arch_count + 1;
     #end
     #ifdef __arm64__
-        arch_count = arch_count + 1;
+    arch_count = arch_count + 1;
     #end
     // どちらか一方のみが定義される
     if (arch_count == 1) {
@@ -137,10 +137,10 @@ int main() {
     // 64BIT と 32BIT は排他的
     int bits_count = 0;
     #ifdef __64BIT__
-        bits_count = bits_count + 1;
+    bits_count = bits_count + 1;
     #end
     #ifdef __32BIT__
-        bits_count = bits_count + 1;
+    bits_count = bits_count + 1;
     #end
     if (bits_count == 1) {
         pass = pass + 1;
@@ -151,35 +151,35 @@ int main() {
 
     // ===== 未定義シンボルの確認 =====
     #ifdef __UNDEFINED_SYMBOL_12345__
-        println("FAIL: undefined symbol should not be defined");
-        fail = fail + 1;
+    println("FAIL: undefined symbol should not be defined");
+    fail = fail + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ===== ifndef 連携テスト =====
     #ifndef __CM__
-        println("FAIL: ifndef __CM__ should be defined");
-        fail = fail + 1;
+    println("FAIL: ifndef __CM__ should be defined");
+    fail = fail + 1;
     #else
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     #ifndef __NONEXISTENT__
-        pass = pass + 1;
+    pass = pass + 1;
     #end
 
     // ===== ネスト深度テスト =====
     #ifdef __CM__
-        #ifdef __64BIT__
-            #ifndef __NONEXISTENT__
-                pass = pass + 1;
-            #end
-        #else
-            #ifndef __NONEXISTENT__
-                pass = pass + 1;
-            #end
-        #end
+    #ifdef __64BIT__
+    #ifndef __NONEXISTENT__
+    pass = pass + 1;
+    #end
+    #else
+    #ifndef __NONEXISTENT__
+    pass = pass + 1;
+    #end
+    #end
     #end
 
     // ===== 結果サマリ =====

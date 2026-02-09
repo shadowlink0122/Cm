@@ -65,4 +65,3 @@ export void sleep_ms(int ms) {
 export void sleep(int seconds) {
     cm_thread_sleep_us((seconds * 1000000) as ulong);
 }
-
