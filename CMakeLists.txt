@@ -440,9 +440,10 @@ if(CM_USE_LLVM)
         set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/http/http_runtime.cpp)
         set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
         # OpenSSLが見つかった場合はHTTPSサポート付きでビルド
+        # CMakeリスト形式で個別引数として展開されるようにする
         set(CM_HTTP_EXTRA_FLAGS "")
         if(OpenSSL_FOUND)
-            set(CM_HTTP_EXTRA_FLAGS "-DCM_HAS_OPENSSL -I${OPENSSL_INCLUDE_DIR}")
+            set(CM_HTTP_EXTRA_FLAGS -DCM_HAS_OPENSSL -I${OPENSSL_INCLUDE_DIR})
         endif()
         add_custom_command(
             OUTPUT ${CM_HTTP_RUNTIME_OUTPUT}
