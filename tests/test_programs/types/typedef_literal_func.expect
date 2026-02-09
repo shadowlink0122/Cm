@@ -1,0 +1,15 @@
+Test 1: String literal as argument
+Method: GET
+Test 2: Direct literal as argument
+Method: POST
+Test 3: Literal return value
+  result=GET
+Test 4: Int literal as argument
+Status: 404
+Test 5: Int literal return value
+  code=200
+Test 6: Transform string literal
+  transformed=POST
+Test 7: Transform int literal
+  new_code=404
+=== PASS ===

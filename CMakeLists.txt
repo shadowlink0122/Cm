@@ -264,11 +264,11 @@ target_link_libraries(cm PRIVATE cm_frontend)
 # OpenSSL検出（HTTPS対応）
 # macOSではHomebrewのパスを優先的に検索
 if(APPLE)
-    # Homebrew Intel/ARM両対応
-    if(EXISTS "/usr/local/opt/openssl@3")
-        set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@3")
-    elseif(EXISTS "/opt/homebrew/opt/openssl@3")
+    # Homebrew ARM優先（/opt/homebrew）、Intel（/usr/local）にフォールバック
+    if(EXISTS "/opt/homebrew/opt/openssl@3")
         set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+    elseif(EXISTS "/usr/local/opt/openssl@3")
+        set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@3")
     endif()
 endif()
 find_package(OpenSSL QUIET)

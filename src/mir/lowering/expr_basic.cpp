@@ -1111,8 +1111,17 @@ LocalId ExprLowering::lower_array_literal(const hir::HirArrayLiteral& lit,
     // 配列型を作成
     hir::TypePtr array_type = hir::make_array(elem_type, lit.elements.size());
 
-    // 結果用の変数を作成
+    // 結果用の変数を作成（new_tempでtypedefが解決される）
     LocalId result = ctx.new_temp(array_type);
+
+    // elem_typeも解決する（new_tempと同じ解決パスを通る）
+    // expected_typeのelement_typeはtypedef未解決のStruct型("Value")の場合があるため、
+    // 正確な型比較のためにlocals経由で解決済みの型を取得する
+    if (result < ctx.func->locals.size() && ctx.func->locals[result].type &&
+        ctx.func->locals[result].type->kind == hir::TypeKind::Array &&
+        ctx.func->locals[result].type->element_type) {
+        elem_type = ctx.func->locals[result].type->element_type;
+    }
 
     // 各要素を初期化
     for (size_t i = 0; i < lit.elements.size(); ++i) {

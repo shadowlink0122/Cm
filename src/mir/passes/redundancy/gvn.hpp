@@ -215,6 +215,8 @@ class GVN : public OptimizationPass {
                     ss << "C(dbl," << *d << ")";
                 else if (auto* b = std::get_if<bool>(&c->value))
                     ss << "C(bool," << *b << ")";
+                else if (auto* s = std::get_if<std::string>(&c->value))
+                    ss << "C(str," << *s << ")";
                 else
                     ss << "C(other)";
             }

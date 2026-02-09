@@ -27,6 +27,15 @@
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 
+// WebAssemblyターゲット初期化関数のextern C宣言
+extern "C" {
+void LLVMInitializeWebAssemblyTargetInfo();
+void LLVMInitializeWebAssemblyTarget();
+void LLVMInitializeWebAssemblyTargetMC();
+void LLVMInitializeWebAssemblyAsmParser();
+void LLVMInitializeWebAssemblyAsmPrinter();
+}
+
 namespace cm::codegen::llvm_backend {
 
 // LLVMのFatal Errorで即時終了（ハング防止）
@@ -76,12 +85,17 @@ class TargetManager {
             errorHandlerInstalled = true;
         }
 
-        // LLVM ターゲット初期化
-        llvm::InitializeAllTargetInfos();
-        llvm::InitializeAllTargets();
-        llvm::InitializeAllTargetMCs();
-        llvm::InitializeAllAsmParsers();
-        llvm::InitializeAllAsmPrinters();
+        // ネイティブ（ホスト）ターゲットの初期化
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
+
+        // WebAssemblyターゲットの初期化（クロスコンパイル用）
+        LLVMInitializeWebAssemblyTargetInfo();
+        LLVMInitializeWebAssemblyTarget();
+        LLVMInitializeWebAssemblyTargetMC();
+        LLVMInitializeWebAssemblyAsmParser();
+        LLVMInitializeWebAssemblyAsmPrinter();
 
         // ターゲットマシン作成
         std::string error;

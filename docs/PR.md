@@ -1,266 +1,256 @@
 [English](PR.en.html)
 
-# v0.13.0 Release - Cm言語コンパイラ
+# v0.13.1 Release - Cm言語コンパイラ
 
 ## 概要
 
-v0.13.0は**std::io完全整理、Tagged Union/Match式強化、libc直接呼び出しアーキテクチャ**に焦点を当てた大規模アップデートです。標準ライブラリからC++ランタイム依存を排除し、純粋なCm実装を達成しました。
+v0.13.1は**GPU/Metal対応**、**ARM64ネイティブビルド**、**標準ライブラリ安定化**、**HTTPS対応**、**リテラル型完全サポート**に焦点を当てた大規模アップデートです。テスト数363 PASS / 0 FAILの安定ベースラインを達成しました。
 
 ## 🎯 主要な新機能
 
-### 1. std::io モジュール階層的再構成
+### 1. GPU/Metal対応
 
-標準I/Oモジュールを機能別にサブモジュール化しました。
-
-```
-std/io/
-├── mod.cm             # エントリ（再エクスポート）
-├── error.cm           # IoResult, IoError, IoErrorKind
-├── traits.cm          # Reader, Writer, Seek インターフェース
-├── console/           # コンソールI/O
-│   ├── input.cm       # input(), input_int(), etc.
-│   └── output.cm      # print, println, eprint, eprintln
-├── stream/            # ストリームI/O
-│   ├── stdin.cm       # Stdin構造体
-│   ├── stdout.cm      # Stdout, Stderr構造体
-│   └── buffered.cm    # BufferedReader, BufferedWriter
-└── file/              # ファイルI/O
-    ├── mod.cm         # 再エクスポート
-    └── io.cm          # read_file, write_file
-```
-
-#### 使用例
+Apple Metal GPUバックエンドによるGPU演算を実装しました。
 
 ```cm
-import std::io::println;
-import std::io::file::{read_file, write_file};
+import std::gpu::create_context;
+import std::gpu::gpu_alloc;
+import std::gpu::gpu_compute;
 
 int main() {
-    // ファイル書き込み
-    write_file("test.txt", "Hello, Cm!");
-    
-    // ファイル読み込み
-    string content = read_file("test.txt");
-    println(content);
-    
+    long ctx = create_context();
+    long buf_a = gpu_alloc(ctx, a_data, 4);
+    long buf_b = gpu_alloc(ctx, b_data, 4);
+    gpu_compute(ctx, "vector_add", buf_a, buf_b, buf_out, 4);
     return 0;
 }
 ```
 
-### 2. libc直接呼び出しアーキテクチャ
+- Metal Shading Language (MSL) カーネル実行
+- int/float/double型のGPUバッファ管理
+- Nativeコンパイル対応（GPU XOR NN学習テスト搭載）
 
-`use libc`構文でlibcの関数を直接呼び出すことが可能になりました。C++ランタイム依存を完全に排除しました。
+### 2. ARM64ネイティブビルド & マルチアーキテクチャ対応
+
+x86_64 LLVM（Rosetta 2）からARM64 LLVMへ移行し、`ARCH`オプションで自動切替が可能になりました。
+
+```bash
+make build              # デフォルト（LLVM自動検出）
+make build ARCH=arm64   # ARM64ビルド
+make build ARCH=x86_64  # x86_64ビルド
+```
+
+### 3. HTTPS (TLS) 対応
+
+OpenSSL 3.6.0による暗号化通信:
 
 ```cm
-use libc {
-    int write(int fd, void* buf, long count);
-    void* malloc(long size);
-    void free(void* ptr);
+import std::http::request;
+
+int main() {
+    request("https://example.com", "GET");
+    return 0;
 }
 ```
 
-### 3. Tagged Union (Enum) の強化
+### 4. ジェネリックコンストラクタ/デストラクタ
 
-関連データを持つenumの実装を強化しました。
+`self()`/`~self()`構文による慣用的なライフサイクル管理:
 
 ```cm
-enum Result<T, E> {
-    Ok(T),
-    Err(E)
-}
+struct Vector<T> {
+    T* data;
+    int size;
+    int capacity;
 
-fn divide(a: int, b: int) -> Result<int, string> {
-    if (b == 0) {
-        return Result::Err("Division by zero");
+    self() {
+        this.data = malloc(8 * sizeof(T)) as T*;
+        this.size = 0;
+        this.capacity = 8;
     }
-    return Result::Ok(a / b);
-}
-```
 
-### 4. Match式の改善
-
-ガード式とより柔軟なパターンマッチングをサポート。
-
-```cm
-match value {
-    x if x > 0 => println("positive"),
-    0 => println("zero"),
-    _ => println("negative"),
-}
-```
-
-### 5. std::fs 削除
-
-`std::fs`モジュールを削除し、`std::io::file`に統合しました。
-
-### 6. 標準ライブラリコレクションのイディオマティック化
-
-`Vector<T>`, `HashMap<K, V>`, `Queue<T>`がイディオマティックな`self()`コンストラクタと`~self()`デストラクタを使用するようになりました。
-
-```cm
-import std::collections::vector::*;
-
-int main() {
-    Vector<int> v();  // self()コンストラクタで初期化
-    v.push(10);
-    v.push(20);
-    // ~self()デストラクタが自動呼び出し
-    return 0;
-}
-```
-
-### 7. 再帰的デストラクタとネストジェネリック対応
-
-`Vector<TrackedObject>`のようなネストしたジェネリックコレクションで、要素のデストラクタが正しく呼び出されるようになりました。
-
-```cm
-struct TrackedObject {
-    int id;
-}
-
-impl TrackedObject {
     ~self() {
-        println("  ~TrackedObject({self.id}) called");
+        free(this.data as void*);
     }
-}
-
-int main() {
-    {
-        Vector<TrackedObject> objects();
-        objects.push(TrackedObject { id: 100 });
-        objects.push(TrackedObject { id: 200 });
-        // スコープ終了時に~Vector()→各要素の~TrackedObject()が呼ばれる
-    }
-    return 0;
 }
 ```
 
-#### 主な修正点:
-- MirRvalue::Ref処理のDeref→Index Projectionシーケンス正常化
-- LLVMエントリブロックのentry_block参照修正
-- ジェネリック型名マングリングの一貫性改善
+### 5. 標準ライブラリ安定化
 
-#### ⚠️ 破壊的変更: Vector.get()の戻り値型変更
+| モジュール | 内容 |
+|-----------|------|
+| `std::collections` | Vector, Queue, HashMap（self()/~self()） |
+| `std::sync` | Mutex, Channel, Atomic |
+| `std::http` | HTTP/HTTPS通信（struct+impl API） |
+| `std::core::result` | CmResult\<T, E\>型 |
 
-`Vector<T>.get()`が値(`T`)ではなくポインタ(`T*`)を返すようになりました。これはDouble Free問題を根本解決するためです。
+### 6. const定数評価拡張
 
-**修正が必要なコード:**
+- **const folding**: コンパイル時定数畳み込みの改善
+- **Octalリテラル**: `0o777`形式の8進数リテラルサポート
+
+### 7. リテラル型の関数引数・戻り値サポート
+
+リテラル型が関数の引数・戻り値として完全にサポートされました。
+
 ```cm
-// 修正前
-int v = vi.get(0);
+typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+typedef StatusCode = 200 | 400 | 404 | 500;
 
-// 修正後
-int v = *vi.get(0);
+void handle_request(HttpMethod method) {
+    println("Method: {method}");
+}
+
+HttpMethod get_method() {
+    return "GET";
+}
 ```
 
-#### Double Free修正の詳細
+### 8. typedef Union配列の関数引数・戻り値対応
 
-`Vector<Vector<int>>`のようなネストされたコレクションで発生していたDouble Free問題を修正しました。
+Union型配列を関数間で受け渡しできるようになりました。
+
+```cm
+typedef Value = string | int | bool;
+
+Value[3] make_values() {
+    Value[3] arr = ["hello" as Value, 42 as Value, true as Value];
+    return arr;
+}
+
+void print_values(Value[3] vals) {
+    string s = vals[0] as string;
+    println("s={s}");
+}
+```
+
+---
+
+## 🐛 バグ修正
+
+### 配列リテラル内Union Castの二重生成バグ修正
 
 | 問題 | 原因 | 修正 |
 |-----|------|------|
-| ポインタ比較ハング | `ptr != null_ptr`が`cm_strcmp`に変換 | HIR型チェックで`icmp ne ptr`に修正 |
-| nullデリファレンス | コンストラクタでnullからload | `isRvalueAlloca`チェック追加 |
-| ポインタスケーリング誤り | Struct固定4バイト | Vector=16B, Queue=24B検出 |
-| Double Free | get()がシャドウコピー返却 | get()をT*戻りに変更 |
+| Union配列の値が破壊される | `lower_array_literal`でtypedef未解決の型を使用 | `expr_basic.cpp`で解決済みの型から取得 |
 
+### リテラル型の関数引数での文字列値破壊バグ修正
 
+| 問題 | 原因 | 修正 |
+|-----|------|------|
+| 文字列リテラル型がゴミ値に | `resolve_typedef()`がLiteralUnion型を素通り | `base.hpp`/`context.hpp`に基底型変換を追加 |
 
-## 🔧 改善点
+---
 
-### テストインフラストラクチャ
+## 🔧 チュートリアル・ドキュメント改善
 
-- 開発中テストは`make tip`または個別実行を推奨
-- 9件のスキップテストにexpectファイルを追加
+### 新規チュートリアル
 
-### 開発ルール追加
+| ドキュメント | 内容 |
+|------------|------|
+| `docs/tutorials/ja/stdlib/` | 標準ライブラリ（Vector, Queue, HashMap, IO, HTTP, GPU, Math, Mem） |
+| `docs/tutorials/ja/stdlib/concurrency/` | 並行処理（Thread, Mutex, Channel, Atomic） |
+| `docs/tutorials/ja/advanced/extern.md` | extern/FFI連携 |
+| `docs/tutorials/ja/advanced/inline-asm.md` | インラインアセンブリ |
+| `docs/tutorials/ja/internals/` | コンパイラ内部構造 |
 
-- `.agent/rules/testing.md`: 開発中テストルール
-- `.agent/workflows/feature-implementation.md`: 検証フェーズ手順
+### 更新チュートリアル
+
+| ドキュメント | 変更 |
+|------------|------|
+| `docs/tutorials/*/types/typedef.md` | リテラル型セクション拡充（関数引数・戻り値の例を追加） |
+| `docs/tutorials/*/types/enums.md` | Tagged Union/Match式の解説強化 |
+| 各チュートリアル | 親ページ（index.md）リンクを追加 |
+
+---
 
 ## 📁 変更ファイル一覧（主要）
 
-### std::io再構成
+### 新機能
+
 | ファイル | 変更内容 |
 |---------|---------|
-| `std/io/mod.cm` | 再エクスポート構成 |
-| `std/io/console/*.cm` | コンソールI/O |
-| `std/io/stream/*.cm` | ストリームI/O |
-| `std/io/file/*.cm` | ファイルI/O |
-| `std/io/error.cm` | エラー型定義 |
-| `std/io/traits.cm` | I/Oインターフェース |
+| `std/gpu/mod.cm` | Metal GPU演算モジュール |
+| `std/gpu/gpu_runtime.mm` | Objective-C++ Metal GPU ランタイム |
+| `std/http/mod.cm` | HTTP/HTTPS通信モジュール |
+| `std/http/http_runtime.cpp` | HTTP通信ランタイム（OpenSSL統合） |
+| `std/sync/mod.cm` | Mutex/Channel/Atomic同期プリミティブ |
+| `std/sync/sync_runtime.cpp` | 同期ランタイム（pthread） |
+| `std/sync/channel_runtime.cpp` | Channelランタイム |
+| `std/collections/` | Vector/Queue/HashMap(self()/~self()) |
+| `std/core/result.cm` | CmResult\<T, E\>型 |
+| `std/net/net_runtime.cpp` | TCP/UDPネットワーキングランタイム |
 
-### コンパイラ
+### コンパイラ修正
+
 | ファイル | 変更内容 |
 |---------|---------|
-| `src/frontend/types/checking/decl.cpp` | output::パス対応削除 |
-| `src/hir/lowering/decl.cpp` | 同上 |
+| `src/mir/lowering/base.hpp` | LiteralUnion→基底型変換、typedef解決強化 |
+| `src/mir/lowering/context.hpp` | 同上（LoweringContext版） |
+| `src/mir/lowering/expr_basic.cpp` | 配列リテラルのelem_type解決修正 |
+| `src/mir/lowering/stmt.cpp` | MIR文の改善 |
+| `src/codegen/llvm/core/mir_to_llvm.cpp` | Union Cast安全性改善 |
+| `src/codegen/llvm/core/types.cpp` | 型変換ロジック改善 |
+| `src/codegen/llvm/core/utils.cpp` | ユーティリティ追加 |
+| `src/codegen/llvm/native/codegen.hpp` | ARM64フラグ対応 |
+| `src/codegen/llvm/native/target.hpp` | ARM64トリプル対応 |
+| `src/frontend/lexer/lexer.hpp` | Octalリテラルサポート |
+| `src/frontend/parser/parser_expr.cpp` | パーサー改善 |
+| `src/frontend/types/checking/call.cpp` | 型チェック改善 |
 
-### 削除ファイル
-| ファイル | 理由 |
-|---------|------|
-| `std/fs/` | std::io::fileに統合 |
-| `std/io/file/file.cm` | io.cmに簡素化 |
+### ビルドシステム
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `CMakeLists.txt` | ARM64自動検出、LLVM/OpenSSLパス設定 |
+| `Makefile` | マルチアーキテクチャ自動環境設定 |
+
+---
 
 ## 🧪 テスト状況
 
 | カテゴリ | 通過 | 失敗 | スキップ |
 |---------|-----|------|---------|
-| インタプリタ | 344 | 0 | 7 |
-| LLVM JIT | 344 | 0 | 7 |
-| JS | 205 | 96 | 51 |
+| JIT (O0) | 363 | 0 | 9 |
 
-## 📊 統計
+### v0.13.0からの新規テスト (+12)
 
-- **追加テスト**: 9件（expect追加）
-- **削除モジュール**: std::fs
-
-## ⚠️ 既知の問題と対策
-
-### モジュール内const定数がMIRで0に評価される問題（対策済み）
-
-**問題**: モジュール内で定義した`const`定数が、MIR生成時に0として評価される
-
-**例**:
-```cm
-// std/io/file.cm
-const int SEEK_END = 2;
-lseek(fd, 0, SEEK_END);  // MIRでは lseek(fd, 0, 0) になる
-```
-
-**対策**: file.cm, output.cmでリテラル値を直接使用するように修正済み
-
-### const定数のビット演算問題
-
-**問題**: `O_WRONLY | O_CREAT | O_TRUNC`のようなconst定数のビット演算が0になる
-
-**回避策**: リテラル値を直接使用（例: `0x0601`）
-
-### Octalリテラル非対応
-
-**問題**: `0644`がCのようにoctal(8進数)として解釈されず、decimal(10進数)として解釈される
-
-**回避策**: 16進数を使用（例: `0644 octal` → `0x1A4`）
-
-## ✅ 最終テスト結果
-
-```
-Total:   351
-Passed:  344
-Failed:  0
-Skipped: 7
-```
-
-## 🚀 今後の予定
-
-- モジュール内const定数評価問題の根本修正
-- const定数ビット演算の修正
-- Octalリテラルサポート
-- std::netモジュール実装
-- async/await対応
+| テスト | カテゴリ |
+|-------|---------|
+| `gpu/gpu_basic.cm` | GPU |
+| `gpu/gpu_xor_nn_test.cm` | GPU |
+| `gpu/gpu_float_test.cm` | GPU |
+| `http/http_external_test.cm` | HTTP |
+| `http/http_rest_test.cm` | HTTP |
+| `sync/thread_channel_atomic_test.cm` | 同期 |
+| `const/octal_test.cm` | const |
+| `const/const_eval_test.cm` | const |
+| `types/typedef_literal_func.cm` | 型 |
+| `types/typedef_union_comprehensive.cm` | 型 |
+| `types/union_array_func.cm` | 型 |
+| `enum/union_array_tuple_test.cm` | enum |
 
 ---
 
-**リリース日**: 2026年2月6日
-**バージョン**: v0.13.0
-**コードネーム**: "Zero-libc I/O"
+## 📊 統計
+
+- **テスト総数**: 372（v0.13.0の360から12増加）
+- **テスト通過**: 363
+- **変更ファイル数**: 189
+- **追加行数**: +12,149
+- **削除行数**: -1,947
+- **新規標準ライブラリモジュール**: gpu, http, collections, core/result, sync
+
+---
+
+## ✅ チェックリスト
+
+- [x] `make tip` 全テスト通過（363 PASS / 0 FAIL）
+- [x] リリースノート更新（`docs/releases/v0.13.1.md`）
+- [x] チュートリアル更新（日英両方）
+- [x] ローカルパス情報なし
+
+---
+
+**リリース日**: 2026年2月9日
+**バージョン**: v0.13.1

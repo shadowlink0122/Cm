@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../frontend/ast/typedef.hpp"
 #include "../../hir/nodes.hpp"
 #include "../nodes.hpp"
 #include "context.hpp"
@@ -166,6 +167,22 @@ class MirLoweringBase {
                 result->element_type = resolved_elem;
                 return result;
             }
+        }
+
+        // LiteralUnion型の場合、基底型（string/int/double）に変換
+        if (type->kind == hir::TypeKind::LiteralUnion) {
+            auto* lit_union = static_cast<ast::LiteralUnionType*>(type.get());
+            if (lit_union && !lit_union->literals.empty()) {
+                const auto& first = lit_union->literals[0].value;
+                if (std::holds_alternative<std::string>(first)) {
+                    return hir::make_string();
+                } else if (std::holds_alternative<int64_t>(first)) {
+                    return hir::make_int();
+                } else if (std::holds_alternative<double>(first)) {
+                    return hir::make_double();
+                }
+            }
+            return hir::make_int();  // フォールバック
         }
 
         return type;

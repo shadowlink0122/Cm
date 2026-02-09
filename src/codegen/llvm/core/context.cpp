@@ -16,6 +16,15 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <stdexcept>
 
+// WebAssemblyターゲット初期化関数のextern C宣言
+extern "C" {
+void LLVMInitializeWebAssemblyTargetInfo();
+void LLVMInitializeWebAssemblyTarget();
+void LLVMInitializeWebAssemblyTargetMC();
+void LLVMInitializeWebAssemblyAsmParser();
+void LLVMInitializeWebAssemblyAsmPrinter();
+}
+
 namespace cm::codegen::llvm_backend {
 
 // ターゲット設定のデフォルト取得
@@ -114,12 +123,17 @@ LLVMContext::~LLVMContext() = default;
 
 // ターゲットマシン初期化
 void LLVMContext::initializeTarget() {
-    // すべてのターゲットを初期化
-    llvm::InitializeAllTargetInfos();
-    llvm::InitializeAllTargets();
-    llvm::InitializeAllTargetMCs();
-    llvm::InitializeAllAsmParsers();
-    llvm::InitializeAllAsmPrinters();
+    // ネイティブ（ホスト）ターゲットの初期化
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+
+    // WebAssemblyターゲットの初期化（クロスコンパイル用）
+    LLVMInitializeWebAssemblyTargetInfo();
+    LLVMInitializeWebAssemblyTarget();
+    LLVMInitializeWebAssemblyTargetMC();
+    LLVMInitializeWebAssemblyAsmParser();
+    LLVMInitializeWebAssemblyAsmPrinter();
 
     // モジュール設定
     module->setTargetTriple(targetConfig.triple);
