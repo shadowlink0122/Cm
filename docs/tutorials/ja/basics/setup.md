@@ -21,12 +21,19 @@ parent: Tutorials
 
 ## 必要要件
 
+### サポート環境
+
+| OS | アーキテクチャ | ステータス |
+|----|-------------|----------|
+| **macOS 14+** | ARM64 (Apple Silicon) | ✅ 完全サポート |
+| **Ubuntu 22.04** | x86_64 | ✅ 完全サポート |
+| Windows | - | ❌ 未サポート |
+
 ### 必須
 
 - **C++20コンパイラ**
   - Clang 17+ （推奨）
   - GCC 12+
-  - MSVC 19.30+（Windows）
 
 - **CMake 3.20+**
   - ビルドシステム
@@ -40,9 +47,6 @@ parent: Tutorials
   - ネイティブコンパイルに必要
   - インタプリタのみならLLVMなしでも可
 
-- **Emscripten**
-  - WASMコンパイルに必要（将来）
-
 - **wasmtime**
   - WASMバイナリの実行に必要
 
@@ -50,7 +54,7 @@ parent: Tutorials
 
 ## インストール手順
 
-### macOS
+### macOS (ARM64 / Apple Silicon)
 
 ```bash
 # Homebrewでインストール
@@ -60,23 +64,31 @@ brew install cmake llvm@17
 export PATH="/opt/homebrew/opt/llvm@17/bin:$PATH"
 ```
 
-### Ubuntu/Debian
+### macOS (Intel / x86_64)
+
+```bash
+# Homebrewでインストール
+brew install cmake llvm@17
+
+# Clangのパスを設定（Intelは/usr/local）
+export PATH="/usr/local/opt/llvm@17/bin:$PATH"
+```
+
+> **Note**: `uname -m` で自分のアーキテクチャを確認できます。
+> `arm64` → Apple Silicon、`x86_64` → Intel
+
+### Ubuntu (x86_64)
 
 ```bash
 # 必須パッケージ
+sudo apt-get update
+sudo apt-get install -y cmake build-essential git
 
 # LLVM（オプション）
 wget https://apt.llvm.org/llvm.sh
 chmod +x llvm.sh
-```
-
-### Windows
-
-```powershell
-# Chocolateyでインストール
-choco install cmake git llvm
-
-# または Visual Studio 2022をインストール
+sudo ./llvm.sh 17
+sudo apt-get install -y llvm-17-dev clang-17
 ```
 
 ---
@@ -326,3 +338,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 **前の章:** [はじめに](introduction.html)  
 **次の章:** [Hello, World!](hello-world.html)
+---
+
+**最終更新:** 2026-02-08

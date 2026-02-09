@@ -326,3 +326,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 **Previous:** [Introduction](introduction.html)  
 **Next:** [Hello, World!](hello-world.html)
+---
+
+**Last Updated:** 2026-02-08

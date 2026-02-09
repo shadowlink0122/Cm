@@ -2,7 +2,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     // === テスト1: mでメモリから読み込み ===
     int mem_val = 42;
     int result = 0;
@@ -15,7 +15,7 @@ int main() {
     __asm__("movl ${m:src}, ${=r:dst}");
     println(dst);  // 100
 
-#else
+    #else
     // ARM64版
     // === テスト1: mでメモリから読み込み ===
     int mem_val = 42;
@@ -29,6 +29,6 @@ int main() {
     __asm__("ldr ${=r:dst}, ${m:src}");
     println(dst);  // 100
 
-#end
+    #end
     return 0;
 }

@@ -153,3 +153,7 @@ gdb ./program_debug
 
 **Previous:** [String Operations](../advanced/strings.html)  
 **Next:** [LLVM Backend](llvm.html)
+
+---
+
+**Last Updated:** 2026-02-08

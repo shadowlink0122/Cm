@@ -59,3 +59,7 @@ The following features are planned but currently **NOT implemented**:
 ---
 
 **Previous:** [Ownership](ownership.html)
+
+---
+
+**Last Updated:** 2026-02-08

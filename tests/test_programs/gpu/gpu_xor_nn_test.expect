@@ -1,0 +1,12 @@
+=== GPU XOR Neural Network Test ===
+GPU device available
+kernel created
+training 5000 epochs...
+training done
+XOR predictions:
+  (0,0) -> 30% (expect <50%)
+  (0,1) -> 69% (expect >50%)
+  (1,0) -> 69% (expect >50%)
+  (1,1) -> 29% (expect <50%)
+PASS: XOR neural network learned correctly
+=== Done ===

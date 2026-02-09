@@ -23,4 +23,3 @@
 #include "runtime_platform.c"
 #include "runtime_print.c"
 #include "runtime_slice.c"
-#include "runtime_sync.c"

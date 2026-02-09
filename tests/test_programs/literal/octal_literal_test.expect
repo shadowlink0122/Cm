@@ -1,0 +1,9 @@
+a = 8
+b = 420
+c = 511
+d = 0
+e = 1
+f = 15
+perm = 493
+hex=255 bin=10 oct=255
+PASS: 0xFF == 0o377

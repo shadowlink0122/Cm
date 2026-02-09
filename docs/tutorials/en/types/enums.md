@@ -73,22 +73,42 @@ int main() {
 
 Cm supports enums where each variant can hold associated data (Tagged Unions).
 
+> **Important:** Each variant can hold **only one field**. Use structs to wrap multiple values.
+
 ### Basic Definition
 
 ```cm
 enum Message {
-    Quit,                      // No data
-    Move { int x; int y; },    // Struct-like data
-    Write(string),             // Tuple-like data
-    ChangeColor(int, int, int) // Multiple values
+    Quit,                  // No data
+    Write(string),         // Single value
+    Code(int)              // Single value
 }
 
 int main() {
     Message m1 = Message::Quit;
-    Message m2 = Message::Move { x: 10, y: 20 };
-    Message m3 = Message::Write("Hello");
-    Message m4 = Message::ChangeColor(255, 128, 0);
+    Message m2 = Message::Write("Hello");
+    Message m3 = Message::Code(404);
     return 0;
+}
+```
+
+### ⚠️ Multiple fields? Use a struct
+
+```cm
+// ❌ Invalid: variants cannot hold multiple fields
+// enum Shape {
+//     Rectangle(int, int),  // Compile error
+// }
+
+// ✅ Correct: wrap in a struct
+struct Rect { int w; int h; }
+struct Color { int r; int g; int b; }
+
+enum Shape {
+    Circle(int),         // radius
+    Rectangle(Rect),     // struct for multiple values
+    Colored(Color),      // RGB via struct
+    Point                // no data
 }
 ```
 
@@ -97,16 +117,18 @@ int main() {
 Extract associated data using the `match` expression.
 
 ```cm
+struct Rect { int w; int h; }
+
 enum Shape {
-    Circle(int),           // radius
-    Rectangle(int, int),   // width, height
+    Circle(int),
+    Rectangle(Rect),
     Point
 }
 
 void describe_shape(Shape s) {
     match (s) {
-        Shape::Circle(r) => println("Circle with radius {}", r),
-        Shape::Rectangle(w, h) => println("Rectangle {}x{}", w, h),
+        Shape::Circle(r) => println("Circle with radius {r}"),
+        Shape::Rectangle(rect) => println("Rectangle {rect.w}x{rect.h}"),
         Shape::Point => println("A point"),
     }
 }
@@ -114,9 +136,68 @@ void describe_shape(Shape s) {
 int main() {
     Shape c = Shape::Circle(5);
     describe_shape(c);  // Circle with radius 5
+
+    Rect r = Rect { w: 10, h: 20 };
+    Shape rect = Shape::Rectangle(r);
+    describe_shape(rect);  // Rectangle 10x20
     return 0;
 }
 ```
+
+---
+
+## Union Type Arrays as Tuples
+
+Cm has union types defined with `typedef`. Using an array of union types, you can return multiple values of different types — like a tuple.
+
+### Defining Union Types
+
+```cm
+typedef Value = int | long;
+typedef Number = int | double;
+typedef Data = int | string;
+```
+
+### Returning Multiple Values
+
+```cm
+import std::io::println;
+
+typedef Value = int | long;
+
+// Return quotient and remainder (pair-like)
+Value[2] divide_with_remainder(int a, int b) {
+    Value[2] pair;
+    pair[0] = (a / b) as Value;
+    pair[1] = (a % b) as Value;
+    return pair;
+}
+
+// Return coordinates (3-element tuple-like)
+Value[3] get_point() {
+    Value[3] point;
+    point[0] = 10 as Value;
+    point[1] = 20 as Value;
+    point[2] = 30 as Value;
+    return point;
+}
+
+int main() {
+    Value[2] dr = divide_with_remainder(17, 5);
+    int quotient = dr[0] as int;
+    int remainder = dr[1] as int;
+    println("17 / 5 = {quotient} remainder {remainder}");
+
+    Value[3] pt = get_point();
+    int x = pt[0] as int;
+    int y = pt[1] as int;
+    int z = pt[2] as int;
+    println("Point: ({x}, {y}, {z})");
+    return 0;
+}
+```
+
+> **Note:** Union type values use `as` casts for assignment and extraction. This is a separate mechanism from Tagged Union (enum) `match`.
 
 ---
 
@@ -330,3 +411,6 @@ int main() {
 
 **Previous:** [Structs](structs.html)  
 **Next:** [typedef](typedef.html)
+---
+
+**Last Updated:** 2026-02-08

@@ -217,6 +217,8 @@ class LLVMCodeGen {
         llvm::raw_string_ostream os(errors);
 
         if (llvm::verifyModule(context->getModule(), &os)) {
+            // デバッグ: IRをダンプ
+            context->getModule().print(llvm::errs(), nullptr);
             cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
                                     "Module verification failed: " + errors,
                                     cm::debug::Level::Error);
@@ -472,6 +474,17 @@ class LLVMCodeGen {
         std::string objFile = options.outputFile + ".o";
         targetManager->emitObjectFile(context->getModule(), objFile);
 
+        // GPU関数の使用を検出
+        bool needsGPU = checkForGPUUsage();
+        bool needsNet = checkForNetUsage();
+        bool needsSync = checkForSyncUsage();
+        bool needsThread = checkForThreadUsage();
+        bool needsHTTP = checkForHTTPUsage();
+        // pthread依存: sync または thread が必要
+        bool needsPthread = needsSync || needsThread;
+        // C++ランタイム依存: C++で書かれたstdランタイムが必要
+        bool needsCppRuntime = needsGPU || needsNet || needsSync || needsThread || needsHTTP;
+
         // リンカ呼び出し
         std::string linkCmd;
 
@@ -480,36 +493,151 @@ class LLVMCodeGen {
             linkCmd = "arm-none-eabi-ld -T link.ld " + objFile + " -o " + options.outputFile;
         } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
             // WebAssembly：wasm-ld使用
-            // WASMランタイムライブラリのパスを検索
             std::string runtimePath = findRuntimeLibrary();
-            // WASI用：_startはランタイムから提供される
-            // --allow-undefined: FFI関数（JavaScript等）を未定義のままリンク可能に
             linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath +
                       " -o " + options.outputFile;
         } else {
             // ネイティブ：システムリンカ使用
-
-            // Cmランタイムライブラリのパスを検索
             std::string runtimePath = findRuntimeLibrary();
 
 #ifdef __APPLE__
             // macOSではシステムのclangを使用してリンク
-            // Homebrew LLVMのclangはSDKパスを認識しないため、/usr/bin/clangを使用
-            // -dead_strip: 未使用関数を削除
-            // -mmacosx-version-min: 最小macOSバージョンを指定してリンカ警告を回避
-            linkCmd = "/usr/bin/clang -mmacosx-version-min=15.0 -Wl,-dead_strip ";
+            linkCmd = "/usr/bin/clang++ -mmacosx-version-min=15.0 -Wl,-dead_strip ";
+#ifdef CM_DEFAULT_TARGET_ARCH
+            // ビルド時指定のターゲットアーキテクチャを使用
+            linkCmd += "-arch " + std::string(CM_DEFAULT_TARGET_ARCH) + " ";
+#endif
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
-            linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
+            linkCmd += objFile + " " + runtimePath;
+
+            // GPU使用時: GPUランタイム + Metal/Foundationフレームワークをリンク
+            if (needsGPU) {
+                std::string gpuRuntimePath = findGPURuntimeLibrary();
+                if (!gpuRuntimePath.empty()) {
+                    linkCmd += " " + gpuRuntimePath;
+                    linkCmd += " -framework Metal -framework Foundation";
+                }
+            }
+
+            // Net使用時: ネットワークランタイムをリンク
+            if (needsNet) {
+                std::string netRuntimePath = findStdRuntimeLibrary("net");
+                if (!netRuntimePath.empty()) {
+                    linkCmd += " " + netRuntimePath;
+                }
+            }
+
+            // Sync使用時: 同期ランタイムをリンク
+            if (needsSync) {
+                std::string syncRuntimePath = findStdRuntimeLibrary("sync");
+                if (!syncRuntimePath.empty()) {
+                    linkCmd += " " + syncRuntimePath;
+                }
+            }
+
+            // Thread使用時: スレッドランタイムをリンク
+            if (needsThread) {
+                std::string threadRuntimePath = findStdRuntimeLibrary("thread");
+                if (!threadRuntimePath.empty()) {
+                    linkCmd += " " + threadRuntimePath;
+                }
+            }
+
+            // HTTP使用時: HTTPランタイム + OpenSSLをリンク
+            if (needsHTTP) {
+                std::string httpRuntimePath = findStdRuntimeLibrary("http");
+                if (!httpRuntimePath.empty()) {
+                    linkCmd += " " + httpRuntimePath;
+                }
+                // OpenSSL (libssl/libcrypto) をリンク
+                // ターゲットアーキテクチャに応じたHomebrewパスを使用
+                // ARM64: /opt/homebrew/opt/openssl@3
+                // x86_64: /usr/local/opt/openssl@3
+                std::string opensslPrefix;
+#ifdef CM_DEFAULT_TARGET_ARCH
+                std::string targetArch = CM_DEFAULT_TARGET_ARCH;
 #else
-            // Linuxでもclangを使用（crt0.oなどが自動的にリンクされる）
-            // --gc-sections: 未使用セクションを削除
+                std::string targetArch = "arm64";
+#endif
+                if (targetArch == "arm64") {
+                    // Apple Silicon: /opt/homebrew を優先
+                    if (std::filesystem::exists("/opt/homebrew/opt/openssl@3/lib")) {
+                        opensslPrefix = "/opt/homebrew/opt/openssl@3";
+                    }
+                } else {
+                    // Intel: /usr/local を優先
+                    if (std::filesystem::exists("/usr/local/opt/openssl@3/lib")) {
+                        opensslPrefix = "/usr/local/opt/openssl@3";
+                    }
+                }
+                // フォールバック: brew --prefix で検出
+                if (opensslPrefix.empty()) {
+                    FILE* pipe = popen("brew --prefix openssl@3 2>/dev/null", "r");
+                    if (pipe) {
+                        char buffer[256];
+                        if (fgets(buffer, sizeof(buffer), pipe)) {
+                            opensslPrefix = buffer;
+                            while (!opensslPrefix.empty() && opensslPrefix.back() == '\n')
+                                opensslPrefix.pop_back();
+                        }
+                        pclose(pipe);
+                    }
+                }
+                if (!opensslPrefix.empty()) {
+                    linkCmd += " -L" + opensslPrefix + "/lib";
+                }
+                linkCmd += " -lssl -lcrypto";
+            }
+
+            // C++ランタイムが必要な場合にリンク
+            if (needsCppRuntime) {
+                linkCmd += " -lc++";
+            }
+
+            // pthread依存ライブラリ
+            if (needsPthread) {
+                linkCmd += " -lpthread";
+            }
+
+            linkCmd += " -o " + options.outputFile;
+#else
+            // Linuxでもclangを使用
             linkCmd = "clang -Wl,--gc-sections ";
             if (context->getTargetConfig().noStd) {
                 linkCmd += "-nostdlib ";
             }
-            linkCmd += objFile + " " + runtimePath + " -o " + options.outputFile;
+            linkCmd += objFile + " " + runtimePath;
+
+            // stdランタイムのリンク（Linux）
+            if (needsNet) {
+                std::string path = findStdRuntimeLibrary("net");
+                if (!path.empty())
+                    linkCmd += " " + path;
+            }
+            if (needsSync) {
+                std::string path = findStdRuntimeLibrary("sync");
+                if (!path.empty())
+                    linkCmd += " " + path;
+            }
+            if (needsThread) {
+                std::string path = findStdRuntimeLibrary("thread");
+                if (!path.empty())
+                    linkCmd += " " + path;
+            }
+            if (needsHTTP) {
+                std::string path = findStdRuntimeLibrary("http");
+                if (!path.empty())
+                    linkCmd += " " + path;
+                linkCmd += " -lssl -lcrypto";
+            }
+            if (needsCppRuntime)
+                linkCmd += " -lstdc++";
+            if (needsPthread)
+                linkCmd += " -lpthread";
+
+            linkCmd += " -o " + options.outputFile;
 #endif
         }
 
@@ -607,6 +735,155 @@ class LLVMCodeGen {
         }
 
         return outputPath;
+    }
+
+    /// GPU関数の使用を検出
+    bool checkForGPUUsage() const {
+        for (const auto& func : context->getModule()) {
+            if (func.isDeclaration()) {
+                std::string name = func.getName().str();
+                if (name.find("gpu_") == 0) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "GPU function detected: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// Net関数の使用を検出（cm_tcp_*, cm_udp_*, cm_dns_*, cm_socket_*）
+    bool checkForNetUsage() const {
+        for (const auto& func : context->getModule()) {
+            if (func.isDeclaration()) {
+                std::string name = func.getName().str();
+                if (name.find("cm_tcp_") == 0 || name.find("cm_udp_") == 0 ||
+                    name.find("cm_dns_") == 0 || name.find("cm_socket_") == 0) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "Net function detected: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// Sync関数の使用を検出（cm_mutex_*, cm_rwlock_*, cm_atomic_*, cm_channel_*, cm_once_*,
+    /// atomic_*）
+    bool checkForSyncUsage() const {
+        for (const auto& func : context->getModule()) {
+            if (func.isDeclaration()) {
+                std::string name = func.getName().str();
+                if (name.find("cm_mutex_") == 0 || name.find("cm_rwlock_") == 0 ||
+                    name.find("cm_atomic_") == 0 || name.find("cm_channel_") == 0 ||
+                    name.find("cm_once_") == 0 ||
+                    // レガシー名（cm_プレフィクスなし）
+                    name.find("atomic_store_") == 0 || name.find("atomic_load_") == 0 ||
+                    name.find("atomic_fetch_") == 0 || name.find("atomic_compare_") == 0) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "Sync function detected: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// Thread関数の使用を検出（cm_thread_*）
+    bool checkForThreadUsage() const {
+        for (const auto& func : context->getModule()) {
+            if (func.isDeclaration()) {
+                std::string name = func.getName().str();
+                if (name.find("cm_thread_") == 0) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "Thread function detected: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// HTTP関数の使用を検出（cm_http_*）
+    bool checkForHTTPUsage() const {
+        for (const auto& func : context->getModule()) {
+            if (func.isDeclaration()) {
+                std::string name = func.getName().str();
+                if (name.find("cm_http_") == 0) {
+                    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                                            "HTTP function detected: " + name);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// GPUランタイムライブラリのパスを検索
+    std::string findGPURuntimeLibrary() {
+#ifdef CM_GPU_RUNTIME_PATH
+        if (std::filesystem::exists(CM_GPU_RUNTIME_PATH)) {
+            return CM_GPU_RUNTIME_PATH;
+        }
+#endif
+        // フォールバック
+        std::vector<std::string> searchPaths = {
+            "build/lib/cm_gpu_runtime.o",
+            "./build/lib/cm_gpu_runtime.o",
+            "../build/lib/cm_gpu_runtime.o",
+        };
+        for (const auto& path : searchPaths) {
+            if (std::filesystem::exists(path)) {
+                return path;
+            }
+        }
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError, "GPU runtime library not found");
+        return "";
+    }
+
+    /// stdランタイムライブラリの汎用検索（net, sync, thread, http）
+    std::string findStdRuntimeLibrary(const std::string& name) {
+        // 1. CMake定義パスをチェック
+#ifdef CM_NET_RUNTIME_PATH
+        if (name == "net" && std::filesystem::exists(CM_NET_RUNTIME_PATH)) {
+            return CM_NET_RUNTIME_PATH;
+        }
+#endif
+#ifdef CM_SYNC_RUNTIME_PATH
+        if (name == "sync" && std::filesystem::exists(CM_SYNC_RUNTIME_PATH)) {
+            return CM_SYNC_RUNTIME_PATH;
+        }
+#endif
+#ifdef CM_THREAD_RUNTIME_PATH
+        if (name == "thread" && std::filesystem::exists(CM_THREAD_RUNTIME_PATH)) {
+            return CM_THREAD_RUNTIME_PATH;
+        }
+#endif
+#ifdef CM_HTTP_RUNTIME_PATH
+        if (name == "http" && std::filesystem::exists(CM_HTTP_RUNTIME_PATH)) {
+            return CM_HTTP_RUNTIME_PATH;
+        }
+#endif
+
+        // 2. フォールバック: build/lib/ を検索
+        // syncはアーカイブ(.a)、それ以外は.o
+        std::string ext = (name == "sync") ? ".a" : ".o";
+        std::string filename = "cm_" + name + "_runtime" + ext;
+
+        std::vector<std::string> searchPaths = {
+            "build/lib/" + filename,
+            "./build/lib/" + filename,
+            "../build/lib/" + filename,
+        };
+        for (const auto& path : searchPaths) {
+            if (std::filesystem::exists(path)) {
+                return path;
+            }
+        }
+
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                name + " runtime library not found");
+        return "";
     }
 
     /// インポートされた外部関数があるかチェック

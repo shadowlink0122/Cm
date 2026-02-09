@@ -440,3 +440,7 @@ int main() {
 
 **前の章:** [関数](../basics/functions.html)  
 **次の章:** [Enum型](enums.html)
+
+---
+
+**最終更新:** 2026-02-08

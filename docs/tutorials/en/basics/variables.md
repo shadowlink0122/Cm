@@ -264,3 +264,7 @@ int main() {
 
 **Previous:** [Hello, World!](hello-world.html)  
 **Next:** [Operators](operators.html)
+
+---
+
+**Last Updated:** 2026-02-08

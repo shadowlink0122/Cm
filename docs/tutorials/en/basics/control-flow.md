@@ -634,3 +634,7 @@ int main() {
 
 **Previous:** [Operators](operators.html)  
 **Next:** [Functions](functions.html)
+
+---
+
+**Last Updated:** 2026-02-08

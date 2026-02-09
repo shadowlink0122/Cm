@@ -1,13 +1,17 @@
 // std - Cm言語標準ライブラリ
 //
 // モジュール構成:
-//   std::io     - 入出力関数 (println, print, etc.)
-//   std::core   - コア機能 (型エイリアス, ユーティリティ関数)
-//   std::math   - 数学関数 (sin, cos, sqrt, etc.)
-//   std::types  - 型情報とイントロスペクション (sizeof, typename)
-//   std::sync   - 同期プリミティブ (Mutex, RwLock, Atomic)
-//   std::async  - 非同期ランタイム (Executor, Channel)
-//   std::net    - ネットワーク (TCP, HTTP)
+//   std::io          - 入出力関数 (println, print, etc.)
+//   std::core        - コア機能 (型エイリアス, ユーティリティ関数)
+//   std::math        - 数学関数 (sin, cos, sqrt, etc.)
+//   std::types       - 型情報とイントロスペクション (sizeof, typename)
+//   std::collections - コレクション (Vector, HashMap, Queue)
+//   std::thread      - スレッド (spawn, join)
+//   std::sync        - 同期プリミティブ (Mutex, RwLock, Atomic)
+//   std::mem         - メモリ管理
+//   std::iter        - イテレータ
+//   std::net         - ネットワーク (TCP通信, イベント多重化)
+//   std::http        - HTTPクライアント (REST API)
 //
 // 使用例:
 //   import std::io::println;
@@ -15,9 +19,7 @@
 //   import std::core::{min, max, clamp};
 //   import std::types::{size_of, type_name};
 //   import std::sync::{Mutex, AtomicInt};
-//   import std::async::{block_on, channel};
-//   import std::net::{TcpStream, TcpListener};
-//   import std::net::http::{HttpClient, get};
+//   import std::thread::{spawn, join};
 
 module std;
 

@@ -1,0 +1,15 @@
+=== GPU Basic Test ===
+GPU device available
+--- Test 1: Long Vector Addition ---
+result[0]: 11
+result[1]: 22
+result[2]: 33
+result[3]: 44
+PASS: long vector addition correct
+--- Test 2: Float Vector Addition ---
+float result[0]: 11 (expect 11)
+float result[1]: 22 (expect 22)
+float result[2]: 33 (expect 33)
+float result[3]: 44 (expect 44)
+PASS: float vector addition correct
+=== Done ===

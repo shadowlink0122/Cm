@@ -137,3 +137,6 @@ extern "C" {
 
 - [ポインタ](../basics/pointers.html) - ポインタ操作の基礎
 - [WASMバックエンド](../compiler/wasm.html) - WASI FFI
+---
+
+**最終更新:** 2026-02-08

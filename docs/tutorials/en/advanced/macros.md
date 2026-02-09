@@ -124,3 +124,6 @@ int main() {
 ## Related Topics
 
 - [Constants](const.md) - const keyword
+---
+
+**Last Updated:** 2026-02-08

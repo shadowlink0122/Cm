@@ -353,3 +353,7 @@ int main() {
 
 **前の章:** [変数と型](variables.html)  
 **次の章:** [制御構文](control-flow.html)
+
+---
+
+**最終更新:** 2026-02-08

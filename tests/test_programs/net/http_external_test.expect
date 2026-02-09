@@ -1,0 +1,8 @@
+=== HTTP External Communication Test ===
+TEST1: PASS (GET httpbin.org/get -> 200)
+TEST2: PASS (POST httpbin.org/post -> 200)
+TEST3: PASS (GET /status/404 -> 404)
+TEST4: PASS (GET /headers -> 200)
+TEST5: PASS (connection refused handled)
+TEST6: PASS (HTTPS google.com -> 200)
+=== Done ===

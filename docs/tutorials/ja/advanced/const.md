@@ -87,3 +87,7 @@ int[SUM] data;  // int[30]
 
 - [変数](../basics/variables.md) - 変数の基本
 - [配列](../basics/arrays.md) - 配列の使い方
+
+---
+
+**最終更新:** 2026-02-08

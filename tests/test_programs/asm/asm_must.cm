@@ -4,7 +4,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== must {} Block Test ===");
 
     // 基本的なmustブロック（asmなし）
@@ -26,7 +26,7 @@ int main() {
     }
 
     println("=== All Tests Passed ===");
-#else
+    #else
     // ARM64版（nopは共通命令）
     println("=== must {} Block Test ===");
 
@@ -47,6 +47,6 @@ int main() {
     }
 
     println("=== All Tests Passed ===");
-#end
+    #end
     return 0;
 }

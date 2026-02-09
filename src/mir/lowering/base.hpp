@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../frontend/ast/typedef.hpp"
 #include "../../hir/nodes.hpp"
 #include "../nodes.hpp"
 #include "context.hpp"
@@ -168,6 +169,22 @@ class MirLoweringBase {
             }
         }
 
+        // LiteralUnion型の場合、基底型（string/int/double）に変換
+        if (type->kind == hir::TypeKind::LiteralUnion) {
+            auto* lit_union = static_cast<ast::LiteralUnionType*>(type.get());
+            if (lit_union && !lit_union->literals.empty()) {
+                const auto& first = lit_union->literals[0].value;
+                if (std::holds_alternative<std::string>(first)) {
+                    return hir::make_string();
+                } else if (std::holds_alternative<int64_t>(first)) {
+                    return hir::make_int();
+                } else if (std::holds_alternative<double>(first)) {
+                    return hir::make_double();
+                }
+            }
+            return hir::make_int();  // フォールバック
+        }
+
         return type;
     }
 
@@ -201,18 +218,117 @@ class MirLoweringBase {
     void register_global_var(const hir::HirGlobalVar& gv) {
         // const変数のみ登録（文字列補間で使用）
         if (gv.is_const && gv.init) {
-            // 初期化式がリテラルの場合のみ値を保存
-            if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&gv.init->kind)) {
-                if (*lit) {
-                    MirConstant const_val;
-                    const_val.type = gv.type;
-                    const_val.value = (*lit)->value;
-                    global_const_values[gv.name] = const_val;
-                }
+            // コンパイル時定数評価を試行
+            auto const_val = try_global_const_eval(*gv.init);
+            if (const_val) {
+                const_val->type = gv.type ? gv.type : const_val->type;
+                global_const_values[gv.name] = *const_val;
             }
         }
     }
 
+   private:
+    // グローバルconst用のコンパイル時定数評価
+    // LoweringContextを使わず、global_const_valuesを直接参照
+    std::optional<MirConstant> try_global_const_eval(const hir::HirExpr& expr) {
+        // リテラルの場合
+        if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr.kind)) {
+            if (*lit) {
+                MirConstant c;
+                c.type = expr.type ? expr.type : hir::make_int();
+                c.value = (*lit)->value;
+                return c;
+            }
+        }
+
+        // 変数参照の場合（既登録のグローバルconst変数を伝搬）
+        if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
+            if (*var) {
+                auto it = global_const_values.find((*var)->name);
+                if (it != global_const_values.end())
+                    return it->second;
+            }
+        }
+
+        // 単項マイナスの場合
+        if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&expr.kind)) {
+            if (*unary && (*unary)->op == hir::HirUnaryOp::Neg && (*unary)->operand) {
+                auto inner = try_global_const_eval(*(*unary)->operand);
+                if (inner && std::holds_alternative<int64_t>(inner->value)) {
+                    MirConstant c;
+                    c.type = inner->type;
+                    c.value = -std::get<int64_t>(inner->value);
+                    return c;
+                }
+            }
+        }
+
+        // 二項演算の場合（ビット演算、算術演算）
+        if (auto* bin = std::get_if<std::unique_ptr<hir::HirBinary>>(&expr.kind)) {
+            if (*bin && (*bin)->lhs && (*bin)->rhs) {
+                auto lval = try_global_const_eval(*(*bin)->lhs);
+                auto rval = try_global_const_eval(*(*bin)->rhs);
+                if (lval && rval && std::holds_alternative<int64_t>(lval->value) &&
+                    std::holds_alternative<int64_t>(rval->value)) {
+                    int64_t l = std::get<int64_t>(lval->value);
+                    int64_t r = std::get<int64_t>(rval->value);
+                    int64_t result = 0;
+                    bool ok = true;
+                    switch ((*bin)->op) {
+                        case hir::HirBinaryOp::Add:
+                            result = l + r;
+                            break;
+                        case hir::HirBinaryOp::Sub:
+                            result = l - r;
+                            break;
+                        case hir::HirBinaryOp::Mul:
+                            result = l * r;
+                            break;
+                        case hir::HirBinaryOp::Div:
+                            if (r != 0)
+                                result = l / r;
+                            else
+                                ok = false;
+                            break;
+                        case hir::HirBinaryOp::Mod:
+                            if (r != 0)
+                                result = l % r;
+                            else
+                                ok = false;
+                            break;
+                        case hir::HirBinaryOp::BitAnd:
+                            result = l & r;
+                            break;
+                        case hir::HirBinaryOp::BitOr:
+                            result = l | r;
+                            break;
+                        case hir::HirBinaryOp::BitXor:
+                            result = l ^ r;
+                            break;
+                        case hir::HirBinaryOp::Shl:
+                            result = l << r;
+                            break;
+                        case hir::HirBinaryOp::Shr:
+                            result = l >> r;
+                            break;
+                        default:
+                            ok = false;
+                            break;
+                    }
+                    if (ok) {
+                        MirConstant c;
+                        c.type = lval->type;
+                        c.value = result;
+                        return c;
+                    }
+                }
+            }
+        }
+
+        return std::nullopt;
+    }
+
+   protected:
     // 構造体のフィールドインデックスを取得
     std::optional<FieldId> get_field_index(const std::string& struct_name,
                                            const std::string& field_name) {

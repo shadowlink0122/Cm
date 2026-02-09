@@ -230,3 +230,7 @@ void process_data(int value) {
 
 - [mustキーワード](../advanced/must.html) - デッドコード削除の防止
 - [マクロ](../advanced/macros.html) - コンパイル時定数
+
+---
+
+**最終更新:** 2026-02-08

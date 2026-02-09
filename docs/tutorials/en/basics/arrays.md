@@ -261,3 +261,7 @@ This optimization provides:
 
 **Previous:** [Functions](functions.html)  
 **Next:** [Pointers](pointers.html)
+
+---
+
+**Last Updated:** 2026-02-08

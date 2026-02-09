@@ -1,124 +1,68 @@
-// std::core::async - 非同期処理のコア定義
+// std/core/async/mod.cm - 非同期ランタイムモジュール
+// C実装(runtime_async.c + runtime_event_loop.c)のCmラッパー
+// シングルスレッド非同期エグゼキュータ基盤を提供
 module std.core.async;
 
 // ============================================================
-// ポーリング結果（ジェネリック版）
+// C runtime extern宣言
 // ============================================================
 
-// Poll<T> - 非同期計算の状態を表す
-// Ready(T): 計算完了、値を含む
-// Pending: まだ完了していない
-enum Poll<T> {
-    Ready(T),
-    Pending
+// 時刻
+extern "C" ulong cm_now_ms();
+
+// スリープ — 指定ミリ秒待機するFutureを返す
+// 注意: この関数はLLVMバックエンド経由で呼ばれる
+// Cmからは直接呼べない（Future*ポインタ型がCm側で表現できないため）
+
+// エグゼキュータ操作（LLVMランタイム内部）
+// これらはasync/await構文から自動生成されるコードが使用する
+
+// ============================================================
+// Export API — Cmから直接使用可能な関数
+// ============================================================
+
+// 現在時刻を取得（ミリ秒、エポックまたはモノトニック）
+export ulong now_ms() {
+    return cm_now_ms();
+}
+
+// スリープ（ブロッキング版 — std::thread::sleep_msの代替）
+// 注意: これは非同期ではなく、スレッドをブロックする
+// 非同期版はasync/await構文経由で使用
+use libc {
+    int usleep(int usec);
+}
+
+export void sleep_ms(int ms) {
+    usleep(ms * 1000);
+}
+
+export void sleep_sec(int sec) {
+    usleep(sec * 1000000);
 }
 
 // ============================================================
-// Waker（起床通知用オブジェクト）
+// 簡易タイマーAPI
 // ============================================================
 
-// 生のWakerテーブル
-// 仮想関数テーブルとして機能する
-struct WakerVTable {
-    // dataポインタを受け取って起床させる関数
-    void*(void*) wake;
-    void*(void*) clone;
-    void*(void*) drop;
+// 経過時間を計測するタイマー
+export struct Timer {
+    ulong start;
 }
 
-// Waker（起床通知用オブジェクト）
-struct Waker {
-    void* data;           // 実装依存のデータポインタ
-    WakerVTable* vtable;  // 関数テーブルへのポインタ
-}
-
-impl Waker {
-    // タスクを起床させる
-    void wake() {
-        self.vtable.wake(self.data);
+impl Timer {
+    // タイマーを開始
+    export static Timer start() {
+        return Timer { start: cm_now_ms() };
     }
 
-    // Wakerを複製する
-    Waker clone() {
-        self.vtable.clone(self.data);
-        return Waker { data: self.data, vtable: self.vtable };
+    // 経過時間を取得（ミリ秒）
+    export ulong elapsed_ms() {
+        return cm_now_ms() - self.start;
     }
-}
 
-// ============================================================
-// 実行コンテキスト
-// ============================================================
-
-struct Context {
-    Waker* waker;
-}
-
-impl Context {
-    // 現在のWakerを取得
-    Waker* waker() {
-        return self.waker;
+    // リセット
+    export void reset() {
+        self.start = cm_now_ms();
     }
-}
-
-// ============================================================
-// Futureインターフェース（ジェネリック版）
-// ============================================================
-
-interface Future<T> {
-    // 非同期計算をポーリング
-    // Ready(T)を返すまで繰り返し呼ばれる
-    Poll<T> poll(Context* cx);
-}
-
-// ============================================================
-// 即座に完了するFuture
-// ============================================================
-
-struct ReadyFuture<T> {
-    T value;
-    bool consumed;
-}
-
-impl<T> ReadyFuture<T> {
-    // 値を持つFutureを作成
-    static ReadyFuture<T> new(T value) {
-        return ReadyFuture<T> { value: value, consumed: false };
-    }
-}
-
-impl<T> ReadyFuture<T> for Future<T> {
-    Poll<T> poll(Context* cx) {
-        if (self.consumed) {
-            // 既に値を返した後の再ポーリングはパニック
-            // 実際の実装ではエラー処理が必要
-        }
-        self.consumed = true;
-        return Poll::Ready(self.value);
-    }
-}
-
-// ============================================================
-// 永遠に完了しないFuture
-// ============================================================
-
-struct PendingFuture<T> {}
-
-impl<T> PendingFuture<T> for Future<T> {
-    Poll<T> poll(Context* cx) {
-        return Poll::Pending;
-    }
-}
-
-// ============================================================
-// ヘルパー関数
-// ============================================================
-
-// 即座に完了するFutureを作成
-export <T> ReadyFuture<T> ready(T value) {
-    return ReadyFuture::new(value);
-}
-
-// 永遠に完了しないFutureを作成
-export <T> PendingFuture<T> pending() {
-    return PendingFuture<T> {};
 }

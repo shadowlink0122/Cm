@@ -118,3 +118,6 @@ int main() {
 
 **Previous:** [typedef](typedef.html)  
 **Next:** [Interfaces](interfaces.html)
+---
+
+**Last Updated:** 2026-02-08

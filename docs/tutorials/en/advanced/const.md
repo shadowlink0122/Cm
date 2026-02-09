@@ -87,3 +87,7 @@ Current implementation has the following limitations:
 
 - [Variables](../basics/variables.md) - Variable basics
 - [Arrays](../basics/arrays.md) - Array usage
+
+---
+
+**Last Updated:** 2026-02-08

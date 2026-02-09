@@ -8,15 +8,16 @@ nav_order: 1
 
 **C++の構文とRustにインスパイアされた機能を併せ持つ、モダンなシステムプログラミング言語**
 
+> **サポート環境**: macOS (ARM64) / Ubuntu (x86_64) | [詳細](QUICKSTART.html)
+
 ---
 
 ## 🚀 クイックリンク
 
 - [📚 はじめる](QUICKSTART.html)
-- [📖 チュートリアル](tutorials/ja/)
+- [📖 チュートリアル](tutorials/ja/index.html)
 - [📋 リリースノート](releases/)
 - [🏗️ プロジェクト構造](PROJECT_STRUCTURE.html)
-- [🎯 ロードマップ](../ROADMAP.md)
 
 ---
 
@@ -24,11 +25,12 @@ nav_order: 1
 
 ### ユーザー向け
 
-- **[チュートリアル](tutorials/ja/)** - 段階的な学習ガイド
-  - [基本編](tutorials/ja/basics/) - 変数、関数、制御構文
-  - [型システム編](tutorials/ja/types/) - 構造体、Enum、インターフェース
-  - [高度な機能編](tutorials/ja/advanced/) - ジェネリクス、マクロ、match式
-  - [コンパイラ編](tutorials/ja/compiler/) - LLVMバックエンド、最適化
+- **[チュートリアル](tutorials/ja/index.html)** - 段階的な学習ガイド
+  - [基本編](tutorials/ja/basics/introduction.html) - 変数、関数、制御構文
+  - [型システム編](tutorials/ja/types/structs.html) - 構造体、Enum、インターフェース
+  - [高度な機能編](tutorials/ja/advanced/match.html) - ジェネリクス、マクロ、match式
+  - [コンパイラ編](tutorials/ja/compiler/usage.html) - LLVMバックエンド、最適化
+  - [標準ライブラリ編](tutorials/ja/stdlib/) - HTTP、ネットワーク、スレッド、GPU
 
 - **[クイックスタートガイド](QUICKSTART.html)** - 5分で始めるCm言語
 
@@ -42,35 +44,47 @@ nav_order: 1
 ### リリース情報
 
 - **[リリースノート](releases/)** - バージョン履歴と変更ログ
-- **[機能リファレンス](features/)** - 現在の実装状況
-- **[ロードマップ](../ROADMAP.md)** - 将来の計画
+- **[機能リファレンス](FEATURES.html)** - 現在の実装状況
 
 ---
 
 ## 🎯 言語の特徴
 
-### ✅ 実装済み (v0.11.0)
+### ✅ 言語コア (v0.13.1)
 
 - **C++ライクな構文** - 親しみやすく読みやすい
 - **強力な型システム** - コンパイル時の安全性
 - **ジェネリクス** - 型安全なジェネリックプログラミング
 - **インターフェース** - トレイトベースのポリモーフィズム
-- **LLVMバックエンド** - ネイティブコード生成
-- **WASMサポート** - WebAssemblyバックエンド
-- **パターンマッチング** - 強力なmatch式
-- **ゼロコスト抽象化** - オーバーヘッドのないパフォーマンス
+- **パターンマッチング** - 強力なmatch式とガード条件
+- **インラインアセンブリ** - `__asm__`によるハードウェアアクセス
+- **条件付きコンパイル** - `#ifdef`/`#ifndef`ディレクティブ
+
+### ✅ バックエンド
+
+- **LLVM Native** - ARM64/x86_64 ネイティブコード生成
+- **WASM** - WebAssemblyバックエンド
+
+### ✅ 標準ライブラリ (Native向け)
+
+- **コレクション** - `Vector<T>`, `Queue<T>`, `HashMap<K,V>`
+- **スレッド** - `std::thread`, `Mutex`, `Channel`
+- **ネットワーク** - `std::http` (HTTP/HTTPS、OpenSSL統合)
+- **GPU** - `std::gpu` (Apple Metalバックエンド)
 
 ### 🔄 進行中
 
-- **標準ライブラリ** - コアユーティリティとデータ構造
-- **モジュールシステム** - 強化されたパッケージ管理
-- **所有権システム** - GCなしのメモリ安全性 (v0.11.0以降)
+- **パッケージ管理** - `cm pkg init/add`
+- **所有権システム** - 借用チェッカーの強化
+- **JSバックエンド** - JavaScriptコード生成 (v0.14.0予定)
 
 ---
 
 ## 💡 コード例
 
 ```cm
+import std::io::println;
+
 // Hello World
 int main() { println("Hello, Cm!"); return 0; }
 
@@ -133,11 +147,10 @@ ctest --test-dir build
 
 - [GitHub リポジトリ](https://github.com/shadowlink0122/Cm)
 - [課題トラッカー](https://github.com/shadowlink0122/Cm/issues)
-- [ディスカッション](https://github.com/shadowlink0122/Cm/discussions)
 
 ---
 
-**最終更新:** v0.11.0 (2026年1月)
+**最終更新:** v0.13.1 (2026年2月)
 
 © 2025-2026 Cm Language Project
 

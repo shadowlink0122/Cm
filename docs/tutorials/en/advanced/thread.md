@@ -147,3 +147,7 @@ int main() {
 - `join` → `pthread_join`
 - `detach` → `pthread_detach`
 - `sleep_ms` → `usleep`
+
+---
+
+**Last Updated:** 2026-02-08

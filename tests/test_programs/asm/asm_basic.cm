@@ -4,7 +4,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== Inline Assembly Test ===");
 
     // 基本命令（直接__asm__使用）
@@ -22,7 +22,7 @@ int main() {
     println("multiple: ok");
 
     println("=== Complete ===");
-#else
+    #else
     // ARM64版
     println("=== Inline Assembly Test ===");
 
@@ -38,6 +38,6 @@ int main() {
     println("multiple: ok");
 
     println("=== Complete ===");
-#end
+    #end
     return 0;
 }

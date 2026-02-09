@@ -4,7 +4,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== LLVM Constraint Test ===");
 
     // --- Test 1: =r (output only) ---
@@ -87,7 +87,7 @@ int main() {
     println(z);
 
     println("\n=== All tests completed! ===");
-#else
+    #else
     // ARM64版
     println("=== LLVM Constraint Test ===");
 
@@ -171,6 +171,6 @@ int main() {
     println(z);
 
     println("\n=== All tests completed! ===");
-#end
+    #end
     return 0;
 }

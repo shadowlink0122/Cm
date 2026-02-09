@@ -1,3 +1,7 @@
+---
+title: Contributing
+---
+
 # Contributing to Cm
 
 Cm言語プロジェクトへの貢献ガイドです。
@@ -190,3 +194,7 @@ feat: HIRにパターンマッチを追加
 4. テスト実行
 5. `main` へマージ
 6. タグ作成: `git tag vX.Y.Z`
+
+---
+
+**最終更新:** 2026-02-08

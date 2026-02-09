@@ -458,6 +458,130 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         structType->setBody(fieldTypes);
     }
 
+    // パス3: インポートモジュールのstruct型を動的に推論・登録
+    // program.structsに含まれないが、関数のメソッドとして参照されるstruct型を
+    // 関数bodyのフィールドプロジェクションから推論して登録する
+    {
+        // 全関数のローカル型から参照されるstruct名を収集
+        std::unordered_map<std::string, const mir::MirFunction*> missingStructFunctions;
+        for (const auto& func : program.functions) {
+            if (!func)
+                continue;
+            // メソッド名パターン: StructName__method
+            const auto& funcName = func->name;
+            size_t lastDunder = funcName.rfind("__");
+            if (lastDunder == std::string::npos || lastDunder == 0)
+                continue;
+
+            std::string structName = funcName.substr(0, lastDunder);
+            // 既に登録済みならスキップ
+            if (structTypes.count(structName) > 0)
+                continue;
+            // ジェネリック型パラメータパターン（__T__, __K__等）はスキップ
+            if (structName.find("__T__") != std::string::npos ||
+                structName.find("__K__") != std::string::npos ||
+                structName.find("__V__") != std::string::npos)
+                continue;
+
+            // 最初のパラメータが*StructNameであることを確認
+            if (func->arg_locals.size() >= 1) {
+                auto firstArgLocal = func->arg_locals[0];
+                if (firstArgLocal < func->locals.size()) {
+                    const auto& localType = func->locals[firstArgLocal].type;
+                    if (localType && localType->kind == hir::TypeKind::Pointer &&
+                        localType->element_type &&
+                        localType->element_type->kind == hir::TypeKind::Struct &&
+                        localType->element_type->name == structName) {
+                        missingStructFunctions[structName] = func.get();
+                    }
+                }
+            }
+        }
+
+        // 欠落struct型を関数bodyのフィールドプロジェクションから推論
+        for (const auto& [structName, func] : missingStructFunctions) {
+            // フィールドプロジェクションを解析してフィールド数と型を推論
+            // _1.*.N = copy(rhs) パターンを検出
+            std::map<uint32_t, hir::TypePtr> fieldTypeMap;
+
+            for (const auto& bb : func->basic_blocks) {
+                if (!bb)
+                    continue;
+                for (const auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Assign)
+                        continue;
+                    const auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    const auto& place = assign.place;
+
+                    // _1.*.N パターン（selfへのフィールド書き込み）を検出
+                    if (place.projections.size() >= 2 &&
+                        place.projections[0].kind == mir::ProjectionKind::Deref &&
+                        place.projections[1].kind == mir::ProjectionKind::Field) {
+                        uint32_t fieldId = place.projections[1].field_id;
+
+                        // rvalueの型からフィールド型を推論
+                        if (assign.rvalue && assign.rvalue->kind == mir::MirRvalue::Use) {
+                            const auto& useData =
+                                std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                            if (useData.operand) {
+                                hir::TypePtr rhsType = nullptr;
+                                if (useData.operand->type) {
+                                    rhsType = useData.operand->type;
+                                } else if (useData.operand->kind == mir::MirOperand::Copy ||
+                                           useData.operand->kind == mir::MirOperand::Move) {
+                                    const auto* rhsPlace =
+                                        std::get_if<mir::MirPlace>(&useData.operand->data);
+                                    if (rhsPlace && rhsPlace->local < func->locals.size()) {
+                                        rhsType = func->locals[rhsPlace->local].type;
+                                    }
+                                } else if (useData.operand->kind == mir::MirOperand::Constant) {
+                                    const auto* c =
+                                        std::get_if<mir::MirConstant>(&useData.operand->data);
+                                    if (c && c->type) {
+                                        rhsType = c->type;
+                                    }
+                                }
+                                if (rhsType && fieldTypeMap.find(fieldId) == fieldTypeMap.end()) {
+                                    fieldTypeMap[fieldId] = rhsType;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (fieldTypeMap.empty())
+                continue;
+
+            // フィールド数を決定（最大fieldId + 1）
+            uint32_t numFields = 0;
+            for (const auto& [fid, _] : fieldTypeMap) {
+                if (fid + 1 > numFields)
+                    numFields = fid + 1;
+            }
+
+            // LLVM構造体型を作成
+            std::vector<llvm::Type*> fieldTypes;
+            for (uint32_t i = 0; i < numFields; ++i) {
+                auto it = fieldTypeMap.find(i);
+                if (it != fieldTypeMap.end() && it->second) {
+                    fieldTypes.push_back(convertType(it->second));
+                } else {
+                    // 型が不明なフィールドはi32として扱う
+                    fieldTypes.push_back(ctx.getI32Type());
+                }
+            }
+
+            auto newStructType = llvm::StructType::create(ctx.getContext(), fieldTypes, structName);
+            structTypes[structName] = newStructType;
+
+            if (cm::debug::g_debug_mode) {
+                std::cerr << "[MIR2LLVM] 動的推論: struct " << structName
+                          << " (フィールド数: " << numFields << ")" << std::endl;
+            }
+        }
+    }
+
     // enum型を処理（Tagged Unionは構造体として生成）
     for (const auto& enumPtr : program.enums) {
         if (!enumPtr)
@@ -622,7 +746,9 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 auto localIdx = func.arg_locals[argIdx];
                 // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用
                 // （C ABIで16バイト以下の構造体はレジスタ渡しされる）
-                if (arg.getType()->isStructTy()) {
+                if (arg.getType()->isStructTy() || arg.getType()->isArrayTy()) {
+                    // 構造体・配列の値渡しパラメータの場合、allocaに格納してポインタとして使用
+                    // （構造体: C ABIで16バイト以下はレジスタ渡し、配列: GEP操作にポインタが必要）
                     auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
                                                         "arg_" + std::to_string(argIdx) + "_stack");
                     builder->CreateStore(&arg, alloca);
@@ -1076,29 +1202,6 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
     switch (stmt.kind) {
         case mir::MirStatement::Assign: {
             auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
-            // デバッグ: main関数での代入を詳しく見る
-            if (cm::debug::g_debug_mode && currentMIRFunction &&
-                currentMIRFunction->name == "main") {
-                std::string msg =
-                    "Assignment to local " + std::to_string(assign.place.local) + ", rvalue kind: ";
-                if (assign.rvalue->kind == mir::MirRvalue::Use) {
-                    auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
-                    if (useData.operand) {
-                        if (useData.operand->kind == mir::MirOperand::Copy) {
-                            auto& place = std::get<mir::MirPlace>(useData.operand->data);
-                            msg += "Copy from local " + std::to_string(place.local);
-                        } else if (useData.operand->kind == mir::MirOperand::FunctionRef) {
-                            auto& funcName = std::get<std::string>(useData.operand->data);
-                            msg += "FunctionRef '" + funcName + "'";
-                        } else {
-                            msg += "Other operand type";
-                        }
-                    }
-                } else {
-                    msg += "Not Use";
-                }
-                debug_msg("MIR", msg);
-            }
 
             // Tagged Unionペイロード読み込みの特別処理
             // rvalueがUse/Copyで、ソースがTagged Unionのfield[1]かつターゲットが構造体の場合
@@ -1535,7 +1638,6 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                             // 構造体代入でmemcpyを使用する条件:
                             // 1. Tagged Unionペイロードへの書き込み
-                            // 2. 配列要素（Index projection）への構造体代入
                             bool needsStructCopy =
                                 (isTaggedUnionPayload && isStructPayload && structType) ||
                                 (hasIndexProjection && isStructPayload && structType);
@@ -2400,8 +2502,27 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             auto sourceType = value->getType();
 
             // 同じ型なら変換不要
+            // ただし、ポインタ同士（ptr == ptr）の場合でもunion alloca→string等の
+            // 抽出が必要なケースがあるためスキップする
             if (sourceType == targetType) {
-                return value;
+                bool isUnionAllocaExtract = false;
+                if (sourceType->isPointerTy()) {
+                    if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                        auto* allocatedType = allocaInst->getAllocatedType();
+                        if (auto* structTy = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                            if (structTy->getNumElements() == 2) {
+                                auto* elem0 = structTy->getElementType(0);
+                                auto* elem1 = structTy->getElementType(1);
+                                if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                                    isUnionAllocaExtract = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!isUnionAllocaExtract) {
+                    return value;
+                }
             }
 
             // float <-> double 変換
@@ -2431,58 +2552,10 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 }
             }
 
-            // LLVM 14+: opaque pointersではポインタ間のBitCast不要
-            if (sourceType->isPointerTy() && targetType->isPointerTy()) {
-                // opaque pointersでは全てのポインタは ptr 型なので変換不要
-                return value;
-            }
-
-            // int <-> ポインタ変換
-            if (sourceType->isIntegerTy() && targetType->isPointerTy()) {
-                return builder->CreateIntToPtr(value, targetType, "inttoptr");
-            }
-            if (sourceType->isPointerTy() && targetType->isIntegerTy()) {
-                // まず、ポインタがタグ付きユニオン構造体を指しているか確認（Union as int等）
-                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
-                    auto* allocatedType = allocaInst->getAllocatedType();
-                    if (auto* structTy = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
-                        if (structTy->getNumElements() == 2) {
-                            auto* elem0 = structTy->getElementType(0);
-                            auto* elem1 = structTy->getElementType(1);
-                            if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
-                                // タグ付きユニオン構造体からの抽出
-                                auto* payloadGEP = builder->CreateStructGEP(structTy, value, 1,
-                                                                            "union_payload_ptr");
-                                // ターゲット型に応じてロード
-                                if (targetType->isIntegerTy(32)) {
-                                    auto* payloadAsInt = builder->CreateBitCast(
-                                        payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
-                                        "payload_as_i32");
-                                    return builder->CreateLoad(ctx.getI32Type(), payloadAsInt,
-                                                               "i32_from_union_ptr");
-                                } else if (targetType->isIntegerTy(64)) {
-                                    auto* payloadAsLong = builder->CreateBitCast(
-                                        payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
-                                        "payload_as_i64");
-                                    return builder->CreateLoad(ctx.getI64Type(), payloadAsLong,
-                                                               "i64_from_union_ptr");
-                                } else {
-                                    auto* payloadAsType = builder->CreateBitCast(
-                                        payloadGEP, llvm::PointerType::get(targetType, 0),
-                                        "payload_as_int");
-                                    return builder->CreateLoad(targetType, payloadAsType,
-                                                               "int_from_union_ptr");
-                                }
-                            }
-                        }
-                    }
-                }
-                // タグ付きユニオンではない場合、通常のポインタ→整数変換
-                return builder->CreatePtrToInt(value, targetType, "ptrtoint");
-            }
-
-            // タグ付きユニオン型への変換（int/long -> IntOrLong等）
+            // === タグ付きユニオン型への変換（int/long/bool/string/struct -> Union等） ===
             // targetTypeがStructType {i32, i8[N]}の場合
+            // 注意: この検出はポインタ処理より前に配置する必要がある
+            //       string型（ptr）がポインタ処理パスに吸収されないようにするため
             if (auto* structTy = llvm::dyn_cast<llvm::StructType>(targetType)) {
                 // タグ付きユニオン構造体（{i32, i8[N]}）かどうか確認
                 if (structTy->getNumElements() == 2) {
@@ -2493,36 +2566,47 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         // 1. 一時allocaを作成
                         auto* alloca = builder->CreateAlloca(structTy, nullptr, "union_temp");
 
-                        // 2. タグを設定（ソース型に基づいて0または1）
-                        //    int = 0, long = 1として仮定
+                        // 2.
+                        // タグを設定（castData.target_type->type_argsからバリアントインデックスを計算）
                         int32_t tagValue = 0;
-                        if (sourceType->isIntegerTy(64)) {
-                            tagValue = 1;  // long
+                        if (castData.target_type && !castData.target_type->type_args.empty()) {
+                            // ソース型のLLVM型とtype_argsのHIR型を照合してタグ値を決定
+                            for (size_t vi = 0; vi < castData.target_type->type_args.size(); ++vi) {
+                                auto& varType = castData.target_type->type_args[vi];
+                                if (!varType)
+                                    continue;
+                                auto* varLLVMType = convertType(varType);
+                                if (varLLVMType == sourceType) {
+                                    tagValue = static_cast<int32_t>(vi);
+                                    break;
+                                }
+                            }
+                        } else if (sourceType->isIntegerTy(64)) {
+                            tagValue = 1;  // フォールバック: long = 1
                         }
                         auto* tagGEP = builder->CreateStructGEP(structTy, alloca, 0, "tag_ptr");
                         builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), tagValue),
                                              tagGEP);
 
-                        // 3. ペイロードに値をストア（型に合わせてbitcast）
+                        // 3. ペイロードに値をストア（全型対応）
                         auto* payloadGEP =
                             builder->CreateStructGEP(structTy, alloca, 1, "payload_ptr");
-                        // payloadは i8[N] なので、適切な型にキャストしてストア
-                        if (sourceType->isIntegerTy(32)) {
-                            auto* payloadAsInt = builder->CreateBitCast(
-                                payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
-                                "payload_as_int");
-                            builder->CreateStore(value, payloadAsInt);
-                        } else if (sourceType->isIntegerTy(64)) {
-                            auto* payloadAsLong = builder->CreateBitCast(
-                                payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
-                                "payload_as_long");
-                            builder->CreateStore(value, payloadAsLong);
+
+                        if (sourceType->isStructTy()) {
+                            // 構造体型: memcpyでペイロードにコピー
+                            auto& dataLayout = module->getDataLayout();
+                            auto payloadSize = dataLayout.getTypeAllocSize(sourceType);
+                            auto* srcAlloca =
+                                builder->CreateAlloca(sourceType, nullptr, "struct_tmp");
+                            builder->CreateStore(value, srcAlloca);
+                            builder->CreateMemCpy(payloadGEP, llvm::MaybeAlign(), srcAlloca,
+                                                  llvm::MaybeAlign(), payloadSize);
                         } else {
-                            // その他の整数型は拡張してストア
-                            auto* payloadAsInt = builder->CreateBitCast(
+                            // プリミティブ型（int/long/bool/float/double/ptr等）: bitcastしてストア
+                            auto* payloadAsType = builder->CreateBitCast(
                                 payloadGEP, llvm::PointerType::get(sourceType, 0),
                                 "payload_as_type");
-                            builder->CreateStore(value, payloadAsInt);
+                            builder->CreateStore(value, payloadAsType);
                         }
 
                         // 4. 構造体全体をロードして返す
@@ -2531,7 +2615,7 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 }
             }
 
-            // タグ付きユニオン型からの変換（IntOrLong -> int/long等）
+            // === タグ付きユニオン型からの変換（Union -> int/long/bool/string/struct等） ===
             // sourceTypeがStructType {i32, i8[N]}の場合
             if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {
                 // タグ付きユニオン構造体（{i32, i8[N]}）かどうか確認
@@ -2549,27 +2633,87 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         auto* payloadGEP =
                             builder->CreateStructGEP(structTy, alloca, 1, "payload_extract_ptr");
 
-                        // ターゲット型に応じてロード
-                        if (targetType->isIntegerTy(32)) {
-                            auto* payloadAsInt = builder->CreateBitCast(
-                                payloadGEP, llvm::PointerType::get(ctx.getI32Type(), 0),
-                                "payload_as_int_extract");
-                            return builder->CreateLoad(ctx.getI32Type(), payloadAsInt,
-                                                       "int_from_union");
-                        } else if (targetType->isIntegerTy(64)) {
-                            auto* payloadAsLong = builder->CreateBitCast(
-                                payloadGEP, llvm::PointerType::get(ctx.getI64Type(), 0),
-                                "payload_as_long_extract");
-                            return builder->CreateLoad(ctx.getI64Type(), payloadAsLong,
-                                                       "long_from_union");
-                        } else if (targetType->isIntegerTy()) {
-                            // その他の整数型
+                        // ターゲット型に応じてロード（全型対応）
+                        if (targetType->isStructTy()) {
+                            // 構造体型: memcpyで読み出し
+                            auto* destAlloca =
+                                builder->CreateAlloca(targetType, nullptr, "struct_extract_tmp");
+                            auto& dataLayout = module->getDataLayout();
+                            auto copySize = dataLayout.getTypeAllocSize(targetType);
+                            builder->CreateMemCpy(destAlloca, llvm::MaybeAlign(), payloadGEP,
+                                                  llvm::MaybeAlign(), copySize);
+                            return builder->CreateLoad(targetType, destAlloca, "struct_from_union");
+                        } else {
+                            // プリミティブ型（int/long/bool/float/double/ptr等）: bitcastしてロード
                             auto* payloadAsType = builder->CreateBitCast(
                                 payloadGEP, llvm::PointerType::get(targetType, 0),
                                 "payload_as_target");
                             return builder->CreateLoad(targetType, payloadAsType, "val_from_union");
                         }
                     }
+                }
+            }
+
+            // LLVM 14+: opaque pointersではポインタ間のBitCast不要
+            if (sourceType->isPointerTy() && targetType->isPointerTy()) {
+                // opaque pointersでは全てのポインタは ptr 型なので通常変換不要
+                // ただし、union alloca(ptr)→string(ptr)の抽出が必要なケースは除く
+                bool isUnionAllocaExtract = false;
+                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                    auto* allocatedType = allocaInst->getAllocatedType();
+                    if (auto* sTy = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                        if (sTy->getNumElements() == 2 && sTy->getElementType(0)->isIntegerTy(32) &&
+                            sTy->getElementType(1)->isArrayTy()) {
+                            isUnionAllocaExtract = true;
+                        }
+                    }
+                }
+                if (!isUnionAllocaExtract) {
+                    return value;
+                }
+            }
+
+            // int <-> ポインタ変換
+            if (sourceType->isIntegerTy() && targetType->isPointerTy()) {
+                return builder->CreateIntToPtr(value, targetType, "inttoptr");
+            }
+            if (sourceType->isPointerTy()) {
+                // ポインタがタグ付きユニオン構造体を指しているか確認（Union as T）
+                if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                    auto* allocatedType = allocaInst->getAllocatedType();
+                    if (auto* structTy = llvm::dyn_cast<llvm::StructType>(allocatedType)) {
+                        if (structTy->getNumElements() == 2) {
+                            auto* elem0 = structTy->getElementType(0);
+                            auto* elem1 = structTy->getElementType(1);
+                            if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
+                                // タグ付きユニオン構造体からの抽出（全型対応）
+                                auto* payloadGEP = builder->CreateStructGEP(structTy, value, 1,
+                                                                            "union_payload_ptr");
+                                if (targetType->isStructTy()) {
+                                    // 構造体型: memcpyで読み出し
+                                    auto* destAlloca = builder->CreateAlloca(
+                                        targetType, nullptr, "struct_from_union_ptr");
+                                    auto& dataLayout = module->getDataLayout();
+                                    auto copySize = dataLayout.getTypeAllocSize(targetType);
+                                    builder->CreateMemCpy(destAlloca, llvm::MaybeAlign(),
+                                                          payloadGEP, llvm::MaybeAlign(), copySize);
+                                    return builder->CreateLoad(targetType, destAlloca,
+                                                               "struct_from_union_ptr_load");
+                                } else {
+                                    // プリミティブ型: bitcastしてロード
+                                    auto* payloadAsType = builder->CreateBitCast(
+                                        payloadGEP, llvm::PointerType::get(targetType, 0),
+                                        "payload_as_target_ptr");
+                                    return builder->CreateLoad(targetType, payloadAsType,
+                                                               "val_from_union_ptr");
+                                }
+                            }
+                        }
+                    }
+                }
+                // タグ付きユニオンではない場合
+                if (targetType->isIntegerTy()) {
+                    return builder->CreatePtrToInt(value, targetType, "ptrtoint");
                 }
             }
 
@@ -2975,6 +3119,17 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
                     if (!fieldType) {
                         // フォールバック: i32として扱う
+                        std::cerr << "[DEBUG] fieldType fallback to i32 in "
+                                  << (currentMIRFunction ? currentMIRFunction->name : "?")
+                                  << " local=" << place.local
+                                  << " projections=" << place.projections.size();
+                        if (currentType) {
+                            std::cerr << " currentType=" << currentType->name
+                                      << " kind=" << static_cast<int>(currentType->kind);
+                        } else {
+                            std::cerr << " currentType=null";
+                        }
+                        std::cerr << "\n";
                         fieldType = ctx.getI32Type();
                     }
 

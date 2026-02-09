@@ -1,24 +1,30 @@
-# ============================================
+---
+title: Cm Language Grammar (EBNF)
+---
+
 # Cm Language Grammar (EBNF)
-# ============================================
-# Version: 0.13.0
-# Date: 2026-02-03
-#
-# Notation:
-#   ::=     defines
-#   |       alternatives
-#   *       zero or more
-#   +       one or more
-#   ?       optional
-#   ( )     grouping
-#   'x'     literal terminal
-#   [ ]     character class
-# ============================================
 
-# ====================
-# Program Structure
-# ====================
+**バージョン:** v0.13.1  
+**最終更新:** 2026-02-08
 
+## 記法
+
+| 記号 | 意味 |
+|------|------|
+| `::=` | 定義 |
+| `\|` | 選択肢 |
+| `*` | 0回以上の繰り返し |
+| `+` | 1回以上の繰り返し |
+| `?` | 省略可能 |
+| `( )` | グルーピング |
+| `'x'` | リテラル終端記号 |
+| `[ ]` | 文字クラス |
+
+---
+
+## プログラム構造
+
+```bnf
 program ::= top_level_decl*
 
 top_level_decl ::= import_statement
@@ -32,34 +38,54 @@ top_level_decl ::= import_statement
                  | operator_decl
 
 import_statement ::= 'import' string_literal ';'
+```
 
-# ====================
-# Declarations
-# ====================
+---
 
+## 宣言
+
+### 関数宣言
+
+```bnf
 function_decl ::= generic_params? type identifier '(' param_list? ')' where_clause? block
                 | generic_params? type identifier '(' param_list? ')' where_clause? ';'  # プロトタイプ
+```
 
+### 構造体宣言
+
+```bnf
 struct_decl ::= 'struct' identifier generic_params? where_clause? '{' struct_member* '}'
 
 struct_member ::= type identifier ';'
-                | function_decl
+               | function_decl
+```
 
+### トレイト宣言
+
+```bnf
 trait_decl ::= 'trait' identifier generic_params? '{' trait_member* '}'
 
 trait_member ::= type identifier '(' param_list? ')' ';'
-               | type identifier '(' param_list? ')' block  # デフォルト実装
+              | type identifier '(' param_list? ')' block  # デフォルト実装
+```
 
+### impl宣言
+
+```bnf
 impl_decl ::= 'impl' generic_params? trait_name 'for' type where_clause? '{' impl_member* '}'
             | 'impl' generic_params? type where_clause? '{' impl_member* '}'  # inherent impl
 
 impl_member ::= function_decl
               | 'type' identifier '=' type ';'  # 関連型
+```
 
+### typedef・マクロ・Enum・演算子
+
+```bnf
 typedef_decl ::= 'typedef' identifier generic_params? '=' type ';'
 
 # マクロ宣言（v0.13.0更新）
-macro_decl ::= 'macro' type identifier '=' literal ';'        # 定数マクロ
+macro_decl ::= 'macro' type identifier '=' literal ';'                          # 定数マクロ
              | 'macro' type '*(' type_list? ')' identifier '=' lambda_expr ';'  # 関数マクロ
 
 enum_decl ::= 'enum' identifier generic_params? '{' enum_variant (',' enum_variant)* ','? '}'
@@ -76,11 +102,13 @@ operator_symbol ::= '+' | '-' | '*' | '/' | '%'
                   | '&' | '|' | '^' | '~' | '!'
                   | '<<' | '>>'
                   | '[]' | '()'
+```
 
-# ====================
-# Generic Parameters
-# ====================
+---
 
+## ジェネリクス
+
+```bnf
 generic_params ::= '<' generic_param_list '>'
 
 generic_param_list ::= generic_param (',' generic_param)*
@@ -94,30 +122,34 @@ const_param ::= identifier ':' 'const' type ('=' const_expr)?
 
 type_constraint ::= union_type       # int | double | float
                   | type_name         # Number (typedef or trait)
+```
 
-# ====================
-# Where Clause
-# ====================
+---
 
+## Where句
+
+```bnf
 where_clause ::= 'where' where_bound (',' where_bound)*
 
 where_bound ::= identifier ':' interface_bound
 
 interface_bound ::= trait_name ('+' trait_name)*
+```
 
-# ====================
-# Types
-# ====================
+---
 
+## 型
+
+```bnf
 type ::= primitive_type
-       | type_name                          # User-defined type
-       | type_name '<' type_list '>'       # Generic instantiation
-       | type '[' const_expr ']'           # Array
-       | type '*'                          # Pointer
-       | type '&'                          # Reference
-       | '(' type_list ')'                 # Tuple
-       | union_type                        # int | double
-       | 'typeof' '(' expression ')'       # Type of expression
+       | type_name                          # ユーザー定義型
+       | type_name '<' type_list '>'        # ジェネリクスインスタンス化
+       | type '[' const_expr ']'            # 配列
+       | type '*'                           # ポインタ
+       | type '&'                           # 参照
+       | '(' type_list ')'                  # タプル
+       | union_type                         # int | double
+       | 'typeof' '(' expression ')'        # 式の型
 
 primitive_type ::= 'int' | 'uint'
                  | 'tiny' | 'utiny'
@@ -134,11 +166,13 @@ type_list ::= type (',' type)*
 type_name ::= identifier ('::' identifier)*
 
 trait_name ::= identifier ('::' identifier)*
+```
 
-# ====================
-# Statements
-# ====================
+---
 
+## 文
+
+```bnf
 statement ::= declaration_statement
             | expression_statement
             | if_statement
@@ -182,11 +216,15 @@ continue_statement ::= 'continue' ';'
 defer_statement ::= 'defer' statement
 
 block ::= '{' statement* '}'
+```
 
-# ====================
-# Expressions
-# ====================
+---
 
+## 式
+
+### 演算子の優先順位（低→高）
+
+```bnf
 expression ::= assignment_expr
 
 assignment_expr ::= conditional_expr
@@ -240,15 +278,19 @@ unary_expr ::= postfix_expr
              | 'typeof' '(' expression ')'
 
 unary_operator ::= '&' | '*' | '+' | '-' | '~' | '!'
+```
 
+### 後置式・一次式
+
+```bnf
 postfix_expr ::= primary_expr
-               | postfix_expr '[' expression ']'         # Array subscript
-               | postfix_expr '(' argument_list? ')'     # Function call
-               | postfix_expr '.' identifier             # Member access
-               | postfix_expr '->' identifier            # Pointer member access
-               | postfix_expr '++'                       # Post-increment
-               | postfix_expr '--'                       # Post-decrement
-               | postfix_expr '<' type_list '>'          # Generic specialization
+               | postfix_expr '[' expression ']'         # 配列添字
+               | postfix_expr '(' argument_list? ')'     # 関数呼び出し
+               | postfix_expr '.' identifier             # メンバアクセス
+               | postfix_expr '->' identifier            # ポインタメンバアクセス
+               | postfix_expr '++'                       # 後置インクリメント
+               | postfix_expr '--'                       # 後置デクリメント
+               | postfix_expr '<' type_list '>'          # ジェネリクス特殊化
 
 primary_expr ::= identifier
                | literal
@@ -270,23 +312,27 @@ format_text ::= [^{}]+
 
 format_expr ::= '{' expression '}'
               | '{' expression ':' format_spec '}'
+```
 
-# ====================
-# Parameters and Arguments
-# ====================
+---
 
+## パラメータと引数
+
+```bnf
 param_list ::= parameter (',' parameter)*
 
 parameter ::= type identifier ('=' const_expr)?
-            | type '...' identifier              # Variadic parameter
+            | type '...' identifier              # 可変長引数
 
 argument_list ::= expression (',' expression)*
+```
 
-# ====================
-# Constants and Literals
-# ====================
+---
 
-const_expr ::= conditional_expr  # Compile-time evaluable
+## 定数とリテラル
+
+```bnf
+const_expr ::= conditional_expr  # コンパイル時評価可能
 
 literal ::= integer_literal
           | float_literal
@@ -332,13 +378,15 @@ escape_sequence ::= '\\' ['"\\nrtbfav]
 bool_literal ::= 'true' | 'false'
 
 null_literal ::= 'null' | 'nullptr'
+```
 
-# ====================
-# Lexical Elements
-# ====================
+---
 
+## 字句要素
+
+```bnf
 identifier ::= [a-zA-Z_] [a-zA-Z0-9_]*
-             | '`' [^`]+ '`'  # Escaped identifier
+             | '`' [^`]+ '`'  # エスケープ識別子
 
 keyword ::= 'if' | 'else' | 'while' | 'for' | 'switch' | 'case' | 'default'
           | 'break' | 'continue' | 'return' | 'defer'
@@ -359,41 +407,20 @@ comment ::= '//' [^\n]* '\n'
           | '/*' ([^*] | '*' [^/])* '*/'
 
 whitespace ::= [ \t\n\r]+
+```
 
-# ====================
-# Preprocessor (Optional)
-# ====================
+---
 
+## プリプロセッサ
+
+```bnf
 preprocessor ::= '#' preprocessor_directive
 
-preprocessor_directive ::= 'include' string_literal
-                         | 'define' identifier replacement?
+preprocessor_directive ::= 'define' identifier replacement?
                          | 'ifdef' identifier
                          | 'ifndef' identifier
-                         | 'if' const_expr
                          | 'else'
-                         | 'elif' const_expr
                          | 'endif'
-                         | 'pragma' pragma_args
+```
 
-# ====================
-# Attributes (Optional)
-# ====================
-
-attribute ::= '[[' attribute_list ']]'
-
-attribute_list ::= attribute_spec (',' attribute_spec)*
-
-attribute_spec ::= identifier
-                  | identifier '(' argument_list ')'
-
-# Common attributes
-# [[inline]]
-# [[noinline]]
-# [[always_inline]]
-# [[deprecated]]
-# [[deprecated("message")]]
-# [[nodiscard]]
-# [[noreturn]]
-# [[likely]]
-# [[unlikely]]
+> **注意:** `#include`、`#pragma`、`#if`/`#elif` は現在未実装です。

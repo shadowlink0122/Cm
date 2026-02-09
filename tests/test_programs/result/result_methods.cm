@@ -1,0 +1,48 @@
+// result_methods.cm - CmResult型のimportテスト
+// std::core::resultからインポートして使用
+import std::io::println;
+import std::core::result::*;
+
+CmResult<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return make_err(0, "Division by zero");
+    }
+    return make_ok(a / b, "");
+}
+
+int main() {
+    println("=== CmResult Test ===");
+
+    // is_ok テスト
+    CmResult<int, string> r1 = safe_divide(10, 2);
+    bool b1 = r1.is_ok;
+    println("r1 is_ok: {b1}");
+
+    CmResult<int, string> r2 = safe_divide(10, 0);
+    bool b2 = r2.is_ok;
+    println("r2 is_ok: {b2}");
+
+    // unwrap テスト
+    int v1 = result_unwrap(r1);
+    println("r1 unwrap: {v1}");
+
+    // unwrap_or テスト
+    int v2 = result_unwrap_or(r2, -1);
+    println("r2 unwrap_or: {v2}");
+
+    // unwrap_err テスト
+    string e1 = result_unwrap_err(r2);
+    println("r2 unwrap_err: {e1}");
+
+    // チェイン テスト
+    CmResult<int, string> r3 = safe_divide(100, 5);
+    if (r3.is_ok) {
+        int v3 = result_unwrap(r3);
+        CmResult<int, string> r4 = safe_divide(v3, 2);
+        int v4 = result_unwrap(r4);
+        println("100 / 5 / 2 = {v4}");
+    }
+
+    println("=== Done ===");
+    return 0;
+}

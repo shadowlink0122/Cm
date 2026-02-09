@@ -1,21 +1,18 @@
 // std.mem - メモリ管理モジュール
-// アロケータインターフェースとFFI宣言を提供
+// アロケータインターフェース、FFI宣言、型情報ユーティリティを提供
 //
 // 使用例:
-//   import std::mem::{malloc, free, Allocator, DefaultAllocator};
+//   import std::mem::{malloc, free, size_of, Allocator, DefaultAllocator};
 //
-//   // 直接FFI使用（sizeof推奨）
-//   int* ptr = (int*)malloc(sizeof(int) * 10);  // int 10個分を確保
-//   free(ptr);
+//   // 型安全なメモリ確保（size_of推奨）
+//   uint n = size_of<int>();       // -> 4
+//   int* ptr = malloc(n * 10) as int*;
+//   free(ptr as void*);
 //
 //   // アロケータインターフェース使用
 //   DefaultAllocator alloc = DefaultAllocator{};
-//   MyStruct* obj = (MyStruct*)alloc.alloc(sizeof(MyStruct));
-//   alloc.dealloc(obj);
-//
-//   // 配列の確保
-//   int count = 100;
-//   double* array = (double*)malloc(sizeof(double) * count);
+//   MyStruct* obj = alloc.alloc(size_of<MyStruct>()) as MyStruct*;
+//   alloc.dealloc(obj as void*);
 //
 module mem;
 
@@ -73,17 +70,36 @@ impl DefaultAllocator for Allocator {
 }
 
 // ============================================================
-// 型安全なメモリ操作ヘルパー（参考実装）
+// メモリ操作 export 関数
+// import std::mem::alloc / dealloc で利用可能
 // ============================================================
-// 使用例:
-//   // 単一オブジェクトの確保
-//   MyStruct* obj = (MyStruct*)malloc(sizeof(MyStruct));
-//
-//   // 配列の確保
-//   int* arr = (int*)malloc(sizeof(int) * count);
-//
-//   // ゼロ初期化された配列
-//   int* zeroed = (int*)calloc(count, sizeof(int));
-//
-// Note: 常にsizeof(T)を使用してサイズを計算することを推奨
-//       これにより、プラットフォーム依存のサイズの違いを吸収できる
+
+export void* alloc(int size) {
+    return malloc(size);
+}
+
+export void dealloc(void* ptr) {
+    free(ptr);
+}
+
+// ============================================================
+// 型情報関数（コンパイラ組み込みのラッパー）
+// ============================================================
+
+// 型のサイズをバイト単位で取得
+// 使用例: uint s = size_of<int>(); // -> 4
+export <T> uint size_of() {
+    return __sizeof__(T);
+}
+
+// 型の名前を文字列で取得（型指定）
+// 使用例: string n = type_name<int>(); // -> "int"
+export <T> string type_name() {
+    return __typename__(T);
+}
+
+// 型のアラインメントをバイト単位で取得
+// 使用例: uint a = align_of<double>(); // -> 8
+export <T> uint align_of() {
+    return __alignof__(T);
+}

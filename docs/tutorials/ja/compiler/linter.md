@@ -104,3 +104,7 @@ warning: unused variable 'x'
 ## 関連項目
 
 - [Formatter](formatter.md) - コードフォーマッター
+
+---
+
+**最終更新:** 2026-02-08

@@ -17,6 +17,40 @@ option(BUILD_TESTING "Build tests (use -DBUILD_TESTING=ON to enable)" OFF)
 option(CM_USE_LLVM "Enable LLVM backend" ON)
 option(CM_LLVM_STATIC "Link LLVM statically" OFF)
 
+# ターゲットアーキテクチャ設定
+# デフォルト: ホストアーキテクチャを自動検出
+# 使用例: cmake -DCM_TARGET_ARCH=arm64 / cmake -DCM_TARGET_ARCH=x86_64
+if(NOT CM_TARGET_ARCH)
+    # LLVMのホストターゲットからアーキテクチャを検出
+    # （cmコンパイラが生成するコードのアーキテクチャはLLVMに依存するため）
+    execute_process(
+        COMMAND llvm-config --host-target
+        OUTPUT_VARIABLE _LLVM_HOST_TARGET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_LLVM_HOST_TARGET)
+        # トリプルからアーキテクチャ部分を抽出（例: x86_64-apple-darwin → x86_64）
+        string(REGEX REPLACE "^([^-]+)-.*" "\\1" CM_TARGET_ARCH "${_LLVM_HOST_TARGET}")
+    else()
+        # LLVMが見つからない場合はホストアーキテクチャにフォールバック
+        execute_process(
+            COMMAND uname -m
+            OUTPUT_VARIABLE CM_TARGET_ARCH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+    endif()
+    if(NOT CM_TARGET_ARCH)
+        set(CM_TARGET_ARCH "arm64")  # 最終フォールバック
+    endif()
+endif()
+# aarch64 → arm64 に正規化（macOS表記に統一）
+if(CM_TARGET_ARCH STREQUAL "aarch64")
+    set(CM_TARGET_ARCH "arm64")
+endif()
+message(STATUS "Target architecture: ${CM_TARGET_ARCH}")
+
 # Debug build definition
 if(CM_DEBUG_BUILD)
     add_compile_definitions(CM_DEBUG_BUILD)
@@ -68,9 +102,10 @@ if(CM_USE_LLVM)
         if(CM_LLVM_STATIC)
             target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
         else()
-            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
             get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
             message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
+            link_directories(${LLVM_LIBRARY_DIR})
+            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
             set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
             set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
             set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -207,20 +242,61 @@ if(CM_USE_LLVM)
         src/codegen/llvm/native/target.cpp
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
+        # std バッキング実装（C/C++/Obj-C++）
+        std/sync/sync_runtime.cpp
+        std/sync/channel_runtime.cpp
+        std/thread/thread_runtime.cpp
+        std/net/net_runtime.cpp
+        std/http/http_runtime.cpp
     )
+
+    # Apple環境: GPU(Metal)バッキング実装を追加
+    if(APPLE)
+        list(APPEND CM_SOURCES
+            std/gpu/gpu_runtime.mm
+        )
+    endif()
 endif()
 
 add_executable(cm ${CM_SOURCES})
 target_link_libraries(cm PRIVATE cm_frontend)
 
+# OpenSSL検出（HTTPS対応）
+# macOSではHomebrewのパスを優先的に検索
+if(APPLE)
+    # Homebrew ARM優先（/opt/homebrew）、Intel（/usr/local）にフォールバック
+    if(EXISTS "/opt/homebrew/opt/openssl@3")
+        set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+    elseif(EXISTS "/usr/local/opt/openssl@3")
+        set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@3")
+    endif()
+endif()
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND)
+    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
+    target_include_directories(cm PRIVATE ${OPENSSL_INCLUDE_DIR})
+    target_link_libraries(cm PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    target_compile_definitions(cm PRIVATE CM_HAS_OPENSSL)
+else()
+    message(WARNING "OpenSSL not found - HTTPS support disabled")
+endif()
+
 # Link LLVM backend if enabled
 if(CM_USE_LLVM)
     target_link_libraries(cm PRIVATE cm_llvm_backend)
+
+    # Apple: Metal/Foundation フレームワークをリンク（GPU演算サポート）
+    if(APPLE)
+        target_link_libraries(cm PRIVATE
+            "-framework Metal"
+            "-framework Foundation"
+        )
+    endif()
     
-    # Linux: JITがホストプロセスからシンボルを解決できるように
-    # ランタイムシンボル（cm_print_*, cm_format_*など）をエクスポート
+    # JITがホストプロセスからシンボルを解決できるように
+    # ランタイムシンボル（cm_print_*, cm_format_*, gpu_*など）をエクスポート
+    set_target_properties(cm PROPERTIES ENABLE_EXPORTS ON)
     if(UNIX AND NOT APPLE)
-        set_target_properties(cm PROPERTIES ENABLE_EXPORTS ON)
         target_link_options(cm PRIVATE "-rdynamic")
     endif()
     
@@ -242,46 +318,36 @@ if(CM_USE_LLVM)
             set(CM_RUNTIME_CLANG "clang")
         endif()
         
+        message(STATUS "LLVM host target: ${LLVM_HOST_TARGET}")
+        message(STATUS "Runtime clang: ${CM_RUNTIME_CLANG}")
+        
+        # CM_TARGET_ARCHに基づいてランタイムアーキテクチャフラグを決定
         if(APPLE)
-            # macOSではシステムclang（/usr/bin/clang）を使用する場合、
-            # -isysrootは不要（自動検出される）だが、-archフラグは必要
-            # Homebrew LLVMを使用する場合は--targetと-isysrootを明示的に設定
             if(CM_RUNTIME_CLANG STREQUAL "/usr/bin/clang")
-                # システムclangはSDKを自動検出するので-isysroot不要
-                # ただしアーキテクチャは明示的に指定
-                if(LLVM_HOST_TARGET MATCHES "x86_64")
-                    set(CM_RUNTIME_ARCH_FLAG "-arch;x86_64")
-                elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-                    set(CM_RUNTIME_ARCH_FLAG "-arch;arm64")
-                else()
-                    set(CM_RUNTIME_ARCH_FLAG "")
-                endif()
+                # システムclang: -archフラグを使用
+                set(CM_RUNTIME_ARCH_FLAG "-arch;${CM_TARGET_ARCH}")
             else()
-                # Homebrew LLVM clangを使用する場合はSDKパスを明示的に指定
+                # Homebrew LLVM clang: --targetと-isysrootを使用
                 execute_process(
                     COMMAND xcrun --show-sdk-path
                     OUTPUT_VARIABLE MACOS_SDK_PATH
                     OUTPUT_STRIP_TRAILING_WHITESPACE
                 )
-                if(LLVM_HOST_TARGET MATCHES "x86_64")
+                if(CM_TARGET_ARCH STREQUAL "x86_64")
                     set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-apple-darwin;-isysroot;${MACOS_SDK_PATH}")
-                elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
+                else()
                     set(CM_RUNTIME_ARCH_FLAG "--target=arm64-apple-darwin;-isysroot;${MACOS_SDK_PATH}")
                 endif()
             endif()
         else()
             # Linux
-            if(LLVM_HOST_TARGET MATCHES "x86_64")
+            if(CM_TARGET_ARCH STREQUAL "x86_64")
                 set(CM_RUNTIME_ARCH_FLAG "--target=x86_64-unknown-linux-gnu")
-            elseif(LLVM_HOST_TARGET MATCHES "arm64|aarch64")
-                set(CM_RUNTIME_ARCH_FLAG "--target=aarch64-unknown-linux-gnu")
             else()
-                set(CM_RUNTIME_ARCH_FLAG "")
+                set(CM_RUNTIME_ARCH_FLAG "--target=aarch64-unknown-linux-gnu")
             endif()
         endif()
         
-        message(STATUS "LLVM host target: ${LLVM_HOST_TARGET}")
-        message(STATUS "Runtime clang: ${CM_RUNTIME_CLANG}")
         message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
         
         # Build LLVM runtime library
@@ -298,6 +364,96 @@ if(CM_USE_LLVM)
             COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
         )
 
+        # Apple環境: GPUランタイムを別途ビルド（ネイティブコンパイル用）
+        if(APPLE)
+            set(CM_GPU_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/gpu/gpu_runtime.mm)
+            set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
+            add_custom_command(
+                OUTPUT ${CM_GPU_RUNTIME_OUTPUT}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+                COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_GPU_RUNTIME_SOURCE}
+                        -o ${CM_GPU_RUNTIME_OUTPUT} -O2 -std=c++17
+                        -fobjc-arc ${CM_RUNTIME_ARCH_FLAG}
+                DEPENDS ${CM_GPU_RUNTIME_SOURCE}
+                COMMENT "Building Cm GPU runtime library (Metal)"
+            )
+        endif()
+
+        # stdランタイムを個別オブジェクトファイルとしてビルド（LLVM Nativeリンク用）
+        # --- Net Runtime ---
+        set(CM_NET_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/net/net_runtime.cpp)
+        set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
+        add_custom_command(
+            OUTPUT ${CM_NET_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_NET_RUNTIME_SOURCE}
+                    -o ${CM_NET_RUNTIME_OUTPUT} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_NET_RUNTIME_SOURCE}
+            COMMENT "Building Cm net runtime library"
+        )
+
+        # --- Sync Runtime (sync + channel を1つのアーカイブに) ---
+        set(CM_SYNC_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/sync_runtime.cpp)
+        set(CM_CHANNEL_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/channel_runtime.cpp)
+        set(CM_SYNC_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime_obj.o)
+        set(CM_CHANNEL_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_channel_runtime_obj.o)
+        set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
+        add_custom_command(
+            OUTPUT ${CM_SYNC_RUNTIME_OBJ}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_SYNC_RUNTIME_SOURCE}
+                    -o ${CM_SYNC_RUNTIME_OBJ} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_SYNC_RUNTIME_SOURCE}
+            COMMENT "Building Cm sync runtime object"
+        )
+        add_custom_command(
+            OUTPUT ${CM_CHANNEL_RUNTIME_OBJ}
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_CHANNEL_RUNTIME_SOURCE}
+                    -o ${CM_CHANNEL_RUNTIME_OBJ} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_CHANNEL_RUNTIME_SOURCE}
+            COMMENT "Building Cm channel runtime object"
+        )
+        add_custom_command(
+            OUTPUT ${CM_SYNC_RUNTIME_OUTPUT}
+            COMMAND ar rcs ${CM_SYNC_RUNTIME_OUTPUT} ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
+            DEPENDS ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
+            COMMENT "Creating Cm sync runtime archive"
+        )
+
+        # --- Thread Runtime ---
+        set(CM_THREAD_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/thread/thread_runtime.cpp)
+        set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
+        add_custom_command(
+            OUTPUT ${CM_THREAD_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_THREAD_RUNTIME_SOURCE}
+                    -o ${CM_THREAD_RUNTIME_OUTPUT} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_THREAD_RUNTIME_SOURCE}
+            COMMENT "Building Cm thread runtime library"
+        )
+
+        # --- HTTP Runtime ---
+        set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/http/http_runtime.cpp)
+        set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
+        # OpenSSLが見つかった場合はHTTPSサポート付きでビルド
+        # CMakeリスト形式で個別引数として展開されるようにする
+        set(CM_HTTP_EXTRA_FLAGS "")
+        if(OpenSSL_FOUND)
+            set(CM_HTTP_EXTRA_FLAGS -DCM_HAS_OPENSSL -I${OPENSSL_INCLUDE_DIR})
+        endif()
+        add_custom_command(
+            OUTPUT ${CM_HTTP_RUNTIME_OUTPUT}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_HTTP_RUNTIME_SOURCE}
+                    -o ${CM_HTTP_RUNTIME_OUTPUT} -O2 -std=c++17
+                    -ffunction-sections -fdata-sections ${CM_HTTP_EXTRA_FLAGS} ${CM_RUNTIME_ARCH_FLAG}
+            DEPENDS ${CM_HTTP_RUNTIME_SOURCE}
+            COMMENT "Building Cm HTTP runtime library"
+        )
 
         # Build WASM runtime library
         set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
@@ -313,7 +469,24 @@ if(CM_USE_LLVM)
             COMMENT "Building Cm WASM runtime library"
         )
 
-        add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT})
+        # ランタイムターゲット
+        set(CM_STD_RUNTIME_DEPS
+            ${CM_NET_RUNTIME_OUTPUT}
+            ${CM_SYNC_RUNTIME_OUTPUT}
+            ${CM_THREAD_RUNTIME_OUTPUT}
+            ${CM_HTTP_RUNTIME_OUTPUT}
+        )
+        if(APPLE)
+            add_custom_target(cm_runtime ALL DEPENDS
+                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT} ${CM_GPU_RUNTIME_OUTPUT}
+                ${CM_STD_RUNTIME_DEPS}
+            )
+        else()
+            add_custom_target(cm_runtime ALL DEPENDS
+                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT}
+                ${CM_STD_RUNTIME_DEPS}
+            )
+        endif()
         add_dependencies(cm cm_runtime)
         
         # ランタイムライブラリをcm実行ファイルにリンク（JIT用）
@@ -321,10 +494,28 @@ if(CM_USE_LLVM)
         target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
         
         # ランタイムライブラリのパスをコンパイル時に埋め込む
-        target_compile_definitions(cm PRIVATE
-            CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
-            CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
-        )
+        if(APPLE)
+            target_compile_definitions(cm PRIVATE
+                CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+                CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+                CM_GPU_RUNTIME_PATH="${CM_GPU_RUNTIME_OUTPUT}"
+                CM_NET_RUNTIME_PATH="${CM_NET_RUNTIME_OUTPUT}"
+                CM_SYNC_RUNTIME_PATH="${CM_SYNC_RUNTIME_OUTPUT}"
+                CM_THREAD_RUNTIME_PATH="${CM_THREAD_RUNTIME_OUTPUT}"
+                CM_HTTP_RUNTIME_PATH="${CM_HTTP_RUNTIME_OUTPUT}"
+                CM_DEFAULT_TARGET_ARCH="${CM_TARGET_ARCH}"
+            )
+        else()
+            target_compile_definitions(cm PRIVATE
+                CM_RUNTIME_PATH="${CM_RUNTIME_OUTPUT}"
+                CM_RUNTIME_WASM_PATH="${CM_RUNTIME_WASM_OUTPUT}"
+                CM_NET_RUNTIME_PATH="${CM_NET_RUNTIME_OUTPUT}"
+                CM_SYNC_RUNTIME_PATH="${CM_SYNC_RUNTIME_OUTPUT}"
+                CM_THREAD_RUNTIME_PATH="${CM_THREAD_RUNTIME_OUTPUT}"
+                CM_HTTP_RUNTIME_PATH="${CM_HTTP_RUNTIME_OUTPUT}"
+                CM_DEFAULT_TARGET_ARCH="${CM_TARGET_ARCH}"
+            )
+        endif()
     else()
         # Windows: ランタイムライブラリなし（ダミーパス）
         message(WARNING "Runtime library build is not supported on Windows/MSVC")

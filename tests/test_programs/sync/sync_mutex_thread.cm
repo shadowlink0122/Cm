@@ -1,0 +1,73 @@
+// sync_mutex_thread.cm - マルチスレッド競合テスト
+// 複数スレッドで共有カウンタをMutex保護下でインクリメントし
+// 競合が発生しないことを検証する
+import std::io::println;
+import std::mem::alloc;
+import std::mem::dealloc;
+import std::sync::mutex::mutex_init;
+import std::sync::mutex::mutex_lock;
+import std::sync::mutex::mutex_unlock;
+import std::sync::mutex::mutex_destroy;
+import std::thread::spawn_with_arg;
+import std::thread::join;
+
+// 共有データ構造:
+// メモリレイアウト: [mutex_buf: 64bytes][counter: 4bytes]
+// offset 0: mutex (pthread_mutex_t = 64bytes)
+// offset 64: counter (int)
+
+// 各スレッドが実行する関数
+// argは共有データ構造へのポインタ
+void* worker(void* arg) {
+    // argの先頭64バイトがmutex, offset 64がcounter
+    void* mutex_ptr = arg;
+    int* counter_ptr = (arg as long + 64) as int*;
+
+    int i = 0;
+    while (i < 1000) {
+        mutex_lock(mutex_ptr);
+        *counter_ptr = *counter_ptr + 1;
+        mutex_unlock(mutex_ptr);
+        i = i + 1;
+    }
+    return 0 as void*;
+}
+
+int main() {
+    println("=== Mutex Thread Test ===");
+
+    // 共有データ用メモリ確保 (64bytes mutex + 4bytes counter)
+    void* shared = alloc(72);
+
+    // mutex初期化
+    mutex_init(shared);
+
+    // counter = 0
+    int* counter_ptr = (shared as long + 64) as int*;
+    *counter_ptr = 0;
+
+    // 4スレッド起動・個別待機
+    // ※ join_allはJIT環境でスタック配列ポインタ変換の問題があるため個別joinを使用
+    ulong t0 = spawn_with_arg(&worker as void*, shared);
+    ulong t1 = spawn_with_arg(&worker as void*, shared);
+    ulong t2 = spawn_with_arg(&worker as void*, shared);
+    ulong t3 = spawn_with_arg(&worker as void*, shared);
+    join(t0);
+    join(t1);
+    join(t2);
+    join(t3);
+
+    // 検証: 4スレッド × 1000回 = 4000
+    int result = *counter_ptr;
+    if (result == 4000) {
+        println("threads completed successfully");
+    } else {
+        println("FAIL: expected 4000, got {result}");
+    }
+
+    mutex_destroy(shared);
+    dealloc(shared);
+
+    println("=== Done ===");
+    return 0;
+}

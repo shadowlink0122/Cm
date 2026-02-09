@@ -5,7 +5,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== LLVM Operand Test ===");
 
     // 変数初期化
@@ -19,7 +19,7 @@ int main() {
     println("Result (should be 60):");
     println(x);
 
-#else
+    #else
     // ARM64版
     println("=== LLVM Operand Test ===");
 
@@ -31,6 +31,6 @@ int main() {
     println("Result (should be 60):");
     println(x);
 
-#end
+    #end
     return 0;
 }

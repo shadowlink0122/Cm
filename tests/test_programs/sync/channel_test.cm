@@ -1,0 +1,79 @@
+// channel_test.cm - Channelの基本動作テスト（シングルスレッド）
+import std::io::println;
+import std::sync::channel::create;
+import std::sync::channel::send;
+import std::sync::channel::recv;
+import std::sync::channel::try_send;
+import std::sync::channel::try_recv;
+import std::sync::channel::close;
+import std::sync::channel::destroy;
+import std::sync::channel::len;
+import std::sync::channel::is_closed;
+
+int main() {
+    println("=== Channel Test ===");
+
+    // チャネル作成（バッファサイズ4）
+    long ch = create(4);
+    println("channel created");
+
+    // 基本 send/recv
+    send(ch, 10);
+    send(ch, 20);
+    send(ch, 30);
+    println("sent 3 values");
+
+    int len1 = len(ch);
+    println("len: {len1}");
+
+    long v1 = 0;
+    long v2 = 0;
+    long v3 = 0;
+    recv(ch, &v1);
+    recv(ch, &v2);
+    recv(ch, &v3);
+    println("recv: {v1}, {v2}, {v3}");
+
+    // FIFO順序検証
+    if (v1 == 10 && v2 == 20 && v3 == 30) {
+        println("PASS: FIFO order correct");
+    } else {
+        println("FAIL: FIFO order wrong");
+    }
+
+    // try_send/try_recv
+    send(ch, 100);
+    int try_ok = try_send(ch, 200);
+    if (try_ok == 0) {
+        println("try_send: success");
+    } else {
+        println("try_send: failed");
+    }
+
+    long tv1 = 0;
+    try_recv(ch, &tv1);
+    println("try_recv: {tv1}");
+
+    // close後のsend
+    close(ch);
+    int closed = is_closed(ch);
+    if (closed != 0) {
+        println("channel closed: true");
+    } else {
+        println("channel closed: false");
+    }
+
+    int send_ret = send(ch, 999);
+    if (send_ret != 0) {
+        println("send after close: rejected");
+    } else {
+        println("send after close: success (unexpected)");
+    }
+
+    // クリーンアップ
+    destroy(ch);
+    println("channel destroyed");
+
+    println("=== Done ===");
+    return 0;
+}

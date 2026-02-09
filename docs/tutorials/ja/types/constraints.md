@@ -75,3 +75,6 @@ interface Clone {
 
 **前の章:** [インターフェース](interfaces.html)  
 **次の章:** [match式](../advanced/match.html)
+---
+
+**最終更新:** 2026-02-08

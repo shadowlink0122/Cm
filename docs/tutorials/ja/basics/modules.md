@@ -238,3 +238,6 @@ import ./utils::add;
 
 - [FFI](../advanced/ffi.html) - 外部関数インターフェース
 - [コンパイラの使い方](../compiler/usage.html) - ビルドオプション
+---
+
+**最終更新:** 2026-02-08

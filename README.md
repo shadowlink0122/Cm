@@ -11,7 +11,7 @@ Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)
 ### 特徴
 
 - ⚡ **LLVMバックエンド**: LLVM IRによる高速なネイティブバイナリ生成
-- 🌐 **クロスプラットフォーム**: LLVM経由でLinux/macOS/Windows/WASM対応
+- 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM
 - 🕸️ **WebAssembly対応**: `--target=wasm`で直接WASMバイナリ生成
 - 🎸 **gen (弦)**: 統合パッケージマネージャ・バージョン管理
 - 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
@@ -214,25 +214,34 @@ int main() {
 
 ## 開発言語
 
-- **C++20** (Clang 17+推奨, GCC 13+, MSVC 2019+)
+- **C++20** (Clang 17+推奨, GCC 13+)
+
+## サポート環境
+
+| OS | アーキテクチャ | ステータス |
+|----|-------------|----------|
+| **macOS 14+** | ARM64 (Apple Silicon) | ✅ 完全サポート |
+| **Ubuntu 22.04** | x86_64 | ✅ 完全サポート |
+| Windows | - | ❌ 未サポート |
+
+> **Note**: macOS Intel (x86_64) でも動作する可能性がありますが、CIでの検証はARM64のみです。
 
 ## CI/CD テストマトリクス
 
-GitHub Actionsで全プラットフォーム・全バックエンドの自動テストを実行しています：
+GitHub Actionsで全バックエンドの自動テストを実行しています：
 
-### テスト構成 (3 OS × 3 Backends = 9 configurations)
+### テスト構成 (2 OS × 3 Backends = 6 configurations)
 
-| OS | Interpreter | LLVM Native | LLVM WASM |
-|----|-------------|-------------|-----------|
-| **Ubuntu 22.04** | ✅ | ✅ | ✅ |
-| **macOS 13** | ✅ | ✅ | ✅ |
-| **Windows 2022** | ✅ | ✅ | ✅ |
+| OS | Arch | Interpreter | LLVM Native | LLVM WASM |
+|----|------|-------------|-------------|-----------|
+| **macOS 14** | ARM64 | ✅ | ✅ | ✅ |
+| **Ubuntu 22.04** | x86_64 | ✅ | ✅ | ✅ |
 
 ### テスト内容
 - **C++ Unit Tests**: GoogleTestによる単体テスト（Lexer, HIR, MIR, 最適化）
-- **Interpreter Tests**: 134個のCmプログラムをインタプリタで実行
-- **LLVM Native Tests**: 134個のCmプログラムをネイティブバイナリにコンパイル・実行
-- **LLVM WASM Tests**: 134個のCmプログラムをWASMにコンパイル・Wasmtimeで実行
+- **Interpreter Tests**: 372個のCmプログラムをインタプリタで実行
+- **LLVM Native Tests**: 372個のCmプログラムをネイティブバイナリにコンパイル・実行
+- **LLVM WASM Tests**: 372個のCmプログラムをWASMにコンパイル・Wasmtimeで実行
 
 ### ローカルテスト実行
 
@@ -277,4 +286,4 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 
 ---
 
-© 2025-2025 Cm言語プロジェクト
+© 2025-2026 Cm言語プロジェクト

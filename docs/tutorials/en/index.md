@@ -7,10 +7,10 @@ has_children: true
 
 [日本語](../ja/)
 
-# Cm Language Tutorials v0.11.0
+# Cm Language Tutorials v0.13.0
 
-**Target Version:** v0.11.0  
-**Last Updated:** 2026-01-06
+**Target Version:** v0.13.0  
+**Last Updated:** 2026-02-08
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
 
@@ -22,7 +22,7 @@ A comprehensive collection of tutorials to learn all features of the Cm language
 
 Estimated Time: 3-4 hours
 
-1. **[Basics](basics/introduction.html)** - Language foundations (11 tutorials)
+1. **[Basics](basics/introduction.html)** - Language foundations (10 tutorials)
    - [Introduction](basics/introduction.html) - Features and design philosophy
    - [Setup](basics/setup.html) - Compiler build and setup
    - [Hello, World!](basics/hello-world.html) - Your first program
@@ -40,12 +40,12 @@ Estimated Time: 4-5 hours
 
 2. **[Type System](types/structs.html)** - Advanced type features
    - [Structs](types/structs.html) - Definition, constructors, nesting
-   - [Enums](types/enums.html) - Enumerations and usage in switch/match
+   - [Enums](types/enums.html) - Enumerations, Tagged Unions, match decomposition
    - [typedef](types/typedef.html) - Type aliases and literal types
    - [Generics](types/generics.html) - Type parameters, inference, monomorphization
    - [Interfaces](types/interfaces.html) - interface/impl/self
    - [Constraints](types/constraints.html) - AND/OR boundaries, where clause
-   - [Ownership](types/ownership.html) - Move semantics, Borrowing
+   - [Ownership](types/ownership.html) - Move semantics, borrowing
    - [Lifetimes](types/lifetimes.html) - Reference validity
 
 ### Path 3: Learning Advanced Features (For Advanced Users)
@@ -53,21 +53,31 @@ Estimated Time: 4-5 hours
 Estimated Time: 5-6 hours
 
 3. **[Advanced Features](advanced/match.html)** - Powerful language features
-   - [match Expression](advanced/match.html) - Pattern matching and exhaustiveness check
+   - [match Expression](advanced/match.html) - Pattern matching, guards, exhaustiveness
    - [Auto Implementation](advanced/with-keyword.html) - with Eq/Ord/Clone/Hash
    - [Operator Overloading](advanced/operators.html) - Custom operators
    - [Function Pointers](advanced/function-pointers.html) - Higher-order functions
+   - [Lambda](advanced/lambda.html) - Closures
    - [String Operations](advanced/strings.html) - Methods and slicing
+   - [Slices](advanced/slices.html) - Dynamic arrays
+   - [FFI](advanced/ffi.html) - C interop
+   - [Threads](advanced/thread.html) - Parallel processing
+   - [const](advanced/const.html) - Compile-time constants
+   - [must keyword](advanced/must.html) - Enforced return value usage
+   - [Macros](advanced/macros.html) - Conditional compilation
 
 ### Path 4: Learning Compilation
 
-Estimated Time: 2 hours
+Estimated Time: 3 hours
 
 4. **[Compiler](compiler/usage.html)** - Build and backends
    - [Usage](compiler/usage.html) - Commands and options
    - [LLVM Backend](compiler/llvm.html) - Native compilation
    - [WASM Backend](compiler/wasm.html) - WebAssembly output
    - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
+   - [Linter](compiler/linter.html) - Static analysis (cm lint)
+   - [Formatter](compiler/formatter.html) - Code formatting (cm fmt)
+   - [Optimization](compiler/optimization.html) - O0-O3, tail call optimization
 
 ### Path 5: Learning Internals (For Developers)
 
@@ -77,8 +87,6 @@ Estimated Time: 3 hours
    - [Architecture](internals/architecture.html) - Overall structure and pipeline
    - [Algorithms](internals/algorithms.html) - Analysis and optimization algorithms
    - [Optimization](internals/optimization.html) - MIR/LLVM level optimizations
-   
-   *(English translation coming soon)*
 
 ---
 
@@ -94,35 +102,35 @@ Estimated Time: 3 hours
 
 ### 🟡 Intermediate - Understand the basics of Cm
 
-- Arrays
-- Pointers
-- Structs
-- Enums
+- Arrays and Pointers
+- Structs and Enums
 - Interfaces
+- Threads
 
 ### 🔴 Advanced - Requires deep understanding of type systems and memory management
 
-- Generics
-- Constraints
-- match Expression
-- Auto Implementation
-- Operator Overloading
+- Generics and Constraints
+- match Expression and Pattern Guards
+- FFI and inline assembly
 
 ---
 
-## ✅ Implementation Status (v0.11.0)
+## 🔗 Related Links
 
-(Omitted for brevity, same as Japanese version)
-
----
-
-**Total Tutorials:** 25 files  
-**Estimated Time:** 17-20 hours  
-**Target Version:** v0.11.0
+- [Language Specification](../../design/CANONICAL_SPEC.html) - Full language spec
+- [Design Documents](../../design/) - Architecture and design docs
+- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 368 files
 
 ---
 
-**Last Updated:** 2026-01-06  
+**Total Tutorials:** 40 files  
+**Estimated Time:** 18-22 hours  
+**Target Version:** v0.13.0
+
+---
+
+**Last Updated:** 2026-02-08  
 **Author:** Cm Language Development Team
 
 ---
+[日本語](../ja/)

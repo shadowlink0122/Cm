@@ -118,3 +118,6 @@ int main() {
 
 **前の章:** [typedef](typedef.html)  
 **次の章:** [インターフェース](interfaces.html)
+---
+
+**最終更新:** 2026-02-08

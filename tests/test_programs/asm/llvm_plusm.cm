@@ -2,18 +2,18 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     // +m: 入力と出力の両方を同じメモリで行う
     int readwrite_val = 10;
     __asm__("addl $$5, ${+m:readwrite_val}");  // 10 + 5 = 15
-    println(readwrite_val);                     // 15
+    println(readwrite_val);                    // 15
 
     // もう一度テスト
     int val2 = 100;
     __asm__("subl $$20, ${+m:val2}");  // 100 - 20 = 80
-    println(val2);                      // 80
+    println(val2);                     // 80
 
-#else
+    #else
     // ARM64版
     // +m制約はARM64では直接対応しないため、ldr/add/str に分解
     int readwrite_val = 10;
@@ -30,6 +30,6 @@ int main() {
     __asm__("str ${r:temp2}, ${=m:val2}");
     println(val2);  // 80
 
-#end
+    #end
     return 0;
 }

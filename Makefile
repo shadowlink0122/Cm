@@ -4,6 +4,40 @@
 # 設定
 CM := ./cm
 BUILD_DIR := build
+# ターゲットアーキテクチャ（デフォルト: LLVMホストターゲットから自動検出）
+# 使用例: make build ARCH=arm64 / make build ARCH=x86_64
+ARCH ?= $(shell llvm-config --host-target 2>/dev/null | cut -d- -f1 || uname -m)
+
+# アーキテクチャに応じたHomebrewプレフィックスを自動設定
+# ARM64: /opt/homebrew, x86_64: /usr/local
+ifeq ($(ARCH),arm64)
+  BREW_PREFIX ?= /opt/homebrew
+else ifeq ($(ARCH),aarch64)
+  BREW_PREFIX ?= /opt/homebrew
+else
+  BREW_PREFIX ?= /usr/local
+endif
+
+# LLVM/OpenSSLパスの自動設定
+LLVM_PREFIX := $(BREW_PREFIX)/opt/llvm@17
+OPENSSL_PREFIX := $(BREW_PREFIX)/opt/openssl@3
+
+# CMake共通フラグ（アーキテクチャ依存のパスを統一）
+CMAKE_ARCH_FLAGS := \
+  -DCM_TARGET_ARCH=$(ARCH) \
+  -DCMAKE_PREFIX_PATH="$(LLVM_PREFIX);$(OPENSSL_PREFIX)" \
+  -DOPENSSL_ROOT_DIR=$(OPENSSL_PREFIX) \
+  -DOPENSSL_SSL_LIBRARY=$(OPENSSL_PREFIX)/lib/libssl.dylib \
+  -DOPENSSL_CRYPTO_LIBRARY=$(OPENSSL_PREFIX)/lib/libcrypto.dylib \
+  -DOPENSSL_INCLUDE_DIR=$(OPENSSL_PREFIX)/include \
+  -DCMAKE_C_COMPILER=/usr/bin/clang \
+  -DCMAKE_CXX_COMPILER=/usr/bin/clang++
+
+# ビルド時の環境変数（x86 LDFLAGSの混入防止）
+BUILD_ENV := \
+  LDFLAGS="-L$(LLVM_PREFIX)/lib -L$(OPENSSL_PREFIX)/lib" \
+  CPPFLAGS="-I$(LLVM_PREFIX)/include -I$(OPENSSL_PREFIX)/include" \
+  PATH="$(LLVM_PREFIX)/bin:$(BREW_PREFIX)/bin:$(PATH)"
 
 # デフォルトターゲット
 .PHONY: help
@@ -17,6 +51,11 @@ help:
 	@echo "  make release        - リリースビルド"
 	@echo "  make clean          - ビルドディレクトリをクリーン"
 	@echo "  make rebuild        - クリーン後に再ビルド"
+	@echo ""
+	@echo "Architecture Options:"
+	@echo "  ARCH=arm64   - ARM64ビルド（デフォルト: LLVM自動検出）"
+	@echo "  ARCH=x86_64  - x86_64ビルド"
+	@echo "  例: make build ARCH=x86_64"
 	@echo ""
 	@echo "Test Commands (Unit Tests):"
 	@echo "  make test           - すべてのC++ユニットテストを実行"
@@ -89,24 +128,24 @@ all: build-all
 
 .PHONY: build
 build:
-	@echo "Building Cm compiler (debug mode)..."
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON
-	@cmake --build $(BUILD_DIR)
-	@echo "✅ Build complete!"
+	@echo "Building Cm compiler (debug mode, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@echo "✅ Build complete! ($(ARCH))"
 
 .PHONY: build-all
 build-all:
-	@echo "Building Cm compiler with tests (debug mode)..."
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON
-	@cmake --build $(BUILD_DIR)
-	@echo "✅ Build complete (with tests)!"
+	@echo "Building Cm compiler with tests (debug mode, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@echo "✅ Build complete (with tests, $(ARCH))!"
 
 .PHONY: release
 release:
-	@echo "Building Cm compiler (release mode)..."
-	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON
-	@cmake --build $(BUILD_DIR)
-	@echo "✅ Release build complete!"
+	@echo "Building Cm compiler (release mode, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@echo "✅ Release build complete! ($(ARCH))"
 
 .PHONY: clean
 clean:

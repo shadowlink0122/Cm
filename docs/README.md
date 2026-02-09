@@ -2,7 +2,7 @@
 
 # Cm言語ドキュメント
 
-*最終更新: 2025年1月*
+*最終更新: 2026年2月*
 
 ## 📁 ディレクトリ構造
 
@@ -72,7 +72,6 @@ docs/
 
 プロジェクトルートにある重要な文書：
 
-- **[../ROADMAP.md](../ROADMAP.html)** - 開発ロードマップ
 - **[../CHANGELOG.md](../CHANGELOG.html)** - 変更履歴
 - **[../CONTRIBUTING.md](../CONTRIBUTING.html)** - 貢献ガイド
 - **[../README.md](../README.html)** - プロジェクト概要

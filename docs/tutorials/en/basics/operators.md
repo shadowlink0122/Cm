@@ -352,3 +352,7 @@ int main() {
 
 **Previous:** [Variables and Types](variables.html)  
 **Next:** [Control Flow](control-flow.html)
+
+---
+
+**Last Updated:** 2026-02-08

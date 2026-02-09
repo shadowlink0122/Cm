@@ -1,0 +1,77 @@
+import std::io::println;
+
+// リテラル型の関数引数・戻り値テスト
+typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+typedef StatusCode = 200 | 400 | 404 | 500;
+
+// リテラル型を引数に取る関数
+void print_method(HttpMethod method) {
+    println("Method: {method}");
+}
+
+void print_status(StatusCode code) {
+    println("Status: {code}");
+}
+
+// リテラル型を返す関数
+HttpMethod get_default_method() {
+    return "GET";
+}
+
+StatusCode get_success_code() {
+    return 200;
+}
+
+// リテラル型を引数と戻り値の両方で使用
+HttpMethod transform_method(HttpMethod method) {
+    if (method == "GET") {
+        return "POST";
+    }
+    return method;
+}
+
+StatusCode transform_status(StatusCode code) {
+    if (code == 200) {
+        return 404;
+    }
+    return code;
+}
+
+int main() {
+    // テスト1: リテラル型を引数に渡す
+    println("Test 1: String literal as argument");
+    HttpMethod m = "GET";
+    print_method(m);
+
+    // テスト2: リテラル型を直接引数に渡す
+    println("Test 2: Direct literal as argument");
+    print_method("POST");
+
+    // テスト3: リテラル型の戻り値
+    println("Test 3: Literal return value");
+    HttpMethod result = get_default_method();
+    println("  result={result}");
+
+    // テスト4: 整数リテラル型を引数に渡す
+    println("Test 4: Int literal as argument");
+    StatusCode s = 404;
+    print_status(s);
+
+    // テスト5: 整数リテラル型の戻り値
+    println("Test 5: Int literal return value");
+    StatusCode code = get_success_code();
+    println("  code={code}");
+
+    // テスト6: リテラル型の変換関数
+    println("Test 6: Transform string literal");
+    HttpMethod transformed = transform_method("GET");
+    println("  transformed={transformed}");
+
+    // テスト7: 整数リテラル型の変換関数
+    println("Test 7: Transform int literal");
+    StatusCode new_code = transform_status(200);
+    println("  new_code={new_code}");
+
+    println("=== PASS ===");
+    return 0;
+}

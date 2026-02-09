@@ -423,3 +423,7 @@ int main() {
 
 **Previous:** [Type Constraints](../types/constraints.html)  
 **Next:** [Auto Implementation](with-keyword.html)
+
+---
+
+**Last Updated:** 2026-02-08

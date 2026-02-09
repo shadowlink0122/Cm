@@ -4,7 +4,7 @@
 import std::io::println;
 
 int main() {
-#ifdef __x86_64__
+    #ifdef __x86_64__
     println("=== builtin_asm test ===");
 
     // 直接__asm__を使用
@@ -17,7 +17,7 @@ int main() {
     println("multiple: ok");
 
     println("=== complete ===");
-#else
+    #else
     // ARM64版
     println("=== builtin_asm test ===");
 
@@ -29,6 +29,6 @@ int main() {
     println("multiple: ok");
 
     println("=== complete ===");
-#end
+    #end
     return 0;
 }

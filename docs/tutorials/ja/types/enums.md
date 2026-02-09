@@ -74,22 +74,42 @@ int main() {
 
 Cmでは、各バリアントに関連データを持つ列挙型（Tagged Union）を定義できます。
 
+> **重要:** 各バリアントが持てるフィールドは **1つだけ** です。複数の値を持たせたい場合は構造体を使ってください。
+
 ### 基本的な定義
 
 ```cm
 enum Message {
-    Quit,                      // データなし
-    Move { int x; int y; },    // 構造体風データ
-    Write(string),             // タプル風データ
-    ChangeColor(int, int, int) // 複数の値
+    Quit,                  // データなし
+    Write(string),         // 1つの値を持つ
+    Code(int)              // 1つの値を持つ
 }
 
 int main() {
     Message m1 = Message::Quit;
-    Message m2 = Message::Move { x: 10, y: 20 };
-    Message m3 = Message::Write("Hello");
-    Message m4 = Message::ChangeColor(255, 128, 0);
+    Message m2 = Message::Write("Hello");
+    Message m3 = Message::Code(404);
     return 0;
+}
+```
+
+### ⚠️ 複数フィールドが必要な場合 → 構造体を使う
+
+```cm
+// ❌ 不正: バリアントは複数フィールドを持てない
+// enum Shape {
+//     Rectangle(int, int),  // コンパイルエラー
+// }
+
+// ✅ 正しい: 構造体でラップ
+struct Rect { int w; int h; }
+struct Color { int r; int g; int b; }
+
+enum Shape {
+    Circle(int),         // 半径
+    Rectangle(Rect),     // 構造体で複数値を格納
+    Colored(Color),      // RGB値を構造体で
+    Point                // データなし
 }
 ```
 
@@ -98,16 +118,18 @@ int main() {
 関連データ付きEnumは `match` 式でデータを取り出せます。
 
 ```cm
+struct Rect { int w; int h; }
+
 enum Shape {
-    Circle(int),           // 半径
-    Rectangle(int, int),   // 幅, 高さ
+    Circle(int),
+    Rectangle(Rect),
     Point
 }
 
 void describe_shape(Shape s) {
     match (s) {
-        Shape::Circle(r) => println("Circle with radius {}", r),
-        Shape::Rectangle(w, h) => println("Rectangle {}x{}", w, h),
+        Shape::Circle(r) => println("Circle with radius {r}"),
+        Shape::Rectangle(rect) => println("Rectangle {rect.w}x{rect.h}"),
         Shape::Point => println("A point"),
     }
 }
@@ -115,9 +137,70 @@ void describe_shape(Shape s) {
 int main() {
     Shape c = Shape::Circle(5);
     describe_shape(c);  // Circle with radius 5
+
+    Rect r = Rect { w: 10, h: 20 };
+    Shape rect = Shape::Rectangle(r);
+    describe_shape(rect);  // Rectangle 10x20
     return 0;
 }
 ```
+
+---
+
+## ユニオン型配列によるタプル風パターン
+
+Cmには `typedef` で定義するユニオン型があります。ユニオン型の配列を使うと、異なる型の値をまとめて返す「タプル」のような使い方ができます。
+
+### ユニオン型の定義
+
+```cm
+// typedef でユニオン型を定義
+typedef Value = int | long;
+typedef Number = int | double;
+typedef Data = int | string;
+```
+
+### ユニオン型配列で複数の値を返す
+
+```cm
+import std::io::println;
+
+typedef Value = int | long;
+
+// 商と余りを返す（ペア風）
+Value[2] divide_with_remainder(int a, int b) {
+    Value[2] pair;
+    pair[0] = (a / b) as Value;
+    pair[1] = (a % b) as Value;
+    return pair;
+}
+
+// 座標を返す（3要素タプル風）
+Value[3] get_point() {
+    Value[3] point;
+    point[0] = 10 as Value;
+    point[1] = 20 as Value;
+    point[2] = 30 as Value;
+    return point;
+}
+
+int main() {
+    // ユニオン型配列を受け取り、キャストで値を取り出す
+    Value[2] dr = divide_with_remainder(17, 5);
+    int quotient = dr[0] as int;
+    int remainder = dr[1] as int;
+    println("17 / 5 = {quotient} remainder {remainder}");
+
+    Value[3] pt = get_point();
+    int x = pt[0] as int;
+    int y = pt[1] as int;
+    int z = pt[2] as int;
+    println("Point: ({x}, {y}, {z})");
+    return 0;
+}
+```
+
+> **注意:** ユニオン型の値は `as` キャストで代入・取り出しを行います。Tagged Union (enum) の `match` とは別の仕組みです。
 
 ---
 
@@ -333,3 +416,6 @@ int main() {
 
 **前の章:** [構造体](structs.html)  
 **次の章:** [typedef型エイリアス](typedef.html)
+---
+
+**最終更新:** 2026-02-08
