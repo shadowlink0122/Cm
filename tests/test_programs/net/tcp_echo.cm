@@ -71,7 +71,7 @@ int main() {
     // listenしたserver_fdをサーバスレッドに渡す
     long* server_arg = &server_fd;
     ulong server = spawn_with_arg(server_thread as void*, server_arg as void*);
-    sleep_ms(50);
+    sleep_ms(20);
 
     // クライアント1: "Hi!" (72, 105, 33) 送信→エコー検証
     long fd1 = tcp_connect("127.0.0.1" as long, 18234);
@@ -84,7 +84,7 @@ int main() {
         buf_set(msg1, 2, 33);   // !
         tcp_write(fd1, msg1, 3);
         buf_destroy(msg1);
-        sleep_ms(50);
+        sleep_ms(20);
         long rbuf1 = buf_create(256);
         int n1 = tcp_read(fd1, rbuf1, 255);
         if (n1 == 3 && buf_get(rbuf1, 0) == 72 && buf_get(rbuf1, 1) == 105 && buf_get(rbuf1, 2) == 33) {
@@ -107,7 +107,7 @@ int main() {
         buf_set(msg2, 2, 67);  // C
         tcp_write(fd2, msg2, 3);
         buf_destroy(msg2);
-        sleep_ms(50);
+        sleep_ms(20);
         long rbuf2 = buf_create(256);
         int n2 = tcp_read(fd2, rbuf2, 255);
         if (n2 == 3 && buf_get(rbuf2, 0) == 65 && buf_get(rbuf2, 1) == 66 && buf_get(rbuf2, 2) == 67) {
