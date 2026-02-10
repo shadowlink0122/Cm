@@ -50,7 +50,7 @@ int main() {
     Message m1 = Message::Quit;
     Message m2 = Message::Move(Point { x: 100, y: 200 });
     Message m3 = Message::Write("Hello, World!");
-    Message m4 = Message::ChangeColor(RGB { r: 255, g: 128, b: 1 });
+    Message m4 = Message::ChangeColor(RGB { r: 255, g: 128, b: 0 });
 
     // 処理
     process_message(m1);

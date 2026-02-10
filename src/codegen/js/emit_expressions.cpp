@@ -37,14 +37,23 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
 
-            // ポインタ比較: 両オペランドがPointerの場合のみ.__idx比較
+            // ポインタ比較: 両オペランドがPointerの場合
             auto lhsType = getOperandType(*data.lhs, func);
             auto rhsType = getOperandType(*data.rhs, func);
             if (lhsType && lhsType->kind == TypeKind::Pointer && rhsType &&
                 rhsType->kind == TypeKind::Pointer) {
+                // Eq/Neは__arrも含めて比較（異なる配列上の同一インデックスが等しくなるバグ防止）
+                if (data.op == mir::MirBinaryOp::Eq) {
+                    return "(" + lhs + ".__arr === " + rhs + ".__arr && " + lhs +
+                           ".__idx === " + rhs + ".__idx)";
+                }
+                if (data.op == mir::MirBinaryOp::Ne) {
+                    return "(" + lhs + ".__arr !== " + rhs + ".__arr || " + lhs +
+                           ".__idx !== " + rhs + ".__idx)";
+                }
+                // Lt/Gt/Le/Geは同一配列前提で__idxのみ比較
                 if (data.op == mir::MirBinaryOp::Lt || data.op == mir::MirBinaryOp::Gt ||
-                    data.op == mir::MirBinaryOp::Le || data.op == mir::MirBinaryOp::Ge ||
-                    data.op == mir::MirBinaryOp::Eq || data.op == mir::MirBinaryOp::Ne) {
+                    data.op == mir::MirBinaryOp::Le || data.op == mir::MirBinaryOp::Ge) {
                     return "(" + lhs + ".__idx " + op + " " + rhs + ".__idx)";
                 }
             }
@@ -151,8 +160,14 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                             // 構造体ポインタのDerefはno-op
                         }
                     }
-                    // インデックス値
-                    std::string idxStr = getLocalVarName(func, lastProj.index_local);
+                    // インデックス値（inline_values_フォールバック付き）
+                    std::string idxStr;
+                    auto it_idx = inline_values_.find(lastProj.index_local);
+                    if (it_idx != inline_values_.end()) {
+                        idxStr = it_idx->second;
+                    } else {
+                        idxStr = getLocalVarName(func, lastProj.index_local);
+                    }
                     return "{__arr: " + base + ", __idx: " + idxStr + "}";
                 }
             }

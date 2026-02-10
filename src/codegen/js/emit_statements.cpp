@@ -116,13 +116,23 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             const auto& data = std::get<mir::MirTerminator::SwitchIntData>(term.data);
             std::string discrim = emitOperand(*data.discriminant, func);
 
+            // discriminantの型を判定してboolean/integerで分岐
+            auto discrimType = getOperandType(*data.discriminant, func);
+            bool isBoolDiscrim = (discrimType && discrimType->kind == hir::TypeKind::Bool);
+
             for (const auto& [value, target] : data.targets) {
-                // 値0/1はtruthy/falsy比較を使用（JS: true===1はfalse、truthy比較で安全）
-                if (value == 1) {
-                    emitter_.emitLine("if (" + discrim + ") {");
-                } else if (value == 0) {
-                    emitter_.emitLine("if (!" + discrim + ") {");
+                if (isBoolDiscrim) {
+                    // Boolean型: truthy/falsy評価（JS: true === 1 は false になるため）
+                    if (value == 1) {
+                        emitter_.emitLine("if (" + discrim + ") {");
+                    } else if (value == 0) {
+                        emitter_.emitLine("if (!" + discrim + ") {");
+                    } else {
+                        emitter_.emitLine("if (" + discrim + " === " + std::to_string(value) +
+                                          ") {");
+                    }
                 } else {
+                    // 整数型: 厳密比較（値2がcase 1にマッチする等のバグ防止）
                     emitter_.emitLine("if (" + discrim + " === " + std::to_string(value) + ") {");
                 }
                 emitter_.increaseIndent();

@@ -184,6 +184,13 @@ run_single_test() {
     local error_file="$TEMP_DIR/${category}_${test_name}.err"
     local is_error_test=false
 
+    # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
+    local test_timeout="$TIMEOUT"
+    local timeout_file="${test_file%.cm}.timeout"
+    if [ -f "$timeout_file" ]; then
+        test_timeout=$(cat "$timeout_file" | tr -d '[:space:]')
+    fi
+
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
     local category_skip_file="$(dirname "$test_file")/.skip"
@@ -268,7 +275,7 @@ run_single_test() {
     run_with_timeout() {
         if [ -n "$TIMEOUT_CMD" ]; then
             if [ "$TIMEOUT_MODE" = "python" ]; then
-                "$TIMEOUT_CMD" - "$TIMEOUT" "$@" <<'PY'
+                "$TIMEOUT_CMD" - "$test_timeout" "$@" <<'PY'
 import subprocess
 import sys
 
@@ -291,7 +298,7 @@ except FileNotFoundError:
 PY
             else
                 # --kill-after: タイムアウト後さらに2秒待ってもプロセスが終了しなければSIGKILL
-                $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" "$@"
+                $TIMEOUT_CMD --kill-after=2 "$test_timeout" "$@"
             fi
         else
             # タイムアウトコマンドがない場合は直接実行
@@ -551,7 +558,7 @@ EOJS
 
     # タイムアウト処理
     if [ $exit_code -eq 124 ] || [ $exit_code -eq 143 ]; then
-        echo -e "${RED}[FAIL]${NC} $category/$test_name - Timeout (>${TIMEOUT}s)"
+        echo -e "${RED}[FAIL]${NC} $category/$test_name - Timeout (>${test_timeout}s)"
         ((FAILED++))
         return
     fi
@@ -803,6 +810,13 @@ run_parallel_test() {
     local output_file="$TEMP_DIR/${category}_${test_name}_$$.out"
     local is_error_test=false
 
+    # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
+    local test_timeout="$TIMEOUT"
+    local timeout_file="${test_file%.cm}.timeout"
+    if [ -f "$timeout_file" ]; then
+        test_timeout=$(cat "$timeout_file" | tr -d '[:space:]')
+    fi
+
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
     local category_skip_file="$(dirname "$test_file")/.skip"
@@ -866,7 +880,7 @@ run_parallel_test() {
     run_with_timeout_silent() {
         if [ -n "$TIMEOUT_CMD" ]; then
             if [ "$TIMEOUT_MODE" = "python" ]; then
-                "$TIMEOUT_CMD" - "$TIMEOUT" "$@" <<'PY'
+                "$TIMEOUT_CMD" - "$test_timeout" "$@" <<'PY'
 import subprocess
 import sys
 
@@ -888,7 +902,7 @@ except FileNotFoundError:
     sys.exit(127)
 PY
             else
-                $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" "$@"
+                $TIMEOUT_CMD --kill-after=2 "$test_timeout" "$@"
             fi
         else
             "$@"
@@ -961,7 +975,7 @@ PY
 
     # タイムアウト
     if [ $exit_code -eq 124 ] || [ $exit_code -eq 143 ]; then
-        echo "FAIL:Timeout (>${TIMEOUT}s)" > "$result_file"
+        echo "FAIL:Timeout (>${test_timeout}s)" > "$result_file"
         rm -f "$output_file"
         return
     fi

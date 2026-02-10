@@ -1,5 +1,6 @@
 // JSターゲットのポインタ使用制限バリデーション
-// malloc/free/void* の使用を検出してコンパイルエラーを発生させる
+// void*/calloc/realloc 等の使用を検出してコンパイルエラーを発生させる
+// 注: malloc/freeはbuiltins.hppでGCベースのエミュレーションを提供しているため許可
 
 #include "codegen.hpp"
 
@@ -13,9 +14,10 @@ namespace cm::codegen::js {
 using ast::TypeKind;
 
 // JSで禁止されるメモリ管理関数
+// 注: malloc/freeはbuiltins.hppでGCベースにエミュレーション実装済みのため除外
 static const std::unordered_set<std::string> kProhibitedFunctions = {
-    "malloc",          "free",           "calloc",   "realloc", "__cm_alloc", "__cm_free",
-    "__cm_heap_alloc", "__cm_heap_free", "cm_alloc", "cm_free"};
+    "calloc",          "realloc",        "__cm_alloc", "__cm_free",
+    "__cm_heap_alloc", "__cm_heap_free", "cm_alloc",   "cm_free"};
 
 // 関数名が禁止リストに含まれるか（修飾名の末尾部分もチェック）
 static bool isProhibitedFunction(const std::string& name) {
@@ -134,8 +136,8 @@ bool JSCodeGen::validatePointerUsage(const mir::MirProgram& program) {
             std::cerr << std::endl;
         }
         // 最初のエラーだけでコンパイル中止（重複エラーを避ける）
-        std::cerr << "ヒント: malloc/free/void* はJSターゲットでは利用できません。"
-                  << "配列とスライスを使用してください。" << std::endl;
+        std::cerr << "ヒント: calloc/realloc/void* はJSターゲットでは利用できません。"
+                  << "malloc/freeはGCベースで代替されます。" << std::endl;
         return false;
     }
 

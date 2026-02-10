@@ -380,42 +380,22 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                     uint32_t computedMax = 0;
                     for (const auto& member : enumIt->second->members) {
                         uint32_t memberSize = 0;
+                        // 一時的なLLVM
+                        // struct型を構築し、DataLayoutで正確なサイズ（パディング込み）を計算
+                        std::vector<llvm::Type*> fieldLlvmTypes;
                         for (const auto& [fieldName, fieldType] : member.fields) {
                             if (!fieldType)
                                 continue;
-                            // 構造体型の場合はconvertTypeでLLVM型を取得してサイズを計算
-                            if (fieldType->kind == hir::TypeKind::Struct ||
-                                fieldType->kind == hir::TypeKind::Generic) {
-                                auto llvmFieldType = convertType(fieldType);
-                                if (llvmFieldType) {
-                                    auto dl = module->getDataLayout();
-                                    memberSize += dl.getTypeAllocSize(llvmFieldType);
-                                } else {
-                                    memberSize += 8;  // フォールバック
-                                }
-                            } else {
-                                // プリミティブ型のサイズ計算
-                                switch (fieldType->kind) {
-                                    case hir::TypeKind::Bool:
-                                    case hir::TypeKind::Char:
-                                    case hir::TypeKind::Tiny:
-                                    case hir::TypeKind::UTiny:
-                                        memberSize += 1;
-                                        break;
-                                    case hir::TypeKind::Short:
-                                    case hir::TypeKind::UShort:
-                                        memberSize += 2;
-                                        break;
-                                    case hir::TypeKind::Int:
-                                    case hir::TypeKind::UInt:
-                                    case hir::TypeKind::Float:
-                                        memberSize += 4;
-                                        break;
-                                    default:
-                                        memberSize += 8;
-                                        break;
-                                }
+                            auto llvmFieldType = convertType(fieldType);
+                            if (llvmFieldType) {
+                                fieldLlvmTypes.push_back(llvmFieldType);
                             }
+                        }
+                        if (!fieldLlvmTypes.empty()) {
+                            auto tempStruct =
+                                llvm::StructType::get(ctx.getContext(), fieldLlvmTypes);
+                            auto dl = module->getDataLayout();
+                            memberSize = static_cast<uint32_t>(dl.getTypeAllocSize(tempStruct));
                         }
                         if (memberSize > computedMax) {
                             computedMax = memberSize;

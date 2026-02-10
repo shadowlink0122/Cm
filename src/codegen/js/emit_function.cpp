@@ -160,8 +160,8 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
                     // ... sanitizeIdentifier(func.locals[argId].name)
                     varName = sanitizeIdentifier(local.name);
                 }
-                emitter_.emitLine("    " + varName + " = [" + varName + "];");
-                emitter_.emitLine("    " + varName + ".__boxed = true;");
+                emitter_.emitLine(varName + " = [" + varName + "];");
+                emitter_.emitLine(varName + ".__boxed = true;");
             }
             continue;
         }

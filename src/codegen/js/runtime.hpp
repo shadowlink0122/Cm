@@ -87,7 +87,9 @@ inline void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string
         emitter.increaseIndent();
         emitter.emitLine("if (!Array.isArray(b) || a.length !== b.length) return false;");
         emitter.emitLine("for (let i = 0; i < a.length; i++) {");
-        emitter.emitLine("    if (!__cm_deep_equal(a[i], b[i])) return false;");
+        emitter.increaseIndent();
+        emitter.emitLine("if (!__cm_deep_equal(a[i], b[i])) return false;");
+        emitter.decreaseIndent();
         emitter.emitLine("}");
         emitter.emitLine("return true;");
         emitter.decreaseIndent();
@@ -97,8 +99,10 @@ inline void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string
         emitter.emitLine("const keysB = Object.keys(b);");
         emitter.emitLine("if (keysA.length !== keysB.length) return false;");
         emitter.emitLine("for (const key of keysA) {");
+        emitter.increaseIndent();
         emitter.emitLine(
-            "    if (!keysB.includes(key) || !__cm_deep_equal(a[key], b[key])) return false;");
+            "if (!keysB.includes(key) || !__cm_deep_equal(a[key], b[key])) return false;");
+        emitter.decreaseIndent();
         emitter.emitLine("}");
         emitter.emitLine("return true;");
         emitter.decreaseIndent();

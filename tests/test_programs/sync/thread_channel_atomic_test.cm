@@ -103,8 +103,9 @@ void* flag_worker(void* arg) {
     int* flag = flag_addr as int*;
     int* counter = counter_addr as int*;
 
-    // フラグが1になるまでスピンウェイト
+    // フラグが1になるまでスピンウェイト（CPU負荷軽減）
     while (load_i32(flag) == 0) {
+        sleep_ms(1);
     }
 
     // フラグが1の間カウント
