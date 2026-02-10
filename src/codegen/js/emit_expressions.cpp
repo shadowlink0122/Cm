@@ -556,6 +556,12 @@ cm::hir::TypePtr JSCodeGen::getOperandType(const mir::MirOperand& operand,
         return getPlaceType(place, func);
     }
 
+    // 定数オペランド（true/false/整数リテラル等）の型情報を返す
+    if (operand.kind == mir::MirOperand::Constant) {
+        const auto& constant = std::get<mir::MirConstant>(operand.data);
+        return constant.type;
+    }
+
     return nullptr;
 }
 
