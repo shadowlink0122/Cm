@@ -73,6 +73,17 @@ cm compile program.cm -o output
 - ✅ 最適化が効く
 - ❌ コンパイル時間がかかる
 
+### check - 構文・型チェック
+
+```bash
+cm check program.cm
+```
+
+**特徴:**
+- ✅ コンパイルなしでチェック
+- ✅ エラー箇所を詳細表示
+- ✅ LLVM不要
+
 ---
 
 ## コンパイラオプション
@@ -101,6 +112,9 @@ cm compile program.cm -o program
 
 # WebAssembly
 cm compile program.cm --target=wasm -o program.wasm
+
+# JavaScript
+cm compile program.cm --target=js -o program.js
 ```
 
 ### 出力形式
@@ -147,7 +161,15 @@ gdb ./program_debug
 ✅ cmコマンドの基本的な使い方を理解した  
 ✅ デバッグ方法がわかった  
 ✅ 最適化オプションを知った  
+✅ ターゲット（Native/WASM/JS）を理解した  
 ⏭️ 次は [LLVMバックエンド](llvm.html) を学びましょう
+
+## 関連リンク
+
+- [環境構築](../basics/setup.html) - makeコマンド一覧
+- [Linter](linter.html) - 静的解析
+- [Formatter](formatter.html) - コードフォーマット
+- [JSバックエンド](js-compilation.html) - JavaScript出力
 
 ---
 
@@ -156,4 +178,4 @@ gdb ./program_debug
 
 ---
 
-**最終更新:** 2026-02-08
+**最終更新:** 2026-02-10
