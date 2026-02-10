@@ -210,9 +210,15 @@ set(CM_SOURCES
 # JavaScript backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/codegen/js/codegen.cpp
+    src/codegen/js/utilities.cpp
+    src/codegen/js/emit_function.cpp
+    src/codegen/js/analysis.cpp
+    src/codegen/js/css_optimization.cpp
+    src/codegen/js/structured_flow.cpp
     src/codegen/js/control_flow.cpp
     src/codegen/js/emit_statements.cpp
     src/codegen/js/emit_expressions.cpp
+    src/codegen/js/validation.cpp
 )
 
 # Add LLVM sources if enabled

@@ -373,12 +373,55 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 std::string enumName = lookupName.substr(14);
 
                 // enumDefsから最大ペイロードサイズを取得
+                // LLVM DataLayoutを使用して構造体型のサイズも正確に計算
                 uint32_t maxPayloadSize = 8;  // デフォルト8バイト
                 auto enumIt = enumDefs.find(enumName);
                 if (enumIt != enumDefs.end() && enumIt->second) {
-                    maxPayloadSize = enumIt->second->max_payload_size();
-                    if (maxPayloadSize == 0)
-                        maxPayloadSize = 8;
+                    uint32_t computedMax = 0;
+                    for (const auto& member : enumIt->second->members) {
+                        uint32_t memberSize = 0;
+                        for (const auto& [fieldName, fieldType] : member.fields) {
+                            if (!fieldType)
+                                continue;
+                            // 構造体型の場合はconvertTypeでLLVM型を取得してサイズを計算
+                            if (fieldType->kind == hir::TypeKind::Struct ||
+                                fieldType->kind == hir::TypeKind::Generic) {
+                                auto llvmFieldType = convertType(fieldType);
+                                if (llvmFieldType) {
+                                    auto dl = module->getDataLayout();
+                                    memberSize += dl.getTypeAllocSize(llvmFieldType);
+                                } else {
+                                    memberSize += 8;  // フォールバック
+                                }
+                            } else {
+                                // プリミティブ型のサイズ計算
+                                switch (fieldType->kind) {
+                                    case hir::TypeKind::Bool:
+                                    case hir::TypeKind::Char:
+                                    case hir::TypeKind::Tiny:
+                                    case hir::TypeKind::UTiny:
+                                        memberSize += 1;
+                                        break;
+                                    case hir::TypeKind::Short:
+                                    case hir::TypeKind::UShort:
+                                        memberSize += 2;
+                                        break;
+                                    case hir::TypeKind::Int:
+                                    case hir::TypeKind::UInt:
+                                    case hir::TypeKind::Float:
+                                        memberSize += 4;
+                                        break;
+                                    default:
+                                        memberSize += 8;
+                                        break;
+                                }
+                            }
+                        }
+                        if (memberSize > computedMax) {
+                            computedMax = memberSize;
+                        }
+                    }
+                    maxPayloadSize = (computedMax > 0) ? computedMax : 8;
                 }
 
                 auto structType = llvm::StructType::create(ctx.getContext(), lookupName);

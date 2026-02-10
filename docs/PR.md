@@ -1,318 +1,158 @@
 [English](PR.en.html)
 
-# v0.13.1 Release - Cm言語コンパイラ
+# v0.14.0 Release - Cm言語コンパイラ
 
 ## 概要
 
-v0.13.1は**GPU/Metal対応**、**ARM64ネイティブビルド**、**標準ライブラリ安定化**、**HTTPS対応**、**リテラル型完全サポート**に焦点を当てた大規模アップデートです。さらに**OpenSSLリンカパスのアーキテクチャ対応修正**、**WASMテスト安定化**、**サポート環境の明確化**、**CI環境の固定化**を行いました。
+v0.14.0は**JavaScriptバックエンドの大規模改善**、**Enum Associated Data修正**、**Tagged Union構造体ペイロード修正**に焦点を当てたリリースです。JSテスト通過率が55%から77%に向上し、NativeとJSの出力一致性が大幅に改善されました。
 
-## 🎯 主要な新機能
+## 🎯 主要な変更
 
-### 1. GPU/Metal対応
+### 1. JSバックエンド大規模リファクタリング
 
-Apple Metal GPUバックエンドによるGPU演算を実装しました。
+JSコードジェネレータを大幅にリファクタリングし、1,600行以上の不要コードを削除しました。
 
-```cm
-import std::gpu::create_context;
-import std::gpu::gpu_alloc;
-import std::gpu::gpu_compute;
+| 変更 | 詳細 |
+|------|------|
+| codegen.cpp | -1,618行（大規模整理） |
+| emit_expressions.cpp | +124行（式出力改善） |
+| emit_statements.cpp | +80行（文出力改善） |
+| builtins.hpp | +71行（ビルトイン拡充） |
 
-int main() {
-    long ctx = create_context();
-    long buf_a = gpu_alloc(ctx, a_data, 4);
-    long buf_b = gpu_alloc(ctx, b_data, 4);
-    gpu_compute(ctx, "vector_add", buf_a, buf_b, buf_out, 4);
-    return 0;
-}
-```
+#### JSテスト通過率
 
-- Metal Shading Language (MSL) カーネル実行
-- int/float/double型のGPUバッファ管理
-- Nativeコンパイル対応（GPU XOR NN学習テスト搭載）
+| バージョン | パス | 失敗 | スキップ | 通過率 |
+|-----------|------|------|---------|--------|
+| v0.13.1 | 206 | 119 | 47 | 55% |
+| **v0.14.0** | **285** | **0** | **87** | **77%** |
 
-### 2. ARM64ネイティブビルド & マルチアーキテクチャ対応
-
-x86_64 LLVM（Rosetta 2）からARM64 LLVMへ移行し、`ARCH`オプションで自動切替が可能になりました。
+#### JSコンパイルの使い方
 
 ```bash
-make build              # デフォルト（LLVM自動検出）
-make build ARCH=arm64   # ARM64ビルド
-make build ARCH=x86_64  # x86_64ビルド
+./cm compile --target=js hello.cm
+node output.js
 ```
 
-### 3. HTTPS (TLS) 対応
+### 2. Enum Associated Dataのprintln出力修正
 
-OpenSSL 3.6.0による暗号化通信:
+match armのペイロード変数を`println`で出力する際のランタイムハングを修正。
 
 ```cm
-import std::http::request;
+enum Message {
+    Quit,
+    Write(string)
+}
 
 int main() {
-    request("https://example.com", "GET");
+    Message m = Message::Write("Hello");
+    match (m) {
+        Message::Write(t) => {
+            println(t);  // v0.13.1: ハング → v0.14.0: "Hello"
+        }
+        _ => {}
+    }
     return 0;
 }
 ```
 
-### 4. ジェネリックコンストラクタ/デストラクタ
+### 3. Tagged Union構造体ペイロードサイズ修正
 
-`self()`/`~self()`構文による慣用的なライフサイクル管理:
-
-```cm
-struct Vector<T> {
-    T* data;
-    int size;
-    int capacity;
-
-    self() {
-        this.data = malloc(8 * sizeof(T)) as T*;
-        this.size = 0;
-        this.capacity = 8;
-    }
-
-    ~self() {
-        free(this.data as void*);
-    }
-}
-```
-
-### 5. 標準ライブラリ安定化
-
-| モジュール | 内容 |
-|-----------|------|
-| `std::collections` | Vector, Queue, HashMap（self()/~self()） |
-| `std::sync` | Mutex, Channel, Atomic |
-| `std::http` | HTTP/HTTPS通信（struct+impl API） |
-| `std::core::result` | CmResult\<T, E\>型 |
-
-### 6. const定数評価拡張
-
-- **const folding**: コンパイル時定数畳み込みの改善
-- **Octalリテラル**: `0o777`形式の8進数リテラルサポート
-
-### 7. リテラル型の関数引数・戻り値サポート
-
-リテラル型が関数の引数・戻り値として完全にサポートされました。
+3フィールド以上の構造体ペイロードの破損を修正。
 
 ```cm
-typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
-typedef StatusCode = 200 | 400 | 404 | 500;
+struct RGB { int r; int g; int b; }
+enum Color { None, Set(RGB) }
 
-void handle_request(HttpMethod method) {
-    println("Method: {method}");
-}
-
-HttpMethod get_method() {
-    return "GET";
-}
-```
-
-### 8. typedef Union配列の関数引数・戻り値対応
-
-Union型配列を関数間で受け渡しできるようになりました。
-
-```cm
-typedef Value = string | int | bool;
-
-Value[3] make_values() {
-    Value[3] arr = ["hello" as Value, 42 as Value, true as Value];
-    return arr;
-}
-
-void print_values(Value[3] vals) {
-    string s = vals[0] as string;
-    println("s={s}");
-}
+// v0.13.1: Set(RGB{255, 128, 0}) → b=1に破損
+// v0.14.0: Set(RGB{255, 128, 0}) → b=0（正常）
 ```
 
 ---
 
 ## 🐛 バグ修正
 
-### 配列リテラル内Union Castの二重生成バグ修正
-
-| 問題 | 原因 | 修正 |
-|-----|------|------|
-| Union配列の値が破壊される | `lower_array_literal`でtypedef未解決の型を使用 | `expr_basic.cpp`で解決済みの型から取得 |
-
-### リテラル型の関数引数での文字列値破壊バグ修正
-
-| 問題 | 原因 | 修正 |
-|-----|------|------|
-| 文字列リテラル型がゴミ値に | `resolve_typedef()`がLiteralUnion型を素通り | `base.hpp`/`context.hpp`に基底型変換を追加 |
+| 問題 | 原因 | 修正ファイル |
+|-----|------|------------|
+| println型判定の誤り | AST型チェッカーがmatch armのpayload変数の型を`int`に設定 | `expr_call.cpp` |
+| ペイロードロードエラー | Tagged Unionの非構造体ペイロード型が`i32`にハードコード | `mir_to_llvm.cpp` |
+| 構造体ペイロードサイズ計算 | `max_payload_size()`がStruct型をデフォルト8バイトで計算 | `types.cpp` |
 
 ---
 
-## 🔧 ビルド・インフラ改善
+## 🔧 ビルド・テスト改善
 
-### OpenSSLリンカパスのアーキテクチャ対応修正
+### JSスキップファイル整理
 
-ネイティブビルド時のOpenSSLリンクで、ARM64環境にもかかわらずx86_64版のパスを参照するバグを修正しました。
-
-| 問題 | 原因 | 修正 |
-|-----|------|------|
-| ARM64でOpenSSLリンクエラー | `brew --prefix openssl`がx86_64パスを返す | アーキテクチャに応じたパス優先参照に変更 |
-
-- ARM64: `/opt/homebrew/opt/openssl@3` を優先
-- x86_64: `/usr/local/opt/openssl@3` を優先
-- フォールバック: `brew --prefix openssl@3`
-
-### WASMテスト安定化
-
-WASMバックエンドで未サポートのネイティブAPI（sync, net, gpu）を使うテストに`.skip`ファイルを追加し、WASMテスト全体が0 FAILになりました。
-
-### サポート環境の明確化
-
-ドキュメントにサポート環境を明記しました:
-
-| OS | アーキテクチャ | ステータス |
-|----|-------------|----------|
-| **macOS 14+** | ARM64 (Apple Silicon) | ✅ 完全サポート |
-| **Ubuntu 22.04** | x86_64 | ✅ 完全サポート |
-| Windows | - | ❌ 未サポート |
-
-- README.md、QUICKSTART.md、index.md（日英）、setup.md からWindows記述を削除
-- アーキテクチャ別インストール手順を追加（macOS ARM64/Intel分割）
-
-### CI環境の固定化
-
-全CIワークフローで明示的なOS/アーキテクチャ指定を導入:
-
-| 変更前 | 変更後 | アーキテクチャ |
-|--------|--------|---------------|
-| `macos-latest` | `macos-14` | ARM64 |
-| `ubuntu-latest` | `ubuntu-22.04` | x86_64 |
-
-- CMake構成に `-DCM_TARGET_ARCH=${{ matrix.arch }}` を追加
-- 対象: ci.yml, test-interpreter.yml, test-llvm-native.yml, test-llvm-wasm.yml, unit-tests.yml, benchmark.yml
+| カテゴリ | 理由 |
+|---------|------|
+| `asm/` | インラインアセンブリはJS非対応 |
+| `io/` | ファイルI/OはJS非対応 |
+| `net/` | TCP/HTTPはJS非対応 |
+| `sync/` | Mutex/Channel/AtomicはJS非対応 |
+| `thread/` | スレッドはJS非対応 |
 
 ---
 
-## 🔧 チュートリアル・ドキュメント改善
+## 📁 変更ファイル一覧
 
-### 新規チュートリアル
+### JSバックエンド
 
-| ドキュメント | 内容 |
-|------------|------|
-| `docs/tutorials/ja/stdlib/` | 標準ライブラリ（Vector, Queue, HashMap, IO, HTTP, GPU, Math, Mem） |
-| `docs/tutorials/ja/stdlib/concurrency/` | 並行処理（Thread, Mutex, Channel, Atomic） |
-| `docs/tutorials/ja/advanced/extern.md` | extern/FFI連携 |
-| `docs/tutorials/ja/advanced/inline-asm.md` | インラインアセンブリ |
-| `docs/tutorials/ja/internals/` | コンパイラ内部構造 |
+| ファイル | 変更内容 |
+|---------|---------| 
+| `src/codegen/js/codegen.cpp` | 大規模リファクタリング（-1,618行） |
+| `src/codegen/js/emit_expressions.cpp` | 式出力改善 |
+| `src/codegen/js/emit_statements.cpp` | 文出力改善 |
+| `src/codegen/js/builtins.hpp` | ビルトイン関数拡充 |
+| `src/codegen/js/runtime.hpp` | ランタイムヘルパー追加 |
+| `src/codegen/js/types.hpp` | 型マッピング改善 |
 
-### 更新チュートリアル
-
-| ドキュメント | 変更 |
-|------------|------|
-| `docs/tutorials/*/types/typedef.md` | リテラル型セクション拡充（関数引数・戻り値の例を追加） |
-| `docs/tutorials/*/types/enums.md` | Tagged Union/Match式の解説強化 |
-| 各チュートリアル | 親ページ（index.md）リンクを追加 |
-
----
-
-## 📁 変更ファイル一覧（主要）
-
-### 新機能
+### LLVMバックエンド/MIR修正
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `std/gpu/mod.cm` | Metal GPU演算モジュール |
-| `std/gpu/gpu_runtime.mm` | Objective-C++ Metal GPU ランタイム |
-| `std/http/mod.cm` | HTTP/HTTPS通信モジュール |
-| `std/http/http_runtime.cpp` | HTTP通信ランタイム（OpenSSL統合） |
-| `std/sync/mod.cm` | Mutex/Channel/Atomic同期プリミティブ |
-| `std/sync/sync_runtime.cpp` | 同期ランタイム（pthread） |
-| `std/sync/channel_runtime.cpp` | Channelランタイム |
-| `std/collections/` | Vector/Queue/HashMap(self()/~self()) |
-| `std/core/result.cm` | CmResult\<T, E\>型 |
-| `std/net/net_runtime.cpp` | TCP/UDPネットワーキングランタイム |
+| `src/codegen/llvm/core/types.cpp` | Tagged Unionペイロードサイズ計算修正 |
+| `src/codegen/llvm/core/mir_to_llvm.cpp` | ペイロードロード修正 |
+| `src/mir/lowering/expr_call.cpp` | println型判定修正 |
+| `src/mir/lowering/impl.cpp` | impl lowering改善 |
 
-### コンパイラ修正
+### テスト
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `src/mir/lowering/base.hpp` | LiteralUnion→基底型変換、typedef解決強化 |
-| `src/mir/lowering/context.hpp` | 同上（LoweringContext版） |
-| `src/mir/lowering/expr_basic.cpp` | 配列リテラルのelem_type解決修正 |
-| `src/mir/lowering/stmt.cpp` | MIR文の改善 |
-| `src/codegen/llvm/core/mir_to_llvm.cpp` | Union Cast安全性改善 |
-| `src/codegen/llvm/core/types.cpp` | 型変換ロジック改善 |
-| `src/codegen/llvm/core/utils.cpp` | ユーティリティ追加 |
-| `src/codegen/llvm/native/codegen.hpp` | ARM64フラグ対応、OpenSSLパスのアーキテクチャ対応 |
-| `src/codegen/llvm/native/target.hpp` | ARM64トリプル対応 |
-| `src/frontend/lexer/lexer.hpp` | Octalリテラルサポート |
-| `src/frontend/parser/parser_expr.cpp` | パーサー改善 |
-| `src/frontend/types/checking/call.cpp` | 型チェック改善 |
-
-### ビルドシステム・CI
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `CMakeLists.txt` | ARM64自動検出、LLVM/OpenSSLパス設定 |
-| `Makefile` | マルチアーキテクチャ自動環境設定 |
-| `.github/workflows/ci.yml` | macos-14/ubuntu-22.04固定、CM_TARGET_ARCH追加 |
-| `.github/workflows/test-interpreter.yml` | 同上 |
-| `.github/workflows/test-llvm-native.yml` | 同上 |
-| `.github/workflows/test-llvm-wasm.yml` | 同上 |
-| `.github/workflows/unit-tests.yml` | 同上 |
-| `.github/workflows/benchmark.yml` | ubuntu-22.04固定 |
-
-### ドキュメント
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `README.md` | サポート環境テーブル追加、CIマトリクス更新 |
-| `docs/QUICKSTART.md` | サポート環境テーブル追加 |
-| `docs/index.md` | サポート環境注記追加 |
-| `docs/index.en.md` | Supported Platforms注記追加 |
-| `docs/tutorials/ja/basics/setup.md` | macOS ARM64/Intel分割、Windows削除 |
-| `docs/ROADMAP.md` | 削除 |
+| `tests/test_programs/enum/associated_data.*` | .error → .expected |
+| `tests/test_programs/asm/.skip` 等 | JSスキップファイル追加 |
 
 ---
 
 ## 🧪 テスト状況
 
-| カテゴリ | 通過 | 失敗 | スキップ |
-|---------|-----|------|---------|
+| バックエンド | 通過 | 失敗 | スキップ |
+|------------|-----|------|---------|
 | JIT (O0) | 363 | 0 | 9 |
-
-### v0.13.0からの新規テスト (+12)
-
-| テスト | カテゴリ |
-|-------|---------|
-| `gpu/gpu_basic.cm` | GPU |
-| `gpu/gpu_xor_nn_test.cm` | GPU |
-| `gpu/gpu_float_test.cm` | GPU |
-| `http/http_external_test.cm` | HTTP |
-| `http/http_rest_test.cm` | HTTP |
-| `sync/thread_channel_atomic_test.cm` | 同期 |
-| `const/octal_test.cm` | const |
-| `const/const_eval_test.cm` | const |
-| `types/typedef_literal_func.cm` | 型 |
-| `types/typedef_union_comprehensive.cm` | 型 |
-| `types/union_array_func.cm` | 型 |
-| `enum/union_array_tuple_test.cm` | enum |
+| JavaScript | 285 | 0 | 87 |
 
 ---
 
 ## 📊 統計
 
-- **テスト総数**: 372（v0.13.0の360から12増加）
-- **テスト通過**: 363
-- **変更ファイル数**: 189
-- **追加行数**: +12,149
-- **削除行数**: -1,947
-- **新規標準ライブラリモジュール**: gpu, http, collections, core/result, sync
+- **テスト総数**: 372
+- **JITテスト通過**: 363（0失敗）
+- **JSテスト通過**: 285（0失敗、+79改善）
+- **変更ファイル数**: 27
+- **追加行数**: +468
+- **削除行数**: -1,708
 
 ---
 
 ## ✅ チェックリスト
 
 - [x] `make tip` 全テスト通過（363 PASS / 0 FAIL）
-- [x] リリースノート更新（`docs/releases/v0.13.1.md`）
-- [x] チュートリアル更新（日英両方）
+- [x] `make tjp` 全テスト通過（285 PASS / 0 FAIL）
+- [x] リリースノート更新（`docs/releases/v0.14.0.md`）
+- [x] JSチュートリアル追加（`docs/tutorials/ja/compiler/js-compilation.md`）
 - [x] ローカルパス情報なし
 
 ---
 
 **リリース日**: 2026年2月10日
-**バージョン**: v0.13.1
+**バージョン**: v0.14.0

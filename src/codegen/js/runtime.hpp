@@ -24,6 +24,25 @@ inline void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string
         emitter.emitLine();
     }
 
+    // ポインタ演算ヘルパー: ポインタを{__arr, __idx}オブジェクトとして表現
+    if (needs("__cm_ptr_add")) {
+        emitter.emitLine("function __cm_ptr_add(p, n) {");
+        emitter.increaseIndent();
+        emitter.emitLine("return {__arr: p.__arr, __idx: p.__idx + n};");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
+    if (needs("__cm_ptr_sub")) {
+        emitter.emitLine("function __cm_ptr_sub(p, n) {");
+        emitter.increaseIndent();
+        emitter.emitLine("return {__arr: p.__arr, __idx: p.__idx - n};");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
     // 配列スライス
     if (needs("__cm_slice")) {
         emitter.emitLine("function __cm_slice(arr, start, end) {");

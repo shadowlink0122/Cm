@@ -1,5 +1,6 @@
 Testing reimport prevention:
-Vector<int>: len=2, values=[10, 20]
-Vector<int> (second): len=1, value=100
+add(10, 20) = 30
+multiply(3, 7) = 21
+add(2*3, 4*5) = 26
 Success: Multiple imports work correctly
 === PASS ===

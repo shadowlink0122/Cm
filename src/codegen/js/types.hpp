@@ -38,8 +38,13 @@ inline std::string sanitizeIdentifier(const std::string& name) {
         result.replace(pos, 2, "__");
     }
 
-    // "<", ">", ",", " " を "_" に置換
-    const std::string unsafe = "<>, ";
+    // "[]" を "_arr" に置換（スライス型名のサニタイズ）
+    while ((pos = result.find("[]")) != std::string::npos) {
+        result.replace(pos, 2, "_arr");
+    }
+
+    // "<", ">", ",", " ", "[", "]" を "_" に置換
+    const std::string unsafe = "<>, []";
     for (char c : unsafe) {
         while ((pos = result.find(c)) != std::string::npos) {
             result.replace(pos, 1, "_");

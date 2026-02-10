@@ -63,6 +63,9 @@ class JSCodeGen {
     std::unordered_set<mir::LocalId> declare_on_assign_;
     std::unordered_set<mir::LocalId> declared_locals_;
 
+    // ポインタ使用バリデーション（malloc/free/void*検出）
+    bool validatePointerUsage(const mir::MirProgram& program);
+
     // プリアンブル（ヘルパー関数など）
     void emitPreamble();
     void emitPostamble(const mir::MirProgram& program);
@@ -163,6 +166,9 @@ class JSCodeGen {
     std::string formatStructFieldKey(const mir::MirStruct& st, const std::string& field_name) const;
     std::string mapExternJsName(const std::string& name) const;
     std::unordered_set<std::string> collectUsedRuntimeHelpers(const std::string& code) const;
+
+    // 構造体のデフォルト値生成（ネストフィールド対応）
+    std::string getStructDefaultValue(const hir::Type& type) const;
 
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;

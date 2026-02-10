@@ -839,6 +839,10 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
             return false;
         }
 
+        // 元のローカル変数の型情報を保持（char型等の情報がJS codegen等で必要）
+        if (!operand.type && place->local < func.locals.size()) {
+            operand.type = func.locals[place->local].type;
+        }
         operand.kind = MirOperand::Constant;
         operand.data = value.constant;
         return true;

@@ -230,8 +230,10 @@ run_single_test() {
     fi
 
     # バックエンド固有のexpectファイルがあれば優先して使用
+    # バックエンド固有のexpectファイルがある場合、汎用errorファイルよりも優先する
     if [ -f "$backend_expect_file" ]; then
         expect_file="$backend_expect_file"
+        is_error_test=false
     fi
 
     # expectファイルもerrorファイルもない場合はスキップ

@@ -2075,9 +2075,16 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             // 式の場合、評価して型に基づいて選択
             LocalId arg_local = lower_expression(*first_arg, ctx);
 
-            // 型チェック
-            if (first_arg->type) {
-                switch (first_arg->type->kind) {
+            // 型チェック: MIRローカルの型情報を優先し、フォールバックとしてHIR式の型を使用
+            // match armのペイロード変数など、AST型チェッカーが正しい型を設定できないケースでは
+            // MIRローカルの型（HirLet経由で正しく設定される）を使用する必要がある
+            hir::TypePtr arg_type = first_arg->type;
+            if (arg_local < ctx.func->locals.size() && ctx.func->locals[arg_local].type) {
+                // MIRローカルに型情報がある場合、それを優先
+                arg_type = ctx.func->locals[arg_local].type;
+            }
+            if (arg_type) {
+                switch (arg_type->kind) {
                     case hir::TypeKind::String:
                         // 文字列変数で複数引数がある場合はフォーマット関数を使う
                         if (call.args.size() > 1) {

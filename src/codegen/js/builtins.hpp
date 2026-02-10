@@ -107,15 +107,25 @@ inline bool isBuiltinFunction(const std::string& name) {
         "cm_slice_first_i64",
         "cm_slice_last_i32",
         "cm_slice_last_i64",
+        "cm_slice_push_i8",
         "cm_slice_push_i32",
         "cm_slice_push_i64",
+        "cm_slice_push_f32",
+        "cm_slice_push_f64",
+        "cm_slice_push_ptr",
         "cm_slice_pop_i32",
         "cm_slice_pop_i64",
+        "cm_slice_pop_f32",
+        "cm_slice_pop_ptr",
+        "cm_slice_delete",
+        "cm_slice_clear",
         "cm_slice_len",
         "cm_slice_cap",
         "cm_slice_subslice",
         "cm_slice_set_i32",
         "cm_slice_set_i64",
+        "cm_slice_set_f32",
+        "cm_slice_set_ptr",
         "cm_slice_push_slice",
         "cm_make_slice",
         "cm_slice_get_subslice",
@@ -136,6 +146,16 @@ inline bool isBuiltinFunction(const std::string& name) {
         // ランタイムヘルパー
         "__cm_slice",
         "__cm_str_slice",
+        // スライス生成
+        "cm_slice_new",
+        // メモリ管理 (JSではオブジェクトベースエミュレーション)
+        "malloc",
+        "realloc",
+        "free",
+        "memcpy",
+        "memset",
+        // 低レベルI/O
+        "__print__",
     };
     return builtins.count(name) > 0;
 }
@@ -402,12 +422,25 @@ inline std::string emitBuiltinCall(const std::string& name,
         return "__cm_unwrap(" + argStrs[0] + ")[__cm_unwrap(" + argStrs[0] + ").length - 1]";
     }
     // cm_slice_push_*: (slice, element) -> void
-    if ((name == "cm_slice_push_i32" || name == "cm_slice_push_i64") && argStrs.size() >= 2) {
+    if ((name == "cm_slice_push_i8" || name == "cm_slice_push_i32" || name == "cm_slice_push_i64" ||
+         name == "cm_slice_push_f32" || name == "cm_slice_push_f64" ||
+         name == "cm_slice_push_ptr") &&
+        argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ").push(" + argStrs[1] + ")";
     }
     // cm_slice_pop_*: (slice) -> 要素
-    if ((name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64") && argStrs.size() >= 1) {
+    if ((name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" || name == "cm_slice_pop_f32" ||
+         name == "cm_slice_pop_ptr") &&
+        argStrs.size() >= 1) {
         return "__cm_unwrap(" + argStrs[0] + ").pop()";
+    }
+    // cm_slice_delete: (slice, index) -> void
+    if (name == "cm_slice_delete" && argStrs.size() >= 2) {
+        return "__cm_unwrap(" + argStrs[0] + ").splice(" + argStrs[1] + ", 1)";
+    }
+    // cm_slice_clear: (slice) -> void
+    if (name == "cm_slice_clear" && argStrs.size() >= 1) {
+        return "(__cm_unwrap(" + argStrs[0] + ").length = 0)";
     }
     // cm_slice_len: (slice) -> 長さ
     if (name == "cm_slice_len" && argStrs.size() >= 1) {
@@ -422,12 +455,34 @@ inline std::string emitBuiltinCall(const std::string& name,
         return "__cm_unwrap(" + argStrs[0] + ").slice(" + argStrs[1] + ", " + argStrs[2] + ")";
     }
     // cm_slice_set_*: (slice, index, value) -> void
-    if ((name == "cm_slice_set_i32" || name == "cm_slice_set_i64") && argStrs.size() >= 3) {
+    if ((name == "cm_slice_set_i32" || name == "cm_slice_set_i64" || name == "cm_slice_set_f32" ||
+         name == "cm_slice_set_ptr") &&
+        argStrs.size() >= 3) {
         return "(__cm_unwrap(" + argStrs[0] + ")[" + argStrs[1] + "] = " + argStrs[2] + ")";
     }
     // cm_slice_push_slice: (outer_slice, inner_slice) -> void
     if (name == "cm_slice_push_slice" && argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ").push(" + argStrs[1] + ")";
+    }
+    // malloc: (size) -> ヒープオブジェクト (JSではオブジェクト)
+    if (name == "malloc" && argStrs.size() >= 1) {
+        return "{value: 0}";
+    }
+    // realloc: (ptr, size) -> 同じオブジェクトを返す
+    if (name == "realloc" && argStrs.size() >= 2) {
+        return argStrs[0];
+    }
+    // free: (ptr) -> void (JSではGCが管理)
+    if (name == "free") {
+        return "undefined";
+    }
+    // memcpy: (dest, src, size) -> dest
+    if (name == "memcpy" && argStrs.size() >= 3) {
+        return "Object.assign(" + argStrs[0] + ", " + argStrs[1] + ")";
+    }
+    // memset: (ptr, val, size) -> ptr
+    if (name == "memset" && argStrs.size() >= 3) {
+        return argStrs[0];
     }
     // cm_make_slice: (capacity, elem_size) -> 新しい空スライス
     if (name == "cm_make_slice" && argStrs.size() >= 2) {
@@ -499,6 +554,16 @@ inline std::string emitBuiltinCall(const std::string& name,
     // cm_slice_to_array: 同様にコピー
     if (name == "cm_slice_to_array" && argStrs.size() >= 1) {
         return "[...__cm_unwrap(" + argStrs[0] + ")]";
+    }
+
+    // cm_slice_new: (elem_size, capacity) -> 新しい空スライス
+    if (name == "cm_slice_new" && argStrs.size() >= 2) {
+        return "[]";
+    }
+
+    // __print__: 改行なし出力
+    if (name == "__print__" && argStrs.size() >= 1) {
+        return "process.stdout.write(String(" + argStrs[0] + "))";
     }
 
     // 不明な組み込み関数

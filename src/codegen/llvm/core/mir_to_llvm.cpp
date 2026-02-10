@@ -1220,6 +1220,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         if (currentMIRFunction &&
                             srcPlace.local < currentMIRFunction->locals.size()) {
                             auto& srcLocal = currentMIRFunction->locals[srcPlace.local];
+
                             if (srcLocal.type && srcLocal.type->name.find("__TaggedUnion_") == 0) {
                                 isSrcTaggedUnionPayload = true;
                             }
@@ -1237,27 +1238,48 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         }
                     }
 
-                    // Tagged Unionペイロードから構造体へのコピー -> memcpy
-                    if (isSrcTaggedUnionPayload && isTargetStruct) {
-                        // ソースアドレス（Tagged Unionのfield[1] = i8配列）
-                        auto srcAddr = convertPlaceToAddress(srcPlace);
+                    // Tagged Unionペイロードからの値コピー
+                    if (isSrcTaggedUnionPayload) {
+                        if (isTargetStruct) {
+                            // 構造体ペイロード → memcpyで直接コピー
+                            auto srcAddr = convertPlaceToAddress(srcPlace);
 
-                        // ターゲットアドレス（構造体ローカル）
-                        auto destAddr = locals[assign.place.local];
-                        if (!destAddr && allocatedLocals.count(assign.place.local) > 0) {
-                            destAddr = locals[assign.place.local];
-                        }
+                            // ターゲットアドレス（構造体ローカル）
+                            auto destAddr = locals[assign.place.local];
+                            if (!destAddr && allocatedLocals.count(assign.place.local) > 0) {
+                                destAddr = locals[assign.place.local];
+                            }
 
-                        if (srcAddr && destAddr) {
-                            // 構造体サイズを取得
-                            auto llvmTargetType = convertType(targetType);
-                            auto dataLayout = module->getDataLayout();
-                            auto structSize = dataLayout.getTypeAllocSize(llvmTargetType);
+                            if (srcAddr && destAddr) {
+                                // 構造体サイズを取得
+                                auto llvmTargetType = convertType(targetType);
+                                auto dataLayout = module->getDataLayout();
+                                auto structSize = dataLayout.getTypeAllocSize(llvmTargetType);
 
-                            // memcpy: dest=構造体ローカル, src=i8配列, size=構造体サイズ
-                            builder->CreateMemCpy(destAddr, llvm::MaybeAlign(), srcAddr,
-                                                  llvm::MaybeAlign(), structSize);
-                            break;
+                                // memcpy: dest=構造体ローカル, src=i8配列, size=構造体サイズ
+                                builder->CreateMemCpy(destAddr, llvm::MaybeAlign(), srcAddr,
+                                                      llvm::MaybeAlign(), structSize);
+                                break;
+                            }
+                        } else if (targetType) {
+                            // 非構造体ペイロード（string/ptr/int等）
+                            // ペイロードバイト配列からターゲット型でロード
+                            auto srcAddr = convertPlaceToAddress(srcPlace);
+                            if (srcAddr) {
+                                auto llvmTargetType = convertType(targetType);
+                                auto loadVal =
+                                    builder->CreateLoad(llvmTargetType, srcAddr, "payload_load");
+
+                                auto destAddr = locals[assign.place.local];
+                                if (destAddr && allocatedLocals.count(assign.place.local) > 0) {
+                                    // allocaモード: load→store
+                                    builder->CreateStore(loadVal, destAddr);
+                                } else {
+                                    // SSAモード（string等allocaなし）: 直接値を設定
+                                    locals[assign.place.local] = loadVal;
+                                }
+                                break;
+                            }
                         }
                     }
                 }
