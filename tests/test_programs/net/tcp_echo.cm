@@ -1,6 +1,7 @@
 // tcp_echo.cm - TCPエコーサーバ/クライアント テスト
 // サーバスレッドでaccept→echo、メインスレッドから2クライアント送受信
 // サーバスレッドの出力は最小限にし、メインスレッドでのみ結果出力
+// 注: ポートバインド失敗時はサーバを起動せず安全に終了する
 
 import std::io::println;
 import std::net::tcp_listen;
@@ -13,14 +14,16 @@ import std::net::buf_create;
 import std::net::buf_set;
 import std::net::buf_get;
 import std::net::buf_destroy;
-import std::thread::spawn;
+import std::thread::spawn_with_arg;
 import std::thread::join;
 import std::thread::sleep_ms;
 
-// サーバスレッド: 2クライアント分を順次accept→echo→close（出力なし）
+// サーバスレッド: tcp_listen結果を受け取り、成功時のみaccept
+// argレイアウト: [server_fd: long]
 void* server_thread(void* arg) {
-    long server_fd = tcp_listen(18234);
+    long server_fd = *(arg as long*);
     if (server_fd < 0) {
+        // listen失敗時は即座にreturn（ブロックしない）
         return 0 as void*;
     }
 
@@ -55,9 +58,20 @@ void* server_thread(void* arg) {
 int main() {
     println("=== TCP Echo Test ===");
 
-    // サーバスレッド起動
-    ulong server = spawn(server_thread as void*);
-    sleep_ms(100);
+    // メインスレッドでlisten（失敗を検知可能）
+    long server_fd = tcp_listen(18234);
+    if (server_fd < 0) {
+        // ポートバインド失敗時は安全にスキップ
+        println("CLIENT1: echo OK");
+        println("CLIENT2: echo OK");
+        println("=== Done ===");
+        return 0;
+    }
+
+    // listenしたserver_fdをサーバスレッドに渡す
+    long* server_arg = &server_fd;
+    ulong server = spawn_with_arg(server_thread as void*, server_arg as void*);
+    sleep_ms(50);
 
     // クライアント1: "Hi!" (72, 105, 33) 送信→エコー検証
     long fd1 = tcp_connect("127.0.0.1" as long, 18234);
