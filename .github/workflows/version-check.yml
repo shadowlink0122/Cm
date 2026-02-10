@@ -1,0 +1,73 @@
+name: Version Check
+
+on:
+  push:
+    branches:
+      - 'feature/v*'
+  pull_request:
+    branches: [main]
+
+jobs:
+  version-check:
+    name: VERSION一致チェック
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: VERSIONファイルとブランチ名の整合チェック
+        run: |
+          # VERSIONファイル読み取り
+          if [ ! -f VERSION ]; then
+            echo "::error::VERSIONファイルが見つかりません"
+            exit 1
+          fi
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          echo "VERSION file: ${FILE_VERSION}"
+
+          # ブランチ名からバージョン抽出
+          # push: refs/heads/feature/v0.14.0 → 0.14.0
+          # PR: GITHUB_HEAD_REFにブランチ名が入る
+          if [ -n "$GITHUB_HEAD_REF" ]; then
+            BRANCH="$GITHUB_HEAD_REF"
+          else
+            BRANCH="${GITHUB_REF#refs/heads/}"
+          fi
+          echo "Branch: ${BRANCH}"
+
+          # feature/v*.*.* パターンの場合のみチェック
+          if [[ "$BRANCH" =~ ^feature/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            BRANCH_VERSION="${BASH_REMATCH[1]}"
+            echo "Branch version: ${BRANCH_VERSION}"
+            
+            if [ "$FILE_VERSION" != "$BRANCH_VERSION" ]; then
+              echo "::error::バージョン不一致! VERSIONファイル: ${FILE_VERSION}, ブランチ名: feature/v${BRANCH_VERSION}"
+              echo ""
+              echo "=========================================="
+              echo "  ❌ VERSION不一致検出"
+              echo "=========================================="
+              echo "  VERSIONファイル: ${FILE_VERSION}"
+              echo "  ブランチ名:     feature/v${BRANCH_VERSION}"
+              echo ""
+              echo "  修正方法:"
+              echo "    echo '${BRANCH_VERSION}' > VERSION"
+              echo "    git add VERSION && git commit -m 'fix: VERSIONを${BRANCH_VERSION}に更新'"
+              echo "=========================================="
+              exit 1
+            fi
+            
+            echo "::notice::✅ バージョン一致: ${FILE_VERSION}"
+          else
+            echo "::notice::feature/v*.*.* パターンのブランチではないためスキップ (branch: ${BRANCH})"
+          fi
+
+      - name: リリースノートの存在チェック
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          RELEASE_NOTE="docs/releases/v${FILE_VERSION}.md"
+          
+          if [ ! -f "$RELEASE_NOTE" ]; then
+            echo "::warning::リリースノートが見つかりません: ${RELEASE_NOTE}"
+          else
+            echo "::notice::✅ リリースノート確認: ${RELEASE_NOTE}"
+          fi
