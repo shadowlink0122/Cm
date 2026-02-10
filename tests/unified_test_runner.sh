@@ -187,14 +187,21 @@ run_single_test() {
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
     local category_skip_file="$(dirname "$test_file")/.skip"
+    local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
 
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
-            # ファイルに内容がある場合、バックエンド名でフィルタ
+            # バックエンド名の完全一致チェック
             if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND"
+                ((SKIPPED++))
+                return
+            fi
+            # backend:os 形式のチェック (例: llvm:linux)
+            if grep -qx "${BACKEND}:${current_os}" "$skip_file" 2>/dev/null; then
+                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND on $current_os"
                 ((SKIPPED++))
                 return
             fi
@@ -803,9 +810,15 @@ run_parallel_test() {
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
-            # ファイルに内容がある場合、バックエンド名でフィルタ
+            local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+            # バックエンド名の完全一致チェック
             if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo "SKIP:Skipped for $BACKEND" > "$result_file"
+                return
+            fi
+            # backend:os 形式のチェック (例: llvm:linux)
+            if grep -qx "${BACKEND}:${current_os}" "$skip_file" 2>/dev/null; then
+                echo "SKIP:Skipped for $BACKEND on $current_os" > "$result_file"
                 return
             fi
         else

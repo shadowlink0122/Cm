@@ -68,7 +68,7 @@ int main() {
 
     // Cmサーバスレッド起動
     ulong server = spawn(server_thread as void*);
-    sleep_ms(100);
+    sleep_ms(30);
 
     // HttpClient初期化
     HttpClient client;
