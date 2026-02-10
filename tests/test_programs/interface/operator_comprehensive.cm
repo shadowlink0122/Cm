@@ -82,7 +82,7 @@ int main() {
     println("10 / 3 = {quot.value}");
 
     Num rem = a % b;
-    println("10 %% 3 = {rem.value}");
+    println("10 % 3 = {rem.value}");
 
     // 比較演算子（if文経由）
     Num x = Num{value: 5};
@@ -139,7 +139,7 @@ int main() {
 
     c = Num{value: 17};
     c %= Num{value: 5};
-    println("17 %%= 5 -> {c.value}");
+    println("17 %= 5 -> {c.value}");
 
     // ビット複合代入
     Num d = Num{value: 0xFF};
