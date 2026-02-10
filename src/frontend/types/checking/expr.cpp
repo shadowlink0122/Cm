@@ -220,7 +220,10 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     bool is_assignment =
         (binary.op == ast::BinaryOp::Assign || binary.op == ast::BinaryOp::AddAssign ||
          binary.op == ast::BinaryOp::SubAssign || binary.op == ast::BinaryOp::MulAssign ||
-         binary.op == ast::BinaryOp::DivAssign || binary.op == ast::BinaryOp::ModAssign);
+         binary.op == ast::BinaryOp::DivAssign || binary.op == ast::BinaryOp::ModAssign ||
+         binary.op == ast::BinaryOp::BitAndAssign || binary.op == ast::BinaryOp::BitOrAssign ||
+         binary.op == ast::BinaryOp::BitXorAssign || binary.op == ast::BinaryOp::ShlAssign ||
+         binary.op == ast::BinaryOp::ShrAssign);
     if (is_assignment) {
         if (auto* ident = binary.left->as<ast::IdentExpr>()) {
             // move済み変数への代入は禁止
@@ -258,7 +261,13 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
         case ast::BinaryOp::AddAssign:
         case ast::BinaryOp::SubAssign:
         case ast::BinaryOp::MulAssign:
-        case ast::BinaryOp::DivAssign: {
+        case ast::BinaryOp::DivAssign:
+        case ast::BinaryOp::ModAssign:
+        case ast::BinaryOp::BitAndAssign:
+        case ast::BinaryOp::BitOrAssign:
+        case ast::BinaryOp::BitXorAssign:
+        case ast::BinaryOp::ShlAssign:
+        case ast::BinaryOp::ShrAssign: {
             if (auto* ident = binary.left->as<ast::IdentExpr>()) {
                 auto sym = scopes_.current().lookup(ident->name);
                 if (sym && sym->is_const) {
@@ -316,6 +325,54 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                             return ast::make_error();
                         }
                     }
+                }
+            }
+            // 複合代入演算子の場合、構造体のオペレーターオーバーロードをチェック
+            if (binary.op != ast::BinaryOp::Assign && ltype->kind == ast::TypeKind::Struct) {
+                std::string type_name = ltype->name;
+                std::string iface_name;
+                switch (binary.op) {
+                    case ast::BinaryOp::AddAssign:
+                        iface_name = "Add";
+                        break;
+                    case ast::BinaryOp::SubAssign:
+                        iface_name = "Sub";
+                        break;
+                    case ast::BinaryOp::MulAssign:
+                        iface_name = "Mul";
+                        break;
+                    case ast::BinaryOp::DivAssign:
+                        iface_name = "Div";
+                        break;
+                    case ast::BinaryOp::ModAssign:
+                        iface_name = "Mod";
+                        break;
+                    case ast::BinaryOp::BitAndAssign:
+                        iface_name = "BitAnd";
+                        break;
+                    case ast::BinaryOp::BitOrAssign:
+                        iface_name = "BitOr";
+                        break;
+                    case ast::BinaryOp::BitXorAssign:
+                        iface_name = "BitXor";
+                        break;
+                    case ast::BinaryOp::ShlAssign:
+                        iface_name = "Shl";
+                        break;
+                    case ast::BinaryOp::ShrAssign:
+                        iface_name = "Shr";
+                        break;
+                    default:
+                        break;
+                }
+                if (!iface_name.empty()) {
+                    auto it = impl_interfaces_.find(type_name);
+                    if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
+                        return ltype;  // オペレーターオーバーロード対応
+                    }
+                    error(binary.left->span, "Type '" + type_name + "' does not implement " +
+                                                 iface_name + " operator for compound assignment");
+                    return ast::make_error();
                 }
             }
             if (!types_compatible(ltype, rtype)) {

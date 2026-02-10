@@ -122,15 +122,45 @@ int main() {
     println("32 >> 2 = {shr.value}");
 
     // 複合代入演算子（演算子オーバーロード経由）
+    // 算術複合代入
     Num c = Num{value: 10};
-    c = c + Num{value: 5};
+    c += Num{value: 5};
     println("10 += 5 -> {c.value}");
 
-    c = c - Num{value: 3};
+    c -= Num{value: 3};
     println("15 -= 3 -> {c.value}");
 
-    c = c * Num{value: 2};
+    c *= Num{value: 2};
     println("12 *= 2 -> {c.value}");
+
+    c = Num{value: 20};
+    c /= Num{value: 4};
+    println("20 /= 4 -> {c.value}");
+
+    c = Num{value: 17};
+    c %= Num{value: 5};
+    println("17 %%= 5 -> {c.value}");
+
+    // ビット複合代入
+    Num d = Num{value: 0xFF};
+    d &= Num{value: 0x0F};
+    println("0xFF &= 0x0F -> {d.value}");
+
+    d = Num{value: 0xF0};
+    d |= Num{value: 0x0F};
+    println("0xF0 |= 0x0F -> {d.value}");
+
+    d = Num{value: 0xFF};
+    d ^= Num{value: 0x0F};
+    println("0xFF ^= 0x0F -> {d.value}");
+
+    Num e = Num{value: 1};
+    e <<= Num{value: 4};
+    println("1 <<= 4 -> {e.value}");
+
+    e = Num{value: 32};
+    e >>= Num{value: 2};
+    println("32 >>= 2 -> {e.value}");
 
     return 0;
 }

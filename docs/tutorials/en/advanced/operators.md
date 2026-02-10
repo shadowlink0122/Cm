@@ -148,19 +148,19 @@ impl Bits {
 }
 ```
 
-## Compound Assignment
+## Compound Assignment Operators
 
-Once a binary operator is defined, you can use `a = a + b` form:
+Once a binary operator is defined, the corresponding compound assignment operators (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) are automatically available.
 
 ```cm
 int main() {
     Vec2 v = Vec2{x: 10, y: 20};
-    v = v + Vec2{x: 5, y: 3};   // equivalent to v += Vec2{5, 3}
+    v += Vec2{x: 5, y: 3};   // equivalent to v = v + Vec2{5, 3}
+    v -= Vec2{x: 2, y: 1};   // equivalent to v = v - Vec2{2, 1}
+    v *= Vec2{x: 3, y: 2};   // equivalent to v = v * Vec2{3, 2}
     return 0;
 }
 ```
-
-> **Note:** The `v += ...` syntax sugar is not yet available. Use `v = v + ...` form instead.
 
 ## with (Auto-Implementation) vs Explicit
 
