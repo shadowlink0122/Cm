@@ -52,6 +52,14 @@ cmake --build build -j4
 ./cm compile examples/hello.cm --target=wasm -o hello.wasm
 ```
 
+### JavaScriptコンパイル
+
+```bash
+# JSへコンパイル
+./cm compile --target=js examples/hello.cm -o hello.js
+node hello.js
+```
+
 ### 構文チェック
 
 ```bash
@@ -160,8 +168,8 @@ make tlwp
 - **ジェネリクス**: 関数、構造体、インターフェース
 - **パターンマッチ**: match式、パターンガード
 - **モジュール**: import/export、名前空間、相対/絶対パス
-- **バックエンド**: インタプリタ、LLVM Native、WASM
+- **バックエンド**: インタプリタ、LLVM Native、WASM、JavaScript
 
 ---
 
-**最終更新:** 2026-02-08
+**最終更新:** 2026-02-10

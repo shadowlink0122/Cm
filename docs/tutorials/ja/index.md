@@ -7,10 +7,10 @@ has_children: true
 
 [English](../en/)
 
-# Cm言語チュートリアル v0.13.1
+# Cm言語チュートリアル v0.14.0
 
-**対象バージョン:** v0.13.1  
-**最終更新:** 2026-02-08
+**対象バージョン:** v0.14.0  
+**最終更新:** 2026-02-10
 
 Cm言語の全機能を段階的に学べる包括的なチュートリアル集です。
 
@@ -93,6 +93,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [コンパイラの使い方](compiler/usage.html) - コマンド・オプション
    - [LLVMバックエンド](compiler/llvm.html) - ネイティブコンパイル
    - [WASMバックエンド](compiler/wasm.html) - WebAssembly出力
+   - [JSバックエンド](compiler/js-compilation.html) - JavaScript出力
    - [プリプロセッサ](compiler/preprocessor.html) - 条件付きコンパイル
    - [Linter](compiler/linter.html) - 静的解析（cm lint）
    - [Formatter](compiler/formatter.html) - コードフォーマット（cm fmt）
@@ -135,23 +136,24 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 
-## ✅ 実装状況一覧（v0.13.1）
+## ✅ 実装状況一覧（v0.14.0）
 
 | カテゴリ | 機能 | LLVM | WASM | JS | チュートリアル |
 |---------|------|------|------|-----|---------------|
 | **基本** | プリミティブ型 | ✅ | ✅ | ✅ | ✅ [variables](basics/variables.html) |
 | | 制御構文 | ✅ | ✅ | ✅ | ✅ [control-flow](basics/control-flow.html) |
 | | 関数 | ✅ | ✅ | ✅ | ✅ [functions](basics/functions.html) |
-| | モジュール | ✅ | ✅ | ⚠️ | ✅ [modules](basics/modules.html) |
+| | モジュール | ✅ | ✅ | ✅ | ✅ [modules](basics/modules.html) |
 | **データ** | 構造体 | ✅ | ✅ | ✅ | ✅ [structs](types/structs.html) |
-| | Enum/Tagged Union | ✅ | ✅ | ❌ | ✅ [enums](types/enums.html) |
+| | Enum/Tagged Union | ✅ | ✅ | ✅ | ✅ [enums](types/enums.html) |
 | | 配列 | ✅ | ✅ | ✅ | ✅ [arrays](basics/arrays.html) |
 | | ポインタ | ✅ | ✅ | ❌ | ✅ [pointers](basics/pointers.html) |
-| **型** | ジェネリクス | ✅ | ✅ | ❌ | ✅ [generics](types/generics.html) |
-| | インターフェース | ✅ | ✅ | ❌ | ✅ [interfaces](types/interfaces.html) |
-| | 型制約 | ✅ | ✅ | ❌ | ✅ [constraints](types/constraints.html) |
-| **高度** | match式・ガード | ✅ | ✅ | ❌ | ✅ [match](advanced/match.html) |
-| | with自動実装 | ✅ | ✅ | ❌ | ✅ [with](advanced/with-keyword.html) |
+| **型** | ジェネリクス | ✅ | ✅ | ✅ | ✅ [generics](types/generics.html) |
+| | インターフェース | ✅ | ✅ | ✅ | ✅ [interfaces](types/interfaces.html) |
+| | 型制約 | ✅ | ✅ | ✅ | ✅ [constraints](types/constraints.html) |
+| **高度** | match式・ガード | ✅ | ✅ | ✅ | ✅ [match](advanced/match.html) |
+| | with自動実装 | ✅ | ✅ | ✅ | ✅ [with](advanced/with-keyword.html) |
+| | クロージャ・ラムダ | ✅ | ✅ | ✅ | ✅ [lambda](advanced/lambda.html) |
 | | インラインASM | ✅ | ❌ | ❌ | ✅ [inline-asm](advanced/inline-asm.html) |
 | | extern宣言 | ✅ | ✅ | ❌ | ✅ [extern](advanced/extern.html) |
 | | FFI | ✅ | ❌ | ❌ | ✅ [ffi](advanced/ffi.html) |
@@ -165,6 +167,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/linter.html) |
 | | Formatter | ✅ | - | - | ✅ [formatter](compiler/formatter.html) |
 | | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/preprocessor.html) |
+| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js-compilation.html) |
 
 凡例: ✅ 完全対応 | ⚠️ 部分対応 | ❌ 未対応
 
@@ -237,10 +240,11 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
   - [ ] mustキーワード
   - [ ] マクロ
 
-- [ ] コンパイラ編（7チュートリアル）
+- [ ] コンパイラ編（8チュートリアル）
   - [ ] コンパイラの使い方
   - [ ] LLVMバックエンド
   - [ ] WASMバックエンド
+  - [ ] JSバックエンド
   - [ ] プリプロセッサ
   - [ ] Linter
   - [ ] Formatter
@@ -253,13 +257,13 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 
-**チュートリアル総数:** 40ファイル  
+**チュートリアル総数:** 42ファイル  
 **推定学習時間:** 18-22時間  
-**対象バージョン:** v0.13.0
+**対象バージョン:** v0.14.0
 
 ---
 
-**最終更新:** 2026-02-08  
+**最終更新:** 2026-02-10  
 **著者:** Cm Language Development Team
 
 ---

@@ -20,10 +20,11 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 | 1 | [コンパイラの使い方](usage.html) | 🟢 初級 | コマンド・オプション |
 | 2 | [LLVMバックエンド](llvm.html) | 🟡 中級 | ネイティブコンパイル |
 | 3 | [WASMバックエンド](wasm.html) | 🟡 中級 | WebAssembly出力 |
-| 4 | [プリプロセッサ](preprocessor.html) | 🟡 中級 | 条件付きコンパイル |
-| 5 | [Linter](linter.html) | 🟢 初級 | 静的解析（cm lint） |
-| 6 | [Formatter](formatter.html) | 🟢 初級 | コードフォーマット（cm fmt） |
-| 7 | [最適化](optimization.html) | 🔴 上級 | O0-O3、末尾呼び出し最適化 |
+| 4 | [JSバックエンド](js-compilation.html) | 🟡 中級 | JavaScript出力 |
+| 5 | [プリプロセッサ](preprocessor.html) | 🟡 中級 | 条件付きコンパイル |
+| 6 | [Linter](linter.html) | 🟢 初級 | 静的解析（cm lint） |
+| 7 | [Formatter](formatter.html) | 🟢 初級 | コードフォーマット（cm fmt） |
+| 8 | [最適化](optimization.html) | 🔴 上級 | O0-O3、末尾呼び出し最適化 |
 
 ---
 
