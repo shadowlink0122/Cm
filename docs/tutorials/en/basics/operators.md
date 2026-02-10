@@ -15,6 +15,7 @@ parent: Tutorials
 - Arithmetic operators
 - Comparison operators
 - Logical operators
+- Bitwise operators
 - Compound assignment operators
 - Increment/Decrement
 
@@ -163,6 +164,63 @@ int main() {
 
 ---
 
+## Bitwise Operators
+
+Operate on integers at the bit level. Frequently used for flags and hardware control.
+
+### Basic Operations
+
+```cm
+int main() {
+    int a = 0b1100;  // 12 (binary)
+    int b = 0b1010;  // 10
+
+    int and_r = a & b;   // 0b1000 = 8  (AND: both bits 1)
+    int or_r  = a | b;   // 0b1110 = 14 (OR: either bit 1)
+    int xor_r = a ^ b;   // 0b0110 = 6  (XOR: different bits)
+    int not_r = ~a;      // Bitwise NOT
+    return 0;
+}
+```
+
+### Shift Operations
+
+```cm
+int main() {
+    int x = 1;
+
+    int left  = x << 3;  // 1 * 2^3 = 8  (Left shift)
+    int right = 16 >> 2;  // 16 / 2^2 = 4 (Right shift)
+
+    // Flag manipulation
+    int flags = 0;
+    flags = flags | (1 << 0);   // Set bit 0
+    flags = flags | (1 << 2);   // Set bit 2
+    flags = flags & ~(1 << 0);  // Clear bit 0
+
+    // Bit check
+    bool bit2_set = (flags & (1 << 2)) != 0;  // true
+    return 0;
+}
+```
+
+### Bitwise Compound Assignment
+
+```cm
+int main() {
+    int x = 0xFF;
+
+    x &= 0x0F;   // x = x & 0x0F  (Extract lower 4 bits)
+    x |= 0x30;   // x = x | 0x30  (Set bits)
+    x ^= 0xFF;   // x = x ^ 0xFF  (Toggle bits)
+    x <<= 2;     // x = x << 2    (Left shift)
+    x >>= 1;     // x = x >> 1    (Right shift)
+    return 0;
+}
+```
+
+---
+
 ## Increment/Decrement
 
 ### Postfix
@@ -211,14 +269,19 @@ int main() {
 Precedence (High -> Low):
 
 1. `()` - Parentheses
-2. `++`, `--`, `!`, `+`(unary), `-`(unary) - Unary
+2. `++`, `--`, `!`, `~`, `+`(unary), `-`(unary) - Unary
 3. `*`, `/`, `%` - Multiplication/Division
 4. `+`, `-` - Addition/Subtraction
-5. `<`, `<=`, `>`, `>=` - Comparison
-6. `==`, `!=` - Equality
-7. `&&` - Logical AND
-8. `||` - Logical OR
-9. `=`, `+=`, `-=`, etc. - Assignment
+5. `<<`, `>>` - Shift
+6. `<`, `<=`, `>`, `>=` - Comparison
+7. `==`, `!=` - Equality
+8. `&` - Bitwise AND
+9. `^` - Bitwise XOR
+10. `|` - Bitwise OR
+11. `&&` - Logical AND
+12. `||` - Logical OR
+13. `? :` - Ternary
+14. `=`, `+=`, `-=`, `&=`, `|=`, etc. - Assignment
 
 ### Example
 
@@ -355,4 +418,4 @@ int main() {
 
 ---
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-10

@@ -1,0 +1,41 @@
+import std::io::println;
+// Add/Sub演算子の明示的実装テスト
+struct Vec2 {
+    int x;
+    int y;
+}
+
+impl Vec2 for Add {
+    operator Vec2 +(Vec2 other) {
+        Vec2 result;
+        result.x = self.x + other.x;
+        result.y = self.y + other.y;
+        return result;
+    }
+}
+
+impl Vec2 for Sub {
+    operator Vec2 -(Vec2 other) {
+        Vec2 result;
+        result.x = self.x - other.x;
+        result.y = self.y - other.y;
+        return result;
+    }
+}
+
+int main() {
+    Vec2 a;
+    a.x = 10;
+    a.y = 20;
+    Vec2 b;
+    b.x = 3;
+    b.y = 7;
+
+    Vec2 sum = a + b;
+    println("sum: ({sum.x}, {sum.y})");
+
+    Vec2 diff = a - b;
+    println("diff: ({diff.x}, {diff.y})");
+
+    return 0;
+}
