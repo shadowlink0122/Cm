@@ -1,0 +1,136 @@
+import std::io::println;
+
+// 網羅的な演算子オーバーロードテスト
+struct Num {
+    int value;
+}
+
+// === 算術演算子 ===
+impl Num {
+    operator Num +(Num other) {
+        return Num{value: self.value + other.value};
+    }
+
+    operator Num -(Num other) {
+        return Num{value: self.value - other.value};
+    }
+
+    operator Num *(Num other) {
+        return Num{value: self.value * other.value};
+    }
+
+    operator Num /(Num other) {
+        return Num{value: self.value / other.value};
+    }
+
+    operator Num %(Num other) {
+        return Num{value: self.value % other.value};
+    }
+}
+
+// === 比較演算子 ===
+impl Num for Eq {
+    operator bool ==(Num other) {
+        return self.value == other.value;
+    }
+}
+
+impl Num for Ord {
+    operator bool <(Num other) {
+        return self.value < other.value;
+    }
+}
+
+// === ビット演算子 ===
+impl Num {
+    operator Num &(Num other) {
+        return Num{value: self.value & other.value};
+    }
+
+    operator Num |(Num other) {
+        return Num{value: self.value | other.value};
+    }
+
+    operator Num ^(Num other) {
+        return Num{value: self.value ^ other.value};
+    }
+
+    operator Num <<(Num other) {
+        return Num{value: self.value << other.value};
+    }
+
+    operator Num >>(Num other) {
+        return Num{value: self.value >> other.value};
+    }
+}
+
+int main() {
+    Num a = Num{value: 10};
+    Num b = Num{value: 3};
+
+    // 算術演算子
+    Num sum = a + b;
+    println("10 + 3 = {sum.value}");
+
+    Num diff = a - b;
+    println("10 - 3 = {diff.value}");
+
+    Num prod = a * b;
+    println("10 * 3 = {prod.value}");
+
+    Num quot = a / b;
+    println("10 / 3 = {quot.value}");
+
+    Num rem = a % b;
+    println("10 %% 3 = {rem.value}");
+
+    // 比較演算子（if文経由）
+    Num x = Num{value: 5};
+    Num y = Num{value: 5};
+    Num z = Num{value: 8};
+
+    if (x == y) {
+        println("5 == 5: true");
+    }
+    if (x != z) {
+        println("5 != 8: true");
+    }
+    if (x < z) {
+        println("5 < 8: true");
+    }
+    if (z > x) {
+        println("8 > 5: true");
+    }
+
+    // ビット演算子
+    Num m = Num{value: 0xFF};
+    Num n = Num{value: 0x0F};
+
+    Num band = m & n;
+    println("0xFF & 0x0F = {band.value}");
+
+    Num bor = m | n;
+    println("0xFF | 0x0F = {bor.value}");
+
+    Num bxor = m ^ n;
+    println("0xFF ^ 0x0F = {bxor.value}");
+
+    Num shl = Num{value: 1} << Num{value: 4};
+    println("1 << 4 = {shl.value}");
+
+    Num shr = Num{value: 32} >> Num{value: 2};
+    println("32 >> 2 = {shr.value}");
+
+    // 複合代入演算子（演算子オーバーロード経由）
+    Num c = Num{value: 10};
+    c = c + Num{value: 5};
+    println("10 += 5 -> {c.value}");
+
+    c = c - Num{value: 3};
+    println("15 -= 3 -> {c.value}");
+
+    c = c * Num{value: 2};
+    println("12 *= 2 -> {c.value}");
+
+    return 0;
+}

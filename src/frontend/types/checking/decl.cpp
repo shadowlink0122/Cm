@@ -439,6 +439,10 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
     }
 
     if (!impl.interface_name.empty()) {
+        // インターフェースの存在チェック
+        if (interface_names_.find(impl.interface_name) == interface_names_.end()) {
+            throw std::runtime_error("'" + impl.interface_name + "' is not a declared interface");
+        }
         if (impl_interfaces_[type_name].count(impl.interface_name) > 0) {
             throw std::runtime_error("Duplicate impl: " + type_name + " already implements " +
                                      impl.interface_name);
@@ -446,6 +450,62 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
         impl_interfaces_[type_name].insert(impl.interface_name);
         debug::tc::log(debug::tc::Id::Resolved, type_name + " implements " + impl.interface_name,
                        debug::Level::Debug);
+    }
+
+    // operator定義からインターフェース名を自動登録
+    // impl T { operator ... } の場合、for InterfaceNameがなくてもimpl_interfaces_に登録
+    for (const auto& op : impl.operators) {
+        std::string iface_name;
+        switch (op->op) {
+            case ast::OperatorKind::Eq:
+            case ast::OperatorKind::Ne:
+                iface_name = "Eq";
+                break;
+            case ast::OperatorKind::Lt:
+            case ast::OperatorKind::Gt:
+            case ast::OperatorKind::Le:
+            case ast::OperatorKind::Ge:
+                iface_name = "Ord";
+                break;
+            case ast::OperatorKind::Add:
+                iface_name = "Add";
+                break;
+            case ast::OperatorKind::Sub:
+                iface_name = "Sub";
+                break;
+            case ast::OperatorKind::Mul:
+                iface_name = "Mul";
+                break;
+            case ast::OperatorKind::Div:
+                iface_name = "Div";
+                break;
+            case ast::OperatorKind::Mod:
+                iface_name = "Mod";
+                break;
+            case ast::OperatorKind::BitAnd:
+                iface_name = "BitAnd";
+                break;
+            case ast::OperatorKind::BitOr:
+                iface_name = "BitOr";
+                break;
+            case ast::OperatorKind::BitXor:
+                iface_name = "BitXor";
+                break;
+            case ast::OperatorKind::Shl:
+                iface_name = "Shl";
+                break;
+            case ast::OperatorKind::Shr:
+                iface_name = "Shr";
+                break;
+            default:
+                break;
+        }
+        if (!iface_name.empty()) {
+            impl_interfaces_[type_name].insert(iface_name);
+            debug::tc::log(debug::tc::Id::Resolved,
+                           type_name + " implements " + iface_name + " (via operator)",
+                           debug::Level::Debug);
+        }
     }
 
     for (const auto& method : impl.methods) {
@@ -482,9 +542,65 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     std::string type_name = ast::type_to_string(*impl.target_type);
 
     if (!impl.interface_name.empty()) {
+        // インターフェースの存在チェック
+        if (interface_names_.find(impl.interface_name) == interface_names_.end()) {
+            throw std::runtime_error("'" + impl.interface_name + "' is not a declared interface");
+        }
         impl_interfaces_[type_name].insert(impl.interface_name);
         debug::tc::log(debug::tc::Id::Resolved, type_name + " implements " + impl.interface_name,
                        debug::Level::Debug);
+    }
+
+    // operator定義からインターフェース名を自動登録
+    for (const auto& op : impl.operators) {
+        std::string iface_name;
+        switch (op->op) {
+            case ast::OperatorKind::Eq:
+            case ast::OperatorKind::Ne:
+                iface_name = "Eq";
+                break;
+            case ast::OperatorKind::Lt:
+            case ast::OperatorKind::Gt:
+            case ast::OperatorKind::Le:
+            case ast::OperatorKind::Ge:
+                iface_name = "Ord";
+                break;
+            case ast::OperatorKind::Add:
+                iface_name = "Add";
+                break;
+            case ast::OperatorKind::Sub:
+                iface_name = "Sub";
+                break;
+            case ast::OperatorKind::Mul:
+                iface_name = "Mul";
+                break;
+            case ast::OperatorKind::Div:
+                iface_name = "Div";
+                break;
+            case ast::OperatorKind::Mod:
+                iface_name = "Mod";
+                break;
+            case ast::OperatorKind::BitAnd:
+                iface_name = "BitAnd";
+                break;
+            case ast::OperatorKind::BitOr:
+                iface_name = "BitOr";
+                break;
+            case ast::OperatorKind::BitXor:
+                iface_name = "BitXor";
+                break;
+            case ast::OperatorKind::Shl:
+                iface_name = "Shl";
+                break;
+            case ast::OperatorKind::Shr:
+                iface_name = "Shr";
+                break;
+            default:
+                break;
+        }
+        if (!iface_name.empty()) {
+            impl_interfaces_[type_name].insert(iface_name);
+        }
     }
 
     // コンストラクタ/デストラクタのチェック

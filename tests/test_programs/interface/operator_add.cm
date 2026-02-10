@@ -1,20 +1,18 @@
 import std::io::println;
-// Add/Sub演算子の明示的実装テスト
+// Add/Sub演算子の明示的実装テスト（impl T構文）
 struct Vec2 {
     int x;
     int y;
 }
 
-impl Vec2 for Add {
+impl Vec2 {
     operator Vec2 +(Vec2 other) {
         Vec2 result;
         result.x = self.x + other.x;
         result.y = self.y + other.y;
         return result;
     }
-}
 
-impl Vec2 for Sub {
     operator Vec2 -(Vec2 other) {
         Vec2 result;
         result.x = self.x - other.x;

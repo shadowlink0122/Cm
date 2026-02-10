@@ -999,10 +999,22 @@ class MirLowering : public MirLoweringBase {
 
                     auto& bin_data = std::get<MirRvalue::BinaryOpData>(rvalue->data);
 
-                    // ==, !=, <, <=, >, >= の演算子をチェック
-                    if (bin_data.op != MirBinaryOp::Eq && bin_data.op != MirBinaryOp::Ne &&
-                        bin_data.op != MirBinaryOp::Lt && bin_data.op != MirBinaryOp::Le &&
-                        bin_data.op != MirBinaryOp::Gt && bin_data.op != MirBinaryOp::Ge) {
+                    // ==, !=, <, <=, >, >= の比較演算子をチェック
+                    bool is_comparison =
+                        (bin_data.op == MirBinaryOp::Eq || bin_data.op == MirBinaryOp::Ne ||
+                         bin_data.op == MirBinaryOp::Lt || bin_data.op == MirBinaryOp::Le ||
+                         bin_data.op == MirBinaryOp::Gt || bin_data.op == MirBinaryOp::Ge);
+                    // +, -, *, /, % の算術演算子をチェック
+                    bool is_arithmetic =
+                        (bin_data.op == MirBinaryOp::Add || bin_data.op == MirBinaryOp::Sub ||
+                         bin_data.op == MirBinaryOp::Mul || bin_data.op == MirBinaryOp::Div ||
+                         bin_data.op == MirBinaryOp::Mod);
+                    // &, |, ^, <<, >> のビット演算子をチェック
+                    bool is_bitwise =
+                        (bin_data.op == MirBinaryOp::BitAnd || bin_data.op == MirBinaryOp::BitOr ||
+                         bin_data.op == MirBinaryOp::BitXor || bin_data.op == MirBinaryOp::Shl ||
+                         bin_data.op == MirBinaryOp::Shr);
+                    if (!is_comparison && !is_arithmetic && !is_bitwise) {
                         continue;
                     }
 
@@ -1037,6 +1049,46 @@ class MirLowering : public MirLoweringBase {
                         if (impl_info.count(type_name) && impl_info[type_name].count("Ord")) {
                             op_func_name = type_name + "__op_lt";
                             // > は < の引数を入れ替え、>= と <= は結果を反転
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Add) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Add")) {
+                            op_func_name = type_name + "__op_add";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Sub) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Sub")) {
+                            op_func_name = type_name + "__op_sub";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Mul) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Mul")) {
+                            op_func_name = type_name + "__op_mul";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Div) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Div")) {
+                            op_func_name = type_name + "__op_div";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Mod) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Mod")) {
+                            op_func_name = type_name + "__op_mod";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::BitAnd) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("BitAnd")) {
+                            op_func_name = type_name + "__op_bitand";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::BitOr) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("BitOr")) {
+                            op_func_name = type_name + "__op_bitor";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::BitXor) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("BitXor")) {
+                            op_func_name = type_name + "__op_bitxor";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Shl) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Shl")) {
+                            op_func_name = type_name + "__op_shl";
+                        }
+                    } else if (bin_data.op == MirBinaryOp::Shr) {
+                        if (impl_info.count(type_name) && impl_info[type_name].count("Shr")) {
+                            op_func_name = type_name + "__op_shr";
                         }
                     }
 

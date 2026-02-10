@@ -80,6 +80,7 @@ struct Options {
     bool debug = false;
     std::string debug_level = "info";
     bool verbose = false;         // デフォルトは静かなモード
+    bool quiet = false;           // 出力を抑制するモード
     std::string output_file;      // -o オプション
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
     bool use_jit = true;          // JITコンパイラ使用（デフォルト）
@@ -102,6 +103,7 @@ void print_help(const char* program_name) {
     std::cout << "  -o <file>             出力ファイル名を指定\n";
     std::cout << "  -O<n>                 最適化レベル（0-3）\n";
     std::cout << "  --verbose, -v         詳細な出力を表示\n";
+    std::cout << "  --quiet, -q           出力を抑制\n";
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
     std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
@@ -179,6 +181,8 @@ Options parse_options(int argc, char* argv[]) {
 
         if (arg == "--verbose" || arg == "-v") {
             opts.verbose = true;
+        } else if (arg == "--quiet" || arg == "-q") {
+            opts.quiet = true;
         } else if (arg == "--ast") {
             opts.show_ast = true;
         } else if (arg == "--hir") {
@@ -631,10 +635,12 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // サマリー表示
-        std::cout << "\n=== フォーマット完了 ===\n";
-        std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
-        std::cout << "整形箇所: " << total_changes << " 箇所\n";
+        // サマリー表示（quietモードでは抑制）
+        if (!opts.quiet) {
+            std::cout << "\n=== フォーマット完了 ===\n";
+            std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
+            std::cout << "整形箇所: " << total_changes << " 箇所\n";
+        }
 
         return 0;
     }

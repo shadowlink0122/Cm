@@ -220,7 +220,7 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     bool is_assignment =
         (binary.op == ast::BinaryOp::Assign || binary.op == ast::BinaryOp::AddAssign ||
          binary.op == ast::BinaryOp::SubAssign || binary.op == ast::BinaryOp::MulAssign ||
-         binary.op == ast::BinaryOp::DivAssign);
+         binary.op == ast::BinaryOp::DivAssign || binary.op == ast::BinaryOp::ModAssign);
     if (is_assignment) {
         if (auto* ident = binary.left->as<ast::IdentExpr>()) {
             // move済み変数への代入は禁止
@@ -338,6 +338,14 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->is_integer() && rtype->kind == ast::TypeKind::Pointer) {
                 return rtype;  // int + pointer = pointer
             }
+            // 演算子オーバーロード: impl for Add
+            if (ltype->kind == ast::TypeKind::Struct) {
+                std::string type_name = ltype->name;
+                auto it = impl_interfaces_.find(type_name);
+                if (it != impl_interfaces_.end() && it->second.count("Add")) {
+                    return ltype;
+                }
+            }
             error(current_span_, "Add operator requires numeric operands or string concatenation");
             return ast::make_error();
 
@@ -353,11 +361,46 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->kind == ast::TypeKind::Pointer && rtype->kind == ast::TypeKind::Pointer) {
                 return ast::make_long();  // ポインタ差分はlong
             }
+            // 演算子オーバーロード: impl for Sub
+            if (ltype->kind == ast::TypeKind::Struct) {
+                std::string type_name = ltype->name;
+                auto it = impl_interfaces_.find(type_name);
+                if (it != impl_interfaces_.end() && it->second.count("Sub")) {
+                    return ltype;
+                }
+            }
             error(current_span_, "Sub operator requires numeric operands");
             return ast::make_error();
 
         default:
             if (!ltype->is_numeric() || !rtype->is_numeric()) {
+                // 演算子オーバーロード: impl for Mul/Div/Mod
+                if (ltype->kind == ast::TypeKind::Struct) {
+                    std::string type_name = ltype->name;
+                    std::string iface_name;
+                    if (binary.op == ast::BinaryOp::Mul)
+                        iface_name = "Mul";
+                    else if (binary.op == ast::BinaryOp::Div)
+                        iface_name = "Div";
+                    else if (binary.op == ast::BinaryOp::Mod)
+                        iface_name = "Mod";
+                    else if (binary.op == ast::BinaryOp::BitAnd)
+                        iface_name = "BitAnd";
+                    else if (binary.op == ast::BinaryOp::BitOr)
+                        iface_name = "BitOr";
+                    else if (binary.op == ast::BinaryOp::BitXor)
+                        iface_name = "BitXor";
+                    else if (binary.op == ast::BinaryOp::Shl)
+                        iface_name = "Shl";
+                    else if (binary.op == ast::BinaryOp::Shr)
+                        iface_name = "Shr";
+                    if (!iface_name.empty()) {
+                        auto it = impl_interfaces_.find(type_name);
+                        if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
+                            return ltype;
+                        }
+                    }
+                }
                 error(current_span_, "Arithmetic operators require numeric operands");
                 return ast::make_error();
             }

@@ -13,23 +13,77 @@ parent: Tutorials
 ## Overview
 
 In Cm, you can overload operators for structs using the `operator` keyword.
-Each overloadable operator corresponds to an interface implemented via `impl`.
+Operators are defined directly inside `impl T { ... }` blocks.
 
-## Supported Operator Interfaces
+## Supported Operators
 
-| Interface | Operator | Method | Description |
-|-----------|----------|--------|-------------|
-| **Eq** | `==`, `!=` | `operator bool ==(T other)` | Equality |
-| **Ord** | `<`, `>`, `<=`, `>=` | `operator bool <(T other)` | Ordering |
-| **Add** | `+` | `operator T +(T other)` | Addition (Planned) |
-| **Sub** | `-` | `operator T -(T other)` | Subtraction (Planned) |
-| **Mul** | `*` | `operator T *(T other)` | Multiplication (Planned) |
-| **Div** | `/` | `operator T /(T other)` | Division (Planned) |
-| **Mod** | `%` | `operator T %(T other)` | Remainder (Planned) |
+### Comparison Operators
 
-> **Note:** `!=` is auto-derived from `==`, and `>`, `<=`, `>=` are auto-derived from `<`. You don't need to implement them explicitly.
+| Operator | Signature | Description |
+|----------|-----------|-------------|
+| `==`, `!=` | `operator bool ==(T other)` | Equality (`!=` auto-derived) |
+| `<`, `>`, `<=`, `>=` | `operator bool <(T other)` | Ordering (`>`, `<=`, `>=` auto-derived) |
 
-## Eq - Equality
+### Arithmetic Operators
+
+| Operator | Signature | Description |
+|----------|-----------|-------------|
+| `+` | `operator T +(T other)` | Addition |
+| `-` | `operator T -(T other)` | Subtraction |
+| `*` | `operator T *(T other)` | Multiplication |
+| `/` | `operator T /(T other)` | Division |
+| `%` | `operator T %(T other)` | Remainder |
+
+### Bitwise Operators
+
+| Operator | Signature | Description |
+|----------|-----------|-------------|
+| `&` | `operator T &(T other)` | Bitwise AND |
+| `\|` | `operator T \|(T other)` | Bitwise OR |
+| `^` | `operator T ^(T other)` | Bitwise XOR |
+| `<<` | `operator T <<(T other)` | Left shift |
+| `>>` | `operator T >>(T other)` | Right shift |
+
+> **Note:** `!=` is auto-derived from `==`, and `>`, `<=`, `>=` are auto-derived from `<`.
+
+## Basic Usage
+
+Operators are defined inside `impl T { ... }` blocks:
+
+```cm
+struct Vec2 {
+    int x;
+    int y;
+}
+
+impl Vec2 {
+    operator Vec2 +(Vec2 other) {
+        return Vec2{x: self.x + other.x, y: self.y + other.y};
+    }
+
+    operator Vec2 -(Vec2 other) {
+        return Vec2{x: self.x - other.x, y: self.y - other.y};
+    }
+
+    operator Vec2 *(Vec2 other) {
+        return Vec2{x: self.x * other.x, y: self.y * other.y};
+    }
+}
+
+int main() {
+    Vec2 a = Vec2{x: 10, y: 20};
+    Vec2 b = Vec2{x: 3, y: 7};
+
+    Vec2 sum = a + b;   // Vec2{13, 27}
+    Vec2 diff = a - b;  // Vec2{7, 13}
+    Vec2 prod = a * b;  // Vec2{30, 140}
+    return 0;
+}
+```
+
+## Comparison Operators
+
+Comparison operators are defined via `impl T for Eq` / `impl T for Ord`:
 
 ```cm
 struct Point {
@@ -43,25 +97,6 @@ impl Point for Eq {
     }
 }
 
-int main() {
-    Point p1 = Point(10, 20);
-    Point p2 = Point(10, 20);
-    Point p3 = Point(5, 5);
-
-    if (p1 == p2) {
-        println("p1 == p2: true");
-    }
-    // != is auto-derived from ==
-    if (p1 != p3) {
-        println("p1 != p3: true");
-    }
-    return 0;
-}
-```
-
-## Ord - Ordering
-
-```cm
 impl Point for Ord {
     operator bool <(Point other) {
         if (self.x != other.x) {
@@ -72,95 +107,62 @@ impl Point for Ord {
 }
 
 int main() {
-    Point p1 = Point(1, 2);
-    Point p2 = Point(3, 4);
+    Point p1 = Point{x: 1, y: 2};
+    Point p2 = Point{x: 3, y: 4};
 
-    // Implementing < gives you >, <=, >= for free
+    if (p1 == p2) { println("equal"); }
     if (p1 < p2) { println("p1 < p2"); }
-    if (p2 > p1) { println("p2 > p1"); }
     return 0;
 }
 ```
 
-## Add / Sub - Addition & Subtraction (Planned)
+> **Note:** `Eq`/`Ord` are built-in interfaces, so `impl T for Eq` syntax works. Arithmetic and bitwise operators use `impl T` syntax.
 
-> ⚠️ **Note:** Add/Sub operator overloading is not yet supported by the type checker. Planned for a future version.
-
-```cm
-struct Vec2 {
-    float x;
-    float y;
-}
-
-impl Vec2 for Add {
-    operator Vec2 +(Vec2 other) {
-        Vec2 result;
-        result.x = self.x + other.x;
-        result.y = self.y + other.y;
-        return result;
-    }
-}
-
-impl Vec2 for Sub {
-    operator Vec2 -(Vec2 other) {
-        Vec2 result;
-        result.x = self.x - other.x;
-        result.y = self.y - other.y;
-        return result;
-    }
-}
-
-int main() {
-    Vec2 a = Vec2(1.0, 2.0);
-    Vec2 b = Vec2(3.0, 4.0);
-
-    Vec2 sum = a + b;   // Vec2(4.0, 6.0)
-    Vec2 diff = a - b;  // Vec2(-2.0, -2.0)
-    return 0;
-}
-```
-
-## Mul / Div / Mod - Multiplication, Division & Remainder (Planned)
-
-> ⚠️ **Note:** Mul/Div/Mod operator overloading is not yet supported by the type checker.
+## Bitwise Operators
 
 ```cm
-struct Number {
+struct Bits {
     int value;
 }
 
-impl Number for Mul {
-    operator Number *(Number other) {
-        return Number(self.value * other.value);
+impl Bits {
+    operator Bits &(Bits other) {
+        return Bits{value: self.value & other.value};
+    }
+
+    operator Bits |(Bits other) {
+        return Bits{value: self.value | other.value};
+    }
+
+    operator Bits ^(Bits other) {
+        return Bits{value: self.value ^ other.value};
+    }
+
+    operator Bits <<(Bits other) {
+        return Bits{value: self.value << other.value};
+    }
+
+    operator Bits >>(Bits other) {
+        return Bits{value: self.value >> other.value};
     }
 }
+```
 
-impl Number for Div {
-    operator Number /(Number other) {
-        return Number(self.value / other.value);
-    }
-}
+## Compound Assignment
 
-impl Number for Mod {
-    operator Number %(Number other) {
-        return Number(self.value % other.value);
-    }
-}
+Once a binary operator is defined, you can use `a = a + b` form:
 
+```cm
 int main() {
-    Number a = Number(10);
-    Number b = Number(3);
-
-    Number prod = a * b;  // Number(30)
-    Number quot = a / b;  // Number(3)
-    Number rem  = a % b;  // Number(1)
+    Vec2 v = Vec2{x: 10, y: 20};
+    v = v + Vec2{x: 5, y: 3};   // equivalent to v += Vec2{5, 3}
     return 0;
 }
 ```
 
-## with (Auto-Implementation) vs Explicit
+> **Note:** The `v += ...` syntax sugar is not yet available. Use `v = v + ...` form instead.
 
-### with (Auto-generated)
+## with (Auto-Implementation) vs Explicit
 
 ```cm
 // All field comparisons are auto-generated
@@ -170,35 +172,7 @@ struct Point with Eq + Ord {
 }
 ```
 
-### Explicit (Custom Logic)
-
-```cm
-struct Point {
-    int x;
-    int y;
-}
-
-// Only compare specific fields
-impl Point for Eq {
-    operator bool ==(Point other) {
-        return self.x == other.x;  // Ignore y
-    }
-}
-```
-
 > 📖 See [with Auto-Implementation](with-keyword.html) for details.
-
-## Implementation Status
-
-| Operator | JIT | LLVM | WASM | JS |
-|----------|-----|------|------|-----|
-| `==` / `!=` (Eq) | ✅ | ✅ | ✅ | ✅ |
-| `<` / `>` / `<=` / `>=` (Ord) | ✅ | ✅ | ✅ | ✅ |
-| `+` (Add) | ⬜ | ⬜ | ⬜ | ⬜ |
-| `-` (Sub) | ⬜ | ⬜ | ⬜ | ⬜ |
-| `*` (Mul) | ⬜ | ⬜ | ⬜ | ⬜ |
-| `/` (Div) | ⬜ | ⬜ | ⬜ | ⬜ |
-| `%` (Mod) | ⬜ | ⬜ | ⬜ | ⬜ |
 
 ---
 

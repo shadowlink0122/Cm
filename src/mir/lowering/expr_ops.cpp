@@ -387,6 +387,86 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         }
     }
 
+    // 構造体の算術演算子の特別処理（impl for Add/Sub/Mul/Div/Mod）
+    if (bin.op == hir::HirBinaryOp::Add || bin.op == hir::HirBinaryOp::Sub ||
+        bin.op == hir::HirBinaryOp::Mul || bin.op == hir::HirBinaryOp::Div ||
+        bin.op == hir::HirBinaryOp::Mod) {
+        if (bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::Struct) {
+            std::string type_name = bin.lhs->type->name;
+
+            // 対応するインターフェース名を決定
+            std::string iface_name;
+            std::string op_suffix;
+            switch (bin.op) {
+                case hir::HirBinaryOp::Add:
+                    iface_name = "Add";
+                    op_suffix = "op_add";
+                    break;
+                case hir::HirBinaryOp::Sub:
+                    iface_name = "Sub";
+                    op_suffix = "op_sub";
+                    break;
+                case hir::HirBinaryOp::Mul:
+                    iface_name = "Mul";
+                    op_suffix = "op_mul";
+                    break;
+                case hir::HirBinaryOp::Div:
+                    iface_name = "Div";
+                    op_suffix = "op_div";
+                    break;
+                case hir::HirBinaryOp::Mod:
+                    iface_name = "Mod";
+                    op_suffix = "op_mod";
+                    break;
+                default:
+                    break;
+            }
+
+            // impl_infoでインターフェースが実装されているかチェック
+            auto& current_impl_info = get_impl_info();
+            auto type_it = current_impl_info.find(type_name);
+            if (type_it != current_impl_info.end()) {
+                std::string op_func_name;
+                for (const auto& [iname, func_name] : type_it->second) {
+                    if (iname == iface_name ||
+                        func_name.find("__" + op_suffix) != std::string::npos) {
+                        op_func_name = type_name + "__" + op_suffix;
+                        break;
+                    }
+                }
+
+                if (!op_func_name.empty()) {
+                    // 戻り値型は構造体型（演算子の戻り値型）
+                    auto result_type = bin.lhs->type;
+                    LocalId result = ctx.new_temp(result_type);
+                    BlockId success_block = ctx.new_block();
+
+                    // 引数を準備（両方とも値渡し）
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(MirPlace{lhs}));  // self (値)
+                    args.push_back(MirOperand::copy(MirPlace{rhs}));  // other (値)
+
+                    // 関数呼び出し
+                    auto func_operand = MirOperand::function_ref(op_func_name);
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data = MirTerminator::CallData{std::move(func_operand),
+                                                              std::move(args),
+                                                              MirPlace{result},
+                                                              success_block,
+                                                              std::nullopt,
+                                                              "",
+                                                              "",
+                                                              false};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+
+                    return result;
+                }
+            }
+        }
+    }
+
     // 文字列連結の特別処理
     if (bin.op == hir::HirBinaryOp::Add) {
         bool lhs_is_string = bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::String;

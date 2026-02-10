@@ -42,6 +42,21 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
         case hir::HirOperatorKind::Mod:
             op_name = "op_mod";
             break;
+        case hir::HirOperatorKind::BitAnd:
+            op_name = "op_bitand";
+            break;
+        case hir::HirOperatorKind::BitOr:
+            op_name = "op_bitor";
+            break;
+        case hir::HirOperatorKind::BitXor:
+            op_name = "op_bitxor";
+            break;
+        case hir::HirOperatorKind::Shl:
+            op_name = "op_shl";
+            break;
+        case hir::HirOperatorKind::Shr:
+            op_name = "op_shr";
+            break;
         default:
             op_name = "op_unknown";
             break;
@@ -390,6 +405,26 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
                 impl_info[type_name]["Eq"] = mir_func->name;
             } else if (op_impl->op == hir::HirOperatorKind::Lt) {
                 impl_info[type_name]["Ord"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Add) {
+                impl_info[type_name]["Add"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Sub) {
+                impl_info[type_name]["Sub"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Mul) {
+                impl_info[type_name]["Mul"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Div) {
+                impl_info[type_name]["Div"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Mod) {
+                impl_info[type_name]["Mod"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::BitAnd) {
+                impl_info[type_name]["BitAnd"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::BitOr) {
+                impl_info[type_name]["BitOr"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::BitXor) {
+                impl_info[type_name]["BitXor"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Shl) {
+                impl_info[type_name]["Shl"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Shr) {
+                impl_info[type_name]["Shr"] = mir_func->name;
             }
 
             mir_program.functions.push_back(std::move(mir_func));

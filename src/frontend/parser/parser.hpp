@@ -562,7 +562,10 @@ class Parser {
             if (check(TokenKind::KwOperator)) {
                 advance();  // consume 'operator'
                 ast::OperatorSig op_sig;
+                // 演算子戻り値型パース中は*&を型サフィックスとして消費しない
+                in_operator_return_type_ = true;
                 op_sig.return_type = parse_type();
+                in_operator_return_type_ = false;
                 // C++スタイルの配列戻り値型: int[] operator+(), int[3] operator-()
                 op_sig.return_type = check_array_suffix(std::move(op_sig.return_type));
 
@@ -703,7 +706,12 @@ class Parser {
                     if (check(TokenKind::KwOperator)) {
                         advance();  // consume 'operator'
                         auto op_impl = std::make_unique<ast::OperatorImpl>();
+                        // 演算子の戻り値型パース時は*や&を型サフィックスとして
+                        // 消費しない（operator Num *(Num other)のように
+                        // *が演算子として解釈されるべきため）
+                        in_operator_return_type_ = true;
                         op_impl->return_type = parse_type();
+                        in_operator_return_type_ = false;
 
                         auto op_kind = parse_operator_kind();
                         if (!op_kind) {
@@ -812,8 +820,29 @@ class Parser {
                     ctor->is_overload = is_overload;
 
                     decl->constructors.push_back(std::move(ctor));
+                } else if (check(TokenKind::KwOperator)) {
+                    // operator定義（impl T内で直接定義）
+                    advance();  // consume 'operator'
+                    auto op_impl = std::make_unique<ast::OperatorImpl>();
+                    // 演算子の戻り値型パース時は*や&を型サフィックスとして消費しない
+                    in_operator_return_type_ = true;
+                    op_impl->return_type = parse_type();
+                    in_operator_return_type_ = false;
+
+                    auto op_kind = parse_operator_kind();
+                    if (!op_kind) {
+                        error("Expected operator symbol after 'operator'");
+                        continue;
+                    }
+                    op_impl->op = *op_kind;
+
+                    expect(TokenKind::LParen);
+                    op_impl->params = parse_params();
+                    expect(TokenKind::RParen);
+                    op_impl->body = parse_block();
+                    decl->operators.push_back(std::move(op_impl));
                 } else {
-                    // selfでもデストラクタでもない場合、通常メソッドとして解析
+                    // selfでもデストラクタでもoperatorでもない場合、通常メソッドとして解析
                     // これにより impl<T> Type<T> { void method() { ... } } が可能になる
                     std::vector<ast::AttributeNode> method_attrs;
                     while (is_attribute_start()) {
@@ -1231,7 +1260,8 @@ class Parser {
                 type->type_args = std::move(type_args);
 
                 // 関数ポインタ型: Vec<T>*(int, int) または ポインタ型: Vec<T>*
-                if (check(TokenKind::Star)) {
+                // 演算子戻り値型の場合は*を型サフィックスとしてでなく演算子として扱う
+                if (check(TokenKind::Star) && !in_operator_return_type_) {
                     if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
                         advance();  // consume *
                         advance();  // consume (
@@ -1256,7 +1286,8 @@ class Parser {
             }
 
             // 関数ポインタ型: MyStruct*(int, int) または ポインタ型: MyStruct*
-            if (check(TokenKind::Star)) {
+            // 演算子戻り値型の場合は*や&を型サフィックスとしてでなく演算子として扱う
+            if (check(TokenKind::Star) && !in_operator_return_type_) {
                 auto named_type = ast::make_named(name);
                 if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].kind == TokenKind::LParen) {
                     advance();  // consume *
@@ -1276,6 +1307,12 @@ class Parser {
                     advance();  // consume *
                     return ast::make_pointer(std::move(named_type));
                 }
+            }
+            // 演算子戻り値型の場合は&を型サフィックスとして消費しない
+            if (check(TokenKind::Amp) && !in_operator_return_type_) {
+                auto named_type = ast::make_named(name);
+                advance();  // consume &
+                return ast::make_reference(std::move(named_type));
             }
 
             return ast::make_named(name);
@@ -1505,6 +1542,8 @@ class Parser {
     std::vector<Diagnostic> diagnostics_;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
     int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
+    bool in_operator_return_type_ =
+        false;  // 演算子戻り値型パース中フラグ（*&の型サフィックス抑制）
 };
 
 }  // namespace cm
