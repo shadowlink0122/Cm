@@ -55,7 +55,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 3. **[高度な機能編](advanced/match.html)** - 言語の強力な機能
    - [match式](advanced/match.html) - パターンマッチング・ガード・網羅性チェック
    - [with自動実装](advanced/with-keyword.html) - Eq/Ord/Clone/Hash
-   - [演算子オーバーロード](advanced/operators.html) - カスタム演算子
+   - [演算子オーバーロード](advanced/operators.html) - impl T構文・複合代入(+= 等)・ビット演算子
    - [関数ポインタ](advanced/function-pointers.html) - 高階関数
    - [ラムダ式](advanced/lambda.html) - クロージャ
    - [文字列操作](advanced/strings.html) - メソッド・スライス
@@ -196,7 +196,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 - [正式言語仕様](../../design/CANONICAL_SPEC.html) - 言語の完全な仕様
 - [設計ドキュメント](../../design/) - アーキテクチャ・設計文書
-- [テストケース](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 368ファイル
+- [テストケース](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 376ファイル
 
 ---
 

@@ -55,7 +55,7 @@ Estimated Time: 5-6 hours
 3. **[Advanced Features](advanced/match.html)** - Powerful language features
    - [match Expression](advanced/match.html) - Pattern matching, guards, exhaustiveness
    - [Auto Implementation](advanced/with-keyword.html) - with Eq/Ord/Clone/Hash
-   - [Operator Overloading](advanced/operators.html) - Custom operators
+   - [Operator Overloading](advanced/operators.html) - impl T syntax, compound assignment (+=), bitwise
    - [Function Pointers](advanced/function-pointers.html) - Higher-order functions
    - [Lambda](advanced/lambda.html) - Closures
    - [String Operations](advanced/strings.html) - Methods and slicing
@@ -120,7 +120,7 @@ Estimated Time: 3 hours
 
 - [Language Specification](../../design/CANONICAL_SPEC.html) - Full language spec
 - [Design Documents](../../design/) - Architecture and design docs
-- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 368 files
+- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 376 files
 
 ---
 
