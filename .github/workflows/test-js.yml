@@ -95,6 +95,21 @@ jobs:
           name: cm-js-build-${{ matrix.os }}
       - run: chmod +x build/bin/* cm 2>/dev/null || true
       
+      # LLVM ランタイム（cm実行に必要）
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+          sudo ./llvm.sh ${{ matrix.llvm_version }}
+          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }} libssl-dev
+          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
+      
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ matrix.llvm_version }} openssl@3
+          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
+      
       # Node.js セットアップ
       - name: Setup Node.js
         uses: actions/setup-node@v4
