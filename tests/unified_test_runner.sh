@@ -966,7 +966,7 @@ run_parallel_test() {
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local error_expect_file="${test_file%.cm}.error"
     local backend_error_file="${test_file%.cm}.error.${BACKEND}"
-    local output_file="$TEMP_DIR/${category}_${test_name}_$$.out"
+    local output_file="$TEMP_DIR/${category}_${test_name}_${BASHPID}.out"
     local is_error_test=false
 
     # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
@@ -1079,7 +1079,7 @@ PY
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
+            local llvm_exec="$TEMP_DIR/llvm_${category}_${test_name}_${BASHPID}"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # テストディレクトリで実行（相対パス解決のため）
@@ -1095,7 +1095,7 @@ PY
             fi
             ;;
         llvm-wasm)
-            local wasm_file="$TEMP_DIR/wasm_${test_name}_$$.wasm"
+            local wasm_file="$TEMP_DIR/wasm_${category}_${test_name}_${BASHPID}.wasm"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
