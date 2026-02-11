@@ -1,61 +1,16 @@
-// UEFI 最小テスト - インラインASMのみ
-// ライブラリを使わず直接system_tableからcon_outを読み取る
-//
-// ビルド: cd tests/uefi && make
+// UEFI Hello World - ローカルモジュール使用版
+// ビルド: cd tests/uefi && make && make run
 
-import uefi::types::*;
+import libs::efi_text::*;
 
-ulong efi_main(EfiHandle image_handle, EfiSystemTable* system_table) {
-    // UCS-2文字列 'H' 'i' '\r' '\n' '\0'
-    ushort[5] msg;
-    msg[0] = 72;  // 'H'
-    msg[1] = 105; // 'i'
-    msg[2] = 13;  // '\r'
-    msg[3] = 10;  // '\n'
-    msg[4] = 0;
+ulong efi_main(void* image_handle, void* system_table) {
+    efi_clear_screen(system_table);
+    efi_println(system_table, "Hello from Cm!");
 
-    // system_table->con_out (offset 0x40) を直接取得
-    ulong st_addr = system_table as ulong;
-    ulong con_out_addr = 0;
-    __asm__(`
-        movq ${r:st_addr}, %rax;
-        movq 0x40(%rax), %rax;
-        movq %rax, ${=r:con_out_addr}
-    `);
-
-    // con_out->output_string (offset 0x08) を取得
-    ulong fn_addr = 0;
-    __asm__(`
-        movq ${r:con_out_addr}, %rax;
-        movq 0x08(%rax), %rax;
-        movq %rax, ${=r:fn_addr}
-    `);
-
-    // OutputString(con_out, msg) を Win64 ABI で呼び出し
-    ulong msg_addr = msg as ulong;
-    ulong result = 0;
-    __asm__(`
-        pushq %rbx;
-        pushq %r12;
-        pushq %r13;
-        movq ${r:fn_addr}, %rbx;
-        movq ${r:con_out_addr}, %r12;
-        movq ${r:msg_addr}, %r13;
-        movq %r12, %rcx;
-        movq %r13, %rdx;
-        subq $$32, %rsp;
-        callq *%rbx;
-        addq $$32, %rsp;
-        movq %rax, ${=r:result};
-        popq %r13;
-        popq %r12;
-        popq %rbx
-    `);
-
-    // 停止
+    // 停止（画面を維持）
     while (true) {
         __asm__("hlt");
     }
 
-    return result;
+    return 0;
 }

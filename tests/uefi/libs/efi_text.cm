@@ -1,0 +1,106 @@
+// libs::efi_text - UEFI テキスト出力
+// ConOut.OutputString をインラインASM経由で呼出し
+// ASCII → UCS-2 変換もASMで実行
+module libs.efi_text;
+
+// ============================================================
+// 内部ヘルパー: Win64 間接呼出
+// ============================================================
+
+/// 1引数で関数ポインタfnを呼出し（Win64 ABI: RCX=a1）
+ulong win64_call1(void* fn, void* a1) {
+    ulong fn_addr = fn as ulong;
+    ulong a1_addr = a1 as ulong;
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        movq ${r:fn_addr}, %rbx;
+        movq ${r:a1_addr}, %r12;
+        movq %r12, %rcx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+// ============================================================
+// テキスト出力
+// ============================================================
+
+/// ASCII文字列をUCS-2に変換してUEFI ConOutに出力
+/// system_table: efi_mainの第2引数をそのまま渡す
+export void efi_puts(void* system_table, string msg) {
+    // ConOut取得 (SystemTable + 0x40)
+    ulong* st = system_table as ulong*;
+    ulong con_out_addr = *(st + 8);  // 8 * 8 = offset 0x40
+    void* con_out = con_out_addr as void*;
+
+    // ConOut->OutputString 取得 (offset 0x08)
+    ulong* co = con_out as ulong*;
+    ulong output_fn_addr = *(co + 1);
+    void* output_fn = output_fn_addr as void*;
+
+    // メッセージ情報の準備
+    void* msg_data = msg as void*;
+    ulong msg_len = 0;
+
+    // 文字列長を計算
+    utiny* p = msg as utiny*;
+    while (*(p + msg_len) != 0) {
+        msg_len += 1;
+    }
+
+    // ASCII → UCS-2 変換 + OutputString 呼出
+    // オリジナル動作実績コードと同じパターン
+    __asm__(`
+        pushq ${r:output_fn};
+        pushq ${r:con_out};
+        pushq ${r:msg_len};
+        pushq ${r:msg_data};
+        popq %r12;
+        popq %rbx;
+        popq %r13;
+        subq $$512, %rsp;
+        xorq %rcx, %rcx;
+        .L_conv:
+            cmpq %rbx, %rcx;
+            jge .L_done;
+            movzbl (%r12, %rcx), %eax;
+            movw %ax, (%rsp, %rcx, 2);
+            incq %rcx;
+            jmp .L_conv;
+        .L_done:
+            movw $$0, (%rsp, %rcx, 2);
+            movq %r13, %rcx;
+            movq %rsp, %rdx;
+            subq $$32, %rsp;
+            callq *544(%rsp);
+            addq $$552, %rsp
+    `);
+}
+
+/// 改行付きテキスト出力
+export void efi_println(void* system_table, string msg) {
+    efi_puts(system_table, msg);
+    efi_puts(system_table, "\r\n");
+}
+
+/// 画面クリア
+export void efi_clear_screen(void* system_table) {
+    // ConOut取得 (SystemTable + 0x40)
+    ulong* st = system_table as ulong*;
+    ulong con_out_addr = *(st + 8);
+    void* con_out = con_out_addr as void*;
+
+    // ConOut->ClearScreen 取得 (offset 0x30)
+    ulong* co = con_out as ulong*;
+    ulong clear_fn_addr = *(co + 6);  // 6 * 8 = offset 0x30
+    void* clear_fn = clear_fn_addr as void*;
+
+    win64_call1(clear_fn, con_out);
+}
