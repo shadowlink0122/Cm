@@ -1,0 +1,27 @@
+// js::console - コンソール拡張API
+// console.warn, console.error等のJSコンソールメソッドを提供
+module js.console;
+
+// ============================================================
+// JavaScript Console API
+// ============================================================
+
+use js {
+    // console_warn: console.warn() を呼び出し
+    void console_warn(string msg);
+
+    // console_error: console.error() を呼び出し
+    void console_error(string msg);
+
+    // console_info: console.info() を呼び出し
+    void console_info(string msg);
+
+    // console_debug: console.debug() を呼び出し
+    void console_debug(string msg);
+
+    // console_time: console.time() を呼び出し
+    void console_time(string label);
+
+    // console_timeEnd: console.timeEnd() を呼び出し
+    void console_timeEnd(string label);
+}

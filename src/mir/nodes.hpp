@@ -628,6 +628,7 @@ struct MirFunction {
     bool is_export = false;           // エクスポートされているか
     bool is_extern = false;           // extern "C" 関数か
     bool is_variadic = false;         // 可変長引数（FFI用）
+    bool is_async = false;            // async関数（JSバックエンド用）
     std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
     LocalId return_local;             // 戻り値用のローカル（_0）

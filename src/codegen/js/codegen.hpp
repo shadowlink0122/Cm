@@ -68,6 +68,7 @@ class JSCodeGen {
 
     // プリアンブル（ヘルパー関数など）
     void emitPreamble();
+    void emitImports(const mir::MirProgram& program);
     void emitPostamble(const mir::MirProgram& program);
 
     // static変数の収集と出力

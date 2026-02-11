@@ -74,6 +74,10 @@ void JSCodeGen::emitFunction(const mir::MirFunction& func, const mir::MirProgram
 
 void JSCodeGen::emitFunctionSignature(const mir::MirFunction& func) {
     std::string safeName = sanitizeIdentifier(func.name);
+    // async関数の場合、asyncキーワードを付与
+    if (func.is_async) {
+        emitter_.stream() << "async ";
+    }
     emitter_.stream() << "function " << safeName << "(";
 
     // 引数

@@ -126,6 +126,7 @@ struct FunctionDecl {
     bool is_destructor = false;   // ~self() デストラクタ
     bool is_overload = false;     // overload修飾子
     bool is_extern = false;       // extern "C" 関数
+    bool is_async = false;        // async関数（JSバックエンド用）
 
     // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
     std::vector<AttributeNode> attributes;

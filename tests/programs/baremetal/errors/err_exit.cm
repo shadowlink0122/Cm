@@ -1,0 +1,11 @@
+// ベアメタルエラーテスト: exit使用禁止
+// exit はOSプロセス制御に依存するため使用不可
+
+use libc {
+    void exit(int code);
+}
+
+int main() {
+    exit(1);
+    return 0;
+}

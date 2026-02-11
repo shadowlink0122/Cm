@@ -8,6 +8,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -58,6 +59,9 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
 
     // プリアンブル
     emitPreamble();
+
+    // インポート文生成（use "pkg" { ... } / extern関数のpackage_name）
+    emitImports(program);
 
     // static変数をグローバルスコープで宣言
     emitStaticVars();
@@ -146,6 +150,71 @@ void JSCodeGen::emitPreamble() {
     }
 }
 
+void JSCodeGen::emitImports(const mir::MirProgram& program) {
+    // パッケージ名を収集（重複排除）
+    // key: パッケージ名, value: エイリアス（空の場合はパッケージ名ベース）
+    std::map<std::string, std::string> packages;
+
+    // 1. MIR importsからパッケージを収集
+    for (const auto& imp : program.imports) {
+        if (!imp || imp->package_name.empty())
+            continue;
+        std::string alias = imp->alias;
+        if (alias.empty()) {
+            // パッケージ名からエイリアスを生成
+            // "@scope/pkg" -> "pkg", "lodash" -> "lodash"
+            alias = imp->package_name;
+            size_t slashPos = alias.rfind('/');
+            if (slashPos != std::string::npos) {
+                alias = alias.substr(slashPos + 1);
+            }
+            // ハイフンをアンダースコアに変換（JS識別子として有効に）
+            for (auto& c : alias) {
+                if (c == '-')
+                    c = '_';
+            }
+        }
+        packages[imp->package_name] = alias;
+    }
+
+    // 2. extern関数のpackage_nameからパッケージを収集
+    for (const auto& func : program.functions) {
+        if (!func || !func->is_extern)
+            continue;
+        if (func->package_name.empty())
+            continue;
+        // "js"と"libc"は組み込みなのでスキップ
+        if (func->package_name == "js" || func->package_name == "libc")
+            continue;
+        if (packages.count(func->package_name) == 0) {
+            std::string alias = func->package_name;
+            size_t slashPos = alias.rfind('/');
+            if (slashPos != std::string::npos) {
+                alias = alias.substr(slashPos + 1);
+            }
+            for (auto& c : alias) {
+                if (c == '-')
+                    c = '_';
+            }
+            packages[func->package_name] = alias;
+        }
+    }
+
+    // 3. import/require文を出力
+    if (!packages.empty()) {
+        for (const auto& [pkg, alias] : packages) {
+            if (options_.esModule) {
+                // ESModule形式: import alias from "pkg";
+                emitter_.emitLine("import " + alias + " from \"" + pkg + "\";");
+            } else {
+                // CommonJS形式: const alias = require("pkg");
+                emitter_.emitLine("const " + alias + " = require(\"" + pkg + "\");");
+            }
+        }
+        emitter_.emitLine();
+    }
+}
+
 void JSCodeGen::emitPostamble(const mir::MirProgram& program) {
     emitter_.emitLine();
 
@@ -163,10 +232,29 @@ void JSCodeGen::emitPostamble(const mir::MirProgram& program) {
         if (options_.esModule) {
             emitter_.emitLine("export { main };");
         }
-        // main()の戻り値で非ゼロ終了コードに対応
-        emitter_.emitLine(
-            "const __exit_code = main(); "
-            "if (__exit_code && typeof process !== 'undefined') process.exit(__exit_code);");
+
+        // async mainの場合はIIAFE（即時実行async関数式）でラップ
+        bool isAsyncMain = false;
+        for (const auto& func : program.functions) {
+            if (func && func->name == "main" && func->is_async) {
+                isAsyncMain = true;
+                break;
+            }
+        }
+
+        if (isAsyncMain) {
+            // async mainはawaitで呼び出し、IIAFEで包む
+            emitter_.emitLine(
+                "(async () => { "
+                "const __exit_code = await main(); "
+                "if (__exit_code && typeof process !== 'undefined') process.exit(__exit_code); "
+                "})();");
+        } else {
+            // 通常のmainは同期呼び出し
+            emitter_.emitLine(
+                "const __exit_code = main(); "
+                "if (__exit_code && typeof process !== 'undefined') process.exit(__exit_code);");
+        }
     }
 }
 

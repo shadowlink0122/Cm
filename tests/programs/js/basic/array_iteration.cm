@@ -1,3 +1,4 @@
+//! platform: js
 // JS-specific: Array methods test
 int main() {
     int[5] arr = [5, 3, 1, 4, 2];

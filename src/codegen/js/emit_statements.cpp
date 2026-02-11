@@ -166,9 +166,22 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             auto it_func = function_map_.find(funcName);
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
-                if (calleeFunc->is_extern &&
-                    (calleeFunc->package_name == "js" || calleeFunc->package_name.empty())) {
-                    funcName = mapExternJsName(calleeFunc->name);
+                if (calleeFunc->is_extern) {
+                    if (calleeFunc->package_name == "js" || calleeFunc->package_name.empty()) {
+                        funcName = mapExternJsName(calleeFunc->name);
+                    } else if (calleeFunc->package_name != "libc") {
+                        // 外部パッケージ: pkg.func() 形式に変換
+                        std::string alias = calleeFunc->package_name;
+                        size_t slashPos = alias.rfind('/');
+                        if (slashPos != std::string::npos) {
+                            alias = alias.substr(slashPos + 1);
+                        }
+                        for (auto& c : alias) {
+                            if (c == '-')
+                                c = '_';
+                        }
+                        funcName = alias + "." + sanitizeIdentifier(calleeFunc->name);
+                    }
                 }
             }
 
@@ -263,6 +276,11 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     callExpr += args[i];
                 }
                 callExpr += ")";
+            }
+
+            // await式の場合、callExprをawaitでラップ
+            if (data.is_awaited) {
+                callExpr = "await " + callExpr;
             }
 
             // 戻り値の格納
@@ -371,9 +389,22 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
             auto it_func = function_map_.find(funcName);
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
-                if (calleeFunc->is_extern &&
-                    (calleeFunc->package_name == "js" || calleeFunc->package_name.empty())) {
-                    funcName = mapExternJsName(calleeFunc->name);
+                if (calleeFunc->is_extern) {
+                    if (calleeFunc->package_name == "js" || calleeFunc->package_name.empty()) {
+                        funcName = mapExternJsName(calleeFunc->name);
+                    } else if (calleeFunc->package_name != "libc") {
+                        // 外部パッケージ: pkg.func() 形式に変換
+                        std::string alias = calleeFunc->package_name;
+                        size_t slashPos = alias.rfind('/');
+                        if (slashPos != std::string::npos) {
+                            alias = alias.substr(slashPos + 1);
+                        }
+                        for (auto& c : alias) {
+                            if (c == '-')
+                                c = '_';
+                        }
+                        funcName = alias + "." + sanitizeIdentifier(calleeFunc->name);
+                    }
                 }
             }
 
@@ -473,6 +504,11 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                     callExpr += args[i];
                 }
                 callExpr += ")";
+            }
+
+            // await式の場合、callExprをawaitでラップ
+            if (data.is_awaited) {
+                callExpr = "await " + callExpr;
             }
 
             // 戻り値の格納

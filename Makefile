@@ -577,7 +577,7 @@ test-uefi:
 test-baremetal:
 	@echo "Running Baremetal compile tests..."
 	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c baremetal:baremetal
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c "baremetal:baremetal baremetal:errors baremetal:allowed"
 
 # ========================================
 # Test Suite Commands

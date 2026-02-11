@@ -145,13 +145,15 @@ class Parser {
             }
 
             // export function (型から始まる関数、または修飾子から始まる関数の場合)
-            // 修飾子: static, inline
-            if (is_type_start() || check(TokenKind::KwStatic) || check(TokenKind::KwInline)) {
+            // 修飾子: static, inline, async
+            if (is_type_start() || check(TokenKind::KwStatic) || check(TokenKind::KwInline) ||
+                check(TokenKind::KwAsync)) {
                 // 修飾子を収集
                 bool is_static = consume_if(TokenKind::KwStatic);
                 bool is_inline = consume_if(TokenKind::KwInline);
+                bool is_async = consume_if(TokenKind::KwAsync);
 
-                return parse_function(true, is_static, is_inline, std::move(attrs));
+                return parse_function(true, is_static, is_inline, std::move(attrs), is_async);
             }
 
             // それ以外は分離エクスポート (export NAME1, NAME2;)
@@ -170,6 +172,7 @@ class Parser {
         // 修飾子を収集
         bool is_static = consume_if(TokenKind::KwStatic);
         bool is_inline = consume_if(TokenKind::KwInline);
+        bool is_async = consume_if(TokenKind::KwAsync);
 
         // struct
         if (check(TokenKind::KwStruct)) {
@@ -254,12 +257,13 @@ class Parser {
         }
 
         // 関数 (型 名前 ...)
-        return parse_function(false, is_static, is_inline, std::move(attrs));
+        return parse_function(false, is_static, is_inline, std::move(attrs), is_async);
     }
 
     // 関数定義
     ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline,
-                                std::vector<ast::AttributeNode> attributes = {}) {
+                                std::vector<ast::AttributeNode> attributes = {},
+                                bool is_async = false) {
         uint32_t start_pos = current().start;
         debug::par::log(debug::par::Id::FuncDef, "", debug::Level::Trace);
 
@@ -308,6 +312,7 @@ class Parser {
         func->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
         func->is_static = is_static;
         func->is_inline = is_inline;
+        func->is_async = is_async;
         func->attributes = std::move(attributes);
 
         return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});

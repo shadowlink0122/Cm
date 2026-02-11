@@ -380,6 +380,7 @@ struct HirFunction {
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_static = false;    // staticメソッド（selfパラメータなし）
+    bool is_async = false;     // async関数（JSバックエンド用）
     bool is_overload = false;  // overloadキーワードの有無
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };

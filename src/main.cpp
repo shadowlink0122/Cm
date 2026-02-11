@@ -289,6 +289,70 @@ std::string read_file(const std::string& filename) {
     return buffer.str();
 }
 
+// ソースコード先頭から //! platform: ディレクティブを解析
+// 戻り値: ディレクティブ文字列（例: "js", "js|web", "!native"）、なければ空文字列
+std::string parse_platform_directive(const std::string& code_content) {
+    std::istringstream iss(code_content);
+    std::string line;
+    int line_count = 0;
+    while (std::getline(iss, line) && line_count < 5) {
+        line_count++;
+        auto pos = line.find("//! platform:");
+        if (pos == std::string::npos) {
+            pos = line.find("//!platform:");
+        }
+        if (pos != std::string::npos) {
+            std::string directive = line.substr(line.find("platform:") + 9);
+            directive.erase(0, directive.find_first_not_of(" \t"));
+            directive.erase(directive.find_last_not_of(" \t\r\n") + 1);
+            return directive;
+        }
+    }
+    return "";
+}
+
+// platformディレクティブと現在のターゲットを比較
+// or形式: "js|web" → jsまたはwebならtrue
+// not形式: "!native" → native以外ならtrue
+bool match_platform_directive(const std::string& directive, const std::string& current_target) {
+    if (directive.empty()) {
+        return true;
+    }
+
+    if (directive[0] == '!') {
+        // NOT形式: !native|jit
+        std::string negated = directive.substr(1);
+        std::istringstream ss(negated);
+        std::string token;
+        while (std::getline(ss, token, '|')) {
+            if (token == current_target) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // OR形式: js|web
+    std::istringstream ss(directive);
+    std::string token;
+    while (std::getline(ss, token, '|')) {
+        if (token == current_target) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// プラットフォームディレクティブからターゲット種別を判定
+// baremetal/uefi系ならtrue
+bool is_baremetal_platform(const std::string& directive) {
+    if (directive.empty())
+        return false;
+    // directiveに "baremetal" や "uefi" が含まれるか
+    return directive.find("baremetal") != std::string::npos ||
+           directive.find("uefi") != std::string::npos;
+}
+
 // 除外パターンにマッチするか判定
 bool matches_exclude_pattern(const std::string& filepath,
                              const std::vector<std::string>& patterns) {
@@ -464,6 +528,10 @@ int main(int argc, char* argv[]) {
             try {
                 std::string code = read_file(file);
 
+                // //! platform: ディレクティブ検出
+                std::string platform_directive = parse_platform_directive(code);
+                bool is_baremetal_file = is_baremetal_platform(platform_directive);
+
                 // モジュールリゾルバ初期化
                 module::initialize_module_resolver();
 
@@ -575,6 +643,46 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
+                // ベアメタルファイルの場合、ソースコード上で禁止関数呼び出しを検出
+                if (is_baremetal_file && opts.command == Command::Lint) {
+                    static const std::vector<std::string> forbidden = {
+                        "println", "print",  "printf",         "puts",         "putchar",
+                        "malloc",  "free",   "calloc",         "realloc",      "exit",
+                        "fopen",   "fclose", "fread",          "fwrite",       "socket",
+                        "connect", "bind",   "pthread_create", "pthread_join",
+                    };
+                    // ソースコードの各行をスキャン
+                    std::istringstream scan(code);
+                    std::string scan_line;
+                    int line_num = 0;
+                    while (std::getline(scan, scan_line)) {
+                        line_num++;
+                        // コメント行はスキップ
+                        auto trimmed = scan_line;
+                        trimmed.erase(0, trimmed.find_first_not_of(" \t"));
+                        if (trimmed.find("//") == 0)
+                            continue;
+
+                        for (const auto& func : forbidden) {
+                            // "func_name(" パターンを検出
+                            std::string pattern = func + "(";
+                            auto fpos = scan_line.find(pattern);
+                            if (fpos != std::string::npos) {
+                                // 直前が英数字やアンダースコアならスキップ（部分一致防止）
+                                if (fpos > 0) {
+                                    char prev = scan_line[fpos - 1];
+                                    if (std::isalnum(prev) || prev == '_')
+                                        continue;
+                                }
+                                std::cerr << file << ":" << line_num
+                                          << ": warning: ベアメタル環境では '" << func
+                                          << "' は使用できません [B001]\n";
+                                total_warnings++;
+                            }
+                        }
+                    }
+                }
+
                 files_checked++;
 
             } catch (const std::exception& e) {
@@ -665,6 +773,28 @@ int main(int argc, char* argv[]) {
 
     // ファイルを読み込む
     std::string code = read_file(opts.input_file);
+
+    // //! platform: ディレクティブチェック
+    {
+        std::string directive = parse_platform_directive(code);
+        if (!directive.empty()) {
+            std::string current = opts.target;
+            if (current.empty()) {
+                if (opts.emit_js)
+                    current = "js";
+                else
+                    current = "native";
+            }
+
+            if (!match_platform_directive(directive, current)) {
+                std::cerr << "警告: このファイルはプラットフォーム '" << directive
+                          << "' 向けです（現在: " << current << "）\n";
+                std::cerr << "  ファイル: " << opts.input_file << "\n";
+                std::cerr << "ヒント: --target=" << directive
+                          << " オプションで対象プラットフォームを指定してください\n\n";
+            }
+        }
+    }
 
     if (opts.verbose) {
         switch (opts.command) {
@@ -1005,6 +1135,55 @@ int main(int argc, char* argv[]) {
             mir::MirPrinter printer;
             printer.print(mir, std::cout);
             return 0;
+        }
+
+        // ========== async/awaitバリデーション ==========
+        // 非JSターゲットでasync/awaitが使用されている場合はエラー
+        {
+            bool is_js_target = (opts.target == "js" || opts.target == "web" || opts.emit_js);
+            if (!is_js_target) {
+                bool has_async = false;
+                std::string async_func_name;
+                bool has_await = false;
+                std::string await_func_name;
+
+                for (const auto& func : mir.functions) {
+                    if (!func)
+                        continue;
+                    if (func->is_async) {
+                        has_async = true;
+                        async_func_name = func->name;
+                    }
+                    for (const auto& block : func->basic_blocks) {
+                        if (!block || !block->terminator)
+                            continue;
+                        if (block->terminator->kind == mir::MirTerminator::Call) {
+                            const auto& data =
+                                std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                            if (data.is_awaited) {
+                                has_await = true;
+                                await_func_name = func->name;
+                            }
+                        }
+                    }
+                }
+
+                if (has_async || has_await) {
+                    std::cerr << "エラー: async/awaitはJSターゲット専用の機能です" << std::endl;
+                    if (has_async) {
+                        std::cerr << "  async関数が検出されました: " << async_func_name
+                                  << std::endl;
+                    }
+                    if (has_await) {
+                        std::cerr << "  await式が検出されました（関数: " << await_func_name << "）"
+                                  << std::endl;
+                    }
+                    std::cerr << "ヒント: --target=js オプションでJSターゲットを指定して"
+                                 "ください"
+                              << std::endl;
+                    return 1;
+                }
+            }
         }
 
         // ========== Backend ==========
