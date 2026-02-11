@@ -1,39 +1,18 @@
-// UEFI Hello World - ライブラリ使用版
-// uefi::text を使用してインラインASM不要でテキスト出力
-//
-// ビルド手順:
-//   make         (コンパイル＆リンク)
-//   make run     (QEMUで実行)
+// UEFI Hello World
+// ビルド: make / 実行: make run
 
 import uefi::table::*;
 import uefi::text::*;
+import uefi::mem::*;
 import uefi::types::*;
 
-// UEFIエントリポイント
 ulong efi_main(EfiHandle image_handle, EfiSystemTable* system_table) {
-    // 画面クリア
+    // 画面クリア＆メッセージ表示
     uefi_clear_screen(system_table);
+    uefi_println(system_table, "Hello from Cm!");
 
-    // テキスト色を緑に設定
-    uefi_set_color(system_table, EFI_GREEN);
-
-    // メッセージ出力（ライブラリにより ASCII→UCS-2 変換が自動で行われる）
-    uefi_println(system_table, "=========================");
-    uefi_println(system_table, "  Hello from Cm (UEFI)!");
-    uefi_println(system_table, "=========================");
-
-    // 白に戻す
-    uefi_set_color(system_table, EFI_WHITE);
-    uefi_println(system_table, "");
-    uefi_println(system_table, "UEFI Library Test:");
-    uefi_println(system_table, "  - uefi::text OK");
-    uefi_println(system_table, "  - uefi::types OK");
-    uefi_println(system_table, "  - uefi::table OK");
-
-    // HLTループ（ビジーウェイト回避）
-    while (true) {
-        __asm__("hlt");
-    }
+    // 10秒待機（出力を確認できるようにする）
+    uefi_stall(system_table, 10000000);
 
     return 0;
 }
