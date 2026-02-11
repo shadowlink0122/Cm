@@ -3,16 +3,16 @@
 
 import uefi::table::*;
 import uefi::text::*;
-import uefi::mem::*;
 import uefi::types::*;
 
 ulong efi_main(EfiHandle image_handle, EfiSystemTable* system_table) {
-    // 画面クリア＆メッセージ表示
     uefi_clear_screen(system_table);
     uefi_println(system_table, "Hello from Cm!");
 
-    // 10秒待機（出力を確認できるようにする）
-    uefi_stall(system_table, 10000000);
+    // 停止（画面を維持）
+    while (true) {
+        __asm__("hlt");
+    }
 
     return 0;
 }
