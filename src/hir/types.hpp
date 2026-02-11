@@ -26,6 +26,7 @@ using ast::make_function_ptr;
 using ast::make_int;
 using ast::make_long;
 using ast::make_named;
+using ast::make_null;
 using ast::make_pointer;
 using ast::make_reference;
 using ast::make_short;

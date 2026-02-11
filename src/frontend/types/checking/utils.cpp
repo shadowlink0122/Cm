@@ -38,6 +38,35 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
         return true;
 
+    // ユニオン型への代入互換性チェック
+    // 例: int | null x = null; → a=Union{int,null}, b=Void
+    // 例: int | null x = 42;   → a=Union{int,null}, b=Int
+    if (a->kind == ast::TypeKind::Union) {
+        auto* union_type = static_cast<const ast::UnionType*>(a.get());
+        if (union_type) {
+            // nullリテラル（Void型）の代入: Nullバリアントがあれば許可
+            if (b->kind == ast::TypeKind::Void) {
+                for (const auto& variant : union_type->variants) {
+                    if (!variant.fields.empty() && variant.fields[0] &&
+                        variant.fields[0]->kind == ast::TypeKind::Null) {
+                        return true;
+                    }
+                }
+            }
+            // メンバー型との互換性チェック: いずれかのバリアントの型と互換なら許可
+            for (const auto& variant : union_type->variants) {
+                if (!variant.fields.empty() && variant.fields[0]) {
+                    // Null型バリアントはスキップ（Voidは上で処理済み）
+                    if (variant.fields[0]->kind == ast::TypeKind::Null)
+                        continue;
+                    if (types_compatible(variant.fields[0], b)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
     // 再帰ガード：相互参照型による無限再帰を防止
     // 型ペアを正規化してセットで管理
     static thread_local std::set<std::pair<std::string, std::string>> visited_pairs;

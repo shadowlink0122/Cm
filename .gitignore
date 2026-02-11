@@ -13,6 +13,7 @@ target/
 *.dylib
 *.dll
 *.lib
+output.js
 
 # テスト実行ファイル
 *_test

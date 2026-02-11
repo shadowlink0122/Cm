@@ -480,7 +480,7 @@ ast::DeclPtr Parser::parse_macro(bool is_exported) {
     uint32_t start_pos = previous().start;
 
     // 型をパース
-    auto type = parse_type();
+    auto type = parse_type_with_union();
 
     // マクロ名
     std::string name = expect_ident();
@@ -651,7 +651,7 @@ ast::DeclPtr Parser::parse_const_decl(bool is_export, std::vector<ast::Attribute
     expect(TokenKind::KwConst);
 
     // 型
-    auto type = parse_type();
+    auto type = parse_type_with_union();
 
     // 変数名
     std::string name = expect_ident();
@@ -679,7 +679,7 @@ ast::DeclPtr Parser::parse_constexpr() {
     expect(TokenKind::KwConstexpr);
 
     // constexpr変数またはconstexpr関数
-    auto type = parse_type();
+    auto type = parse_type_with_union();
     std::string name = expect_ident();
 
     if (check(TokenKind::LParen)) {

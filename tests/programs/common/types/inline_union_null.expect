@@ -1,0 +1,16 @@
+=== Inline Union Type Test ===
+Test 1: Typedef union with null
+  x declared
+  y declared
+Test 2: Function with union return
+  v1=42
+Test 3: Inline union variable
+  a declared with null
+  b declared with 42
+Test 4: Multi-type inline union
+  c declared
+Test 5: Null assignment
+  null assigned to MaybeInt
+Test 6: Value assignment
+  v6=100
+=== PASS ===

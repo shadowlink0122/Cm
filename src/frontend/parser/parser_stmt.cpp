@@ -205,9 +205,7 @@ ast::StmtPtr Parser::parse_stmt() {
             bool has_explicit_type = !(check(TokenKind::Ident) && pos_ + 1 < tokens_.size() &&
                                        tokens_[pos_ + 1].kind == TokenKind::KwIn);
             if (has_explicit_type) {
-                var_type = parse_type();
-                // C++スタイルの配列サフィックスをチェック (int[3] など)
-                var_type = check_array_suffix(std::move(var_type));
+                var_type = parse_type_with_union();
             }
             std::string var_name = expect_ident();
             expect(TokenKind::KwIn);
@@ -313,10 +311,7 @@ ast::StmtPtr Parser::parse_stmt() {
                             debug::Level::Debug);
         }
 
-        auto type = parse_type();
-
-        // C++スタイルの配列宣言をチェック: T[N] name;
-        type = check_array_suffix(std::move(type));
+        auto type = parse_type_with_union();
 
         // 名前のスパンを記録（Lint警告用）
         uint32_t name_start = current().start;

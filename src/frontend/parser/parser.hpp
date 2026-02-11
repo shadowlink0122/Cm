@@ -270,9 +270,7 @@ class Parser {
         // 明示的なジェネリックパラメータをチェック（例: <T> T max(T a, T b)）
         auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
-        auto return_type = parse_type();
-        // C++スタイルの配列戻り値型: int[] func(), int[3] func()
-        return_type = check_array_suffix(std::move(return_type));
+        auto return_type = parse_type_with_union();
 
         // 名前のスパンを記録（Lint警告用）
         uint32_t name_start = current().start;
@@ -327,10 +325,7 @@ class Parser {
             do {
                 ast::Param param;
                 param.qualifiers.is_const = consume_if(TokenKind::KwConst);
-                param.type = parse_type();
-
-                // C++スタイルの配列パラメータ: int[10] arr
-                param.type = check_array_suffix(std::move(param.type));
+                param.type = parse_type_with_union();
 
                 param.name = expect_ident();
 
@@ -436,10 +431,7 @@ class Parser {
                 break;
             }
 
-            field.type = parse_type();
-
-            // C++スタイルの配列フィールド: int[10] data;
-            field.type = check_array_suffix(std::move(field.type));
+            field.type = parse_type_with_union();
 
             field.name = expect_ident();
             expect(TokenKind::Semicolon);
@@ -589,7 +581,7 @@ class Parser {
             } else {
                 // 通常のメソッドシグネチャ
                 ast::MethodSig sig;
-                sig.return_type = parse_type();
+                sig.return_type = parse_type_with_union();
                 // C++スタイルの配列戻り値型: int[] func(), int[3] func()
                 sig.return_type = check_array_suffix(std::move(sig.return_type));
                 sig.name = expect_ident();
@@ -1066,7 +1058,9 @@ class Parser {
         bool has_const = consume_if(TokenKind::KwConst);
 
         // ポインタ/参照
-        if (consume_if(TokenKind::Star)) {
+        // 演算子戻り値型パース中は*&を型として消費しない
+        // (operator Num *(Num other) の * は乗算演算子)
+        if (!in_operator_return_type_ && consume_if(TokenKind::Star)) {
             type = ast::make_pointer(parse_type());
             // constポインタの場合、要素型にconst修飾を設定
             if (has_const && type->element_type) {
@@ -1074,7 +1068,7 @@ class Parser {
             }
             return type;
         }
-        if (consume_if(TokenKind::Amp)) {
+        if (!in_operator_return_type_ && consume_if(TokenKind::Amp)) {
             type = ast::make_reference(parse_type());
             return type;
         }
@@ -1090,7 +1084,8 @@ class Parser {
                 }
             }
             expect(TokenKind::RBracket);
-            return ast::make_array(std::move(elem), size);
+            auto arr_type = ast::make_array(std::move(elem), size);
+            return arr_type;
         }
 
         // プリミティブ型
@@ -1192,6 +1187,10 @@ class Parser {
             case TokenKind::KwCstring:
                 advance();
                 base_type = ast::make_cstring();
+                break;
+            case TokenKind::KwNull:
+                advance();
+                base_type = ast::make_null();
                 break;
             default:
                 break;
@@ -1320,11 +1319,49 @@ class Parser {
                 return ast::make_reference(std::move(named_type));
             }
 
-            return ast::make_named(name);
+            auto result = ast::make_named(name);
+            return result;
         }
 
         error("Expected type");
         return ast::make_error();
+    }
+
+    // インラインユニオン型をサポートする型解析
+    // int | null, string | int のような形式をパース
+    ast::TypePtr parse_type_with_union() {
+        auto first = parse_type();
+        first = check_array_suffix(std::move(first));
+
+        if (!check(TokenKind::Pipe)) {
+            return first;
+        }
+
+        // ユニオン型として収集
+        std::vector<ast::TypePtr> types;
+        types.push_back(std::move(first));
+
+        while (consume_if(TokenKind::Pipe)) {
+            auto next_type = parse_type();
+            next_type = check_array_suffix(std::move(next_type));
+            types.push_back(std::move(next_type));
+        }
+
+        // UnionType構築（typedef_declと同じ方式）
+        std::vector<ast::UnionVariant> variants;
+        std::string union_name;
+        for (size_t i = 0; i < types.size(); ++i) {
+            std::string tag = ast::type_to_string(*types[i]);
+            if (i > 0)
+                union_name += " | ";
+            union_name += tag;
+            ast::UnionVariant v(tag);
+            v.fields.push_back(std::move(types[i]));
+            variants.push_back(std::move(v));
+        }
+        auto union_type = ast::make_union(std::move(variants));
+        union_type->name = std::move(union_name);
+        return union_type;
     }
 
     // C++スタイルの配列サイズ指定とポインタをチェック (T[N], T*, T*[N], T[N]*)
