@@ -792,6 +792,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << "  ファイル: " << opts.input_file << "\n";
                 std::cerr << "ヒント: --target=" << directive
                           << " オプションで対象プラットフォームを指定してください\n\n";
+                return 1;
             }
         }
     }
