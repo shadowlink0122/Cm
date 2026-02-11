@@ -1,22 +1,22 @@
 // gpu_basic.cm - GPU(Metal) ベクトル加算テスト
 // 配列リテラルを使用、longとfloat両方のベクトル加算を検証
 import std::io::println;
-import std::gpu::device_create;
-import std::gpu::device_destroy;
-import std::gpu::buffer_create;
-import std::gpu::buffer_create_floats;
-import std::gpu::buffer_destroy;
-import std::gpu::buffer_write;
-import std::gpu::buffer_read;
-import std::gpu::buffer_write_longs;
-import std::gpu::buffer_read_longs;
-import std::gpu::buffer_write_floats;
-import std::gpu::buffer_read_floats;
-import std::gpu::float_to_bits;
-import std::gpu::bits_to_float;
-import std::gpu::kernel_create;
-import std::gpu::kernel_destroy;
-import std::gpu::dispatch;
+import native::gpu::device_create;
+import native::gpu::device_destroy;
+import native::gpu::buffer_create;
+import native::gpu::buffer_create_floats;
+import native::gpu::buffer_destroy;
+import native::gpu::buffer_write;
+import native::gpu::buffer_read;
+import native::gpu::buffer_write_longs;
+import native::gpu::buffer_read_longs;
+import native::gpu::buffer_write_floats;
+import native::gpu::buffer_read_floats;
+import native::gpu::float_to_bits;
+import native::gpu::bits_to_float;
+import native::gpu::kernel_create;
+import native::gpu::kernel_destroy;
+import native::gpu::dispatch;
 
 int main() {
     println("=== GPU Basic Test ===");

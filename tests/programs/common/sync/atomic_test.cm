@@ -3,13 +3,13 @@
 import std::io::println;
 import std::mem::alloc;
 import std::mem::dealloc;
-import std::sync::atomic::store_i32;
-import std::sync::atomic::load_i32;
-import std::sync::atomic::fetch_add_i32;
-import std::sync::atomic::fetch_sub_i32;
-import std::sync::atomic::store_i64;
-import std::sync::atomic::load_i64;
-import std::sync::atomic::fetch_add_i64;
+import native::sync::atomic::store_i32;
+import native::sync::atomic::load_i32;
+import native::sync::atomic::fetch_add_i32;
+import native::sync::atomic::fetch_sub_i32;
+import native::sync::atomic::store_i64;
+import native::sync::atomic::load_i64;
+import native::sync::atomic::fetch_add_i64;
 
 int main() {
     println("=== Atomic Test ===");

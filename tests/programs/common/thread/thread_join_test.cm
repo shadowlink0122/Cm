@@ -1,8 +1,8 @@
 // thread_join_test.cm - join/detachの動作確認テスト
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::detach;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::detach;
+import native::thread::sleep_ms;
 
 // デストラクタを持つ構造体
 struct BusyCounter {

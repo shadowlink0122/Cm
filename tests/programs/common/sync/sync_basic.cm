@@ -1,16 +1,16 @@
 // sync_basic.cm - 同期プリミティブ ランタイムテスト
 // std::sync::mutex の低レベルAPI経由で同期プリミティブの動作を検証
 import std::io::println;
-import std::sync::mutex::mutex_init;
-import std::sync::mutex::mutex_lock;
-import std::sync::mutex::mutex_unlock;
-import std::sync::mutex::mutex_destroy;
-import std::sync::mutex::mutex_trylock;
-import std::sync::mutex::rwlock_init;
-import std::sync::mutex::rwlock_rdlock;
-import std::sync::mutex::rwlock_wrlock;
-import std::sync::mutex::rwlock_unlock;
-import std::sync::mutex::rwlock_destroy;
+import native::sync::mutex::mutex_init;
+import native::sync::mutex::mutex_lock;
+import native::sync::mutex::mutex_unlock;
+import native::sync::mutex::mutex_destroy;
+import native::sync::mutex::mutex_trylock;
+import native::sync::mutex::rwlock_init;
+import native::sync::mutex::rwlock_rdlock;
+import native::sync::mutex::rwlock_wrlock;
+import native::sync::mutex::rwlock_unlock;
+import native::sync::mutex::rwlock_destroy;
 
 // RawMutex = long[8] (pthread_mutex_tを格納するバッファ)
 struct RawMutex {

@@ -1,0 +1,71 @@
+// std/sync/mutex.cm - Mutex/RwLock 低レベルAPIモジュール
+// pthread ラッパー関数を提供
+// impl<T>ブロックを含まないため、インポート時のパーサーエラーを回避
+module native.sync.mutex;
+
+// pthreadをuse libcで直接呼び出し
+use libc {
+    int pthread_mutex_init(void* mutex, void* attr);
+    int pthread_mutex_lock(void* mutex);
+    int pthread_mutex_unlock(void* mutex);
+    int pthread_mutex_destroy(void* mutex);
+    int pthread_mutex_trylock(void* mutex);
+
+    int pthread_rwlock_init(void* lock, void* attr);
+    int pthread_rwlock_rdlock(void* lock);
+    int pthread_rwlock_wrlock(void* lock);
+    int pthread_rwlock_unlock(void* lock);
+    int pthread_rwlock_destroy(void* lock);
+}
+
+// ============================================================
+// 低レベル Mutex API
+// import std::sync::mutex::mutex_init 等で利用可能
+// ============================================================
+
+export int mutex_init(void* mutex) {
+    void* null_ptr = 0 as void*;
+    return pthread_mutex_init(mutex, null_ptr);
+}
+
+export int mutex_lock(void* mutex) {
+    return pthread_mutex_lock(mutex);
+}
+
+export int mutex_unlock(void* mutex) {
+    return pthread_mutex_unlock(mutex);
+}
+
+export int mutex_destroy(void* mutex) {
+    return pthread_mutex_destroy(mutex);
+}
+
+export int mutex_trylock(void* mutex) {
+    return pthread_mutex_trylock(mutex);
+}
+
+// ============================================================
+// 低レベル RwLock API
+// import std::sync::mutex::rwlock_init 等で利用可能
+// ============================================================
+
+export int rwlock_init(void* lock) {
+    void* null_ptr = 0 as void*;
+    return pthread_rwlock_init(lock, null_ptr);
+}
+
+export int rwlock_rdlock(void* lock) {
+    return pthread_rwlock_rdlock(lock);
+}
+
+export int rwlock_wrlock(void* lock) {
+    return pthread_rwlock_wrlock(lock);
+}
+
+export int rwlock_unlock(void* lock) {
+    return pthread_rwlock_unlock(lock);
+}
+
+export int rwlock_destroy(void* lock) {
+    return pthread_rwlock_destroy(lock);
+}

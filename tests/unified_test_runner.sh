@@ -88,7 +88,7 @@ fi
 # llvm/ は llvm, jit で実行
 # wasm/ は llvm-wasm で実行
 # js/ は js で実行
-# bm/ は llvm-baremetal で実行
+# baremetal/ は llvm-baremetal で実行
 # uefi/ は llvm-uefi で実行
 # jit/ は jit で実行
 get_platform_dirs() {
@@ -110,7 +110,7 @@ get_platform_dirs() {
             echo "uefi"
             ;;
         llvm-baremetal)
-            echo "bm"
+            echo "baremetal"
             ;;
         js)
             echo "common js"
@@ -691,14 +691,14 @@ EOJS
 
         llvm-baremetal)
             # ベアメタルターゲットへのコンパイルのみ検証（実行不可）
-            local bm_obj="$TEMP_DIR/bm_${test_name}.o"
-            rm -f "$bm_obj"
+            local baremetal_obj="$TEMP_DIR/baremetal_${test_name}.o"
+            rm -f "$baremetal_obj"
 
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
 
             # ベアメタルターゲットでコンパイル（オブジェクト出力のみ）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$bm_obj" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
 
             # コンパイル成功 = PASS（実行はしない）
             if [ $exit_code -eq 0 ]; then
@@ -706,7 +706,7 @@ EOJS
                     echo "COMPILE_OK" > "$output_file"
                 fi
             fi
-            rm -f "$bm_obj"
+            rm -f "$baremetal_obj"
             ;;
     esac
 
@@ -1141,16 +1141,16 @@ PY
             ;;
         llvm-baremetal)
             # ベアメタルターゲットへのコンパイルのみ検証
-            local bm_obj="$TEMP_DIR/bm_${test_name}_$$.o"
+            local baremetal_obj="$TEMP_DIR/baremetal_${test_name}_$$.o"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$bm_obj" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ]; then
                 if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                     echo "COMPILE_OK" > "$output_file"
                 fi
             fi
-            rm -f "$bm_obj"
+            rm -f "$baremetal_obj"
             ;;
         *)
             echo "SKIP:Backend not supported for parallel" > "$result_file"

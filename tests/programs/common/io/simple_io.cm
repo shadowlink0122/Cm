@@ -1,6 +1,6 @@
 // シンプルなファイルI/Oテスト
 import std::io::println;
-import std::io::file::{read_file, write_file};
+import native::io::file::{read_file, write_file};
 
 int main() {
     println("=== Simple File I/O Test ===");

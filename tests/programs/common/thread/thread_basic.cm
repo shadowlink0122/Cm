@@ -1,7 +1,7 @@
 // thread_basic.cm - 基本的なスレッドテスト
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 // スレッドで実行する関数
 void* worker(void* arg) {

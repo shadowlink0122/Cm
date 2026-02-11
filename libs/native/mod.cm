@@ -1,0 +1,25 @@
+// native - Cm言語 Native専用ライブラリ
+// JIT / LLVM Native バックエンドでのみ利用可能
+//
+// OS依存機能を提供するライブラリ群。
+// WASM/Web/Baremetal環境では利用不可。
+//
+// モジュール構成:
+//   native::io       - ファイルI/O、ストリーム、バッファ付きI/O
+//   native::math     - 三角関数、対数、冪乗等 (libm依存)
+//   native::sync     - 同期プリミティブ (Mutex, RwLock, Atomic, Channel)
+//   native::thread   - スレッド (spawn, join)
+//   native::net      - ネットワーク (TCP通信, イベント多重化)
+//   native::http     - HTTPクライアント (REST API)
+//   native::gpu      - GPU計算 (Metal)
+//
+// 使用例:
+//   import native::io::{read_file, write_file};
+//   import native::math::{sin, cos, PI};
+//   import native::sync::{Mutex, AtomicInt};
+//   import native::thread::{spawn, join};
+
+module native;
+
+// サブモジュールへのアクセスは直接インポートで行う
+// 例: import native::sync::Mutex;

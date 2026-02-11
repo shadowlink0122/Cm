@@ -4,12 +4,12 @@
 import std::io::println;
 import std::mem::alloc;
 import std::mem::dealloc;
-import std::sync::mutex::mutex_init;
-import std::sync::mutex::mutex_lock;
-import std::sync::mutex::mutex_unlock;
-import std::sync::mutex::mutex_destroy;
-import std::thread::spawn_with_arg;
-import std::thread::join;
+import native::sync::mutex::mutex_init;
+import native::sync::mutex::mutex_lock;
+import native::sync::mutex::mutex_unlock;
+import native::sync::mutex::mutex_destroy;
+import native::thread::spawn_with_arg;
+import native::thread::join;
 
 // 共有データ構造:
 // メモリレイアウト: [mutex_buf: 64bytes][counter: 4bytes]

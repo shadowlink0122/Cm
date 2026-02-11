@@ -1,0 +1,239 @@
+// std/gpu/mod.cm - GPU(Metal)コンピュートモジュール
+// Apple Metal Framework を使用したGPGPU演算
+// M1以上のApple Siliconで動作
+module native.gpu;
+
+// ============================================================
+// C++ backing extern宣言（内部使用）
+// ============================================================
+
+extern "C" long gpu_device_create();
+extern "C" void gpu_device_destroy(long device);
+extern "C" string gpu_device_name(long device);
+extern "C" long gpu_buffer_create(long device, long size);
+extern "C" void gpu_buffer_destroy(long buffer);
+extern "C" void gpu_buffer_write(long buffer, void* data, long size);
+extern "C" void gpu_buffer_read(long buffer, void* data, long size);
+
+// Long バッファ操作（JITエイリアス分析回避版）
+extern "C" void gpu_buffer_write_longs(long buffer, long* data, long count);
+extern "C" void gpu_buffer_read_longs(long buffer, long* data, long count);
+
+// Float バッファ操作（Cm long ↔ GPU float 変換）
+extern "C" long gpu_buffer_create_floats(long device, long count);
+extern "C" void gpu_buffer_write_floats(long buffer, long* data, long count);
+extern "C" void gpu_buffer_read_floats(long buffer, long* data, long count);
+extern "C" long gpu_float_to_bits(double value);
+extern "C" double gpu_bits_to_float(long bits);
+
+extern "C" long gpu_kernel_create(long device, string source, string func_name);
+extern "C" void gpu_kernel_destroy(long kernel);
+extern "C" void gpu_dispatch(long kernel, long buf_a, long buf_b, long buf_out, long count);
+extern "C" void gpu_dispatch_1(long kernel, long buf, long count);
+extern "C" void gpu_dispatch_2(long kernel, long buf_in, long buf_out, long count);
+extern "C" void gpu_dispatch_n(long kernel, long* buffers, long buffer_count, long count);
+
+// ============================================================
+// Export API — ラッパー関数
+// ============================================================
+
+// デバイス管理
+export long device_create() {
+    return gpu_device_create();
+}
+
+export void device_destroy(long device) {
+    gpu_device_destroy(device);
+}
+
+export string device_name(long device) {
+    return gpu_device_name(device);
+}
+
+// バッファ管理
+export long buffer_create(long device, long size) {
+    return gpu_buffer_create(device, size);
+}
+
+export void buffer_destroy(long buffer) {
+    gpu_buffer_destroy(buffer);
+}
+
+export void buffer_write(long buffer, void* data, long size) {
+    gpu_buffer_write(buffer, data, size);
+}
+
+export void buffer_read(long buffer, void* data, long size) {
+    gpu_buffer_read(buffer, data, size);
+}
+
+// Long バッファ操作
+export void buffer_write_longs(long buffer, long* data, long count) {
+    gpu_buffer_write_longs(buffer, data, count);
+}
+
+export void buffer_read_longs(long buffer, long* data, long count) {
+    gpu_buffer_read_longs(buffer, data, count);
+}
+
+// Float バッファ操作
+export long buffer_create_floats(long device, long count) {
+    return gpu_buffer_create_floats(device, count);
+}
+
+export void buffer_write_floats(long buffer, long* data, long count) {
+    gpu_buffer_write_floats(buffer, data, count);
+}
+
+export void buffer_read_floats(long buffer, long* data, long count) {
+    gpu_buffer_read_floats(buffer, data, count);
+}
+
+// IEEE754 float ↔ long 変換ヘルパー
+export long float_to_bits(double value) {
+    return gpu_float_to_bits(value);
+}
+
+export double bits_to_float(long bits) {
+    return gpu_bits_to_float(bits);
+}
+
+// カーネル管理
+export long kernel_create(long device, string source, string func_name) {
+    return gpu_kernel_create(device, source, func_name);
+}
+
+export void kernel_destroy(long kernel) {
+    gpu_kernel_destroy(kernel);
+}
+
+// カーネル実行
+export void dispatch(long kernel, long buf_a, long buf_b, long buf_out, long count) {
+    gpu_dispatch(kernel, buf_a, buf_b, buf_out, count);
+}
+
+export void dispatch_1(long kernel, long buf, long count) {
+    gpu_dispatch_1(kernel, buf, count);
+}
+
+export void dispatch_2(long kernel, long buf_in, long buf_out, long count) {
+    gpu_dispatch_2(kernel, buf_in, buf_out, count);
+}
+
+// N個バッファ版 — ニューラルネット等の複雑なカーネル用
+export void dispatch_n(long kernel, long* buffers, long buffer_count, long count) {
+    gpu_dispatch_n(kernel, buffers, buffer_count, count);
+}
+
+// ============================================================
+// ヘルパー関数
+// ============================================================
+
+// デバイスが利用可能かチェック
+export bool is_available() {
+    long dev = gpu_device_create();
+    if (dev == 0) {
+        return false;
+    }
+    gpu_device_destroy(dev);
+    return true;
+}
+
+// ============================================================
+// Phase 3 追加機能 C++ backing extern宣言
+// ============================================================
+
+// Int32 バッファ操作
+extern "C" long gpu_buffer_create_ints(long device, long count);
+extern "C" void gpu_buffer_write_ints(long buffer, int* data, long count);
+extern "C" void gpu_buffer_read_ints(long buffer, int* data, long count);
+
+// バッファユーティリティ
+extern "C" long gpu_buffer_size(long buffer);
+extern "C" void gpu_buffer_copy(long src, long dst, long size);
+extern "C" void gpu_buffer_zero(long buffer);
+
+// デバイス情報
+extern "C" long gpu_device_max_threads(long device);
+extern "C" long gpu_device_memory_size(long device);
+
+// グリッドdispatch
+extern "C" void gpu_dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x, long group_x);
+
+// 非同期dispatch
+extern "C" long gpu_dispatch_async(long kernel, long buf_a, long buf_b, long buf_out, long count);
+extern "C" void gpu_command_wait(long cmd);
+extern "C" int gpu_command_is_completed(long cmd);
+
+// ============================================================
+// Int32 バッファ API
+// ============================================================
+
+export long buffer_create_ints(long device, long count) {
+    return gpu_buffer_create_ints(device, count);
+}
+
+export void buffer_write_ints(long buffer, int* data, long count) {
+    gpu_buffer_write_ints(buffer, data, count);
+}
+
+export void buffer_read_ints(long buffer, int* data, long count) {
+    gpu_buffer_read_ints(buffer, data, count);
+}
+
+// ============================================================
+// バッファユーティリティ API
+// ============================================================
+
+export long buffer_size(long buffer) {
+    return gpu_buffer_size(buffer);
+}
+
+export void buffer_copy(long src, long dst, long size) {
+    gpu_buffer_copy(src, dst, size);
+}
+
+export void buffer_zero(long buffer) {
+    gpu_buffer_zero(buffer);
+}
+
+// ============================================================
+// デバイス情報 API
+// ============================================================
+
+export long device_max_threads(long device) {
+    return gpu_device_max_threads(device);
+}
+
+export long device_memory_size(long device) {
+    return gpu_device_memory_size(device);
+}
+
+// ============================================================
+// グリッドdispatch API
+// ============================================================
+
+// スレッドグループサイズを明示指定してdispatch
+// group_x=0の場合はカーネル最大値を自動使用
+export void dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x, long group_x) {
+    gpu_dispatch_grid(kernel, buf_a, buf_b, buf_out, grid_x, group_x);
+}
+
+// ============================================================
+// 非同期dispatch API
+// ============================================================
+
+// GPUカーネルを非同期実行し、コマンドハンドルを返す
+export long dispatch_async(long kernel, long buf_a, long buf_b, long buf_out, long count) {
+    return gpu_dispatch_async(kernel, buf_a, buf_b, buf_out, count);
+}
+
+// コマンドバッファ完了待機
+export void command_wait(long cmd) {
+    gpu_command_wait(cmd);
+}
+
+// コマンドバッファが完了しているかチェック
+export bool command_is_completed(long cmd) {
+    return gpu_command_is_completed(cmd) != 0;
+}

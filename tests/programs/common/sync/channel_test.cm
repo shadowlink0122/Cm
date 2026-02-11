@@ -1,14 +1,14 @@
 // channel_test.cm - Channelの基本動作テスト（シングルスレッド）
 import std::io::println;
-import std::sync::channel::create;
-import std::sync::channel::send;
-import std::sync::channel::recv;
-import std::sync::channel::try_send;
-import std::sync::channel::try_recv;
-import std::sync::channel::close;
-import std::sync::channel::destroy;
-import std::sync::channel::len;
-import std::sync::channel::is_closed;
+import native::sync::channel::create;
+import native::sync::channel::send;
+import native::sync::channel::recv;
+import native::sync::channel::try_send;
+import native::sync::channel::try_recv;
+import native::sync::channel::close;
+import native::sync::channel::destroy;
+import native::sync::channel::len;
+import native::sync::channel::is_closed;
 
 int main() {
     println("=== Channel Test ===");

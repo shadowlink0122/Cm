@@ -1,0 +1,477 @@
+// std::sync - 同期プリミティブモジュール
+// アトミック操作: C++ backing (sync_runtime.cpp)
+// Mutex/RwLock: use libcでpthread関数を直接呼び出し
+module native.sync;
+
+// ============================================================
+// libc宣言 — POSIX pthread同期プリミティブ
+// ============================================================
+
+use libc {
+    // Mutex (pthread_mutex_t操作)
+    int pthread_mutex_init(void* mutex, void* attr);
+    int pthread_mutex_lock(void* mutex);
+    int pthread_mutex_unlock(void* mutex);
+    int pthread_mutex_destroy(void* mutex);
+    int pthread_mutex_trylock(void* mutex);
+
+    // RwLock (pthread_rwlock_t操作)
+    int pthread_rwlock_init(void* lock, void* attr);
+    int pthread_rwlock_rdlock(void* lock);
+    int pthread_rwlock_wrlock(void* lock);
+    int pthread_rwlock_unlock(void* lock);
+    int pthread_rwlock_destroy(void* lock);
+}
+
+// ============================================================
+// 低レベル Mutex API (pthread ラッパー)
+// import std::sync::mutex_init 等で利用可能
+// ============================================================
+
+export int mutex_init(void* mutex) {
+    void* null_ptr = 0 as void*;
+    return pthread_mutex_init(mutex, null_ptr);
+}
+
+export int mutex_lock(void* mutex) {
+    return pthread_mutex_lock(mutex);
+}
+
+export int mutex_unlock(void* mutex) {
+    return pthread_mutex_unlock(mutex);
+}
+
+export int mutex_destroy(void* mutex) {
+    return pthread_mutex_destroy(mutex);
+}
+
+export int mutex_trylock(void* mutex) {
+    return pthread_mutex_trylock(mutex);
+}
+
+// ============================================================
+// 低レベル RwLock API (pthread ラッパー)
+// import std::sync::rwlock_init 等で利用可能
+// ============================================================
+
+export int rwlock_init(void* lock) {
+    void* null_ptr = 0 as void*;
+    return pthread_rwlock_init(lock, null_ptr);
+}
+
+export int rwlock_rdlock(void* lock) {
+    return pthread_rwlock_rdlock(lock);
+}
+
+export int rwlock_wrlock(void* lock) {
+    return pthread_rwlock_wrlock(lock);
+}
+
+export int rwlock_unlock(void* lock) {
+    return pthread_rwlock_unlock(lock);
+}
+
+export int rwlock_destroy(void* lock) {
+    return pthread_rwlock_destroy(lock);
+}
+
+// ============================================================
+// プラットフォーム依存型（OS Mutex抽象化）
+// ============================================================
+
+// POSIX pthread_mutex_t の抽象化
+// サイズはプラットフォームによって異なるため、十分なバッファを確保
+export struct RawMutex {
+    // pthread_mutex_t は最大64バイト（Linux/macOS）
+    long[8] _opaque;
+}
+
+export struct RawRwLock {
+    long[8] _opaque;
+}
+
+// ============================================================
+// Mutex - 排他ロック
+// ============================================================
+
+export struct Mutex<T> {
+    T value;
+    RawMutex raw;
+    bool initialized;
+}
+
+// Mutexを保持するガード
+// スコープを抜けると自動的にアンロック
+export struct MutexGuard<T> {
+    Mutex<T>* mutex;
+}
+
+impl<T> MutexGuard<T> {
+    // 内部値への参照を取得
+    export T* get() {
+        return &self.mutex.value;
+    }
+
+    // 内部値への不変参照を取得
+    export const T* get_const() {
+        return &self.mutex.value;
+    }
+
+    // 明示的なアンロック（通常はデストラクタで呼ばれる）
+    export void unlock() {
+        pthread_mutex_unlock(&self.mutex.raw);
+    }
+}
+
+impl<T> Mutex<T> {
+    // 新しいMutexを作成
+    export static Mutex<T> new(T value) {
+        Mutex<T> m = Mutex<T> { value: value, initialized: false };
+        void* null_ptr = 0 as void*;
+        pthread_mutex_init(&m.raw, null_ptr);
+        m.initialized = true;
+        return m;
+    }
+
+    // ロックを取得（ブロッキング）
+    export MutexGuard<T> lock() {
+        pthread_mutex_lock(&self.raw);
+        return MutexGuard<T> { mutex: &self };
+    }
+
+    // ロックを試行（非ブロッキング）
+    // 成功時はtrue、失敗時はfalseを返す
+    // 成功時はロックが保持されるので、後でunlock()を呼ぶこと
+    export bool try_lock() {
+        return pthread_mutex_trylock(&self.raw) == 0;
+    }
+}
+
+// ============================================================
+// RwLock - 読み書きロック
+// ============================================================
+
+export struct RwLock<T> {
+    T value;
+    RawRwLock raw;
+    bool initialized;
+}
+
+// 読み取りガード
+export struct RwLockReadGuard<T> {
+    RwLock<T>* lock;
+}
+
+// 書き込みガード
+export struct RwLockWriteGuard<T> {
+    RwLock<T>* lock;
+}
+
+impl<T> RwLockReadGuard<T> {
+    export const T* get() {
+        return &self.lock.value;
+    }
+
+    export void unlock() {
+        pthread_rwlock_unlock(&self.lock.raw);
+    }
+}
+
+impl<T> RwLockWriteGuard<T> {
+    export T* get() {
+        return &self.lock.value;
+    }
+
+    export void unlock() {
+        pthread_rwlock_unlock(&self.lock.raw);
+    }
+}
+
+impl<T> RwLock<T> {
+    export static RwLock<T> new(T value) {
+        RwLock<T> l = RwLock<T> { value: value, initialized: false };
+        void* null_ptr = 0 as void*;
+        pthread_rwlock_init(&l.raw, null_ptr);
+        l.initialized = true;
+        return l;
+    }
+
+    export RwLockReadGuard<T> read() {
+        pthread_rwlock_rdlock(&self.raw);
+        return RwLockReadGuard<T> { lock: &self };
+    }
+
+    export RwLockWriteGuard<T> write() {
+        pthread_rwlock_wrlock(&self.raw);
+        return RwLockWriteGuard<T> { lock: &self };
+    }
+}
+
+// ============================================================
+// Atomic - アトミック操作
+// ============================================================
+
+export struct AtomicInt {
+    int value;
+}
+
+export struct AtomicLong {
+    long value;
+}
+
+export struct AtomicBool {
+    bool value;
+}
+
+// アトミック操作はC++ <atomic>でbackingが必要なためランタイムC++で実装
+extern "C" int cm_atomic_load_i32(int* ptr);
+extern "C" void cm_atomic_store_i32(int* ptr, int value);
+extern "C" int cm_atomic_fetch_add_i32(int* ptr, int value);
+extern "C" int cm_atomic_fetch_sub_i32(int* ptr, int value);
+extern "C" bool cm_atomic_compare_exchange_i32(int* ptr, int* expected, int desired);
+
+extern "C" long cm_atomic_load_i64(long* ptr);
+extern "C" void cm_atomic_store_i64(long* ptr, long value);
+extern "C" long cm_atomic_fetch_add_i64(long* ptr, long value);
+extern "C" long cm_atomic_fetch_sub_i64(long* ptr, long value);
+extern "C" bool cm_atomic_compare_exchange_i64(long* ptr, long* expected, long desired);
+
+impl AtomicInt {
+    export static AtomicInt new(int value) {
+        return AtomicInt { value: value };
+    }
+
+    export int load() {
+        return cm_atomic_load_i32(&self.value);
+    }
+
+    export void store(int value) {
+        cm_atomic_store_i32(&self.value, value);
+    }
+
+    export int fetch_add(int value) {
+        return cm_atomic_fetch_add_i32(&self.value, value);
+    }
+
+    export int fetch_sub(int value) {
+        return cm_atomic_fetch_sub_i32(&self.value, value);
+    }
+
+    export bool compare_exchange(int* expected, int desired) {
+        return cm_atomic_compare_exchange_i32(&self.value, expected, desired);
+    }
+}
+
+impl AtomicLong {
+    export static AtomicLong new(long value) {
+        return AtomicLong { value: value };
+    }
+
+    export long load() {
+        return cm_atomic_load_i64(&self.value);
+    }
+
+    export void store(long value) {
+        cm_atomic_store_i64(&self.value, value);
+    }
+
+    export long fetch_add(long value) {
+        return cm_atomic_fetch_add_i64(&self.value, value);
+    }
+
+    export long fetch_sub(long value) {
+        return cm_atomic_fetch_sub_i64(&self.value, value);
+    }
+
+    export bool compare_exchange(long* expected, long desired) {
+        return cm_atomic_compare_exchange_i64(&self.value, expected, desired);
+    }
+}
+
+impl AtomicBool {
+    export static AtomicBool new(bool value) {
+        return AtomicBool { value: value };
+    }
+
+    export bool load() {
+        int v = cm_atomic_load_i32(&self.value);
+        return v != 0;
+    }
+
+    export void store(bool value) {
+        cm_atomic_store_i32(&self.value, value ? 1 : 0);
+    }
+}
+
+// ============================================================
+// Once - 一度だけ実行
+// ============================================================
+
+export struct Once {
+    AtomicInt state;  // 0: 未実行, 1: 実行中, 2: 完了
+}
+
+impl Once {
+    export static Once new() {
+        return Once { state: AtomicInt::new(0) };
+    }
+
+    // TODO: call_once(void() f) は関数ポインタ型パラメータのパーサー対応待ち
+    // 一度だけ関数を実行する機能を提供予定
+
+    export bool is_completed() {
+        return self.state.load() == 2;
+    }
+}
+
+// ============================================================
+// Channel - スレッド間通信（Go風バウンデッドチャネル）
+// ============================================================
+
+// C++ backing extern宣言
+extern "C" long cm_channel_create(int capacity);
+extern "C" int cm_channel_send(long handle, long value);
+extern "C" int cm_channel_recv(long handle, long* value);
+extern "C" int cm_channel_try_send(long handle, long value);
+extern "C" int cm_channel_try_recv(long handle, long* value);
+extern "C" void cm_channel_close(long handle);
+extern "C" void cm_channel_destroy(long handle);
+extern "C" int cm_channel_len(long handle);
+extern "C" int cm_channel_is_closed(long handle);
+
+export struct Channel {
+    long handle;
+}
+
+impl Channel {
+    // バウンデッドチャネルを作成
+    // capacity: バッファサイズ
+    export static Channel new(int capacity) {
+        long h = cm_channel_create(capacity);
+        return Channel { handle: h };
+    }
+
+    // データ送信（ブロッキング）
+    export bool send(long value) {
+        return cm_channel_send(self.handle, value) == 0;
+    }
+
+    // データ受信（ブロッキング）
+    export long recv() {
+        long value = 0;
+        cm_channel_recv(self.handle, &value);
+        return value;
+    }
+
+    // ノンブロッキング送信
+    export bool try_send(long value) {
+        return cm_channel_try_send(self.handle, value) == 0;
+    }
+
+    // ノンブロッキング受信
+    export long try_recv() {
+        long value = 0;
+        cm_channel_try_recv(self.handle, &value);
+        return value;
+    }
+
+    // チャネル内の要素数
+    export int len() {
+        return cm_channel_len(self.handle);
+    }
+
+    // チャネルがクローズされているか
+    export bool is_closed() {
+        return cm_channel_is_closed(self.handle) != 0;
+    }
+
+    // チャネルをクローズ（送信不可、残データは受信可）
+    export void close() {
+        cm_channel_close(self.handle);
+    }
+
+    // チャネルを破棄
+    export void destroy() {
+        cm_channel_destroy(self.handle);
+    }
+}
+
+// ============================================================
+// Atomic export関数（モジュールレベル）
+// importで直接利用可能: import std::sync::atomic_load_i32;
+// ============================================================
+
+// --- i32 アトミック操作 ---
+export int atomic_load_i32(int* ptr) {
+    return cm_atomic_load_i32(ptr);
+}
+
+export void atomic_store_i32(int* ptr, int value) {
+    cm_atomic_store_i32(ptr, value);
+}
+
+export int atomic_fetch_add_i32(int* ptr, int value) {
+    return cm_atomic_fetch_add_i32(ptr, value);
+}
+
+export int atomic_fetch_sub_i32(int* ptr, int value) {
+    return cm_atomic_fetch_sub_i32(ptr, value);
+}
+
+// --- i64 アトミック操作 ---
+export long atomic_load_i64(long* ptr) {
+    return cm_atomic_load_i64(ptr);
+}
+
+export void atomic_store_i64(long* ptr, long value) {
+    cm_atomic_store_i64(ptr, value);
+}
+
+export long atomic_fetch_add_i64(long* ptr, long value) {
+    return cm_atomic_fetch_add_i64(ptr, value);
+}
+
+export long atomic_fetch_sub_i64(long* ptr, long value) {
+    return cm_atomic_fetch_sub_i64(ptr, value);
+}
+
+// ============================================================
+// Channel export関数（モジュールレベル）
+// importで直接利用可能: import std::sync::channel_create;
+// ============================================================
+
+export long channel_create(int capacity) {
+    return cm_channel_create(capacity);
+}
+
+export int channel_send(long handle, long value) {
+    return cm_channel_send(handle, value);
+}
+
+export int channel_recv(long handle, long* value) {
+    return cm_channel_recv(handle, value);
+}
+
+export int channel_try_send(long handle, long value) {
+    return cm_channel_try_send(handle, value);
+}
+
+export int channel_try_recv(long handle, long* value) {
+    return cm_channel_try_recv(handle, value);
+}
+
+export void channel_close(long handle) {
+    cm_channel_close(handle);
+}
+
+export void channel_destroy(long handle) {
+    cm_channel_destroy(handle);
+}
+
+export int channel_len(long handle) {
+    return cm_channel_len(handle);
+}
+
+export int channel_is_closed(long handle) {
+    return cm_channel_is_closed(handle);
+}

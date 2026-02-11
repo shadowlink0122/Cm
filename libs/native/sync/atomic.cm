@@ -1,0 +1,61 @@
+// std/sync/atomic.cm - アトミック操作モジュール
+// C++ backing (sync_runtime.cpp) のDirect APIを使用
+module native.sync.atomic;
+
+// Direct API extern宣言（cm_プレフィックスなし）
+extern "C" int atomic_load_i32(int* ptr);
+extern "C" void atomic_store_i32(int* ptr, int value);
+extern "C" int atomic_fetch_add_i32(int* ptr, int value);
+extern "C" int atomic_fetch_sub_i32(int* ptr, int value);
+extern "C" bool atomic_compare_exchange_i32(int* ptr, int* expected, int desired);
+
+extern "C" long atomic_load_i64(long* ptr);
+extern "C" void atomic_store_i64(long* ptr, long value);
+extern "C" long atomic_fetch_add_i64(long* ptr, long value);
+extern "C" long atomic_fetch_sub_i64(long* ptr, long value);
+extern "C" bool atomic_compare_exchange_i64(long* ptr, long* expected, long desired);
+
+// ============================================================
+// export ラッパー関数
+// import std::sync::atomic::fetch_add_i32 で使用可能
+// ============================================================
+
+export int load_i32(int* ptr) {
+    return atomic_load_i32(ptr);
+}
+
+export void store_i32(int* ptr, int value) {
+    atomic_store_i32(ptr, value);
+}
+
+export int fetch_add_i32(int* ptr, int value) {
+    return atomic_fetch_add_i32(ptr, value);
+}
+
+export int fetch_sub_i32(int* ptr, int value) {
+    return atomic_fetch_sub_i32(ptr, value);
+}
+
+export bool compare_exchange_i32(int* ptr, int* expected, int desired) {
+    return atomic_compare_exchange_i32(ptr, expected, desired);
+}
+
+export long load_i64(long* ptr) {
+    return atomic_load_i64(ptr);
+}
+
+export void store_i64(long* ptr, long value) {
+    atomic_store_i64(ptr, value);
+}
+
+export long fetch_add_i64(long* ptr, long value) {
+    return atomic_fetch_add_i64(ptr, value);
+}
+
+export long fetch_sub_i64(long* ptr, long value) {
+    return atomic_fetch_sub_i64(ptr, value);
+}
+
+export bool compare_exchange_i64(long* ptr, long* expected, long desired) {
+    return atomic_compare_exchange_i64(ptr, expected, desired);
+}

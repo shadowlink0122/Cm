@@ -1,0 +1,73 @@
+// std/sync/channel.cm - チャネルモジュール
+// C++ backing (channel_runtime.cpp) を使用
+// Go風バウンデッドチャネル
+module native.sync.channel;
+
+// C++ backing extern宣言（内部使用）
+extern "C" long cm_channel_create(int capacity);
+extern "C" int cm_channel_send(long handle, long value);
+extern "C" int cm_channel_recv(long handle, long* value);
+extern "C" int cm_channel_try_send(long handle, long value);
+extern "C" int cm_channel_try_recv(long handle, long* value);
+extern "C" void cm_channel_close(long handle);
+extern "C" void cm_channel_destroy(long handle);
+extern "C" int cm_channel_len(long handle);
+extern "C" int cm_channel_is_closed(long handle);
+
+// ============================================================
+// Channel API
+// ============================================================
+
+// バウンデッドチャネルを作成
+// capacity: バッファサイズ（最大何個のメッセージを保持できるか）
+// 戻り値: チャネルハンドル
+export long create(int capacity) {
+    return cm_channel_create(capacity);
+}
+
+// データ送信（ブロッキング）
+// バッファが満杯の場合は空くまで待機
+// 戻り値: 0=成功, -1=チャネルがクローズ済み
+export int send(long handle, long value) {
+    return cm_channel_send(handle, value);
+}
+
+// データ受信（ブロッキング）
+// バッファが空の場合はデータが送信されるまで待機
+// 戻り値: 0=成功, -1=チャネルがクローズ済みかつ空
+export int recv(long handle, long* value) {
+    return cm_channel_recv(handle, value);
+}
+
+// ノンブロッキング送信
+// 戻り値: 0=成功, -1=クローズ済み, -2=満杯
+export int try_send(long handle, long value) {
+    return cm_channel_try_send(handle, value);
+}
+
+// ノンブロッキング受信
+// 戻り値: 0=成功, -1=クローズ済みかつ空, -2=空
+export int try_recv(long handle, long* value) {
+    return cm_channel_try_recv(handle, value);
+}
+
+// チャネルをクローズ（送信不可、残データは受信可）
+export void close(long handle) {
+    cm_channel_close(handle);
+}
+
+// チャネルを破棄
+export void destroy(long handle) {
+    cm_channel_destroy(handle);
+}
+
+// チャネル内の要素数
+export int len(long handle) {
+    return cm_channel_len(handle);
+}
+
+// チャネルがクローズされているか
+// 戻り値: 0=未クローズ, 1=クローズ済み
+export int is_closed(long handle) {
+    return cm_channel_is_closed(handle);
+}

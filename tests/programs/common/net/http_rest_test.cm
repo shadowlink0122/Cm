@@ -9,15 +9,15 @@
 //   5. 非同期並列GETリクエスト (thread + channel)
 
 import std::io::println;
-import std::http::*;
-import std::thread::spawn;
-import std::thread::spawn_with_arg;
-import std::thread::join;
-import std::thread::sleep_ms;
-import std::sync::channel::create;
-import std::sync::channel::send;
-import std::sync::channel::recv;
-import std::sync::channel::destroy;
+import native::http::*;
+import native::thread::spawn;
+import native::thread::spawn_with_arg;
+import native::thread::join;
+import native::thread::sleep_ms;
+import native::sync::channel::create;
+import native::sync::channel::send;
+import native::sync::channel::recv;
+import native::sync::channel::destroy;
 
 // Cm側サーバスレッド: ルーティングとレスポンスをCmで制御
 void* server_thread(void* arg) {

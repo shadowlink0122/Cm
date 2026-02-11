@@ -3,17 +3,17 @@
 // Metal Compute Shaderでネイティブfloat演算（sigmoid + 勾配降下）
 // 配列リテラルでデータ初期化
 import std::io::println;
-import std::gpu::device_create;
-import std::gpu::device_destroy;
-import std::gpu::buffer_create_floats;
-import std::gpu::buffer_destroy;
-import std::gpu::buffer_write_floats;
-import std::gpu::buffer_read_floats;
-import std::gpu::float_to_bits;
-import std::gpu::bits_to_float;
-import std::gpu::kernel_create;
-import std::gpu::kernel_destroy;
-import std::gpu::dispatch_1;
+import native::gpu::device_create;
+import native::gpu::device_destroy;
+import native::gpu::buffer_create_floats;
+import native::gpu::buffer_destroy;
+import native::gpu::buffer_write_floats;
+import native::gpu::buffer_read_floats;
+import native::gpu::float_to_bits;
+import native::gpu::bits_to_float;
+import native::gpu::kernel_create;
+import native::gpu::kernel_destroy;
+import native::gpu::dispatch_1;
 
 int main() {
     println("=== GPU XOR Neural Network Test ===");

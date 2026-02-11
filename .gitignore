@@ -7,7 +7,6 @@ build/
 /build-*/
 cmake-build-*/
 target/
-web/
 *.o
 *.a
 *.so
@@ -33,6 +32,7 @@ Thumbs.db
 # Dependencies
 deps/
 cm_modules/
+node_modules/
 
 # Test artifacts
 *.log

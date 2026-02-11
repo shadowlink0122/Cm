@@ -1,0 +1,11 @@
+// web - Cm言語 Web/JS専用ライブラリ
+// ブラウザ/Node.js上でのみ利用可能
+//
+// DOM API、ブラウザAPI、Web固有の機能を提供予定。
+//
+// 使用例:
+//   import web::dom::{...};
+
+module web;
+
+// 将来拡張: DOM API等のWeb固有機能をここに追加

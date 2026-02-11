@@ -76,15 +76,19 @@ ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
     }
 
     // 4. 実行ファイルの場所を基準（異なるディレクトリから実行される場合に重要）
-    // 注: std::io は std/io に変換されるため、exe_dir 自体を追加
+    // 注: std::io は std/io に変換される。libs/std/io を見つけるため exe_dir/libs を追加
     auto exe_dir = get_executable_directory();
-    if (!exe_dir.empty() && std::filesystem::exists(exe_dir / "std")) {
-        search_paths.push_back(exe_dir);
+    if (!exe_dir.empty()) {
+        auto exe_libs = exe_dir / "libs";
+        if (std::filesystem::exists(exe_libs)) {
+            search_paths.push_back(exe_libs);
+        }
     }
 
-    // 5. プロジェクトルート（project_root/std/io を探すため）
-    if (std::filesystem::exists(project_root / "std")) {
-        search_paths.push_back(project_root);
+    // 5. プロジェクトルート（project_root/libs/std/io 等を探すため）
+    auto project_libs = project_root / "libs";
+    if (std::filesystem::exists(project_libs)) {
+        search_paths.push_back(project_libs);
     }
 
     // 5. システムインストールパス（プラットフォーム依存）

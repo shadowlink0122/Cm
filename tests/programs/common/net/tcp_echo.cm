@@ -4,19 +4,19 @@
 // 注: ポートバインド失敗時はサーバを起動せず安全に終了する
 
 import std::io::println;
-import std::net::tcp_listen;
-import std::net::tcp_accept;
-import std::net::tcp_connect;
-import std::net::tcp_read;
-import std::net::tcp_write;
-import std::net::tcp_close;
-import std::net::buf_create;
-import std::net::buf_set;
-import std::net::buf_get;
-import std::net::buf_destroy;
-import std::thread::spawn_with_arg;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::net::tcp_listen;
+import native::net::tcp_accept;
+import native::net::tcp_connect;
+import native::net::tcp_read;
+import native::net::tcp_write;
+import native::net::tcp_close;
+import native::net::buf_create;
+import native::net::buf_set;
+import native::net::buf_get;
+import native::net::buf_destroy;
+import native::thread::spawn_with_arg;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 // サーバスレッド: tcp_listen結果を受け取り、成功時のみaccept
 // argレイアウト: [server_fd: long]

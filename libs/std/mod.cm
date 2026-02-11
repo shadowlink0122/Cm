@@ -1,0 +1,32 @@
+// std - Cm言語標準ライブラリ（全バックエンド共通）
+//
+// 全てのバックエンド (JIT, LLVM Native, WASM, Web) で
+// 動作が保証されたライブラリ群。
+//
+// モジュール構成:
+//   std::io          - 基本入出力 (println, print, input)
+//   std::core        - コア機能 (型エイリアス, min, max, clamp)
+//   std::math        - 整数数学関数 (gcd, lcm, factorial, fibonacci)
+//   std::collections - コレクション (Vector, HashMap, Queue)
+//   std::mem         - メモリ管理 (malloc, free, size_of)
+//   std::iter        - イテレータ
+//
+// OS/libc依存の機能は native:: を使用してください:
+//   native::math     - 三角関数, 対数, 冪乗 (sin, cos, sqrt)
+//   native::io       - ファイルI/O, ストリーム
+//   native::sync     - 同期プリミティブ (Mutex, RwLock)
+//   native::thread   - スレッド (spawn, join)
+//   native::net      - ネットワーク
+//   native::http     - HTTPクライアント
+//   native::gpu      - GPU計算 (Metal)
+//
+// 使用例:
+//   import std::io::println;
+//   import std::math::{gcd, factorial};
+//   import std::core::{min, max, clamp};
+//   import std::collections::Vector;
+
+module std;
+
+// サブモジュールへのアクセスは直接インポートで行う
+// 例: import std::io::println;

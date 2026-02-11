@@ -2,13 +2,13 @@
 // プロデューサースレッドがチャネルに値を送信し
 // メインスレッド（コンシューマー）が受信・集計
 import std::io::println;
-import std::sync::channel::create;
-import std::sync::channel::send;
-import std::sync::channel::recv;
-import std::sync::channel::close;
-import std::sync::channel::destroy;
-import std::thread::spawn_with_arg;
-import std::thread::join_all;
+import native::sync::channel::create;
+import native::sync::channel::send;
+import native::sync::channel::recv;
+import native::sync::channel::close;
+import native::sync::channel::destroy;
+import native::thread::spawn_with_arg;
+import native::thread::join_all;
 
 // プロデューサー: チャネルに1〜5の値を送信
 void* producer(void* arg) {

@@ -1,0 +1,34 @@
+// native::io - ファイルI/Oモジュール (Native専用)
+// JIT / LLVM Native バックエンドでのみ利用可能
+module native.io;
+
+// ============================================================
+// エラー型
+// ============================================================
+
+export import native.io.error::{IoResult, IoError, IoErrorKind};
+
+// ============================================================
+// インターフェース
+// ============================================================
+
+export import native.io.traits::{Reader, Writer, Seek, SeekFrom};
+
+// ============================================================
+// 標準入出力ストリーム
+// ============================================================
+
+export import native.io.stream.stdin::{Stdin, stdin};
+export import native.io.stream.stdout::{Stdout, Stderr, stdout, stderr};
+
+// ============================================================
+// バッファ付きI/O
+// ============================================================
+
+export import native.io.stream.buffered::{BufferedReader, BufferedWriter};
+
+// ============================================================
+// ファイルI/O
+// ============================================================
+
+export import native.io.file::{read_file, write_file};

@@ -249,17 +249,17 @@ if(CM_USE_LLVM)
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
         # std バッキング実装（C/C++/Obj-C++）
-        std/sync/sync_runtime.cpp
-        std/sync/channel_runtime.cpp
-        std/thread/thread_runtime.cpp
-        std/net/net_runtime.cpp
-        std/http/http_runtime.cpp
+        libs/native/sync/sync_runtime.cpp
+        libs/native/sync/channel_runtime.cpp
+        libs/native/thread/thread_runtime.cpp
+        libs/native/net/net_runtime.cpp
+        libs/native/http/http_runtime.cpp
     )
 
     # Apple環境: GPU(Metal)バッキング実装を追加
     if(APPLE)
         list(APPEND CM_SOURCES
-            std/gpu/gpu_runtime.mm
+            libs/native/gpu/gpu_runtime.mm
         )
     endif()
 endif()
@@ -372,7 +372,7 @@ if(CM_USE_LLVM)
 
         # Apple環境: GPUランタイムを別途ビルド（ネイティブコンパイル用）
         if(APPLE)
-            set(CM_GPU_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/gpu/gpu_runtime.mm)
+            set(CM_GPU_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/gpu/gpu_runtime.mm)
             set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
             add_custom_command(
                 OUTPUT ${CM_GPU_RUNTIME_OUTPUT}
@@ -387,7 +387,7 @@ if(CM_USE_LLVM)
 
         # stdランタイムを個別オブジェクトファイルとしてビルド（LLVM Nativeリンク用）
         # --- Net Runtime ---
-        set(CM_NET_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/net/net_runtime.cpp)
+        set(CM_NET_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/net/net_runtime.cpp)
         set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
         add_custom_command(
             OUTPUT ${CM_NET_RUNTIME_OUTPUT}
@@ -400,8 +400,8 @@ if(CM_USE_LLVM)
         )
 
         # --- Sync Runtime (sync + channel を1つのアーカイブに) ---
-        set(CM_SYNC_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/sync_runtime.cpp)
-        set(CM_CHANNEL_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/channel_runtime.cpp)
+        set(CM_SYNC_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/sync/sync_runtime.cpp)
+        set(CM_CHANNEL_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/sync/channel_runtime.cpp)
         set(CM_SYNC_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime_obj.o)
         set(CM_CHANNEL_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_channel_runtime_obj.o)
         set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
@@ -430,7 +430,7 @@ if(CM_USE_LLVM)
         )
 
         # --- Thread Runtime ---
-        set(CM_THREAD_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/thread/thread_runtime.cpp)
+        set(CM_THREAD_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/thread/thread_runtime.cpp)
         set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
         add_custom_command(
             OUTPUT ${CM_THREAD_RUNTIME_OUTPUT}
@@ -443,7 +443,7 @@ if(CM_USE_LLVM)
         )
 
         # --- HTTP Runtime ---
-        set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/http/http_runtime.cpp)
+        set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/http/http_runtime.cpp)
         set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
         # OpenSSLが見つかった場合はHTTPSサポート付きでビルド
         # CMakeリスト形式で個別引数として展開されるようにする

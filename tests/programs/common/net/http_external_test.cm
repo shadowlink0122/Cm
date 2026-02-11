@@ -2,7 +2,7 @@
 // 実際の外部サーバへのHTTPリクエストを検証
 // httpbin.org: テスト用HTTP API (HTTP port 80対応)
 import std::io::println;
-import std::http::*;
+import native::http::*;
 
 int main() {
     println("=== HTTP External Communication Test ===");

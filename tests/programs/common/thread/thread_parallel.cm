@@ -1,8 +1,8 @@
 // thread_parallel.cm - 複数スレッドの並列実行テスト
 // 結果の合計値で正しく動作を確認（出力順序は不定）
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 // ワーカー関数（計算のみ、出力なし）
 void* calc10(void* arg) {
