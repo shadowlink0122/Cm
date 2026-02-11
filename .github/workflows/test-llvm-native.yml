@@ -168,8 +168,8 @@ jobs:
             # ANSIカラーコード除去してからFAIL行を抽出
             sed 's/\x1b\[[0-9;]*m//g' test_output_o0.log | grep '\[FAIL\]' | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
               echo "::notice::DEBUG processing: ${test_name}"
-              test_file="tests/test_programs/${test_name}.cm"
-              expect_file="tests/test_programs/${test_name}.expect"
+              test_file="tests/programs/${test_name}.cm"
+              expect_file="tests/programs/${test_name}.expect"
               if [ -f "$test_file" ]; then
                 compile_output=$(./cm compile -O0 "$test_file" -o "/tmp/test_debug_$$" 2>&1) || true
                 if [ -f "/tmp/test_debug_$$" ]; then
@@ -286,8 +286,8 @@ jobs:
             # ANSIカラーコード除去してからFAIL行を抽出
             sed 's/\x1b\[[0-9;]*m//g' test_output_o3.log | grep '\[FAIL\]' | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
               echo "::notice::DEBUG processing: ${test_name}"
-              test_file="tests/test_programs/${test_name}.cm"
-              expect_file="tests/test_programs/${test_name}.expect"
+              test_file="tests/programs/${test_name}.cm"
+              expect_file="tests/programs/${test_name}.expect"
               if [ -f "$test_file" ]; then
                 compile_output=$(./cm compile -O3 "$test_file" -o "/tmp/test_debug_$$" 2>&1) || true
                 if [ -f "/tmp/test_debug_$$" ]; then

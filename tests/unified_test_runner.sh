@@ -176,7 +176,7 @@ usage() {
     echo "  runtime  - OS依存ランタイムテスト（ファイルI/O・ネット・スレッド等）"
     echo "  all      - 全テスト（デフォルト）"
     echo ""
-    echo "Categories are auto-detected from directories in tests/test_programs/"
+    echo "Categories are auto-detected from directories in tests/programs/"
     exit 0
 }
 
