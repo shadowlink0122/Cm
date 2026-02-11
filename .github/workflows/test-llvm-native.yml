@@ -168,25 +168,34 @@ jobs:
             # ANSIカラーコード除去してからFAIL行を抽出
             sed 's/\x1b\[[0-9;]*m//g' test_output_o0.log | grep '\[FAIL\]' | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
               echo "::notice::DEBUG processing: ${test_name}"
-              test_file="tests/programs/${test_name}.cm"
-              expect_file="tests/programs/${test_name}.expect"
-              if [ -f "$test_file" ]; then
-                compile_output=$(./cm compile -O0 "$test_file" -o "/tmp/test_debug_$$" 2>&1) || true
-                if [ -f "/tmp/test_debug_$$" ]; then
-                  actual=$("/tmp/test_debug_$$" 2>&1) || true
-                  if [ -f "$expect_file" ]; then
-                    expected=$(cat "$expect_file")
-                    diff_output=$(diff <(echo "$actual") "$expect_file" 2>&1) || true
-                    echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | Expected: $(echo "$expected" | head -20 | tr '\n' '|') | Diff: $(echo "$diff_output" | head -10 | tr '\n' '|')"
-                  else
-                    echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | No expect file"
-                  fi
-                  rm -f "/tmp/test_debug_$$"
-                else
-                  echo "::error::DEBUG ${test_name} | Compile failed: $(echo "$compile_output" | head -5 | tr '\n' '|')"
+              # テストファイルの検索: common/, llvm/, runtime/ 等のサブディレクトリを候補として検索
+              test_file=""
+              expect_file=""
+              for prefix in common llvm runtime; do
+                candidate="tests/programs/${prefix}/${test_name}.cm"
+                if [ -f "$candidate" ]; then
+                  test_file="$candidate"
+                  expect_file="tests/programs/${prefix}/${test_name}.expect"
+                  break
                 fi
+              done
+              if [ -z "$test_file" ]; then
+                echo "::error::DEBUG ${test_name} | File not found in any programs subdirectory"
+                continue
+              fi
+              compile_output=$(./cm compile -O0 "$test_file" -o "/tmp/test_debug_$$" 2>&1) || true
+              if [ -f "/tmp/test_debug_$$" ]; then
+                actual=$("/tmp/test_debug_$$" 2>&1) || true
+                if [ -f "$expect_file" ]; then
+                  expected=$(cat "$expect_file")
+                  diff_output=$(diff <(echo "$actual") "$expect_file" 2>&1) || true
+                  echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | Expected: $(echo "$expected" | head -20 | tr '\n' '|') | Diff: $(echo "$diff_output" | head -10 | tr '\n' '|')"
+                else
+                  echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | No expect file"
+                fi
+                rm -f "/tmp/test_debug_$$"
               else
-                echo "::error::DEBUG ${test_name} | File not found: ${test_file}"
+                echo "::error::DEBUG ${test_name} | Compile failed: $(echo "$compile_output" | head -5 | tr '\n' '|')"
               fi
             done
           fi
@@ -286,25 +295,34 @@ jobs:
             # ANSIカラーコード除去してからFAIL行を抽出
             sed 's/\x1b\[[0-9;]*m//g' test_output_o3.log | grep '\[FAIL\]' | sed 's/.*\[FAIL\] //' | sed 's/ -.*//' | while read -r test_name; do
               echo "::notice::DEBUG processing: ${test_name}"
-              test_file="tests/programs/${test_name}.cm"
-              expect_file="tests/programs/${test_name}.expect"
-              if [ -f "$test_file" ]; then
-                compile_output=$(./cm compile -O3 "$test_file" -o "/tmp/test_debug_$$" 2>&1) || true
-                if [ -f "/tmp/test_debug_$$" ]; then
-                  actual=$("/tmp/test_debug_$$" 2>&1) || true
-                  if [ -f "$expect_file" ]; then
-                    expected=$(cat "$expect_file")
-                    diff_output=$(diff <(echo "$actual") "$expect_file" 2>&1) || true
-                    echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | Expected: $(echo "$expected" | head -20 | tr '\n' '|') | Diff: $(echo "$diff_output" | head -10 | tr '\n' '|')"
-                  else
-                    echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | No expect file"
-                  fi
-                  rm -f "/tmp/test_debug_$$"
-                else
-                  echo "::error::DEBUG ${test_name} | Compile failed: $(echo "$compile_output" | head -5 | tr '\n' '|')"
+              # テストファイルの検索: common/, llvm/, runtime/ 等のサブディレクトリを候補として検索
+              test_file=""
+              expect_file=""
+              for prefix in common llvm runtime; do
+                candidate="tests/programs/${prefix}/${test_name}.cm"
+                if [ -f "$candidate" ]; then
+                  test_file="$candidate"
+                  expect_file="tests/programs/${prefix}/${test_name}.expect"
+                  break
                 fi
+              done
+              if [ -z "$test_file" ]; then
+                echo "::error::DEBUG ${test_name} | File not found in any programs subdirectory"
+                continue
+              fi
+              compile_output=$(./cm compile -O3 "$test_file" -o "/tmp/test_debug_$$" 2>&1) || true
+              if [ -f "/tmp/test_debug_$$" ]; then
+                actual=$("/tmp/test_debug_$$" 2>&1) || true
+                if [ -f "$expect_file" ]; then
+                  expected=$(cat "$expect_file")
+                  diff_output=$(diff <(echo "$actual") "$expect_file" 2>&1) || true
+                  echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | Expected: $(echo "$expected" | head -20 | tr '\n' '|') | Diff: $(echo "$diff_output" | head -10 | tr '\n' '|')"
+                else
+                  echo "::error::DEBUG ${test_name} | Got: $(echo "$actual" | head -20 | tr '\n' '|') | No expect file"
+                fi
+                rm -f "/tmp/test_debug_$$"
               else
-                echo "::error::DEBUG ${test_name} | File not found: ${test_file}"
+                echo "::error::DEBUG ${test_name} | Compile failed: $(echo "$compile_output" | head -5 | tr '\n' '|')"
               fi
             done
           fi
