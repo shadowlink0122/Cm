@@ -1,5 +1,6 @@
+//! platform: uefi
 // UEFI Hello World - モジュール版
-// ビルド: cd tests/uefi && make clean && make && make run
+// ビルド: cd examples/uefi && make clean && make && make run
 import ./libs/efi_core;
 import ./libs/efi_text;
 

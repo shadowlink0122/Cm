@@ -128,10 +128,18 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
         std::ofstream html(htmlFile);
         if (html.is_open()) {
             html << "<!DOCTYPE html>\n";
-            html << "<html>\n<head>\n";
+            html << "<html lang=\"ja\">\n<head>\n";
             html << "    <meta charset=\"UTF-8\">\n";
+            html << "    <meta name=\"viewport\" content=\"width=device-width, "
+                    "initial-scale=1.0\">\n";
             html << "    <title>Cm Application</title>\n";
+            html << "    <style id=\"cm-style\">\n";
+            html << "        *, *::before, *::after { box-sizing: border-box; "
+                    "margin: 0; padding: 0; }\n";
+            html << "        body { font-family: system-ui, -apple-system, sans-serif; }\n";
+            html << "    </style>\n";
             html << "</head>\n<body>\n";
+            html << "    <div id=\"cm-root\"></div>\n";
             html << "    <script src=\"" << scriptSrc << "\"></script>\n";
             html << "</body>\n</html>\n";
             html.close();

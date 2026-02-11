@@ -426,6 +426,10 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
 }
 
 std::string JSCodeGen::emitConstant(const mir::MirConstant& constant) {
+    // nullリテラル（Void型定数）はJSのnullとして出力
+    if (constant.type && constant.type->kind == ast::TypeKind::Void) {
+        return "null";
+    }
     return std::visit(
         [](auto&& val) -> std::string {
             using T = std::decay_t<decltype(val)>;

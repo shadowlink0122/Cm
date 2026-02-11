@@ -495,6 +495,49 @@ void AutoImplGenerator::generate_builtin_css_method(const hir::HirStruct& st) {
 }
 
 // ============================================================
+// 組み込みto_cssメソッドの自動実装（css()のエイリアス）
+// __to_css は __css を呼び出すラッパー関数
+// ============================================================
+void AutoImplGenerator::generate_builtin_to_css_method(const hir::HirStruct& st) {
+    std::string func_name = st.name + "__to_css";
+    std::string css_func_name = st.name + "__css";
+
+    auto mir_func = std::make_unique<MirFunction>();
+    mir_func->name = func_name;
+
+    auto struct_type = hir::make_named(st.name);
+    mir_func->return_local = mir_func->add_local("_0", hir::make_string(), true, false);
+
+    LocalId self_local = mir_func->add_local("self", struct_type, false, true);
+    mir_func->arg_locals.push_back(self_local);
+
+    BlockId entry_block = mir_func->add_block();
+    auto* block = mir_func->get_block(entry_block);
+
+    // __css(self) を呼び出して結果を返す
+    BlockId return_block = mir_func->add_block();
+    std::vector<MirOperandPtr> args;
+    args.push_back(MirOperand::copy(MirPlace(self_local)));
+
+    auto call_term = std::make_unique<MirTerminator>();
+    call_term->kind = MirTerminator::Call;
+    call_term->data = MirTerminator::CallData{MirOperand::function_ref(css_func_name),
+                                              std::move(args),
+                                              MirPlace(mir_func->return_local),
+                                              return_block,
+                                              std::nullopt,
+                                              std::string(),
+                                              std::string(),
+                                              false};
+    block->terminator = std::move(call_term);
+
+    auto* ret_block = mir_func->get_block(return_block);
+    ret_block->terminator = MirTerminator::return_value();
+
+    ctx_.program.functions.push_back(std::move(mir_func));
+}
+
+// ============================================================
 // 組み込みisCssメソッドの自動実装
 // ============================================================
 void AutoImplGenerator::generate_builtin_is_css_method(const hir::HirStruct& st) {
@@ -639,6 +682,53 @@ void AutoImplGenerator::generate_builtin_css_method_for_monomorphized(const MirS
     block->terminator = MirTerminator::return_value();
 
     ctx_.impl_info[st.name]["Css"] = func_name;
+    ctx_.program.functions.push_back(std::move(mir_func));
+}
+
+// ============================================================
+// モノモーフィゼーション版to_css（css()のエイリアス）
+// ============================================================
+void AutoImplGenerator::generate_builtin_to_css_method_for_monomorphized(const MirStruct& st) {
+    std::string func_name = st.name + "__to_css";
+    std::string css_func_name = st.name + "__css";
+
+    for (const auto& func : ctx_.program.functions) {
+        if (func && func->name == func_name)
+            return;
+    }
+
+    auto mir_func = std::make_unique<MirFunction>();
+    mir_func->name = func_name;
+
+    auto struct_type = hir::make_named(st.name);
+    mir_func->return_local = mir_func->add_local("_0", hir::make_string(), true, false);
+
+    LocalId self_local = mir_func->add_local("self", struct_type, false, true);
+    mir_func->arg_locals.push_back(self_local);
+
+    BlockId entry_block = mir_func->add_block();
+    auto* block = mir_func->get_block(entry_block);
+
+    // __css(self) を呼び出して結果を返す
+    BlockId return_block = mir_func->add_block();
+    std::vector<MirOperandPtr> args;
+    args.push_back(MirOperand::copy(MirPlace(self_local)));
+
+    auto call_term = std::make_unique<MirTerminator>();
+    call_term->kind = MirTerminator::Call;
+    call_term->data = MirTerminator::CallData{MirOperand::function_ref(css_func_name),
+                                              std::move(args),
+                                              MirPlace(mir_func->return_local),
+                                              return_block,
+                                              std::nullopt,
+                                              std::string(),
+                                              std::string(),
+                                              false};
+    block->terminator = std::move(call_term);
+
+    auto* ret_block = mir_func->get_block(return_block);
+    ret_block->terminator = MirTerminator::return_value();
+
     ctx_.program.functions.push_back(std::move(mir_func));
 }
 

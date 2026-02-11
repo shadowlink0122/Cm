@@ -1,3 +1,4 @@
+//! platform: uefi
 // UEFI メモリ管理テスト
 // Boot ServicesのAllocatePool/FreePoolを使用
 //

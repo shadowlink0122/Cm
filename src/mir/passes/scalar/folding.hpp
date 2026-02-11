@@ -272,6 +272,13 @@ class ConstantFolding : public OptimizationPass {
     // 二項演算を評価
     std::optional<MirConstant> eval_binary_op(MirBinaryOp op, const MirConstant& lhs,
                                               const MirConstant& rhs) {
+        // Void型（nullリテラル）の演算は定数畳み込みしない
+        // nullable型のnull比較は実行時に行う必要がある
+        if ((lhs.type && lhs.type->kind == hir::TypeKind::Void) ||
+            (rhs.type && rhs.type->kind == hir::TypeKind::Void)) {
+            return std::nullopt;
+        }
+
         // 整数演算
         if (auto* lhs_int = std::get_if<int64_t>(&lhs.value)) {
             if (auto* rhs_int = std::get_if<int64_t>(&rhs.value)) {

@@ -1,3 +1,4 @@
+//! platform: uefi
 // libs::efi_core - UEFI基本型とSystemTableアクセスヘルパー
 // ポインタ演算でUEFI構造体にアクセスする方式
 // module efi_core;

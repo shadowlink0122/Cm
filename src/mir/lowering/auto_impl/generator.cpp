@@ -32,6 +32,7 @@ void AutoImplGenerator::generate_for_struct(const hir::HirStruct& st) {
             generate_builtin_display_method(st);
         } else if (iface_name == "Css") {
             generate_builtin_css_method(st);
+            generate_builtin_to_css_method(st);
             generate_builtin_is_css_method(st);
         } else {
             // ユーザー定義インターフェース
@@ -84,6 +85,7 @@ void AutoImplGenerator::generate_monomorphized_auto_impls() {
                 generate_builtin_display_method_for_monomorphized(*mir_struct);
             } else if (iface_name == "Css") {
                 generate_builtin_css_method_for_monomorphized(*mir_struct);
+                generate_builtin_to_css_method_for_monomorphized(*mir_struct);
                 generate_builtin_is_css_method_for_monomorphized(*mir_struct);
             }
         }

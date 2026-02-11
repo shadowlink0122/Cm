@@ -1,4 +1,4 @@
-# UEFI テスト用 Makefile
+# UEFI サンプル Makefile
 # 使い方:
 #   make          - コンパイル＆リンク
 #   make compile  - コンパイルのみ

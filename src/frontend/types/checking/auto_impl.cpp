@@ -230,6 +230,12 @@ void TypeChecker::register_builtin_interfaces() {
         css_method.return_type = ast::make_string();
         interface_methods_["Css"]["css"] = css_method;
 
+        // to_css() は css() のエイリアス
+        MethodInfo to_css_method;
+        to_css_method.name = "to_css";
+        to_css_method.return_type = ast::make_string();
+        interface_methods_["Css"]["to_css"] = to_css_method;
+
         MethodInfo is_css_method;
         is_css_method.name = "isCss";
         is_css_method.return_type = ast::make_bool();
@@ -292,6 +298,12 @@ void TypeChecker::register_auto_css_impl(const ast::StructDecl& st) {
     css_method.return_type = ast::make_string();
     type_methods_[struct_name]["css"] = css_method;
 
+    // to_css() は css() のエイリアス（同じマングル名 __css を使用）
+    MethodInfo to_css_method;
+    to_css_method.name = "to_css";
+    to_css_method.return_type = ast::make_string();
+    type_methods_[struct_name]["to_css"] = to_css_method;
+
     MethodInfo is_css_method;
     is_css_method.name = "isCss";
     is_css_method.return_type = ast::make_bool();
@@ -299,6 +311,13 @@ void TypeChecker::register_auto_css_impl(const ast::StructDecl& st) {
 
     {
         std::string mangled_name = struct_name + "__css";
+        std::vector<ast::TypePtr> param_types;
+        param_types.push_back(struct_type);  // self
+        scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_string());
+    }
+    {
+        // to_css も同じ __css にマングルされる
+        std::string mangled_name = struct_name + "__to_css";
         std::vector<ast::TypePtr> param_types;
         param_types.push_back(struct_type);  // self
         scopes_.global().define_function(mangled_name, std::move(param_types), ast::make_string());
@@ -312,7 +331,7 @@ void TypeChecker::register_auto_css_impl(const ast::StructDecl& st) {
 
     auto_impl_info_[struct_name]["Css"] = true;
 
-    debug::tc::log(debug::tc::Id::Resolved, "  Generated css()/isCss() for " + struct_name,
+    debug::tc::log(debug::tc::Id::Resolved, "  Generated css()/to_css()/isCss() for " + struct_name,
                    debug::Level::Debug);
 }
 

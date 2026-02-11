@@ -1,3 +1,4 @@
+//! platform: uefi
 // libs::efi_text - UEFI テキスト出力
 // ConOut.OutputString をインラインASM経由で呼出し
 // ASCII -> UCS-2 変換もASMで実行
