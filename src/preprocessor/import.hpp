@@ -159,6 +159,10 @@ class ImportPreprocessor {
 
     // 階層再構築エクスポート処理: export { ns::{item1, item2} }
     std::string process_hierarchical_reexport(const std::string& source);
+
+    // exportされたブロック（関数・struct・const等）を抽出
+    // namespace外へのforward展開用
+    std::string extract_exported_blocks(const std::string& module_source);
 };
 
 }  // namespace cm::preprocessor

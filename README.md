@@ -11,9 +11,10 @@ Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)
 ### 特徴
 
 - ⚡ **LLVMバックエンド**: LLVM IRによる高速なネイティブバイナリ生成
-- 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM / JavaScript
+- 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM / JavaScript / UEFI
 - 🕸️ **WebAssembly対応**: `--target=wasm`で直接WASMバイナリ生成
 - 🎸 **JavaScriptバックエンド**: `--target=js`でJSコード生成、Node.jsで実行可能
+- 🖥️ **ベアメタル/UEFI対応**: `--target=uefi`でOS不要のUEFIアプリケーション生成
 - 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
 - 🎼 **演算子オーバーロード**: `impl T { operator ... }` でカスタム演算子定義、複合代入(`+=`等)自動対応
 - 📝 **Rustスタイルフォーマット**: `{}`プレースホルダーによる柔軟な文字列フォーマット
@@ -111,13 +112,13 @@ Lexer → Parser → AST → TypeCheck → HIR → MIR
                        │  LLVM IR  │         │ JS CodeGen │
                        └─────┬─────┘         └─────┬──────┘
                              │                     │
-          ┌──────────┬───────┼──────────┐          │
-          ▼          ▼       ▼          ▼          ▼
-     ┌─────────┐ ┌───────┐ ┌──────┐ ┌──────────┐
-     │ x86_64  │ │ ARM64 │ │ WASM │ │output.js │
-     └────┬────┘ └───┬───┘ └──┬───┘ └────┬─────┘
-          ▼          ▼        ▼           ▼
-     Linux/macOS   macOS   Browser    Node.js
+     ┌──────────┬────────┬───┼──────────┐          │
+     ▼          ▼        ▼   ▼          ▼          ▼
+┌─────────┐ ┌───────┐ ┌──────┐ ┌──────┐ ┌──────────┐
+│ x86_64  │ │ ARM64 │ │ WASM │ │ UEFI │ │output.js │
+└────┬────┘ └───┬───┘ └──┬───┘ └──┬───┘ └────┬─────┘
+     ▼          ▼        ▼        ▼           ▼
+Linux/macOS   macOS   Browser  Firmware    Node.js
 ```
 
 > **Note**: Rust/TypeScript/C++へのトランスパイル機能は廃止されました。
@@ -185,6 +186,8 @@ cm compile example.cm -o myprogram     # 出力ファイル名指定
 cm compile example.cm -O3              # 最適化レベル3
 cm compile example.cm --emit=llvm-ir   # LLVM IR出力
 cm compile example.cm --target=wasm    # WebAssembly出力
+cm compile example.cm --target=js      # JavaScript出力
+cm compile example.cm --target=uefi    # UEFIアプリケーション出力
 
 # 構文チェック
 cm check example.cm        # 型チェックのみ
@@ -238,9 +241,11 @@ int main() {
 |----|-------------|----------|
 | **macOS 14+** | ARM64 (Apple Silicon) | ✅ 完全サポート |
 | **Ubuntu 22.04** | x86_64 | ✅ 完全サポート |
+| **UEFI** | x86_64 | ✅ サポート（no_std） |
 | Windows | - | ❌ 未サポート |
 
 > **Note**: macOS Intel (x86_64) でも動作する可能性がありますが、CIでの検証はARM64のみです。
+> UEFI対応はクロスコンパイルで実現しています（macOS/Linux上でQEMU + OVMFにて動作確認）。
 
 ## CI/CD テストマトリクス
 
@@ -291,6 +296,7 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 - [フォーマット文字列](docs/STRING_INTERPOLATION_LLVM.md)
 - [FFI設計](docs/design/ffi.md)
 - [パッケージマネージャ](docs/design/package_manager.md)
+- [UEFIベアメタル開発](docs/tutorials/ja/compiler/uefi.md) - UEFI Hello World チュートリアル
 - [プロジェクト状況](docs/PROJECT_STATUS.md)
 
 ## 関連プロジェクト

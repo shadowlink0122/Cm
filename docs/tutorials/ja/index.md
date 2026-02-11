@@ -94,6 +94,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [LLVMバックエンド](compiler/llvm.html) - ネイティブコンパイル
    - [WASMバックエンド](compiler/wasm.html) - WebAssembly出力
    - [JSバックエンド](compiler/js-compilation.html) - JavaScript出力
+   - [UEFIベアメタル](compiler/uefi.html) - UEFIアプリケーション開発（no_std）
    - [プリプロセッサ](compiler/preprocessor.html) - 条件付きコンパイル
    - [Linter](compiler/linter.html) - 静的解析（cm lint）
    - [Formatter](compiler/formatter.html) - コードフォーマット（cm fmt）
@@ -168,6 +169,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | | Formatter | ✅ | - | - | ✅ [formatter](compiler/formatter.html) |
 | | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/preprocessor.html) |
 | **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js-compilation.html) |
+| | UEFIベアメタル | ✅ | ❌ | ❌ | ✅ [uefi](compiler/uefi.html) |
 
 凡例: ✅ 完全対応 | ⚠️ 部分対応 | ❌ 未対応
 
@@ -240,11 +242,12 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
   - [ ] mustキーワード
   - [ ] マクロ
 
-- [ ] コンパイラ編（8チュートリアル）
+- [ ] コンパイラ編（9チュートリアル）
   - [ ] コンパイラの使い方
   - [ ] LLVMバックエンド
   - [ ] WASMバックエンド
   - [ ] JSバックエンド
+  - [ ] UEFIベアメタル
   - [ ] プリプロセッサ
   - [ ] Linter
   - [ ] Formatter
@@ -257,7 +260,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 
-**チュートリアル総数:** 42ファイル  
+**チュートリアル総数:** 43ファイル  
 **推定学習時間:** 18-22時間  
 **対象バージョン:** v0.14.0
 

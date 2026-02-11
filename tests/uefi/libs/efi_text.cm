@@ -1,11 +1,12 @@
 // libs::efi_text - UEFI テキスト出力
 // ConOut.OutputString をインラインASM経由で呼出し
-// ASCII → UCS-2 変換もASMで実行
+// ASCII -> UCS-2 変換もASMで実行
 //
 // 注意: string型は関数パラメータとして渡すとデータが壊れるため、
 //       全てのインターフェースは void* + ulong で受け取る
-// 注意: ASMに渡す値は全てulongにキャストすること（pushq制約）
-module libs.efi_text;
+// 注意: ASMに渡す値は全てulongにキャストすること
+// 注意: 全てのASMブロックはmust{}で囲むこと（最適化除去防止）
+// module efi_text;
 
 // ============================================================
 // テキスト出力（低レベル）
@@ -18,72 +19,77 @@ module libs.efi_text;
 export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
     // ConOut取得 (SystemTable + 0x40)
     ulong* st = system_table as ulong*;
-    ulong con_out_addr = *(st + 8);  // 8 * 8 = offset 0x40
+    ulong con_out_addr = *(st + 8);
     void* con_out = con_out_addr as void*;
 
     // ConOut->OutputString 取得 (offset 0x08)
     ulong* co = con_out as ulong*;
     ulong output_fn_addr = *(co + 1);
-    void* output_fn = output_fn_addr as void*;
 
-    // ASMに渡す前にulongにキャスト（pushq制約対応）
-    ulong fn_val = output_fn as ulong;
+    // ASMに渡す前にulongにキャスト
+    ulong fn_val = output_fn_addr as ulong;
     ulong co_val = con_out as ulong;
     ulong md_val = msg_data as ulong;
 
-    // ASCII → UCS-2 変換 + OutputString 呼出
-    __asm__(`
-        pushq ${r:fn_val};
-        pushq ${r:co_val};
-        pushq ${r:msg_len};
-        pushq ${r:md_val};
-        popq %r12;
-        popq %rbx;
-        popq %r13;
-        subq $$512, %rsp;
-        xorq %rcx, %rcx;
-        .L_conv:
-            cmpq %rbx, %rcx;
-            jge .L_done;
-            movzbl (%r12, %rcx), %eax;
-            movw %ax, (%rsp, %rcx, 2);
-            incq %rcx;
-            jmp .L_conv;
-        .L_done:
-            movw $$0, (%rsp, %rcx, 2);
-            movq %r13, %rcx;
-            movq %rsp, %rdx;
-            subq $$32, %rsp;
-            callq *544(%rsp);
-            addq $$552, %rsp
-    `);
+    // ASCII -> UCS-2 変換 + OutputString 呼出
+    // pushq/popqで入力値を安全にハードコードレジスタへ転送
+    // （LLVMのレジスタ割り当てとの競合を防止）
+    // 数値ラベル(0:, 1:)でインライン展開時の重複回避
+    must {
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:co_val};
+            pushq ${r:md_val};
+            pushq ${r:msg_len};
+            popq %rbx;
+            popq %r12;
+            popq %r14;
+            popq %r13;
+            subq $$512, %rsp;
+            xorq %rcx, %rcx;
+            0:
+                cmpq %rbx, %rcx;
+                jge 1f;
+                movzbl (%r12, %rcx), %eax;
+                movw %ax, (%rsp, %rcx, 2);
+                incq %rcx;
+                jmp 0b;
+            1:
+                movw $$0, (%rsp, %rcx, 2);
+                movq %r14, %rcx;
+                movq %rsp, %rdx;
+                subq $$32, %rsp;
+                callq *%r13;
+                addq $$544, %rsp
+        `);
+    }
 }
 
 /// NUL終端文字列の長さを計算（ASM実装）
-/// Cmコンパイラの utiny* デリファレンスバグ回避:
-///   *(p + n) が movq（8バイト）で生成されるため、
-///   ASMで movzbl（1バイト）を直接使用する
+/// Cmコンパイラの utiny* デリファレンスバグ回避
 export ulong efi_strlen(void* data) {
     ulong data_val = data as ulong;
     ulong result = 0;
-    __asm__(`
-        movq ${r:data_val}, %rdi;
-        xorq %rcx, %rcx;
-        0:
-            movzbl (%rdi, %rcx), %eax;
-            testb %al, %al;
-            jz 1f;
-            incq %rcx;
-            jmp 0b;
-        1:
-            movq %rcx, ${=r:result}
-    `);
+    // pushq/popqでLLVMレジスタ割り当てとの競合を防止
+    must {
+        __asm__(`
+            pushq ${r:data_val};
+            popq %rdi;
+            xorq %rcx, %rcx;
+            0:
+                movzbl (%rdi, %rcx), %eax;
+                testb %al, %al;
+                jz 1f;
+                incq %rcx;
+                jmp 0b;
+            1:
+                movq %rcx, ${=r:result}
+        `);
+    }
     return result;
 }
 
 /// 文字列を出力（長さ自動計算）
-/// system_table: efi_mainの第2引数
-/// msg_data:     NUL終端ASCII文字列のポインタ
 export void efi_print(void* system_table, void* msg_data) {
     ulong len = efi_strlen(msg_data);
     efi_puts_raw(system_table, msg_data, len);
@@ -92,7 +98,7 @@ export void efi_print(void* system_table, void* msg_data) {
 /// 文字列を改行付きで出力（長さ自動計算）
 export void efi_println(void* system_table, void* msg_data) {
     efi_print(system_table, msg_data);
-    // "\r\n" を直接出力
+    // CR+LF を出力
     string crlf = "\r\n";
     void* crlf_data = crlf as void*;
     efi_puts_raw(system_table, crlf_data, 2);
@@ -107,24 +113,23 @@ export void efi_clear_screen(void* system_table) {
 
     // ConOut->ClearScreen 取得 (offset 0x30)
     ulong* co = con_out as ulong*;
-    ulong clear_fn_addr = *(co + 6);  // 6 * 8 = offset 0x30
-    void* clear_fn = clear_fn_addr as void*;
+    ulong clear_fn_addr = *(co + 6);
 
     // Win64 ABI: RCX = con_out
-    ulong fn_val = clear_fn as ulong;
+    ulong fn_val = clear_fn_addr as ulong;
     ulong co_val = con_out as ulong;
     ulong result = 0;
-    __asm__(`
-        pushq %rbx;
-        pushq %r12;
-        movq ${r:fn_val}, %rbx;
-        movq ${r:co_val}, %r12;
-        movq %r12, %rcx;
-        subq $$32, %rsp;
-        callq *%rbx;
-        addq $$32, %rsp;
-        movq %rax, ${=r:result};
-        popq %r12;
-        popq %rbx
-    `);
+    // pushq/popqでLLVMレジスタ割り当てとの競合を防止
+    must {
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:co_val};
+            popq %rcx;
+            popq %r8;
+            subq $$32, %rsp;
+            callq *%r8;
+            addq $$32, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
 }

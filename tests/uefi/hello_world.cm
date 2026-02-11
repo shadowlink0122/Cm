@@ -1,17 +1,13 @@
-// UEFI Hello World - ローカルモジュール使用版
-//
-// ビルド: cd tests/uefi && make && make run
-//
-// 注意: string型はUEFI関数間で渡すと壊れるため、
-//       efi_main内でvoid*に変換してから渡す
-
-import libs::efi_text::*;
+// UEFI Hello World - モジュール版
+// ビルド: cd tests/uefi && make clean && make && make run
+import ./libs/efi_core;
+import ./libs/efi_text;
 
 ulong efi_main(void* image_handle, void* system_table) {
     // 画面クリア
     efi_clear_screen(system_table);
 
-    // 文字列をvoid*に変換してから渡す（長さは自動計算）
+    // メッセージ出力
     string msg = "Hello World from Cm!";
     efi_println(system_table, msg as void*);
 

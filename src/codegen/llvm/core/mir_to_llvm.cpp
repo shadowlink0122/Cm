@@ -1285,6 +1285,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             }
 
             auto rvalue = convertRvalue(*assign.rvalue);
+
             if (rvalue) {
                 // 関数参照の特別処理
                 // bool isFunctionValue = false;
@@ -1788,6 +1789,16 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(localPtr)) {
                         // allocaから実際の型を取得
                         elemType = allocaInst->getAllocatedType();
+                    } else if (currentMIRFunction &&
+                               operand.local_id < currentMIRFunction->locals.size()) {
+                        // SSA値（ConstantInt等）の場合、MIR型情報から型を推定
+                        auto& localInfo = currentMIRFunction->locals[operand.local_id];
+                        if (localInfo.type) {
+                            auto llvmType = convertType(localInfo.type);
+                            if (llvmType && !llvmType->isVoidTy()) {
+                                elemType = llvmType;
+                            }
+                        }
                     }
                     // AArch64用: オペランドの型とメモリ制約を記録
                     operandElemTypes[i] = elemType;
@@ -1900,6 +1911,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     initStore->setVolatile(true);
                                 }
                                 localPtr = alloca;
+                                // localsマップを更新して、後続のcopy操作が
+                                // allocaからvolatile loadで値を読み取れるようにする
+                                locals[operand.local_id] = alloca;
                                 allocatedLocals.insert(operand.local_id);
                             }
                             outputPtrs.push_back(localPtr);
@@ -2063,6 +2077,100 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         llvmConstraints += clob;
                     } else {
                         llvmConstraints += "~{" + clob + "}";
+                    }
+                }
+
+                // ハードコードレジスタの自動クロバー検出
+                // ASMコード内の %reg パターンを検出し、入出力オペランドでないものを
+                // 自動的にクロバーとして追加する
+                // （LLVMのインライン展開時にレジスタの値が不正に再利用されることを防止）
+                {
+                    // x86-64のレジスタ名一覧（LLVM形式）
+                    // 64bit → LLVM名のマッピング
+                    static const std::vector<std::pair<std::string, std::string>> regPatterns = {
+                        // 64ビットレジスタ
+                        {"%rax", "rax"},
+                        {"%rbx", "rbx"},
+                        {"%rcx", "rcx"},
+                        {"%rdx", "rdx"},
+                        {"%rsi", "rsi"},
+                        {"%rdi", "rdi"},
+                        {"%rbp", "rbp"},
+                        {"%r8", "r8"},
+                        {"%r9", "r9"},
+                        {"%r10", "r10"},
+                        {"%r11", "r11"},
+                        {"%r12", "r12"},
+                        {"%r13", "r13"},
+                        {"%r14", "r14"},
+                        {"%r15", "r15"},
+                        // 32ビットレジスタ（対応する64ビットをクロバー）
+                        {"%eax", "rax"},
+                        {"%ebx", "rbx"},
+                        {"%ecx", "rcx"},
+                        {"%edx", "rdx"},
+                        {"%esi", "rsi"},
+                        {"%edi", "rdi"},
+                        // 16ビットレジスタ
+                        {"%ax", "rax"},
+                        {"%bx", "rbx"},
+                        {"%cx", "rcx"},
+                        {"%dx", "rdx"},
+                        // 8ビットレジスタ
+                        {"%al", "rax"},
+                        {"%bl", "rbx"},
+                        {"%cl", "rcx"},
+                        {"%dl", "rdx"},
+                        {"%ah", "rax"},
+                        {"%bh", "rbx"},
+                        {"%ch", "rcx"},
+                        {"%dh", "rdx"},
+                    };
+
+                    std::set<std::string> detectedClobbers;
+                    std::string asmCode = asmData.code;
+
+                    for (const auto& [pattern, llvmName] : regPatterns) {
+                        size_t searchPos = 0;
+                        while ((searchPos = asmCode.find(pattern, searchPos)) !=
+                               std::string::npos) {
+                            // レジスタ名の直後が英数字やアンダースコアでないことを確認
+                            // （%r12の検出で%r12bを誤検出しないように）
+                            size_t afterPos = searchPos + pattern.size();
+                            bool isFullMatch = true;
+                            if (afterPos < asmCode.size()) {
+                                char nextChar = asmCode[afterPos];
+                                // %r8, %r9等の短いパターンと%r8d等の区別
+                                if (std::isalnum(nextChar) || nextChar == '_') {
+                                    // ただし%eax等→%eaxl等は普通ないので、
+                                    // 32bit以上のパターンは次の文字がレジスタ拡張子でなければOK
+                                    if (pattern.size() >= 4) {
+                                        // %rax, %eax等: 後ろの文字は通常ない
+                                        isFullMatch = false;
+                                    } else {
+                                        // %r8, %al等: %r8d のような拡張をチェック
+                                        isFullMatch = false;
+                                    }
+                                }
+                            }
+                            if (isFullMatch) {
+                                detectedClobbers.insert(llvmName);
+                            }
+                            searchPos += pattern.size();
+                        }
+                    }
+
+                    // オペランドとして使用されているレジスタは除外しない
+                    // （LLVMは入出力オペランドと重複するクロバーを自動的に無視する）
+                    // 既に追加済みのクロバーとの重複チェック
+                    for (const auto& reg : detectedClobbers) {
+                        std::string clobStr = "~{" + reg + "}";
+                        if (llvmConstraints.find(clobStr) == std::string::npos) {
+                            if (!llvmConstraints.empty()) {
+                                llvmConstraints += ",";
+                            }
+                            llvmConstraints += clobStr;
+                        }
                     }
                 }
 
