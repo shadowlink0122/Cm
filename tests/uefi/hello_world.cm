@@ -11,11 +11,9 @@ ulong efi_main(void* image_handle, void* system_table) {
     // 画面クリア
     efi_clear_screen(system_table);
 
-    // 文字列をvoid*に変換してから渡す
-    string msg = "Hello from Cm!\r\n";
-    void* msg_data = msg as void*;
-    ulong msg_len = 16;
-    efi_puts_raw(system_table, msg_data, msg_len);
+    // 文字列をvoid*に変換してから渡す（長さは自動計算）
+    string msg = "Hello World from Cm!";
+    efi_println(system_table, msg as void*);
 
     // 停止（画面を維持）
     while (true) {

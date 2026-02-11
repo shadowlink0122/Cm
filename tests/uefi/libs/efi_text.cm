@@ -59,6 +59,33 @@ export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
     `);
 }
 
+/// NUL終端文字列の長さを計算（UEFI環境用、ランタイム不要）
+export ulong efi_strlen(void* data) {
+    ulong len = 0;
+    utiny* p = data as utiny*;
+    while (*(p + len) != 0) {
+        len += 1;
+    }
+    return len;
+}
+
+/// 文字列を出力（長さ自動計算）
+/// system_table: efi_mainの第2引数
+/// msg_data:     NUL終端ASCII文字列のポインタ
+export void efi_print(void* system_table, void* msg_data) {
+    ulong len = efi_strlen(msg_data);
+    efi_puts_raw(system_table, msg_data, len);
+}
+
+/// 文字列を改行付きで出力（長さ自動計算）
+export void efi_println(void* system_table, void* msg_data) {
+    efi_print(system_table, msg_data);
+    // "\r\n" を直接出力
+    string crlf = "\r\n";
+    void* crlf_data = crlf as void*;
+    efi_puts_raw(system_table, crlf_data, 2);
+}
+
 /// 画面クリア
 export void efi_clear_screen(void* system_table) {
     // ConOut取得 (SystemTable + 0x40)
