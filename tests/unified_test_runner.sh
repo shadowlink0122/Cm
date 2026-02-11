@@ -966,7 +966,7 @@ run_parallel_test() {
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local error_expect_file="${test_file%.cm}.error"
     local backend_error_file="${test_file%.cm}.error.${BACKEND}"
-    local output_file="$TEMP_DIR/${category}_${test_name}_${BASHPID}.out"
+    local output_file="$TEMP_DIR/${category}_${test_name}_${BASHPID}_${RANDOM}.out"
     local is_error_test=false
 
     # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
