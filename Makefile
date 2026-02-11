@@ -567,14 +567,14 @@ test-js-all-opts: test-js-o0-parallel test-js-o1-parallel test-js-o2-parallel te
 test-uefi:
 	@echo "Running UEFI compile tests..."
 	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi -c uefi
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi -c uefi:uefi_compile
 
 # ベアメタル コンパイルテスト
 .PHONY: test-baremetal
 test-baremetal:
 	@echo "Running Baremetal compile tests..."
 	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c baremetal
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c bm:baremetal
 
 # ========================================
 # Test Suite Commands
@@ -702,7 +702,7 @@ format:
 	@find src tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
 		-exec clang-format -i -style=file {} \;
 	@echo "Formatting Cm code..."
-	@find tests/test_programs std -type f -name "*.cm" -exec ./cm fmt -q {} \;
+	@find tests/programs std -type f -name "*.cm" -exec ./cm fmt -q {} \;
 	@echo "✅ Format complete!"
 
 .PHONY: format-check

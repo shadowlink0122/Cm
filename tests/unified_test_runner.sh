@@ -18,7 +18,7 @@ else
     IS_WINDOWS=false
 fi
 
-TEST_DIR="$PROJECT_ROOT/tests/test_programs"
+PROGRAMS_DIR="$PROJECT_ROOT/tests/programs"
 TEMP_DIR="$PROJECT_ROOT/.tmp/test_runner"
 
 # カラー出力
@@ -83,8 +83,46 @@ if [ -z "$TIMEOUT_CMD" ]; then
     echo ""
 fi
 
+# バックエンドに応じたプラットフォームディレクトリの解決
+# common/ は全バックエンドで実行
+# llvm/ は llvm, jit で実行
+# wasm/ は llvm-wasm で実行
+# js/ は js で実行
+# bm/ は llvm-baremetal で実行
+# uefi/ は llvm-uefi で実行
+# jit/ は jit で実行
+get_platform_dirs() {
+    local backend="$1"
+    case "$backend" in
+        interpreter)
+            echo "common"
+            ;;
+        jit)
+            echo "common llvm jit"
+            ;;
+        llvm)
+            echo "common llvm"
+            ;;
+        llvm-wasm)
+            echo "common wasm"
+            ;;
+        llvm-uefi)
+            echo "uefi"
+            ;;
+        llvm-baremetal)
+            echo "bm"
+            ;;
+        js)
+            echo "common js"
+            ;;
+        *)
+            echo "common"
+            ;;
+    esac
+}
+
 # テストスイート定義
-# 各スイートはカテゴリのグループを定義する
+# 各スイートはカテゴリのグループを定義する（common/ 内のカテゴリ名）
 expand_suite() {
     local suite="$1"
     case "$suite" in
@@ -101,10 +139,10 @@ expand_suite() {
             echo "modules advanced_modules macro advanced"
             ;;
         platform)
-            echo "target asm ffi js_specific gpu uefi baremetal"
+            echo "gpu"
             ;;
         runtime)
-            echo "file_io fs net thread sync async"
+            echo "file_io fs net thread sync"
             ;;
         all)
             echo ""
@@ -191,21 +229,42 @@ if [ -n "$SUITE" ] && [ -z "$CATEGORIES" ]; then
     CATEGORIES=$(expand_suite "$SUITE")
 fi
 
+# プラットフォームディレクトリの解決
+PLATFORM_DIRS=$(get_platform_dirs "$BACKEND")
+
 # カテゴリー設定
 if [ -z "$CATEGORIES" ]; then
-    # test_programsディレクトリ内の全サブディレクトリを自動検出
+    # バックエンドに応じたプラットフォームディレクトリからカテゴリを自動検出
     CATEGORIES=""
-    for dir in "$TEST_DIR"/*/; do
-        if [ -d "$dir" ]; then
-            dirname="$(basename "$dir")"
-            # .cmファイルがあるディレクトリのみ追加
-            if ls "$dir"/*.cm 1> /dev/null 2>&1; then
-                CATEGORIES="$CATEGORIES $dirname"
-            fi
+    for platform_dir in $PLATFORM_DIRS; do
+        base_dir="$PROGRAMS_DIR/$platform_dir"
+        if [ ! -d "$base_dir" ]; then
+            continue
         fi
+        for dir in "$base_dir"/*/; do
+            if [ -d "$dir" ]; then
+                dirname="$(basename "$dir")"
+                # .cmファイルがあるディレクトリのみ追加
+                if ls "$dir"/*.cm 1> /dev/null 2>&1; then
+                    # プラットフォーム:カテゴリ の形式で保持
+                    CATEGORIES="$CATEGORIES ${platform_dir}:${dirname}"
+                fi
+            fi
+        done
     done
     # 先頭のスペースを削除
     CATEGORIES="${CATEGORIES# }"
+else
+    # ユーザー指定のカテゴリ（スイート展開含む）は common/ 内として扱う
+    expanded=""
+    for cat in $CATEGORIES; do
+        if [[ "$cat" != *:* ]]; then
+            expanded="$expanded common:$cat"
+        else
+            expanded="$expanded $cat"
+        fi
+    done
+    CATEGORIES="${expanded# }"
 fi
 
 # 一時ディレクトリ作成
@@ -778,15 +837,18 @@ main() {
 
 # 順次実行モード
 run_tests_sequential() {
-    for category in $CATEGORIES; do
-        local category_dir="$TEST_DIR/$category"
+    for entry in $CATEGORIES; do
+        # platform:category フォーマットをパース
+        local platform_dir="${entry%%:*}"
+        local category="${entry##*:}"
+        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
 
         if [ ! -d "$category_dir" ]; then
-            log "Warning: Category directory '$category' not found, skipping"
+            log "Warning: Category directory '$platform_dir/$category' not found, skipping"
             continue
         fi
 
-        log "Testing category: $category"
+        log "Testing category: $platform_dir/$category"
         log "----------------------------------------"
 
         for test_file in "$category_dir"/*.cm; do
@@ -807,8 +869,10 @@ run_tests_parallel() {
     mkdir -p "$results_dir"
     
     # 全テストファイルを収集
-    for category in $CATEGORIES; do
-        local category_dir="$TEST_DIR/$category"
+    for entry in $CATEGORIES; do
+        local platform_dir="${entry%%:*}"
+        local category="${entry##*:}"
+        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
         if [ -d "$category_dir" ]; then
             for test_file in "$category_dir"/*.cm; do
                 if [ -f "$test_file" ]; then
