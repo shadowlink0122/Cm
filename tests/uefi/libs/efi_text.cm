@@ -59,14 +59,26 @@ export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
     `);
 }
 
-/// NUL終端文字列の長さを計算（UEFI環境用、ランタイム不要）
+/// NUL終端文字列の長さを計算（ASM実装）
+/// Cmコンパイラの utiny* デリファレンスバグ回避:
+///   *(p + n) が movq（8バイト）で生成されるため、
+///   ASMで movzbl（1バイト）を直接使用する
 export ulong efi_strlen(void* data) {
-    ulong len = 0;
-    utiny* p = data as utiny*;
-    while (*(p + len) != 0) {
-        len += 1;
-    }
-    return len;
+    ulong data_val = data as ulong;
+    ulong result = 0;
+    __asm__(`
+        movq ${r:data_val}, %rdi;
+        xorq %rcx, %rcx;
+        0:
+            movzbl (%rdi, %rcx), %eax;
+            testb %al, %al;
+            jz 1f;
+            incq %rcx;
+            jmp 0b;
+        1:
+            movq %rcx, ${=r:result}
+    `);
+    return result;
 }
 
 /// 文字列を出力（長さ自動計算）
