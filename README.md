@@ -16,6 +16,7 @@ Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)
 - 🎸 **JavaScriptバックエンド**: `--target=js`でJSコード生成、Node.jsで実行可能
 - 🖥️ **ベアメタル/UEFI対応**: `--target=uefi`でOS不要のUEFIアプリケーション生成
 - 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
+- ☄️ **インラインユニオン型**: `int | null` のように型を直接結合、null許容型を簡潔に記述
 - 🎼 **演算子オーバーロード**: `impl T { operator ... }` でカスタム演算子定義、複合代入(`+=`等)自動対応
 - 📝 **Rustスタイルフォーマット**: `{}`プレースホルダーによる柔軟な文字列フォーマット
 - 🧬 **ジェネリクス**: 型パラメータによる汎用プログラミング
@@ -95,6 +96,20 @@ int getValue(Option<int> opt) {
         Some(v) => return v;
         None => return 0;
     }
+}
+
+// インラインユニオン型とnull型
+typedef MaybeInt = int | null;
+
+int main() {
+    // typedef経由でのユニオン型
+    MaybeInt x = null;
+    MaybeInt y = 42 as MaybeInt;
+
+    // インラインユニオン型（typedef不要）
+    int | null a = null;
+    int | string | null b = null;
+    return 0;
 }
 ```
 
@@ -263,7 +278,7 @@ GitHub Actionsで全バックエンドの自動テストを実行しています
 - **Interpreter Tests**: 376個のCmプログラムをインタプリタで実行
 - **LLVM Native Tests**: 376個のCmプログラムをネイティブバイナリにコンパイル・実行
 - **LLVM WASM Tests**: 376個のCmプログラムをWASMにコンパイル・Wasmtimeで実行
-- **JS Tests**: 376個のCmプログラムをJavaScriptにコンパイル・Node.jsで実行
+- **JS Tests**: 344個のCmプログラムをJavaScriptにコンパイル・Node.jsで実行
 
 ### ローカルテスト実行
 
@@ -310,3 +325,5 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 ---
 
 © 2025-2026 Cm言語プロジェクト
+
+**最終更新:** 2026-02-12
