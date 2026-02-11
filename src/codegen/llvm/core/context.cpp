@@ -32,8 +32,12 @@ TargetConfig TargetConfig::getDefault(BuildTarget target) {
     switch (target) {
         case BuildTarget::Baremetal:
             return getBaremetalARM();
+        case BuildTarget::BaremetalX86:
+            return getBaremetalX86();
         case BuildTarget::Wasm:
             return getWasm();
+        case BuildTarget::BaremetalUEFI:
+            return getBaremetalUEFI();
         default:
             return getNative();
     }
@@ -287,7 +291,11 @@ void LLVMContext::setupStd() {
 
 // エントリーポイント設定
 void LLVMContext::setupEntryPoint(llvm::Function* mainFunc) {
-    if (targetConfig.noMain) {
+    if (targetConfig.target == BuildTarget::BaremetalUEFI) {
+        // UEFIモード：efi_mainはユーザーが明示的に定義する
+        // setupEntryPointでのリネームは不要
+        // Win64呼出規約はmir_to_llvm.cppでefi_main関数に直接設定される
+    } else if (targetConfig.noMain) {
         // no_main モード：_startをエントリーポイントに
         mainFunc->setName("_start");
     } else {

@@ -12,6 +12,8 @@
 
 // JavaScript codegen
 #include "codegen/js/codegen.hpp"
+
+// MIR validation
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
 #include "fmt/formatter.hpp"
@@ -24,6 +26,7 @@
 #include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
 #include "mir/passes/core/manager.hpp"
+#include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
 #include "preprocessor/conditional.hpp"
@@ -109,11 +112,15 @@ void print_help(const char* program_name) {
     std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
 
     std::cout << "コンパイル時オプション:\n";
-    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
-    std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
-    std::cout << "                        wasm:   WebAssembly\n";
-    std::cout << "                        js:     JavaScript (Node.js向け)\n";
-    std::cout << "                        web:    JavaScript + HTML (ブラウザ向け)\n";
+    std::cout << "  --target=<target>     コンパイルターゲット\n";
+    std::cout << "                        native:        ネイティブ実行ファイル（デフォルト）\n";
+    std::cout << "                        wasm:          WebAssembly\n";
+    std::cout << "                        js:            JavaScript (Node.js向け)\n";
+    std::cout << "                        web:           JavaScript + HTML (ブラウザ向け)\n";
+    std::cout << "                        baremetal-arm: ベアメタル ARM Cortex-M\n";
+    std::cout << "                        baremetal-x86: ベアメタル x86_64\n";
+    std::cout << "                        uefi:          UEFI Application\n";
+    std::cout << "                        bm:            baremetal-arm の短縮形\n";
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --emit-js             JavaScriptを生成\n";
     std::cout << "  --run                 生成後に実行\n";
@@ -709,6 +716,17 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Conditional Preprocessor ===\n";
         preprocessor::ConditionalPreprocessor conditional;
+        // ターゲットに応じたプリプロセッサ定数を追加
+        if (opts.target == "baremetal-arm" || opts.target == "bm" ||
+            opts.target == "baremetal-x86" || opts.target == "bm-x86") {
+            conditional.define("__NO_STD__");
+            conditional.define("__BAREMETAL__");
+        } else if (opts.target == "uefi") {
+            conditional.define("__NO_STD__");
+            conditional.define("__BAREMETAL__");  // UEFIもベアメタルサブカテゴリ
+            conditional.define("__UEFI__");
+            conditional.define("__EFI__");
+        }
         code = conditional.process(code);
         if (opts.debug) {
             std::cout << "定義済みシンボル: ";
@@ -1083,9 +1101,22 @@ int main(int argc, char* argv[]) {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                } else if (opts.target == "uefi") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
+                } else if (opts.target == "baremetal-arm" || opts.target == "bm") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Baremetal;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
+                } else if (opts.target == "baremetal-x86" || opts.target == "bm-x86") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::BaremetalX86;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
                 } else if (!opts.target.empty() && opts.target != "native") {
                     std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
-                    std::cerr << "有効なターゲット: native, wasm, js, web\n";
+                    std::cerr << "有効なターゲット: native, wasm, js, web, bm, bm-x86, "
+                                 "baremetal-arm, baremetal-x86, uefi\n";
                     return 1;
                 } else {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
@@ -1097,6 +1128,14 @@ int main(int argc, char* argv[]) {
                 if (opts.output_file.empty()) {
                     if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
                         llvm_opts.outputFile = "a.wasm";
+                    } else if (llvm_opts.target ==
+                               cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI) {
+                        llvm_opts.outputFile = "bootx64.efi";
+                    } else if (llvm_opts.target ==
+                                   cm::codegen::llvm_backend::BuildTarget::Baremetal ||
+                               llvm_opts.target ==
+                                   cm::codegen::llvm_backend::BuildTarget::BaremetalX86) {
+                        llvm_opts.outputFile = "firmware.o";
                     } else {
                         llvm_opts.outputFile = "a.out";
                     }
@@ -1123,6 +1162,21 @@ int main(int argc, char* argv[]) {
                     }
 
                     cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
+
+                    // no_std環境でのOS依存機能チェック
+                    if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Baremetal ||
+                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalX86 ||
+                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI) {
+                        cm::mir::opt::NoStdChecker checker;
+                        auto check_result = checker.check(mir);
+                        if (check_result.has_errors) {
+                            for (const auto& err : check_result.errors) {
+                                std::cerr << err << "\n";
+                            }
+                            return 1;
+                        }
+                    }
+
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     codegen.compile(mir);

@@ -1,0 +1,5 @@
+// UEFI最小コンパイル検証
+// efi_mainエントリポイントが正しくコンパイルされることを確認
+ulong efi_main(void* image_handle, void* system_table) {
+    return 0;
+}

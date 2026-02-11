@@ -47,7 +47,7 @@ impl Num {
         return Num{value: self.value & other.value};
     }
 
-    operator Num |(Num other) {
+    operator Num | (Num other) {
         return Num{value: self.value | other.value};
     }
 

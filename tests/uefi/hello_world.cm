@@ -1,0 +1,68 @@
+// UEFI Hello World
+// EFI Simple Text Output Protocol を使用して画面に文字を出力
+//
+// ビルド手順:
+//   make         (コンパイル＆リンク)
+//   make run     (QEMUで実行)
+
+// UEFIエントリポイント
+ulong efi_main(void* image_handle, void* system_table) {
+    // ConOut取得 (SystemTable + 0x40)
+    ulong* st = system_table as ulong*;
+    ulong con_out_addr = *(st + 8);
+    void* con_out = con_out_addr as void*;
+
+    // OutputString取得 (ConOut + 0x08)
+    ulong* co = con_out as ulong*;
+    ulong output_fn_addr = *(co + 1);
+    void* output_fn = output_fn_addr as void*;
+
+    // ============================================================
+    // メッセージ定義（Cm文字列）
+    // ============================================================
+    string msg = "Hello from Cm!\r\n";
+    void* msg_data = msg as void*;
+    ulong msg_len = 16;
+
+    // ============================================================
+    // ASCII→UCS-2 変換 + OutputString 呼出し
+    // ============================================================
+    // 手順:
+    //   1. 入力値(output_fn, con_out, msg_len, msg_data)をスタックに退避
+    //   2. UCS-2バッファをスタック上に確保 (48 bytes)
+    //   3. ASCIIバイト列をUCS-2(16bit)に変換（ゼロ拡張ループ）
+    //   4. Win64 ABI: RCX=ConOut, RDX=UCS-2文字列 → OutputString呼出し
+    //   5. スタック復帰
+    __asm__(`
+        pushq ${r:output_fn};
+        pushq ${r:con_out};
+        pushq ${r:msg_len};
+        pushq ${r:msg_data};
+        popq %r12;
+        popq %rbx;
+        popq %r13;
+        subq $$48, %rsp;
+        xorq %rcx, %rcx;
+        .L_conv:
+            cmpq %rbx, %rcx;
+            jge .L_done;
+            movzbl (%r12, %rcx), %eax;
+            movw %ax, (%rsp, %rcx, 2);
+            incq %rcx;
+            jmp .L_conv;
+        .L_done:
+            movw $$0, (%rsp, %rcx, 2);
+            movq %r13, %rcx;
+            movq %rsp, %rdx;
+            subq $$32, %rsp;
+            callq *80(%rsp);
+            addq $$88, %rsp
+    `);
+
+    // HLTループ（ビジーウェイト回避）
+    while (true) {
+        __asm__("hlt");
+    }
+
+    return 0;
+}

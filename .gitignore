@@ -61,6 +61,11 @@ link.ld
 *.bc
 *.wasm
 
+# UEFI
+*.EFI
+tests/uefi/esp/
+third-party/ovmf/
+
 # Jekyll
 .jekyll-cache/
 _site/

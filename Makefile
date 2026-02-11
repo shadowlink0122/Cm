@@ -558,6 +558,65 @@ test-js-all-opts: test-js-o0-parallel test-js-o1-parallel test-js-o2-parallel te
 	@echo "✅ All JS optimization level tests completed!"
 	@echo "=========================================="
 
+# ========================================
+# UEFI / Baremetal Test Commands
+# ========================================
+
+# UEFI コンパイルテスト
+.PHONY: test-uefi
+test-uefi:
+	@echo "Running UEFI compile tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi -c uefi
+
+# ベアメタル コンパイルテスト
+.PHONY: test-baremetal
+test-baremetal:
+	@echo "Running Baremetal compile tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c baremetal
+
+# ========================================
+# Test Suite Commands
+# ========================================
+
+# スイート別テスト（JITバックエンド、パラレル）
+.PHONY: test-suite-core
+test-suite-core:
+	@echo "Running core suite tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s core -p
+
+.PHONY: test-suite-syntax
+test-suite-syntax:
+	@echo "Running syntax suite tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s syntax -p
+
+.PHONY: test-suite-stdlib
+test-suite-stdlib:
+	@echo "Running stdlib suite tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s stdlib -p
+
+.PHONY: test-suite-modules
+test-suite-modules:
+	@echo "Running modules suite tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s modules -p
+
+.PHONY: test-suite-platform
+test-suite-platform:
+	@echo "Running platform suite tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s platform -p
+
+.PHONY: test-suite-runtime
+test-suite-runtime:
+	@echo "Running runtime suite tests..."
+	@chmod +x tests/unified_test_runner.sh
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s runtime -p
+
 # すべてのLLVMテストを実行
 .PHONY: test-llvm-all
 test-llvm-all: test-llvm test-llvm-wasm

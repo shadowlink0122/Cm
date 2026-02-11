@@ -78,9 +78,9 @@ bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
 
 // 関数の一意なIDを生成（オーバーロードを区別するため）
 std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
-    // main関数は特別扱い
-    if (func.name == "main") {
-        return "main";
+    // main/efi_main関数は特別扱い（エントリポイント）
+    if (func.name == "main" || func.name == "efi_main") {
+        return func.name;
     }
 
     // ラムダ関数はそのまま
@@ -174,9 +174,9 @@ std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
 // 呼び出し時の引数型から関数IDを生成
 std::string MIRToLLVM::generateCallFunctionId(const std::string& baseName,
                                               const std::vector<mir::MirOperandPtr>& args) {
-    // main関数は特別扱い
-    if (baseName == "main") {
-        return "main";
+    // main/efi_main関数は特別扱い（エントリポイント）
+    if (baseName == "main" || baseName == "efi_main") {
+        return baseName;
     }
 
     // ラムダ関数はそのまま
@@ -378,13 +378,12 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     }
 
-    // main関数には以前optnone属性を追加していたが、
-    // これはパフォーマンス上重大な問題を引き起こす（バブルソート1000要素が終わらない等）
-    // control flowの問題は別途対処する必要がある
-    // if (func.name == "main") {
-    //     llvmFunc->addFnAttr(llvm::Attribute::NoInline);
-    //     llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
-    // }
+    // UEFIエントリポイント: efi_mainにWin64呼出規約とDLLExportを設定
+    // DLLExportにより最適化で関数が除去されるのを防ぐ
+    if (func.name == "efi_main") {
+        llvmFunc->setCallingConv(llvm::CallingConv::Win64);
+        llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+    }
 
     // パラメータ名設定
     size_t idx = 0;

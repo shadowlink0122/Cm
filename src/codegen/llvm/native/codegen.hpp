@@ -162,8 +162,14 @@ class LLVMCodeGen {
                 case BuildTarget::Baremetal:
                     config = TargetConfig::getBaremetalARM();
                     break;
+                case BuildTarget::BaremetalX86:
+                    config = TargetConfig::getBaremetalX86();
+                    break;
                 case BuildTarget::Wasm:
                     config = TargetConfig::getWasm();
+                    break;
+                case BuildTarget::BaremetalUEFI:
+                    config = TargetConfig::getBaremetalUEFI();
                     break;
                 default:
                     config = TargetConfig::getNative();
@@ -189,10 +195,11 @@ class LLVMCodeGen {
         // 変換器
         converter = std::make_unique<MIRToLLVM>(*context);
 
-        // ベアメタルの場合、スタートアップコード生成
+        // ベアメタル / UEFI の場合、スタートアップコード生成
         if (config.target == BuildTarget::Baremetal) {
             targetManager->generateStartupCode(context->getModule());
         }
+        // UEFIはスタートアップコード不要（ファームウェアがefi_mainを直接呼び出す）
     }
 
     /// IR生成
@@ -383,6 +390,9 @@ class LLVMCodeGen {
             MPM =
                 passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::Os  // サイズ優先
                 );
+        } else if (context->getTargetConfig().target == BuildTarget::BaremetalUEFI) {
+            // UEFI用の最適化（サイズ優先）
+            MPM = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
         } else {
             // ネイティブ用の最適化
             MPM = passBuilder.buildPerModuleDefaultPipeline(optLevel);
@@ -491,6 +501,11 @@ class LLVMCodeGen {
         if (context->getTargetConfig().target == BuildTarget::Baremetal) {
             // ベアメタル：arm-none-eabi-ld使用
             linkCmd = "arm-none-eabi-ld -T link.ld " + objFile + " -o " + options.outputFile;
+        } else if (context->getTargetConfig().target == BuildTarget::BaremetalUEFI) {
+            // UEFI：lld-linkでPE/COFF形式の実行ファイルを生成
+            linkCmd =
+                "lld-link /subsystem:efi_application /entry:efi_main /out:" + options.outputFile +
+                " " + objFile;
         } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
             // WebAssembly：wasm-ld使用
             std::string runtimePath = findRuntimeLibrary();

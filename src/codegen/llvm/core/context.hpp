@@ -12,9 +12,11 @@ namespace cm::codegen::llvm_backend {
 
 /// ビルドターゲット
 enum class BuildTarget {
-    Baremetal,  // no_std, no_main
-    Native,     // std, OS依存
-    Wasm        // WebAssembly
+    Baremetal,     // no_std, no_main (ARM)
+    BaremetalX86,  // no_std, no_main (x86_64)
+    Native,        // std, OS依存
+    Wasm,          // WebAssembly
+    BaremetalUEFI  // UEFI Application (ベアメタルサブカテゴリ)
 };
 
 /// ターゲット設定
@@ -46,8 +48,32 @@ struct TargetConfig {
         };
     }
 
+    /// ベアメタル x86_64（カーネル/ブートローダ用）
+    static TargetConfig getBaremetalX86() {
+        return {.target = BuildTarget::BaremetalX86,
+                .triple = "x86_64-unknown-none-elf",
+                .cpu = "generic",
+                .features = "-sse,-sse2,-mmx",  // カーネル/ブートローダではSSE無効
+                .dataLayout = "",               // TargetMachineから設定
+                .noStd = true,
+                .noMain = true,
+                .optLevel = 2};
+    }
+
     /// ネイティブ（ホストOS）
     static TargetConfig getNative();
+
+    /// UEFI x86_64 (ベアメタルサブカテゴリ)
+    static TargetConfig getBaremetalUEFI() {
+        return {.target = BuildTarget::BaremetalUEFI,
+                .triple = "x86_64-unknown-windows-gnu",  // PE/COFF生成用
+                .cpu = "generic",
+                .features = "+sse,+sse2",  // UEFI環境ではSSE利用可能
+                .dataLayout = "",          // TargetMachineから設定
+                .noStd = true,
+                .noMain = true,  // efi_mainを使用
+                .optLevel = 2};
+    }
 
     /// WebAssembly
     static TargetConfig getWasm() {

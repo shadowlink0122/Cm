@@ -61,11 +61,17 @@ class TargetManager {
             case BuildTarget::Baremetal:
                 config = TargetConfig::getBaremetalARM();
                 break;
+            case BuildTarget::BaremetalX86:
+                config = TargetConfig::getBaremetalX86();
+                break;
             case BuildTarget::Native:
                 config = TargetConfig::getNative();
                 break;
             case BuildTarget::Wasm:
                 config = TargetConfig::getWasm();
+                break;
+            case BuildTarget::BaremetalUEFI:
+                config = TargetConfig::getBaremetalUEFI();
                 break;
         }
     }
@@ -96,6 +102,20 @@ class TargetManager {
         LLVMInitializeWebAssemblyTargetMC();
         LLVMInitializeWebAssemblyAsmParser();
         LLVMInitializeWebAssemblyAsmPrinter();
+
+        // X86ターゲットの初期化（UEFI/baremetal-x86 クロスコンパイル用）
+        LLVMInitializeX86TargetInfo();
+        LLVMInitializeX86Target();
+        LLVMInitializeX86TargetMC();
+        LLVMInitializeX86AsmParser();
+        LLVMInitializeX86AsmPrinter();
+
+        // ARMターゲットの初期化（baremetal-arm クロスコンパイル用）
+        LLVMInitializeARMTargetInfo();
+        LLVMInitializeARMTarget();
+        LLVMInitializeARMTargetMC();
+        LLVMInitializeARMAsmParser();
+        LLVMInitializeARMAsmPrinter();
 
         // ターゲットマシン作成
         std::string error;

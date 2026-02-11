@@ -41,6 +41,7 @@ class ProgramDeadCodeElimination {
         // mainとエントリポイントは常に使用される
         used.insert("main");
         used.insert("_start");
+        used.insert("efi_main");  // UEFIエントリポイント
 
         // 組み込み関数は常に使用される
         static const std::set<std::string> builtins = {"println",
@@ -86,6 +87,7 @@ class ProgramDeadCodeElimination {
         // 呼び出しグラフをたどって使用される関数を収集
         std::queue<std::string> worklist;
         worklist.push("main");
+        worklist.push("efi_main");  // UEFIエントリポイントからの呼び出しも追跡
 
         // インターフェースメソッド呼び出しを記録（Interface__method形式）
         std::set<std::string> interface_methods;

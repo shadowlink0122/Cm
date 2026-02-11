@@ -52,6 +52,7 @@ trap cleanup SIGINT SIGTERM
 # NOTE: interpreterバックエンドは未実装のため、デフォルトはjit
 BACKEND="jit"
 CATEGORIES=""
+SUITE=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
@@ -82,16 +83,60 @@ if [ -z "$TIMEOUT_CMD" ]; then
     echo ""
 fi
 
+# テストスイート定義
+# 各スイートはカテゴリのグループを定義する
+expand_suite() {
+    local suite="$1"
+    case "$suite" in
+        core)
+            echo "basic types control_flow functions function_ptr loops literal auto const const_interpolation casting errors type_checking"
+            ;;
+        syntax)
+            echo "array arrays array_higher_order dynamic_array slice string formatting enum match structs impl interface lambda chaining result must defer pointer ownership generics iterator"
+            ;;
+        stdlib)
+            echo "collections io std allocator memory intrinsics preprocessor"
+            ;;
+        modules)
+            echo "modules advanced_modules macro advanced"
+            ;;
+        platform)
+            echo "target asm ffi js_specific gpu uefi baremetal"
+            ;;
+        runtime)
+            echo "file_io fs net thread sync async"
+            ;;
+        all)
+            echo ""
+            ;;
+        *)
+            echo "Error: Unknown suite '$suite'" >&2
+            echo "Valid suites: core, syntax, stdlib, modules, platform, runtime, all" >&2
+            exit 1
+            ;;
+    esac
+}
+
 # ヘルプメッセージ
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js (default: jit)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
+    echo "  -s, --suite <suite>        Test suite: core|syntax|stdlib|modules|platform|runtime|all (default: all)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
     echo "  -t, --timeout <seconds>    Test timeout in seconds (default: 5)"
     echo "  -h, --help                 Show this help message"
+    echo ""
+    echo "Suites:"
+    echo "  core     - 言語基盤テスト（全ターゲット共通）"
+    echo "  syntax   - 構文機能テスト（配列・構造体・ジェネリクス等）"
+    echo "  stdlib   - 標準ライブラリテスト"
+    echo "  modules  - モジュール・マクロテスト"
+    echo "  platform - ターゲット固有テスト（UEFI・ベアメタル・ASM等）"
+    echo "  runtime  - OS依存ランタイムテスト（ファイルI/O・ネット・スレッド等）"
+    echo "  all      - 全テスト（デフォルト）"
     echo ""
     echo "Categories are auto-detected from directories in tests/test_programs/"
     exit 0
@@ -106,6 +151,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -c|--category)
             CATEGORIES="$2"
+            shift 2
+            ;;
+        -s|--suite)
+            SUITE="$2"
             shift 2
             ;;
         -v|--verbose)
@@ -131,10 +180,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, js"
+    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js"
     exit 1
+fi
+
+# スイート展開
+if [ -n "$SUITE" ] && [ -z "$CATEGORIES" ]; then
+    CATEGORIES=$(expand_suite "$SUITE")
 fi
 
 # カテゴリー設定
@@ -554,6 +608,47 @@ EOJS
                 fi
             fi
             ;;
+
+        llvm-uefi)
+            # UEFI ターゲットへのコンパイルのみ検証（実行不可）
+            local uefi_obj="$TEMP_DIR/uefi_${test_name}.efi"
+            rm -f "$uefi_obj"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # UEFI ターゲットでコンパイル（オブジェクト出力のみ）
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
+
+            # コンパイル成功 = PASS（実行はしない）
+            if [ $exit_code -eq 0 ]; then
+                # expectファイルが "COMPILE_OK" なら出力比較をスキップ
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$uefi_obj"
+            ;;
+
+        llvm-baremetal)
+            # ベアメタルターゲットへのコンパイルのみ検証（実行不可）
+            local bm_obj="$TEMP_DIR/bm_${test_name}.o"
+            rm -f "$bm_obj"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # ベアメタルターゲットでコンパイル（オブジェクト出力のみ）
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$bm_obj" > "$output_file" 2>&1) || exit_code=$?
+
+            # コンパイル成功 = PASS（実行はしない）
+            if [ $exit_code -eq 0 ]; then
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$bm_obj"
+            ;;
     esac
 
     # タイムアウト処理
@@ -966,6 +1061,32 @@ PY
                 fi
                 rm -f "$js_file"
             fi
+            ;;
+        llvm-uefi)
+            # UEFI ターゲットへのコンパイルのみ検証
+            local uefi_obj="$TEMP_DIR/uefi_${test_name}_$$.efi"
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ]; then
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$uefi_obj"
+            ;;
+        llvm-baremetal)
+            # ベアメタルターゲットへのコンパイルのみ検証
+            local bm_obj="$TEMP_DIR/bm_${test_name}_$$.o"
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$bm_obj" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ]; then
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$bm_obj"
             ;;
         *)
             echo "SKIP:Backend not supported for parallel" > "$result_file"
