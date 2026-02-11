@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cm Todo App</title>
-    <meta name="description" content="Cm言語で構築されたWebアプリケーション - with Cssによる自動スタイル生成">
+    <meta name="description" content="Cm言語で構築されたWebアプリケーション - ロジックもスタイルも全てCmで記述">
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -19,7 +19,7 @@
         <div class="card">
             <div style="display: flex; gap: 8px;">
                 <input class="input" type="text" id="taskInput" placeholder="新しいタスクを入力..." style="flex: 1;">
-                <button class="btn" id="addBtn" onclick="addTask()">追加</button>
+                <button class="btn" id="addBtn">追加</button>
             </div>
         </div>
 
@@ -32,67 +32,15 @@
         </div>
 
         <div class="card" style="text-align: center; color: #6b7280; font-size: 13px;">
-            <p>このアプリのCSSは <code>with Css</code> による自動生成です</p>
-            <p>ソース: <code>src/app.cm</code> → <code>public/app.js</code></p>
+            <p>このアプリはロジックもCSSも全て <code>Cm言語</code> で記述されています</p>
+            <p>ソース: <code>src/app.cm</code>（ロジック）+ <code>src/styles.cm</code>（CSS）</p>
         </div>
     </div>
 
-    <script>
-        // タスクデータ
-        let tasks = [];
-        let nextId = 1;
-
-        // タスク追加
-        function addTask() {
-            const input = document.getElementById('taskInput');
-            const text = input.value.trim();
-            if (!text) return;
-            tasks.push({ id: nextId++, text: text, done: false });
-            input.value = '';
-            render();
-        }
-
-        // タスク完了トグル
-        function toggleTask(id) {
-            const task = tasks.find(t => t.id === id);
-            if (task) task.done = !task.done;
-            render();
-        }
-
-        // タスク削除
-        function deleteTask(id) {
-            tasks = tasks.filter(t => t.id !== id);
-            render();
-        }
-
-        // 描画
-        function render() {
-            const container = document.getElementById('tasks');
-            const emptyMsg = document.getElementById('emptyMsg');
-            emptyMsg.style.display = tasks.length === 0 ? 'block' : 'none';
-
-            container.innerHTML = tasks.map(t => `
-                <div class="task-item">
-                    <input type="checkbox" ${t.done ? 'checked' : ''}
-                           onchange="toggleTask(${t.id})"
-                           style="margin-right: 12px; width: 18px; height: 18px;">
-                    <span style="flex: 1; ${t.done ? 'text-decoration: line-through; color: #9ca3af;' : ''}">${t.text}</span>
-                    <button onclick="deleteTask(${t.id})"
-                            style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;">✕</button>
-                </div>
-            `).join('');
-        }
-
-        // Enterキーで追加
-        document.getElementById('taskInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') addTask();
-        });
-
-        render();
-    </script>
-
-    <!-- Cm生成のJSを読み込み（CSS生成ロジック等に利用可能） -->
-    <!-- <script src="app.js"></script> -->
+    <!-- DOMランタイムブリッジ（Cm FFI用） -->
+    <script src="dom_runtime.js"></script>
+    <!-- Cm生成のアプリケーションロジック -->
+    <script src="app.js"></script>
 </body>
 
 </html>
