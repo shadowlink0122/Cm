@@ -1,0 +1,208 @@
+// uefi::mem - UEFI Boot Services メモリ管理
+// Boot ServicesのAllocatePool/FreePool等をインラインASMで呼び出し
+module uefi.mem;
+
+import uefi::types::*;
+import uefi::table::*;
+
+// ============================================================
+// Win64 ABI 間接呼び出しヘルパー
+// すべてのパラメータはulongで受け取り（i64保証）
+// ============================================================
+
+/// 1引数 間接呼び出し
+ulong bs_call1(ulong fn, ulong a1) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq %r12, %rcx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+/// 2引数 間接呼び出し
+ulong bs_call2(ulong fn, ulong a1, ulong a2) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq ${r:a2}, %r13;
+        movq %r12, %rcx;
+        movq %r13, %rdx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+/// 3引数 間接呼び出し
+ulong bs_call3(ulong fn, ulong a1, ulong a2, ulong a3) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        pushq %r14;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq ${r:a2}, %r13;
+        movq ${r:a3}, %r14;
+        movq %r12, %rcx;
+        movq %r13, %rdx;
+        movq %r14, %r8;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r14;
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+/// 4引数 間接呼び出し
+ulong bs_call4(ulong fn, ulong a1, ulong a2, ulong a3, ulong a4) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        pushq %r14;
+        pushq %r15;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq ${r:a2}, %r13;
+        movq ${r:a3}, %r14;
+        movq ${r:a4}, %r15;
+        movq %r12, %rcx;
+        movq %r13, %rdx;
+        movq %r14, %r8;
+        movq %r15, %r9;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r15;
+        popq %r14;
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+// ============================================================
+// AllocateType定数
+// ============================================================
+
+export const ulong ALLOCATE_ANY_PAGES    = 0;
+export const ulong ALLOCATE_MAX_ADDRESS  = 1;
+export const ulong ALLOCATE_ADDRESS      = 2;
+
+// ============================================================
+// メモリ管理関数
+// ============================================================
+
+/// Boot Servicesを使用してメモリプールを割り当て
+export ulong uefi_alloc_pool(EfiSystemTable* st, ulong size, void** out_buffer) {
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* alloc_fn = bs->allocate_pool;
+    if (alloc_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    // AllocatePool(PoolType=EFI_LOADER_DATA, Size, *Buffer)
+    ulong fn_addr = alloc_fn as ulong;
+    ulong buf_addr = out_buffer as ulong;
+    return bs_call3(fn_addr, EFI_LOADER_DATA, size, buf_addr);
+}
+
+/// Boot Servicesを使用してメモリプールを解放
+export ulong uefi_free_pool(EfiSystemTable* st, void* buffer) {
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* free_fn = bs->free_pool;
+    if (free_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    ulong fn_addr = free_fn as ulong;
+    ulong buf_addr = buffer as ulong;
+    return bs_call1(fn_addr, buf_addr);
+}
+
+/// Boot Servicesを使用してページ単位でメモリを割り当て
+export ulong uefi_alloc_pages(EfiSystemTable* st, ulong pages, ulong* out_address) {
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* alloc_fn = bs->allocate_pages;
+    if (alloc_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    // AllocatePages(AllocateType, MemoryType, Pages, *Memory)
+    ulong fn_addr = alloc_fn as ulong;
+    ulong out_addr = out_address as ulong;
+    return bs_call4(fn_addr, ALLOCATE_ANY_PAGES, EFI_LOADER_DATA, pages, out_addr);
+}
+
+/// Boot Servicesを使用してページを解放
+export ulong uefi_free_pages(EfiSystemTable* st, ulong address, ulong pages) {
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* free_fn = bs->free_pages;
+    if (free_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    ulong fn_addr = free_fn as ulong;
+    return bs_call2(fn_addr, address, pages);
+}
+
+/// Boot Servicesのstall（マイクロ秒単位の待機）
+export ulong uefi_stall(EfiSystemTable* st, ulong microseconds) {
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* stall_fn = bs->stall;
+    if (stall_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    ulong fn_addr = stall_fn as ulong;
+    return bs_call1(fn_addr, microseconds);
+}

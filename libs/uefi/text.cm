@@ -1,0 +1,181 @@
+// uefi::text - テキスト出力ユーティリティ
+// ConOut.OutputString をインラインASM経由で呼び出し
+//
+// Win64 ABI: RCX=第1引数, RDX=第2引数, 戻り値=RAX
+module uefi.text;
+
+import uefi::types::*;
+import uefi::table::*;
+
+// ============================================================
+// 内部ヘルパー: Win64 間接呼び出し
+// すべてのパラメータはulongで受け取り（i64保証）
+// ============================================================
+
+/// 2引数(ulong,ulong)で関数ポインタfnを呼び出し
+ulong win64_call2(ulong fn, ulong a1, ulong a2) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq ${r:a2}, %r13;
+        movq %r12, %rcx;
+        movq %r13, %rdx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+/// 1引数(ulong)で関数ポインタfnを呼び出し
+ulong win64_call1(ulong fn, ulong a1) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq %r12, %rcx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+// ============================================================
+// テキスト出力関数
+// ============================================================
+
+/// ASCII文字列をUCS-2に変換してUEFI ConOutに出力
+export ulong uefi_puts(EfiSystemTable* st, string msg) {
+    EfiSimpleTextOutputProtocol* con_out = st->con_out;
+    if (con_out == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* output_fn = con_out->output_string;
+    if (output_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    // ASCII → UCS-2 変換
+    ushort[257] buf;
+    utiny* src = msg as utiny*;
+
+    int i = 0;
+    while (i < 256) {
+        utiny ch = *(src + i);
+        if (ch == 0) {
+            break;
+        }
+        buf[i] = ch as ushort;
+        i += 1;
+    }
+    buf[i] = 0;
+
+    // void* → ulong にキャスト（i64保証でASMに渡す）
+    ulong fn_addr = output_fn as ulong;
+    ulong co_addr = con_out as ulong;
+    ulong buf_addr = buf as ulong;
+    ulong status = win64_call2(fn_addr, co_addr, buf_addr);
+    return status;
+}
+
+/// 改行付きテキスト出力
+export ulong uefi_println(EfiSystemTable* st, string msg) {
+    ulong status = uefi_puts(st, msg);
+    if (efi_error(status)) {
+        return status;
+    }
+
+    // \r\n を出力
+    ushort[3] newline;
+    newline[0] = 13;
+    newline[1] = 10;
+    newline[2] = 0;
+
+    EfiSimpleTextOutputProtocol* con_out = st->con_out;
+    void* output_fn = con_out->output_string;
+
+    ulong fn_addr = output_fn as ulong;
+    ulong co_addr = con_out as ulong;
+    ulong nl_addr = newline as ulong;
+    status = win64_call2(fn_addr, co_addr, nl_addr);
+    return status;
+}
+
+/// 画面クリア
+export ulong uefi_clear_screen(EfiSystemTable* st) {
+    EfiSimpleTextOutputProtocol* con_out = st->con_out;
+    if (con_out == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* clear_fn = con_out->clear_screen;
+    if (clear_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    ulong fn_addr = clear_fn as ulong;
+    ulong co_addr = con_out as ulong;
+    return win64_call1(fn_addr, co_addr);
+}
+
+/// テキスト属性設定（前景色・背景色）
+export ulong uefi_set_color(EfiSystemTable* st, ulong attribute) {
+    EfiSimpleTextOutputProtocol* con_out = st->con_out;
+    if (con_out == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* set_attr_fn = con_out->set_attribute;
+    if (set_attr_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    ulong fn_addr = set_attr_fn as ulong;
+    ulong co_addr = con_out as ulong;
+    return win64_call2(fn_addr, co_addr, attribute);
+}
+
+// ============================================================
+// テキスト属性定数（前景色）
+// ============================================================
+export const ulong EFI_BLACK         = 0x00;
+export const ulong EFI_BLUE          = 0x01;
+export const ulong EFI_GREEN         = 0x02;
+export const ulong EFI_CYAN          = 0x03;
+export const ulong EFI_RED           = 0x04;
+export const ulong EFI_MAGENTA       = 0x05;
+export const ulong EFI_BROWN         = 0x06;
+export const ulong EFI_LIGHTGRAY     = 0x07;
+export const ulong EFI_DARKGRAY      = 0x08;
+export const ulong EFI_LIGHTBLUE     = 0x09;
+export const ulong EFI_LIGHTGREEN    = 0x0A;
+export const ulong EFI_LIGHTCYAN     = 0x0B;
+export const ulong EFI_LIGHTRED      = 0x0C;
+export const ulong EFI_LIGHTMAGENTA  = 0x0D;
+export const ulong EFI_YELLOW        = 0x0E;
+export const ulong EFI_WHITE         = 0x0F;
+
+// 背景色（4ビットシフト）
+export const ulong EFI_BACKGROUND_BLACK     = 0x00;
+export const ulong EFI_BACKGROUND_BLUE      = 0x10;
+export const ulong EFI_BACKGROUND_GREEN     = 0x20;
+export const ulong EFI_BACKGROUND_CYAN      = 0x30;
+export const ulong EFI_BACKGROUND_RED       = 0x40;
+export const ulong EFI_BACKGROUND_MAGENTA   = 0x50;
+export const ulong EFI_BACKGROUND_BROWN     = 0x60;
+export const ulong EFI_BACKGROUND_LIGHTGRAY = 0x70;
