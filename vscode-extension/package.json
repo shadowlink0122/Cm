@@ -21,12 +21,12 @@
     "url": "https://github.com/shadowlink0122/Cm"
   },
   "license": "MIT",
-  "icon": "images/icon.svg",
+  "icon": "images/icon.png",
   "scripts": {
     "update-version": "node scripts/update-version.js",
     "verify-version": "node scripts/verify-version.js",
     "prepackage": "npm run verify-version",
-    "package": "vsce package"
+    "package": "pnpm exec vsce package --allow-missing-repository --skip-license"
   },
   "contributes": {
     "languages": [
@@ -60,5 +60,8 @@
         "path": "./iconTheme.json"
       }
     ]
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.7.1"
   }
 }
