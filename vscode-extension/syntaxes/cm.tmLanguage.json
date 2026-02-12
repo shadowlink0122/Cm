@@ -1,0 +1,712 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Cm",
+    "scopeName": "source.cm",
+    "fileTypes": [
+        "cm"
+    ],
+    "patterns": [
+        {
+            "include": "#platform-directive"
+        },
+        {
+            "include": "#preprocessor"
+        },
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#import-statement"
+        },
+        {
+            "include": "#use-statement"
+        },
+        {
+            "include": "#module-statement"
+        },
+        {
+            "include": "#asm-block"
+        },
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#constants"
+        },
+        {
+            "include": "#builtin-functions"
+        },
+        {
+            "include": "#function-declaration"
+        },
+        {
+            "include": "#function-call"
+        },
+        {
+            "include": "#types"
+        },
+        {
+            "include": "#variables"
+        },
+        {
+            "include": "#operators"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#punctuation"
+        }
+    ],
+    "repository": {
+        "platform-directive": {
+            "patterns": [
+                {
+                    "name": "meta.preprocessor.platform.cm",
+                    "match": "^\\s*(//!)\\s*(platform)\\s*:\\s*(\\w+)",
+                    "captures": {
+                        "1": {
+                            "name": "punctuation.definition.directive.cm"
+                        },
+                        "2": {
+                            "name": "keyword.control.directive.cm"
+                        },
+                        "3": {
+                            "name": "entity.name.tag.cm"
+                        }
+                    }
+                }
+            ]
+        },
+        "preprocessor": {
+            "patterns": [
+                {
+                    "name": "meta.preprocessor.macro.cm",
+                    "begin": "^\\s*#\\s*(define|undef)\\b",
+                    "end": "$",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.control.directive.cm"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "name": "entity.name.function.preprocessor.cm",
+                            "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+                        }
+                    ]
+                },
+                {
+                    "name": "meta.preprocessor.conditional.cm",
+                    "match": "^\\s*#\\s*(ifdef|ifndef|if|elif|elseif|else|endif)\\b",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.directive.cm"
+                        }
+                    }
+                },
+                {
+                    "name": "meta.preprocessor.diagnostic.cm",
+                    "begin": "^\\s*#\\s*(error|warning)\\b",
+                    "end": "$",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.control.directive.cm"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "name": "string.unquoted.cm",
+                            "match": ".+"
+                        }
+                    ]
+                },
+                {
+                    "name": "meta.preprocessor.include.cm",
+                    "match": "^\\s*#\\s*(include)\\b",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.directive.cm"
+                        }
+                    }
+                },
+                {
+                    "name": "constant.language.preprocessor.cm",
+                    "match": "\\b__(FILE|LINE|DATE|TIME|VERSION|PLATFORM|ARCH|OS)__\\b"
+                }
+            ]
+        },
+        "module-statement": {
+            "patterns": [
+                {
+                    "begin": "\\b(module)\\s+",
+                    "end": ";",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.control.module.cm"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.terminator.statement.cm"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "name": "entity.name.type.module.cm",
+                            "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+                        },
+                        {
+                            "name": "punctuation.accessor.cm",
+                            "match": "\\."
+                        }
+                    ]
+                }
+            ]
+        },
+        "import-statement": {
+            "patterns": [
+                {
+                    "begin": "\\b(import)\\s+",
+                    "end": ";",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.control.import.cm"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.terminator.statement.cm"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "begin": "\\{",
+                            "end": "\\}",
+                            "beginCaptures": {
+                                "0": {
+                                    "name": "punctuation.definition.imports.begin.cm"
+                                }
+                            },
+                            "endCaptures": {
+                                "0": {
+                                    "name": "punctuation.definition.imports.end.cm"
+                                }
+                            },
+                            "patterns": [
+                                {
+                                    "name": "variable.other.readwrite.cm",
+                                    "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+                                },
+                                {
+                                    "name": "punctuation.separator.comma.cm",
+                                    "match": ","
+                                }
+                            ]
+                        },
+                        {
+                            "name": "entity.name.type.module.cm",
+                            "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+                        },
+                        {
+                            "name": "punctuation.accessor.cm",
+                            "match": "\\.|::"
+                        }
+                    ]
+                }
+            ]
+        },
+        "use-statement": {
+            "patterns": [
+                {
+                    "begin": "\\b(use)\\s+",
+                    "end": "\\}|;",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.control.directive.cm"
+                        }
+                    },
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.section.block.end.cm"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "name": "string.quoted.double.cm",
+                            "begin": "\"",
+                            "end": "\"",
+                            "patterns": [
+                                {
+                                    "name": "constant.character.escape.cm",
+                                    "match": "\\\\."
+                                }
+                            ]
+                        },
+                        {
+                            "name": "entity.name.type.module.cm",
+                            "match": "[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*\\{)"
+                        },
+                        {
+                            "name": "entity.name.type.module.cm",
+                            "match": "\\b(js|libc|foreign)\\b"
+                        },
+                        {
+                            "name": "punctuation.section.block.begin.cm",
+                            "match": "\\{"
+                        },
+                        {
+                            "include": "#comments"
+                        },
+                        {
+                            "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\([^)]*\\)\\s*;)",
+                            "captures": {
+                                "1": {
+                                    "name": "entity.name.function.cm"
+                                }
+                            }
+                        },
+                        {
+                            "include": "#types"
+                        },
+                        {
+                            "name": "entity.name.type.module.cm",
+                            "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+                        },
+                        {
+                            "name": "punctuation.accessor.cm",
+                            "match": "\\."
+                        }
+                    ]
+                }
+            ]
+        },
+        "asm-block": {
+            "patterns": [
+                {
+                    "name": "meta.embedded.assembly.cm",
+                    "begin": "\\b(__asm__)\\s*\\{",
+                    "end": "\\}",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.other.asm.cm"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "name": "string.quoted.double.assembly.cm",
+                            "begin": "\"",
+                            "end": "\"",
+                            "patterns": [
+                                {
+                                    "name": "constant.character.escape.cm",
+                                    "match": "\\\\."
+                                }
+                            ]
+                        },
+                        {
+                            "include": "#comments"
+                        },
+                        {
+                            "name": "keyword.other.asm.constraint.cm",
+                            "match": "\\b(in|out|inout|clobber)\\b"
+                        },
+                        {
+                            "include": "#variables"
+                        }
+                    ]
+                }
+            ]
+        },
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.block.cm",
+                    "begin": "/\\*",
+                    "end": "\\*/",
+                    "captures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.cm"
+                        }
+                    }
+                },
+                {
+                    "name": "comment.line.double-slash.cm",
+                    "begin": "//",
+                    "end": "$",
+                    "captures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.cm"
+                        }
+                    }
+                }
+            ]
+        },
+        "strings": {
+            "patterns": [
+                {
+                    "name": "string.quoted.backtick.cm",
+                    "begin": "`",
+                    "end": "`",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.cm",
+                            "match": "\\\\."
+                        },
+                        {
+                            "name": "constant.character.escape.cm",
+                            "match": "\\{\\{|\\}\\}"
+                        },
+                        {
+                            "begin": "\\{",
+                            "end": "\\}",
+                            "beginCaptures": {
+                                "0": {
+                                    "name": "punctuation.definition.template-expression.begin.cm"
+                                }
+                            },
+                            "endCaptures": {
+                                "0": {
+                                    "name": "punctuation.definition.template-expression.end.cm"
+                                }
+                            },
+                            "patterns": [
+                                {
+                                    "include": "#builtin-functions"
+                                },
+                                {
+                                    "include": "#function-call"
+                                },
+                                {
+                                    "include": "#constants"
+                                },
+                                {
+                                    "include": "#numbers"
+                                },
+                                {
+                                    "include": "#variables"
+                                },
+                                {
+                                    "include": "#operators"
+                                },
+                                {
+                                    "include": "#string-interpolation-punctuation"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.double.cm",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.cm",
+                            "match": "\\\\."
+                        },
+                        {
+                            "name": "constant.character.escape.cm",
+                            "match": "\\{\\{|\\}\\}"
+                        },
+                        {
+                            "begin": "\\{",
+                            "end": "\\}",
+                            "beginCaptures": {
+                                "0": {
+                                    "name": "punctuation.definition.template-expression.begin.cm"
+                                }
+                            },
+                            "endCaptures": {
+                                "0": {
+                                    "name": "punctuation.definition.template-expression.end.cm"
+                                }
+                            },
+                            "patterns": [
+                                {
+                                    "include": "#builtin-functions"
+                                },
+                                {
+                                    "include": "#function-call"
+                                },
+                                {
+                                    "include": "#constants"
+                                },
+                                {
+                                    "include": "#numbers"
+                                },
+                                {
+                                    "include": "#variables"
+                                },
+                                {
+                                    "include": "#operators"
+                                },
+                                {
+                                    "include": "#string-interpolation-punctuation"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.cm",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.cm",
+                            "match": "\\\\."
+                        }
+                    ]
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.conditional.cm",
+                    "match": "\\b(if|else|switch|case|default|match)\\b"
+                },
+                {
+                    "name": "keyword.control.repeat.cm",
+                    "match": "\\b(for|in|while|break|continue)\\b"
+                },
+                {
+                    "name": "keyword.control.return.cm",
+                    "match": "\\b(return|yield|defer)\\b"
+                },
+                {
+                    "name": "keyword.control.flow.cm",
+                    "match": "\\b(async|await)\\b"
+                },
+                {
+                    "name": "keyword.control.export.cm",
+                    "match": "\\b(export|private|pub)\\b"
+                },
+                {
+                    "name": "keyword.control.exception.cm",
+                    "match": "\\b(try|checked|panic|unwrap|must)\\b"
+                },
+                {
+                    "name": "keyword.other.cm",
+                    "match": "\\b(typedef|struct|enum|interface|impl|union|with|module|macro|namespace|overload|operator)\\b"
+                },
+                {
+                    "name": "storage.type.primitive.cm",
+                    "match": "\\b(const|constexpr|static|extern|inline|volatile|mutable|move|as|from|where|auto)\\b"
+                },
+                {
+                    "name": "keyword.operator.new.cm",
+                    "match": "\\b(new|delete|sizeof|typeof|typename)\\b"
+                },
+                {
+                    "name": "keyword.other.assert.cm",
+                    "match": "\\b(assert)\\b"
+                },
+                {
+                    "name": "keyword.other.asm.cm",
+                    "match": "\\b(__asm__|__sizeof__|__typeof__|__typename__|__alignof__)\\b"
+                }
+            ]
+        },
+        "types": {
+            "patterns": [
+                {
+                    "name": "storage.type.primitive.cm",
+                    "match": "\\b(tiny|utiny|short|ushort|int|uint|long|ulong|isize|usize|float|ufloat|double|udouble|char|string|cstring|bool|void)\\b"
+                },
+                {
+                    "name": "entity.name.type.cm",
+                    "match": "\\b([A-Z][a-zA-Z0-9_]*)\\b"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "name": "constant.language.boolean.cm",
+                    "match": "\\b(true|false)\\b"
+                },
+                {
+                    "name": "constant.language.null.cm",
+                    "match": "\\b(nullptr|null)\\b"
+                },
+                {
+                    "name": "constant.numeric.cm",
+                    "match": "\\b[A-Z][A-Z0-9_]*\\b"
+                },
+                {
+                    "name": "variable.language.self.cm",
+                    "match": "\\b(self)\\b"
+                }
+            ]
+        },
+        "builtin-functions": {
+            "patterns": [
+                {
+                    "name": "support.function.builtin.cm",
+                    "match": "\\b(print|println|printf)\\b"
+                }
+            ]
+        },
+        "function-declaration": {
+            "patterns": [
+                {
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\([^)]*\\)\\s*;)",
+                    "captures": {
+                        "1": {
+                            "name": "entity.name.function.cm"
+                        }
+                    }
+                }
+            ]
+        },
+        "function-call": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.member.cm",
+                    "match": "(?<=\\.)([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+                },
+                {
+                    "name": "entity.name.function.cm",
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+                }
+            ]
+        },
+        "variables": {
+            "patterns": [
+                {
+                    "name": "variable.other.member.cm",
+                    "match": "(?<=\\.)([a-zA-Z_][a-zA-Z0-9_]*)\\b(?!\\s*\\()"
+                },
+                {
+                    "name": "variable.other.cm",
+                    "match": "\\b([a-z_][a-zA-Z0-9_]*|_[a-zA-Z0-9_]+)\\b"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.logical.cm",
+                    "match": "(&&|\\|\\||!(?!=))"
+                },
+                {
+                    "name": "keyword.operator.comparison.cm",
+                    "match": "(==|!=|<=|>=|<(?!<)|>(?!>))"
+                },
+                {
+                    "name": "keyword.operator.arithmetic.cm",
+                    "match": "(\\+(?!\\+)|\\-(?!\\-)|\\*(?!=)|/(?!=)|%(?!=))"
+                },
+                {
+                    "name": "keyword.operator.bitwise.cm",
+                    "match": "(&(?!&|=)|\\|(?!\\||=)|\\^(?!=)|~|<<|>>)"
+                },
+                {
+                    "name": "keyword.operator.assignment.cm",
+                    "match": "(=|\\+=|\\-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=)"
+                },
+                {
+                    "name": "keyword.operator.increment-decrement.cm",
+                    "match": "(\\+\\+|\\-\\-)"
+                },
+                {
+                    "name": "keyword.operator.pointer.cm",
+                    "match": "(\\*(?!\\*)|&(?!&)|->)"
+                },
+                {
+                    "name": "keyword.operator.fat-arrow.cm",
+                    "match": "=>"
+                },
+                {
+                    "name": "keyword.operator.ternary.cm",
+                    "match": "\\?|:"
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.cm",
+                    "match": "\\b0[xX][0-9a-fA-F]+\\b"
+                },
+                {
+                    "name": "constant.numeric.binary.cm",
+                    "match": "\\b0[bB][01]+\\b"
+                },
+                {
+                    "name": "constant.numeric.octal.cm",
+                    "match": "\\b0[oO][0-7]+\\b"
+                },
+                {
+                    "name": "constant.numeric.float.cm",
+                    "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.cm",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "punctuation": {
+            "patterns": [
+                {
+                    "name": "punctuation.terminator.statement.cm",
+                    "match": ";"
+                },
+                {
+                    "name": "punctuation.separator.comma.cm",
+                    "match": ","
+                },
+                {
+                    "name": "punctuation.accessor.cm",
+                    "match": "\\.|::"
+                },
+                {
+                    "name": "punctuation.section.block.begin.cm",
+                    "match": "\\{"
+                },
+                {
+                    "name": "punctuation.section.block.end.cm",
+                    "match": "\\}"
+                },
+                {
+                    "name": "punctuation.section.brackets.begin.cm",
+                    "match": "\\["
+                },
+                {
+                    "name": "punctuation.section.brackets.end.cm",
+                    "match": "\\]"
+                },
+                {
+                    "name": "punctuation.section.parens.begin.cm",
+                    "match": "\\("
+                },
+                {
+                    "name": "punctuation.section.parens.end.cm",
+                    "match": "\\)"
+                }
+            ]
+        },
+        "string-interpolation-punctuation": {
+            "patterns": [
+                {
+                    "name": "meta.embedded.punctuation.accessor.cm",
+                    "match": "\\.|::"
+                },
+                {
+                    "name": "meta.embedded.punctuation.parens.cm",
+                    "match": "[()]"
+                },
+                {
+                    "name": "meta.embedded.punctuation.brackets.cm",
+                    "match": "[\\[\\]]"
+                }
+            ]
+        }
+    }
+}
