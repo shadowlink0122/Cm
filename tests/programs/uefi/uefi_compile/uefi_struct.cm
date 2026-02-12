@@ -1,0 +1,29 @@
+//! platform: uefi
+// UEFIターゲットでの構造体パラメータテスト
+// EFI関数スタイルの引数パッシングを検証
+
+struct EfiTableHeader {
+    ulong signature;
+    uint revision;
+    uint header_size;
+    uint crc32;
+    uint reserved;
+}
+
+ulong validate_header(EfiTableHeader* header) {
+    if (header->signature == 0) {
+        return 1;  // EFI_LOAD_ERROR
+    }
+    return 0;  // EFI_SUCCESS
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    EfiTableHeader header = EfiTableHeader {
+        signature: 0x5453595320494249,
+        revision: 0x00020046,
+        header_size: 72,
+        crc32: 0,
+        reserved: 0
+    };
+    return validate_header(&header);
+}

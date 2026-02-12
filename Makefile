@@ -85,6 +85,10 @@ help:
 	@echo "  make test-js-all-opts              - JS全最適化レベルテスト"
 	@echo "  make test-all-opts                 - 全プラットフォーム・全最適化レベルテスト"
 	@echo ""
+	@echo "Test Commands (Baremetal/UEFI):"
+	@echo "  make test-baremetal   - ベアメタルコンパイルテスト"
+	@echo "  make test-uefi        - UEFIコンパイルテスト"
+	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
 	@echo ""
 	@echo "Run Commands:"
@@ -894,6 +898,16 @@ tjitp2: test-jit-o2-parallel
 
 .PHONY: tjitp3
 tjitp3: test-jit-o3-parallel
+
+# Baremetal/UEFI shortcuts
+.PHONY: tb
+tb: test-baremetal
+
+.PHONY: tu
+tu: test-uefi
+
+.PHONY: tbu
+tbu: test-baremetal test-uefi
 
 # ========================================
 # Benchmark Commands

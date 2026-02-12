@@ -190,6 +190,8 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 - JSバックエンドテストをCIに追加
 - VERSIONファイルとブランチ名の整合チェックCI追加
 - VSCode拡張機能lint CIジョブ追加
+- UEFIコンパイルテストCIジョブ追加
+- ベアメタルコンパイルテストCIジョブ追加
 - GPUテスト全バックエンドスキップ
 - タイムアウトテスト根本修正
 
@@ -240,7 +242,7 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 | `vscode-extension/eslint.config.mjs` | ESLint Flat Config |
 | `vscode-extension/.prettierrc` | Prettier設定 |
 | `vscode-extension/tsconfig.json` | TypeScript設定 |
-| `.github/workflows/ci.yml` | extension-lintジョブ追加 |
+| `.github/workflows/ci.yml` | extension-lintジョブ、baremetal-testジョブ追加 |
 
 ### チュートリアル・ドキュメント
 
@@ -265,6 +267,8 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 | `tests/programs/enum/associated_data.*` | .error → .expected |
 | `tests/programs/asm/.skip` 等 | JSスキップファイル追加 |
 | `tests/unified_test_runner.sh` | テストランナー改善 |
+| `tests/programs/uefi/uefi_compile/*` | UEFIコンパイルテスト5件追加 |
+| `tests/programs/baremetal/allowed/*` | ベアメタルテスト3件追加（enum/配列/ポインタ） |
 
 ### サンプル
 
@@ -282,6 +286,8 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 | JIT (O0) | 368 | 0 | 8 |
 | LLVM Native | 368 | 0 | 8 |
 | JavaScript | 293 | 1 | 50 |
+| Baremetal | 11 | 0 | 0 |
+| UEFI | 5 | 0 | 0 |
 
 ---
 
@@ -304,6 +310,8 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 - [x] `make tlp` 全テスト通過（368 PASS / 0 FAIL）
 - [x] `make tjp` 全テスト通過（293 PASS / 1 FAIL）
 - [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
+- [x] ベアメタルテスト通過（11 PASS / 0 FAIL）
+- [x] UEFIテスト通過（5 PASS / 0 FAIL）
 - [x] リリースノート更新（`docs/releases/v0.14.0.md`）
 - [x] チュートリアル更新（演算子、UEFI、JS、環境構築）
 - [x] VSCode拡張機能README更新

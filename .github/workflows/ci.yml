@@ -133,3 +133,44 @@ jobs:
       - name: Prettier format check
         run: npm run format:check
 
+  # ========================================
+  # Baremetal/UEFI - コンパイルテスト
+  # ========================================
+  baremetal-test:
+    name: Baremetal / UEFI Compile Tests
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 17
+          sudo apt-get install -y llvm-17-dev clang-17 libssl-dev
+          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm" >> $GITHUB_ENV
+
+      - name: Install Google Test
+        run: sudo apt-get install -y libgtest-dev
+
+      - name: Build Cm compiler
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCM_USE_LLVM=ON \
+            -DCM_TARGET_ARCH=x86_64 \
+            -DBUILD_TESTING=ON
+          cmake --build build -j$(nproc)
+
+      - name: Run Baremetal compile tests
+        run: |
+          chmod +x tests/unified_test_runner.sh
+          OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal
+
+      - name: Run UEFI compile tests
+        run: |
+          chmod +x tests/unified_test_runner.sh
+          OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi
+
