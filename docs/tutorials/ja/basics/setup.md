@@ -17,6 +17,7 @@ parent: Tutorials
 - makeコマンドの使い方
 - テストの実行
 - 初めてのプログラム実行
+- エディタ設定（VSCode拡張機能）
 
 ---
 
@@ -91,13 +92,22 @@ brew install wasmtime
 curl https://wasmtime.dev/install.sh -sSf | bash
 ```
 
-### Node.js (JS実行用)
+### Node.js (JS実行 / VSCode拡張機能用)
 
-JSバックエンドで生成されたコードの実行に必要です。
+JSバックエンドで生成されたコードの実行と、VSCode拡張機能のビルドに必要です。
 
 ```bash
-# Node.js v16+ が必要
+# Node.js v20+ を推奨
 node --version
+```
+
+### pnpm (VSCode拡張機能用)
+
+VSCode拡張機能の依存関係管理に必要です（npmでも代替可能）。
+
+```bash
+npm install -g pnpm
+pnpm --version
 ```
 
 ---
@@ -546,9 +556,67 @@ which wasmtime
 
 ### VS Code（推奨）
 
-Cm用VSCode拡張機能をインストールすることで、構文ハイライト、Linter連携が利用できます。
+Cm用VSCode拡張機能をインストールすることで、構文ハイライト、ファイルアイコン、Linter連携が利用できます。
 
-`.vscode/settings.json`（拡張機能がない場合）:
+#### 拡張機能のインストール
+
+```bash
+# 1. 依存関係のインストール
+cd vscode-extension
+pnpm install    # または npm install
+
+# 2. パッケージビルド
+pnpm run package
+
+# 3. VSCodeにインストール
+code --install-extension cm-language-*.vsix
+```
+
+> **Note**: Node.js v20+、pnpm（またはnpm）が必要です。
+
+#### 拡張機能の機能
+
+| 機能 | 説明 |
+|------|------|
+| **構文ハイライト** | キーワード、型、関数、文字列補間、プリプロセッサ等 |
+| **ファイルアイコン** | `.cm`ファイルにCmアイコンを表示 |
+| **言語設定** | ブラケットマッチング、折りたたみ、インデント支援 |
+
+#### 拡張機能の開発（コントリビューター向け）
+
+拡張機能はTypeScriptで開発され、ESLint + Prettierで品質管理されています。
+
+```bash
+cd vscode-extension
+pnpm install
+
+# TypeScriptコンパイル
+pnpm run compile
+
+# 静的解析（ESLint）
+pnpm run lint
+
+# コードフォーマットチェック（Prettier）
+pnpm run format:check
+
+# コードフォーマット自動修正
+pnpm run format
+```
+
+| コマンド | 説明 |
+|---------|------|
+| `pnpm run compile` | TypeScriptコンパイル |
+| `pnpm run lint` | ESLintチェック |
+| `pnpm run lint:fix` | ESLint自動修正 |
+| `pnpm run format` | Prettier自動フォーマット |
+| `pnpm run format:check` | Prettierフォーマットチェック |
+| `pnpm run verify-version` | バージョン一致確認 |
+
+> **Tip**: CIでは `extension-lint` ジョブが自動的に compile → lint → format:check を実行します。
+
+#### 拡張機能なしの場合
+
+`.vscode/settings.json`:
 
 ```json
 {
@@ -600,6 +668,7 @@ make build ARCH=x86_64
 ✅ コンパイラをビルドできた  
 ✅ makeコマンドを理解した  
 ✅ 構文チェックツールを試した  
+✅ エディタを設定した（VSCode拡張機能）  
 ⏭️ 次は [Hello, World!](hello-world.html) で最初のプログラムを書きましょう
 
 ## 関連リンク

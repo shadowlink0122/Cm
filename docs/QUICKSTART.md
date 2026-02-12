@@ -193,6 +193,7 @@ make tjp
 | [環境構築](tutorials/ja/basics/setup.html) | 依存関係・makeコマンド一覧 |
 | [コンパイラの使い方](tutorials/ja/compiler/usage.html) | コマンド・オプション |
 | [JSバックエンド](tutorials/ja/compiler/js-compilation.html) | JavaScript出力ガイド |
+| [VSCode拡張機能](../vscode-extension/README.html) | 構文ハイライト・アイコン・開発ガイド |
 | [機能リファレンス](FEATURES.html) | 実装済み機能一覧 |
 | [言語仕様](design/CANONICAL_SPEC.html) | 完全な言語仕様 |
 | [リリースノート](releases/) | バージョン履歴 |
