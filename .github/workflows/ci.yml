@@ -103,3 +103,33 @@ jobs:
           ls -la build/bin/ || echo "No bin directory"
           ./cm --version || echo "cm not found in root"
           echo "✅ Build completed successfully"
+
+  # ========================================
+  # Extension Lint - VSCode拡張機能のTypeScript/Lintチェック
+  # ========================================
+  extension-lint:
+    name: Extension Lint (TypeScript)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: TypeScript compile
+        run: npm run compile
+
+      - name: ESLint check
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npm run format:check
+

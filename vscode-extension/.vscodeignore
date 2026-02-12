@@ -4,3 +4,8 @@
 .git/**
 *.vsix
 node_modules/**
+scripts/**
+out/**
+tsconfig.json
+eslint.config.mjs
+.prettierrc

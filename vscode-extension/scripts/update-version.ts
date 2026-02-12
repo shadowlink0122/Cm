@@ -2,11 +2,22 @@
 
 /**
  * VSCode拡張機能のバージョンをルートのcm_config.jsonから自動更新するスクリプト
- * 使用方法: node scripts/update-version.js
+ * 使用方法: node out/update-version.js
  */
 
-const fs = require('fs');
-const path = require('path');
+import * as fs from 'fs';
+import * as path from 'path';
+
+// 型定義
+interface CmConfig {
+  version: string;
+  [key: string]: unknown;
+}
+
+interface PackageJson {
+  version: string;
+  [key: string]: unknown;
+}
 
 // パス設定
 const rootDir = path.join(__dirname, '../..');
@@ -15,49 +26,45 @@ const packageJsonPath = path.join(__dirname, '../package.json');
 
 // cm_config.jsonファイルを読み込み
 if (!fs.existsSync(configFile)) {
-    console.error('❌ Error: cm_config.json file not found at', configFile);
-    process.exit(1);
+  console.error('❌ Error: cm_config.json file not found at', configFile);
+  process.exit(1);
 }
 
-const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+const config: CmConfig = JSON.parse(fs.readFileSync(configFile, 'utf8'));
 const version = config.version;
 
 if (!version) {
-    console.error('❌ Error: version field not found in cm_config.json');
-    process.exit(1);
+  console.error('❌ Error: version field not found in cm_config.json');
+  process.exit(1);
 }
 
 // バージョンフォーマットチェック (x.y.z)
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
-    console.error('❌ Error: Invalid version format in cm_config.json:', version);
-    console.error('   Expected format: x.y.z (e.g., 0.14.0)');
-    process.exit(1);
+  console.error('❌ Error: Invalid version format in cm_config.json:', version);
+  console.error('   Expected format: x.y.z (e.g., 0.14.0)');
+  process.exit(1);
 }
 
 // package.jsonを読み込み
 if (!fs.existsSync(packageJsonPath)) {
-    console.error('❌ Error: package.json not found at', packageJsonPath);
-    process.exit(1);
+  console.error('❌ Error: package.json not found at', packageJsonPath);
+  process.exit(1);
 }
 
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+const packageJson: PackageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const oldVersion = packageJson.version;
 
 // バージョンが既に同じ場合はスキップ
 if (oldVersion === version) {
-    console.log('✅ Version is already up to date:', version);
-    process.exit(0);
+  console.log('✅ Version is already up to date:', version);
+  process.exit(0);
 }
 
 // バージョンを更新
 packageJson.version = version;
 
 // package.jsonに書き戻し（フォーマット保持）
-fs.writeFileSync(
-    packageJsonPath,
-    JSON.stringify(packageJson, null, 2) + '\n',
-    'utf8'
-);
+fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
 
 console.log('✅ Version updated successfully:');
 console.log('   Old version:', oldVersion);

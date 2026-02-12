@@ -23,10 +23,15 @@
   "license": "MIT",
   "icon": "images/icon.png",
   "scripts": {
-    "update-version": "node scripts/update-version.js",
-    "verify-version": "node scripts/verify-version.js",
+    "compile": "tsc -p ./",
+    "update-version": "tsc -p ./ && node out/update-version.js",
+    "verify-version": "tsc -p ./ && node out/verify-version.js",
     "prepackage": "npm run verify-version",
-    "package": "pnpm exec vsce package --allow-missing-repository --skip-license"
+    "package": "pnpm exec vsce package --allow-missing-repository --skip-license",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write 'scripts/**/*.ts'",
+    "format:check": "prettier --check 'scripts/**/*.ts'"
   },
   "contributes": {
     "languages": [
@@ -62,6 +67,13 @@
     ]
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.7.1"
+    "@types/node": "^20.0.0",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "@eslint/js": "^9.0.0"
   }
 }
