@@ -16,6 +16,9 @@
             "include": "#comments"
         },
         {
+            "include": "#backtick-block"
+        },
+        {
             "include": "#strings"
         },
         {
@@ -252,7 +255,7 @@
                         },
                         {
                             "name": "entity.name.type.module.cm",
-                            "match": "\\b(js|libc|foreign)\\b"
+                            "match": "\\b(js|libc)\\b"
                         },
                         {
                             "name": "punctuation.section.block.begin.cm",
@@ -345,60 +348,58 @@
                 }
             ]
         },
-        "strings": {
+        "backtick-block": {
+            "comment": "バッククォート文字列: デリミターは文字列色、中身は通常構文ハイライト",
+            "begin": "`",
+            "end": "`",
+            "beginCaptures": {
+                "0": {
+                    "name": "string.quoted.backtick.cm"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "string.quoted.backtick.cm"
+                }
+            },
             "patterns": [
                 {
-                    "name": "string.quoted.backtick.cm",
-                    "begin": "`",
-                    "end": "`",
-                    "patterns": [
-                        {
-                            "name": "constant.character.escape.cm",
-                            "match": "\\\\."
-                        },
-                        {
-                            "name": "constant.character.escape.cm",
-                            "match": "\\{\\{|\\}\\}"
-                        },
-                        {
-                            "begin": "\\{",
-                            "end": "\\}",
-                            "beginCaptures": {
-                                "0": {
-                                    "name": "punctuation.definition.template-expression.begin.cm"
-                                }
-                            },
-                            "endCaptures": {
-                                "0": {
-                                    "name": "punctuation.definition.template-expression.end.cm"
-                                }
-                            },
-                            "patterns": [
-                                {
-                                    "include": "#builtin-functions"
-                                },
-                                {
-                                    "include": "#function-call"
-                                },
-                                {
-                                    "include": "#constants"
-                                },
-                                {
-                                    "include": "#numbers"
-                                },
-                                {
-                                    "include": "#variables"
-                                },
-                                {
-                                    "include": "#operators"
-                                },
-                                {
-                                    "include": "#string-interpolation-punctuation"
-                                }
-                            ]
-                        }
-                    ]
+                    "include": "#comments"
                 },
+                {
+                    "include": "#strings"
+                },
+                {
+                    "include": "#keywords"
+                },
+                {
+                    "include": "#constants"
+                },
+                {
+                    "include": "#builtin-functions"
+                },
+                {
+                    "include": "#function-call"
+                },
+                {
+                    "include": "#types"
+                },
+                {
+                    "include": "#variables"
+                },
+                {
+                    "include": "#operators"
+                },
+                {
+                    "include": "#numbers"
+                },
+                {
+                    "include": "#punctuation"
+                }
+            ]
+        },
+        "strings": {
+            "patterns": [
                 {
                     "name": "string.quoted.double.cm",
                     "begin": "\"",
@@ -476,7 +477,7 @@
                 },
                 {
                     "name": "keyword.control.return.cm",
-                    "match": "\\b(return|yield|defer)\\b"
+                    "match": "\\b(return|defer)\\b"
                 },
                 {
                     "name": "keyword.control.flow.cm",
@@ -484,27 +485,23 @@
                 },
                 {
                     "name": "keyword.control.export.cm",
-                    "match": "\\b(export|private|pub)\\b"
+                    "match": "\\b(export|private)\\b"
                 },
                 {
                     "name": "keyword.control.exception.cm",
-                    "match": "\\b(try|checked|panic|unwrap|must)\\b"
+                    "match": "\\b(try|must)\\b"
                 },
                 {
                     "name": "keyword.other.cm",
-                    "match": "\\b(typedef|struct|enum|interface|impl|union|with|module|macro|namespace|overload|operator)\\b"
+                    "match": "\\b(typedef|struct|enum|interface|impl|with|module|macro|namespace|overload|operator|template)\\b"
                 },
                 {
                     "name": "storage.type.primitive.cm",
-                    "match": "\\b(const|constexpr|static|extern|inline|volatile|mutable|move|as|from|where|auto)\\b"
+                    "match": "\\b(const|constexpr|static|extern|inline|volatile|move|as|from|where|auto)\\b"
                 },
                 {
                     "name": "keyword.operator.new.cm",
-                    "match": "\\b(new|delete|sizeof|typeof|typename)\\b"
-                },
-                {
-                    "name": "keyword.other.assert.cm",
-                    "match": "\\b(assert)\\b"
+                    "match": "\\b(sizeof|typeof|typename)\\b"
                 },
                 {
                     "name": "keyword.other.asm.cm",
@@ -516,7 +513,7 @@
             "patterns": [
                 {
                     "name": "storage.type.primitive.cm",
-                    "match": "\\b(tiny|utiny|short|ushort|int|uint|long|ulong|isize|usize|float|ufloat|double|udouble|char|string|cstring|bool|void)\\b"
+                    "match": "\\b(tiny|utiny|short|ushort|int|uint|long|ulong|isize|usize|float|ufloat|double|udouble|char|string|bool|void)\\b"
                 },
                 {
                     "name": "entity.name.type.cm",
@@ -548,7 +545,7 @@
             "patterns": [
                 {
                     "name": "support.function.builtin.cm",
-                    "match": "\\b(print|println|printf)\\b"
+                    "match": "\\b(print|println|printf|assert|panic)\\b"
                 }
             ]
         },
