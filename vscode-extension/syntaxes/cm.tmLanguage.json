@@ -367,9 +367,6 @@
                     "include": "#comments"
                 },
                 {
-                    "include": "#strings"
-                },
-                {
                     "include": "#keywords"
                 },
                 {
@@ -593,7 +590,11 @@
                 },
                 {
                     "name": "keyword.operator.comparison.cm",
-                    "match": "(==|!=|<=|>=|<(?!<)|>(?!>))"
+                    "match": "(==|!=|<=|>=)"
+                },
+                {
+                    "name": "punctuation.definition.typeparameters.cm",
+                    "match": "(<(?!<)|>(?!>))"
                 },
                 {
                     "name": "keyword.operator.arithmetic.cm",
