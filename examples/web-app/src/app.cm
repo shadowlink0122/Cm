@@ -93,7 +93,13 @@ void render() {
         }
 
         // タスクアイテムHTML（変数埋め込みで1つの文字列として定義）
-        string item = "<div class=\"task-item\"><input type=\"checkbox\" id=\"{checkId}\"{checked} style=\"margin-right: 12px; width: 18px; height: 18px;\"><span style=\"{textStyle}\">{text}</span><button id=\"{delId}\" style=\"background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;\">✕</button></div>";
+        string item = `
+            <div class="task-item">
+                <input type="checkbox" id="{checkId}"{checked} style="margin-right: 12px; width: 18px; height: 18px;">
+                <span style="{textStyle}">{text}</span>
+                <button id="{delId}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;">✕</button>
+            </div>
+        `;
         html = html + item;
 
         i = i + 1;
