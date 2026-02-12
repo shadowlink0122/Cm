@@ -27,13 +27,17 @@ body {
     background: white;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .two-column {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8mm;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
 }
 
 .column {

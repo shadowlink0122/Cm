@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="device-width, initial-scale=1.0">
+    <title>Cm言語紹介チラシ v0.14.0 (4ページ)</title>
+    <link rel="stylesheet" href="flyer.css">
+</head>
+
+<body>
+
+    <!-- ========== 1枚目・表面 (ページ1): 概要・言語紹介 ========== -->
+    <div class="page">
+        <h1>Cm <span style="font-size: 18pt;">(シーマイナー)</span> プログラミング言語 <span
+                style="font-size: 14pt; font-weight: normal; color: #666666;">v0.14.0</span></h1>
+        <div class="event-info">OS開発からWebアプリまで、1つの言語でカバーするシステム言語</div>
+
+        <div class="two-column">
+            <!-- 左列 -->
+            <div class="column">
+                <h2>Cmとは？</h2>
+
+                <div
+                    style="background: #EEEEEE; border-left: 4px solid #000000; padding: 8px; margin: 6px 0; border-radius: 4px;">
+                    <p style="font-size: 11pt; font-weight: bold; color: #000000; margin: 0 0 4px 0;">
+                        「使いやすく、安全で、高速な言語」を作りたかった</p>
+                    <p style="font-size: 9.5pt; color: #333; margin: 0;">C/C++の速度・低レベル制御と、Rust/TypeScriptのモダンな構文を融合。
+                        ベアメタルOSからWebアプリまで、1つの言語でカバーします。</p>
+                </div>
+
+                <h3>Cmが目指す3つの柱</h3>
+                <ol style="font-size: 10pt;">
+                    <li><strong>実用性重視</strong> - 理論より実践を優先</li>
+                    <li><strong>型安全性</strong> - コンパイル時の厳密な型チェック</li>
+                    <li><strong>高速実行</strong> - LLVM最適化でC++並みの速度</li>
+                </ol>
+
+                <h3>技術スタック</h3>
+                <table style="font-size: 9pt;">
+                    <tr>
+                        <td><strong>実装言語</strong></td>
+                        <td>C++17 (約80,000行)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>バックエンド</strong></td>
+                        <td>LLVM 17</td>
+                    </tr>
+                    <tr>
+                        <td><strong>実行方式</strong></td>
+                        <td>JIT / Native / WASM / JS</td>
+                    </tr>
+                    <tr>
+                        <td><strong>ターゲット</strong></td>
+                        <td>x86_64 / ARM64 / WASM / UEFI</td>
+                    </tr>
+                    <tr>
+                        <td><strong>ビルド</strong></td>
+                        <td>CMake (macOS / Linux / Windows)</td>
+                    </tr>
+                </table>
+
+                <h3>ベンチマーク（行列乗算 300×300）</h3>
+                <table style="font-size: 9pt;">
+                    <tr>
+                        <th>言語</th>
+                        <th>実行時間</th>
+                        <th>比率</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Cm (Native)</strong></td>
+                        <td>0.28s</td>
+                        <td>0.9x</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cm (JIT)</strong></td>
+                        <td>0.31s</td>
+                        <td>1.0x</td>
+                    </tr>
+                    <tr>
+                        <td>C++ (clang -O3)</td>
+                        <td>0.28s</td>
+                        <td>0.9x</td>
+                    </tr>
+                    <tr>
+                        <td>Rust (release)</td>
+                        <td>0.29s</td>
+                        <td>0.9x</td>
+                    </tr>
+                    <tr>
+                        <td>Python</td>
+                        <td>4.0s</td>
+                        <td>13x</td>
+                    </tr>
+                </table>
+
+                <h3>Cmの強み</h3>
+                <div class="strength-box">
+                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
+                        <li><strong>C++並みの速度</strong>: LLVMネイティブコンパイル</li>
+                        <li><strong>モダン構文</strong>: Rust/TS風の直感的な書き方</li>
+                        <li><strong>マルチターゲット</strong>: Native/WASM/JS/UEFI</li>
+                        <li><strong>低学習コスト</strong>: C/C++に似た構文で移行容易</li>
+                        <li><strong>充実のツール</strong>: lint, fmt, check, run, compile</li>
+                    </ul>
+                </div>
+
+                <h3>品質指標 (v0.14.0)</h3>
+                <table style="font-size: 9pt;">
+                    <tr>
+                        <td><strong>JIT/LLVMテスト</strong></td>
+                        <td>368 PASS / 0 FAIL (100%)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>JSテスト</strong></td>
+                        <td>293 PASS / 1 FAIL (85%)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>WASM</strong></td>
+                        <td>336 PASS / 7 FAIL (97%)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Baremetal/UEFI</strong></td>
+                        <td>16 PASS / 0 FAIL (100%)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>開発期間</strong></td>
+                        <td>約9ヶ月 (2025年夏〜)</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- 右列 -->
+            <div class="column">
+                <h2>言語機能一覧</h2>
+
+                <h3>主な機能</h3>
+                <div style="font-size: 9pt; column-count: 2; column-gap: 12px;">
+                    <ul style="margin: 0; padding-left: 14px;">
+                        <li>interface / impl</li>
+                        <li>ジェネリクス &lt;T&gt;</li>
+                        <li>match式 / enum</li>
+                        <li>ラムダ / クロージャ</li>
+                        <li>構造体 / メソッド</li>
+                        <li>ポインタ / 配列</li>
+                        <li>defer文</li>
+                    </ul>
+                    <ul style="margin: 0; padding-left: 14px;">
+                        <li>モジュール / import</li>
+                        <li>RAII / デストラクタ</li>
+                        <li>with自動実装</li>
+                        <li>演算子オーバーロード</li>
+                        <li>インラインASM</li>
+                        <li>FFI (C互換)</li>
+                        <li>ユニオン型 (int | null)</li>
+                    </ul>
+                </div>
+
+                <h3>1. Interface/Impl + with自動実装</h3>
+                <div class="code-block" style="font-size: 7.5pt;">struct Point with Debug { int x; int y; }
+interface Printable { void print(); }
+impl Printable for Point {
+    void print() { println("({self.x},{self.y})"); }
+}
+int main() {
+    Point p = Point{10, 20};
+    p.debug(); // Point{x:10, y:20}
+    p.print(); // (10,20)
+}</div>
+
+                <h3>2. ジェネリクス + Match式</h3>
+                <div class="code-block" style="font-size: 7.5pt;">enum Result&lt;T&gt; { Ok(T), Err(string) }
+
+&lt;T&gt; T unwrap(Result&lt;T&gt; r) {
+    match (r) {
+        Result::Ok(v)  =&gt; return v,
+        Result::Err(e) =&gt; { println(e); exit(1); }
+    }
+}
+int main() {
+    Result&lt;int&gt; r = Result::Ok(42);
+    println(unwrap(r));  // 42
+}</div>
+
+                <h3>3. 演算子オーバーロード (v0.14.0)</h3>
+                <div class="code-block" style="font-size: 7.5pt;">struct Vec2 { int x; int y; }
+impl Vec2 {
+    operator Vec2 +(Vec2 o) {
+        return Vec2{self.x+o.x, self.y+o.y};
+    }
+}
+int main() {
+    Vec2 a = Vec2{1, 2};
+    Vec2 b = Vec2{3, 4};
+    Vec2 c = a + b;  // Vec2{4, 6}
+    a += b;          // += は自動生成
+}</div>
+
+                <h3>4. インラインユニオン型 (v0.14.0)</h3>
+                <div class="code-block" style="font-size: 7.5pt;">int | null maybe_find(int[5] arr, int target) {
+    for (int i = 0; i &lt; 5; i++) {
+        if (arr[i] == target) return arr[i];
+    }
+    return null;
+}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 1枚目・裏面 (ページ2): コード例・比較 ========== -->
+    <div class="page">
+        <div class="two-column">
+            <!-- 左列 -->
+            <div class="column">
+                <h2>サンプルプログラム</h2>
+
+                <h4>例1: FizzBuzz（Interface活用）</h4>
+                <div class="code-block" style="font-size: 7.5pt;">interface IFizzbuzz { void fizzbuzz(); }
+impl IFizzbuzz for int {
+    void fizzbuzz() {
+        if (self % 15 == 0) println("FizzBuzz");
+        else if (self % 3 == 0) println("Fizz");
+        else if (self % 5 == 0) println("Buzz");
+        else println(self);
+    }
+}
+int main() {
+    for (int i = 1; i &lt;= 100; i++) {
+        i.fizzbuzz();
+    }
+}</div>
+
+                <div class="point-box">
+                    <strong>ポイント:</strong> プリミティブ型（int）にメソッド追加可能
+                </div>
+
+                <h4>例2: ジェネリクスコレクション</h4>
+                <div class="code-block" style="font-size: 7.5pt;">import std::collections::Vector;
+
+int main() {
+    Vector&lt;int&gt; v = Vector&lt;int&gt;();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    println("len = {v.len()}");   // len = 3
+    println("v[1] = {v.get(1)}"); // v[1] = 20
+}</div>
+
+                <h4>例3: ラムダ・クロージャ</h4>
+                <div class="code-block" style="font-size: 7.5pt;">int[5] nums = [1, 2, 3, 4, 5];
+int sum = nums.reduce(0, (a, b) =&gt; a + b);
+println(sum); // 15
+// クロージャで外部変数をキャプチャ
+int multiplier = 3;
+int[5] result = nums.map(x =&gt; x * multiplier);</div>
+
+                <h2>他の言語との比較</h2>
+
+                <table style="font-size: 9pt;">
+                    <thead>
+                        <tr>
+                            <th>特徴</th>
+                            <th><strong>Cm</strong></th>
+                            <th>C++</th>
+                            <th>Rust</th>
+                            <th>Go</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>型安全性</td>
+                            <td>強</td>
+                            <td>弱</td>
+                            <td>最強</td>
+                            <td>強</td>
+                        </tr>
+                        <tr>
+                            <td>メモリ管理</td>
+                            <td>RAII</td>
+                            <td>RAII</td>
+                            <td>所有権</td>
+                            <td>GC</td>
+                        </tr>
+                        <tr>
+                            <td>学習コスト</td>
+                            <td>低</td>
+                            <td>高</td>
+                            <td>高</td>
+                            <td>低</td>
+                        </tr>
+                        <tr>
+                            <td>実行速度</td>
+                            <td>高</td>
+                            <td>高</td>
+                            <td>高</td>
+                            <td>中</td>
+                        </tr>
+                        <tr>
+                            <td>ジェネリクス</td>
+                            <td>○</td>
+                            <td>○</td>
+                            <td>○</td>
+                            <td>○</td>
+                        </tr>
+                        <tr>
+                            <td>Match式</td>
+                            <td>○</td>
+                            <td>×</td>
+                            <td>○</td>
+                            <td>×</td>
+                        </tr>
+                        <tr>
+                            <td>Interface</td>
+                            <td>○</td>
+                            <td>×</td>
+                            <td>○</td>
+                            <td>○</td>
+                        </tr>
+                        <tr>
+                            <td>WASM出力</td>
+                            <td>○</td>
+                            <td>△</td>
+                            <td>○</td>
+                            <td>△</td>
+                        </tr>
+                        <tr>
+                            <td>JS出力</td>
+                            <td>○</td>
+                            <td>×</td>
+                            <td>×</td>
+                            <td>×</td>
+                        </tr>
+                        <tr>
+                            <td>UEFI</td>
+                            <td>○</td>
+                            <td>○</td>
+                            <td>○</td>
+                            <td>×</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Cmが優れている点</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li><strong>低い学習コスト</strong> - C/C++に似た構文で移行が容易</li>
+                    <li><strong>マルチターゲット</strong> - Native/WASM/JS/UEFIを1ソースで</li>
+                    <li><strong>モダン機能</strong> - Match式、ジェネリクス、RAII</li>
+                    <li><strong>充実のエラーメッセージ</strong> - 日本語対応の診断</li>
+                </ul>
+            </div>
+
+            <!-- 右列 -->
+            <div class="column">
+                <h2>コンパイラアーキテクチャ</h2>
+
+                <div
+                    style="font-size: 8.5pt; background: #F5F5F5; border: 1px solid #000; border-radius: 3px; padding: 6px; margin: 4px 0;">
+                    <p style="margin: 0 0 4px 0; font-weight: bold;">多段IR変換パイプライン:</p>
+                    <div style="text-align: center; font-family: monospace; font-size: 8pt;">
+                        Source → <strong>AST</strong> → <strong>HIR</strong> → <strong>MIR</strong> →
+                        <strong>LLVM IR</strong> → Native
+                    </div>
+                    <ul style="font-size: 8pt; margin: 4px 0 0 12px;">
+                        <li><strong>AST</strong>: 構文解析結果（型推論前）</li>
+                        <li><strong>HIR</strong>: 高レベルIR（型解決・脱糖後）</li>
+                        <li><strong>MIR</strong>: 制御フローグラフ（最適化対応）</li>
+                    </ul>
+                </div>
+
+                <h3>MIR最適化パイプライン (独自実装)</h3>
+                <div
+                    style="font-size: 8.5pt; background: #F5F5F5; border: 1px solid #000; border-radius: 3px; padding: 6px; margin: 4px 0;">
+                    <ul style="font-size: 8pt; margin: 0 0 0 12px;">
+                        <li><strong>定数畳み込み</strong> - コンパイル時計算</li>
+                        <li><strong>DCE</strong> - 到達不能コード除去</li>
+                        <li><strong>SCCP</strong> - 疎条件付き定数伝播</li>
+                        <li><strong>CSE</strong> - 共通部分式除去</li>
+                        <li><strong>インライン展開</strong> - 小関数の埋め込み</li>
+                        <li><strong>末尾呼出最適化</strong> - 再帰をループに変換</li>
+                    </ul>
+                    <p style="margin: 4px 0 0 0; font-size: 8pt; font-weight: bold;">+ LLVM O3最適化（ベクトル化、ループ最適化等）</p>
+                </div>
+
+                <h2>マルチターゲット出力</h2>
+
+                <div
+                    style="font-size: 8.5pt; background: #F5F5F5; border: 1px solid #000; border-radius: 3px; padding: 8px; margin: 4px 0;">
+                    <p style="margin: 0 0 4px 0; font-weight: bold;">1ソースで5ターゲットに出力:</p>
+                    <table style="font-size: 8pt; margin: 0;">
+                        <tr>
+                            <td><strong>cm run</strong></td>
+                            <td>→ JIT即座実行</td>
+                        </tr>
+                        <tr>
+                            <td><strong>cm compile</strong></td>
+                            <td>→ ネイティブバイナリ</td>
+                        </tr>
+                        <tr>
+                            <td><strong>--target=wasm</strong></td>
+                            <td>→ WebAssembly</td>
+                        </tr>
+                        <tr>
+                            <td><strong>--target=js</strong></td>
+                            <td>→ JavaScript</td>
+                        </tr>
+                        <tr>
+                            <td><strong>--target=uefi</strong></td>
+                            <td>→ UEFI Application</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <h2>開発ツール (エコシステム)</h2>
+                <table style="font-size: 8.5pt;">
+                    <tr>
+                        <td><strong>cm run</strong></td>
+                        <td>JIT実行（即座に実行）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>cm compile</strong></td>
+                        <td>ネイティブバイナリ生成</td>
+                    </tr>
+                    <tr>
+                        <td><strong>cm check</strong></td>
+                        <td>型チェック（コンパイルなし）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>cm lint</strong></td>
+                        <td>静的解析・コード品質検査</td>
+                    </tr>
+                    <tr>
+                        <td><strong>cm fmt</strong></td>
+                        <td>コードフォーマッタ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>VSCode拡張</strong></td>
+                        <td>シンタックスハイライト・LSP</td>
+                    </tr>
+                </table>
+
+                <h2>標準ライブラリ</h2>
+                <table style="font-size: 8.5pt;">
+                    <tr>
+                        <th>モジュール</th>
+                        <th>内容</th>
+                    </tr>
+                    <tr>
+                        <td><strong>std::io</strong></td>
+                        <td>println, ファイルI/O</td>
+                    </tr>
+                    <tr>
+                        <td><strong>std::collections</strong></td>
+                        <td>Vector, HashMap, Queue</td>
+                    </tr>
+                    <tr>
+                        <td><strong>std::string</strong></td>
+                        <td>文字列操作ユーティリティ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>std::sync</strong></td>
+                        <td>Mutex, Channel, Atomic</td>
+                    </tr>
+                    <tr>
+                        <td><strong>std::net</strong></td>
+                        <td>TCP/HTTP ソケット</td>
+                    </tr>
+                    <tr>
+                        <td><strong>std::thread</strong></td>
+                        <td>マルチスレッド</td>
+                    </tr>
+                    <tr>
+                        <td><strong>std::async</strong></td>
+                        <td>async/await (試験的)</td>
+                    </tr>
+                </table>
+
+                <p style="font-size: 9pt;">ファイル先頭に記述し、実行環境を制約:</p>
+                <div class="code-block" style="font-size: 7.5pt;">//! platform: native  // → Native/JITのみ
+//! platform: uefi    // → UEFI専用</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 2枚目・表面 (ページ3): ベアメタル/UEFI・応用例 ========== -->
+    <div class="page">
+        <h1 style="font-size: 20pt;">Cm言語 — 応用編: ベアメタル / UEFI / Webアプリ</h1>
+        <div class="event-info">Native, WASM, JS, UEFIの全ターゲットを1つのコンパイラで</div>
+
+        <div class="two-column">
+            <!-- 左列 -->
+            <div class="column">
+                <h2>🖥️ UEFI開発</h2>
+
+                <h3>UEFIアプリケーション</h3>
+                <p style="font-size: 9pt;">CmコンパイラでUEFIアプリケーションを直接コンパイル可能。
+                    QEMUでの動作を確認済みです。</p>
+
+                <div class="code-block" style="font-size: 7pt;">import uefi::text::{uefi_println, uefi_clear_screen};
+import uefi::mem::uefi_stall;
+
+ulong efi_main(void* image_handle,
+               void* system_table) {
+    uefi_clear_screen(system_table);
+    uefi_println(system_table, "Hello from Cm!");
+    uefi_stall(system_table, 5000000);
+    return 0;  // EFI_SUCCESS
+}</div>
+
+                <h4>ビルド手順</h4>
+                <div class="terminal-block" style="font-size: 7pt;"># UEFIオブジェクトにコンパイル
+cm compile --target=uefi -o hello.o hello.cm
+
+# EFIバイナリにリンク
+lld-link /subsystem:efi_application \
+  /entry:efi_main /out:BOOTX64.EFI hello.o
+
+# QEMUで実行テスト
+qemu-system-x86_64 \
+  -drive if=pflash,format=raw,file=OVMF.fd \
+  -drive format=raw,file=fat:rw:esp \
+  -net none -nographic</div>
+
+                <h3>UEFIライブラリ (libs/uefi)</h3>
+                <table style="font-size: 8pt;">
+                    <tr>
+                        <th>モジュール</th>
+                        <th>機能</th>
+                    </tr>
+                    <tr>
+                        <td><strong>uefi::types</strong></td>
+                        <td>EFIステータスコード・基本型</td>
+                    </tr>
+                    <tr>
+                        <td><strong>uefi::table</strong></td>
+                        <td>SystemTable / BootServices</td>
+                    </tr>
+                    <tr>
+                        <td><strong>uefi::text</strong></td>
+                        <td>テキスト出力 (UCS-2変換)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>uefi::mem</strong></td>
+                        <td>メモリ管理 (AllocPool/Pages)</td>
+                    </tr>
+                </table>
+
+                <h2>⚙️ ベアメタル開発</h2>
+
+                <p style="font-size: 9pt;">OS依存機能を排除した<strong>ベアメタルターゲット</strong>で、
+                    組み込みシステムやカスタムOS向けのコードをコンパイルできます。</p>
+
+                <div class="code-block" style="font-size: 7pt;">// ベアメタル: OS依存なしでコンパイル可能
+struct Register { int* base; int offset; }
+
+int main() {
+    int[4] mmio = [0, 0, 0, 0];
+    Register r = Register{mmio as int*, 2};
+    *(r.base + r.offset) = 0xFF;
+    return *(r.base + r.offset);
+}</div>
+
+                <h4>ベアメタルで使える機能 / 使えない機能</h4>
+                <table style="font-size: 8pt;">
+                    <tr>
+                        <th>✅ 使える</th>
+                        <th>❌ 使えない</th>
+                    </tr>
+                    <tr>
+                        <td>算術演算・制御フロー</td>
+                        <td>println (標準出力)</td>
+                    </tr>
+                    <tr>
+                        <td>構造体・enum・match</td>
+                        <td>malloc/free (ヒープ)</td>
+                    </tr>
+                    <tr>
+                        <td>固定長配列・ポインタ</td>
+                        <td>exit (プロセス終了)</td>
+                    </tr>
+                    <tr>
+                        <td>関数・インラインASM</td>
+                        <td>ファイルI/O</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- 右列 -->
+            <div class="column">
+                <h2>🌐 Web開発 (JS/WASMバックエンド)</h2>
+
+                <h3>JavaScriptへのコンパイル</h3>
+                <p style="font-size: 9pt;">CmコードをJavaScriptに変換し、Node.jsやブラウザで実行できます。
+                    v0.14.0でテスト通過率が55%→85%に大幅向上。</p>
+
+                <div class="code-block" style="font-size: 7.5pt;">int main() {
+    println("Hello from Cm → JS!");
+    int[5] nums = [1, 2, 3, 4, 5];
+    int sum = nums.reduce(0, (a,b) =&gt; a+b);
+    println("sum = {sum}"); // 15
+}</div>
+
+                <div class="terminal-block" style="font-size: 7.5pt;">$ cm compile --target=js hello.cm -o hello.js
+$ node hello.js
+Hello from Cm → JS!
+sum = 15</div>
+
+                <h3>WebAssemblyへのコンパイル</h3>
+                <div class="terminal-block" style="font-size: 7.5pt;">$ cm compile --target=wasm hello.cm -o hello.wasm
+$ wasmtime hello.wasm
+Hello from WASM!</div>
+
+                <h3>インラインアセンブリ</h3>
+                <p style="font-size: 9pt;">UEFI/ベアメタル開発で必須の低レベル制御。</p>
+
+                <div class="code-block" style="font-size: 7pt;">ulong win64_call(ulong fn, ulong a1) {
+    ulong result = 0;
+    __asm__(`
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %rcx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result}
+    `);
+    return result;
+}</div>
+
+                <h2>📋 条件付きコンパイル</h2>
+                <div class="code-block" style="font-size: 7.5pt;">#ifdef PLATFORM_MACOS
+    println("macOS");
+#elif PLATFORM_LINUX
+    println("Linux");
+#endif
+
+#ifdef ARCH_X86_64
+    __asm__("nop");
+#elif ARCH_ARM64
+    __asm__("nop");
+#endif</div>
+
+                <h2>📦 サンプルプロジェクト</h2>
+                <table style="font-size: 8.5pt;">
+                    <tr>
+                        <th>プロジェクト</th>
+                        <th>説明</th>
+                    </tr>
+                    <tr>
+                        <td><strong>examples/uefi/</strong></td>
+                        <td>UEFI Hello World + メモリテスト</td>
+                    </tr>
+                    <tr>
+                        <td><strong>examples/web-app/</strong></td>
+                        <td>Cm→JS Webアプリケーション</td>
+                    </tr>
+                    <tr>
+                        <td><strong>examples/01_basics/</strong></td>
+                        <td>基本構文サンプル集</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 2枚目・裏面 (ページ4): ロードマップ・始め方 ========== -->
+    <div class="page">
+        <div class="two-column">
+            <!-- 左列 -->
+            <div class="column">
+                <h2>ロードマップ</h2>
+
+                <h3>Phase 1: 基礎完成 ✅ (v0.1〜v0.10)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>基本型、配列、構造体、ポインタ</li>
+                    <li>インターフェース / Impl、ジェネリクス</li>
+                    <li>match式、モジュールシステム、FFI</li>
+                    <li>ラムダ / クロージャ、defer文</li>
+                </ul>
+
+                <h3>Phase 2: コンパイラ化 ✅ (v0.11〜v0.12)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>LLVM JITコンパイラ（デフォルト）</li>
+                    <li>ネイティブバイナリ出力 (x86_64/ARM64)</li>
+                    <li>JavaScript / WebAssembly出力</li>
+                    <li>MIR最適化パイプライン (6パス)</li>
+                </ul>
+
+                <h3>Phase 3: エコシステム ✅ (v0.13)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>標準ライブラリ (Vector, HashMap, Queue)</li>
+                    <li>ファイルI/O、ネットワーク (TCP/HTTP)</li>
+                    <li>マクロ (実行時定数)、async/await</li>
+                    <li>インラインASM、条件付きコンパイル</li>
+                    <li>GPU (Metal) 対応</li>
+                    <li>VSCode拡張機能 (シンタックスハイライト)</li>
+                </ul>
+
+                <h3>Phase 4: マルチターゲット ✅ (v0.14)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>JSバックエンド大規模改善 (85%通過)</li>
+                    <li>演算子オーバーロード (impl T構文)</li>
+                    <li>インラインユニオン型 (int | null)</li>
+                    <li>ベアメタル / UEFIサポート</li>
+                    <li>プラットフォームディレクティブ</li>
+                    <li>VSCode構文ハイライト</li>
+                </ul>
+
+                <h3>Phase 5: 安定化 🔄 (v0.15+)</h3>
+                <ul style="font-size: 9.5pt;">
+                    <li>パッケージ管理 / 依存関係解決</li>
+                    <li>LSPサーバ (Go to Definition, References)</li>
+                    <li>JSバックエンド安定化・API拡充</li>
+                    <li>UEFI / ベアメタルの拡充</li>
+                    <li>セルフホスティング</li>
+                </ul>
+
+                <h2>開発スタイル</h2>
+                <div class="change-box">
+                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
+                        <li><strong>AIバイブコーディング</strong>で高速開発</li>
+                        <li>Antigravity + Claude Opus モデル使用</li>
+                        <li>9ヶ月で80,000行のC++コンパイラを実装</li>
+                        <li>CI/CD完備 (GitHub Actions)</li>
+                        <li>osdev-jp コミュニティで公開中</li>
+                    </ul>
+                </div>
+
+                <h2>v0.14.0 ハイライト</h2>
+                <div class="highlight-box">
+                    <ul style="font-size: 9pt; margin: 3px 0 0 15px;">
+                        <li>📈 JSテスト通過率: 55% → <strong>85%</strong></li>
+                        <li>🎼 演算子オーバーロード: <strong>impl T {}</strong></li>
+                        <li>🧬 ユニオン型: <strong>int | null</strong></li>
+                        <li>🖥️ UEFIアプリ: <strong>QEMU動作確認済</strong></li>
+                        <li>⚙️ ベアメタル: <strong>16テスト全PASS</strong></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 右列 -->
+            <div class="column">
+                <h2>クイックスタート</h2>
+                <div class="terminal-block" style="font-size: 7.5pt;"># リポジトリをクローン
+git clone https://github.com/shadowlink0122/Cm.git
+cd Cm
+
+# ビルド (macOS / Linux)
+mkdir build && cd build
+cmake .. -DCM_USE_LLVM=ON && make
+cd ..
+
+# JIT実行 (即座に実行)
+./cm run examples/01_basics/hello.cm
+
+# ネイティブバイナリ
+./cm compile hello.cm -o hello && ./hello
+
+# JavaScript出力
+./cm compile --target=js hello.cm -o hello.js
+node hello.js
+
+# WebAssembly出力
+./cm compile --target=wasm hello.cm -o hello.wasm
+wasmtime hello.wasm</div>
+
+                <h3>必要な環境</h3>
+                <table style="font-size: 9pt;">
+                    <tr>
+                        <td><strong>OS</strong></td>
+                        <td>macOS / Linux / Windows (WSL)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>C++コンパイラ</strong></td>
+                        <td>Clang 14+ / GCC 11+</td>
+                    </tr>
+                    <tr>
+                        <td><strong>LLVM</strong></td>
+                        <td>LLVM 17</td>
+                    </tr>
+                    <tr>
+                        <td><strong>OpenSSL</strong></td>
+                        <td>OpenSSL 3.x</td>
+                    </tr>
+                    <tr>
+                        <td><strong>CMake</strong></td>
+                        <td>3.20+</td>
+                    </tr>
+                </table>
+
+                <h2>VSCode拡張機能</h2>
+                <div
+                    style="font-size: 9pt; background: #F5F5F5; border: 1px solid #000; border-radius: 3px; padding: 6px; margin: 4px 0;">
+                    <ul style="font-size: 8.5pt; margin: 3px 0 0 12px;">
+                        <li>シンタックスハイライト (710パターン)</li>
+                        <li>ファイルアイコン (.cmファイル)</li>
+                        <li>cm lint / cm fmt コマンド統合</li>
+                        <li>エラー診断（Problem タブ連携）</li>
+                        <li>TypeScript + ESLint + Prettier構成</li>
+                    </ul>
+                </div>
+
+                <h2>Hello World</h2>
+                <div class="code-block" style="font-size: 8pt;">import std::io::println;
+
+int main() {
+    println("Hello, Cm!");
+    return 0;
+}</div>
+
+                <h2>詳細情報・コミュニティ</h2>
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="flex: 1;">
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>GitHub:</strong><br>
+                            <code style="font-size: 8pt; font-weight: bold;">github.com/shadowlink0122/Cm</code>
+                        </p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>X:</strong> <code style="font-size: 8pt; font-weight: bold;">@sl_0122</code>
+                        </p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>コミュニティ:</strong> <code style="font-size: 8pt; font-weight: bold;">osdev-jp</code>
+                        </p>
+                        <p style="font-size: 10pt; margin-bottom: 4px;">
+                            <strong>ドキュメント:</strong><br>
+                            <code style="font-size: 8pt; font-weight: bold;">shadowlink0122.github.io/Cm/</code>
+                        </p>
+                    </div>
+                    <div style="text-align: center;">
+                        <img src="docs-qr.png" style="width: 100px; height: 100px; border: 1px solid #000;">
+                        <p style="font-size: 8pt; margin: 2px 0 0 0;">Docs</p>
+                    </div>
+                </div>
+
+                <div class="footer-box" style="margin-top: 8px;">
+                    <strong style="font-size: 11pt;">Cm言語 v0.14.0</strong><br>
+                    <span style="font-size: 9pt;">C++の速度とモダン言語の使いやすさを融合</span><br>
+                    <span style="font-size: 8pt;">開発者: shadowlink0122 (@sl_0122) | 更新: 2026/02/12</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- コードブロック自動正規化: エディタの自動インデントによる崩れを防止 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.code-block, .terminal-block').forEach(el => {
+                const lines = el.innerHTML.split('\n');
+                if (lines.length <= 1) return;
+                // 2行目以降の非空行の最小先頭スペース数を計算
+                const minIndent = lines.slice(1).filter(l => l.trim()).reduce((min, l) => {
+                    const spaces = l.match(/^ */)[0].length;
+                    return Math.min(min, spaces);
+                }, Infinity);
+                if (minIndent >= 8 && minIndent < Infinity) {
+                    el.innerHTML = lines[0] + '\n' +
+                        lines.slice(1).map(l => l.trim() ? l.slice(minIndent) : '').join('\n');
+                }
+            });
+        });
+    </script>
+
+</body>
+
+</html>
