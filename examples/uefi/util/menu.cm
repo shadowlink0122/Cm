@@ -1,0 +1,20 @@
+//! platform: uefi
+// util/menu - メニュー表示
+
+import ../libs/efi_text;
+
+// ============================================================
+// メニュー表示
+// ============================================================
+
+export void show_menu(void* st) {
+    efi_println(st, "" as void*);
+    efi_println(st, "+---------- Menu ----------+" as void*);
+    efi_println(st, "|  1: Memory Map           |" as void*);
+    efi_println(st, "|  2: Keyboard Test        |" as void*);
+    efi_println(st, "|  3: System Info          |" as void*);
+    efi_println(st, "|  q: Quit                 |" as void*);
+    efi_println(st, "+--------------------------+" as void*);
+    efi_println(st, "" as void*);
+    efi_print(st, "Select [1-3/q]: " as void*);
+}

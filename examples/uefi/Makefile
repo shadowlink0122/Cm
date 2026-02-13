@@ -17,8 +17,8 @@ OVMF_FW ?= $(OVMF_DIR)/OVMF.fd
 # OVMF ダウンロードURL (Arch: x86_64, Release build)
 OVMF_URL ?= https://retrage.github.io/edk2-nightly/bin/RELEASEX64_OVMF.fd
 
-SRC = hello_world.cm
-OBJ = hello.o
+SRC = main.cm
+OBJ = main.o
 EFI = BOOTX64.EFI
 ESP_DIR = esp
 ESP_BOOT = $(ESP_DIR)/EFI/BOOT

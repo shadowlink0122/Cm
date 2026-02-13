@@ -1,0 +1,45 @@
+//! platform: uefi
+// util/sysinfo - システム情報表示
+
+import ../libs/efi_text;
+import ../libs/efi_input;
+
+// ============================================================
+// システム情報
+// ============================================================
+
+export void show_system_info(void* st) {
+    efi_println(st, "" as void*);
+    efi_println(st, "=== System Info ===" as void*);
+
+    // UEFI Revision: offset 8のqwordの下位32bit = revision
+    ulong* rev_qptr = (st as ulong + 8) as ulong*;
+    ulong rev_raw = *rev_qptr;
+    ulong rev_mask = 4294967295;
+    ulong rev = rev_raw & rev_mask;
+    ulong sixteen = 16;
+    ulong major = rev >> sixteen;
+    ulong ffff = 65535;
+    ulong minor = rev & ffff;
+
+    efi_print(st, "UEFI Revision: " as void*);
+    efi_print_dec(st, major);
+    efi_print(st, "." as void*);
+    efi_print_dec(st, minor);
+    efi_println(st, "" as void*);
+
+    // Firmware Revision (SystemTable + 0x20)
+    ulong* fw_qptr = (st as ulong + 32) as ulong*;
+    ulong fw_raw = *fw_qptr;
+    ulong fw_rev = fw_raw & rev_mask;
+    efi_print(st, "Firmware Rev:  " as void*);
+    efi_print_dec(st, fw_rev);
+    efi_println(st, "" as void*);
+
+    efi_println(st, "" as void*);
+    efi_print(st, "Press any key..." as void*);
+    ushort ws = 0;
+    ushort wc = 0;
+    efi_read_key_blocking(st, &ws, &wc);
+    efi_println(st, "" as void*);
+}

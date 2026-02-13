@@ -1,0 +1,57 @@
+//! platform: uefi
+// util/keyboard - キーボードテスト
+
+import ../libs/efi_text;
+import ../libs/efi_input;
+import ./convert;
+
+// ============================================================
+// キーボードテスト
+// ============================================================
+
+export void keyboard_test(void* st) {
+    efi_println(st, "" as void*);
+    efi_println(st, "=== Keyboard Test ===" as void*);
+    efi_println(st, "Press keys to see codes. ESC to return." as void*);
+    efi_println(st, "" as void*);
+
+    while (true) {
+        ushort scan = 0;
+        ushort ch = 0;
+
+        ulong status = efi_read_key_blocking(st, &scan, &ch);
+        long s = status as long;
+        if (s < 0) {
+            continue;
+        }
+
+        // ESCで戻る
+        if (scan == SCAN_ESC) {
+            efi_println(st, "Returning to menu..." as void*);
+            return;
+        }
+
+        if (ch != 0) {
+            // 印字可能文字
+            efi_print(st, "Char: " as void*);
+
+            // 1文字をUCS-2で直接出力
+            efi_put_char(st, ch);
+
+            efi_print(st, "  (0x" as void*);
+            efi_print_hex(st, ch as ulong);
+            efi_println(st, ")" as void*);
+        } else {
+            // 特殊キー
+            efi_print(st, "Scan: 0x" as void*);
+            efi_print_hex(st, scan as ulong);
+
+            if (scan == SCAN_UP)    { efi_print(st, " (UP)" as void*); }
+            if (scan == SCAN_DOWN)  { efi_print(st, " (DOWN)" as void*); }
+            if (scan == SCAN_LEFT)  { efi_print(st, " (LEFT)" as void*); }
+            if (scan == SCAN_RIGHT) { efi_print(st, " (RIGHT)" as void*); }
+
+            efi_println(st, "" as void*);
+        }
+    }
+}

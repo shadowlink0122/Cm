@@ -1,0 +1,126 @@
+//! platform: uefi
+// util/memmap - メモリマップ表示
+
+import ../libs/efi_core;
+import ../libs/efi_text;
+import ../libs/efi_input;
+import ../libs/efi_memmap;
+
+// ============================================================
+// メモリマップ表示
+// ============================================================
+
+export void dump_memory_map(void* st) {
+    efi_println(st, "" as void*);
+    efi_println(st, "=== Memory Map ===" as void*);
+
+    // バッファ割り当て（32KB）
+    ulong buf_size = 32768;
+    void* buffer = 0 as void*;
+    ulong status = efi_alloc_pool(st, buf_size, &buffer);
+
+    long s = status as long;
+    if (s < 0) {
+        efi_println(st, "Failed to allocate buffer" as void*);
+        return;
+    }
+
+    // GetMemoryMap
+    ulong map_size = buf_size;
+    ulong map_key = 0;
+    ulong desc_size = 0;
+    ulong desc_version = 0;
+
+    status = efi_get_memory_map(st, &map_size, buffer, &map_key, &desc_size, &desc_version);
+
+    s = status as long;
+    if (s < 0) {
+        efi_println(st, "GetMemoryMap failed" as void*);
+        efi_free_pool(st, buffer);
+        return;
+    }
+
+    // エントリ数計算
+    ulong entry_count = 0;
+    if (desc_size > 0) {
+        entry_count = map_size / desc_size;
+    }
+
+    efi_print(st, "Entries: " as void*);
+    efi_print_dec(st, entry_count);
+    efi_print(st, "  DescSize: " as void*);
+    efi_print_dec(st, desc_size);
+    efi_println(st, "" as void*);
+    efi_println(st, "" as void*);
+
+    // ヘッダ
+    efi_println(st, "Type       | PhysAddr           | Pages" as void*);
+    efi_println(st, "-----------+--------------------+--------" as void*);
+
+    // 各エントリ表示
+    ulong total_conv = 0;
+    ulong total_all = 0;
+    ulong idx = 0;
+
+    while (idx < entry_count) {
+        ulong offset = idx * desc_size;
+        ulong desc_addr = buffer as ulong + offset;
+
+        // type: uint at offset 0
+        ulong* type_ptr = desc_addr as ulong*;
+        ulong type_raw = *type_ptr;
+        ulong type_mask = 4294967295;
+        ulong mem_type = type_raw & type_mask;
+
+        // physical_start: ulong at offset 8
+        ulong* phys_ptr = (desc_addr + 8) as ulong*;
+        ulong phys = *phys_ptr;
+
+        // number_of_pages: ulong at offset 24
+        ulong* pages_ptr = (desc_addr + 24) as ulong*;
+        ulong pages = *pages_ptr;
+
+        total_all += pages;
+        ulong seven = 7;
+        if (mem_type == seven) {
+            total_conv += pages;
+        }
+
+        string type_name = efi_memory_type_name(mem_type);
+        efi_print(st, type_name as void*);
+        efi_print(st, " | " as void*);
+
+        efi_print_hex(st, phys);
+        efi_print(st, " | " as void*);
+
+        efi_print_dec(st, pages);
+        efi_println(st, "" as void*);
+
+        idx += 1;
+    }
+
+    // サマリー
+    efi_println(st, "" as void*);
+    efi_println(st, "--- Summary ---" as void*);
+    efi_print(st, "Total:     " as void*);
+    ulong page_size = 4096;
+    ulong mb_div = 1048576;
+    ulong total_mb = (total_all * page_size) / mb_div;
+    efi_print_dec(st, total_mb);
+    efi_println(st, " MB" as void*);
+
+    efi_print(st, "Available: " as void*);
+    ulong avail_mb = (total_conv * page_size) / mb_div;
+    efi_print_dec(st, avail_mb);
+    efi_println(st, " MB" as void*);
+
+    efi_free_pool(st, buffer);
+    efi_println(st, "" as void*);
+
+    // キー待ちで戻る
+    efi_print(st, "Press any key..." as void*);
+    ushort ws = 0;
+    ushort wc = 0;
+    efi_read_key_blocking(st, &ws, &wc);
+    efi_println(st, "" as void*);
+}

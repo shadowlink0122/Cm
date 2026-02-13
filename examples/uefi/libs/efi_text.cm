@@ -7,7 +7,8 @@
 //       全てのインターフェースは void* + ulong で受け取る
 // 注意: ASMに渡す値は全てulongにキャストすること
 // 注意: 全てのASMブロックはmust{}で囲むこと（最適化除去防止）
-// module efi_text;
+// 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用
+//       Win64 ABI callee-saved(RBX,RDI,RSI,R12-R15)は使用禁止
 
 // ============================================================
 // テキスト出力（低レベル）
@@ -32,36 +33,32 @@ export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
     ulong co_val = con_out as ulong;
     ulong md_val = msg_data as ulong;
 
-    // ASCII -> UCS-2 変換 + OutputString 呼出
-    // pushq/popqで入力値を安全にハードコードレジスタへ転送
-    // （LLVMのレジスタ割り当てとの競合を防止）
-    // 数値ラベル(0:, 1:)でインライン展開時の重複回避
+    // volatileレジスタのみ使用:
+    // fn_val, co_valはcall後に必要→スタックに保存
+    // md_val, msg_lenはループ前にR10,R11へ移動
     must {
         __asm__(`
             pushq ${r:fn_val};
             pushq ${r:co_val};
-            pushq ${r:md_val};
-            pushq ${r:msg_len};
-            popq %rbx;
-            popq %r12;
-            popq %r14;
-            popq %r13;
+            movq ${r:md_val}, %r10;
+            movq ${r:msg_len}, %r11;
             subq $$512, %rsp;
             xorq %rcx, %rcx;
             0:
-                cmpq %rbx, %rcx;
+                cmpq %r11, %rcx;
                 jge 1f;
-                movzbl (%r12, %rcx), %eax;
+                movzbl (%r10, %rcx), %eax;
                 movw %ax, (%rsp, %rcx, 2);
                 incq %rcx;
                 jmp 0b;
             1:
                 movw $$0, (%rsp, %rcx, 2);
-                movq %r14, %rcx;
+                movq 512(%rsp), %rcx;
+                movq 520(%rsp), %r10;
                 movq %rsp, %rdx;
                 subq $$32, %rsp;
-                callq *%r13;
-                addq $$544, %rsp
+                callq *%r10;
+                addq $$560, %rsp
         `);
     }
 }
@@ -71,14 +68,13 @@ export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
 export ulong efi_strlen(void* data) {
     ulong data_val = data as ulong;
     ulong result = 0;
-    // pushq/popqでLLVMレジスタ割り当てとの競合を防止
+    // volatileレジスタのみ使用: R10(データポインタ), RCX(カウンタ), EAX(バイト読込)
     must {
         __asm__(`
-            pushq ${r:data_val};
-            popq %rdi;
+            movq ${r:data_val}, %r10;
             xorq %rcx, %rcx;
             0:
-                movzbl (%rdi, %rcx), %eax;
+                movzbl (%r10, %rcx), %eax;
                 testb %al, %al;
                 jz 1f;
                 incq %rcx;
@@ -116,21 +112,115 @@ export void efi_clear_screen(void* system_table) {
     ulong* co = con_out as ulong*;
     ulong clear_fn_addr = *(co + 6);
 
-    // Win64 ABI: RCX = con_out
     ulong fn_val = clear_fn_addr as ulong;
     ulong co_val = con_out as ulong;
     ulong result = 0;
-    // pushq/popqでLLVMレジスタ割り当てとの競合を防止
     must {
         __asm__(`
             pushq ${r:fn_val};
             pushq ${r:co_val};
             popq %rcx;
-            popq %r8;
+            popq %r10;
             subq $$32, %rsp;
-            callq *%r8;
+            callq *%r10;
             addq $$32, %rsp;
             movq %rax, ${=r:result}
         `);
     }
+}
+
+/// テキスト属性設定（前景色）
+export void efi_set_color(void* system_table, ulong attribute) {
+    ulong* st = system_table as ulong*;
+    ulong con_out_addr = *(st + 8);
+    void* con_out = con_out_addr as void*;
+
+    // ConOut->SetAttribute (offset 0x28)
+    ulong* co = con_out as ulong*;
+    ulong set_attr_fn = *(co + 5);
+
+    ulong fn_val = set_attr_fn as ulong;
+    ulong co_val = con_out as ulong;
+    ulong attr_val = attribute;
+    ulong result = 0;
+    must {
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:co_val};
+            pushq ${r:attr_val};
+            popq %rdx;
+            popq %rcx;
+            popq %r10;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$32, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
+}
+
+// 色定数
+export const ulong EFI_BLACK         = 0x00;
+export const ulong EFI_WHITE         = 0x0F;
+export const ulong EFI_RED           = 0x04;
+export const ulong EFI_GREEN         = 0x02;
+export const ulong EFI_YELLOW        = 0x0E;
+export const ulong EFI_LIGHTCYAN     = 0x0B;
+export const ulong EFI_LIGHTGREEN    = 0x0A;
+export const ulong EFI_LIGHTBLUE     = 0x09;
+export const ulong EFI_LIGHTMAGENTA  = 0x0D;
+export const ulong EFI_DARKGRAY      = 0x08;
+
+/// 16進数文字列を出力（0x + 16桁）
+export void efi_print_hex(void* system_table, ulong value) {
+    // "0x" を出力
+    string prefix = "0x";
+    efi_print(system_table, prefix as void*);
+
+    // 16桁を上位から出力
+    ulong i = 0;
+    while (i < 16) {
+        ulong shift = (15 - i) * 4;
+        ulong mask = 15;
+        ulong nibble = (value >> shift) & mask;
+        ulong ten = 10;
+
+        // 1文字ずつ出力
+        utiny[2] ch;
+        if (nibble < ten) {
+            ch[0] = (nibble + 48) as utiny;  // '0'-'9'
+        } else {
+            ch[0] = (nibble + 55) as utiny;  // 'A'-'F'
+        }
+        ch[1] = 0;
+        efi_print(system_table, ch as void*);
+        i += 1;
+    }
+}
+
+/// 10進数文字列を出力
+export void efi_print_dec(void* system_table, ulong value) {
+    ulong zero = 0;
+    if (value == zero) {
+        string z = "0";
+        efi_print(system_table, z as void*);
+        return;
+    }
+
+    // 桁を逆順で文字列化
+    utiny[21] buf;
+    ulong pos = 20;
+    buf[pos] = 0;
+    ulong v = value;
+    ulong ten = 10;
+    while (v > zero) {
+        pos -= 1;
+        ulong digit = v % ten;
+        buf[pos] = (digit + 48) as utiny;
+        v = v / ten;
+    }
+
+    // posから始まる文字列を出力
+    void* data = (buf as ulong + pos) as void*;
+    efi_print(system_table, data);
 }

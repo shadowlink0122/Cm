@@ -1,0 +1,85 @@
+//! platform: uefi
+// util/convert - 型変換ユーティリティ
+// ushort値のデバッグ表示用文字列変換
+// 注意: ASM内ではvolatileレジスタのみ使用
+
+import ../libs/efi_text;
+
+// ============================================================
+// ushort → 10進文字列
+// ============================================================
+
+/// ushort値を10進数のASCII文字列としてUEFI出力
+export void efi_print_ushort(void* st, ushort value) {
+    ulong v = value as ulong;
+    efi_print_dec(st, v);
+}
+
+// ============================================================
+// ushort → 16進文字列
+// ============================================================
+
+/// ushort値を16進数(0x????)としてUEFI出力
+export void efi_print_ushort_hex(void* st, ushort value) {
+    // "0x" プレフィックス
+    efi_print(st, "0x" as void*);
+
+    // 4桁を上位から出力
+    ulong v = value as ulong;
+    ulong i = 0;
+    while (i < 4) {
+        ulong shift = (3 - i) * 4;
+        ulong mask = 15;
+        ulong nibble = (v >> shift) & mask;
+        ulong ten = 10;
+
+        utiny[2] ch;
+        if (nibble < ten) {
+            ch[0] = (nibble + 48) as utiny;  // '0'-'9'
+        } else {
+            ch[0] = (nibble + 55) as utiny;  // 'A'-'F'
+        }
+        ch[1] = 0;
+        efi_print(st, ch as void*);
+        i += 1;
+    }
+}
+
+// ============================================================
+// char → 1文字出力（UCS-2）
+// ============================================================
+
+/// 1文字をUCS-2で直接出力
+export void efi_put_char(void* system_table, ushort unicode_char) {
+    ulong* st_p = system_table as ulong*;
+    ulong con_out_addr = *(st_p + 8);
+    void* con_out = con_out_addr as void*;
+
+    ulong* co = con_out as ulong*;
+    ulong output_fn_addr = *(co + 1);
+
+    // UCS-2バッファ（1文字 + null）
+    ushort[2] ch_buf;
+    ch_buf[0] = unicode_char;
+    ch_buf[1] = 0;
+
+    ulong fn_val = output_fn_addr as ulong;
+    ulong co_val = con_out as ulong;
+    ulong buf_val = ch_buf as ulong;
+    ulong r = 0;
+    must {
+        // volatileレジスタのみ使用
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:co_val};
+            pushq ${r:buf_val};
+            popq %rdx;
+            popq %rcx;
+            popq %r10;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$32, %rsp;
+            movq %rax, ${=r:r}
+        `);
+    }
+}

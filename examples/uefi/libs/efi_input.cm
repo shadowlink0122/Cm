@@ -1,0 +1,126 @@
+//! platform: uefi
+// libs::efi_input - UEFI キーボード入力
+// ConInのReadKeyStrokeとWaitForEventをインラインASMで呼出し
+// 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用
+
+// ============================================================
+// キー入力
+// ============================================================
+
+/// ConInからキーストロークを非ブロッキング読み取り
+/// system_table: efi_mainの第2引数
+/// out_scan:     スキャンコード出力先
+/// out_char:     Unicode文字出力先
+/// 戻り値: EFI_STATUS (0=成功, 非ゼロ=キーなし等)
+export ulong efi_read_key(void* system_table, ushort* out_scan, ushort* out_char) {
+    // ConIn取得 (SystemTable + 0x30)
+    ulong* st = system_table as ulong*;
+    ulong con_in_addr = *(st + 6);  // 6 * 8 = offset 0x30
+    void* con_in = con_in_addr as void*;
+
+    // ReadKeyStroke関数取得 (ConIn + 0x08)
+    ulong* ci = con_in as ulong*;
+    ulong read_fn_addr = *(ci + 1);
+
+    ulong fn_val = read_fn_addr as ulong;
+    ulong ci_val = con_in as ulong;
+    ulong scan_ptr = out_scan as ulong;
+    ulong char_ptr = out_char as ulong;
+
+    ulong result = 0;
+    must {
+        // scan_ptr, char_ptrをスタックに退避（call後に使用）
+        // ASMスタック上にEFI_INPUT_KEYバッファを確保
+        // volatileレジスタのみ使用
+        __asm__(`
+            pushq ${r:scan_ptr};
+            pushq ${r:char_ptr};
+            pushq ${r:fn_val};
+            pushq ${r:ci_val};
+            popq %rcx;
+            popq %r10;
+            subq $$48, %rsp;
+            leaq 32(%rsp), %rdx;
+            callq *%r10;
+            movzwl 32(%rsp), %r10d;
+            movzwl 34(%rsp), %r11d;
+            addq $$48, %rsp;
+            popq %rcx;
+            popq %rdx;
+            movw %r10w, (%rdx);
+            movw %r11w, (%rcx);
+            movq %rax, ${=r:result}
+        `);
+    }
+
+    return result;
+}
+
+/// WaitForEventでキー入力をブロッキング待機
+/// ConIn->WaitForKey (offset 0x10) を BootServices->WaitForEvent で待つ
+export ulong efi_wait_for_key(void* system_table) {
+    // BootServices取得 (SystemTable + 0x60)
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);  // 12 * 8 = offset 0x60
+    void* boot_services = bs_addr as void*;
+
+    // ConIn取得 (SystemTable + 0x30)
+    ulong con_in_addr = *(st + 6);
+    void* con_in = con_in_addr as void*;
+
+    // WaitForKey イベント取得 (ConIn + 0x10)
+    ulong* ci = con_in as ulong*;
+    ulong wait_event = *(ci + 2);
+
+    // WaitForEvent: BootServices offset 0x60 = index 12
+    ulong* bs = boot_services as ulong*;
+    ulong wait_fn_addr = *(bs + 12);  // 12 * 8 = 0x60 = WaitForEvent
+
+    // イベント配列とインデックスをスタック上に作成
+    ulong event_array = wait_event;
+    ulong index = 0;
+
+    ulong fn_val = wait_fn_addr as ulong;
+    ulong num_events = 1;
+    ulong ea_val = (&event_array) as ulong;
+    ulong idx_val = (&index) as ulong;
+
+    ulong result = 0;
+    must {
+        // WaitForEvent(NumberOfEvents=RCX, Event=RDX, Index=R8)
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:num_events};
+            pushq ${r:ea_val};
+            pushq ${r:idx_val};
+            popq %r8;
+            popq %rdx;
+            popq %rcx;
+            popq %r10;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$32, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
+
+    return result;
+}
+
+/// キー入力をブロッキングで読み取り（待機+読み取り）
+export ulong efi_read_key_blocking(void* system_table, ushort* out_scan, ushort* out_char) {
+    ulong status = efi_wait_for_key(system_table);
+    // エラーチェック（ビット63セット = エラー）
+    long signed_status = status as long;
+    if (signed_status < 0) {
+        return status;
+    }
+    return efi_read_key(system_table, out_scan, out_char);
+}
+
+// スキャンコード定数
+export const ushort SCAN_ESC   = 0x17;
+export const ushort SCAN_UP    = 0x01;
+export const ushort SCAN_DOWN  = 0x02;
+export const ushort SCAN_RIGHT = 0x03;
+export const ushort SCAN_LEFT  = 0x04;
