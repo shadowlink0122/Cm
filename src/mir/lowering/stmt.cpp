@@ -1164,6 +1164,23 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
     // 判別式をlowering
     LocalId discriminant = expr_lowering->lower_expression(*switch_stmt.expr, ctx);
 
+    // ヘルパー: HirExprからcase値（int64_t）を抽出
+    auto extract_case_value = [](const hir::HirExprPtr& expr) -> int64_t {
+        if (!expr)
+            return 0;
+        if (auto lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr->kind)) {
+            if (*lit) {
+                auto& val = (*lit)->value;
+                if (std::holds_alternative<int64_t>(val)) {
+                    return std::get<int64_t>(val);
+                } else if (std::holds_alternative<char>(val)) {
+                    return static_cast<int64_t>(std::get<char>(val));
+                }
+            }
+        }
+        return 0;
+    };
+
     // 各caseのブロックを作成
     std::vector<std::pair<int64_t, BlockId>> cases;
     std::vector<BlockId> case_blocks;
@@ -1177,41 +1194,40 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
         BlockId case_block = ctx.new_block();
         case_blocks.push_back(case_block);
 
-        // case値を評価
-        int64_t case_value = 0;
+        const auto& pat = *switch_stmt.cases[i].pattern;
 
-        // patternがSingleValueの場合、その値を取得
-        if (switch_stmt.cases[i].pattern &&
-            switch_stmt.cases[i].pattern->kind == hir::HirSwitchPattern::SingleValue &&
-            switch_stmt.cases[i].pattern->value) {
-            // pattern->valueから値を取得
-            if (auto lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(
-                    &switch_stmt.cases[i].pattern->value->kind)) {
-                if (*lit) {
-                    auto& val = (*lit)->value;
-                    if (std::holds_alternative<int64_t>(val)) {
-                        case_value = std::get<int64_t>(val);
-                    } else if (std::holds_alternative<char>(val)) {
-                        case_value = static_cast<int64_t>(std::get<char>(val));
-                    }
+        if (pat.kind == hir::HirSwitchPattern::SingleValue) {
+            // 単一値パターン: patternのvalueから値を取得
+            int64_t case_value = 0;
+            if (pat.value) {
+                case_value = extract_case_value(pat.value);
+            }
+            // 旧互換性のためvalueフィールドも確認
+            else if (switch_stmt.cases[i].value) {
+                case_value = extract_case_value(switch_stmt.cases[i].value);
+            }
+            cases.push_back({case_value, case_block});
+
+        } else if (pat.kind == hir::HirSwitchPattern::Or) {
+            // Orパターン: 各サブパターンの値を同じブロックに分岐
+            for (const auto& sub_pat : pat.or_patterns) {
+                if (sub_pat && sub_pat->kind == hir::HirSwitchPattern::SingleValue) {
+                    int64_t sub_value = extract_case_value(sub_pat->value);
+                    cases.push_back({sub_value, case_block});
+                }
+            }
+
+        } else if (pat.kind == hir::HirSwitchPattern::Range) {
+            // Rangeパターン: 範囲内の全値を個別のcaseとして展開
+            int64_t range_start = extract_case_value(pat.range_start);
+            int64_t range_end = extract_case_value(pat.range_end);
+            // 安全制限: 最大256エントリまで
+            if (range_end - range_start <= 256) {
+                for (int64_t v = range_start; v <= range_end; ++v) {
+                    cases.push_back({v, case_block});
                 }
             }
         }
-        // 旧互換性のためvalueフィールドも確認
-        else if (switch_stmt.cases[i].value) {
-            if (auto lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(
-                    &switch_stmt.cases[i].value->kind)) {
-                if (*lit) {
-                    auto& val = (*lit)->value;
-                    if (std::holds_alternative<int64_t>(val)) {
-                        case_value = std::get<int64_t>(val);
-                    } else if (std::holds_alternative<char>(val)) {
-                        case_value = static_cast<int64_t>(std::get<char>(val));
-                    }
-                }
-            }
-        }
-        cases.push_back({case_value, case_block});
     }
 
     // defaultブロック

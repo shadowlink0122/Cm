@@ -1,39 +1,73 @@
-// Test switch with char type
-import std::io::println;
+// char リテラルとOr/Rangeパターンのswitch文テスト
 
-int main() {
-    char c = 'B';
-    int result = 0;
-
-    switch(c) {
-        case('A') { result = 1;
+void main() {
+    // charリテラル単一値
+    char c1 = '3';
+    switch(c1) {
+        case ('1') {
+            println("ONE");
         }
-        case('B') { result = 2;
+        case ('2') {
+            println("TWO");
         }
-        case('C') { result = 3;
+        case ('3') {
+            println("THREE");
         }
-        else { result = 99;
-        }
-    }
-
-    println(result);
-    // Should print 2
-
-    // Test with char variable in else case
-    char d = 'X';
-    int result2 = 0;
-
-    switch(d) {
-        case('A') { result2 = 1;
-        }
-        case('B') { result2 = 2;
-        }
-        else { result2 = 99;
+        else {
+            println("OTHER");
         }
     }
 
-    println(result2);
-    // Should print 99
+    // Orパターン: case ('a' | 'A')
+    char c2 = 'A';
+    switch(c2) {
+        case ('a' | 'A') {
+            println("ALPHA");
+        }
+        case ('b' | 'B') {
+            println("BETA");
+        }
+        else {
+            println("UNKNOWN");
+        }
+    }
 
-    return 0;
+    // Orパターン: 小文字も
+    char c3 = 'b';
+    switch(c3) {
+        case ('a' | 'A') {
+            println("ALPHA");
+        }
+        case ('b' | 'B') {
+            println("BETA");
+        }
+        else {
+            println("UNKNOWN");
+        }
+    }
+
+    // else分岐
+    char c4 = 'z';
+    switch(c4) {
+        case ('a' | 'A') {
+            println("ALPHA");
+        }
+        else {
+            println("DEFAULT");
+        }
+    }
+
+    // 整数switchも引き続き動作確認
+    int x = 42;
+    switch(x) {
+        case (42) {
+            println("FORTY_TWO");
+        }
+        case (0) {
+            println("ZERO");
+        }
+        else {
+            println("ELSE");
+        }
+    }
 }

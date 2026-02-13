@@ -2012,25 +2012,95 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 arg_locals.push_back(result);
                                             }
                                         } else {
-                                            // 通常の変数
-                                            // まずconst値をチェック（定数として登録されている場合）
-                                            auto const_val = ctx.get_const_value(var_name);
-                                            if (const_val) {
-                                                // const変数の値を一時変数に格納
-                                                LocalId const_temp = ctx.new_temp(const_val->type);
-                                                ctx.push_statement(MirStatement::assign(
-                                                    MirPlace{const_temp},
-                                                    MirRvalue::use(
-                                                        MirOperand::constant(*const_val))));
-                                                arg_locals.push_back(const_temp);
-                                            } else {
-                                                auto var_id = ctx.resolve_variable(var_name);
+                                            // 「x as int」形式のキャスト式チェック
+                                            size_t as_pos = var_name.find(" as ");
+                                            if (as_pos != std::string::npos) {
+                                                // キャスト式: 変数名とターゲット型に分割
+                                                std::string actual_var = var_name.substr(0, as_pos);
+                                                std::string target_type_str =
+                                                    var_name.substr(as_pos + 4);
+
+                                                // 前後の空白を除去
+                                                while (!actual_var.empty() &&
+                                                       actual_var.back() == ' ')
+                                                    actual_var.pop_back();
+                                                while (!target_type_str.empty() &&
+                                                       target_type_str.front() == ' ')
+                                                    target_type_str.erase(0, 1);
+
+                                                auto var_id = ctx.resolve_variable(actual_var);
                                                 if (var_id) {
-                                                    arg_locals.push_back(*var_id);
+                                                    // 型名文字列からhir::TypePtrを解決
+                                                    hir::TypePtr target_type = nullptr;
+                                                    if (target_type_str == "int")
+                                                        target_type = hir::make_int();
+                                                    else if (target_type_str == "uint")
+                                                        target_type = hir::make_uint();
+                                                    else if (target_type_str == "long")
+                                                        target_type = hir::make_long();
+                                                    else if (target_type_str == "ulong")
+                                                        target_type = hir::make_ulong();
+                                                    else if (target_type_str == "short")
+                                                        target_type = hir::make_short();
+                                                    else if (target_type_str == "ushort")
+                                                        target_type = hir::make_ushort();
+                                                    else if (target_type_str == "tiny")
+                                                        target_type = hir::make_tiny();
+                                                    else if (target_type_str == "utiny")
+                                                        target_type = hir::make_utiny();
+                                                    else if (target_type_str == "char")
+                                                        target_type = hir::make_char();
+                                                    else if (target_type_str == "bool")
+                                                        target_type = hir::make_bool();
+                                                    else if (target_type_str == "float")
+                                                        target_type = hir::make_float();
+                                                    else if (target_type_str == "double")
+                                                        target_type = hir::make_double();
+                                                    else if (target_type_str == "string")
+                                                        target_type = hir::make_string();
+                                                    else
+                                                        target_type =
+                                                            hir::make_int();  // フォールバック
+
+                                                    LocalId cast_result = ctx.new_temp(target_type);
+                                                    ctx.push_statement(MirStatement::assign(
+                                                        MirPlace{cast_result},
+                                                        MirRvalue::cast(
+                                                            MirOperand::copy(MirPlace{*var_id}),
+                                                            target_type)));
+
+                                                    debug_msg("MIR",
+                                                              "Interpolation cast: " + actual_var +
+                                                                  " as " + target_type_str);
+                                                    arg_locals.push_back(cast_result);
                                                 } else {
                                                     // 変数が見つからない場合、エラー用のダミー値を追加
                                                     auto err_type = hir::make_error();
                                                     arg_locals.push_back(ctx.new_temp(err_type));
+                                                }
+                                            } else {
+                                                // 通常の変数
+                                                // まずconst値をチェック（定数として登録されている場合）
+                                                auto const_val = ctx.get_const_value(var_name);
+                                                if (const_val) {
+                                                    // const変数の値を一時変数に格納
+                                                    LocalId const_temp =
+                                                        ctx.new_temp(const_val->type);
+                                                    ctx.push_statement(MirStatement::assign(
+                                                        MirPlace{const_temp},
+                                                        MirRvalue::use(
+                                                            MirOperand::constant(*const_val))));
+                                                    arg_locals.push_back(const_temp);
+                                                } else {
+                                                    auto var_id = ctx.resolve_variable(var_name);
+                                                    if (var_id) {
+                                                        arg_locals.push_back(*var_id);
+                                                    } else {
+                                                        // 変数が見つからない場合、エラー用のダミー値を追加
+                                                        auto err_type = hir::make_error();
+                                                        arg_locals.push_back(
+                                                            ctx.new_temp(err_type));
+                                                    }
                                                 }
                                             }
                                         }

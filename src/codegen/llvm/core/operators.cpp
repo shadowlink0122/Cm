@@ -543,10 +543,32 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateAnd(lhs, rhs, "bitand");
         case mir::MirBinaryOp::BitOr:
             return builder->CreateOr(lhs, rhs, "bitor");
-        case mir::MirBinaryOp::Shl:
+        case mir::MirBinaryOp::Shl: {
+            // ビット幅を揃える（LLVMはShlの両オペランドに同一型を要求）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateShl(lhs, rhs, "shl");
-        case mir::MirBinaryOp::Shr:
+        }
+        case mir::MirBinaryOp::Shr: {
+            // ビット幅を揃える（LLVMはAShrの両オペランドに同一型を要求）
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                if (lhsBits < rhsBits) {
+                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                } else if (rhsBits < lhsBits) {
+                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                }
+            }
             return builder->CreateAShr(lhs, rhs, "shr");
+        }
 
         // 論理演算
         case mir::MirBinaryOp::And: {

@@ -80,7 +80,6 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             break;
         }
         case mir::MirTerminator::Call: {
-            // // debug_msg("MIR2LLVM", "Call terminator processing...");
             auto& callData = std::get<mir::MirTerminator::CallData>(term.data);
 
             // 関数名を取得
@@ -119,7 +118,6 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 // std::cout << "[CODEGEN] Call Indirect Op Converted\n" << std::flush;
             }
 
-            // ============================================================
             // Print/Format系の特別処理（ヘルパー関数を使用）
             // ============================================================
             if (funcName == "cm_println_format" || funcName == "cm_print_format") {
@@ -454,6 +452,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // ============================================================
             // 通常の関数呼び出し
             // ============================================================
+
             std::vector<llvm::Value*> args;
             for (const auto& arg : callData.args) {
                 args.push_back(convertOperand(*arg));
@@ -702,10 +701,12 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             }
 
             // 間接呼び出しの場合は直接呼び出しの処理をスキップ
+
             llvm::Function* callee = nullptr;
             if (!isIndirectCall && !funcName.empty()) {
                 // オーバーロード対応：引数の型から関数IDを生成
                 auto funcId = generateCallFunctionId(funcName, callData.args);
+
                 callee = functions[funcId];
                 if (!callee) {
                     callee = declareExternalFunction(funcName);
@@ -903,7 +904,10 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 }
 
                 auto result = builder->CreateCall(callee, args);
-                if (callData.destination) {
+
+                // void関数の返り値をdestinationに格納しようとするとLLVMがクラッシュするため、
+                // void型の場合はdestination処理をスキップ
+                if (callData.destination && !result->getType()->isVoidTy()) {
                     auto destLocal = callData.destination->local;
                     llvm::Value* resultToStore = result;
 
@@ -953,6 +957,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         locals[destLocal] = resultToStore;
                     }
                 }
+
             }
             // 間接呼び出し（関数ポインタ変数経由）
             else if (isIndirectCall && funcPtrValue) {
@@ -1134,6 +1139,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
             if (callData.success != mir::INVALID_BLOCK && blocks.count(callData.success) > 0) {
                 builder->CreateBr(blocks[callData.success]);
+
             } else {
                 // success == INVALID_BLOCK または ブロックがDCEで削除された場合
                 // ターミネータがないとLLVMがハングするため、適切なターミネータを生成
