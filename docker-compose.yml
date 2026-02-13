@@ -8,7 +8,6 @@ services:
     container_name: cm-dev
     volumes:
       - .:/workspace
-      - build-cache:/workspace/build
     working_dir: /workspace
     stdin_open: true
     tty: true
@@ -22,7 +21,6 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
-      - build-cache:/workspace/build
     working_dir: /workspace
     environment:
       - CC=clang
@@ -41,7 +39,6 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
-      - build-gcc-cache:/workspace/build
     working_dir: /workspace
     environment:
       - CC=gcc
@@ -74,7 +71,6 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
-      - build-cache:/workspace/build
     working_dir: /workspace
     command: >
       bash -c "
@@ -90,7 +86,6 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
-      - build-coverage-cache:/workspace/build
     working_dir: /workspace
     command: >
       bash -c "
@@ -100,9 +95,3 @@ services:
         lcov --capture --directory build --output-file coverage.info &&
         lcov --remove coverage.info '/usr/*' --output-file coverage.info
       "
-
-# Named volumes: Docker専用のbuildディレクトリ（ローカルのbuild/を汚染しない）
-volumes:
-  build-cache:
-  build-gcc-cache:
-  build-coverage-cache:

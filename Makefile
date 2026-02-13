@@ -3,7 +3,6 @@
 
 # 設定
 CM := ./cm
-CM_BIN := build/bin/cm
 BUILD_DIR := build
 # ターゲットアーキテクチャ（デフォルト: LLVMホストターゲットから自動検出）
 # 使用例: make build ARCH=arm64 / make build ARCH=x86_64
@@ -163,7 +162,6 @@ build:
 	@echo "Building Cm compiler (debug mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
-	@ln -sf $(CM_BIN) $(CM)
 	@echo "✅ Build complete! ($(ARCH))"
 
 .PHONY: libs
