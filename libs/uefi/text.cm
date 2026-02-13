@@ -179,3 +179,65 @@ export const ulong EFI_BACKGROUND_RED       = 0x40;
 export const ulong EFI_BACKGROUND_MAGENTA   = 0x50;
 export const ulong EFI_BACKGROUND_BROWN     = 0x60;
 export const ulong EFI_BACKGROUND_LIGHTGRAY = 0x70;
+
+// ============================================================
+// 数値出力ヘルパー
+// ============================================================
+
+/// 16進数文字列に変換して出力（0x付き、16桁ゼロ埋め）
+export ulong uefi_print_hex(EfiSystemTable* st, ulong value) {
+    // "0x" + 16桁 + null = 19文字
+    utiny[19] buf;
+    buf[0] = 48;  // '0'
+    buf[1] = 120; // 'x'
+
+    ulong i = 0;
+    while (i < 16) {
+        // 上位ニブルから処理
+        ulong shift = (15 - i) * 4;
+        ulong mask = 15;
+        ulong nibble = (value >> shift) & mask;
+        ulong ten = 10;
+        if (nibble < ten) {
+            buf[i + 2] = (nibble + 48) as utiny;   // '0'-'9'
+        } else {
+            buf[i + 2] = (nibble + 55) as utiny;   // 'A'-'F'
+        }
+        i += 1;
+    }
+    buf[18] = 0;
+
+    // バッファを文字列として出力
+    void* data = buf as void*;
+    return uefi_puts(st, data as string);
+}
+
+/// 10進数文字列に変換して出力
+export ulong uefi_print_dec(EfiSystemTable* st, ulong value) {
+    utiny[21] buf;  // 最大20桁 + null
+
+    ulong zero = 0;
+    if (value == zero) {
+        buf[0] = 48;  // '0'
+        buf[1] = 0;
+        void* data = buf as void*;
+        return uefi_puts(st, data as string);
+    }
+
+    // 後ろから埋める
+    ulong pos = 20;
+    buf[pos] = 0;
+    ulong v = value;
+    ulong ten = 10;
+    while (v > zero) {
+        pos -= 1;
+        ulong digit = v % ten;
+        buf[pos] = (digit + 48) as utiny;
+        v = v / ten;
+    }
+
+    // posから始まる文字列を出力
+    void* data = (buf as ulong + pos) as void*;
+    return uefi_puts(st, data as string);
+}
+

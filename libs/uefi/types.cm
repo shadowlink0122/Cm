@@ -62,8 +62,53 @@ export const ulong EFI_RUNTIME_SERVICES_CODE    = 5;
 export const ulong EFI_RUNTIME_SERVICES_DATA    = 6;
 export const ulong EFI_CONVENTIONAL_MEMORY      = 7;
 
+// 追加メモリタイプ
+export const ulong EFI_UNUSABLE_MEMORY          = 8;
+export const ulong EFI_ACPI_RECLAIM_MEMORY      = 9;
+export const ulong EFI_ACPI_MEMORY_NVS          = 10;
+export const ulong EFI_MEMORY_MAPPED_IO         = 11;
+export const ulong EFI_MEMORY_MAPPED_IO_PORT    = 12;
+export const ulong EFI_PAL_CODE                 = 13;
+export const ulong EFI_PERSISTENT_MEMORY        = 14;
+export const ulong EFI_MAX_MEMORY_TYPE          = 15;
+
 // ページサイズ (4KB)
 export const ulong EFI_PAGE_SIZE = 4096;
+
+// ============================================================
+// メモリマップ構造体
+// ============================================================
+
+/// UEFIメモリマップのエントリ（1ディスクリプタ）
+/// GetMemoryMapで取得される各メモリ領域の情報
+export struct EfiMemoryDescriptor {
+    uint type;             // メモリタイプ (EFI_CONVENTIONAL_MEMORY等)
+    uint _pad0;            // アラインメント用パディング
+    ulong physical_start;  // 物理アドレス開始
+    ulong virtual_start;   // 仮想アドレス開始
+    ulong number_of_pages; // ページ数 (各4KB)
+    ulong attribute;       // メモリ属性フラグ
+}
+
+// ============================================================
+// スキャンコード定数
+// ============================================================
+
+export const ushort SCAN_NULL  = 0x00;
+export const ushort SCAN_UP    = 0x01;
+export const ushort SCAN_DOWN  = 0x02;
+export const ushort SCAN_RIGHT = 0x03;
+export const ushort SCAN_LEFT  = 0x04;
+export const ushort SCAN_HOME  = 0x05;
+export const ushort SCAN_END   = 0x06;
+export const ushort SCAN_INS   = 0x07;
+export const ushort SCAN_DEL   = 0x08;
+export const ushort SCAN_PGUP  = 0x09;
+export const ushort SCAN_PGDN  = 0x0A;
+export const ushort SCAN_F1    = 0x0B;
+export const ushort SCAN_F2    = 0x0C;
+export const ushort SCAN_F10   = 0x14;
+export const ushort SCAN_ESC   = 0x17;
 
 // ============================================================
 // ヘルパー関数

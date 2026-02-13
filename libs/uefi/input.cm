@@ -1,0 +1,145 @@
+// uefi::input - UEFI キーボード入力
+// EFI_SIMPLE_TEXT_INPUT_PROTOCOL経由でキーストローク取得
+module uefi.input;
+
+import uefi::types::*;
+import uefi::table::*;
+
+// ============================================================
+// Win64 ABI 間接呼び出しヘルパー
+// ============================================================
+
+/// 2引数 間接呼び出し
+ulong input_call2(ulong fn, ulong a1, ulong a2) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq ${r:a2}, %r13;
+        movq %r12, %rcx;
+        movq %r13, %rdx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+/// 3引数 間接呼び出し
+ulong input_call3(ulong fn, ulong a1, ulong a2, ulong a3) {
+    ulong result = 0;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        pushq %r14;
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %r12;
+        movq ${r:a2}, %r13;
+        movq ${r:a3}, %r14;
+        movq %r12, %rcx;
+        movq %r13, %rdx;
+        movq %r14, %r8;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result};
+        popq %r14;
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+// ============================================================
+// キー入力関数
+// ============================================================
+
+/// ConInをリセット
+export ulong uefi_reset_input(EfiSystemTable* st) {
+    EfiSimpleTextInputProtocol* con_in = st->con_in;
+    if (con_in == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* reset_fn = con_in->reset;
+    if (reset_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    // Reset(This, ExtendedVerification=FALSE)
+    ulong fn_addr = reset_fn as ulong;
+    ulong ci_addr = con_in as ulong;
+    return input_call2(fn_addr, ci_addr, 0);
+}
+
+/// キーストロークを非ブロッキングで読み取り
+/// 成功時: EFI_SUCCESS, key にスキャンコードとUnicode文字が入る
+/// キーなし: EFI_NOT_READY
+export ulong uefi_read_key(EfiSystemTable* st, EfiInputKey* key) {
+    EfiSimpleTextInputProtocol* con_in = st->con_in;
+    if (con_in == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* read_fn = con_in->read_key_stroke;
+    if (read_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    // ReadKeyStroke(This, Key)
+    ulong fn_addr = read_fn as ulong;
+    ulong ci_addr = con_in as ulong;
+    ulong key_addr = key as ulong;
+    return input_call2(fn_addr, ci_addr, key_addr);
+}
+
+/// WaitForEventを使ってキー入力をブロッキング待機
+export ulong uefi_wait_for_key(EfiSystemTable* st) {
+    EfiSimpleTextInputProtocol* con_in = st->con_in;
+    if (con_in == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* wait_fn = bs->wait_for_event;
+    if (wait_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    // WaitForEvent(NumberOfEvents=1, Events=&con_in->wait_for_key, Index)
+    void* event = con_in->wait_for_key;
+    ulong event_array = event as ulong;
+    ulong index = 0;
+
+    // イベント配列をスタック上に作成
+    ulong[1] events;
+    events[0] = event_array;
+
+    ulong fn_addr = wait_fn as ulong;
+    ulong num_events = 1;
+    ulong events_addr = events as ulong;
+    ulong index_addr = (&index) as ulong;
+    return input_call3(fn_addr, num_events, events_addr, index_addr);
+}
+
+/// キー入力をブロッキングで読み取り（待機+読み取りの便利関数）
+export ulong uefi_read_key_blocking(EfiSystemTable* st, EfiInputKey* key) {
+    ulong status = uefi_wait_for_key(st);
+    if (efi_error(status)) {
+        return status;
+    }
+    return uefi_read_key(st, key);
+}
