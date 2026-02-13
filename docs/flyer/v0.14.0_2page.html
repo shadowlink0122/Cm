@@ -21,12 +21,15 @@
             <div class="column">
                 <h2>Cmとは？</h2>
 
-                <div
-                    style="background: #EEEEEE; border-left: 4px solid #000000; padding: 8px; margin: 6px 0; border-radius: 4px;">
+                <div class="highlight-box">
                     <p style="font-size: 11pt; font-weight: bold; color: #000000; margin: 0 0 4px 0;">
-                        「使いやすく、安全で、高速な言語」を作りたかった</p>
-                    <p style="font-size: 9.5pt; color: #333; margin: 0;">C/C++の速度・低レベル制御と、Rust/TypeScriptのモダンな構文を融合。
-                        ベアメタルOSからWebアプリまで、1つの言語でカバーします。</p>
+                        モダンなC/C++を目指しました</p>
+                    <p style="font-size: 9.5pt; color: #333; margin: 0;">
+                        基本構文はC/C++で、Rust/TypeScriptなどのモダンな言語機能を取り入れました。
+                    </p>
+                    <p style="font-size: 9.5pt; color: #333; margin: 0;">
+                        <strong>ベアメタルプログラミングからWebアプリ開発まで</strong>、全てを1つの言語で行えるようにしたいというコンセプトです。
+                    </p>
                 </div>
 
                 <h3>Cmが目指す3つの柱</h3>
@@ -434,7 +437,7 @@ int[5] result = nums.map(x =&gt; x * multiplier);</div>
                     </tr>
                     <tr>
                         <td><strong>VSCode拡張</strong></td>
-                        <td>シンタックスハイライト・LSP</td>
+                        <td>シンタックスハイライト</td>
                     </tr>
                 </table>
 
@@ -467,10 +470,6 @@ int[5] result = nums.map(x =&gt; x * multiplier);</div>
                     <tr>
                         <td><strong>std::thread</strong></td>
                         <td>マルチスレッド</td>
-                    </tr>
-                    <tr>
-                        <td><strong>std::async</strong></td>
-                        <td>async/await (試験的)</td>
                     </tr>
                 </table>
 
@@ -710,13 +709,16 @@ Hello from WASM!</div>
                         このプロジェクトを始めるまで、プログラミング言語を作った経験はなく、低レイヤーのデバッグ知識もありませんでした。前身の<strong>Cb（シーフラット）</strong>は細部を詰めずに「とりあえず動くもの」を作っていましたが、設計やゴールが曖昧だったため一度挫折。逆に<strong>「設計さえしっかりすれば次はうまくいくはず」</strong>と考え、再出発して<strong>Cm（シーマイナー）</strong>と名付けました。
                     </p>
                     <p style="font-size: 9pt; margin: 6px 0 0 0; line-height: 1.5;">
-                        ディレクトリ構成・言語設計・中間表現・最適化などを<strong>生成AIと壁打ち</strong>しながら設計の手がかりを得て、今に至ります。
+                        目指していたコンパイラにはある程度近づきましたが、納得していない点も多いです。モダンな言語の良いところとして、変数宣言はRustやTSのように後置型注釈のほうが見やすかったり、<code>func</code>/<code>fn</code>キーワードを使ったほうがBNFとしての構文や意味解析がシンプルになったかもしれないと思っています。
                     </p>
                     <p style="font-size: 9pt; margin: 6px 0 0 0; line-height: 1.5;">
-                        目指していたコンパイラにはある程度近づきましたが、納得していない点も多いです。変数宣言はRustやTSのように後置型注釈のほうが見やすかったり、<code>func</code>/<code>fn</code>キーワードを使ったほうがBNFとしての構文がシンプルになる気がしています。
+                        テストはある程度行なっておりCIも導入しましたが、実際のユースケースに合わせた改善やバグ修正を今後も行なっていこうと思います。
                     </p>
                     <p style="font-size: 9pt; margin: 6px 0 0 0; line-height: 1.5;">
-                        テストもまだ網羅的には行えていないので、今後は実際にCmを使いながら改善していこうと思います！
+                        ディレクトリ構成・言語設計・中間表現・最適化などを<strong>生成AIと壁打ち</strong>しながら設計の手がかりを得て、今に至ります。設計に関する過去のドキュメントは全てdocs/archiveにまとまっているので興味があればぜひ見てみてください！
+                    </p>
+                    <p style="font-size: 5pt; margin: 6px 0 0 0; line-height: 1.5;">
+                        ※本プロジェクトはバイブコーディングで作られており、作者は肝心な低レイヤーのデバッグ手法などをあまり理解できていない点が残念ポイントになっています！
                     </p>
                 </div>
             </div>
