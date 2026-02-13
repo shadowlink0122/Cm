@@ -159,6 +159,27 @@ export void efi_set_color(void* system_table, ulong attribute) {
     }
 }
 
+// ============================================================
+// 文字変換ヘルパー
+// ============================================================
+
+/// 4bit値(0-15)を16進数のUCS-2文字コードに変換
+/// nibble 0-9 → '0'-'9', nibble 10-15 → 'A'-'F'
+export ushort nibble_to_hex_char(ulong nibble) {
+    if (nibble < 10) {
+        // '0'からのオフセットで数字文字を得る
+        return ('0' as ulong + nibble) as ushort;
+    }
+    // 'A'は16進値10に対応するため、nibbleから10を引いて
+    // 'A'からのオフセットで英字を得る（10→'A', 11→'B', ..., 15→'F'）
+    return ('A' as ulong + nibble - 10) as ushort;
+}
+
+/// 1桁の数値(0-9)をUCS-2文字コードに変換
+export ushort digit_to_char(ulong digit) {
+    return ('0' as ulong + digit) as ushort;
+}
+
 // 色定数
 export const ulong EFI_BLACK         = 0x00;
 export const ulong EFI_WHITE         = 0x0F;
@@ -172,10 +193,11 @@ export const ulong EFI_LIGHTMAGENTA  = 0x0D;
 export const ulong EFI_DARKGRAY      = 0x08;
 
 /// 16進数文字列を出力（0x + 16桁）
+/// 注意: utiny[2] ch as void* はコンパイラのIR変換バグで動作しないため
+///       efi_put_char（UCS-2直接出力）方式を使用
 export void efi_print_hex(void* system_table, ulong value) {
-    // "0x" を出力
-    string prefix = "0x";
-    efi_print(system_table, prefix as void*);
+    // "0x" プレフィックス
+    efi_print(system_table, "0x" as void*);
 
     // 16桁を上位から出力
     ulong i = 0;
@@ -183,44 +205,69 @@ export void efi_print_hex(void* system_table, ulong value) {
         ulong shift = (15 - i) * 4;
         ulong mask = 15;
         ulong nibble = (value >> shift) & mask;
-        ulong ten = 10;
-
-        // 1文字ずつ出力
-        utiny[2] ch;
-        if (nibble < ten) {
-            ch[0] = (nibble + 48) as utiny;  // '0'-'9'
-        } else {
-            ch[0] = (nibble + 55) as utiny;  // 'A'-'F'
-        }
-        ch[1] = 0;
-        efi_print(system_table, ch as void*);
+        efi_put_char(system_table, nibble_to_hex_char(nibble));
         i += 1;
     }
 }
 
 /// 10進数文字列を出力
+/// 注意: utiny配列のポインタ演算を回避するためefi_put_char方式を使用
 export void efi_print_dec(void* system_table, ulong value) {
     ulong zero = 0;
     if (value == zero) {
-        string z = "0";
-        efi_print(system_table, z as void*);
+        efi_put_char(system_table, digit_to_char(0));
         return;
     }
 
-    // 桁を逆順で文字列化
-    utiny[21] buf;
-    ulong pos = 20;
-    buf[pos] = 0;
+    // 桁を逆順でushort配列に格納
+    ushort[21] digits;
+    ulong count = 0;
     ulong v = value;
     ulong ten = 10;
     while (v > zero) {
-        pos -= 1;
         ulong digit = v % ten;
-        buf[pos] = (digit + 48) as utiny;
+        digits[count] = digit_to_char(digit);
+        count += 1;
         v = v / ten;
     }
 
-    // posから始まる文字列を出力
-    void* data = (buf as ulong + pos) as void*;
-    efi_print(system_table, data);
+    // 逆順に1文字ずつ出力
+    ulong j = count;
+    while (j > zero) {
+        j -= 1;
+        efi_put_char(system_table, digits[j]);
+    }
+}
+
+// ============================================================
+// 1文字出力（UCS-2）
+// ============================================================
+
+/// 1文字をUCS-2で直接出力
+/// ConOut->OutputStringを使用してUCS-2文字を出力
+/// 注意: ASM内でUCS-2バッファをスタック上に構築（配列as ulongのIR変換バグ回避）
+export void efi_put_char(void* system_table, ushort unicode_char) {
+    void* con_out = efi_get_con_out(system_table);
+    ulong* co = con_out as ulong*;
+    ulong output_fn_addr = *(co + 1);
+
+    ulong fn_val = output_fn_addr as ulong;
+    ulong co_val = con_out as ulong;
+    ulong ch_val = unicode_char as ulong;
+    ulong r = 0;
+    must {
+        // UCS-2バッファをスタック上に直接構築（Cm配列変換を回避）
+        __asm__(`
+            subq $$48, %rsp;
+            movq ${r:ch_val}, %rax;
+            movw %ax, 32(%rsp);
+            movw $$0, 34(%rsp);
+            leaq 32(%rsp), %rdx;
+            movq ${r:co_val}, %rcx;
+            movq ${r:fn_val}, %r10;
+            callq *%r10;
+            addq $$48, %rsp;
+            movq %rax, ${=r:r}
+        `);
+    }
 }

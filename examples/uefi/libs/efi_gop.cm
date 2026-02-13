@@ -1,0 +1,108 @@
+//! platform: uefi
+// libs::efi_gop - UEFI Graphics Output Protocol (GOP) 初期化
+// BootServicesのLocateProtocolでGOPを取得し、フレームバッファ情報を提供
+// 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用
+// 注意: UEFIバイナリのグローバル変数への書き込みは動作しないため、
+//       全情報はcallerのローカル変数（ポインタ経由）で受け渡す
+
+import ./efi_core;
+import ./efi_text;
+
+// ============================================================
+// GOP初期化
+// ============================================================
+
+/// BootServices::LocateProtocol でGOPを取得し、フレームバッファ情報をcallerに返す
+/// out_fb: フレームバッファベースアドレス格納先
+/// out_width: 水平解像度格納先
+/// out_height: 垂直解像度格納先
+/// out_stride: スキャンラインあたりのピクセル数格納先
+/// 戻り値: 0=成功, その他=エラー
+export ulong gop_init(void* system_table, ulong* out_fb, ulong* out_width, ulong* out_height, ulong* out_stride) {
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);  // offset 0x60 = BootServices
+    ulong* bs = bs_addr as ulong*;
+
+    // LocateProtocol関数ポインタ取得
+    // BootServices offset: Header(24bytes) + 37 function pointers = 24 + 37*8 = 320
+    // qword index: 320/8 = 40
+    ulong locate_fn = *(bs + 40);
+
+    // LocateProtocol(GUID*, Registration=NULL, **Interface)
+    ulong gop_ptr = 0;
+    ulong result = 0;
+
+    // ASMでLocateProtocol呼び出し
+    // GUIDをimmediate定数としてASM内に直接記述（Cm変数参照はASM内で不正値になるため）
+    // GOP GUID: {0x9042a9de, 0x23dc, 0x4a38, {0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}}
+    // qword[0] = 0x4A3823DC9042A9DE, qword[1] = 0x6A5180D0DE7AFB96
+    must {
+        __asm__(`
+        pushq ${r:locate_fn};
+        popq %r10;
+        subq $$64, %rsp;
+        movabsq $$0x4A3823DC9042A9DE, %rax;
+        movq %rax, 48(%rsp);
+        movabsq $$0x6A5180D0DE7AFB96, %rax;
+        movq %rax, 56(%rsp);
+        movq $$0, 32(%rsp);
+        leaq 48(%rsp), %rcx;
+        xorq %rdx, %rdx;
+        leaq 32(%rsp), %r8;
+        callq *%r10;
+        movq 32(%rsp), ${=r:gop_ptr};
+        addq $$64, %rsp;
+        movq %rax, ${=r:result}
+        `);
+    }
+
+    // エラーチェック
+    long signed_result = result as long;
+    if (signed_result < 0) {
+        efi_print(system_table, "GOP LocateProtocol failed: " as void*);
+        efi_print_hex(system_table, result);
+        efi_println(system_table, "" as void*);
+        return result;
+    }
+
+    // GOPプロトコルからMode情報を取得
+    // GOP構造体: QueryMode(0x00), SetMode(0x08), Blt(0x10), Mode(0x18)
+    ulong* gop = gop_ptr as ulong*;
+    ulong mode_addr = *(gop + 3);  // offset 0x18 = Mode
+
+    // Mode構造体:
+    //   MaxMode(u32, 0x00), Mode(u32, 0x04), Info(ptr, 0x08),
+    //   SizeOfInfo(ulong, 0x10), FrameBufferBase(ulong, 0x18), FrameBufferSize(ulong, 0x20)
+    ulong* mode = mode_addr as ulong*;
+    ulong fb_base = *(mode + 3);  // offset 0x18 = FrameBufferBase
+
+    // Info構造体のポインタを取得
+    ulong info_addr = *(mode + 1);  // offset 0x08 = Info
+
+    // ModeInfo構造体:
+    //   Version(u32, 0x00), HRes(u32, 0x04), VRes(u32, 0x08),
+    //   PixelFormat(u32, 0x0C), PixelInformation(16bytes, 0x10), PixelsPerScanLine(u32, 0x20)
+    uint* info32 = info_addr as uint*;
+    ulong hres = (*(info32 + 1)) as ulong;    // offset 0x04 = HRes
+    ulong vres = (*(info32 + 2)) as ulong;    // offset 0x08 = VRes
+    ulong stride = (*(info32 + 8)) as ulong;  // offset 0x20 = PixelsPerScanLine
+
+    // callerのポインタに書き込み
+    *out_fb = fb_base;
+    *out_width = hres;
+    *out_height = vres;
+    *out_stride = stride;
+
+    // デバッグ出力
+    efi_print(system_table, "GOP: " as void*);
+    efi_print_dec(system_table, hres);
+    efi_print(system_table, "x" as void*);
+    efi_print_dec(system_table, vres);
+    efi_print(system_table, " stride=" as void*);
+    efi_print_dec(system_table, stride);
+    efi_print(system_table, " fb=" as void*);
+    efi_print_hex(system_table, fb_base);
+    efi_println(system_table, "" as void*);
+
+    return 0;
+}

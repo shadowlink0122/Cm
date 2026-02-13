@@ -40,10 +40,13 @@ echo "EFI:  $EFI_FILE"
 echo "ESP:  $ESP_DIR"
 echo "======================"
 
-# QEMU起動
+# QEMU起動（グラフィカルモード: GOPフレームバッファ使用）
+# 注意: -vga stdではOVMFがGOPプロトコルを提供しない場合がある
+# virtio-gpu-pciを使用することでGOPフレームバッファが確実に利用可能
 qemu-system-x86_64 \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF_FW" \
     -drive format=raw,file=fat:rw:"$ESP_DIR" \
     -net none \
-    -nographic \
-    -serial mon:stdio
+    -device virtio-gpu-pci \
+    -display default,show-cursor=on \
+    -serial stdio

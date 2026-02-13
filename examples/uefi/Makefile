@@ -68,7 +68,8 @@ run: setup-esp download-ovmf
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_FW) \
 		-drive format=raw,file=fat:rw:$(ESP_DIR) \
 		-net none \
-		-nographic \
+		-device virtio-gpu-pci \
+		-display default,show-cursor=on \
 		-serial mon:stdio
 
 clean:

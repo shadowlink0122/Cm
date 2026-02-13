@@ -11,6 +11,7 @@ import ./util/memmap;
 import ./util/keyboard;
 import ./util/sysinfo;
 import ./util/convert;
+import ./util/graphics;
 
 // ============================================================
 // メイン
@@ -67,6 +68,17 @@ ulong efi_main(void* image_handle, void* system_table) {
             case('3') {
                 // システム情報表示
                 show_system_info(system_table);
+                show_menu(system_table);
+            }
+            case('4') {
+                // グラフィクスデモ
+                graphics_demo(system_table);
+                efi_println(system_table, "" as void*);
+                efi_println(system_table, "Graphics demo complete. Press any key..." as void*);
+                ushort dummy_scan = 0;
+                ushort dummy_ch = 0;
+                efi_read_key_blocking(system_table, &dummy_scan, &dummy_ch);
+                efi_clear_screen(system_table);
                 show_menu(system_table);
             }
             case('q') {
