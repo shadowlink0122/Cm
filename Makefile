@@ -9,36 +9,62 @@ BUILD_DIR := build
 # 使用例: make build ARCH=arm64 / make build ARCH=x86_64
 ARCH ?= $(shell llvm-config --host-target 2>/dev/null | cut -d- -f1 || uname -m)
 
-# アーキテクチャに応じたHomebrewプレフィックスを自動設定
-# ARM64: /opt/homebrew, x86_64: /usr/local
-ifeq ($(ARCH),arm64)
-  BREW_PREFIX ?= /opt/homebrew
-else ifeq ($(ARCH),aarch64)
-  BREW_PREFIX ?= /opt/homebrew
+# OS判定
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+  # ========================================
+  # macOS: Homebrew前提
+  # ========================================
+
+  # アーキテクチャに応じたHomebrewプレフィックスを自動設定
+  ifeq ($(ARCH),arm64)
+    BREW_PREFIX ?= /opt/homebrew
+  else ifeq ($(ARCH),aarch64)
+    BREW_PREFIX ?= /opt/homebrew
+  else
+    BREW_PREFIX ?= /usr/local
+  endif
+
+  # LLVM/OpenSSLパスの自動設定
+  LLVM_PREFIX := $(BREW_PREFIX)/opt/llvm@17
+  OPENSSL_PREFIX := $(BREW_PREFIX)/opt/openssl@3
+
+  # CMake共通フラグ（Homebrew依存のパスを統一）
+  CMAKE_ARCH_FLAGS := \
+    -DCM_TARGET_ARCH=$(ARCH) \
+    -DCMAKE_PREFIX_PATH="$(LLVM_PREFIX);$(OPENSSL_PREFIX)" \
+    -DOPENSSL_ROOT_DIR=$(OPENSSL_PREFIX) \
+    -DOPENSSL_SSL_LIBRARY=$(OPENSSL_PREFIX)/lib/libssl.dylib \
+    -DOPENSSL_CRYPTO_LIBRARY=$(OPENSSL_PREFIX)/lib/libcrypto.dylib \
+    -DOPENSSL_INCLUDE_DIR=$(OPENSSL_PREFIX)/include \
+    -DCMAKE_C_COMPILER=/usr/bin/clang \
+    -DCMAKE_CXX_COMPILER=/usr/bin/clang++
+
+  # ビルド時の環境変数（x86 LDFLAGSの混入防止）
+  BUILD_ENV := \
+    LDFLAGS="-L$(LLVM_PREFIX)/lib -L$(OPENSSL_PREFIX)/lib" \
+    CPPFLAGS="-I$(LLVM_PREFIX)/include -I$(OPENSSL_PREFIX)/include" \
+    PATH="$(LLVM_PREFIX)/bin:$(BREW_PREFIX)/bin:$(PATH)"
+
 else
-  BREW_PREFIX ?= /usr/local
+  # ========================================
+  # Linux: システムパッケージ前提
+  # ========================================
+
+  # CMakeフラグ（システムのfind_packageに任せる）
+  CMAKE_ARCH_FLAGS := \
+    -DCM_TARGET_ARCH=$(ARCH)
+
+  # LLVM_DIRが設定されている場合はそれを使用
+  ifneq ($(LLVM_DIR),)
+    CMAKE_ARCH_FLAGS += -DLLVM_DIR=$(LLVM_DIR)
+  endif
+
+  # ビルド時の環境変数
+  BUILD_ENV :=
+
 endif
-
-# LLVM/OpenSSLパスの自動設定
-LLVM_PREFIX := $(BREW_PREFIX)/opt/llvm@17
-OPENSSL_PREFIX := $(BREW_PREFIX)/opt/openssl@3
-
-# CMake共通フラグ（アーキテクチャ依存のパスを統一）
-CMAKE_ARCH_FLAGS := \
-  -DCM_TARGET_ARCH=$(ARCH) \
-  -DCMAKE_PREFIX_PATH="$(LLVM_PREFIX);$(OPENSSL_PREFIX)" \
-  -DOPENSSL_ROOT_DIR=$(OPENSSL_PREFIX) \
-  -DOPENSSL_SSL_LIBRARY=$(OPENSSL_PREFIX)/lib/libssl.dylib \
-  -DOPENSSL_CRYPTO_LIBRARY=$(OPENSSL_PREFIX)/lib/libcrypto.dylib \
-  -DOPENSSL_INCLUDE_DIR=$(OPENSSL_PREFIX)/include \
-  -DCMAKE_C_COMPILER=/usr/bin/clang \
-  -DCMAKE_CXX_COMPILER=/usr/bin/clang++
-
-# ビルド時の環境変数（x86 LDFLAGSの混入防止）
-BUILD_ENV := \
-  LDFLAGS="-L$(LLVM_PREFIX)/lib -L$(OPENSSL_PREFIX)/lib" \
-  CPPFLAGS="-I$(LLVM_PREFIX)/include -I$(OPENSSL_PREFIX)/include" \
-  PATH="$(LLVM_PREFIX)/bin:$(BREW_PREFIX)/bin:$(PATH)"
 
 # デフォルトターゲット
 .PHONY: help
