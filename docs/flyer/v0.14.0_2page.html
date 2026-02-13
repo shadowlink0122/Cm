@@ -158,51 +158,51 @@
 
                 <h3>1. Interface/Impl + with自動実装</h3>
                 <div class="code-block" style="font-size: 7.5pt;">struct Point with Debug { int x; int y; }
-                    interface Printable { void print(); }
-                    impl Printable for Point {
-                    void print() { println("({self.x},{self.y})"); }
-                    }
-                    int main() {
-                    Point p = Point{10, 20};
-                    p.debug(); // Point{x:10, y:20}
-                    p.print(); // (10,20)
-                    }</div>
+interface Printable { void print(); }
+impl Printable for Point {
+    void print() { println("({self.x},{self.y})"); }
+}
+int main() {
+    Point p = Point{10, 20};
+    p.debug(); // Point{x:10, y:20}
+    p.print(); // (10,20)
+}</div>
 
                 <h3>2. ジェネリクス + Match式</h3>
                 <div class="code-block" style="font-size: 7.5pt;">enum Result&lt;T&gt; { Ok(T), Err(string) }
 
-                    &lt;T&gt; T unwrap(Result&lt;T&gt; r) {
-                    match (r) {
-                    Result::Ok(v) =&gt; return v,
-                    Result::Err(e) =&gt; { println(e); exit(1); }
-                    }
-                    }
-                    int main() {
-                    Result&lt;int&gt; r = Result::Ok(42);
-                    println(unwrap(r)); // 42
-                    }</div>
+&lt;T&gt; T unwrap(Result&lt;T&gt; r) {
+    match (r) {
+        Result::Ok(v)  =&gt; return v,
+        Result::Err(e) =&gt; { println(e); exit(1); }
+    }
+}
+int main() {
+    Result&lt;int&gt; r = Result::Ok(42);
+    println(unwrap(r));  // 42
+}</div>
 
                 <h3>3. 演算子オーバーロード (v0.14.0)</h3>
                 <div class="code-block" style="font-size: 7.5pt;">struct Vec2 { int x; int y; }
-                    impl Vec2 {
-                    operator Vec2 +(Vec2 o) {
-                    return Vec2{self.x+o.x, self.y+o.y};
-                    }
-                    }
-                    int main() {
-                    Vec2 a = Vec2{1, 2};
-                    Vec2 b = Vec2{3, 4};
-                    Vec2 c = a + b; // Vec2{4, 6}
-                    a += b; // += は自動生成
-                    }</div>
+impl Vec2 {
+    operator Vec2 +(Vec2 o) {
+        return Vec2{self.x+o.x, self.y+o.y};
+    }
+}
+int main() {
+    Vec2 a = Vec2{1, 2};
+    Vec2 b = Vec2{3, 4};
+    Vec2 c = a + b;  // Vec2{4, 6}
+    a += b;          // += は自動生成
+}</div>
 
                 <h3>4. インラインユニオン型 (v0.14.0)</h3>
                 <div class="code-block" style="font-size: 7.5pt;">int | null maybe_find(int[5] arr, int target) {
-                    for (int i = 0; i &lt; 5; i++) {
-                    if (arr[i] == target) return arr[i];
-                    }
-                    return null;
-                    }</div>
+    for (int i = 0; i &lt; 5; i++) {
+        if (arr[i] == target) return arr[i];
+    }
+    return null;
+}</div>
             </div>
         </div>
     </div>
@@ -216,19 +216,19 @@
 
                 <h4>例1: FizzBuzz（Interface活用）</h4>
                 <div class="code-block" style="font-size: 7.5pt;">interface IFizzbuzz { void fizzbuzz(); }
-                    impl IFizzbuzz for int {
-                    void fizzbuzz() {
-                    if (self % 15 == 0) println("FizzBuzz");
-                    else if (self % 3 == 0) println("Fizz");
-                    else if (self % 5 == 0) println("Buzz");
-                    else println(self);
-                    }
-                    }
-                    int main() {
-                    for (int i = 1; i &lt;= 100; i++) {
-                    i.fizzbuzz();
-                    }
-                    }</div>
+impl IFizzbuzz for int {
+    void fizzbuzz() {
+        if (self % 15 == 0) println("FizzBuzz");
+        else if (self % 3 == 0) println("Fizz");
+        else if (self % 5 == 0) println("Buzz");
+        else println(self);
+    }
+}
+int main() {
+    for (int i = 1; i &lt;= 100; i++) {
+        i.fizzbuzz();
+    }
+}</div>
 
                 <div class="point-box">
                     <strong>ポイント:</strong> プリミティブ型（int）にメソッド追加可能
@@ -237,22 +237,22 @@
                 <h4>例2: ジェネリクスコレクション</h4>
                 <div class="code-block" style="font-size: 7.5pt;">import std::collections::Vector;
 
-                    int main() {
-                    Vector&lt;int&gt; v = Vector&lt;int&gt;();
-                    v.push(10);
-                    v.push(20);
-                    v.push(30);
-                    println("len = {v.len()}"); // len = 3
-                    println("v[1] = {v.get(1)}"); // v[1] = 20
-                    }</div>
+int main() {
+    Vector&lt;int&gt; v = Vector&lt;int&gt;();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    println("len = {v.len()}");   // len = 3
+    println("v[1] = {v.get(1)}"); // v[1] = 20
+}</div>
 
                 <h4>例3: ラムダ・クロージャ</h4>
                 <div class="code-block" style="font-size: 7.5pt;">int[5] nums = [1, 2, 3, 4, 5];
-                    int sum = nums.reduce(0, (a, b) =&gt; a + b);
-                    println(sum); // 15
-                    // クロージャで外部変数をキャプチャ
-                    int multiplier = 3;
-                    int[5] result = nums.map(x =&gt; x * multiplier);</div>
+int sum = nums.reduce(0, (a, b) =&gt; a + b);
+println(sum); // 15
+// クロージャで外部変数をキャプチャ
+int multiplier = 3;
+int[5] result = nums.map(x =&gt; x * multiplier);</div>
 
                 <h2>他の言語との比較</h2>
 
@@ -475,8 +475,8 @@
                 </table>
 
                 <p style="font-size: 9pt;">ファイル先頭に記述し、実行環境を制約:</p>
-                <div class="code-block" style="font-size: 7.5pt;">//! platform: native // → Native/JITのみ
-                    //! platform: uefi // → UEFI専用</div>
+                <div class="code-block" style="font-size: 7.5pt;">//! platform: native  // → Native/JITのみ
+//! platform: uefi    // → UEFI専用</div>
             </div>
         </div>
     </div>
@@ -496,29 +496,29 @@
                     QEMUでの動作を確認済みです。</p>
 
                 <div class="code-block" style="font-size: 7pt;">import uefi::text::{uefi_println, uefi_clear_screen};
-                    import uefi::mem::uefi_stall;
+import uefi::mem::uefi_stall;
 
-                    ulong efi_main(void* image_handle,
-                    void* system_table) {
-                    uefi_clear_screen(system_table);
-                    uefi_println(system_table, "Hello from Cm!");
-                    uefi_stall(system_table, 5000000);
-                    return 0; // EFI_SUCCESS
-                    }</div>
+ulong efi_main(void* image_handle,
+               void* system_table) {
+    uefi_clear_screen(system_table);
+    uefi_println(system_table, "Hello from Cm!");
+    uefi_stall(system_table, 5000000);
+    return 0;  // EFI_SUCCESS
+}</div>
 
                 <h4>ビルド手順</h4>
                 <div class="terminal-block" style="font-size: 7pt;"># UEFIオブジェクトにコンパイル
-                    cm compile --target=uefi -o hello.o hello.cm
+cm compile --target=uefi -o hello.o hello.cm
 
-                    # EFIバイナリにリンク
-                    lld-link /subsystem:efi_application \
-                    /entry:efi_main /out:BOOTX64.EFI hello.o
+# EFIバイナリにリンク
+lld-link /subsystem:efi_application \
+  /entry:efi_main /out:BOOTX64.EFI hello.o
 
-                    # QEMUで実行テスト
-                    qemu-system-x86_64 \
-                    -drive if=pflash,format=raw,file=OVMF.fd \
-                    -drive format=raw,file=fat:rw:esp \
-                    -net none -nographic</div>
+# QEMUで実行テスト
+qemu-system-x86_64 \
+  -drive if=pflash,format=raw,file=OVMF.fd \
+  -drive format=raw,file=fat:rw:esp \
+  -net none -nographic</div>
 
                 <h3>UEFIライブラリ (libs/uefi)</h3>
                 <table style="font-size: 8pt;">
@@ -550,14 +550,14 @@
                     組み込みシステムやカスタムOS向けのコードをコンパイルできます。</p>
 
                 <div class="code-block" style="font-size: 7pt;">// ベアメタル: OS依存なしでコンパイル可能
-                    struct Register { int* base; int offset; }
+struct Register { int* base; int offset; }
 
-                    int main() {
-                    int[4] mmio = [0, 0, 0, 0];
-                    Register r = Register{mmio as int*, 2};
-                    *(r.base + r.offset) = 0xFF;
-                    return *(r.base + r.offset);
-                    }</div>
+int main() {
+    int[4] mmio = [0, 0, 0, 0];
+    Register r = Register{mmio as int*, 2};
+    *(r.base + r.offset) = 0xFF;
+    return *(r.base + r.offset);
+}</div>
 
                 <h4>ベアメタルで使える機能 / 使えない機能</h4>
                 <table style="font-size: 8pt;">
@@ -593,50 +593,50 @@
                     v0.14.0でテスト通過率が55%→85%に大幅向上。</p>
 
                 <div class="code-block" style="font-size: 7.5pt;">int main() {
-                    println("Hello from Cm → JS!");
-                    int[5] nums = [1, 2, 3, 4, 5];
-                    int sum = nums.reduce(0, (a,b) =&gt; a+b);
-                    println("sum = {sum}"); // 15
-                    }</div>
+    println("Hello from Cm → JS!");
+    int[5] nums = [1, 2, 3, 4, 5];
+    int sum = nums.reduce(0, (a,b) =&gt; a+b);
+    println("sum = {sum}"); // 15
+}</div>
 
                 <div class="terminal-block" style="font-size: 7.5pt;">$ cm compile --target=js hello.cm -o hello.js
-                    $ node hello.js
-                    Hello from Cm → JS!
-                    sum = 15</div>
+$ node hello.js
+Hello from Cm → JS!
+sum = 15</div>
 
                 <h3>WebAssemblyへのコンパイル</h3>
                 <div class="terminal-block" style="font-size: 7.5pt;">$ cm compile --target=wasm hello.cm -o hello.wasm
-                    $ wasmtime hello.wasm
-                    Hello from WASM!</div>
+$ wasmtime hello.wasm
+Hello from WASM!</div>
 
                 <h3>インラインアセンブリ</h3>
                 <p style="font-size: 9pt;">UEFI/ベアメタル開発で必須の低レベル制御。</p>
 
                 <div class="code-block" style="font-size: 7pt;">ulong win64_call(ulong fn, ulong a1) {
-                    ulong result = 0;
-                    __asm__(`
-                    movq ${r:fn}, %rbx;
-                    movq ${r:a1}, %rcx;
-                    subq $$32, %rsp;
-                    callq *%rbx;
-                    addq $$32, %rsp;
-                    movq %rax, ${=r:result}
-                    `);
-                    return result;
-                    }</div>
+    ulong result = 0;
+    __asm__(`
+        movq ${r:fn}, %rbx;
+        movq ${r:a1}, %rcx;
+        subq $$32, %rsp;
+        callq *%rbx;
+        addq $$32, %rsp;
+        movq %rax, ${=r:result}
+    `);
+    return result;
+}</div>
 
                 <h2>📋 条件付きコンパイル</h2>
                 <div class="code-block" style="font-size: 7.5pt;">#ifdef PLATFORM_MACOS
-                    println("macOS");
-                    #elif PLATFORM_LINUX
-                    println("Linux");
-                    #endif
+    println("macOS");
+#elif PLATFORM_LINUX
+    println("Linux");
+#endif
 
-                    #ifdef ARCH_X86_64
-                    __asm__("nop");
-                    #elif ARCH_ARM64
-                    __asm__("nop");
-                    #endif</div>
+#ifdef ARCH_X86_64
+    __asm__("nop");
+#elif ARCH_ARM64
+    __asm__("nop");
+#endif</div>
 
                 <h2>📦 サンプルプロジェクト</h2>
                 <table style="font-size: 8.5pt;">
@@ -725,27 +725,27 @@
             <div class="column">
                 <h2>クイックスタート</h2>
                 <div class="terminal-block" style="font-size: 7.5pt;"># リポジトリをクローン
-                    git clone https://github.com/shadowlink0122/Cm.git
-                    cd Cm
+git clone https://github.com/shadowlink0122/Cm.git
+cd Cm
 
-                    # ビルド (macOS / Linux)
-                    mkdir build && cd build
-                    cmake .. -DCM_USE_LLVM=ON && make
-                    cd ..
+# ビルド (macOS / Linux)
+mkdir build && cd build
+cmake .. -DCM_USE_LLVM=ON && make
+cd ..
 
-                    # JIT実行 (即座に実行)
-                    ./cm run examples/01_basics/hello.cm
+# JIT実行 (即座に実行)
+./cm run examples/01_basics/hello.cm
 
-                    # ネイティブバイナリ
-                    ./cm compile hello.cm -o hello && ./hello
+# ネイティブバイナリ
+./cm compile hello.cm -o hello && ./hello
 
-                    # JavaScript出力
-                    ./cm compile --target=js hello.cm -o hello.js
-                    node hello.js
+# JavaScript出力
+./cm compile --target=js hello.cm -o hello.js
+node hello.js
 
-                    # WebAssembly出力
-                    ./cm compile --target=wasm hello.cm -o hello.wasm
-                    wasmtime hello.wasm</div>
+# WebAssembly出力
+./cm compile --target=wasm hello.cm -o hello.wasm
+wasmtime hello.wasm</div>
 
                 <h3>必要な環境</h3>
                 <table style="font-size: 9pt;">
@@ -786,10 +786,10 @@
                 <h2>Hello World</h2>
                 <div class="code-block" style="font-size: 8pt;">import std::io::println;
 
-                    int main() {
-                    println("Hello, Cm!");
-                    return 0;
-                    }</div>
+int main() {
+    println("Hello, Cm!");
+    return 0;
+}</div>
 
                 <h2>詳細情報・コミュニティ</h2>
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -824,24 +824,6 @@
         </div>
     </div>
 
-    <!-- コードブロック自動正規化: エディタの自動インデントによる崩れを防止 -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.code-block, .terminal-block').forEach(el => {
-                const lines = el.innerHTML.split('\n');
-                if (lines.length <= 1) return;
-                // 2行目以降の非空行の最小先頭スペース数を計算
-                const minIndent = lines.slice(1).filter(l => l.trim()).reduce((min, l) => {
-                    const spaces = l.match(/^ */)[0].length;
-                    return Math.min(min, spaces);
-                }, Infinity);
-                if (minIndent >= 8 && minIndent < Infinity) {
-                    el.innerHTML = lines[0] + '\n' +
-                        lines.slice(1).map(l => l.trim() ? l.slice(minIndent) : '').join('\n');
-                }
-            });
-        });
-    </script>
 
 </body>
 
