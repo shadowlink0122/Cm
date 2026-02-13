@@ -26,7 +26,9 @@ RUN apt-get update && apt-get install -y \
     lld-17 \
     # OpenSSL（HTTPS対応）
     libssl-dev \
-    # テスト・カバレッジ
+    # テスト
+    libgtest-dev \
+    # カバレッジ
     lcov \
     # その他
     python3 \

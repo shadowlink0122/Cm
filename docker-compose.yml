@@ -8,6 +8,7 @@ services:
     container_name: cm-dev
     volumes:
       - .:/workspace
+      - build-cache:/workspace/build
     working_dir: /workspace
     stdin_open: true
     tty: true
@@ -21,14 +22,15 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
+      - build-cache:/workspace/build
     working_dir: /workspace
     environment:
       - CC=clang
       - CXX=clang++
     command: >
       bash -c "
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
-        cmake --build build
+        make build &&
+        make libs
       "
 
   # ビルド（GCC）
@@ -39,14 +41,15 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
+      - build-gcc-cache:/workspace/build
     working_dir: /workspace
     environment:
       - CC=gcc
       - CXX=g++
     command: >
       bash -c "
-        cmake -B build-gcc -G Ninja -DCMAKE_BUILD_TYPE=Release &&
-        cmake --build build-gcc
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
+        cmake --build build
       "
 
   # Lint
@@ -63,7 +66,7 @@ services:
         find src -name '*.cpp' -o -name '*.hpp' | xargs clang-format --dry-run --Werror
       "
 
-  # テスト
+  # テスト（ユニットテスト + 統合テスト）
   test:
     build:
       context: .
@@ -71,12 +74,12 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
+      - build-cache:/workspace/build
     working_dir: /workspace
     command: >
       bash -c "
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON &&
-        cmake --build build &&
-        ctest --test-dir build --output-on-failure
+        make build-all &&
+        make test
       "
 
   # カバレッジ
@@ -87,6 +90,7 @@ services:
     image: cm-dev:latest
     volumes:
       - .:/workspace
+      - build-coverage-cache:/workspace/build
     working_dir: /workspace
     command: >
       bash -c "
@@ -96,3 +100,9 @@ services:
         lcov --capture --directory build --output-file coverage.info &&
         lcov --remove coverage.info '/usr/*' --output-file coverage.info
       "
+
+# Named volumes: Docker専用のbuildディレクトリ（ローカルのbuild/を汚染しない）
+volumes:
+  build-cache:
+  build-gcc-cache:
+  build-coverage-cache:
