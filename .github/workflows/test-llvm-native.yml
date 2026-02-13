@@ -65,12 +65,14 @@ jobs:
       - name: Build
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
       
+      - name: Build runtime libraries
+        run: make libs
+      
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: cm-native-build-${{ matrix.os }}
           path: |
-            build/bin/
             build/lib/
             cm
           retention-days: 1
@@ -93,7 +95,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: cm-native-build-${{ matrix.os }}
-      - run: chmod +x build/bin/* cm 2>/dev/null || true
+      - run: chmod +x cm 2>/dev/null || true
       
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
@@ -227,7 +229,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: cm-native-build-${{ matrix.os }}
-      - run: chmod +x build/bin/* cm 2>/dev/null || true
+      - run: chmod +x cm 2>/dev/null || true
       
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'

@@ -97,10 +97,13 @@ jobs:
       - name: Build
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
       
+      - name: Build runtime libraries
+        run: make libs
+      
       - name: Verify build
         run: |
           echo "=== Build Verification ==="
-          ls -la build/bin/ || echo "No bin directory"
+          ls -la build/lib/ || echo "No lib directory"
           ./cm --version || echo "cm not found in root"
           echo "✅ Build completed successfully"
 
