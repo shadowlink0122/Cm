@@ -47,7 +47,8 @@ help:
 	@echo "Build Commands:"
 	@echo "  make all            - ビルド（テスト含む）"
 	@echo "  make build          - cmコンパイラのみビルド"
-	@echo "  make build-all      - テストを含むビルド"
+	@echo "  make libs           - ランタイムライブラリのビルド"
+	@echo "  make build-all      - テストを含む全ビルド"
 	@echo "  make release        - リリースビルド"
 	@echo "  make clean          - ビルドディレクトリをクリーン"
 	@echo "  make rebuild        - クリーン後に再ビルド"
@@ -128,7 +129,7 @@ help:
 # ========================================
 
 .PHONY: all
-all: build-all
+all: build libs
 
 .PHONY: build
 build:
@@ -137,11 +138,22 @@ build:
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
 	@echo "✅ Build complete! ($(ARCH))"
 
+.PHONY: libs
+libs:
+	@echo "Building runtime libraries (arch=$(ARCH))..."
+	@$(MAKE) -C libs/native ARCH=$(ARCH) all-with-wasm
+	@echo "✅ Runtime libraries build complete!"
+
+.PHONY: libs-clean
+libs-clean:
+	@$(MAKE) -C libs/native clean
+
 .PHONY: build-all
 build-all:
 	@echo "Building Cm compiler with tests (debug mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@$(MAKE) libs
 	@echo "✅ Build complete (with tests, $(ARCH))!"
 
 .PHONY: release
@@ -149,6 +161,7 @@ release:
 	@echo "Building Cm compiler (release mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
 
 .PHONY: clean
@@ -162,6 +175,7 @@ clean:
 
 .PHONY: rebuild
 rebuild: clean build-all
+
 
 # ========================================
 # Unit Test Commands (C++ tests via ctest)

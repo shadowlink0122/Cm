@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y \
     clang-format-17 \
     clang-tidy-17 \
     lld-17 \
+    # OpenSSL（HTTPS対応）
+    libssl-dev \
     # テスト・カバレッジ
     lcov \
     # その他

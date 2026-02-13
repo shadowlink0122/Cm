@@ -278,13 +278,13 @@ if(APPLE)
     endif()
 endif()
 find_package(OpenSSL QUIET)
-if(OpenSSL_FOUND)
+if(OpenSSL_FOUND AND TARGET OpenSSL::SSL)
     message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
     target_include_directories(cm PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(cm PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     target_compile_definitions(cm PRIVATE CM_HAS_OPENSSL)
 else()
-    message(WARNING "OpenSSL not found - HTTPS support disabled")
+    message(STATUS "OpenSSL not found - HTTPS support disabled")
 endif()
 
 # Link LLVM backend if enabled
@@ -356,9 +356,8 @@ if(CM_USE_LLVM)
         
         message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
         
-        # Build LLVM runtime library
-        # Cランタイムをコンパイルしてbuild/lib/に配置
-        # -ffunction-sections: 関数ごとにセクションを分離（デッドコード削除を有効化）
+        # コアランタイムのビルド（JITシンボル解決に必須）
+        # cm_runtime.oはcm実行ファイルにリンクされるためCMakeで管理
         set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
         set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
@@ -367,137 +366,25 @@ if(CM_USE_LLVM)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
             COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
-            COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
+            COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 
-        # Apple環境: GPUランタイムを別途ビルド（ネイティブコンパイル用）
-        if(APPLE)
-            set(CM_GPU_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/gpu/gpu_runtime.mm)
-            set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
-            add_custom_command(
-                OUTPUT ${CM_GPU_RUNTIME_OUTPUT}
-                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-                COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_GPU_RUNTIME_SOURCE}
-                        -o ${CM_GPU_RUNTIME_OUTPUT} -O2 -std=c++17
-                        -fobjc-arc ${CM_RUNTIME_ARCH_FLAG}
-                DEPENDS ${CM_GPU_RUNTIME_SOURCE}
-                COMMENT "Building Cm GPU runtime library (Metal)"
-            )
-        endif()
-
-        # stdランタイムを個別オブジェクトファイルとしてビルド（LLVM Nativeリンク用）
-        # --- Net Runtime ---
-        set(CM_NET_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/net/net_runtime.cpp)
-        set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
-        add_custom_command(
-            OUTPUT ${CM_NET_RUNTIME_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_NET_RUNTIME_SOURCE}
-                    -o ${CM_NET_RUNTIME_OUTPUT} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_NET_RUNTIME_SOURCE}
-            COMMENT "Building Cm net runtime library"
-        )
-
-        # --- Sync Runtime (sync + channel を1つのアーカイブに) ---
-        set(CM_SYNC_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/sync/sync_runtime.cpp)
-        set(CM_CHANNEL_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/sync/channel_runtime.cpp)
-        set(CM_SYNC_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime_obj.o)
-        set(CM_CHANNEL_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_channel_runtime_obj.o)
-        set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
-        add_custom_command(
-            OUTPUT ${CM_SYNC_RUNTIME_OBJ}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_SYNC_RUNTIME_SOURCE}
-                    -o ${CM_SYNC_RUNTIME_OBJ} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_SYNC_RUNTIME_SOURCE}
-            COMMENT "Building Cm sync runtime object"
-        )
-        add_custom_command(
-            OUTPUT ${CM_CHANNEL_RUNTIME_OBJ}
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_CHANNEL_RUNTIME_SOURCE}
-                    -o ${CM_CHANNEL_RUNTIME_OBJ} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_CHANNEL_RUNTIME_SOURCE}
-            COMMENT "Building Cm channel runtime object"
-        )
-        add_custom_command(
-            OUTPUT ${CM_SYNC_RUNTIME_OUTPUT}
-            COMMAND ar rcs ${CM_SYNC_RUNTIME_OUTPUT} ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
-            DEPENDS ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
-            COMMENT "Creating Cm sync runtime archive"
-        )
-
-        # --- Thread Runtime ---
-        set(CM_THREAD_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/thread/thread_runtime.cpp)
-        set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
-        add_custom_command(
-            OUTPUT ${CM_THREAD_RUNTIME_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_THREAD_RUNTIME_SOURCE}
-                    -o ${CM_THREAD_RUNTIME_OUTPUT} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_THREAD_RUNTIME_SOURCE}
-            COMMENT "Building Cm thread runtime library"
-        )
-
-        # --- HTTP Runtime ---
-        set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/libs/native/http/http_runtime.cpp)
-        set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
-        # OpenSSLが見つかった場合はHTTPSサポート付きでビルド
-        # CMakeリスト形式で個別引数として展開されるようにする
-        set(CM_HTTP_EXTRA_FLAGS "")
-        if(OpenSSL_FOUND)
-            set(CM_HTTP_EXTRA_FLAGS -DCM_HAS_OPENSSL -I${OPENSSL_INCLUDE_DIR})
-        endif()
-        add_custom_command(
-            OUTPUT ${CM_HTTP_RUNTIME_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_HTTP_RUNTIME_SOURCE}
-                    -o ${CM_HTTP_RUNTIME_OUTPUT} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_HTTP_EXTRA_FLAGS} ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_HTTP_RUNTIME_SOURCE}
-            COMMENT "Building Cm HTTP runtime library"
-        )
-
-        # Build WASM runtime library
-        set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
-        set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
-        set(CM_RUNTIME_WASM_PRINT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c)
-        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
-
-        add_custom_command(
-            OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
-            DEPENDS ${CM_RUNTIME_WASM_SOURCE} ${CM_RUNTIME_WASM_FORMAT} ${CM_RUNTIME_WASM_PRINT}
-            COMMENT "Building Cm WASM runtime library"
-        )
-
-        # ランタイムターゲット
-        set(CM_STD_RUNTIME_DEPS
-            ${CM_NET_RUNTIME_OUTPUT}
-            ${CM_SYNC_RUNTIME_OUTPUT}
-            ${CM_THREAD_RUNTIME_OUTPUT}
-            ${CM_HTTP_RUNTIME_OUTPUT}
-        )
-        if(APPLE)
-            add_custom_target(cm_runtime ALL DEPENDS
-                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT} ${CM_GPU_RUNTIME_OUTPUT}
-                ${CM_STD_RUNTIME_DEPS}
-            )
-        else()
-            add_custom_target(cm_runtime ALL DEPENDS
-                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT}
-                ${CM_STD_RUNTIME_DEPS}
-            )
-        endif()
+        add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT})
         add_dependencies(cm cm_runtime)
-        
-        # ランタイムライブラリをcm実行ファイルにリンク（JIT用）
-        # これによりランタイム関数がホストプロセスのシンボルテーブルに追加される
+
+        # コアランタイムをcm実行ファイルにリンク（JIT用シンボルエクスポート）
         target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
+        
+        # stdランタイムライブラリのパス定義
+        # ビルドは make libs (libs/native/Makefile) で実行
+        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+        set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
+        set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
+        set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
+        set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
+        if(APPLE)
+            set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
+        endif()
         
         # ランタイムライブラリのパスをコンパイル時に埋め込む
         if(APPLE)
