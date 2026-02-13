@@ -156,13 +156,19 @@ brew install wasmtime node
 ```bash
 # 必須パッケージ
 sudo apt-get update
-sudo apt-get install -y cmake build-essential git make
+sudo apt-get install -y cmake build-essential git make pkg-config
 
 # LLVM 17
 wget https://apt.llvm.org/llvm.sh
 chmod +x llvm.sh
 sudo ./llvm.sh 17
 sudo apt-get install -y llvm-17-dev clang-17
+
+# OpenSSL（HTTPS通信サポート、オプション）
+sudo apt-get install -y libssl-dev
+
+# GTest（C++ユニットテスト、オプション）
+sudo apt-get install -y libgtest-dev
 
 # オプション: wasmtime
 curl https://wasmtime.dev/install.sh -sSf | bash
@@ -214,12 +220,18 @@ cd Cm
 ### 2. makeでビルド（推奨）
 
 ```bash
-# デフォルトビルド（LLVM有効、デバッグモード）
-make build
+# 全ビルド（コンパイラ + ランタイムライブラリ）
+make all
+
+# またはステップごとに
+make build   # コンパイラのみ
+make libs    # ランタイムライブラリのみ
 
 # リリースビルド（最適化あり）
 make release
 ```
+
+> `./cm` は `build/bin/cm` へのシンボリックリンクです。
 
 ### 3. アーキテクチャ指定ビルド
 
@@ -235,7 +247,24 @@ make build ARCH=x86_64
 
 > デフォルトではLLVMの`llvm-config --host-target`から自動検出されます。
 
-### 4. CMake直接ビルド
+### 4. Docker環境でのビルド
+
+Docker環境ではnamed volumeにより、ローカルのbuild/を汚さずにビルド・テストできます。
+
+```bash
+# Dockerイメージのビルド
+docker compose build dev
+
+# コンテナ内で開発シェル起動
+docker compose run --rm dev
+
+# ビルド + テスト実行
+docker compose run --rm test
+```
+
+> ローカルのbuild/ディレクトリとDockerのbuild/は独立しています。
+
+### 5. CMake直接ビルド
 
 makeを使わない場合は直接CMakeを使用できます：
 
@@ -252,7 +281,7 @@ cmake --build build
 cmake --build build -j8
 ```
 
-### 5. ビルド確認
+### 6. ビルド確認
 
 ```bash
 ./cm --version
@@ -266,8 +295,10 @@ cmake --build build -j8
 
 | コマンド | エイリアス | 説明 |
 |---------|----------|------|
-| `make build` | `make b` | デバッグビルド (LLVM有効) |
-| `make build-all` | - | テスト込みビルド |
+| `make all` | - | コンパイラ + ランタイム（推奨） |
+| `make build` | `make b` | コンパイラのみ (CMake) |
+| `make libs` | - | ランタイムライブラリのみ (Make) |
+| `make build-all` | - | テスト込み全ビルド |
 | `make release` | - | リリースビルド (最適化あり) |
 | `make clean` | - | ビルドディレクトリ削除 |
 | `make rebuild` | - | クリーン → ビルド |
@@ -526,9 +557,40 @@ export CC=gcc-12
 #### cmコマンドが見つからない
 
 ```bash
+# ./cm はシンボリックリンク: build/bin/cm を参照
+ls -la ./cm
+
 # パスを通す
-export PATH="$PWD/build/bin:$PATH"
+export PATH="$PWD:$PATH"
 ```
+
+#### OpenSSL関連エラー
+
+OpenSSLはHTTPS通信のオプション依存です。未インストールでもビルドは成功しますが、HTTPSは無効になります。
+
+```bash
+# macOS
+brew install openssl@3
+
+# Ubuntu/Debian
+sudo apt-get install libssl-dev
+```
+
+> CMakeの出力で `OpenSSL found: x.x.x` が表示されればHTTPSは有効です。  
+> `OpenSSL not found - HTTPS support disabled` が表示されてもビルド自体は正常です。
+
+#### GTestが見つからない（ユニットテスト）
+
+```bash
+# macOS
+brew install googletest
+
+# Ubuntu/Debian
+sudo apt-get install libgtest-dev
+```
+
+> GTestが無くてもコンパイラのビルドとCmテスト(`make tip`)は実行可能です。  
+> C++ユニットテスト(`make test`)のみスキップされます。
 
 #### ライブラリが見つからない（LLVM）
 
@@ -685,4 +747,4 @@ make build ARCH=x86_64
 **次の章:** [Hello, World!](hello-world.html)
 ---
 
-**最終更新:** 2026-02-10
+**最終更新:** 2026-02-13

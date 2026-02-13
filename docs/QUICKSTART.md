@@ -34,12 +34,15 @@ git clone https://github.com/shadowlink0122/Cm.git
 cd Cm
 
 # makeでビルド（推奨）
-make build
+make all      # コンパイラ + ランタイムライブラリ
 
 # アーキテクチャ指定ビルド
 make build ARCH=arm64     # Apple Silicon
 make build ARCH=x86_64    # Intel / Linux
 ```
+
+> `./cm` は `build/bin/cm` へのシンボリックリンクです。  
+> Docker環境では `docker compose run --rm test` でビルド・テストが実行できます。
 
 > CMakeの直接実行や詳細なオプションについては [環境構築](tutorials/ja/basics/setup.html) を参照。
 
@@ -167,8 +170,8 @@ int main() {
 ## 🧪 テスト実行
 
 ```bash
-# C++ユニットテスト
-make t
+# C++ユニットテスト（GTest必須）
+make test
 
 # JITテスト（並列）
 make tip
@@ -181,6 +184,9 @@ make tlwp
 
 # JSテスト（並列・Node.js必要）
 make tjp
+
+# Dockerでテスト
+docker compose run --rm test
 ```
 
 > 📖 makeコマンドの全一覧は [環境構築](tutorials/ja/basics/setup.html) を参照。
@@ -215,4 +221,4 @@ make tjp
 
 ---
 
-**最終更新:** 2026-02-12
+**最終更新:** 2026-02-13
