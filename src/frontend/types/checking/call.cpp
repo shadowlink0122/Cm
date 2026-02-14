@@ -4,6 +4,8 @@
 
 #include "../type_checker.hpp"
 
+#include <sstream>
+
 namespace cm {
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {

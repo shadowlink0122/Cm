@@ -235,6 +235,14 @@ set(CM_SOURCES
     # MIR analysis (解析モジュール)
     src/mir/analysis/dominators.cpp
     src/mir/analysis/loop_analysis.cpp
+    # 共通ライブラリ (HPP/CPP分離 Phase5)
+    src/fmt/formatter.cpp
+    src/common/format_string.cpp
+    src/common/source_location.cpp
+    src/common/diagnostics.cpp
+    src/hir/string_interpolation.cpp
+    src/diagnostics/engine.cpp
+    src/diagnostics/catalog.cpp
 )
 
 # JavaScript backend (LLVMに依存しない)
