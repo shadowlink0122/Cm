@@ -1,0 +1,20 @@
+=== Result Chain Test ===
+--- Chain Test ---
+divide ok: 20
+range ok: 20
+divide ok: 33
+range fail: exceeds maximum
+divide fail: division by zero
+--- Multiple Returns Test ---
+digit(0): 0
+digit(3): 3
+digit(9): 9
+digit(12): not a single digit
+digit(-1): negative digit
+--- Accumulate Test ---
+100/1 = 100
+100/2 = 50
+100/3 = 33
+100/4 = 25
+fail: division by zero
+=== PASS ===

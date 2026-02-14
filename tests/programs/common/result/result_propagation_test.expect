@@ -1,0 +1,16 @@
+=== Result Propagation Test ===
+--- Int/Int Result ---
+17 mod 5 = 2
+10 mod 3 = 1
+mod err: -1
+--- Int/String Result ---
+age ok: 25
+age ng: age cannot be negative
+age ng: age too large
+age ok: 0
+age ok: 150
+--- Sequential Test ---
+20/4 = 5
+fail: division by zero
+100 mod 7 = 2
+=== PASS ===

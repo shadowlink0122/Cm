@@ -349,13 +349,14 @@ check_platform_directive() {
 run_single_test() {
     local test_file="$1"
     local test_name="$(basename "${test_file%.cm}")"
-    local category="$(basename "$(dirname "$test_file")")"
+    # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+    local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
     local expect_file="${test_file%.cm}.expect"
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local error_expect_file="${test_file%.cm}.error"
     local backend_error_file="${test_file%.cm}.error.${BACKEND}"
-    local output_file="$TEMP_DIR/${category}_${test_name}.out"
-    local error_file="$TEMP_DIR/${category}_${test_name}.err"
+    local output_file="$TEMP_DIR/${category//\//_}_${test_name}.out"
+    local error_file="$TEMP_DIR/${category//\//_}_${test_name}.err"
     local is_error_test=false
 
     # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
@@ -965,8 +966,9 @@ run_tests_parallel() {
     
     for test_file in "${test_files[@]}"; do
         local test_name="$(basename "${test_file%.cm}")"
-        local category="$(basename "$(dirname "$test_file")")"
-        local result_file="$results_dir/${category}_${test_name}.result"
+        # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+        local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
+        local result_file="$results_dir/${category//\//_}_${test_name}.result"
         
         # バックグラウンドでテスト実行
         (
@@ -991,8 +993,9 @@ run_tests_parallel() {
     # 結果を集計
     for test_file in "${test_files[@]}"; do
         local test_name="$(basename "${test_file%.cm}")"
-        local category="$(basename "$(dirname "$test_file")")"
-        local result_file="$results_dir/${category}_${test_name}.result"
+        # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+        local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
+        local result_file="$results_dir/${category//\//_}_${test_name}.result"
         
         if [ -f "$result_file" ]; then
             local result=$(cat "$result_file")
@@ -1031,12 +1034,13 @@ run_parallel_test() {
     local test_file="$1"
     local result_file="$2"
     local test_name="$(basename "${test_file%.cm}")"
-    local category="$(basename "$(dirname "$test_file")")"
+    # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+    local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
     local expect_file="${test_file%.cm}.expect"
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local error_expect_file="${test_file%.cm}.error"
     local backend_error_file="${test_file%.cm}.error.${BACKEND}"
-    local output_file="$TEMP_DIR/${category}_${test_name}_${BASHPID}_${RANDOM}.out"
+    local output_file="$TEMP_DIR/${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.out"
     local is_error_test=false
 
     # テスト別タイムアウト: .timeoutファイルがあれば値を上書き

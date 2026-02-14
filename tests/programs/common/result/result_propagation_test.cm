@@ -1,0 +1,104 @@
+// Result型のエラー伝播パターンテスト
+// 異なる型パラメータの組み合わせを検証
+import std::io::println;
+
+// Result型を明示的に定義
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+// --- int, int ペイロード ---
+Result<int, int> safe_mod(int a, int b) {
+    if (b == 0) {
+        return Result::Err(-1);
+    }
+    // a mod b = a - (a/b)*b
+    int q = a / b;
+    int rem = a - q * b;
+    return Result::Ok(rem);
+}
+
+// --- int, string ペイロード ---
+Result<int, string> validate_age(int age) {
+    if (age < 0) {
+        return Result::Err("age cannot be negative");
+    }
+    if (age > 150) {
+        return Result::Err("age too large");
+    }
+    return Result::Ok(age);
+}
+
+// --- 安全な除算 ---
+Result<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return Result::Err("division by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+int main() {
+    println("=== Result Propagation Test ===");
+
+    // --- Int/Int Result テスト ---
+    println("--- Int/Int Result ---");
+    Result<int, int> m1 = safe_mod(17, 5);
+    match (m1) {
+        Result::Ok(v) => { println("17 mod 5 = {v}"); }
+        Result::Err(e) => { println("mod err: {e}"); }
+    }
+    Result<int, int> m2 = safe_mod(10, 3);
+    match (m2) {
+        Result::Ok(v) => { println("10 mod 3 = {v}"); }
+        Result::Err(e) => { println("mod err: {e}"); }
+    }
+    Result<int, int> m3 = safe_mod(10, 0);
+    match (m3) {
+        Result::Ok(v) => { println("10 mod 0 = {v}"); }
+        Result::Err(e) => { println("mod err: {e}"); }
+    }
+
+    // --- Int/String Result テスト ---
+    println("--- Int/String Result ---");
+    Result<int, string> a1 = validate_age(25);
+    match (a1) {
+        Result::Ok(v) => { println("age ok: {v}"); }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+    Result<int, string> a2 = validate_age(-5);
+    match (a2) {
+        Result::Ok(v) => { println("age ok: {v}"); }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+    Result<int, string> a3 = validate_age(200);
+    match (a3) {
+        Result::Ok(v) => { println("age ok: {v}"); }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+    Result<int, string> a4 = validate_age(0);
+    match (a4) {
+        Result::Ok(v) => { println("age ok: {v}"); }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+    Result<int, string> a5 = validate_age(150);
+    match (a5) {
+        Result::Ok(v) => { println("age ok: {v}"); }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+
+    // --- 連続実行テスト ---
+    println("--- Sequential Test ---");
+    // 複数のResult関数を順に呼び出し、それぞれmatchで結果表示
+    Result<int, string> s1 = safe_divide(20, 4);
+    match (s1) { Result::Ok(v) => { println("20/4 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
+
+    Result<int, string> s2 = safe_divide(20, 0);
+    match (s2) { Result::Ok(v) => { println("20/0 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
+
+    Result<int, int> s3 = safe_mod(100, 7);
+    match (s3) { Result::Ok(v) => { println("100 mod 7 = {v}"); } Result::Err(e) => { println("mod fail: {e}"); } }
+
+    println("=== PASS ===");
+    return 0;
+}
