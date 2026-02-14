@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * VSCode拡張機能のバージョンがcm_config.jsonと一致しているか確認するスクリプト
+ * VSCode拡張機能のバージョンがルートのVERSIONファイルと一致しているか確認するスクリプト
  * CI/CDやビルド前のチェックに使用
  * 使用方法: node out/verify-version.js
  */
@@ -10,11 +10,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // 型定義
-interface CmConfig {
-  version: string;
-  [key: string]: unknown;
-}
-
 interface PackageJson {
   version: string;
   [key: string]: unknown;
@@ -22,20 +17,19 @@ interface PackageJson {
 
 // パス設定
 const rootDir = path.join(__dirname, '../..');
-const configFile = path.join(rootDir, 'cm_config.json');
+const versionFile = path.join(rootDir, 'VERSION');
 const packageJsonPath = path.join(__dirname, '../package.json');
 
-// cm_config.jsonファイルを読み込み
-if (!fs.existsSync(configFile)) {
-  console.error('❌ Error: cm_config.json file not found at', configFile);
+// VERSIONファイルを読み込み
+if (!fs.existsSync(versionFile)) {
+  console.error('❌ Error: VERSION file not found at', versionFile);
   process.exit(1);
 }
 
-const config: CmConfig = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-const expectedVersion = config.version;
+const expectedVersion = fs.readFileSync(versionFile, 'utf8').trim();
 
 if (!expectedVersion) {
-  console.error('❌ Error: version field not found in cm_config.json');
+  console.error('❌ Error: VERSION file is empty');
   process.exit(1);
 }
 
@@ -51,7 +45,7 @@ const actualVersion = packageJson.version;
 // バージョンチェック
 if (actualVersion !== expectedVersion) {
   console.error('❌ Version mismatch detected!');
-  console.error('   cm_config.json:', expectedVersion);
+  console.error('   VERSION:', expectedVersion);
   console.error('   package.json:', actualVersion);
   console.error('');
   console.error('💡 Fix by running: cd vscode-extension && npm run update-version');
@@ -59,4 +53,4 @@ if (actualVersion !== expectedVersion) {
 }
 
 console.log('✅ Version check passed:', actualVersion);
-console.log('   VSCode extension version matches cm_config.json');
+console.log('   VSCode extension version matches VERSION file');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * VSCode拡張機能のバージョンをルートのcm_config.jsonから自動更新するスクリプト
+ * VSCode拡張機能のバージョンをルートのVERSIONファイルから自動更新するスクリプト
  * 使用方法: node out/update-version.js
  */
 
@@ -9,11 +9,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // 型定義
-interface CmConfig {
-  version: string;
-  [key: string]: unknown;
-}
-
 interface PackageJson {
   version: string;
   [key: string]: unknown;
@@ -21,26 +16,25 @@ interface PackageJson {
 
 // パス設定
 const rootDir = path.join(__dirname, '../..');
-const configFile = path.join(rootDir, 'cm_config.json');
+const versionFile = path.join(rootDir, 'VERSION');
 const packageJsonPath = path.join(__dirname, '../package.json');
 
-// cm_config.jsonファイルを読み込み
-if (!fs.existsSync(configFile)) {
-  console.error('❌ Error: cm_config.json file not found at', configFile);
+// VERSIONファイルを読み込み
+if (!fs.existsSync(versionFile)) {
+  console.error('❌ Error: VERSION file not found at', versionFile);
   process.exit(1);
 }
 
-const config: CmConfig = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-const version = config.version;
+const version = fs.readFileSync(versionFile, 'utf8').trim();
 
 if (!version) {
-  console.error('❌ Error: version field not found in cm_config.json');
+  console.error('❌ Error: VERSION file is empty');
   process.exit(1);
 }
 
 // バージョンフォーマットチェック (x.y.z)
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
-  console.error('❌ Error: Invalid version format in cm_config.json:', version);
+  console.error('❌ Error: Invalid version format in VERSION:', version);
   console.error('   Expected format: x.y.z (e.g., 0.14.0)');
   process.exit(1);
 }
@@ -69,5 +63,5 @@ fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', '
 console.log('✅ Version updated successfully:');
 console.log('   Old version:', oldVersion);
 console.log('   New version:', version);
-console.log('   Source:', configFile);
+console.log('   Source:', versionFile);
 console.log('   Target:', packageJsonPath);

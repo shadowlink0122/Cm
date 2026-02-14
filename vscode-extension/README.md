@@ -63,7 +63,7 @@ pnpm run package      # VSIXパッケージ作成
 
 ### バージョン管理
 
-バージョンはルートの `cm_config.json` から自動同期:
+バージョンはルートの `VERSION` ファイルから自動同期:
 
 ```bash
 pnpm run update-version   # バージョンを同期
