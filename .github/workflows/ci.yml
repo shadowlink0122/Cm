@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   BUILD_TYPE: Debug
@@ -12,7 +13,7 @@ env:
 
 jobs:
   # ========================================
-  # Lint - コードフォーマットチェック
+  # Lint - コードフォーマットチェック（独立・並列）
   # ========================================
   lint:
     name: Lint
@@ -29,7 +30,36 @@ jobs:
             xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
 
   # ========================================
-  # Build - ビルド (Linux/macOS)
+  # Extension Lint - VSCode拡張機能チェック（独立・並列）
+  # ========================================
+  extension-lint:
+    name: Extension Lint
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: TypeScript compile
+        run: npm run compile
+
+      - name: ESLint check
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npm run format:check
+
+  # ========================================
+  # Build - 全テスト共通（OS別1回のみ）
   # ========================================
   build:
     name: Build (${{ matrix.os }})
@@ -47,12 +77,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        id: cache-llvm
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
           sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
           echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
           echo "LLVM_DIR=/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm" >> $GITHUB_ENV
@@ -98,34 +139,237 @@ jobs:
         run: |
           echo "=== Build Verification ==="
           ls -la build/lib/ || echo "No lib directory"
-          ./cm --version || echo "cm not found in root"
-          echo "✅ Build completed successfully"
+          ./cm --version || echo "cm not found"
+          echo "✅ Build completed (${{ matrix.arch }})"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+          path: |
+            build/bin/
+            build/lib/
+            cm
+          retention-days: 1
 
   # ========================================
-  # Extension Lint - VSCode拡張機能のTypeScript/Lintチェック
+  # Unit Tests（ビルド共有、matrix並列）
   # ========================================
-  extension-lint:
-    name: Extension Lint (TypeScript)
-    runs-on: ubuntu-22.04
-    defaults:
-      run:
-        working-directory: vscode-extension
+  unit-test:
+    name: Unit ${{ matrix.test_name }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        include:
+          - os: ubuntu-22.04
+            test_name: Lexer
+            test_bin: lexer_test
+          - os: macos-14
+            test_name: Lexer
+            test_bin: lexer_test
+          - os: ubuntu-22.04
+            test_name: HIR Lowering
+            test_bin: hir_lowering_test
+          - os: macos-14
+            test_name: HIR Lowering
+            test_bin: hir_lowering_test
+          - os: ubuntu-22.04
+            test_name: MIR Lowering
+            test_bin: mir_lowering_test
+          - os: macos-14
+            test_name: MIR Lowering
+            test_bin: mir_lowering_test
+          - os: ubuntu-22.04
+            test_name: MIR Optimization
+            test_bin: mir_optimization_test
+          - os: macos-14
+            test_name: MIR Optimization
+            test_bin: mir_optimization_test
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+
+      - run: chmod +x build/bin/* cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+
+      - name: Run ${{ matrix.test_name }} Test
+        run: ./build/bin/${{ matrix.test_bin }} --gtest_output=xml:test-results.xml
+
+  # ========================================
+  # Integration Tests（ビルド共有、16並列）
+  # 4バックエンド × O0/O3 × 2OS
+  # ========================================
+  integration-test:
+    name: ${{ matrix.config.name }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        config:
+          - { id: jit-o0,  name: "JIT O0",         target: tjitp0, backend: jit,       needs_node: false }
+          - { id: jit-o3,  name: "JIT O3",         target: tjitp3, backend: jit,       needs_node: false }
+          - { id: llvm-o0, name: "LLVM Native O0", target: tlp0,   backend: llvm,      needs_node: false }
+          - { id: llvm-o3, name: "LLVM Native O3", target: tlp3,   backend: llvm,      needs_node: false }
+          - { id: wasm-o0, name: "LLVM WASM O0",   target: tlwp0,  backend: llvm-wasm, needs_node: false }
+          - { id: wasm-o3, name: "LLVM WASM O3",   target: tlwp3,  backend: llvm-wasm, needs_node: false }
+          - { id: js-o0,   name: "JS O0",          target: tjp0,   backend: js,        needs_node: true  }
+          - { id: js-o3,   name: "JS O3",          target: tjp3,   backend: js,        needs_node: true  }
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+
       - name: Setup Node.js
+        if: matrix.config.needs_node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install wasmtime
+        if: matrix.config.backend == 'llvm-wasm'
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "latest"
 
-      - name: TypeScript compile
-        run: npm run compile
+      - name: Run ${{ matrix.config.name }} Tests
+        id: run_tests
+        run: |
+          set +e
+          make ${{ matrix.config.target }} 2>&1 | tee test_output.log
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          echo "test_exit_code=${TEST_EXIT_CODE}" >> $GITHUB_OUTPUT
+          # FAIL行と詳細をAnnotationに出力
+          awk '
+          /\[FAIL\]/ {
+            fail_line = $0
+            gsub(/\033\[[0-9;]*m/, "", fail_line)
+            detail = ""
+            collecting = 1
+            next
+          }
+          collecting && /^  (Expected|Got|Diff|Output)/ {
+            line = $0
+            gsub(/\033\[[0-9;]*m/, "", line)
+            detail = detail " | " line
+            next
+          }
+          collecting && !/^  / {
+            print "::error::" fail_line detail
+            collecting = 0
+          }
+          END {
+            if (collecting) {
+              print "::error::" fail_line detail
+            }
+          }
+          ' test_output.log
+          grep -E "^(Total|Passed|Failed|Skipped|Status):" test_output.log | while read -r line; do
+            echo "::notice::${line}"
+          done
+          exit ${TEST_EXIT_CODE}
 
-      - name: ESLint check
-        run: npm run lint
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.config.id }}-${{ matrix.os }}
+          path: test_output.log
+          retention-days: 7
 
-      - name: Prettier format check
-        run: npm run format:check
+  # ========================================
+  # Baremetal / UEFI コンパイルテスト（Linuxのみ）
+  # ========================================
+  baremetal-test:
+    name: Baremetal / UEFI
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-22.04
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04
+
+      - name: Install LLVM
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Run Baremetal compile tests
+        run: make test-baremetal
+
+      - name: Run UEFI compile tests
+        run: make test-uefi
