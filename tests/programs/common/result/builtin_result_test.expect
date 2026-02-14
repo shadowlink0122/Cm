@@ -1,0 +1,4 @@
+=== Result Type Test ===
+10 / 2 = 5
+Err: Division by zero
+=== PASS ===

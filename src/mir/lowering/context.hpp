@@ -70,6 +70,9 @@ class LoweringContext {
     // インターフェース名のセット - 親クラスから参照
     const std::unordered_set<std::string>* interface_names = nullptr;
 
+    // Tagged Union（ペイロード付きenum）名のセット - 親クラスから参照
+    const std::unordered_set<std::string>* tagged_union_names = nullptr;
+
     // グローバルconst変数の値 - 親クラスから参照
     const std::unordered_map<std::string, MirConstant>* global_const_values = nullptr;
 
@@ -112,9 +115,9 @@ class LoweringContext {
 
     // 新しいローカル変数を作成（typedefを解決）
     LocalId new_local(const std::string& name, hir::TypePtr type, bool is_mutable = true,
-                      bool is_user = true, bool is_static = false) {
+                      bool is_user = true, bool is_static = false, bool is_global = false) {
         auto resolved_type = resolve_typedef(type);
-        return func->add_local(name, resolved_type, is_mutable, is_user, is_static);
+        return func->add_local(name, resolved_type, is_mutable, is_user, is_static, is_global);
     }
 
     // 新しい一時変数を作成（typedefを解決）
@@ -455,9 +458,16 @@ class LoweringContext {
                 }
             }
 
-            // enum定義を確認（enum型はintとして扱う）
+            // enum定義を確認
             if (enum_defs) {
                 if (auto it = enum_defs->find(type->name); it != enum_defs->end()) {
+                    // Tagged Union enum（ペイロード付き）は__TaggedUnion_構造体として扱う
+                    if (tagged_union_names && tagged_union_names->count(type->name)) {
+                        auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                        tagged_union_type->name = "__TaggedUnion_" + type->name;
+                        return tagged_union_type;
+                    }
+                    // 通常のenum（値のみ）はintとして扱う
                     return hir::make_int();
                 }
             }

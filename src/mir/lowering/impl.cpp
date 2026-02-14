@@ -83,6 +83,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
     // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）
@@ -93,26 +94,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
 
     // 他のパラメータを登録
     for (const auto& param : op_impl.params) {
-        hir::TypePtr resolved_param_type;
-
-        // Tagged Union enum型の場合、resolve_typedef前に構造体型に変換
-        // （resolve_typedefは全enum型をintに変換するため、元の型名で判定が必要）
-        bool is_tagged_union_param = false;
-        if (param.type && !param.type->name.empty() && enum_defs.count(param.type->name)) {
-            for (const auto& e : mir_program.enums) {
-                if (e->name == param.type->name && e->is_tagged_union()) {
-                    is_tagged_union_param = true;
-                    break;
-                }
-            }
-        }
-        if (is_tagged_union_param) {
-            auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-            tagged_union_type->name = "__TaggedUnion_" + param.type->name;
-            resolved_param_type = tagged_union_type;
-        } else {
-            resolved_param_type = resolve_typedef(param.type);
-        }
+        auto resolved_param_type = resolve_typedef(param.type);
 
         LocalId param_id = ctx.new_local(param.name, resolved_param_type, false);
         mir_func->arg_locals.push_back(param_id);
@@ -173,25 +155,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     if (func.is_extern) {
         // パラメータを記録
         for (const auto& param : func.params) {
-            hir::TypePtr resolved_param_type;
-
-            // Tagged Union enum型チェック（resolve_typedef前に元の型名で判定）
-            bool is_tagged_union_param = false;
-            if (param.type && !param.type->name.empty() && enum_defs.count(param.type->name)) {
-                for (const auto& e : mir_program.enums) {
-                    if (e->name == param.type->name && e->is_tagged_union()) {
-                        is_tagged_union_param = true;
-                        break;
-                    }
-                }
-            }
-            if (is_tagged_union_param) {
-                auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                tagged_union_type->name = "__TaggedUnion_" + param.type->name;
-                resolved_param_type = tagged_union_type;
-            } else {
-                resolved_param_type = resolve_typedef(param.type);
-            }
+            auto resolved_param_type = resolve_typedef(param.type);
 
             LocalId param_id = static_cast<LocalId>(mir_func->locals.size());
             mir_func->locals.emplace_back(param_id, param.name, resolved_param_type, false, false);
@@ -210,7 +174,17 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
+
+    // グローバル変数をスコープに登録（is_global=trueのLocalDeclとして）
+    for (const auto& gv : mir_program.global_vars) {
+        if (!gv)
+            continue;
+        // グローバル変数をローカル変数として登録（is_global=true）
+        LocalId gv_id = ctx.new_local(gv->name, gv->type, !gv->is_const, true, false, true);
+        ctx.register_variable(gv->name, gv_id);
+    }
 
     // デストラクタを持つ型の情報をコンテキストに渡す
     for (const auto& type_name : types_with_destructor) {
@@ -219,26 +193,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
 
     // 関数パラメータをローカル変数として登録（typedefを解決）
     for (const auto& param : func.params) {
-        hir::TypePtr resolved_param_type;
-
-        // Tagged Union enum型チェック（resolve_typedef前に元の型名で判定）
-        // resolve_typedefは全enum型をintに変換するため、元の型名で判定が必要
-        bool is_tagged_union_param = false;
-        if (param.type && !param.type->name.empty() && enum_defs.count(param.type->name)) {
-            for (const auto& e : mir_program.enums) {
-                if (e->name == param.type->name && e->is_tagged_union()) {
-                    is_tagged_union_param = true;
-                    break;
-                }
-            }
-        }
-        if (is_tagged_union_param) {
-            auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-            tagged_union_type->name = "__TaggedUnion_" + param.type->name;
-            resolved_param_type = tagged_union_type;
-        } else {
-            resolved_param_type = resolve_typedef(param.type);
-        }
+        auto resolved_param_type = resolve_typedef(param.type);
 
         LocalId param_id = ctx.new_local(param.name, resolved_param_type, false);
         mir_func->arg_locals.push_back(param_id);

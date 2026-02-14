@@ -37,6 +37,9 @@ class MirLoweringBase {
     // インターフェース名のセット
     std::unordered_set<std::string> interface_names;
 
+    // Tagged Union（ペイロード付きenum）名のセット
+    std::unordered_set<std::string> tagged_union_names;
+
     // typedef定義 (エイリアス名 -> 実際の型)
     std::unordered_map<std::string, hir::TypePtr> typedef_defs;
 
@@ -142,9 +145,16 @@ class MirLoweringBase {
                 return resolve_typedef(it->second);
             }
 
-            // enum定義を確認（enum型はintとして扱う）
+            // enum定義を確認
             auto enum_it = enum_defs.find(type->name);
             if (enum_it != enum_defs.end()) {
+                // Tagged Union enum（ペイロード付き）は__TaggedUnion_構造体として扱う
+                if (tagged_union_names.count(type->name)) {
+                    auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                    tagged_union_type->name = "__TaggedUnion_" + type->name;
+                    return tagged_union_type;
+                }
+                // 通常のenum（値のみ）はintとして扱う
                 return hir::make_int();
             }
         }
@@ -191,8 +201,17 @@ class MirLoweringBase {
     // enum定義を登録（MirEnumも作成してmir_programに追加）
     void register_enum(const hir::HirEnum& e) {
         // enum_defsに登録（値マッピング用）
+        bool has_data = false;
         for (const auto& member : e.members) {
             enum_defs[e.name][member.name] = member.value;
+            if (!member.fields.empty()) {
+                has_data = true;
+            }
+        }
+
+        // Tagged Union（ペイロード付きenum）の場合、名前を記録
+        if (has_data) {
+            tagged_union_names.insert(e.name);
         }
 
         // MirEnumを作成してmir_programに追加
@@ -214,18 +233,44 @@ class MirLoweringBase {
         mir_program.enums.push_back(std::move(mir_enum));
     }
 
-    // グローバルconst変数を登録
+    // グローバル変数を登録
     void register_global_var(const hir::HirGlobalVar& gv) {
-        // const変数のみ登録（文字列補間で使用）
+        // const変数のみ定数評価（文字列補間で使用）
         if (gv.is_const && gv.init) {
             // コンパイル時定数評価を試行
             auto const_val = try_global_const_eval(*gv.init);
             if (const_val) {
                 const_val->type = gv.type ? gv.type : const_val->type;
                 global_const_values[gv.name] = *const_val;
+                // マクロ定数は定数展開のみで十分、グローバル変数の実体は不要
+                // MirGlobalVarに登録するとインタプリタでstring型がハングする
+                return;
             }
         }
+
+        // 非constグローバル変数のみMirGlobalVarとして登録
+        auto mir_gv = std::make_unique<MirGlobalVar>();
+        mir_gv->name = gv.name;
+        mir_gv->type = gv.type;
+        mir_gv->is_const = gv.is_const;
+        mir_gv->is_export = gv.is_export;
+
+        // 初期値を設定
+        if (gv.init) {
+            auto const_val = try_global_const_eval(*gv.init);
+            if (const_val) {
+                mir_gv->init_value = std::make_unique<MirConstant>(*const_val);
+            }
+        }
+
+        // グローバル変数名を追跡
+        global_var_names.insert(gv.name);
+
+        mir_program.global_vars.push_back(std::move(mir_gv));
     }
+
+    // グローバル変数名のセット（関数内で参照されるかの判定に使用）
+    std::unordered_set<std::string> global_var_names;
 
    private:
     // グローバルconst用のコンパイル時定数評価
