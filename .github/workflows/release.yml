@@ -1,0 +1,197 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'リリースバージョン (例: 0.14.0)'
+        required: true
+        type: string
+      arch:
+        description: 'ターゲットアーキテクチャ'
+        required: true
+        type: choice
+        options:
+          - arm64
+          - x86_64
+        default: 'arm64'
+
+env:
+  LLVM_VERSION: "17"
+
+jobs:
+  # ========================================
+  # バージョン検証
+  # ========================================
+  verify:
+    name: バージョン検証
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: バージョン整合チェック
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          INPUT_VERSION="${{ inputs.version }}"
+          
+          if [ "$FILE_VERSION" != "$INPUT_VERSION" ]; then
+            echo "::error::バージョン不一致! VERSION: ${FILE_VERSION}, 入力: ${INPUT_VERSION}"
+            exit 1
+          fi
+          
+          # VSCode拡張バージョンチェック
+          PKG_VERSION=$(node -p "require('./vscode-extension/package.json').version")
+          if [ "$FILE_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::VSCode拡張バージョン不一致! VERSION: ${FILE_VERSION}, package.json: ${PKG_VERSION}"
+            exit 1
+          fi
+          
+          echo "✅ バージョン検証OK: v${FILE_VERSION}"
+
+  # ========================================
+  # リリースビルド
+  # ========================================
+  build:
+    name: リリースビルド (${{ inputs.arch }})
+    needs: verify
+    runs-on: ${{ inputs.arch == 'arm64' && 'macos-14' || 'ubuntu-22.04' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm" >> $GITHUB_ENV
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+          echo "LDFLAGS=-L$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ env.LLVM_VERSION }})/include" >> $GITHUB_ENV
+          echo "LLVM_DIR=$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib/cmake/llvm" >> $GITHUB_ENV
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
+
+      # Releaseモードでコンパイラビルド
+      - name: コンパイラビルド (Release)
+        run: |
+          CMAKE_EXTRA_FLAGS=""
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            CMAKE_EXTRA_FLAGS="-DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)"
+          fi
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCM_USE_LLVM=ON \
+            -DCM_TARGET_ARCH=${{ inputs.arch }} \
+            $CMAKE_EXTRA_FLAGS
+          cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      # stdランタイムライブラリビルド
+      - name: ランタイムライブラリビルド
+        run: make libs ARCH=${{ inputs.arch }}
+
+      - name: ビルド検証
+        run: |
+          echo "=== Build Verification ==="
+          ./cm --version
+          echo "=== Runtime Libraries ==="
+          ls -la build/lib/
+          echo "✅ Release build complete (${{ inputs.arch }})"
+
+      # VSCode拡張パッケージング
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: VSCode拡張パッケージング
+        working-directory: vscode-extension
+        run: |
+          npm install
+          npm run compile
+          npm run verify-version
+          npx @vscode/vsce package --allow-missing-repository --skip-license
+          echo "✅ VSCode extension packaged"
+
+      # 配布物構築
+      - name: 配布物構築
+        run: |
+          VERSION="${{ inputs.version }}"
+          OS=$(uname -s | tr 'A-Z' 'a-z')
+          ARCH="${{ inputs.arch }}"
+          DIST_DIR="dist/cm-v${VERSION}-${OS}-${ARCH}"
+          
+          rm -rf "${DIST_DIR}"
+          mkdir -p "${DIST_DIR}"/{bin,lib,vscode-extension,docs/tutorials,examples}
+          
+          # コンパイラバイナリ
+          cp cm "${DIST_DIR}/bin/"
+          
+          # ランタイムライブラリ
+          cp build/lib/*.o build/lib/*.a "${DIST_DIR}/lib/" 2>/dev/null || true
+          
+          # VSCode拡張
+          cp vscode-extension/cm-language-*.vsix "${DIST_DIR}/vscode-extension/" 2>/dev/null || true
+          
+          # チュートリアル
+          cp -r docs/tutorials/ja "${DIST_DIR}/docs/tutorials/"
+          cp -r docs/tutorials/en "${DIST_DIR}/docs/tutorials/"
+          
+          # GitHub Pagesリンク案内
+          cat > "${DIST_DIR}/docs/DOCUMENTATION.md" << 'EOF'
+          # Cm ドキュメント
+          
+          ## オンラインドキュメント
+          
+          最新のドキュメントはGitHub Pagesで公開されています：
+          
+          🌐 https://shadowlink0122.github.io/Cm/
+          
+          - [クイックスタート](https://shadowlink0122.github.io/Cm/QUICKSTART.html)
+          - [言語仕様](https://shadowlink0122.github.io/Cm/design/CANONICAL_SPEC.html)
+          - [チュートリアル一覧](https://shadowlink0122.github.io/Cm/tutorials/)
+          - [機能リファレンス](https://shadowlink0122.github.io/Cm/features/)
+          - [リリースノート](https://shadowlink0122.github.io/Cm/releases/)
+          
+          ## オフラインドキュメント
+          
+          このアーカイブには以下のドキュメントが含まれています：
+          
+          - `tutorials/ja/` - 日本語チュートリアル
+          - `tutorials/en/` - 英語チュートリアル
+          EOF
+          # インデント除去
+          sed -i.bak 's/^          //' "${DIST_DIR}/docs/DOCUMENTATION.md" && rm -f "${DIST_DIR}/docs/DOCUMENTATION.md.bak"
+          
+          # サンプルコード（node_modules除外）
+          cp -r examples/* "${DIST_DIR}/examples/"
+          find "${DIST_DIR}/examples" -name "node_modules" -type d -exec rm -rf {} + 2>/dev/null || true
+          find "${DIST_DIR}/examples" -name ".DS_Store" -delete 2>/dev/null || true
+          
+          # README & VERSION
+          cp README.md VERSION "${DIST_DIR}/"
+          
+          # アーカイブ作成
+          (cd dist && tar czf "cm-v${VERSION}-${OS}-${ARCH}.tar.gz" "cm-v${VERSION}-${OS}-${ARCH}/")
+          
+          echo "=== Distribution Contents ==="
+          find "${DIST_DIR}" -type f | head -30
+          echo "..."
+          echo "=== Archive ==="
+          ls -lh "dist/cm-v${VERSION}-${OS}-${ARCH}.tar.gz"
+          echo "✅ Distribution build complete!"
+
+      # アーティファクトアップロード
+      - name: アーティファクトアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm-v${{ inputs.version }}-${{ runner.os }}-${{ inputs.arch }}
+          path: |
+            dist/cm-v${{ inputs.version }}-*.tar.gz
+          retention-days: 90

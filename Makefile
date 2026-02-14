@@ -76,6 +76,7 @@ help:
 	@echo "  make libs           - ランタイムライブラリのビルド"
 	@echo "  make build-all      - テストを含む全ビルド"
 	@echo "  make release        - リリースビルド"
+	@echo "  make dist           - 配布用アーカイブ作成 (.tar.gz)"
 	@echo "  make clean          - ビルドディレクトリをクリーン"
 	@echo "  make rebuild        - クリーン後に再ビルド"
 	@echo ""
@@ -191,6 +192,47 @@ release:
 	@ln -sf $(CM_BIN) $(CM)
 	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
+
+# 配布物ビルド（tar.gz作成）
+# 含まれるもの: コンパイラ, stdランタイム, VSCode拡張, チュートリアル, examples, README
+.PHONY: dist
+dist: release
+	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
+	OS=$$(uname -s | tr 'A-Z' 'a-z'); \
+	DIST_DIR=".tmp/cm-v$${VERSION}-$${OS}-$(ARCH)"; \
+	DIST_ARCHIVE=".tmp/cm-v$${VERSION}-$${OS}-$(ARCH).tar.gz"; \
+	echo "Building distribution: cm-v$${VERSION}-$${OS}-$(ARCH)..."; \
+	rm -rf "$${DIST_DIR}" "$${DIST_ARCHIVE}"; \
+	mkdir -p "$${DIST_DIR}"/{bin,lib,vscode-extension,docs/tutorials,examples}; \
+	cp cm "$${DIST_DIR}/bin/"; \
+	cp build/lib/*.o build/lib/*.a "$${DIST_DIR}/lib/" 2>/dev/null || true; \
+	if [ -d vscode-extension ]; then \
+		(cd vscode-extension && npm install --silent 2>/dev/null && npm run compile --silent 2>/dev/null && \
+		 npx @vscode/vsce package --allow-missing-repository --skip-license 2>/dev/null || true); \
+		cp vscode-extension/cm-language-*.vsix "$${DIST_DIR}/vscode-extension/" 2>/dev/null || true; \
+	fi; \
+	cp -r docs/tutorials/ja "$${DIST_DIR}/docs/tutorials/" 2>/dev/null || true; \
+	cp -r docs/tutorials/en "$${DIST_DIR}/docs/tutorials/" 2>/dev/null || true; \
+	printf '# Cm ドキュメント\n\n## オンラインドキュメント\n\n🌐 https://shadowlink0122.github.io/Cm/\n\n- [クイックスタート](https://shadowlink0122.github.io/Cm/QUICKSTART.html)\n- [言語仕様](https://shadowlink0122.github.io/Cm/design/CANONICAL_SPEC.html)\n- [チュートリアル](https://shadowlink0122.github.io/Cm/tutorials/)\n- [リリースノート](https://shadowlink0122.github.io/Cm/releases/)\n\n## オフラインドキュメント\n\n- tutorials/ja/ - 日本語チュートリアル\n- tutorials/en/ - 英語チュートリアル\n' > "$${DIST_DIR}/docs/DOCUMENTATION.md"; \
+	cp -r examples/* "$${DIST_DIR}/examples/" 2>/dev/null || true; \
+	find "$${DIST_DIR}/examples" -name "node_modules" -type d -prune -exec rm -rf {} + 2>/dev/null || true; \
+	find "$${DIST_DIR}/examples" -name ".DS_Store" -delete 2>/dev/null || true; \
+	cp README.md VERSION "$${DIST_DIR}/"; \
+	(cd .tmp && tar czf "cm-v$${VERSION}-$${OS}-$(ARCH).tar.gz" "cm-v$${VERSION}-$${OS}-$(ARCH)/"); \
+	echo ""; \
+	echo "=========================================="; \
+	echo "  ✅ Distribution build complete!"; \
+	echo "=========================================="; \
+	echo "  Archive: $${DIST_ARCHIVE}"; \
+	ls -lh "$${DIST_ARCHIVE}" | awk '{print "  Size:    " $$5}'; \
+	echo "  Contents:"; \
+	echo "    bin/cm             - コンパイラ"; \
+	echo "    lib/               - ランタイムライブラリ"; \
+	echo "    vscode-extension/  - VSCode拡張 (.vsix)"; \
+	echo "    docs/tutorials/    - チュートリアル (ja/en)"; \
+	echo "    examples/          - サンプルコード"; \
+	echo "    README.md          - プロジェクト説明"; \
+	echo "=========================================="
 
 .PHONY: clean
 clean:
