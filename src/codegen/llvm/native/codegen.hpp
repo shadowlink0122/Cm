@@ -682,6 +682,9 @@ class LLVMCodeGen {
             if (std::filesystem::exists("build/lib/cm_runtime_wasm.o")) {
                 return "build/lib/cm_runtime_wasm.o";
             }
+
+            // オンデマンドコンパイル（WASM用）
+            return compileWasmRuntimeOnDemand();
         }
 
 // 1. コンパイル時に埋め込まれたパス（CMake定義）
@@ -747,6 +750,73 @@ class LLVMCodeGen {
         int result = std::system(compileCmd.c_str());
         if (result != 0) {
             throw std::runtime_error("Failed to compile Cm runtime library");
+        }
+
+        return outputPath;
+    }
+
+    /// WASMランタイムをオンデマンドでコンパイル
+    std::string compileWasmRuntimeOnDemand() {
+        // WASMランタイムソースの可能な場所
+        std::vector<std::string> sourcePaths = {
+            "src/codegen/llvm/wasm/runtime_wasm.c",
+            "./src/codegen/llvm/wasm/runtime_wasm.c",
+            "../src/codegen/llvm/wasm/runtime_wasm.c",
+        };
+
+        std::string runtimeSource;
+        for (const auto& path : sourcePaths) {
+            if (std::filesystem::exists(path)) {
+                runtimeSource = path;
+                break;
+            }
+        }
+
+        if (runtimeSource.empty()) {
+            throw std::runtime_error(
+                "Cannot find Cm WASM runtime source. "
+                "Please rebuild the compiler with 'cmake --build build'");
+        }
+
+        // WASMターゲット対応のclangを検索（Homebrew LLVM優先）
+        std::vector<std::string> clangPaths = {
+            "/opt/homebrew/opt/llvm@17/bin/clang",
+            "/opt/homebrew/opt/llvm/bin/clang",
+            "/usr/local/opt/llvm@17/bin/clang",
+            "/usr/local/opt/llvm/bin/clang",
+        };
+
+        std::string wasmClang;
+        for (const auto& path : clangPaths) {
+            if (std::filesystem::exists(path)) {
+                wasmClang = path;
+                break;
+            }
+        }
+
+        if (wasmClang.empty()) {
+            throw std::runtime_error(
+                "Cannot find WASM-capable clang. "
+                "Please install LLVM with Homebrew: brew install llvm@17");
+        }
+
+        // ソースディレクトリを取得（-Iオプション用）
+        std::string sourceDir = std::filesystem::path(runtimeSource).parent_path().string();
+
+        // build/lib/にコンパイル
+        std::filesystem::create_directories("build/lib");
+        std::string outputPath = "build/lib/cm_runtime_wasm.o";
+
+        std::string compileCmd = wasmClang + " -c " + runtimeSource + " -o " + outputPath +
+                                 " --target=wasm32-wasi -O2 -ffunction-sections -fdata-sections"
+                                 " -nostdlib -D__wasi__ -I" +
+                                 sourceDir;
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit,
+                                "Compiling WASM runtime: " + compileCmd);
+
+        int result = std::system(compileCmd.c_str());
+        if (result != 0) {
+            throw std::runtime_error("Failed to compile Cm WASM runtime library");
         }
 
         return outputPath;

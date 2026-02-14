@@ -372,12 +372,42 @@ if(CM_USE_LLVM)
         add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT})
         add_dependencies(cm cm_runtime)
 
+        # WASMランタイムのビルド（wasm32ターゲット用クロスコンパイル）
+        # Homebrew LLVMのclangを使用（システムclangはwasm32をサポートしない）
+        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+        find_program(CM_WASM_CLANG
+            NAMES clang
+            PATHS /opt/homebrew/opt/llvm@17/bin /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm@17/bin
+            NO_DEFAULT_PATH
+        )
+        if(CM_WASM_CLANG)
+            set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
+            add_custom_command(
+                OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+                COMMAND ${CM_WASM_CLANG} -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT}
+                    --target=wasm32-wasi -O2 -ffunction-sections -fdata-sections
+                    -nostdlib -D__wasi__
+                    -I${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
+                DEPENDS ${CM_RUNTIME_WASM_SOURCE}
+                    ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c
+                    ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c
+                    ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_slice.c
+                COMMENT "Building Cm WASM runtime library (wasm32-wasi)"
+            )
+            add_custom_target(cm_runtime_wasm ALL DEPENDS ${CM_RUNTIME_WASM_OUTPUT})
+            add_dependencies(cm cm_runtime_wasm)
+            message(STATUS "WASM runtime: ${CM_WASM_CLANG} -> ${CM_RUNTIME_WASM_OUTPUT}")
+        else()
+            message(STATUS "WASM clang not found - WASM runtime will be compiled on-demand")
+        endif()
+
         # コアランタイムをcm実行ファイルにリンク（JIT用シンボルエクスポート）
         target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
         
         # stdランタイムライブラリのパス定義
         # ビルドは make libs (libs/native/Makefile) で実行
-        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+        # CM_RUNTIME_WASM_OUTPUT は上のWASMビルドセクションで定義済み
         set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
         set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
         set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
