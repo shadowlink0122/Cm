@@ -125,7 +125,7 @@ bool InfiniteLoopDetector::hasExitFromCycle(llvm::BasicBlock* start, llvm::Basic
 
 // サイクル内のブロックを収集
 void InfiniteLoopDetector::collectCycleBlocks(llvm::BasicBlock* start, llvm::BasicBlock* end,
-                                               std::set<llvm::BasicBlock*>& blocks) {
+                                              std::set<llvm::BasicBlock*>& blocks) {
     if (start == end) {
         blocks.insert(start);
         return;

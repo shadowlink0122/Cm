@@ -9,9 +9,9 @@ struct Item {
 int main() {
     // 構造体配列を作成
     Item[3] items = [
-    Item{id: 1, value: 100},
-    Item{id: 2, value: 200},
-    Item{id: 3, value: 300}
+        Item{id: 1, value: 100},
+        Item{id: 2, value: 200},
+        Item{id: 3, value: 300}
     ];
 
     // サイズ確認

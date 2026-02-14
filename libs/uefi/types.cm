@@ -82,12 +82,12 @@ export const ulong EFI_PAGE_SIZE = 4096;
 /// UEFIメモリマップのエントリ（1ディスクリプタ）
 /// GetMemoryMapで取得される各メモリ領域の情報
 export struct EfiMemoryDescriptor {
-    uint type;             // メモリタイプ (EFI_CONVENTIONAL_MEMORY等)
-    uint _pad0;            // アラインメント用パディング
-    ulong physical_start;  // 物理アドレス開始
-    ulong virtual_start;   // 仮想アドレス開始
-    ulong number_of_pages; // ページ数 (各4KB)
-    ulong attribute;       // メモリ属性フラグ
+    uint type;              // メモリタイプ (EFI_CONVENTIONAL_MEMORY等)
+    uint _pad0;             // アラインメント用パディング
+    ulong physical_start;   // 物理アドレス開始
+    ulong virtual_start;    // 仮想アドレス開始
+    ulong number_of_pages;  // ページ数 (各4KB)
+    ulong attribute;        // メモリ属性フラグ
 }
 
 // ============================================================

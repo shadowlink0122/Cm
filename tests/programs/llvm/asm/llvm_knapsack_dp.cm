@@ -11,10 +11,10 @@ int main() {
     // 2次元DP配列: dp[n_items+1][capacity+1] = dp[4][8]
     // 行優先レイアウト: dp[i][w] = base + (i * 8 + w) * 4
     int[32] dp = [
-    0, 0, 0, 0, 0, 0, 0, 0,  // dp[0][0..7] - アイテムなし
-    0, 0, 0, 0, 0, 0, 0, 0,  // dp[1][0..7] - アイテム0まで
-    0, 0, 0, 0, 0, 0, 0, 0,  // dp[2][0..7] - アイテム1まで
-    0, 0, 0, 0, 0, 0, 0, 0   // dp[3][0..7] - アイテム2まで
+        0, 0, 0, 0, 0, 0, 0, 0,  // dp[0][0..7] - アイテムなし
+        0, 0, 0, 0, 0, 0, 0, 0,  // dp[1][0..7] - アイテム0まで
+        0, 0, 0, 0, 0, 0, 0, 0,  // dp[2][0..7] - アイテム1まで
+        0, 0, 0, 0, 0, 0, 0, 0   // dp[3][0..7] - アイテム2まで
     ];
 
     // アイテムの重さと価値
@@ -41,82 +41,82 @@ int main() {
     // 2次元DP更新
     // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
     __asm__(`
-    # 外側ループ: i = 1
-    movl $$1, ${+r:i}
+        # 外側ループ: i = 1
+        movl $$1, ${+r:i}
 
-    1:  # outer_loop
-    # i > 3 なら終了
-    cmpl $$3, ${+r:i}
-    jg 5f
+        1:  # outer_loop
+        # i > 3 なら終了
+        cmpl $$3, ${+r:i}
+        jg 5f
 
-    # 内側ループ: w = 0
-    movl $$0, ${+r:w}
+        # 内側ループ: w = 0
+        movl $$0, ${+r:w}
 
-    2:  # inner_loop
-    # w > 7 なら次のアイテムへ
-    cmpl $$7, ${+r:w}
-    jg 4f
+        2:  # inner_loop
+        # w > 7 なら次のアイテムへ
+        cmpl $$7, ${+r:w}
+        jg 4f
 
-    # weights[i-1] を取得
-    movl ${+r:i}, ${+r:tmp2}
-    decl ${+r:tmp2}
-    movslq ${+r:tmp2}, ${+r:idx}
-    movl (${r:w_ptr}, ${+r:idx}, 4), ${+r:wi}
+        # weights[i-1] を取得
+        movl ${+r:i}, ${+r:tmp2}
+        decl ${+r:tmp2}
+        movslq ${+r:tmp2}, ${+r:idx}
+        movl (${r:w_ptr}, ${+r:idx}, 4), ${+r:wi}
 
-    # dp[i-1][w]のオフセット計算: (i-1) * 8 + w
-    movl ${+r:i}, ${+r:tmp2}
-    decl ${+r:tmp2}
-    shll $$3, ${+r:tmp2}
-    addl ${+r:w}, ${+r:tmp2}
-    movslq ${+r:tmp2}, ${+r:idx}
-    movl (${r:dp_ptr}, ${+r:idx}, 4), ${+r:dp_prev}
+        # dp[i-1][w]のオフセット計算: (i-1) * 8 + w
+        movl ${+r:i}, ${+r:tmp2}
+        decl ${+r:tmp2}
+        shll $$3, ${+r:tmp2}
+        addl ${+r:w}, ${+r:tmp2}
+        movslq ${+r:tmp2}, ${+r:idx}
+        movl (${r:dp_ptr}, ${+r:idx}, 4), ${+r:dp_prev}
 
-    # w < weights[i-1] なら dp[i][w] = dp[i-1][w]
-    cmpl ${+r:wi}, ${+r:w}
-    jl 3f
+        # w < weights[i-1] なら dp[i][w] = dp[i-1][w]
+        cmpl ${+r:wi}, ${+r:w}
+        jl 3f
 
-    # values[i-1] を取得
-    movl ${+r:i}, ${+r:tmp2}
-    decl ${+r:tmp2}
-    movslq ${+r:tmp2}, ${+r:idx}
-    movl (${r:v_ptr}, ${+r:idx}, 4), ${+r:vi}
+        # values[i-1] を取得
+        movl ${+r:i}, ${+r:tmp2}
+        decl ${+r:tmp2}
+        movslq ${+r:tmp2}, ${+r:idx}
+        movl (${r:v_ptr}, ${+r:idx}, 4), ${+r:vi}
 
-    # dp[i-1][w - weight]のオフセット計算
-    movl ${+r:i}, ${+r:tmp2}
-    decl ${+r:tmp2}
-    shll $$3, ${+r:tmp2}
-    movl ${+r:w}, ${+r:cand}
-    subl ${+r:wi}, ${+r:cand}
-    addl ${+r:cand}, ${+r:tmp2}
-    movslq ${+r:tmp2}, ${+r:idx}
-    movl (${r:dp_ptr}, ${+r:idx}, 4), ${+r:cand}
+        # dp[i-1][w - weight]のオフセット計算
+        movl ${+r:i}, ${+r:tmp2}
+        decl ${+r:tmp2}
+        shll $$3, ${+r:tmp2}
+        movl ${+r:w}, ${+r:cand}
+        subl ${+r:wi}, ${+r:cand}
+        addl ${+r:cand}, ${+r:tmp2}
+        movslq ${+r:tmp2}, ${+r:idx}
+        movl (${r:dp_ptr}, ${+r:idx}, 4), ${+r:cand}
 
-    # cand = dp[i-1][w-weight] + value
-    addl ${+r:vi}, ${+r:cand}
+        # cand = dp[i-1][w-weight] + value
+        addl ${+r:vi}, ${+r:cand}
 
-    # new_val = max(dp[i-1][w], cand)
-    cmpl ${+r:dp_prev}, ${+r:cand}
-    cmovlel ${+r:dp_prev}, ${+r:cand}
-    movl ${+r:cand}, ${+r:dp_prev}
+        # new_val = max(dp[i-1][w], cand)
+        cmpl ${+r:dp_prev}, ${+r:cand}
+        cmovlel ${+r:dp_prev}, ${+r:cand}
+        movl ${+r:cand}, ${+r:dp_prev}
 
-    3:  # store_dp
-    # dp[i][w]のオフセット計算: i * 8 + w
-    movl ${+r:i}, ${+r:tmp2}
-    shll $$3, ${+r:tmp2}
-    addl ${+r:w}, ${+r:tmp2}
-    movslq ${+r:tmp2}, ${+r:idx}
-    movl ${+r:dp_prev}, (${r:dp_ptr}, ${+r:idx}, 4)
+        3:  # store_dp
+        # dp[i][w]のオフセット計算: i * 8 + w
+        movl ${+r:i}, ${+r:tmp2}
+        shll $$3, ${+r:tmp2}
+        addl ${+r:w}, ${+r:tmp2}
+        movslq ${+r:tmp2}, ${+r:idx}
+        movl ${+r:dp_prev}, (${r:dp_ptr}, ${+r:idx}, 4)
 
-    # w++
-    incl ${+r:w}
-    jmp 2b
+        # w++
+        incl ${+r:w}
+        jmp 2b
 
-    4:  # next_item
-    # i++
-    incl ${+r:i}
-    jmp 1b
+        4:  # next_item
+        # i++
+        incl ${+r:i}
+        jmp 1b
 
-    5:  # done
+        5:  # done
     `);
 
     // =========================================
@@ -146,10 +146,10 @@ int main() {
     println("Capacity: 7");
 
     int[32] dp = [
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
     ];
 
     int[3] weights = [2, 3, 4];
@@ -174,72 +174,72 @@ int main() {
     // :w修飾子で全変数がwレジスタになるため、
     // ldr/strの[base, offset]ではsxtwで32→64bit拡張が必要
     __asm__(`
-    // 外側ループ: i = 1
-    mov ${+r:i}, #1
+        // 外側ループ: i = 1
+        mov ${+r:i}, #1
 
-    1:  // outer_loop
-    cmp ${+r:i}, #3
-    b.gt 5f
+        1:  // outer_loop
+        cmp ${+r:i}, #3
+        b.gt 5f
 
-    // 内側ループ: w = 0
-    mov ${+r:w}, #0
+        // 内側ループ: w = 0
+        mov ${+r:w}, #0
 
-    2:  // inner_loop
-    cmp ${+r:w}, #7
-    b.gt 4f
+        2:  // inner_loop
+        cmp ${+r:w}, #7
+        b.gt 4f
 
-    // weights[i-1] を取得
-    sub ${+r:tmp}, ${+r:i}, #1
-    lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}, sxtw]
+        // weights[i-1] を取得
+        sub ${+r:tmp}, ${+r:i}, #1
+        lsl ${+r:tmp}, ${+r:tmp}, #2
+        ldr ${+r:wi}, [${r:w_ptr}, ${+r:tmp}, sxtw]
 
-    // dp[i-1][w]のオフセット計算: ((i-1) * 8 + w) * 4
-    sub ${+r:tmp}, ${+r:i}, #1
-    lsl ${+r:tmp}, ${+r:tmp}, #3
-    add ${+r:tmp}, ${+r:tmp}, ${+r:w}
-    lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
+        // dp[i-1][w]のオフセット計算: ((i-1) * 8 + w) * 4
+        sub ${+r:tmp}, ${+r:i}, #1
+        lsl ${+r:tmp}, ${+r:tmp}, #3
+        add ${+r:tmp}, ${+r:tmp}, ${+r:w}
+        lsl ${+r:tmp}, ${+r:tmp}, #2
+        ldr ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
 
-    // w < weights[i-1] なら dp[i][w] = dp[i-1][w]
-    cmp ${+r:w}, ${+r:wi}
-    b.lt 3f
+        // w < weights[i-1] なら dp[i][w] = dp[i-1][w]
+        cmp ${+r:w}, ${+r:wi}
+        b.lt 3f
 
-    // values[i-1] を取得
-    sub ${+r:tmp}, ${+r:i}, #1
-    lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}, sxtw]
+        // values[i-1] を取得
+        sub ${+r:tmp}, ${+r:i}, #1
+        lsl ${+r:tmp}, ${+r:tmp}, #2
+        ldr ${+r:vi}, [${r:v_ptr}, ${+r:tmp}, sxtw]
 
-    // dp[i-1][w - weight]のオフセット計算
-    sub ${+r:tmp}, ${+r:i}, #1
-    lsl ${+r:tmp}, ${+r:tmp}, #3
-    sub ${+r:cand}, ${+r:w}, ${+r:wi}
-    add ${+r:tmp}, ${+r:tmp}, ${+r:cand}
-    lsl ${+r:tmp}, ${+r:tmp}, #2
-    ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
+        // dp[i-1][w - weight]のオフセット計算
+        sub ${+r:tmp}, ${+r:i}, #1
+        lsl ${+r:tmp}, ${+r:tmp}, #3
+        sub ${+r:cand}, ${+r:w}, ${+r:wi}
+        add ${+r:tmp}, ${+r:tmp}, ${+r:cand}
+        lsl ${+r:tmp}, ${+r:tmp}, #2
+        ldr ${+r:cand}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
 
-    // cand = dp[i-1][w-weight] + value
-    add ${+r:cand}, ${+r:cand}, ${+r:vi}
+        // cand = dp[i-1][w-weight] + value
+        add ${+r:cand}, ${+r:cand}, ${+r:vi}
 
-    // new_val = max(dp[i-1][w], cand)
-    cmp ${+r:cand}, ${+r:dp_prev}
-    csel ${+r:dp_prev}, ${+r:cand}, ${+r:dp_prev}, gt
+        // new_val = max(dp[i-1][w], cand)
+        cmp ${+r:cand}, ${+r:dp_prev}
+        csel ${+r:dp_prev}, ${+r:cand}, ${+r:dp_prev}, gt
 
-    3:  // store_dp
-    // dp[i][w]のオフセット計算: (i * 8 + w) * 4
-    lsl ${+r:tmp}, ${+r:i}, #3
-    add ${+r:tmp}, ${+r:tmp}, ${+r:w}
-    lsl ${+r:tmp}, ${+r:tmp}, #2
-    str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
+        3:  // store_dp
+        // dp[i][w]のオフセット計算: (i * 8 + w) * 4
+        lsl ${+r:tmp}, ${+r:i}, #3
+        add ${+r:tmp}, ${+r:tmp}, ${+r:w}
+        lsl ${+r:tmp}, ${+r:tmp}, #2
+        str ${+r:dp_prev}, [${r:dp_ptr}, ${+r:tmp}, sxtw]
 
-    // w++
-    add ${+r:w}, ${+r:w}, #1
-    b 2b
+        // w++
+        add ${+r:w}, ${+r:w}, #1
+        b 2b
 
-    4:  // next_item
-    add ${+r:i}, ${+r:i}, #1
-    b 1b
+        4:  // next_item
+        add ${+r:i}, ${+r:i}, #1
+        b 1b
 
-    5:  // done
+        5:  // done
     `);
 
     println("\n=== 2D DP Table (last row) ===");

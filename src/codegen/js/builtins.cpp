@@ -157,8 +157,7 @@ bool isBuiltinFunction(const std::string& name) {
 }
 
 // 組み込み関数呼び出しをJSコードに変換
-std::string emitBuiltinCall(const std::string& name,
-                            const std::vector<std::string>& argStrs) {
+std::string emitBuiltinCall(const std::string& name, const std::vector<std::string>& argStrs) {
     // __cm_slice: (arr, start, end)
     if (name == "__cm_slice" && argStrs.size() >= 3) {
         return "__cm_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";

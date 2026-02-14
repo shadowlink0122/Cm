@@ -98,9 +98,9 @@ int main() {
     // テスト6: ローカルで構築して引数に渡す
     println("Test 6: Local build and pass");
     Value[3] local = [
-    "test" as Value,
-    999 as Value,
-    true as Value
+        "test" as Value,
+        999 as Value,
+        true as Value
     ];
     print_values(local);
 

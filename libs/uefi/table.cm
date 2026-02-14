@@ -27,16 +27,16 @@ export struct EfiTableHeader {
 /// UEFI Simple Text Output Protocol の関数テーブル
 /// ConOutのフィールドオフセットに対応
 export struct EfiSimpleTextOutputProtocol {
-    void* reset;           // offset 0x00: Reset
-    void* output_string;   // offset 0x08: OutputString
-    void* test_string;     // offset 0x10: TestString
-    void* query_mode;      // offset 0x18: QueryMode
-    void* set_mode;        // offset 0x20: SetMode
-    void* set_attribute;   // offset 0x28: SetAttribute
-    void* clear_screen;    // offset 0x30: ClearScreen
-    void* set_cursor;      // offset 0x38: SetCursorPosition
-    void* enable_cursor;   // offset 0x40: EnableCursor
-    void* mode;            // offset 0x48: Mode pointer
+    void* reset;          // offset 0x00: Reset
+    void* output_string;  // offset 0x08: OutputString
+    void* test_string;    // offset 0x10: TestString
+    void* query_mode;     // offset 0x18: QueryMode
+    void* set_mode;       // offset 0x20: SetMode
+    void* set_attribute;  // offset 0x28: SetAttribute
+    void* clear_screen;   // offset 0x30: ClearScreen
+    void* set_cursor;     // offset 0x38: SetCursorPosition
+    void* enable_cursor;  // offset 0x40: EnableCursor
+    void* mode;           // offset 0x48: Mode pointer
 }
 
 // ============================================================
@@ -63,26 +63,26 @@ export struct EfiSimpleTextInputProtocol {
 /// UEFI Boot Services テーブル
 /// 主要な関数ポインタのみ定義（全59関数中、頻出のものを先頭から配置）
 export struct EfiBootServices {
-    EfiTableHeader hdr;            // ヘッダ
+    EfiTableHeader hdr;  // ヘッダ
 
     // タスク管理 (Task Priority Services)
-    void* raise_tpl;               // RaiseTPL
-    void* restore_tpl;             // RestoreTPL
+    void* raise_tpl;    // RaiseTPL
+    void* restore_tpl;  // RestoreTPL
 
     // メモリ管理 (Memory Services)
-    void* allocate_pages;          // AllocatePages
-    void* free_pages;              // FreePages
-    void* get_memory_map;          // GetMemoryMap
-    void* allocate_pool;           // AllocatePool
-    void* free_pool;               // FreePool
+    void* allocate_pages;  // AllocatePages
+    void* free_pages;      // FreePages
+    void* get_memory_map;  // GetMemoryMap
+    void* allocate_pool;   // AllocatePool
+    void* free_pool;       // FreePool
 
     // イベント・タイマー (Event & Timer Services)
-    void* create_event;            // CreateEvent
-    void* set_timer;               // SetTimer
-    void* wait_for_event;          // WaitForEvent
-    void* signal_event;            // SignalEvent
-    void* close_event;             // CloseEvent
-    void* check_event;             // CheckEvent
+    void* create_event;    // CreateEvent
+    void* set_timer;       // SetTimer
+    void* wait_for_event;  // WaitForEvent
+    void* signal_event;    // SignalEvent
+    void* close_event;     // CloseEvent
+    void* check_event;     // CheckEvent
 
     // プロトコル管理 (Protocol Handler Services)
     void* install_protocol_interface;    // InstallProtocolInterface
@@ -96,16 +96,16 @@ export struct EfiBootServices {
     void* install_configuration_table;   // InstallConfigurationTable
 
     // イメージ管理 (Image Services)
-    void* load_image;              // LoadImage
-    void* start_image;             // StartImage
-    void* exit;                    // Exit
-    void* unload_image;            // UnloadImage
-    void* exit_boot_services;      // ExitBootServices
+    void* load_image;          // LoadImage
+    void* start_image;         // StartImage
+    void* exit;                // Exit
+    void* unload_image;        // UnloadImage
+    void* exit_boot_services;  // ExitBootServices
 
     // その他 (Miscellaneous Services)
-    void* get_next_monotonic_count; // GetNextMonotonicCount
-    void* stall;                    // Stall
-    void* set_watchdog_timer;       // SetWatchdogTimer
+    void* get_next_monotonic_count;  // GetNextMonotonicCount
+    void* stall;                     // Stall
+    void* set_watchdog_timer;        // SetWatchdogTimer
 }
 
 // ============================================================
@@ -117,14 +117,14 @@ export struct EfiRuntimeServices {
     EfiTableHeader hdr;
 
     // 時刻管理
-    void* get_time;                // GetTime
-    void* set_time;                // SetTime
-    void* get_wakeup_time;         // GetWakeupTime
-    void* set_wakeup_time;         // SetWakeupTime
+    void* get_time;         // GetTime
+    void* set_time;         // SetTime
+    void* get_wakeup_time;  // GetWakeupTime
+    void* set_wakeup_time;  // SetWakeupTime
 
     // 仮想メモリマッピング
-    void* set_virtual_address_map; // SetVirtualAddressMap
-    void* convert_pointer;         // ConvertPointer
+    void* set_virtual_address_map;  // SetVirtualAddressMap
+    void* convert_pointer;          // ConvertPointer
 
     // 変数管理
     void* get_variable;            // GetVariable
@@ -132,8 +132,8 @@ export struct EfiRuntimeServices {
     void* set_variable;            // SetVariable
 
     // その他
-    void* get_next_high_monotonic_count; // GetNextHighMonotonicCount
-    void* reset_system;                  // ResetSystem
+    void* get_next_high_monotonic_count;  // GetNextHighMonotonicCount
+    void* reset_system;                   // ResetSystem
 }
 
 // ============================================================
@@ -142,25 +142,25 @@ export struct EfiRuntimeServices {
 
 /// UEFI System Table - efi_mainの第2引数
 export struct EfiSystemTable {
-    EfiTableHeader hdr;                          // offset 0x00
-    ushort* firmware_vendor;                     // offset 0x18: UCS-2 ファームウェア名
-    uint firmware_revision;                      // offset 0x20
+    EfiTableHeader hdr;       // offset 0x00
+    ushort* firmware_vendor;  // offset 0x18: UCS-2 ファームウェア名
+    uint firmware_revision;   // offset 0x20
 
     // パディング（アラインメント調整）
     uint _pad0;
 
-    EfiHandle console_in_handle;                 // offset 0x28
-    EfiSimpleTextInputProtocol* con_in;          // offset 0x30
+    EfiHandle console_in_handle;         // offset 0x28
+    EfiSimpleTextInputProtocol* con_in;  // offset 0x30
 
-    EfiHandle console_out_handle;                // offset 0x38
-    EfiSimpleTextOutputProtocol* con_out;        // offset 0x40
+    EfiHandle console_out_handle;          // offset 0x38
+    EfiSimpleTextOutputProtocol* con_out;  // offset 0x40
 
-    EfiHandle standard_error_handle;             // offset 0x48
-    EfiSimpleTextOutputProtocol* std_err;        // offset 0x50
+    EfiHandle standard_error_handle;       // offset 0x48
+    EfiSimpleTextOutputProtocol* std_err;  // offset 0x50
 
-    EfiRuntimeServices* runtime_services;        // offset 0x58
-    EfiBootServices* boot_services;              // offset 0x60
+    EfiRuntimeServices* runtime_services;  // offset 0x58
+    EfiBootServices* boot_services;        // offset 0x60
 
-    ulong number_of_table_entries;               // offset 0x68
-    void* configuration_table;                   // offset 0x70
+    ulong number_of_table_entries;  // offset 0x68
+    void* configuration_table;      // offset 0x70
 }

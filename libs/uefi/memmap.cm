@@ -63,12 +63,12 @@ ulong bs_call5(ulong fn, ulong a1, ulong a2, ulong a3, ulong a4, ulong a5) {
 /// desc_size:    [出力] 1ディスクリプタのサイズ
 /// desc_version: [出力] ディスクリプタバージョン
 export ulong uefi_get_memory_map(
-    EfiSystemTable* st,
-    ulong* map_size,
-    void* map,
-    ulong* map_key,
-    ulong* desc_size,
-    ulong* desc_version
+EfiSystemTable* st,
+ulong* map_size,
+void* map,
+ulong* map_key,
+ulong* desc_size,
+ulong* desc_version
 ) {
     EfiBootServices* bs = st->boot_services;
     if (bs == null) {

@@ -35,9 +35,9 @@ int main() {
 
     // 構造体配列 with auto
     Point[3] points = [
-    Point{x: 1, y: 2},
-    Point{x: 3, y: 4},
-    Point{x: 5, y: 6}
+        Point{x: 1, y: 2},
+        Point{x: 3, y: 4},
+        Point{x: 5, y: 6}
     ];
     int point_sum = 0;
     for (auto p in points) {

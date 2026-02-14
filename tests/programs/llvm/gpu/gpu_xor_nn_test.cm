@@ -65,31 +65,31 @@ int main() {
 
     // 配列リテラルで全パラメータを定義
     long[40] data = [
-    // [0..3] XOR入力 x0
-    float_to_bits(0.0), float_to_bits(0.0), float_to_bits(1.0), float_to_bits(1.0),
-    // [4..7] XOR入力 x1
-    float_to_bits(0.0), float_to_bits(1.0), float_to_bits(0.0), float_to_bits(1.0),
-    // [8..11] XOR正解 y
-    float_to_bits(0.0), float_to_bits(1.0), float_to_bits(1.0), float_to_bits(0.0),
-    // [12..19] 重み w1 (2x4) — XOR用対称初期値
-    float_to_bits(0.5), float_to_bits(1.0), float_to_bits(-1.0), float_to_bits(0.5),
-    float_to_bits(0.5), float_to_bits(-1.0), float_to_bits(1.0), float_to_bits(0.5),
-    // [20..23] バイアス b1 (4)
-    float_to_bits(0.0), float_to_bits(-0.5), float_to_bits(-0.5), float_to_bits(0.0),
-    // [24..27] 重み w2 (4)
-    float_to_bits(1.0), float_to_bits(1.0), float_to_bits(1.0), float_to_bits(-2.0),
-    // [28] バイアス b2
-    float_to_bits(-0.5),
-    // [29..32] 隠れ層出力 h
-    float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0),
-    // [33] 出力 o
-    float_to_bits(0.0),
-    // [34] エポック数
-    float_to_bits(5000.0),
-    // [35] 学習率
-    float_to_bits(2.0),
-    // [36..39] 予測結果
-    float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0)
+        // [0..3] XOR入力 x0
+        float_to_bits(0.0), float_to_bits(0.0), float_to_bits(1.0), float_to_bits(1.0),
+        // [4..7] XOR入力 x1
+        float_to_bits(0.0), float_to_bits(1.0), float_to_bits(0.0), float_to_bits(1.0),
+        // [8..11] XOR正解 y
+        float_to_bits(0.0), float_to_bits(1.0), float_to_bits(1.0), float_to_bits(0.0),
+        // [12..19] 重み w1 (2x4) — XOR用対称初期値
+        float_to_bits(0.5), float_to_bits(1.0), float_to_bits(-1.0), float_to_bits(0.5),
+        float_to_bits(0.5), float_to_bits(-1.0), float_to_bits(1.0), float_to_bits(0.5),
+        // [20..23] バイアス b1 (4)
+        float_to_bits(0.0), float_to_bits(-0.5), float_to_bits(-0.5), float_to_bits(0.0),
+        // [24..27] 重み w2 (4)
+        float_to_bits(1.0), float_to_bits(1.0), float_to_bits(1.0), float_to_bits(-2.0),
+        // [28] バイアス b2
+        float_to_bits(-0.5),
+        // [29..32] 隠れ層出力 h
+        float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0),
+        // [33] 出力 o
+        float_to_bits(0.0),
+        // [34] エポック数
+        float_to_bits(5000.0),
+        // [35] 学習率
+        float_to_bits(2.0),
+        // [36..39] 予測結果
+        float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0)
     ];
 
     // GPUバッファにコピー

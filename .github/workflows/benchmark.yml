@@ -39,6 +39,11 @@ jobs:
       - name: Build
         run: cmake --build build -j$(nproc)
 
+      - name: Build runtime libraries
+        run: |
+          ln -sf build/bin/cm cm
+          make libs
+
       - name: Run All Benchmarks
         run: |
           echo "=== Running Cm JIT Benchmarks ==="
@@ -69,9 +74,10 @@ jobs:
           echo "Passed: $PASS"
           echo "Failed: $FAIL"
           
-          # ベンチマーク失敗はCIを失敗させない（警告のみ）
+          # ベンチマーク失敗時はCIを失敗扱い
           if [ $FAIL -gt 0 ]; then
-            echo "⚠️ Some benchmarks failed (non-critical)"
+            echo "❌ Some benchmarks failed"
+            exit 1
           else
             echo "✅ All benchmarks passed!"
           fi

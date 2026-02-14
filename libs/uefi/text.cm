@@ -188,8 +188,8 @@ export const ulong EFI_BACKGROUND_LIGHTGRAY = 0x70;
 export ulong uefi_print_hex(EfiSystemTable* st, ulong value) {
     // "0x" + 16桁 + null = 19文字
     utiny[19] buf;
-    buf[0] = 48;  // '0'
-    buf[1] = 120; // 'x'
+    buf[0] = 48;   // '0'
+    buf[1] = 120;  // 'x'
 
     ulong i = 0;
     while (i < 16) {
@@ -199,9 +199,9 @@ export ulong uefi_print_hex(EfiSystemTable* st, ulong value) {
         ulong nibble = (value >> shift) & mask;
         ulong ten = 10;
         if (nibble < ten) {
-            buf[i + 2] = (nibble + 48) as utiny;   // '0'-'9'
+            buf[i + 2] = (nibble + 48) as utiny;  // '0'-'9'
         } else {
-            buf[i + 2] = (nibble + 55) as utiny;   // 'A'-'F'
+            buf[i + 2] = (nibble + 55) as utiny;  // 'A'-'F'
         }
         i += 1;
     }
@@ -240,4 +240,3 @@ export ulong uefi_print_dec(EfiSystemTable* st, ulong value) {
     void* data = (buf as ulong + pos) as void*;
     return uefi_puts(st, data as string);
 }
-

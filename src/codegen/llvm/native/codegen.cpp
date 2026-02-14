@@ -112,8 +112,8 @@ void LLVMCodeGen::initialize(const std::string& moduleName) {
     targetManager->configureModule(context->getModule());
 
     // 組み込み関数マネージャ（宣言は遅延実行）
-    intrinsicsManager = std::make_unique<IntrinsicsManager>(&context->getModule(),
-                                                            &context->getContext(), config);
+    intrinsicsManager =
+        std::make_unique<IntrinsicsManager>(&context->getModule(), &context->getContext(), config);
 
     // 変換器
     converter = std::make_unique<MIRToLLVM>(*context);
@@ -143,8 +143,7 @@ void LLVMCodeGen::verifyModule() {
     if (llvm::verifyModule(context->getModule(), &os)) {
         context->getModule().print(llvm::errs(), nullptr);
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
-                                "Module verification failed: " + errors,
-                                cm::debug::Level::Error);
+                                "Module verification failed: " + errors, cm::debug::Level::Error);
         throw std::runtime_error("LLVM module verification failed:\n" + errors);
     }
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMVerifyOK);
@@ -160,8 +159,8 @@ void LLVMCodeGen::optimize() {
     RecursionLimiter::preprocessModule(context->getModule(), options.optimizationLevel);
 
     // パターンベースの最適化レベル調整
-    int adjustedLevel = OptimizationPassLimiter::adjustOptimizationLevel(
-        context->getModule(), options.optimizationLevel);
+    int adjustedLevel = OptimizationPassLimiter::adjustOptimizationLevel(context->getModule(),
+                                                                         options.optimizationLevel);
     if (adjustedLevel != options.optimizationLevel) {
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
                                 "Optimization level adjusted from O" +
@@ -259,8 +258,8 @@ void LLVMCodeGen::optimize() {
     if (options.verbose && (options.optimizationLevel >= 2)) {
         llvm::errs() << "[PASS_DEBUG] Running individual pass debugging for O"
                      << options.optimizationLevel << "\n";
-        auto results = PassDebugger::runPassesWithTimeout(context->getModule(), passBuilder,
-                                                          optLevel, 5000);
+        auto results =
+            PassDebugger::runPassesWithTimeout(context->getModule(), passBuilder, optLevel, 5000);
         cm::codegen::llvm_backend::PassDebugger::printResults(results);
 
         bool hasTimeout = false;
@@ -326,8 +325,7 @@ void LLVMCodeGen::emit() {
             break;
     }
 
-    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEmitEnd,
-                            "Output: " + options.outputFile);
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEmitEnd, "Output: " + options.outputFile);
 }
 
 // オブジェクトファイル出力
@@ -387,9 +385,8 @@ void LLVMCodeGen::emitExecutable() {
     if (context->getTargetConfig().target == BuildTarget::Baremetal) {
         linkCmd = "arm-none-eabi-ld -T link.ld " + objFile + " -o " + options.outputFile;
     } else if (context->getTargetConfig().target == BuildTarget::BaremetalUEFI) {
-        linkCmd =
-            "lld-link /subsystem:efi_application /entry:efi_main /out:" + options.outputFile +
-            " " + objFile;
+        linkCmd = "lld-link /subsystem:efi_application /entry:efi_main /out:" + options.outputFile +
+                  " " + objFile;
     } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
         std::string runtimePath = findRuntimeLibrary();
         linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath +
@@ -594,8 +591,7 @@ std::string LLVMCodeGen::compileRuntimeOnDemand() {
     std::string outputPath = "build/lib/cm_runtime.o";
 
     std::string compileCmd = "clang -c " + runtimeSource + " -o " + outputPath + " -O2";
-    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit,
-                            "Compiling runtime: " + compileCmd);
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMInit, "Compiling runtime: " + compileCmd);
 
     int result = std::system(compileCmd.c_str());
     if (result != 0) {
@@ -706,9 +702,9 @@ bool LLVMCodeGen::checkForSyncUsage() const {
             std::string name = func.getName().str();
             if (name.find("cm_mutex_") == 0 || name.find("cm_rwlock_") == 0 ||
                 name.find("cm_atomic_") == 0 || name.find("cm_channel_") == 0 ||
-                name.find("cm_once_") == 0 ||
-                name.find("atomic_store_") == 0 || name.find("atomic_load_") == 0 ||
-                name.find("atomic_fetch_") == 0 || name.find("atomic_compare_") == 0) {
+                name.find("cm_once_") == 0 || name.find("atomic_store_") == 0 ||
+                name.find("atomic_load_") == 0 || name.find("atomic_fetch_") == 0 ||
+                name.find("atomic_compare_") == 0) {
                 cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
                                         "Sync function detected: " + name);
                 return true;
@@ -806,8 +802,7 @@ std::string LLVMCodeGen::findStdRuntimeLibrary(const std::string& name) {
         }
     }
 
-    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
-                            name + " runtime library not found");
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError, name + " runtime library not found");
     return "";
 }
 
@@ -818,8 +813,7 @@ bool LLVMCodeGen::checkForImports() const {
             std::string name = func.getName().str();
             if (name != "printf" && name != "puts" && name != "malloc" && name != "free" &&
                 name != "memcpy" && name != "memset" && name != "__cm_panic" &&
-                name != "__cm_alloc" && name != "__cm_dealloc" &&
-                name.find("llvm.") != 0) {
+                name != "__cm_alloc" && name != "__cm_dealloc" && name.find("llvm.") != 0) {
                 cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
                                         "Found imported function: " + name);
                 return true;

@@ -5,10 +5,10 @@ int main() {
     line2`;
     println(s);
     string braces = `{b}`;
-    println(braces);
+        println(braces);
     println("``");
     println(`""`);
-    println("\"");
+        println("\"");
     println(`\``);
     return 0;
 }
