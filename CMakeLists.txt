@@ -205,6 +205,27 @@ set(CM_SOURCES
     src/mir/lowering/auto_impl/ord.cpp
     src/mir/lowering/auto_impl/clone_hash.cpp
     src/mir/lowering/auto_impl/debug_display_css.cpp
+    # MIR passes (最適化パス実装)
+    src/mir/passes/scalar/sccp.cpp
+    src/mir/passes/scalar/folding.cpp
+    src/mir/passes/scalar/propagation.cpp
+    src/mir/passes/scalar/array_base_extraction.cpp
+    src/mir/passes/cleanup/dce.cpp
+    src/mir/passes/cleanup/dse.cpp
+    src/mir/passes/cleanup/simplify_cfg.cpp
+    src/mir/passes/cleanup/program_dce.cpp
+    src/mir/passes/interprocedural/inlining.cpp
+    src/mir/passes/interprocedural/tail_call_elimination.cpp
+    src/mir/passes/loop/licm.cpp
+    src/mir/passes/redundancy/gvn.cpp
+    src/mir/passes/core/base.cpp
+    src/mir/passes/core/manager.cpp
+    src/mir/passes/convergence/manager.cpp
+    src/mir/passes/convergence/smart.cpp
+    src/mir/passes/validation/no_std_checker.cpp
+    # MIR analysis (解析モジュール)
+    src/mir/analysis/dominators.cpp
+    src/mir/analysis/loop_analysis.cpp
 )
 
 # JavaScript backend (LLVMに依存しない)
@@ -502,6 +523,25 @@ if(BUILD_TESTING)
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
             src/mir/lowering/monomorphization_utils.cpp
+            src/mir/passes/scalar/sccp.cpp
+            src/mir/passes/scalar/folding.cpp
+            src/mir/passes/scalar/propagation.cpp
+            src/mir/passes/scalar/array_base_extraction.cpp
+            src/mir/passes/cleanup/dce.cpp
+            src/mir/passes/cleanup/dse.cpp
+            src/mir/passes/cleanup/simplify_cfg.cpp
+            src/mir/passes/cleanup/program_dce.cpp
+            src/mir/passes/interprocedural/inlining.cpp
+            src/mir/passes/interprocedural/tail_call_elimination.cpp
+            src/mir/passes/loop/licm.cpp
+            src/mir/passes/redundancy/gvn.cpp
+            src/mir/passes/core/base.cpp
+            src/mir/passes/core/manager.cpp
+            src/mir/passes/convergence/manager.cpp
+            src/mir/passes/convergence/smart.cpp
+            src/mir/passes/validation/no_std_checker.cpp
+            src/mir/analysis/dominators.cpp
+            src/mir/analysis/loop_analysis.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
@@ -526,6 +566,25 @@ if(BUILD_TESTING)
             src/mir/lowering/monomorphization_impl.cpp
             src/mir/lowering/monomorphization_utils.cpp
             src/mir/optimizations/optimization_pipeline.cpp
+            src/mir/passes/scalar/sccp.cpp
+            src/mir/passes/scalar/folding.cpp
+            src/mir/passes/scalar/propagation.cpp
+            src/mir/passes/scalar/array_base_extraction.cpp
+            src/mir/passes/cleanup/dce.cpp
+            src/mir/passes/cleanup/dse.cpp
+            src/mir/passes/cleanup/simplify_cfg.cpp
+            src/mir/passes/cleanup/program_dce.cpp
+            src/mir/passes/interprocedural/inlining.cpp
+            src/mir/passes/interprocedural/tail_call_elimination.cpp
+            src/mir/passes/loop/licm.cpp
+            src/mir/passes/redundancy/gvn.cpp
+            src/mir/passes/core/base.cpp
+            src/mir/passes/core/manager.cpp
+            src/mir/passes/convergence/manager.cpp
+            src/mir/passes/convergence/smart.cpp
+            src/mir/passes/validation/no_std_checker.cpp
+            src/mir/analysis/dominators.cpp
+            src/mir/analysis/loop_analysis.cpp
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)

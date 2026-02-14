@@ -25,6 +25,8 @@
 #include "lint/config.hpp"
 #include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
+#include "mir/passes/cleanup/dce.hpp"
+#include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
 #include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
