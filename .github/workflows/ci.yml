@@ -156,7 +156,7 @@ jobs:
   # Unit Tests（ビルド共有、matrix並列）
   # ========================================
   unit-test:
-    name: Unit ${{ matrix.test_name }} (${{ matrix.os }})
+    name: 単体テスト ${{ matrix.test_name }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
@@ -230,21 +230,21 @@ jobs:
   # 4バックエンド × O0/O3 × 2OS
   # ========================================
   integration-test:
-    name: ${{ matrix.config.name }} (${{ matrix.os }})
+    name: 統合テスト ${{ matrix.config.name }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-14]
         config:
-          - { id: jit-o0,  name: "JIT O0",         target: tjitp0, backend: jit,       needs_node: false }
-          - { id: jit-o3,  name: "JIT O3",         target: tjitp3, backend: jit,       needs_node: false }
-          - { id: llvm-o0, name: "LLVM Native O0", target: tlp0,   backend: llvm,      needs_node: false }
-          - { id: llvm-o3, name: "LLVM Native O3", target: tlp3,   backend: llvm,      needs_node: false }
-          - { id: wasm-o0, name: "LLVM WASM O0",   target: tlwp0,  backend: llvm-wasm, needs_node: false }
-          - { id: wasm-o3, name: "LLVM WASM O3",   target: tlwp3,  backend: llvm-wasm, needs_node: false }
-          - { id: js-o0,   name: "JS O0",          target: tjp0,   backend: js,        needs_node: true  }
-          - { id: js-o3,   name: "JS O3",          target: tjp3,   backend: js,        needs_node: true  }
+          - { id: jit-o0,  name: "JIT実行 O0",            target: tjitp0, backend: jit,       needs_node: false }
+          - { id: jit-o3,  name: "JIT実行 O3",            target: tjitp3, backend: jit,       needs_node: false }
+          - { id: llvm-o0, name: "LLVMネイティブ実行 O0",  target: tlp0,   backend: llvm,      needs_node: false }
+          - { id: llvm-o3, name: "LLVMネイティブ実行 O3",  target: tlp3,   backend: llvm,      needs_node: false }
+          - { id: wasm-o0, name: "WASMコンパイル+実行 O0", target: tlwp0,  backend: llvm-wasm, needs_node: false }
+          - { id: wasm-o3, name: "WASMコンパイル+実行 O3", target: tlwp3,  backend: llvm-wasm, needs_node: false }
+          - { id: js-o0,   name: "JSコード生成+実行 O0",  target: tjp0,   backend: js,        needs_node: true  }
+          - { id: js-o3,   name: "JSコード生成+実行 O3",  target: tjp3,   backend: js,        needs_node: true  }
     runs-on: ${{ matrix.os }}
 
     steps:
