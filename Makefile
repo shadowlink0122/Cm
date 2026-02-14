@@ -77,6 +77,8 @@ help:
 	@echo "  make build-all      - テストを含む全ビルド"
 	@echo "  make release        - リリースビルド"
 	@echo "  make dist           - 配布用アーカイブ作成 (.tar.gz)"
+	@echo "  make install        - ~/.cm/ にインストール"
+	@echo "  make uninstall      - ~/.cm/ からアンインストール"
 	@echo "  make clean          - ビルドディレクトリをクリーン"
 	@echo "  make rebuild        - クリーン後に再ビルド"
 	@echo ""
@@ -180,7 +182,6 @@ build-all:
 	@echo "Building Cm compiler with tests (debug mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
-	@ln -sf $(CM_BIN) $(CM)
 	@$(MAKE) libs
 	@echo "✅ Build complete (with tests, $(ARCH))!"
 
@@ -189,7 +190,6 @@ release:
 	@echo "Building Cm compiler (release mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
-	@ln -sf $(CM_BIN) $(CM)
 	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
 
@@ -233,6 +233,42 @@ dist: release
 	echo "    examples/          - サンプルコード"; \
 	echo "    README.md          - プロジェクト説明"; \
 	echo "=========================================="
+
+# インストール: ~/.cm/bin/cm と ~/.cm/lib/ にインストール
+CM_INSTALL_DIR = $(HOME)/.cm
+
+.PHONY: install
+install: release
+	@echo "=========================================="
+	@echo "  Cm インストール"
+	@echo "=========================================="
+	@mkdir -p $(CM_INSTALL_DIR)/bin
+	@mkdir -p $(CM_INSTALL_DIR)/lib
+	@cp -L $(CM) $(CM_INSTALL_DIR)/bin/cm
+	@cp build/lib/*.o $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
+	@cp build/lib/*.a $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
+	@echo ""
+	@echo "✅ インストール完了!"
+	@echo "  バイナリ: $(CM_INSTALL_DIR)/bin/cm"
+	@echo "  ライブラリ: $(CM_INSTALL_DIR)/lib/"
+	@echo ""
+	@if echo "$$PATH" | grep -q "$(CM_INSTALL_DIR)/bin"; then \
+		echo "  PATHは設定済みです"; \
+	else \
+		echo "  以下をシェル設定ファイルに追加してください:"; \
+		echo ""; \
+		echo "    export PATH=\"$(CM_INSTALL_DIR)/bin:\$$PATH\""; \
+		echo ""; \
+		echo "  例: echo 'export PATH=\"$(CM_INSTALL_DIR)/bin:\$$PATH\"' >> ~/.zshrc"; \
+	fi
+	@echo "=========================================="
+
+.PHONY: uninstall
+uninstall:
+	@echo "Cm をアンインストール中..."
+	@rm -rf $(CM_INSTALL_DIR)
+	@echo "✅ $(CM_INSTALL_DIR) を削除しました"
+	@echo "  シェル設定ファイルからPATH設定も削除してください"
 
 .PHONY: clean
 clean:

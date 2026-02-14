@@ -373,3 +373,73 @@ jobs:
 
       - name: Run UEFI compile tests
         run: make test-uefi
+
+  # ========================================
+  # Benchmark - パフォーマンスベンチマーク
+  # ========================================
+  benchmark:
+    name: Benchmark
+    needs: build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-22.04
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04
+
+      - name: Install LLVM
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Run Benchmarks
+        run: |
+          echo "=== Running Cm JIT Benchmarks ==="
+
+          PASS=0
+          FAIL=0
+
+          for bench in 06_prime_sieve 07_fibonacci_memoized 04_array_sort 05_matrix_multiply; do
+            echo ""
+            echo "--- $bench ---"
+
+            if [ -f "tests/bench_marks/cm/${bench}.cm" ]; then
+              echo "Running tests/bench_marks/cm/${bench}.cm..."
+              if timeout 120 ./cm run tests/bench_marks/cm/${bench}.cm > /dev/null 2>&1; then
+                echo "✅ $bench: PASS"
+                PASS=$((PASS + 1))
+              else
+                echo "❌ $bench: FAIL"
+                FAIL=$((FAIL + 1))
+              fi
+            else
+              echo "⚠️ $bench: SKIP (file not found)"
+            fi
+          done
+
+          echo ""
+          echo "=== Benchmark Results ==="
+          echo "Passed: $PASS"
+          echo "Failed: $FAIL"
+
+          # ベンチマーク失敗時はCIを失敗扱い
+          if [ $FAIL -gt 0 ]; then
+            echo "❌ Some benchmarks failed"
+            exit 1
+          else
+            echo "✅ All benchmarks passed!"
+          fi

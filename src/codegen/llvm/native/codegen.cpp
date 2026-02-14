@@ -549,12 +549,19 @@ std::string LLVMCodeGen::findRuntimeLibrary() {
     }
 #endif
 
+    // ホームディレクトリの~/.cm/lib/も検索（make install対応）
+    std::string homeLib;
+    if (const char* home = std::getenv("HOME")) {
+        homeLib = std::string(home) + "/.cm/lib/cm_runtime.o";
+    }
     std::vector<std::string> searchPaths = {
         "build/lib/cm_runtime.o",
         "./build/lib/cm_runtime.o",
         "../build/lib/cm_runtime.o",
         ".tmp/cm_runtime.o",
     };
+    if (!homeLib.empty())
+        searchPaths.push_back(homeLib);
 
     for (const auto& path : searchPaths) {
         if (std::filesystem::exists(path)) {
@@ -751,11 +758,18 @@ std::string LLVMCodeGen::findGPURuntimeLibrary() {
         return CM_GPU_RUNTIME_PATH;
     }
 #endif
+    // ホームディレクトリの~/.cm/lib/も検索（make install対応）
+    std::string homeLib;
+    if (const char* home = std::getenv("HOME")) {
+        homeLib = std::string(home) + "/.cm/lib/cm_gpu_runtime.o";
+    }
     std::vector<std::string> searchPaths = {
         "build/lib/cm_gpu_runtime.o",
         "./build/lib/cm_gpu_runtime.o",
         "../build/lib/cm_gpu_runtime.o",
     };
+    if (!homeLib.empty())
+        searchPaths.push_back(homeLib);
     for (const auto& path : searchPaths) {
         if (std::filesystem::exists(path)) {
             return path;
@@ -791,11 +805,18 @@ std::string LLVMCodeGen::findStdRuntimeLibrary(const std::string& name) {
     std::string ext = (name == "sync") ? ".a" : ".o";
     std::string filename = "cm_" + name + "_runtime" + ext;
 
+    // ホームディレクトリの~/.cm/lib/も検索（make install対応）
+    std::string homeLib;
+    if (const char* home = std::getenv("HOME")) {
+        homeLib = std::string(home) + "/.cm/lib/" + filename;
+    }
     std::vector<std::string> searchPaths = {
         "build/lib/" + filename,
         "./build/lib/" + filename,
         "../build/lib/" + filename,
     };
+    if (!homeLib.empty())
+        searchPaths.push_back(homeLib);
     for (const auto& path : searchPaths) {
         if (std::filesystem::exists(path)) {
             return path;
