@@ -187,27 +187,42 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
 
         // 変数宣言: 常にIDをサフィックスとして追加（引数以外）
         std::string defaultVal;
-        if (local.type) {
-            // インターフェース型がStructとして報告される場合に対応
-            if (local.type->kind == ast::TypeKind::Struct &&
-                interface_names_.count(local.type->name) > 0) {
-                // インターフェース型はfat objectとして初期化
-                defaultVal = "{data: null, vtable: null}";
-            } else if (local.type->kind == ast::TypeKind::Struct) {
-                // 構造体型：ネストフィールドも含めた完全なデフォルト値を生成
-                defaultVal = getStructDefaultValue(*local.type);
-            } else if (local.type->kind == ast::TypeKind::Array && local.type->element_type &&
-                       local.type->element_type->kind == ast::TypeKind::Struct &&
-                       local.type->array_size && *local.type->array_size > 0) {
-                // 構造体の配列：各要素を完全なデフォルト値で初期化
-                std::string elemDefault = getStructDefaultValue(*local.type->element_type);
-                defaultVal = "Array.from({length: " + std::to_string(*local.type->array_size) +
-                             "}, () => (" + elemDefault + "))";
-            } else {
-                defaultVal = jsDefaultValue(*local.type);
+
+        // グローバル変数の場合、MirGlobalVarから初期値を取得
+        bool foundGlobalInit = false;
+        if (local.is_global) {
+            for (const auto& gv : program.global_vars) {
+                if (gv && gv->name == local.name && gv->init_value) {
+                    defaultVal = emitConstant(*gv->init_value);
+                    foundGlobalInit = true;
+                    break;
+                }
             }
-        } else {
-            defaultVal = "null";
+        }
+
+        if (!foundGlobalInit) {
+            if (local.type) {
+                // インターフェース型がStructとして報告される場合に対応
+                if (local.type->kind == ast::TypeKind::Struct &&
+                    interface_names_.count(local.type->name) > 0) {
+                    // インターフェース型はfat objectとして初期化
+                    defaultVal = "{data: null, vtable: null}";
+                } else if (local.type->kind == ast::TypeKind::Struct) {
+                    // 構造体型：ネストフィールドも含めた完全なデフォルト値を生成
+                    defaultVal = getStructDefaultValue(*local.type);
+                } else if (local.type->kind == ast::TypeKind::Array && local.type->element_type &&
+                           local.type->element_type->kind == ast::TypeKind::Struct &&
+                           local.type->array_size && *local.type->array_size > 0) {
+                    // 構造体の配列：各要素を完全なデフォルト値で初期化
+                    std::string elemDefault = getStructDefaultValue(*local.type->element_type);
+                    defaultVal = "Array.from({length: " + std::to_string(*local.type->array_size) +
+                                 "}, () => (" + elemDefault + "))";
+                } else {
+                    defaultVal = jsDefaultValue(*local.type);
+                }
+            } else {
+                defaultVal = "null";
+            }
         }
         std::string varName = sanitizeIdentifier(local.name) + "_" + std::to_string(local.id);
 

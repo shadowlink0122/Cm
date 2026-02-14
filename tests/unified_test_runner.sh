@@ -1161,7 +1161,7 @@ PY
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            local llvm_exec="$TEMP_DIR/llvm_${category}_${test_name}_${BASHPID}"
+            local llvm_exec="$TEMP_DIR/llvm_${category//\//_}_${test_name}_${BASHPID}"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # テストディレクトリで実行（相対パス解決のため）
@@ -1177,7 +1177,7 @@ PY
             fi
             ;;
         llvm-wasm)
-            local wasm_file="$TEMP_DIR/wasm_${category}_${test_name}_${BASHPID}.wasm"
+            local wasm_file="$TEMP_DIR/wasm_${category//\//_}_${test_name}_${BASHPID}.wasm"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
