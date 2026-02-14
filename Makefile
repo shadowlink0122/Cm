@@ -72,9 +72,11 @@ help:
 	@echo ""
 	@echo "Build Commands:"
 	@echo "  make all            - ビルド（テスト含む）"
-	@echo "  make build          - cmコンパイラのみビルド"
+	@echo "  make build          - コンパイラ + ランタイムのビルド"
+	@echo "  make build-compiler - コンパイラのみビルド"
 	@echo "  make libs           - ランタイムライブラリのビルド"
 	@echo "  make build-all      - テストを含む全ビルド"
+	@echo "  make configure      - CMake configure (明示的再構成)"
 	@echo "  make release        - リリースビルド"
 	@echo "  make dist           - 配布用アーカイブ作成 (.tar.gz)"
 	@echo "  make install        - ~/.cm/ にインストール"
@@ -158,13 +160,40 @@ help:
 # ========================================
 
 .PHONY: all
-all: build libs
+all: build
 
-.PHONY: build
-build:
-	@echo "Building Cm compiler (debug mode, arch=$(ARCH))..."
+# CMake configure（初回 or 明示的に実行）
+.PHONY: configure
+configure:
+	@echo "Configuring CMake (debug mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
-	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@echo "✅ Configure complete!"
+
+.PHONY: configure-release
+configure-release:
+	@echo "Configuring CMake (release mode, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
+	@echo "✅ Configure complete!"
+
+.PHONY: configure-test
+configure-test:
+	@echo "Configuring CMake (debug mode with tests, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
+	@echo "✅ Configure complete!"
+
+# コンパイラのみビルド（configureは初回のみ自動実行）
+.PHONY: build-compiler
+build-compiler:
+	@if [ ! -f $(BUILD_DIR)/CMakeCache.txt ]; then \
+		echo "初回ビルド: CMake configureを実行..."; \
+		$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS); \
+	fi
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
+	@echo "✅ Compiler build complete! ($(ARCH))"
+
+# コンパイラ + ランタイムライブラリをビルド
+.PHONY: build
+build: build-compiler libs
 	@echo "✅ Build complete! ($(ARCH))"
 
 .PHONY: libs
@@ -179,17 +208,21 @@ libs-clean:
 
 .PHONY: build-all
 build-all:
-	@echo "Building Cm compiler with tests (debug mode, arch=$(ARCH))..."
-	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
-	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/CMakeCache.txt ] || ! grep -q 'BUILD_TESTING:BOOL=ON' $(BUILD_DIR)/CMakeCache.txt 2>/dev/null; then \
+		echo "テスト有効で CMake configureを実行..."; \
+		$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS); \
+	fi
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 	@$(MAKE) libs
 	@echo "✅ Build complete (with tests, $(ARCH))!"
 
 .PHONY: release
 release:
-	@echo "Building Cm compiler (release mode, arch=$(ARCH))..."
-	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
-	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/CMakeCache.txt ] || ! grep -q 'CMAKE_BUILD_TYPE:STRING=Release' $(BUILD_DIR)/CMakeCache.txt 2>/dev/null; then \
+		echo "リリースモードで CMake configureを実行..."; \
+		$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS); \
+	fi
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
 
