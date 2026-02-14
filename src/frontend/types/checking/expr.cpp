@@ -698,6 +698,35 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
                             if (member.name == variant_name && !member.fields.empty()) {
                                 // 最初のフィールドの型を使用（設計: 1フィールド推奨）
                                 binding_type = member.fields[0].second;
+
+                                // ジェネリック型パラメータを具象型に置換
+                                // 例: Result<int, string> の Ok(T) → T を int に置換
+                                if (binding_type && !scrutinee_type->type_args.empty()) {
+                                    const auto& enum_decl = enum_it->second;
+                                    const auto& gparams = enum_decl->generic_params.empty()
+                                                              ? std::vector<std::string>{}
+                                                              : enum_decl->generic_params;
+                                    // generic_params_v2からも名前を取得
+                                    std::vector<std::string> param_names;
+                                    if (!gparams.empty()) {
+                                        param_names = gparams;
+                                    } else {
+                                        for (const auto& gp : enum_decl->generic_params_v2) {
+                                            param_names.push_back(gp.name);
+                                        }
+                                    }
+
+                                    // マッピング構築: T → int, E → string
+                                    if (param_names.size() == scrutinee_type->type_args.size()) {
+                                        for (size_t i = 0; i < param_names.size(); ++i) {
+                                            if (binding_type->name == param_names[i]) {
+                                                binding_type = scrutinee_type->type_args[i];
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                         }

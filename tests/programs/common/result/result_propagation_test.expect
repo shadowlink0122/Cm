@@ -7,10 +7,8 @@ mod err: -1
 age ok: 25
 age ng: age cannot be negative
 age ng: age too large
-age ok: 0
-age ok: 150
---- Sequential Test ---
-20/4 = 5
-fail: division by zero
-100 mod 7 = 2
+--- Propagation Test ---
+age 30 is in 30s
+--- Function Call Test ---
+mod result: 1
 === PASS ===

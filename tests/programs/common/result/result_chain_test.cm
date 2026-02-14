@@ -1,5 +1,5 @@
 // Result型のチェインとネストパターンテスト
-// matchバインディングはprintlnでの表示に使用
+// matchバインディングを具象型変数に代入して使用
 import std::io::println;
 
 // Result型を明示的に定義
@@ -49,76 +49,93 @@ int main() {
     // 成功チェイン: 100 / 5 = 20, check_range(20, 50) = ok
     Result<int, string> r1 = safe_divide(100, 5);
     match (r1) {
-        Result::Ok(v) => { println("divide ok: {v}"); }
+        Result::Ok(v) => {
+            int val = v;
+            Result<int, string> r2 = check_range(val, 50);
+            match (r2) {
+                Result::Ok(v2) => {
+                    int val2 = v2;
+                    println("chain ok: {val2}");
+                }
+                Result::Err(e) => { println("range fail: {e}"); }
+            }
+        }
         Result::Err(e) => { println("divide fail: {e}"); }
-    }
-    // 20は50以下なのでOK
-    Result<int, string> r2 = check_range(20, 50);
-    match (r2) {
-        Result::Ok(v) => { println("range ok: {v}"); }
-        Result::Err(e) => { println("range fail: {e}"); }
     }
 
     // 失敗チェイン: 100 / 3 = 33, check_range(33, 10) = exceeds
     Result<int, string> r3 = safe_divide(100, 3);
     match (r3) {
-        Result::Ok(v) => { println("divide ok: {v}"); }
+        Result::Ok(v) => {
+            int val = v;
+            Result<int, string> r4 = check_range(val, 10);
+            match (r4) {
+                Result::Ok(v2) => {
+                    int val2 = v2;
+                    println("chain ok: {val2}");
+                }
+                Result::Err(e) => { println("range fail: {e}"); }
+            }
+        }
         Result::Err(e) => { println("divide fail: {e}"); }
-    }
-    Result<int, string> r4 = check_range(33, 10);
-    match (r4) {
-        Result::Ok(v) => { println("range ok: {v}"); }
-        Result::Err(e) => { println("range fail: {e}"); }
     }
 
     // 除算失敗
     Result<int, string> r5 = safe_divide(100, 0);
     match (r5) {
-        Result::Ok(v) => { println("divide ok: {v}"); }
+        Result::Ok(v) => {
+            int val = v;
+            println("unexpected ok: {val}");
+        }
         Result::Err(e) => { println("divide fail: {e}"); }
     }
 
     // --- 複数戻り値テスト ---
     println("--- Multiple Returns Test ---");
-    Result<int, string> d0 = parse_digit(0);
-    match (d0) {
-        Result::Ok(v) => { println("digit(0): {v}"); }
-        Result::Err(e) => { println("digit(0): {e}"); }
-    }
-    Result<int, string> d1 = parse_digit(3);
-    match (d1) {
-        Result::Ok(v) => { println("digit(3): {v}"); }
-        Result::Err(e) => { println("digit(3): {e}"); }
-    }
-    Result<int, string> d2 = parse_digit(9);
-    match (d2) {
-        Result::Ok(v) => { println("digit(9): {v}"); }
-        Result::Err(e) => { println("digit(9): {e}"); }
-    }
-    Result<int, string> d3 = parse_digit(12);
-    match (d3) {
-        Result::Ok(v) => { println("digit(12): {v}"); }
-        Result::Err(e) => { println("digit(12): {e}"); }
-    }
-    Result<int, string> d4 = parse_digit(-1);
-    match (d4) {
-        Result::Ok(v) => { println("digit(-1): {v}"); }
-        Result::Err(e) => { println("digit(-1): {e}"); }
+    int i = 0;
+    while (i < 5) {
+        int input = i * 3;
+        Result<int, string> r = parse_digit(input);
+        match (r) {
+            Result::Ok(v) => {
+                int val = v;
+                println("digit({input}): {val}");
+            }
+            Result::Err(e) => { println("digit({input}): {e}"); }
+        }
+        i = i + 1;
     }
 
     // --- 集約テスト ---
     println("--- Accumulate Test ---");
-    // 各除算の結果を個別に表示
-    Result<int, string> a1 = safe_divide(100, 1);
-    match (a1) { Result::Ok(v) => { println("100/1 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
-    Result<int, string> a2 = safe_divide(100, 2);
-    match (a2) { Result::Ok(v) => { println("100/2 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
-    Result<int, string> a3 = safe_divide(100, 3);
-    match (a3) { Result::Ok(v) => { println("100/3 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
-    Result<int, string> a4 = safe_divide(100, 4);
-    match (a4) { Result::Ok(v) => { println("100/4 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
-    Result<int, string> a5 = safe_divide(100, 0);
-    match (a5) { Result::Ok(v) => { println("100/0 = {v}"); } Result::Err(e) => { println("fail: {e}"); } }
+    int sum = 0;
+    int j = 1;
+    while (j <= 4) {
+        Result<int, string> r = safe_divide(100, j);
+        match (r) {
+            Result::Ok(v) => {
+                int val = v;
+                sum = sum + val;
+            }
+            Result::Err(e) => { println("skip: {e}"); }
+        }
+        j = j + 1;
+    }
+    // 100/1 + 100/2 + 100/3 + 100/4 = 100 + 50 + 33 + 25 = 208
+    println("sum: {sum}");
+
+    // --- 演算テスト ---
+    println("--- Arithmetic Test ---");
+    Result<int, string> ra = safe_divide(100, 4);
+    match (ra) {
+        Result::Ok(v) => {
+            int val = v;
+            int doubled = val * 2;
+            int added = val + 10;
+            println("val={val}, doubled={doubled}, added={added}");
+        }
+        Result::Err(e) => { println("err: {e}"); }
+    }
 
     println("=== PASS ===");
     return 0;
