@@ -617,6 +617,51 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     }
 
     // 関数宣言（先に全て宣言）- vtable生成前に必要
+    // グローバル変数を生成
+    for (const auto& gv : program.global_vars) {
+        if (!gv)
+            continue;
+
+        auto llvmType = convertType(gv->type);
+        if (!llvmType)
+            continue;
+
+        // 初期値を決定（指定がなければゼロ初期化）
+        llvm::Constant* initialValue = nullptr;
+        if (gv->init_value) {
+            // string型のglobal_varの場合、builder->CreateGlobalStringPtrは
+            // BasicBlockが必要なため使用できない。直接グローバル文字列定数を作成する。
+            if (std::holds_alternative<std::string>(gv->init_value->value)) {
+                auto& str = std::get<std::string>(gv->init_value->value);
+                // グローバル文字列定数を作成（null終端付き）
+                auto strConstant = llvm::ConstantDataArray::getString(ctx.getContext(), str, true);
+                auto strGlobal = new llvm::GlobalVariable(*module, strConstant->getType(), true,
+                                                          llvm::GlobalValue::PrivateLinkage,
+                                                          strConstant, gv->name + ".str");
+                strGlobal->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+                // 文字列へのポインタ（GEP定数）を初期値として使用
+                llvm::Constant* zero = llvm::ConstantInt::get(ctx.getI32Type(), 0);
+                llvm::Constant* indices[] = {zero, zero};
+                initialValue = llvm::ConstantExpr::getInBoundsGetElementPtr(strConstant->getType(),
+                                                                            strGlobal, indices);
+            } else {
+                initialValue = convertConstant(*gv->init_value);
+            }
+        }
+        if (!initialValue) {
+            initialValue = llvm::Constant::getNullValue(llvmType);
+        }
+
+        // リンケージ: exportなら外部公開、そうでなければ内部
+        auto linkage =
+            gv->is_export ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage;
+
+        auto globalVar = new llvm::GlobalVariable(*module, llvmType, gv->is_const, linkage,
+                                                  initialValue, gv->name);
+
+        globals[gv->name] = globalVar;
+    }
+
     // 重複した関数はスキップ
     // std::cerr << "[MIR2LLVM] Declaring function signatures...\n";
     std::set<std::string> declaredFunctions;
@@ -898,7 +943,20 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
                     // ベアメタル対応: すべての配列はスタックに割り当て（ヒープ不使用）
                     // static変数はグローバル変数として作成
-                    if (local.is_static) {
+                    // グローバル変数はconvert()で既に作成済み
+                    if (local.is_global) {
+                        auto it = globals.find(local.name);
+                        if (it != globals.end()) {
+                            locals[i] = it->second;
+                            allocatedLocals.insert(i);
+                        } else {
+                            // グローバル変数が見つからない場合はallocaで代替
+                            auto alloca = builder->CreateAlloca(
+                                llvmType, nullptr, "global_fallback_" + std::to_string(i));
+                            locals[i] = alloca;
+                            allocatedLocals.insert(i);
+                        }
+                    } else if (local.is_static) {
                         std::string staticKey = func.name + "_" + local.name;
                         auto it = staticVariables.find(staticKey);
                         if (it == staticVariables.end()) {
