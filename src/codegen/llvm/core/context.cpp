@@ -43,52 +43,7 @@ TargetConfig TargetConfig::getDefault(BuildTarget target) {
     }
 }
 
-// ネイティブターゲット設定
-TargetConfig TargetConfig::getNative() {
-    // ホストCPUの機能を検出してSIMDベクトル化を有効にする
-    std::string cpu = llvm::sys::getHostCPUName().str();
-    if (cpu.empty() || cpu == "generic") {
-        cpu = "native";  // フォールバック
-    }
-
-    // CPUの機能フラグを取得（SSE, AVX, NEON等）
-    llvm::StringMap<bool> features;
-    llvm::sys::getHostCPUFeatures(features);
-    std::string featureStr;
-    for (const auto& feature : features) {
-        if (feature.second) {  // 機能が有効な場合
-            if (!featureStr.empty())
-                featureStr += ",";
-            featureStr += "+" + feature.first().str();
-        }
-    }
-
-    // ターゲットトリプルを取得し、macOSバージョンを正規化
-    std::string triple = llvm::sys::getDefaultTargetTriple();
-#ifdef __APPLE__
-    // macOSトリプルのバージョンを15.0に正規化してリンカ警告を回避
-    // ユーザーがmacOS 15.x以降を使用している前提
-    size_t macosxPos = triple.find("-macosx");
-    if (macosxPos != std::string::npos) {
-        size_t versionStart = macosxPos + 7;  // "-macosx"の長さ
-        size_t versionEnd = triple.find_first_not_of("0123456789.", versionStart);
-        if (versionEnd == std::string::npos) {
-            versionEnd = triple.length();
-        }
-        triple = triple.substr(0, versionStart) + "15.0" + triple.substr(versionEnd);
-    }
-#endif
-
-    return {.target = BuildTarget::Native,
-            .triple = triple,
-            .cpu = cpu,
-            .features = featureStr,
-            .dataLayout = "",  // 後で設定
-            .noStd = false,
-            .noMain = false,
-            .debugInfo = false,
-            .optLevel = 2};
-}
+// TargetConfig::getNative() はtarget.cppで定義
 
 // LLVMコンテキストのコンストラクタ
 LLVMContext::LLVMContext(const std::string& moduleName, const TargetConfig& config)

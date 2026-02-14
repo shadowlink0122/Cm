@@ -249,6 +249,8 @@ list(APPEND CM_SOURCES
     src/codegen/js/emit_statements.cpp
     src/codegen/js/emit_expressions.cpp
     src/codegen/js/validation.cpp
+    src/codegen/js/builtins.cpp
+    src/codegen/js/runtime.cpp
 )
 
 # Add LLVM sources if enabled
@@ -276,6 +278,7 @@ if(CM_USE_LLVM)
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp
+        src/codegen/llvm/native/loop_detector.cpp
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
         # std バッキング実装（C/C++/Obj-C++）
@@ -483,11 +486,25 @@ endif()
 if(BUILD_TESTING)
     enable_testing()
     
-    # Find Google Test
-    find_package(GTest QUIET)
+    # FetchContentでGoogle Testをソースからビルド（アーキテクチャ整合性を保証）
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.17.0
+        GIT_SHALLOW TRUE
+    )
+    # GMockを無効化（AppleClangでの互換性問題を回避）
+    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
     
-    if(GTest_FOUND)
-        include(GoogleTest)
+    # FetchContentのGTestインクルードパスを取得
+    FetchContent_GetProperties(googletest SOURCE_DIR GTEST_SRC_DIR)
+    set(GTEST_INCLUDE_DIR "${GTEST_SRC_DIR}/googletest/include")
+    
+    include(GoogleTest)
         
         # Unit tests - Lexer
         add_executable(lexer_test
@@ -496,7 +513,8 @@ if(BUILD_TESTING)
             src/frontend/lexer/lexer.cpp
         )
         set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(lexer_test GTest::gtest_main cm_frontend)
+        target_include_directories(lexer_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(lexer_test gtest_main cm_frontend)
         gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
 
         # Unit tests - HIR Lowering
@@ -515,7 +533,8 @@ if(BUILD_TESTING)
             src/hir/lowering/decl.cpp
         )
         set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
+        target_include_directories(hir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(hir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Lowering
@@ -564,7 +583,8 @@ if(BUILD_TESTING)
             src/mir/analysis/loop_analysis.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
+        target_include_directories(mir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(mir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Optimization
@@ -614,7 +634,8 @@ if(BUILD_TESTING)
             src/mir/analysis/loop_analysis.cpp
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
+        target_include_directories(mir_optimization_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(mir_optimization_test gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
@@ -627,10 +648,6 @@ if(BUILD_TESTING)
         # )
         # target_link_libraries(mir_interpreter_test GTest::gtest_main cm_frontend)
         # gtest_discover_tests(mir_interpreter_test PROPERTIES LABELS "unit")
-    else()
-        message(STATUS "Google Test not found, skipping C++ tests")
-        message(STATUS "Install with: brew install googletest (macOS)")
-    endif()
 endif()
 
 # Installation

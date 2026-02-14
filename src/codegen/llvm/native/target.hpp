@@ -44,7 +44,7 @@ inline void llvmFatalErrorHandler(void* /*user_data*/, const char* message, bool
     if (gen_crash_diag) {
         std::cerr << "[LLVM] Please report this bug.\n";
     }
-    std::exit(1);  // 即時終了
+    std::exit(1);
 }
 
 /// ターゲットマネージャ
@@ -56,416 +56,38 @@ class TargetManager {
 
    public:
     /// コンストラクタ
-    explicit TargetManager(BuildTarget target) {
-        switch (target) {
-            case BuildTarget::Baremetal:
-                config = TargetConfig::getBaremetalARM();
-                break;
-            case BuildTarget::BaremetalX86:
-                config = TargetConfig::getBaremetalX86();
-                break;
-            case BuildTarget::Native:
-                config = TargetConfig::getNative();
-                break;
-            case BuildTarget::Wasm:
-                config = TargetConfig::getWasm();
-                break;
-            case BuildTarget::BaremetalUEFI:
-                config = TargetConfig::getBaremetalUEFI();
-                break;
-        }
-    }
+    explicit TargetManager(BuildTarget target);
 
     /// カスタム設定
     explicit TargetManager(const TargetConfig& cfg) : config(cfg) {}
 
     /// 初期化
-    void initialize() {
-        if (initialized)
-            return;
-
-        // LLVM Fatal Error Handlerを設定（エラー時に即時終了してハングを防止）
-        static bool errorHandlerInstalled = false;
-        if (!errorHandlerInstalled) {
-            llvm::install_fatal_error_handler(llvmFatalErrorHandler, nullptr);
-            errorHandlerInstalled = true;
-        }
-
-        // ネイティブ（ホスト）ターゲットの初期化
-        llvm::InitializeNativeTarget();
-        llvm::InitializeNativeTargetAsmPrinter();
-        llvm::InitializeNativeTargetAsmParser();
-
-        // WebAssemblyターゲットの初期化（クロスコンパイル用）
-        LLVMInitializeWebAssemblyTargetInfo();
-        LLVMInitializeWebAssemblyTarget();
-        LLVMInitializeWebAssemblyTargetMC();
-        LLVMInitializeWebAssemblyAsmParser();
-        LLVMInitializeWebAssemblyAsmPrinter();
-
-        // X86ターゲットの初期化（UEFI/baremetal-x86 クロスコンパイル用）
-        LLVMInitializeX86TargetInfo();
-        LLVMInitializeX86Target();
-        LLVMInitializeX86TargetMC();
-        LLVMInitializeX86AsmParser();
-        LLVMInitializeX86AsmPrinter();
-
-        // ARMターゲットの初期化（baremetal-arm クロスコンパイル用）
-        LLVMInitializeARMTargetInfo();
-        LLVMInitializeARMTarget();
-        LLVMInitializeARMTargetMC();
-        LLVMInitializeARMAsmParser();
-        LLVMInitializeARMAsmPrinter();
-
-        // ターゲットマシン作成
-        std::string error;
-        auto target = llvm::TargetRegistry::lookupTarget(config.triple, error);
-        if (!target) {
-            throw std::runtime_error("Target not found: " + error);
-        }
-
-        llvm::TargetOptions options;
-        options.MCOptions.AsmVerbose = true;
-
-        // ベアメタルの場合の特殊設定
-        if (config.noStd) {
-            options.DisableIntegratedAS = false;
-            options.MCOptions.ShowMCEncoding = false;
-
-// LLVM 17以降でMCUseDwarfDirectoryがenum型に変更
-#if LLVM_VERSION_MAJOR >= 17
-            options.MCOptions.MCUseDwarfDirectory = llvm::MCTargetOptions::DisableDwarfDirectory;
-#else
-            options.MCOptions.MCUseDwarfDirectory = false;
-#endif
-        }
-
-        // 最適化レベル設定
-#if LLVM_VERSION_MAJOR >= 18
-        llvm::CodeGenOptLevel optLevel;
-#else
-        llvm::CodeGenOpt::Level optLevel;
-#endif
-        switch (config.optLevel) {
-            case 0:
-#if LLVM_VERSION_MAJOR >= 18
-                optLevel = llvm::CodeGenOptLevel::None;
-#else
-                optLevel = llvm::CodeGenOpt::None;
-#endif
-                break;
-            case 1:
-#if LLVM_VERSION_MAJOR >= 18
-                optLevel = llvm::CodeGenOptLevel::Less;
-#else
-                optLevel = llvm::CodeGenOpt::Less;
-#endif
-                break;
-            case 2:
-#if LLVM_VERSION_MAJOR >= 18
-                optLevel = llvm::CodeGenOptLevel::Default;
-#else
-                optLevel = llvm::CodeGenOpt::Default;
-#endif
-                break;
-            case 3:
-#if LLVM_VERSION_MAJOR >= 18
-                optLevel = llvm::CodeGenOptLevel::Aggressive;
-#else
-                optLevel = llvm::CodeGenOpt::Aggressive;
-#endif
-                break;
-            case -1:
-#if LLVM_VERSION_MAJOR >= 18
-                optLevel = llvm::CodeGenOptLevel::Default;
-#else
-                optLevel = llvm::CodeGenOpt::Default;
-#endif
-                break;  // サイズは後で
-            default:
-#if LLVM_VERSION_MAJOR >= 18
-                optLevel = llvm::CodeGenOptLevel::Default;
-#else
-                optLevel = llvm::CodeGenOpt::Default;
-#endif
-        }
-
-        targetMachine =
-            target->createTargetMachine(config.triple, config.cpu, config.features, options,
-                                        llvm::Reloc::PIC_, llvm::CodeModel::Small, optLevel);
-
-        if (!targetMachine) {
-            throw std::runtime_error("Failed to create target machine");
-        }
-
-        initialized = true;
-    }
+    void initialize();
 
     /// TargetMachine取得（PassBuilder用）
     llvm::TargetMachine* getTargetMachine() const { return targetMachine; }
 
     /// モジュール設定
-    void configureModule(llvm::Module& module) {
-        module.setTargetTriple(config.triple);
-        module.setDataLayout(targetMachine->createDataLayout());
-    }
+    void configureModule(llvm::Module& module);
 
     /// オブジェクトファイル生成（安全版）
-    void emitObjectFile(llvm::Module& module, const std::string& filename) {
-        // 複雑度チェック
-        if (!SafeCodeGenerator::checkComplexity(module)) {
-            std::cerr << "[CODEGEN] Warning: Module complexity is high, proceeding with caution\n";
-        }
-
-        // タイムアウト付きで安全にコード生成
-        try {
-            SafeCodeGenerator::emitObjectFileSafe(module, targetMachine, filename,
-                                                  std::chrono::seconds(30));
-        } catch (const std::exception& e) {
-            // エラーメッセージを改善
-            std::string error_msg = "Failed to generate object file: ";
-            error_msg += e.what();
-            if (error_msg.find("timeout") != std::string::npos) {
-                error_msg += "\nHint: Try reducing optimization level (use -O1 or -O0)";
-            }
-            throw std::runtime_error(error_msg);
-        }
-    }
+    void emitObjectFile(llvm::Module& module, const std::string& filename);
 
     /// アセンブリ出力（安全版）
-    void emitAssembly(llvm::Module& module, const std::string& filename) {
-        // 複雑度チェック
-        if (!SafeCodeGenerator::checkComplexity(module)) {
-            std::cerr << "[CODEGEN] Warning: Module complexity is high, proceeding with caution\n";
-        }
-
-        // タイムアウト付きで安全にコード生成
-        try {
-            SafeCodeGenerator::emitAssemblySafe(module, targetMachine, filename,
-                                                std::chrono::seconds(30));
-        } catch (const std::exception& e) {
-            // エラーメッセージを改善
-            std::string error_msg = "Failed to generate assembly: ";
-            error_msg += e.what();
-            if (error_msg.find("timeout") != std::string::npos) {
-                error_msg += "\nHint: Try reducing optimization level (use -O1 or -O0)";
-            }
-            throw std::runtime_error(error_msg);
-        }
-    }
+    void emitAssembly(llvm::Module& module, const std::string& filename);
 
     /// リンカスクリプト生成（ベアメタル用）
-    void generateLinkerScript(const std::string& filename) {
-        if (config.target != BuildTarget::Baremetal) {
-            return;  // ベアメタル以外は不要
-        }
-
-        std::ofstream out(filename);
-        out << R"(/* Cm Baremetal Linker Script */
-MEMORY
-{
-    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 256K
-    RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 64K
-}
-
-ENTRY(_start)
-
-SECTIONS
-{
-    .text :
-    {
-        KEEP(*(.vectors))
-        *(.text)
-        *(.text.*)
-        *(.rodata)
-        *(.rodata.*)
-    } > FLASH
-
-    .data :
-    {
-        _sdata = .;
-        *(.data)
-        *(.data.*)
-        _edata = .;
-    } > RAM AT> FLASH
-
-    .bss :
-    {
-        _sbss = .;
-        *(.bss)
-        *(.bss.*)
-        *(COMMON)
-        _ebss = .;
-    } > RAM
-
-    _estack = ORIGIN(RAM) + LENGTH(RAM);
-}
-)";
-    }
+    void generateLinkerScript(const std::string& filename);
 
     /// スタートアップコード生成（ベアメタル用）
-    void generateStartupCode(llvm::Module& module) {
-        if (config.target != BuildTarget::Baremetal) {
-            return;
-        }
-
-        auto& ctx = module.getContext();
-        auto& builder = *new llvm::IRBuilder<>(ctx);
-
-        // _start関数
-        auto startType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), false);
-        auto startFunc =
-            llvm::Function::Create(startType, llvm::Function::ExternalLinkage, "_start", &module);
-
-        auto bb = llvm::BasicBlock::Create(ctx, "entry", startFunc);
-        builder.SetInsertPoint(bb);
-
-        // スタックポインタ設定
-        // LLVM 14+: opaque pointers を使用
-        auto spType = llvm::PointerType::get(ctx, 0);
-        auto sp = module.getOrInsertGlobal("_estack", spType);
-        // ARM: MSPレジスタに設定（インラインアセンブリ）
-        auto asmType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), {spType}, false);
-        auto setMSP = llvm::InlineAsm::get(asmType, "msr msp, $0", "r", true);
-        builder.CreateCall(setMSP, {sp});
-
-        // データセクション初期化
-        generateDataInit(module, builder);
-
-        // BSSセクションゼロクリア
-        generateBssInit(module, builder);
-
-        // main呼び出し
-        auto mainFunc = module.getFunction("main");
-        if (mainFunc) {
-            builder.CreateCall(mainFunc);
-        }
-
-        // 無限ループ（リターンしない）
-        auto loopBB = llvm::BasicBlock::Create(ctx, "hang", startFunc);
-        builder.CreateBr(loopBB);
-        builder.SetInsertPoint(loopBB);
-        builder.CreateBr(loopBB);
-
-        delete &builder;
-    }
+    void generateStartupCode(llvm::Module& module);
 
    private:
     /// データセクション初期化
-    void generateDataInit(llvm::Module& module, llvm::IRBuilder<>& builder) {
-        auto& ctx = module.getContext();
-
-        // extern symbols
-        // LLVM 14+: opaque pointers を使用
-        auto ptrTy = llvm::PointerType::get(ctx, 0);
-        auto sdata = module.getOrInsertGlobal("_sdata", ptrTy);
-        auto edata = module.getOrInsertGlobal("_edata", ptrTy);
-        auto sidata = module.getOrInsertGlobal("_sidata", ptrTy);
-
-        // memcpy(_sdata, _sidata, _edata - _sdata)
-        auto memcpy =
-            module.getOrInsertFunction("memcpy", ptrTy, ptrTy, ptrTy, llvm::Type::getInt32Ty(ctx));
-
-        // グローバル変数（ポインタへのポインタ）からポインタをロード
-        auto sdataPtr = builder.CreateLoad(ptrTy, sdata, "sdata_ptr");
-        auto edataPtr = builder.CreateLoad(ptrTy, edata, "edata_ptr");
-        auto sidataPtr = builder.CreateLoad(ptrTy, sidata, "sidata_ptr");
-
-        auto size = builder.CreatePtrDiff(ptrTy, edataPtr, sdataPtr);
-        builder.CreateCall(memcpy, {sdataPtr, sidataPtr, size});
-    }
+    void generateDataInit(llvm::Module& module, llvm::IRBuilder<>& builder);
 
     /// BSSセクション初期化
-    void generateBssInit(llvm::Module& module, llvm::IRBuilder<>& builder) {
-        auto& ctx = module.getContext();
-
-        // extern symbols
-        // LLVM 14+: opaque pointers を使用
-        auto ptrTy = llvm::PointerType::get(ctx, 0);
-        auto sbss = module.getOrInsertGlobal("_sbss", ptrTy);
-        auto ebss = module.getOrInsertGlobal("_ebss", ptrTy);
-
-        // memset(_sbss, 0, _ebss - _sbss)
-        auto memset = module.getOrInsertFunction("memset", ptrTy, ptrTy, llvm::Type::getInt8Ty(ctx),
-                                                 llvm::Type::getInt32Ty(ctx));
-
-        auto sbssPtr = builder.CreateLoad(ptrTy, sbss);
-        auto ebssPtr = builder.CreateLoad(ptrTy, ebss);
-
-        auto size = builder.CreatePtrDiff(ptrTy, ebssPtr, sbssPtr);
-        auto zero = llvm::ConstantInt::get(llvm::Type::getInt8Ty(ctx), 0);
-        builder.CreateCall(memset, {sbssPtr, zero, size});
-    }
+    void generateBssInit(llvm::Module& module, llvm::IRBuilder<>& builder);
 };
-
-/// TargetConfig::getNative() 実装
-inline TargetConfig TargetConfig::getNative() {
-    auto hostTriple = llvm::sys::getDefaultTargetTriple();
-    auto hostCpu = llvm::sys::getHostCPUName().str();
-
-#ifdef CM_DEFAULT_TARGET_ARCH
-    // ビルド時に指定されたターゲットアーキテクチャを使用
-    std::string targetArch = CM_DEFAULT_TARGET_ARCH;
-
-    // ホストアーキテクチャと異なる場合、トリプルを書き換え
-    bool isArm64 = (targetArch == "arm64" || targetArch == "aarch64");
-    bool isX86 = (targetArch == "x86_64");
-
-    std::string triple = hostTriple;
-    std::string cpu = hostCpu;
-
-    if (isArm64 && hostTriple.find("x86_64") != std::string::npos) {
-        // x86_64ホスト上でARM64ターゲット
-        auto pos = triple.find("x86_64");
-        if (pos != std::string::npos) {
-            triple.replace(pos, 6, "aarch64");
-        }
-        cpu = "generic";
-    } else if (isX86 && (hostTriple.find("arm64") != std::string::npos ||
-                         hostTriple.find("aarch64") != std::string::npos)) {
-        // ARM64ホスト上でx86_64ターゲット
-        auto pos = triple.find("arm64");
-        if (pos != std::string::npos) {
-            triple.replace(pos, 5, "x86_64");
-        } else {
-            pos = triple.find("aarch64");
-            if (pos != std::string::npos) {
-                triple.replace(pos, 7, "x86_64");
-            }
-        }
-        cpu = "generic";
-    }
-#else
-    std::string triple = hostTriple;
-    std::string cpu = hostCpu;
-#endif
-
-    // CPUの機能フラグを取得（SSE, AVX, NEON等）してSIMDベクトル化を有効にする
-    llvm::StringMap<bool> features;
-    llvm::sys::getHostCPUFeatures(features);
-    std::string featureStr;
-    // ホストと同一アーキの場合のみCPU機能を利用
-    if (cpu != "generic") {
-        for (const auto& feature : features) {
-            if (feature.second) {  // 機能が有効な場合
-                if (!featureStr.empty())
-                    featureStr += ",";
-                featureStr += "+" + feature.first().str();
-            }
-        }
-    }
-
-    TargetConfig config;
-    config.target = BuildTarget::Native;
-    config.triple = triple;
-    config.cpu = cpu;
-    config.features = featureStr;  // CPU機能を有効化
-    config.noStd = false;
-    config.noMain = false;
-    config.optLevel = 2;
-
-    // データレイアウトは後で設定
-    return config;
-}
 
 }  // namespace cm::codegen::llvm_backend
