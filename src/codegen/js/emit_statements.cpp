@@ -55,7 +55,15 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                     const auto& funcName = std::get<std::string>(useData.operand->data);
                     const auto& local = func.locals[target_local];
                     std::string rvalue = emitLambdaRef(funcName, func, local.captured_locals);
-                    emitter_.emitLine(place + " = " + rvalue + ";");
+                    // 通常の代入と同じlet宣言チェックを適用
+                    if (data.place.projections.empty() &&
+                        declare_on_assign_.count(target_local) > 0 &&
+                        declared_locals_.count(target_local) == 0) {
+                        emitter_.emitLine("let " + place + " = " + rvalue + ";");
+                        declared_locals_.insert(target_local);
+                    } else {
+                        emitter_.emitLine(place + " = " + rvalue + ";");
+                    }
                     break;
                 }
             }
