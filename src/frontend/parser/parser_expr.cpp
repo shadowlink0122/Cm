@@ -1,3 +1,4 @@
+#include "../../common/debug/par.hpp"
 #include "parser.hpp"
 
 namespace cm {

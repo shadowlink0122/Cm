@@ -168,10 +168,14 @@ target_link_libraries(cm_frontend INTERFACE cm_common)
 set(CM_SOURCES
     src/main.cpp
     src/frontend/lexer/token.cpp
+    src/frontend/lexer/lexer.cpp
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
+    src/frontend/parser/parser_decl.cpp
+    src/frontend/parser/parser_type.cpp
     # Type checking (分割済み)
+    src/frontend/types/scope.cpp
     src/frontend/types/checking/decl.cpp
     src/frontend/types/checking/stmt.cpp
     src/frontend/types/checking/expr.cpp
@@ -489,6 +493,7 @@ if(BUILD_TESTING)
         add_executable(lexer_test
             tests/unit/lexer_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
         )
         set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_link_libraries(lexer_test GTest::gtest_main cm_frontend)
@@ -498,9 +503,12 @@ if(BUILD_TESTING)
         add_executable(hir_lowering_test
             tests/unit/hir_lowering_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/frontend/parser/parser_decl.cpp
+            src/frontend/parser/parser_type.cpp
             src/hir/lowering/impl.cpp
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
@@ -514,15 +522,22 @@ if(BUILD_TESTING)
         add_executable(mir_lowering_test
             tests/unit/mir_lowering_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/frontend/parser/parser_decl.cpp
+            src/frontend/parser/parser_type.cpp
             src/hir/lowering/impl.cpp
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
+            src/mir/lowering/context.cpp
+            src/mir/lowering/base.cpp
+            src/mir/lowering/lowering.cpp
             src/mir/lowering/impl.cpp
             src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr.cpp
             src/mir/lowering/expr_basic.cpp
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
@@ -556,15 +571,22 @@ if(BUILD_TESTING)
         add_executable(mir_optimization_test
             tests/unit/mir_optimization_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/frontend/parser/parser_decl.cpp
+            src/frontend/parser/parser_type.cpp
             src/hir/lowering/impl.cpp
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
+            src/mir/lowering/context.cpp
+            src/mir/lowering/base.cpp
+            src/mir/lowering/lowering.cpp
             src/mir/lowering/impl.cpp
             src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr.cpp
             src/mir/lowering/expr_basic.cpp
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
