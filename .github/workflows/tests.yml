@@ -13,7 +13,7 @@ env:
 
 jobs:
   # ========================================
-  # Build - 全テストバックエンド共通ビルド
+  # Build - 全テスト共通ビルド（OS別、1回のみ）
   # ========================================
   build:
     name: Build (${{ matrix.os }})
@@ -30,12 +30,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # LLVM キャッシュ（インストール高速化）
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        id: cache-llvm
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}-build
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
           sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
           echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
           echo "LLVM_DIR=/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm" >> $GITHUB_ENV
@@ -75,6 +87,14 @@ jobs:
       - name: Build runtime libraries
         run: make libs
 
+      - name: Verify build
+        run: |
+          echo "=== Build Verification ==="
+          ls -la build/lib/ || echo "No lib directory"
+          ./cm --version || echo "cm not found"
+          echo "✅ Build completed (${{ matrix.arch }})"
+
+      # ビルド成果物をアップロード（全テストジョブで共有）
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -85,138 +105,35 @@ jobs:
           retention-days: 1
 
   # ========================================
-  # Integration Tests - matrix で全バックエンド×最適化レベルをカバー
+  # Integration Tests
+  # 全バックエンド × O0/O3 × 2OS = 16並列ジョブ
   # ========================================
   test:
-    name: ${{ matrix.backend_name }} O${{ matrix.opt }} (${{ matrix.os }})
+    name: ${{ matrix.name }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-14]
-        include:
-          # Interpreter O0
-          - os: ubuntu-22.04
-            backend: interpreter
-            backend_name: Interpreter
-            opt: 0
-            make_target: tip0
-            needs_node: false
-          - os: macos-14
-            backend: interpreter
-            backend_name: Interpreter
-            opt: 0
-            make_target: tip0
-            needs_node: false
-          # Interpreter O3
-          - os: ubuntu-22.04
-            backend: interpreter
-            backend_name: Interpreter
-            opt: 3
-            make_target: tip3
-            needs_node: false
-          - os: macos-14
-            backend: interpreter
-            backend_name: Interpreter
-            opt: 3
-            make_target: tip3
-            needs_node: false
-          # JIT O0
-          - os: ubuntu-22.04
-            backend: jit
-            backend_name: JIT
-            opt: 0
-            make_target: tjitp0
-            needs_node: false
-          - os: macos-14
-            backend: jit
-            backend_name: JIT
-            opt: 0
-            make_target: tjitp0
-            needs_node: false
-          # JIT O3
-          - os: ubuntu-22.04
-            backend: jit
-            backend_name: JIT
-            opt: 3
-            make_target: tjitp3
-            needs_node: false
-          - os: macos-14
-            backend: jit
-            backend_name: JIT
-            opt: 3
-            make_target: tjitp3
-            needs_node: false
-          # LLVM Native O0
-          - os: ubuntu-22.04
-            backend: llvm
-            backend_name: LLVM Native
-            opt: 0
-            make_target: tlp0
-            needs_node: false
-          - os: macos-14
-            backend: llvm
-            backend_name: LLVM Native
-            opt: 0
-            make_target: tlp0
-            needs_node: false
-          # LLVM Native O3
-          - os: ubuntu-22.04
-            backend: llvm
-            backend_name: LLVM Native
-            opt: 3
-            make_target: tlp3
-            needs_node: false
-          - os: macos-14
-            backend: llvm
-            backend_name: LLVM Native
-            opt: 3
-            make_target: tlp3
-            needs_node: false
-          # LLVM WASM O0
-          - os: ubuntu-22.04
-            backend: llvm-wasm
-            backend_name: LLVM WASM
-            opt: 0
-            make_target: tlwp0
-            needs_node: false
-          - os: macos-14
-            backend: llvm-wasm
-            backend_name: LLVM WASM
-            opt: 0
-            make_target: tlwp0
-            needs_node: false
-          # LLVM WASM O3
-          - os: ubuntu-22.04
-            backend: llvm-wasm
-            backend_name: LLVM WASM
-            opt: 3
-            make_target: tlwp3
-            needs_node: false
-          - os: macos-14
-            backend: llvm-wasm
-            backend_name: LLVM WASM
-            opt: 3
-            make_target: tlwp3
-            needs_node: false
-          # JavaScript O3
-          - os: ubuntu-22.04
-            backend: js
-            backend_name: JavaScript
-            opt: 3
-            make_target: tjp3
-            needs_node: true
-          - os: macos-14
-            backend: js
-            backend_name: JavaScript
-            opt: 3
-            make_target: tjp3
-            needs_node: true
+        config:
+          # JIT O0 / O3
+          - { id: jit-o0,      name: "JIT O0",         target: tjitp0, backend: jit,       needs_node: false }
+          - { id: jit-o3,      name: "JIT O3",         target: tjitp3, backend: jit,       needs_node: false }
+          # LLVM Native O0 / O3
+          - { id: llvm-o0,     name: "LLVM Native O0", target: tlp0,   backend: llvm,      needs_node: false }
+          - { id: llvm-o3,     name: "LLVM Native O3", target: tlp3,   backend: llvm,      needs_node: false }
+          # LLVM WASM O0 / O3
+          - { id: wasm-o0,     name: "LLVM WASM O0",   target: tlwp0,  backend: llvm-wasm, needs_node: false }
+          - { id: wasm-o3,     name: "LLVM WASM O3",   target: tlwp3,  backend: llvm-wasm, needs_node: false }
+          # JavaScript O0 / O3
+          - { id: js-o0,       name: "JS O0",          target: tjp0,   backend: js,        needs_node: true  }
+          - { id: js-o3,       name: "JS O3",          target: tjp3,   backend: js,        needs_node: true  }
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
+      # ビルド成果物ダウンロード（共有キャッシュ）
       - uses: actions/download-artifact@v4
         with:
           name: cm-build-${{ matrix.os }}
@@ -224,11 +141,22 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       # LLVM ランタイム（cm実行に必要）
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        id: cache-llvm
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}-build
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
-          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
           sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
           echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
 
@@ -240,16 +168,24 @@ jobs:
 
       # Node.js セットアップ（JSバックエンドのみ）
       - name: Setup Node.js
-        if: matrix.needs_node
+        if: matrix.config.needs_node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Run ${{ matrix.backend_name }} Tests (O${{ matrix.opt }})
+      # WASM ランタイム（WASMバックエンドのみ）
+      - name: Install wasmtime
+        if: matrix.config.backend == 'llvm-wasm'
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "latest"
+
+      # テスト実行
+      - name: Run ${{ matrix.config.name }} Tests
         id: run_tests
         run: |
           set +e
-          make ${{ matrix.make_target }} 2>&1 | tee test_output.log
+          make ${{ matrix.config.target }} 2>&1 | tee test_output.log
           TEST_EXIT_CODE=${PIPESTATUS[0]}
           echo "test_exit_code=${TEST_EXIT_CODE}" >> $GITHUB_OUTPUT
           # FAIL行と詳細をAnnotationに出力
@@ -287,6 +223,43 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-logs-${{ matrix.backend }}-o${{ matrix.opt }}-${{ matrix.os }}
+          name: test-logs-${{ matrix.config.id }}-${{ matrix.os }}
           path: test_output.log
           retention-days: 7
+
+  # ========================================
+  # Baremetal / UEFI コンパイルテスト（Linuxのみ）
+  # ========================================
+  baremetal-test:
+    name: Baremetal / UEFI Compile Tests
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-22.04
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04-build
+
+      - name: Install LLVM
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Run Baremetal compile tests
+        run: make test-baremetal
+
+      - name: Run UEFI compile tests
+        run: make test-uefi
