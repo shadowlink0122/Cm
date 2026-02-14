@@ -147,10 +147,10 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("if (spec === 'e') return val.toExponential();");
         emitter.emitLine("if (spec === 'E') return val.toExponential().toUpperCase();");
         emitter.emitLine("// 小数点精度 .N");
-        emitter.emitLine("let precMatch = spec.match(/^\\\\.(\\\\d+)$/);");
+        emitter.emitLine("let precMatch = spec.match(/^\\.(\\d+)$/);");
         emitter.emitLine("if (precMatch) return val.toFixed(parseInt(precMatch[1]));");
         emitter.emitLine("// 科学記法+精度 .Ne, .NE");
-        emitter.emitLine("precMatch = spec.match(/^\\\\.(\\\\d+)([eE])$/);");
+        emitter.emitLine("precMatch = spec.match(/^\\.(\\d+)([eE])$/);");
         emitter.emitLine("if (precMatch) {");
         emitter.increaseIndent();
         emitter.emitLine("let result = val.toExponential(parseInt(precMatch[1]));");
@@ -158,7 +158,7 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.decreaseIndent();
         emitter.emitLine("}");
         emitter.emitLine("// 幅とアライメント");
-        emitter.emitLine("let alignMatch = spec.match(/^([<>^]?)(\\\\d+)$/);");
+        emitter.emitLine("let alignMatch = spec.match(/^([<>^]?)(\\d+)$/);");
         emitter.emitLine("if (alignMatch) {");
         emitter.increaseIndent();
         emitter.emitLine("let align = alignMatch[1] || '>';");
@@ -173,7 +173,7 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.decreaseIndent();
         emitter.emitLine("}");
         emitter.emitLine("// ゼロパディング 0>N");
-        emitter.emitLine("let zeroPadMatch = spec.match(/^0>(\\\\d+)$/);");
+        emitter.emitLine("let zeroPadMatch = spec.match(/^0>(\\d+)$/);");
         emitter.emitLine("if (zeroPadMatch) {");
         emitter.increaseIndent();
         emitter.emitLine("let width = parseInt(zeroPadMatch[1]);");
@@ -193,9 +193,9 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("let result = format;");
         emitter.emitLine("let idx = 0;");
         emitter.emitLine("// エスケープされた波括弧を一時的に置換");
-        emitter.emitLine("result = result.replace(/\\\\{\\\\{/g, '\\x00LBRACE\\x00');");
+        emitter.emitLine("result = result.replace(/\\{\\{/g, '\\x00LBRACE\\x00');");
         emitter.emitLine("// フォーマット指定子付きプレースホルダを置換 {name:spec} or {:spec}");
-        emitter.emitLine("result = result.replace(/\\\\{[^}]*\\\\}/g, (match) => {");
+        emitter.emitLine("result = result.replace(/\\{[^}]*\\}/g, (match) => {");
         emitter.increaseIndent();
         emitter.emitLine("let inner = match.slice(1, -1);");
         emitter.emitLine("let spec = '';");
@@ -204,7 +204,7 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("return __cm_format(values[idx++], spec);");
         emitter.decreaseIndent();
         emitter.emitLine("});");
-        emitter.emitLine("result = result.replace(/\\\\}\\\\}/g, '\\x00RBRACE\\x00');");
+        emitter.emitLine("result = result.replace(/\\}\\}/g, '\\x00RBRACE\\x00');");
         emitter.emitLine("// エスケープを復元");
         emitter.emitLine("result = result.replace(/\\x00LBRACE\\x00/g, '{');");
         emitter.emitLine("result = result.replace(/\\x00RBRACE\\x00/g, '}');");
