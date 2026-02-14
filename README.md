@@ -85,7 +85,7 @@ void* compute(void* arg) {
 }
 
 int main() {
-    ulong t = spawn(compute as void*);
+    ulong t = spawn(compute);
     int result = join(t);  // 42
     return 0;
 }
@@ -139,53 +139,11 @@ Linux/macOS   macOS   Browser  Firmware    Node.js
 > **Note**: Rust/TypeScript/C++へのトランスパイル機能は廃止されました。
 > すべてのコード生成はLLVM IRまたはJS CodeGenを経由して行われます。
 
-## エコシステム: gen (弦)
+## エコシステム: gen (弦) — 将来構想
 
-> 💡 Cb/Cmが音楽（コード名）に由来することから、「弦」をモチーフにしています。
-
-### バージョン管理
-
-```bash
-gen install cm@1.0.0     # Cmバージョンインストール
-gen use 1.0.0            # グローバル設定
-gen use 0.9.0 --local    # プロジェクト固有設定
-```
-
-### パッケージ管理
-
-```bash
-# プロジェクト作成
-gen init my-app
-
-# 依存追加
-gen add cm-json
-gen add cm-http --dev
-
-# グローバルツール
-gen install -g cm-fmt
-gen install -g cm-lsp
-```
-
-### Cm.toml
-
-```toml
-[package]
-name = "my-app"
-version = "0.1.0"
-
-[dependencies]
-cm-std = "1.0"
-cm-json = "0.5"
-
-[build]
-optimization = 2  # -O2
-
-[target.native]
-triple = "x86_64-unknown-linux-gnu"
-
-[target.wasm]
-triple = "wasm32-unknown-unknown"
-```
+> 💡 Cb/Cmが音楽（コード名）に由来することから、「弦」をモチーフにした
+> パッケージマネージャ・バージョン管理ツールを将来的に計画しています。
+> **現在は未実装です。**
 
 ## CLI使用方法
 
@@ -266,19 +224,19 @@ int main() {
 
 GitHub Actionsで全バックエンドの自動テストを実行しています：
 
-### テスト構成 (2 OS × 3 Backends = 6 configurations)
+### テスト構成 (2 OS × 4 Backends × O0/O3 = 16 configurations)
 
-| OS | Arch | Interpreter | LLVM Native | LLVM WASM |
-|----|------|-------------|-------------|-----------|
-| **macOS 14** | ARM64 | ✅ | ✅ | ✅ |
-| **Ubuntu 22.04** | x86_64 | ✅ | ✅ | ✅ |
+| OS | Arch | JIT | LLVM Native | LLVM WASM | JavaScript |
+|----|------|-----|-------------|-----------|------------|
+| **macOS 14** | ARM64 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 |
+| **Ubuntu 22.04** | x86_64 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 |
 
 ### テスト内容
-- **C++ Unit Tests**: GoogleTestによる単体テスト（Lexer, HIR, MIR, 最適化）
-- **Interpreter Tests**: 376個のCmプログラムをインタプリタで実行
-- **LLVM Native Tests**: 376個のCmプログラムをネイティブバイナリにコンパイル・実行
-- **LLVM WASM Tests**: 376個のCmプログラムをWASMにコンパイル・Wasmtimeで実行
-- **JS Tests**: 344個のCmプログラムをJavaScriptにコンパイル・Node.jsで実行
+- **単体テスト**: GoogleTestによるC++単体テスト（Lexer, HIR, MIR, 最適化）
+- **JIT テスト**: 379個のCmプログラムをJIT実行（372 PASS / 0 FAIL）
+- **LLVM Native テスト**: ネイティブバイナリにコンパイル・実行（372 PASS / 0 FAIL）
+- **LLVM WASM テスト**: WASMにコンパイル・Wasmtimeで実行（338 PASS / 0 FAIL）
+- **JS テスト**: JavaScriptにコンパイル・Node.jsで実行（298 PASS / 0 FAIL）
 
 ### ローカルテスト実行
 
@@ -286,13 +244,18 @@ GitHub Actionsで全バックエンドの自動テストを実行しています
 # すべてのテスト
 make test
 
-# バックエンド別
-make test-interpreter-parallel  # インタプリタテスト（並列実行）
-make test-llvm-parallel         # LLVMネイティブテスト（並列実行）
-make test-wasm-parallel         # LLVM WASMテスト（並列実行）
+# バックエンド別（並列実行）
+make tip    # JITテスト（= test-jit-parallel）
+make tlp    # LLVMネイティブテスト
+make tlwp   # LLVM WASMテスト
+make tjp    # JSテスト
+
+# 最適化レベル指定
+make tjitp0   # JIT O0 parallel
+make tjitp3   # JIT O3 parallel
 
 # 個別カテゴリ
-./tests/unified_test_runner.sh -b interpreter -c basic
+./tests/unified_test_runner.sh -b jit -c basic
 ./tests/unified_test_runner.sh -b llvm -c generics
 ```
 
@@ -326,4 +289,4 @@ make test-wasm-parallel         # LLVM WASMテスト（並列実行）
 
 © 2025-2026 Cm言語プロジェクト
 
-**最終更新:** 2026-02-12
+**最終更新:** 2026-02-14
