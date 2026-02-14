@@ -191,11 +191,16 @@ set(CM_SOURCES
     src/hir/lowering/expr.cpp
     # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
+    src/mir/printer.cpp
+    src/mir/lowering/context.cpp
+    src/mir/lowering/base.cpp
+    src/mir/lowering/lowering.cpp
     src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp
     src/mir/lowering/monomorphization_utils.cpp
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt.cpp
+    src/mir/lowering/expr.cpp
     src/mir/lowering/expr_basic.cpp
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
