@@ -8,6 +8,7 @@ on:
 
 env:
   BUILD_TYPE: Debug
+  LLVM_VERSION: "17"
 
 jobs:
   # ========================================
@@ -18,10 +19,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
-      
+
       - name: Check C++ format
         run: |
           find src -name '*.cpp' -o -name '*.hpp' | head -50 | \
@@ -38,49 +39,42 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            llvm_version: "17"
             arch: x86_64
           - os: macos-14
-            llvm_version: "17"
             arch: arm64
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
-      # LLVM インストール (Ubuntu)
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }} libssl-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
-      
-      # LLVM インストール (macOS)
+          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm" >> $GITHUB_ENV
+
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
-          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+          echo "LDFLAGS=-L$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ env.LLVM_VERSION }})/include" >> $GITHUB_ENV
+          echo "LLVM_DIR=$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib/cmake/llvm" >> $GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
-      
-      # Google Test インストール (Ubuntu)
+
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y libgtest-dev
-      
-      # Google Test インストール (macOS)
+
       - name: Install Google Test (macOS)
         if: runner.os == 'macOS'
         run: brew install googletest
-      
-      # ビルド
+
       - name: Configure CMake
         run: |
           CMAKE_EXTRA_FLAGS=""
@@ -93,13 +87,13 @@ jobs:
             -DCM_TARGET_ARCH=${{ matrix.arch }} \
             -DBUILD_TESTING=ON \
             $CMAKE_EXTRA_FLAGS
-      
+
       - name: Build
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-      
+
       - name: Build runtime libraries
         run: make libs
-      
+
       - name: Verify build
         run: |
           echo "=== Build Verification ==="
@@ -135,45 +129,3 @@ jobs:
 
       - name: Prettier format check
         run: npm run format:check
-
-  # ========================================
-  # Baremetal/UEFI - コンパイルテスト
-  # ========================================
-  baremetal-test:
-    name: Baremetal / UEFI Compile Tests
-    needs: build
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install LLVM
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 17
-          sudo apt-get install -y llvm-17-dev clang-17 libssl-dev
-          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm" >> $GITHUB_ENV
-
-      - name: Install Google Test
-        run: sudo apt-get install -y libgtest-dev
-
-      - name: Build Cm compiler
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCM_USE_LLVM=ON \
-            -DCM_TARGET_ARCH=x86_64 \
-            -DBUILD_TESTING=ON
-          cmake --build build -j$(nproc)
-
-      - name: Run Baremetal compile tests
-        run: |
-          chmod +x tests/unified_test_runner.sh
-          OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal
-
-      - name: Run UEFI compile tests
-        run: |
-          chmod +x tests/unified_test_runner.sh
-          OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi
-

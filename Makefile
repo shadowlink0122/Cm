@@ -237,375 +237,73 @@ test-opt:
 	@ctest --test-dir $(BUILD_DIR) -R "MirOptimizationTest" --output-on-failure
 
 # ========================================
-# Integration Test Commands
+# Integration Test Commands（マクロで自動生成）
 # ========================================
 
-# インタプリタテスト（デフォルトはO3）
-.PHONY: test-interpreter
-test-interpreter:
-	@echo "Running interpreter tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter
+# テストターゲット自動生成マクロ
+# 引数: $(1)=バックエンド名, $(2)=表示名
+define BACKEND_DEFAULT_TARGETS
+.PHONY: test-$(1)
+test-$(1):
+	@echo "Running $(2) tests (O3)..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b $(1)
 
-# 並列インタプリタテスト
-.PHONY: test-interpreter-parallel
-test-interpreter-parallel:
-	@echo "Running interpreter tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
+.PHONY: test-$(1)-parallel
+test-$(1)-parallel:
+	@echo "Running $(2) tests (parallel, O3)..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b $(1) -p
+endef
 
-# インタプリタ最適化レベル別テスト（シリアル）
-.PHONY: test-interpreter-o0
-test-interpreter-o0:
-	@echo "Running interpreter tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b interpreter
+# 最適化レベル別テスト自動生成マクロ
+# 引数: $(1)=バックエンド名, $(2)=表示名, $(3)=最適化レベル(0-3)
+define BACKEND_OPT_TARGETS
+.PHONY: test-$(1)-o$(3)
+test-$(1)-o$(3):
+	@echo "Running $(2) tests (O$(3), serial)..."
+	@OPT_LEVEL=$(3) tests/unified_test_runner.sh -b $(1)
 
-.PHONY: test-interpreter-o1
-test-interpreter-o1:
-	@echo "Running interpreter tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b interpreter
+.PHONY: test-$(1)-o$(3)-parallel
+test-$(1)-o$(3)-parallel:
+	@echo "Running $(2) tests (O$(3), parallel)..."
+	@OPT_LEVEL=$(3) tests/unified_test_runner.sh -b $(1) -p
+endef
 
-.PHONY: test-interpreter-o2
-test-interpreter-o2:
-	@echo "Running interpreter tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b interpreter
-
-.PHONY: test-interpreter-o3
-test-interpreter-o3:
-	@echo "Running interpreter tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter
-
-# インタプリタ最適化レベル別テスト（パラレル）
-.PHONY: test-interpreter-o0-parallel
-test-interpreter-o0-parallel:
-	@echo "Running interpreter tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-o1-parallel
-test-interpreter-o1-parallel:
-	@echo "Running interpreter tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-o2-parallel
-test-interpreter-o2-parallel:
-	@echo "Running interpreter tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-o3-parallel
-test-interpreter-o3-parallel:
-	@echo "Running interpreter tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-all-opts
-test-interpreter-all-opts: test-interpreter-o0-parallel test-interpreter-o1-parallel test-interpreter-o2-parallel test-interpreter-o3-parallel
+# 全最適化レベルテスト集約マクロ
+# 引数: $(1)=バックエンド名, $(2)=表示名
+define BACKEND_ALL_OPTS_TARGET
+.PHONY: test-$(1)-all-opts
+test-$(1)-all-opts: test-$(1)-o0-parallel test-$(1)-o1-parallel test-$(1)-o2-parallel test-$(1)-o3-parallel
 	@echo ""
 	@echo "=========================================="
-	@echo "✅ All interpreter optimization level tests completed!"
+	@echo "✅ All $(2) optimization level tests completed!"
 	@echo "=========================================="
+endef
 
-# ========================================
-# LLVM Backend Test Commands
-# ========================================
+# バックエンド定義: 名前 表示名 ショートカット
+# --- interpreter ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,interpreter,interpreter))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,interpreter,interpreter,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,interpreter,interpreter))
 
-# LLVM ネイティブテスト（デフォルトはO3）
-.PHONY: test-llvm
-test-llvm:
-	@echo "Running LLVM native code generation tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm
+# --- jit ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,jit,JIT))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,jit,JIT,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,jit,JIT))
 
-# LLVM ネイティブテスト（並列）
-.PHONY: test-llvm-parallel
-test-llvm-parallel:
-	@echo "Running LLVM native code generation tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
+# --- llvm ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,llvm,LLVM native))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,llvm,LLVM native,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,llvm,LLVM native))
 
-# LLVM最適化レベル別テスト（シリアル）
-.PHONY: test-llvm-o0
-test-llvm-o0:
-	@echo "Running LLVM native tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm
+# --- llvm-wasm ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,llvm-wasm,LLVM WASM))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,llvm-wasm,LLVM WASM,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,llvm-wasm,LLVM WASM))
 
-.PHONY: test-llvm-o1
-test-llvm-o1:
-	@echo "Running LLVM native tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm
-
-.PHONY: test-llvm-o2
-test-llvm-o2:
-	@echo "Running LLVM native tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm
-
-.PHONY: test-llvm-o3
-test-llvm-o3:
-	@echo "Running LLVM native tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm
-
-# LLVM最適化レベル別テスト（パラレル）
-.PHONY: test-llvm-o0-parallel
-test-llvm-o0-parallel:
-	@echo "Running LLVM native tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-o1-parallel
-test-llvm-o1-parallel:
-	@echo "Running LLVM native tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-o2-parallel
-test-llvm-o2-parallel:
-	@echo "Running LLVM native tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-o3-parallel
-test-llvm-o3-parallel:
-	@echo "Running LLVM native tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-all-opts
-test-llvm-all-opts: test-llvm-o0-parallel test-llvm-o1-parallel test-llvm-o2-parallel test-llvm-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All LLVM optimization level tests completed!"
-	@echo "=========================================="
-
-# ========================================
-# JIT Backend Test Commands
-# ========================================
-
-# JITテスト（デフォルトはO3）
-.PHONY: test-jit
-test-jit:
-	@echo "Running JIT tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit
-
-# JITテスト（並列）
-.PHONY: test-jit-parallel
-test-jit-parallel:
-	@echo "Running JIT tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -p
-
-# JIT最適化レベル別テスト（シリアル）
-.PHONY: test-jit-o0
-test-jit-o0:
-	@echo "Running JIT tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b jit
-
-.PHONY: test-jit-o1
-test-jit-o1:
-	@echo "Running JIT tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b jit
-
-.PHONY: test-jit-o2
-test-jit-o2:
-	@echo "Running JIT tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b jit
-
-.PHONY: test-jit-o3
-test-jit-o3:
-	@echo "Running JIT tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit
-
-# JIT最適化レベル別テスト（パラレル）
-.PHONY: test-jit-o0-parallel
-test-jit-o0-parallel:
-	@echo "Running JIT tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-o1-parallel
-test-jit-o1-parallel:
-	@echo "Running JIT tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-o2-parallel
-test-jit-o2-parallel:
-	@echo "Running JIT tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-o3-parallel
-test-jit-o3-parallel:
-	@echo "Running JIT tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-all-opts
-test-jit-all-opts: test-jit-o0-parallel test-jit-o1-parallel test-jit-o2-parallel test-jit-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All JIT optimization level tests completed!"
-	@echo "=========================================="
-
-# LLVM WebAssemblyテスト（デフォルトはO3）
-.PHONY: test-llvm-wasm
-test-llvm-wasm:
-	@echo "Running LLVM WebAssembly code generation tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm
-
-# LLVM WebAssemblyテスト（並列）
-.PHONY: test-llvm-wasm-parallel
-test-llvm-wasm-parallel:
-	@echo "Running LLVM WebAssembly code generation tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
-
-# WASM最適化レベル別テスト（シリアル）
-.PHONY: test-llvm-wasm-o0
-test-llvm-wasm-o0:
-	@echo "Running WASM tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm-wasm
-
-.PHONY: test-llvm-wasm-o1
-test-llvm-wasm-o1:
-	@echo "Running WASM tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm-wasm
-
-.PHONY: test-llvm-wasm-o2
-test-llvm-wasm-o2:
-	@echo "Running WASM tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-wasm
-
-.PHONY: test-llvm-wasm-o3
-test-llvm-wasm-o3:
-	@echo "Running WASM tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm
-
-# WASM最適化レベル別テスト（パラレル）
-.PHONY: test-llvm-wasm-o0-parallel
-test-llvm-wasm-o0-parallel:
-	@echo "Running WASM tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-o1-parallel
-test-llvm-wasm-o1-parallel:
-	@echo "Running WASM tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-o2-parallel
-test-llvm-wasm-o2-parallel:
-	@echo "Running WASM tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-o3-parallel
-test-llvm-wasm-o3-parallel:
-	@echo "Running WASM tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-all-opts
-test-llvm-wasm-all-opts: test-llvm-wasm-o0-parallel test-llvm-wasm-o1-parallel test-llvm-wasm-o2-parallel test-llvm-wasm-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All WASM optimization level tests completed!"
-	@echo "=========================================="
-
-# ========================================
-# JavaScript Backend Test Commands
-# ========================================
-
-# JavaScript テスト（デフォルトはO3）
-.PHONY: test-js
-test-js:
-	@echo "Running JavaScript code generation tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js
-
-# JavaScript テスト（並列）
-.PHONY: test-js-parallel
-test-js-parallel:
-	@echo "Running JavaScript code generation tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p
-
-# JS最適化レベル別テスト（シリアル）
-.PHONY: test-js-o0
-test-js-o0:
-	@echo "Running JS tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b js
-
-.PHONY: test-js-o1
-test-js-o1:
-	@echo "Running JS tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b js
-
-.PHONY: test-js-o2
-test-js-o2:
-	@echo "Running JS tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b js
-
-.PHONY: test-js-o3
-test-js-o3:
-	@echo "Running JS tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js
-
-# JS最適化レベル別テスト（パラレル）
-.PHONY: test-js-o0-parallel
-test-js-o0-parallel:
-	@echo "Running JS tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-o1-parallel
-test-js-o1-parallel:
-	@echo "Running JS tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-o2-parallel
-test-js-o2-parallel:
-	@echo "Running JS tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-o3-parallel
-test-js-o3-parallel:
-	@echo "Running JS tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-all-opts
-test-js-all-opts: test-js-o0-parallel test-js-o1-parallel test-js-o2-parallel test-js-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All JS optimization level tests completed!"
-	@echo "=========================================="
+# --- js ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,js,JavaScript))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,js,JavaScript,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,js,JavaScript))
 
 # ========================================
 # UEFI / Baremetal Test Commands
@@ -615,56 +313,28 @@ test-js-all-opts: test-js-o0-parallel test-js-o1-parallel test-js-o2-parallel te
 .PHONY: test-uefi
 test-uefi:
 	@echo "Running UEFI compile tests..."
-	@chmod +x tests/unified_test_runner.sh
 	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi -c uefi:uefi_compile
 
 # ベアメタル コンパイルテスト
 .PHONY: test-baremetal
 test-baremetal:
 	@echo "Running Baremetal compile tests..."
-	@chmod +x tests/unified_test_runner.sh
 	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c "baremetal:baremetal baremetal:errors baremetal:allowed"
 
 # ========================================
 # Test Suite Commands
 # ========================================
 
-# スイート別テスト（JITバックエンド、パラレル）
-.PHONY: test-suite-core
-test-suite-core:
-	@echo "Running core suite tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s core -p
+# スイート別テスト自動生成マクロ
+# 引数: $(1)=スイート名
+define SUITE_TARGET
+.PHONY: test-suite-$(1)
+test-suite-$(1):
+	@echo "Running $(1) suite tests..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s $(1) -p
+endef
 
-.PHONY: test-suite-syntax
-test-suite-syntax:
-	@echo "Running syntax suite tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s syntax -p
-
-.PHONY: test-suite-stdlib
-test-suite-stdlib:
-	@echo "Running stdlib suite tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s stdlib -p
-
-.PHONY: test-suite-modules
-test-suite-modules:
-	@echo "Running modules suite tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s modules -p
-
-.PHONY: test-suite-platform
-test-suite-platform:
-	@echo "Running platform suite tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s platform -p
-
-.PHONY: test-suite-runtime
-test-suite-runtime:
-	@echo "Running runtime suite tests..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s runtime -p
+$(foreach s,core syntax stdlib modules platform runtime,$(eval $(call SUITE_TARGET,$(s))))
 
 # すべてのLLVMテストを実行
 .PHONY: test-llvm-all
@@ -690,7 +360,6 @@ test-all-opts: test-interpreter-all-opts test-llvm-all-opts test-llvm-wasm-all-o
 .PHONY: test-all-parallel
 test-all-parallel:
 	@echo "Running all tests in parallel..."
-	@chmod +x tests/unified_test_runner.sh
 	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
 	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
 	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
@@ -711,6 +380,9 @@ test-all: test test-interpreter test-llvm-all
 # ========================================
 # Run Commands
 # ========================================
+
+# デフォルトファイル設定
+FILE ?=
 
 .PHONY: run
 run:
@@ -766,9 +438,10 @@ format-check:
 lint: format-check
 
 # ========================================
-# Quick Development Shortcuts
+# Quick Shortcuts（マクロで自動生成）
 # ========================================
 
+# 基本ショートカット
 .PHONY: b
 b: build
 
@@ -787,161 +460,52 @@ tao: test-all-opts
 .PHONY: c
 c: clean
 
-.PHONY: ti
-ti: test-jit
+# バックエンド別ショートカット自動生成マクロ
+# 引数: $(1)=ショートカットプレフィクス, $(2)=バックエンド名
+define SHORTCUT_TEMPLATE
+.PHONY: $(1)
+$(1): test-$(2)
 
-.PHONY: tip
-tip: test-jit-parallel
+.PHONY: $(1)p
+$(1)p: test-$(2)-parallel
 
-.PHONY: ti0
-ti0: test-jit-o0
+.PHONY: $(1)0
+$(1)0: test-$(2)-o0
 
-.PHONY: ti1
-ti1: test-jit-o1
+.PHONY: $(1)1
+$(1)1: test-$(2)-o1
 
-.PHONY: ti2
-ti2: test-jit-o2
+.PHONY: $(1)2
+$(1)2: test-$(2)-o2
 
-.PHONY: ti3
-ti3: test-jit-o3
+.PHONY: $(1)3
+$(1)3: test-$(2)-o3
 
-.PHONY: tip0
-tip0: test-jit-o0-parallel
+.PHONY: $(1)p0
+$(1)p0: test-$(2)-o0-parallel
 
-.PHONY: tip1
-tip1: test-jit-o1-parallel
+.PHONY: $(1)p1
+$(1)p1: test-$(2)-o1-parallel
 
-.PHONY: tip2
-tip2: test-jit-o2-parallel
+.PHONY: $(1)p2
+$(1)p2: test-$(2)-o2-parallel
 
-.PHONY: tip3
-tip3: test-jit-o3-parallel
+.PHONY: $(1)p3
+$(1)p3: test-$(2)-o3-parallel
+endef
 
-.PHONY: tl
-tl: test-llvm
+# ショートカット生成
+$(eval $(call SHORTCUT_TEMPLATE,ti,interpreter))
+$(eval $(call SHORTCUT_TEMPLATE,tjit,jit))
+$(eval $(call SHORTCUT_TEMPLATE,tl,llvm))
+$(eval $(call SHORTCUT_TEMPLATE,tlw,llvm-wasm))
+$(eval $(call SHORTCUT_TEMPLATE,tj,js))
 
-.PHONY: tlp
-tlp: test-llvm-parallel
-
-.PHONY: tl0
-tl0: test-llvm-o0
-
-.PHONY: tl1
-tl1: test-llvm-o1
-
-.PHONY: tl2
-tl2: test-llvm-o2
-
-.PHONY: tl3
-tl3: test-llvm-o3
-
-.PHONY: tlp0
-tlp0: test-llvm-o0-parallel
-
-.PHONY: tlp1
-tlp1: test-llvm-o1-parallel
-
-.PHONY: tlp2
-tlp2: test-llvm-o2-parallel
-
-.PHONY: tlp3
-tlp3: test-llvm-o3-parallel
-
-.PHONY: tlw
-tlw: test-llvm-wasm
-
-.PHONY: tlwp
-tlwp: test-llvm-wasm-parallel
-
-.PHONY: tlw0
-tlw0: test-llvm-wasm-o0
-
-.PHONY: tlw1
-tlw1: test-llvm-wasm-o1
-
-.PHONY: tlw2
-tlw2: test-llvm-wasm-o2
-
-.PHONY: tlw3
-tlw3: test-llvm-wasm-o3
-
-.PHONY: tlwp0
-tlwp0: test-llvm-wasm-o0-parallel
-
-.PHONY: tlwp1
-tlwp1: test-llvm-wasm-o1-parallel
-
-.PHONY: tlwp2
-tlwp2: test-llvm-wasm-o2-parallel
-
-.PHONY: tlwp3
-tlwp3: test-llvm-wasm-o3-parallel
-
+# LLVM集約ショートカット
 .PHONY: tla
 tla: test-llvm-all
 
-.PHONY: tj
-tj: test-js
-
-.PHONY: tjp
-tjp: test-js-parallel
-
-.PHONY: tj0
-tj0: test-js-o0
-
-.PHONY: tj1
-tj1: test-js-o1
-
-.PHONY: tj2
-tj2: test-js-o2
-
-.PHONY: tj3
-tj3: test-js-o3
-
-.PHONY: tjp0
-tjp0: test-js-o0-parallel
-
-.PHONY: tjp1
-tjp1: test-js-o1-parallel
-
-.PHONY: tjp2
-tjp2: test-js-o2-parallel
-
-.PHONY: tjp3
-tjp3: test-js-o3-parallel
-
-# JIT shortcuts
-.PHONY: tjit
-tjit: test-jit
-
-.PHONY: tjitp
-tjitp: test-jit-parallel
-
-.PHONY: tjit0
-tjit0: test-jit-o0
-
-.PHONY: tjit1
-tjit1: test-jit-o1
-
-.PHONY: tjit2
-tjit2: test-jit-o2
-
-.PHONY: tjit3
-tjit3: test-jit-o3
-
-.PHONY: tjitp0
-tjitp0: test-jit-o0-parallel
-
-.PHONY: tjitp1
-tjitp1: test-jit-o1-parallel
-
-.PHONY: tjitp2
-tjitp2: test-jit-o2-parallel
-
-.PHONY: tjitp3
-tjitp3: test-jit-o3-parallel
-
-# Baremetal/UEFI shortcuts
+# Baremetal/UEFI ショートカット
 .PHONY: tb
 tb: test-baremetal
 
@@ -1033,9 +597,6 @@ bench-clean:
 	@rm -f /tmp/bench_*
 	@echo "✅ Benchmark cleanup complete!"
 
-# デフォルトファイル設定
-FILE ?=
-
 # ========================================
 # Standard Library Test Commands
 # ========================================
@@ -1097,5 +658,3 @@ sc: security-check
 
 .PHONY: pc
 pc: pre-commit
-
-

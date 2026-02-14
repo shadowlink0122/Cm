@@ -58,20 +58,14 @@ endif()
 
 # LLVM Configuration
 if(CM_USE_LLVM)
-    # Try to find LLVM using CMake config files
-    find_package(LLVM 18 CONFIG QUIET)
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 17 CONFIG QUIET)
-    endif()
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 16 CONFIG QUIET)
-    endif()
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 15 CONFIG QUIET)
-    endif()
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 14 CONFIG QUIET)
-    endif()
+    # サポートするLLVMバージョン（降順で検索）
+    set(CM_LLVM_SUPPORTED_VERSIONS 18 17 16 15 14)
+    foreach(_ver IN LISTS CM_LLVM_SUPPORTED_VERSIONS)
+        if(NOT LLVM_FOUND)
+            find_package(LLVM ${_ver} CONFIG QUIET)
+        endif()
+    endforeach()
+    # バージョン指定なしのフォールバック
     if(NOT LLVM_FOUND)
         find_package(LLVM CONFIG QUIET)
     endif()

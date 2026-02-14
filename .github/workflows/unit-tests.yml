@@ -9,6 +9,7 @@ on:
 
 env:
   BUILD_TYPE: Debug
+  LLVM_VERSION: "17"
 
 jobs:
   # ========================================
@@ -21,44 +22,42 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            llvm_version: "17"
             arch: x86_64
           - os: macos-14
-            llvm_version: "17"
             arch: arm64
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }} libssl-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
-      
+          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm" >> $GITHUB_ENV
+
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
-          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+          echo "LDFLAGS=-L$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ env.LLVM_VERSION }})/include" >> $GITHUB_ENV
+          echo "LLVM_DIR=$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib/cmake/llvm" >> $GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
-      
+
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y libgtest-dev
-      
+
       - name: Install Google Test (macOS)
         if: runner.os == 'macOS'
         run: brew install googletest
-      
+
       - name: Configure CMake
         run: |
           CMAKE_EXTRA_FLAGS=""
@@ -71,10 +70,10 @@ jobs:
             -DCM_TARGET_ARCH=${{ matrix.arch }} \
             -DBUILD_TESTING=ON \
             $CMAKE_EXTRA_FLAGS
-      
+
       - name: Build
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-      
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -86,10 +85,10 @@ jobs:
           retention-days: 1
 
   # ========================================
-  # Unit Tests - Lexer
+  # Unit Tests - matrix で全テストをカバー
   # ========================================
-  test-lexer:
-    name: Lexer (${{ matrix.os }})
+  unit-test:
+    name: ${{ matrix.test_name }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
@@ -97,178 +96,64 @@ jobs:
         os: [ubuntu-22.04, macos-14]
         include:
           - os: ubuntu-22.04
-            llvm_version: "17"
+            test_name: Lexer
+            test_bin: lexer_test
+            result_file: test-results-lexer.xml
           - os: macos-14
-            llvm_version: "17"
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-unit-build-${{ matrix.os }}
-      
-      - name: Set executable permissions
-        run: chmod +x build/bin/* cm 2>/dev/null || true
-      
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-      
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-      
-      - name: Run Lexer Test
-        run: ./build/bin/lexer_test --gtest_output=xml:test-results-lexer.xml
-
-  # ========================================
-  # Unit Tests - HIR Lowering
-  # ========================================
-  test-hir:
-    name: HIR Lowering (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, macos-14]
-        include:
+            test_name: Lexer
+            test_bin: lexer_test
+            result_file: test-results-lexer.xml
           - os: ubuntu-22.04
-            llvm_version: "17"
+            test_name: HIR Lowering
+            test_bin: hir_lowering_test
+            result_file: test-results-hir.xml
           - os: macos-14
-            llvm_version: "17"
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-unit-build-${{ matrix.os }}
-      
-      - name: Set executable permissions
-        run: chmod +x build/bin/* cm 2>/dev/null || true
-      
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-      
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-      
-      - name: Run HIR Lowering Test
-        run: ./build/bin/hir_lowering_test --gtest_output=xml:test-results-hir.xml
-
-  # ========================================
-  # Unit Tests - MIR Lowering
-  # ========================================
-  test-mir:
-    name: MIR Lowering (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, macos-14]
-        include:
+            test_name: HIR Lowering
+            test_bin: hir_lowering_test
+            result_file: test-results-hir.xml
           - os: ubuntu-22.04
-            llvm_version: "17"
+            test_name: MIR Lowering
+            test_bin: mir_lowering_test
+            result_file: test-results-mir.xml
           - os: macos-14
-            llvm_version: "17"
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cm-unit-build-${{ matrix.os }}
-      
-      - name: Set executable permissions
-        run: chmod +x build/bin/* cm 2>/dev/null || true
-      
-      - name: Install LLVM (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-      
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-      
-      - name: Run MIR Lowering Test
-        run: ./build/bin/mir_lowering_test --gtest_output=xml:test-results-mir.xml
-
-  # ========================================
-  # Unit Tests - MIR Optimization
-  # ========================================
-  test-optimization:
-    name: MIR Optimization (${{ matrix.os }})
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, macos-14]
-        include:
+            test_name: MIR Lowering
+            test_bin: mir_lowering_test
+            result_file: test-results-mir.xml
           - os: ubuntu-22.04
-            llvm_version: "17"
+            test_name: MIR Optimization
+            test_bin: mir_optimization_test
+            result_file: test-results-opt.xml
           - os: macos-14
-            llvm_version: "17"
+            test_name: MIR Optimization
+            test_bin: mir_optimization_test
+            result_file: test-results-opt.xml
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: cm-unit-build-${{ matrix.os }}
-      
+
       - name: Set executable permissions
         run: chmod +x build/bin/* cm 2>/dev/null || true
-      
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-      
+          sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-      
-      - name: Run MIR Optimization Test
-        run: ./build/bin/mir_optimization_test --gtest_output=xml:test-results-opt.xml
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
 
-  # ========================================
-  # Summary
-  # ========================================
+      - name: Run ${{ matrix.test_name }} Test
+        run: ./build/bin/${{ matrix.test_bin }} --gtest_output=xml:${{ matrix.result_file }}
