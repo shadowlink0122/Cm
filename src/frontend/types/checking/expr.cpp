@@ -135,6 +135,20 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
 
     if (inferred_type && !expr.type) {
         expr.type = inferred_type;
+    } else if (inferred_type && expr.type) {
+        // 推論された型がexpr.typeより情報豊富な場合は上書き
+        // 例: パーサーがname=空のStruct型を設定していても、
+        //      スコープから取得した型がname="Result"でtype_argsを持つ場合
+        bool inferred_has_more_info = false;
+        if (expr.type->name.empty() && !inferred_type->name.empty()) {
+            inferred_has_more_info = true;
+        }
+        if (expr.type->type_args.empty() && !inferred_type->type_args.empty()) {
+            inferred_has_more_info = true;
+        }
+        if (inferred_has_more_info) {
+            expr.type = inferred_type;
+        }
     } else if (!expr.type) {
         expr.type = ast::make_error();
     }

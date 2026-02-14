@@ -18,8 +18,31 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
     if (type->kind == ast::TypeKind::Struct || type->kind == ast::TypeKind::Interface ||
         type->kind == ast::TypeKind::Generic) {
         // enum名の場合はint型として解決
+        // ただしtype_argsを持つTagged Union enum（Result<int,string>等）は除外
         if (enum_names_.count(type->name)) {
-            return ast::make_int();
+            // type_argsを持つジェネリックenum（Result<T,E>, Option<T>等）は
+            // Tagged Unionとしてそのまま保持
+            if (!type->type_args.empty() && generic_enums_.count(type->name)) {
+                // そのまま返す（構造体として扱われる）
+            } else if (!type->type_args.empty()) {
+                // ジェネリックenum以外でもtype_argsがある場合はTagged Union判定
+                bool is_tagged_union = false;
+                auto def_it = enum_defs_.find(type->name);
+                if (def_it != enum_defs_.end() && def_it->second) {
+                    for (const auto& member : def_it->second->members) {
+                        if (member.has_data()) {
+                            is_tagged_union = true;
+                            break;
+                        }
+                    }
+                }
+                if (!is_tagged_union) {
+                    return ast::make_int();
+                }
+            } else {
+                // type_argsなし: 従来通りint型に変換
+                return ast::make_int();
+            }
         }
 
         // typedefに登録されていれば解決
@@ -99,6 +122,16 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         return a_name == b_name;
     }
 
+    // ジェネリックenum（Tagged Union）互換性: resolve_typedef前に判定
+    // Result<int, string> vs Result のようにtype_argsが一方にしかない場合でも
+    // 同名のジェネリックenumなら互換とみなす
+    if ((a->kind == ast::TypeKind::Struct || a->kind == ast::TypeKind::Generic) &&
+        (b->kind == ast::TypeKind::Struct || b->kind == ast::TypeKind::Generic) &&
+        a->name == b->name && !a->name.empty() && generic_enums_.count(a->name) > 0 &&
+        a->type_args.size() != b->type_args.size()) {
+        return true;
+    }
+
     // typedefを展開（名前付き型の場合）
     a = resolve_typedef(a);
     b = resolve_typedef(b);
@@ -124,6 +157,11 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
             }
             // ジェネリック型引数の比較（Result<int, string> vs Result<int, int>など）
             if (a->type_args.size() != b->type_args.size()) {
+                // Tagged Union enum: 一方がtype_argsなしでも名前一致なら互換
+                // Result<int, string> vs Result（コンストラクタ側が型引数未推論の場合）
+                if (generic_enums_.count(a->name) > 0) {
+                    return true;
+                }
                 return false;
             }
             for (size_t i = 0; i < a->type_args.size(); ++i) {

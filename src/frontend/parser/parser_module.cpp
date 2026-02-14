@@ -673,6 +673,35 @@ ast::DeclPtr Parser::parse_const_decl(bool is_export, std::vector<ast::Attribute
 }
 
 // ============================================================
+// グローバル変数宣言（トップレベル: TYPE NAME = EXPR;）
+// ============================================================
+ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
+                                           std::vector<ast::AttributeNode> attributes) {
+    uint32_t start_pos = current().start;
+
+    // 型
+    auto type = parse_type_with_union();
+
+    // 変数名
+    std::string name = expect_ident();
+
+    // 初期化子
+    expect(TokenKind::Eq);
+    auto init = parse_expr();
+
+    expect(TokenKind::Semicolon);
+
+    // GlobalVarDeclとして表現（is_const = false）
+    auto global_var = std::make_unique<ast::GlobalVarDecl>(
+        std::move(name), std::move(type), std::move(init), false  // is_const = false
+    );
+    global_var->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+    global_var->attributes = std::move(attributes);
+
+    return std::make_unique<ast::Decl>(std::move(global_var), Span{start_pos, previous().end});
+}
+
+// ============================================================
 // constexpr宣言
 // ============================================================
 ast::DeclPtr Parser::parse_constexpr() {

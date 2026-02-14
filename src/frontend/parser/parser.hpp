@@ -153,6 +153,11 @@ class Parser {
                 bool is_inline = consume_if(TokenKind::KwInline);
                 bool is_async = consume_if(TokenKind::KwAsync);
 
+                // グローバル変数判定（型 名前 = ... のパターン）
+                if (!is_static && !is_inline && !is_async && is_global_var_start()) {
+                    return parse_global_var_decl(true, std::move(attrs));
+                }
+
                 return parse_function(true, is_static, is_inline, std::move(attrs), is_async);
             }
 
@@ -256,9 +261,51 @@ class Parser {
             return parse_constexpr();
         }
 
+        // グローバル変数判定（型 名前 = ... のパターン）
+        if (!is_static && !is_inline && !is_async && is_global_var_start()) {
+            return parse_global_var_decl(false, std::move(attrs));
+        }
+
         // 関数 (型 名前 ...)
         return parse_function(false, is_static, is_inline, std::move(attrs), is_async);
     }
+
+    // グローバル変数宣言かどうかを先読みで判定
+    // 型名 識別子 = ... のパターンを検出
+    bool is_global_var_start() {
+        if (!is_type_start())
+            return false;
+
+        // 現在位置を保存
+        auto saved_pos = pos_;
+
+        // 型をスキップ（単純型のみ対応: int, long, etc.）
+        // 複合型（ポインタ、配列）は後で必要に応じて拡張
+        advance();  // 型トークンを消費
+
+        // ポインタ接尾辞をスキップ（int* x = 0; のパターン）
+        while (!is_at_end() && check(TokenKind::Star)) {
+            advance();
+        }
+
+        // 次が識別子かチェック
+        bool result = false;
+        if (!is_at_end() && check(TokenKind::Ident)) {
+            advance();  // 識別子を消費
+            // その次が = なら変数宣言
+            if (!is_at_end() && check(TokenKind::Eq)) {
+                result = true;
+            }
+        }
+
+        // 位置を復元
+        pos_ = saved_pos;
+        return result;
+    }
+
+    // グローバル変数宣言のパース
+    ast::DeclPtr parse_global_var_decl(bool is_export,
+                                       std::vector<ast::AttributeNode> attributes = {});
 
     // 関数定義
     ast::DeclPtr parse_function(bool is_export, bool is_static, bool is_inline,
