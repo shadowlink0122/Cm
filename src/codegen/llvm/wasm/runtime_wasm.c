@@ -25,19 +25,19 @@ __wasi_fd_write_direct(int fd, const void* iovs, size_t iovs_len, size_t* nwritt
 // Memory operations (memcpy, memcmp, memmove, memset)
 // These must be defined before including runtime_slice.c
 // ============================================================
-void* memcpy(void* dest, const void* src, int32_t n) {
+void* memcpy(void* dest, const void* src, size_t n) {
     char* d = (char*)dest;
     const char* s = (const char*)src;
-    for (int32_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) {
         d[i] = s[i];
     }
     return dest;
 }
 
-int memcmp(const void* s1, const void* s2, int32_t n) {
+int memcmp(const void* s1, const void* s2, size_t n) {
     const unsigned char* p1 = (const unsigned char*)s1;
     const unsigned char* p2 = (const unsigned char*)s2;
-    for (int32_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) {
         if (p1[i] != p2[i]) {
             return (int)p1[i] - (int)p2[i];
         }
@@ -45,24 +45,24 @@ int memcmp(const void* s1, const void* s2, int32_t n) {
     return 0;
 }
 
-void* memmove(void* dest, const void* src, int32_t n) {
+void* memmove(void* dest, const void* src, size_t n) {
     char* d = (char*)dest;
     const char* s = (const char*)src;
     if (d < s) {
-        for (int32_t i = 0; i < n; i++) {
+        for (size_t i = 0; i < n; i++) {
             d[i] = s[i];
         }
     } else {
-        for (int32_t i = n; i > 0; i--) {
+        for (size_t i = n; i > 0; i--) {
             d[i - 1] = s[i - 1];
         }
     }
     return dest;
 }
 
-void* memset(void* s, int c, int32_t n) {
+void* memset(void* s, int c, size_t n) {
     unsigned char* p = (unsigned char*)s;
-    for (int32_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) {
         p[i] = (unsigned char)c;
     }
     return s;
@@ -92,11 +92,11 @@ int puts(const char* s) {
     return 0;
 }
 
-// strlen - returns uint64_t to match Cm's usize type
-uint64_t strlen(const char* s) {
+// strlen - 標準ライブラリ互換のシグネチャ
+size_t strlen(const char* s) {
     if (!s)
         return 0;
-    return (uint64_t)wasm_strlen(s);
+    return (size_t)wasm_strlen(s);
 }
 
 // printf - simplified implementation
@@ -172,10 +172,9 @@ int printf(const char* format, ...) {
 
 // ============================================================
 // Memory allocation (wrapping wasm_alloc from runtime_format.c)
-// Cm言語のint型はWASM32ではi32なのでint32_tで受ける
 // ============================================================
-void* malloc(int32_t size) {
-    return wasm_alloc((size_t)size);
+void* malloc(size_t size) {
+    return wasm_alloc(size);
 }
 
 void free(void* ptr) {
@@ -183,8 +182,8 @@ void free(void* ptr) {
     (void)ptr;
 }
 
-void* calloc(int32_t nmemb, int32_t size) {
-    size_t total = (size_t)(nmemb * size);
+void* calloc(size_t nmemb, size_t size) {
+    size_t total = nmemb * size;
     void* ptr = wasm_alloc(total);
     if (ptr) {
         char* p = (char*)ptr;
@@ -195,15 +194,15 @@ void* calloc(int32_t nmemb, int32_t size) {
     return ptr;
 }
 
-void* realloc(void* ptr, int32_t size) {
+void* realloc(void* ptr, size_t size) {
     // Simple implementation: allocate new, copy old data
     // Note: This doesn't actually free the old memory
-    void* new_ptr = wasm_alloc((size_t)size);
+    void* new_ptr = wasm_alloc(size);
     if (new_ptr && ptr) {
         // Copy minimum possible (we don't know old size)
         char* src = (char*)ptr;
         char* dst = (char*)new_ptr;
-        for (size_t i = 0; i < (size_t)size; i++) {
+        for (size_t i = 0; i < size; i++) {
             dst[i] = src[i];
         }
     }
