@@ -898,8 +898,12 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Import Preprocessor ===\n";
 
+        auto phase_preprocess_start = std::chrono::steady_clock::now();
         preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
         auto preprocess_result = import_preprocessor.process(code, opts.input_file);
+        auto phase_preprocess_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - phase_preprocess_start)
+                                       .count();
 
         if (!preprocess_result.success) {
             std::cerr << "プリプロセッサエラー: " << preprocess_result.error_message << "\n";
@@ -1013,6 +1017,7 @@ int main(int argc, char* argv[]) {
         // ========== Lexer ==========
         if (opts.debug)
             std::cout << "=== Lexer ===\n";
+        auto phase_parse_start = std::chrono::steady_clock::now();
         Lexer lexer(code);
         auto tokens = lexer.tokenize();
         if (opts.debug)
@@ -1066,12 +1071,19 @@ int main(int argc, char* argv[]) {
         // ========== Type Checker ==========
         if (opts.debug)
             std::cout << "=== Type Checker ===\n";
+        auto phase_parse_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - phase_parse_start)
+                                  .count();
+        auto phase_typecheck_start = std::chrono::steady_clock::now();
         TypeChecker checker;
         // Check/Lintコマンドの場合のみLint警告を有効化
         if (opts.command == Command::Check) {
             checker.set_enable_lint_warnings(true);
         }
         bool type_check_ok = checker.check(program);
+        auto phase_typecheck_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - phase_typecheck_start)
+                                      .count();
 
         // 診断情報（エラー・警告）を表示
         if (!checker.diagnostics().empty()) {
@@ -1197,8 +1209,12 @@ int main(int argc, char* argv[]) {
         // ========== HIR Lowering ==========
         if (opts.debug)
             std::cout << "=== HIR Lowering ===\n";
+        auto phase_hir_start = std::chrono::steady_clock::now();
         hir::HirLowering hir_lowering;
         auto hir = hir_lowering.lower(program);
+        auto phase_hir_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - phase_hir_start)
+                                .count();
         if (opts.debug)
             std::cout << "HIR宣言数: " << hir.declarations.size() << "\n\n";
 
@@ -1212,10 +1228,14 @@ int main(int argc, char* argv[]) {
             std::cout << "=== MIR Lowering ===\n";
 
         debug::log(debug::Stage::Mir, debug::Level::Info, "Starting MIR lowering");
+        auto phase_mir_start = std::chrono::steady_clock::now();
         mir::MirLowering mir_lowering;
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
+        auto phase_mir_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - phase_mir_start)
+                                .count();
 
         if (opts.debug)
             std::cout << "MIR関数数: " << mir.functions.size() << "\n\n" << std::flush;
@@ -1228,7 +1248,7 @@ int main(int argc, char* argv[]) {
         }
 
         // ========== Optimization ==========
-
+        auto phase_opt_start = std::chrono::steady_clock::now();
         if (opts.optimization_level > 0 || opts.show_mir_opt) {
             if (cm::debug::g_debug_mode)
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
@@ -1246,6 +1266,9 @@ int main(int argc, char* argv[]) {
             if (opts.debug)
                 std::cout << "最適化完了\n\n";
         }
+        auto phase_opt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - phase_opt_start)
+                                .count();
 
         // 関数レベルのDCE（コンパイル時のみ）
         if (opts.command == Command::Compile) {
@@ -1495,7 +1518,11 @@ int main(int argc, char* argv[]) {
 
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
+                    auto phase_llvm_start = std::chrono::steady_clock::now();
                     codegen.compile(mir);
+                    auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                             std::chrono::steady_clock::now() - phase_llvm_start)
+                                             .count();
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
 
@@ -1514,6 +1541,21 @@ int main(int argc, char* argv[]) {
                                               .count();
                         std::cout << "✓ コンパイル完了: " << llvm_opts.outputFile << " ("
                                   << compile_ms << "ms)\n";
+                        if (opts.verbose) {
+                            auto frontend_ms = phase_preprocess_ms + phase_parse_ms +
+                                               phase_typecheck_ms + phase_hir_ms + phase_mir_ms +
+                                               phase_opt_ms;
+                            std::cout << "  プリプロセス: " << phase_preprocess_ms << "ms\n";
+                            std::cout
+                                << "  パース+型チェック: " << phase_parse_ms + phase_typecheck_ms
+                                << "ms\n";
+                            std::cout << "  HIR+MIR変換: " << phase_hir_ms + phase_mir_ms << "ms\n";
+                            std::cout << "  MIR最適化: " << phase_opt_ms << "ms\n";
+                            std::cout << "  LLVM codegen: " << phase_llvm_ms << "ms\n";
+                            std::cout << "  フロントエンド合計: " << frontend_ms << "ms ("
+                                      << (compile_ms > 0 ? frontend_ms * 100 / compile_ms : 0)
+                                      << "%)\n";
+                        }
                     }
 
                     // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
