@@ -163,6 +163,85 @@ std::vector<std::string> CacheManager::detect_changed_files(
     return changed;
 }
 
+// ========== モジュール別フィンガープリント計算 ==========
+
+std::map<std::string, std::string> CacheManager::compute_module_fingerprints(
+    const std::map<std::string, std::vector<std::string>>& module_files) {
+    std::map<std::string, std::string> fingerprints;
+
+    for (const auto& [module_name, files] : module_files) {
+        // モジュール内のファイルをソートして順序を固定
+        std::vector<std::string> sorted_files = files;
+        std::sort(sorted_files.begin(), sorted_files.end());
+
+        std::string combined;
+        for (const auto& file : sorted_files) {
+            std::string hash = compute_file_hash(file);
+            if (hash.empty()) {
+                continue;  // 読めないファイルはスキップ
+            }
+            combined += file + ":" + hash + "\n";
+        }
+
+        if (!combined.empty()) {
+            fingerprints[module_name] = picosha2::hash256_hex_string(combined);
+        }
+    }
+
+    return fingerprints;
+}
+
+// ========== 変更モジュール検出 ==========
+
+std::vector<std::string> CacheManager::detect_changed_modules(
+    const std::map<std::string, std::vector<std::string>>& module_files, const std::string& target,
+    int optimization_level) {
+    std::vector<std::string> changed;
+
+    // 前回のキャッシュエントリを探す
+    auto entries = load_manifest();
+    const CacheEntry* best = nullptr;
+    for (const auto& [_, entry] : entries) {
+        if (entry.target == target && entry.optimization_level == optimization_level) {
+            if (!best || entry.created_at > best->created_at) {
+                best = &entry;
+            }
+        }
+    }
+
+    // 前回のモジュールフィンガープリントがない場合、全モジュールを変更とみなす
+    if (!best || best->module_fingerprints.empty()) {
+        for (const auto& [module_name, _] : module_files) {
+            changed.push_back(module_name);
+        }
+        return changed;
+    }
+
+    // 現在のモジュールフィンガープリントを計算
+    auto current_fps = compute_module_fingerprints(module_files);
+
+    // 各モジュールのフィンガープリントを比較
+    for (const auto& [module_name, current_fp] : current_fps) {
+        auto prev_it = best->module_fingerprints.find(module_name);
+        if (prev_it == best->module_fingerprints.end()) {
+            // 新規モジュール
+            changed.push_back(module_name);
+        } else if (prev_it->second != current_fp) {
+            // 変更されたモジュール
+            changed.push_back(module_name);
+        }
+    }
+
+    // 前回あったが今回ないモジュール（削除）
+    for (const auto& [prev_module, _] : best->module_fingerprints) {
+        if (current_fps.find(prev_module) == current_fps.end()) {
+            changed.push_back(prev_module + " (削除)");
+        }
+    }
+
+    return changed;
+}
+
 // ========== キャッシュ保存 ==========
 
 bool CacheManager::store(const std::string& fingerprint, const std::filesystem::path& object_file,
@@ -322,7 +401,8 @@ std::map<std::string, CacheEntry> CacheManager::load_manifest() const {
     }
 
     // 簡易JSONパーサー: 行ベースでキー=値を読み取る
-    // 形式: fingerprint|target|opt_level|compiler_version|object_file|created_at|hash1,hash2,...
+    // V1形式: fingerprint|target|opt_level|version|object_file|timestamp|hashes
+    // V2形式: fingerprint|target|opt_level|version|object_file|timestamp|hashes|module_fps
     std::string line;
     while (std::getline(ifs, line)) {
         if (line.empty() || line[0] == '#') {
@@ -335,7 +415,7 @@ std::map<std::string, CacheEntry> CacheManager::load_manifest() const {
         if (!std::getline(iss, fingerprint, '|') || !std::getline(iss, target, '|') ||
             !std::getline(iss, opt_str, '|') || !std::getline(iss, version, '|') ||
             !std::getline(iss, obj_file, '|') || !std::getline(iss, timestamp, '|') ||
-            !std::getline(iss, hashes_str)) {
+            !std::getline(iss, hashes_str, '|')) {
             continue;
         }
 
@@ -361,6 +441,20 @@ std::map<std::string, CacheEntry> CacheManager::load_manifest() const {
             }
         }
 
+        // V2: モジュールフィンガープリントを解析ï¼存在する場合ï¼
+        std::string module_fps_str;
+        if (std::getline(iss, module_fps_str) && !module_fps_str.empty()) {
+            std::istringstream mfp_iss(module_fps_str);
+            std::string mfp_pair;
+            while (std::getline(mfp_iss, mfp_pair, ',')) {
+                auto eq_pos = mfp_pair.find('=');
+                if (eq_pos != std::string::npos) {
+                    entry.module_fingerprints[mfp_pair.substr(0, eq_pos)] =
+                        mfp_pair.substr(eq_pos + 1);
+                }
+            }
+        }
+
         entries[fingerprint] = entry;
     }
 
@@ -382,8 +476,8 @@ bool CacheManager::save_manifest(const std::map<std::string, CacheEntry>& entrie
     }
 
     // ヘッダーコメント
-    ofs << "# Cm Compiler Cache Manifest\n";
-    ofs << "# 形式: fingerprint|target|opt_level|version|object_file|timestamp|hashes\n";
+    ofs << "# Cm Compiler Cache Manifest V2\n";
+    ofs << "# 形式: fingerprint|target|opt_level|version|object_file|timestamp|hashes|module_fps\n";
 
     for (const auto& [fp, entry] : entries) {
         ofs << fp << "|" << entry.target << "|" << entry.optimization_level << "|"
@@ -398,6 +492,18 @@ bool CacheManager::save_manifest(const std::map<std::string, CacheEntry>& entrie
             ofs << file << "=" << hash;
             first = false;
         }
+
+        // モジュールフィンガープリントを書き出し（V2拡張）
+        ofs << "|";
+        first = true;
+        for (const auto& [module_name, mfp] : entry.module_fingerprints) {
+            if (!first) {
+                ofs << ",";
+            }
+            ofs << module_name << "=" << mfp;
+            first = false;
+        }
+
         ofs << "\n";
     }
 

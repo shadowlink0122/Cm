@@ -21,11 +21,12 @@ struct CacheConfig {
 
 // キャッシュエントリのメタデータ
 struct CacheEntry {
-    std::string fingerprint;                           // 合成フィンガープリント
-    std::map<std::string, std::string> source_hashes;  // ファイルパス → SHA-256
-    std::string target;                                // ビルドターゲット
-    int optimization_level = 0;                        // 最適化レベル
-    std::string compiler_version;                      // コンパイラバージョン
+    std::string fingerprint;                                 // 合成フィンガープリント
+    std::map<std::string, std::string> source_hashes;        // ファイルパス → SHA-256
+    std::map<std::string, std::string> module_fingerprints;  // モジュール名 → SHA-256
+    std::string target;                                      // ビルドターゲット
+    int optimization_level = 0;                              // 最適化レベル
+    std::string compiler_version;                            // コンパイラバージョン
     std::string object_file;  // キャッシュされたオブジェクトファイル名
     std::string created_at;   // 作成日時（ISO 8601）
 };
@@ -61,6 +62,17 @@ class CacheManager {
     std::vector<std::string> detect_changed_files(const std::vector<std::string>& current_files,
                                                   const std::string& target,
                                                   int optimization_level);
+
+    // モジュール別フィンガープリントを計算
+    // module_files: モジュール名 → そのモジュールに属するファイルパスのリスト
+    std::map<std::string, std::string> compute_module_fingerprints(
+        const std::map<std::string, std::vector<std::string>>& module_files);
+
+    // 変更されたモジュールのみを返す
+    // 前回のキャッシュエントリと比較し、フィンガープリントが変わったモジュールを検出
+    std::vector<std::string> detect_changed_modules(
+        const std::map<std::string, std::vector<std::string>>& module_files,
+        const std::string& target, int optimization_level);
 
     // コンパイル成果物をキャッシュに保存
     bool store(const std::string& fingerprint, const std::filesystem::path& object_file,

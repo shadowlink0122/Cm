@@ -45,7 +45,9 @@
 #include <sstream>
 #include <string>
 #if !defined(_WIN32)
+#include <fcntl.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #endif
 #include <vector>
 
@@ -919,20 +921,35 @@ int main(int argc, char* argv[]) {
         // コンパイル時間計測開始
         auto compile_start = std::chrono::steady_clock::now();
 
-        if (opts.incremental && opts.command == Command::Compile) {
-            cache::CacheManager cache_mgr(cache_config);
-            cache_fingerprint = cache_mgr.compute_fingerprint(
-                preprocess_result.resolved_files, opts.target.empty() ? "native" : opts.target,
-                opts.optimization_level);
+        if (opts.incremental) {
+            // Run/Compile両方でフィンガープリントを計算
+            std::string target_key;
+            if (opts.command == Command::Run) {
+                target_key = "jit";
+            } else {
+                target_key = opts.target.empty() ? "native" : opts.target;
+            }
 
-            if (!cache_fingerprint.empty()) {
+            cache::CacheManager cache_mgr(cache_config);
+            cache_fingerprint = cache_mgr.compute_fingerprint(preprocess_result.resolved_files,
+                                                              target_key, opts.optimization_level);
+
+            if (!cache_fingerprint.empty() && opts.command == Command::Compile) {
                 auto cached = cache_mgr.lookup(cache_fingerprint);
                 if (cached) {
                     // キャッシュヒット: オブジェクトファイルをコピーしてコンパイルをスキップ
                     auto cached_obj = cache_mgr.cache_dir() / "objects" / cached->object_file;
                     std::string output = opts.output_file;
-                    if (output.empty())
-                        output = "a.out";
+                    if (output.empty()) {
+                        // ターゲットに応じたデフォルト出力ファイル名
+                        if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+                            output = "output.js";
+                        } else if (opts.target == "wasm") {
+                            output = "a.wasm";
+                        } else {
+                            output = "a.out";
+                        }
+                    }
 
                     try {
                         std::filesystem::copy_file(
@@ -957,12 +974,10 @@ int main(int argc, char* argv[]) {
                         std::cout << "キャッシュミス: フルコンパイルを実行\n";
                         // 変更ファイルを表示
                         auto changed = cache_mgr.detect_changed_files(
-                            preprocess_result.resolved_files,
-                            opts.target.empty() ? "native" : opts.target, opts.optimization_level);
+                            preprocess_result.resolved_files, target_key, opts.optimization_level);
                         if (!changed.empty()) {
                             std::cout << "変更検出 (" << changed.size() << "ファイル):\n";
                             for (const auto& f : changed) {
-                                // ファイル名のみ表示（パスが長い場合）
                                 auto name = std::filesystem::path(f).filename().string();
                                 std::cout << "  → " << name << "\n";
                             }
@@ -1349,11 +1364,39 @@ int main(int argc, char* argv[]) {
         // ========== Backend ==========
         if (opts.command == Command::Run) {
 #ifdef CM_LLVM_ENABLED
+            // JITキャッシュ: ソースが変更されていない場合、キャッシュされたバイナリを直接実行
+            if (opts.incremental && !cache_fingerprint.empty()) {
+                cache::CacheManager cache_mgr(cache_config);
+                auto cached = cache_mgr.lookup(cache_fingerprint);
+                if (cached) {
+                    auto cached_exec = cache_mgr.cache_dir() / "objects" / cached->object_file;
+                    if (std::filesystem::exists(cached_exec)) {
+                        if (opts.verbose) {
+                            auto hit_end = std::chrono::steady_clock::now();
+                            auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              hit_end - compile_start)
+                                              .count();
+                            std::cout << "✓ JITキャッシュヒット (" << hit_ms << "ms)\n";
+                        }
+                        // キャッシュされたバイナリを直接実行
+                        std::string cmd = cached_exec.string();
+                        int exec_result = std::system(cmd.c_str());
+#if defined(_WIN32)
+                        return exec_result;
+#else
+                        return WEXITSTATUS(exec_result);
+#endif
+                    }
+                }
+            }
+
             // JITコンパイラで実行
             if (opts.verbose) {
                 std::cout << "=== JIT Compiler ===" << std::endl;
             }
 
+            // JITキャッシュ用: バックグラウンドでネイティブバイナリも生成
+            // MIRからLLVMコンパイルしてJIT実行
             cm::codegen::jit::JITEngine jit;
 
             // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
@@ -1365,6 +1408,10 @@ int main(int argc, char* argv[]) {
                 std::cerr << "JIT実行エラー: " << result.errorMessage << std::endl;
                 return 1;
             }
+
+            // 注意: JIT実行後のキャッシュ保存（codegen.compile）は、
+            // LLVM globalの再初期化問題とstdout汚染のため実装しない。
+            // JITキャッシュは「cm compile」で生成されたキャッシュの再利用のみサポート。
 
             if (opts.verbose) {
                 std::cout << "プログラム終了コード: " << result.exitCode << std::endl;
@@ -1406,6 +1453,38 @@ int main(int argc, char* argv[]) {
 
                     if (opts.verbose) {
                         std::cout << "✓ JavaScript コード生成完了: " << js_opts.outputFile << "\n";
+                    }
+
+                    // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
+                    if (opts.incremental && !cache_fingerprint.empty()) {
+                        cache::CacheManager cache_mgr(cache_config);
+                        cache::CacheEntry entry;
+                        entry.fingerprint = cache_fingerprint;
+                        entry.target = opts.target.empty() ? "js" : opts.target;
+                        entry.optimization_level = opts.optimization_level;
+                        entry.compiler_version = cache::CacheManager::get_compiler_version();
+                        entry.object_file = cache_fingerprint.substr(0, 16) + ".js";
+                        entry.created_at = cache::CacheManager::current_timestamp();
+                        for (const auto& f : preprocess_result.resolved_files) {
+                            entry.source_hashes[f] = cache::CacheManager::compute_file_hash(f);
+                        }
+
+                        // モジュール別フィンガープリントを計算
+                        std::map<std::string, std::vector<std::string>> module_files;
+                        for (const auto& mr : preprocess_result.module_ranges) {
+                            auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                            module_files[mr.file_path].push_back(abs_path);
+                        }
+                        if (!module_files.empty()) {
+                            entry.module_fingerprints =
+                                cache_mgr.compute_module_fingerprints(module_files);
+                        }
+
+                        if (cache_mgr.store(cache_fingerprint, js_opts.outputFile, entry)) {
+                            if (opts.verbose) {
+                                std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
+                            }
+                        }
                     }
 
                     // --runオプションがある場合は実行（Node.js）
@@ -1572,6 +1651,17 @@ int main(int argc, char* argv[]) {
                         // 各ソースファイルのハッシュを記録
                         for (const auto& f : preprocess_result.resolved_files) {
                             entry.source_hashes[f] = cache::CacheManager::compute_file_hash(f);
+                        }
+
+                        // モジュール別フィンガープリントを計算
+                        std::map<std::string, std::vector<std::string>> module_files;
+                        for (const auto& mr : preprocess_result.module_ranges) {
+                            auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                            module_files[mr.file_path].push_back(abs_path);
+                        }
+                        if (!module_files.empty()) {
+                            entry.module_fingerprints =
+                                cache_mgr.compute_module_fingerprints(module_files);
                         }
 
                         if (cache_mgr.store(cache_fingerprint, llvm_opts.outputFile, entry)) {

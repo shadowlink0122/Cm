@@ -57,6 +57,8 @@ VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
 TIMEOUT=15
+NO_CACHE=false
+CLEAN_CACHE=false
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
@@ -165,6 +167,8 @@ usage() {
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
     echo "  -t, --timeout <seconds>    Test timeout in seconds (default: 5)"
+    echo "  -n, --no-cache             キャッシュを無効化してテスト実行"
+    echo "  --clean-cache              テスト前にキャッシュを削除"
     echo "  -h, --help                 Show this help message"
     echo ""
     echo "Suites:"
@@ -207,6 +211,14 @@ while [[ $# -gt 0 ]]; do
             TIMEOUT="$2"
             shift 2
             ;;
+        -n|--no-cache)
+            NO_CACHE=true
+            shift
+            ;;
+        --clean-cache)
+            CLEAN_CACHE=true
+            shift
+            ;;
         -h|--help)
             usage
             ;;
@@ -222,6 +234,18 @@ if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-
     echo "Error: Invalid backend '$BACKEND'"
     echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js"
     exit 1
+fi
+
+# キャッシュオプションの構築
+CACHE_OPTS=""
+if [ "$NO_CACHE" = true ]; then
+    CACHE_OPTS="--no-cache"
+fi
+
+# テスト前キャッシュクリア
+if [ "$CLEAN_CACHE" = true ]; then
+    rm -rf "$PROJECT_ROOT/.cm-cache"
+    echo -e "${YELLOW}[INFO]${NC} キャッシュをクリアしました"
 fi
 
 # スイート展開
@@ -497,7 +521,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL $CACHE_OPTS "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         jit)
@@ -506,7 +530,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # JITで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL $CACHE_OPTS "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         typescript)
@@ -515,7 +539,7 @@ PY
             rm -rf "$ts_dir"
 
             # コンパイル（エラー時は出力ファイルにエラーメッセージを書き込む）
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-ts "$test_file" -o "$ts_dir" > "$output_file" 2>&1 || exit_code=$?
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-ts $CACHE_OPTS "$test_file" -o "$ts_dir" > "$output_file" 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # TypeScriptプロジェクトのビルドと実行
@@ -537,7 +561,7 @@ PY
             rm -rf "$rust_dir"
 
             # コンパイル（エラー時は出力ファイルにエラーメッセージを書き込む）
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-rust "$test_file" -o "$rust_dir" > "$output_file" 2>&1 || exit_code=$?
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-rust $CACHE_OPTS "$test_file" -o "$rust_dir" > "$output_file" 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # Rustコンパイルと実行
@@ -556,7 +580,7 @@ PY
             rm -rf "$cpp_dir"
 
             # コンパイル
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-cpp "$test_file" -o "$cpp_dir" > /dev/null 2>&1 || exit_code=$?
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-cpp $CACHE_OPTS "$test_file" -o "$cpp_dir" > /dev/null 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # C++コンパイルと実行
@@ -583,7 +607,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # LLVM経由でネイティブ実行ファイル生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # テストディレクトリで実行（相対パス解決のため）
@@ -606,7 +630,7 @@ PY
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 # WASMランタイムで実行
@@ -725,7 +749,7 @@ EOJS
             local test_basename="$(basename "$test_file")"
 
             # JavaScript生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 # Node.jsで実行
@@ -748,7 +772,7 @@ EOJS
             local test_basename="$(basename "$test_file")"
 
             # UEFI ターゲットでコンパイル（オブジェクト出力のみ）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
 
             # コンパイル成功 = PASS（実行はしない）
             if [ $exit_code -eq 0 ]; then
@@ -769,7 +793,7 @@ EOJS
             local test_basename="$(basename "$test_file")"
 
             # ベアメタルターゲットでコンパイル（オブジェクト出力のみ）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
 
             # コンパイル成功 = PASS（実行はしない）
             if [ $exit_code -eq 0 ]; then
@@ -957,8 +981,25 @@ run_tests_parallel() {
     log "Running $TOTAL tests in parallel..."
     log ""
     
-    # 並列ジョブ数（CPU数に基づく）
-    local max_jobs=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    # 並列ジョブ数の決定
+    # 環境変数CM_TEST_MAX_JOBSでオーバーライド可能
+    local cpu_count=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    local max_jobs=${CM_TEST_MAX_JOBS:-$cpu_count}
+
+    # コンパイル系バックエンド（llvm/wasm/js）はコンパイル+実行で負荷が高いため制限
+    case "$BACKEND" in
+        llvm|llvm-wasm|js)
+            # CI環境ではさらに制限（GitHub Actions runner = 2コア）
+            if [ -n "$CI" ]; then
+                max_jobs=$(( max_jobs > 2 ? 2 : max_jobs ))
+            else
+                max_jobs=$(( max_jobs > cpu_count / 2 ? cpu_count / 2 : max_jobs ))
+                # 最低2並列は確保
+                max_jobs=$(( max_jobs < 2 ? 2 : max_jobs ))
+            fi
+            ;;
+    esac
+    log "並列ジョブ数: $max_jobs (CPU: $cpu_count)"
     
     # 各テストを並列実行
     local pids=()
@@ -1155,17 +1196,17 @@ PY
             # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run -O$OPT_LEVEL $CACHE_OPTS "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
         llvm)
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             local llvm_exec="$TEMP_DIR/llvm_${category//\//_}_${test_name}_${BASHPID}"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
-                # テストディレクトリで実行（相対パス解決のため）
-                (cd "$test_dir" && "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+                # テストディレクトリで実行（タイムアウト付き）
+                (cd "$test_dir" && run_with_timeout_silent "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
@@ -1180,10 +1221,10 @@ PY
             local wasm_file="$TEMP_DIR/wasm_${category//\//_}_${test_name}_${BASHPID}.wasm"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 if command -v wasmtime >/dev/null 2>&1; then
-                    run_with_timeout_silent wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                    run_with_timeout_silent wasmtime run --dir=. "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
                     echo "SKIP:No WASM runtime" > "$result_file"
                     rm -f "$wasm_file"
@@ -1196,10 +1237,12 @@ PY
             local js_file="$TEMP_DIR/js_${test_name}_$$.js"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                    # nodeプロセスがゾンビ化する場合に備えてクリーンアップ
+                    kill %% 2>/dev/null || true
                 else
                     echo "SKIP:Node.js not found" > "$result_file"
                     rm -f "$js_file"
@@ -1213,7 +1256,7 @@ PY
             local uefi_obj="$TEMP_DIR/uefi_${test_name}_$$.efi"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ]; then
                 if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                     echo "COMPILE_OK" > "$output_file"
@@ -1226,7 +1269,7 @@ PY
             local baremetal_obj="$TEMP_DIR/baremetal_${test_name}_$$.o"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ]; then
                 if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                     echo "COMPILE_OK" > "$output_file"

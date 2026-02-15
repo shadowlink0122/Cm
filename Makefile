@@ -480,6 +480,31 @@ test-all-parallel:
 	@echo "✅ All parallel tests completed!"
 	@echo "=========================================="
 
+# キャッシュ無効テスト（並列）
+.PHONY: tipnc tlpnc twpnc tjpnc test-all-parallel-nc
+tipnc: build  ## インタプリタ（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p --no-cache
+
+tlpnc: build  ## LLVM（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p --no-cache
+
+twpnc: build  ## WASM（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p --no-cache
+
+tjpnc: build  ## JavaScript（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p --no-cache
+
+test-all-parallel-nc: build  ## 全バックエンド（パラレル、キャッシュ無効）
+	@echo "Running all tests in parallel (no cache)..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p --no-cache
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All parallel tests (no cache) completed!"
+	@echo "=========================================="
+
 # すべてのテストを実行
 .PHONY: test-all
 test-all: test test-interpreter test-llvm-all
