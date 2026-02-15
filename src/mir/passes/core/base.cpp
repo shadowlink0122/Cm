@@ -1,5 +1,7 @@
 #include "base.hpp"
 
+#include <chrono>
+
 namespace cm::mir::opt {
 
 int OptimizationPipeline::count_instructions(const MirProgram& program) const {
@@ -58,6 +60,10 @@ void OptimizationPipeline::run_until_fixpoint(MirProgram& program, int max_itera
     // 個々の最適化パスの実行回数を追跡
     std::unordered_map<std::string, int> pass_run_counts;
 
+    // 各パスが前回の反復で変更を生じたかを追跡
+    // 変更なし + その後に他のパスも変更なし → スキップ可能
+    std::vector<bool> pass_changed_last(passes.size(), true);  // 初回は全パス実行
+
     for (int i = 0; i < max_iterations; ++i) {
         ConvergenceManager::ChangeMetrics metrics;
 
@@ -75,8 +81,15 @@ void OptimizationPipeline::run_until_fixpoint(MirProgram& program, int max_itera
         // 個々のパスごとの実行回数制限
         const int max_pass_runs_total = 30;
 
+        // この反復で何かしら変更があったか
+        bool any_pass_changed_this_iteration = false;
+
+        // 各パスの変更状態を記録（次の反復用）
+        std::vector<bool> pass_changed_current(passes.size(), false);
+
         // 各パスを実行（回数制限付き）
-        for (auto& pass : passes) {
+        for (size_t p = 0; p < passes.size(); ++p) {
+            auto& pass = passes[p];
             std::string pass_name = pass->name();
 
             if (pass_run_counts[pass_name] >= max_pass_runs_total) {
@@ -87,17 +100,37 @@ void OptimizationPipeline::run_until_fixpoint(MirProgram& program, int max_itera
                 continue;
             }
 
+            // スキップ判定: 前回変更なし + その後に他のパスも変更なし → スキップ
+            if (i > 0 && !pass_changed_last[p] && !any_pass_changed_this_iteration) {
+                if (debug_output) {
+                    std::cout << "[OPT]   " << pass_name << " スキップ（前回変更なし）\n";
+                }
+                continue;
+            }
+
+            auto pass_start = std::chrono::steady_clock::now();
             bool pass_changed = pass->run_on_program(program);
+            auto pass_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - pass_start)
+                               .count();
+
+            pass_changed_current[p] = pass_changed;
 
             if (pass_changed) {
                 pass_run_counts[pass_name]++;
+                any_pass_changed_this_iteration = true;
                 if (debug_output) {
                     std::cout << "[OPT]   " << pass_name
                               << " 変更実行 (回数: " << pass_run_counts[pass_name] << "/"
-                              << max_pass_runs_total << ")\n";
+                              << max_pass_runs_total << ", " << pass_ms << "ms)\n";
                 }
+            } else if (debug_output && pass_ms > 0) {
+                std::cout << "[OPT]   " << pass_name << " 変更なし (" << pass_ms << "ms)\n";
             }
         }
+
+        // 次の反復用に変更状態を更新
+        pass_changed_last = pass_changed_current;
 
         int after_count = count_instructions(program);
         bool any_changed = (before_count != after_count);

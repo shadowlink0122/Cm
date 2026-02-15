@@ -26,6 +26,7 @@
 #include "lint/config.hpp"
 #include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
+#include "mir/mir_splitter.hpp"
 #include "mir/passes/cleanup/dce.hpp"
 #include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
@@ -94,7 +95,7 @@ struct Options {
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
     bool use_jit = true;          // JITコンパイラ使用（デフォルト）
     // インクリメンタルビルド設定
-    bool incremental = true;              // デフォルトで有効
+    bool incremental = false;             // デフォルトで無効（--incrementalで有効化）
     std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
     std::string cache_subcommand;         // cache サブコマンド（clear/stats）
 };
@@ -899,6 +900,7 @@ int main(int argc, char* argv[]) {
         // ========== 高速キャッシュ判定（ImportPreprocessor の前に実行）==========
         // ファイルのタイムスタンプ+サイズで変更がないか高速チェック
         // ヒットすれば ImportPreprocessor (1.6秒) + SHA-256 (0.4秒) をスキップ
+        std::string prev_build_fingerprint;
         if (opts.incremental && opts.command == Command::Compile) {
             std::string target_key = opts.target.empty() ? "native" : opts.target;
             cache::CacheConfig qc_config;
@@ -906,6 +908,7 @@ int main(int argc, char* argv[]) {
             cache::CacheManager qc_mgr(qc_config);
             auto qc_result =
                 qc_mgr.quick_check(opts.input_file, target_key, opts.optimization_level);
+            prev_build_fingerprint = qc_result.fingerprint;
             if (qc_result.valid) {
                 // 高速キャッシュヒット: ファイルコピーのみ
                 auto cached_obj = qc_mgr.cache_dir() / "objects" / qc_result.object_file;
@@ -1013,17 +1016,30 @@ int main(int argc, char* argv[]) {
                     }
                 } else {
                     // キャッシュミス: 変更モジュールを検出
-                    auto prev = cache_mgr.lookup(cache_fingerprint);
+                    // モジュール情報の構築
+                    std::map<std::string, std::vector<std::string>> module_files;
+                    for (const auto& mr : preprocess_result.module_ranges) {
+                        auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                        auto mod_name =
+                            cm::mir::MirSplitter::source_file_to_module_name(mr.file_path);
+                        module_files[mod_name].push_back(abs_path);
+                    }
+
+                    // キャッシュミス: 変更モジュールを検出
+                    auto prev = prev_build_fingerprint.empty()
+                                    ? std::nullopt
+                                    : cache_mgr.lookup(prev_build_fingerprint);
+
                     if (prev && !prev->module_fingerprints.empty()) {
                         // 前回のモジュールフィンガープリントと比較
-                        std::map<std::string, std::vector<std::string>> module_files;
-                        for (const auto& mr : preprocess_result.module_ranges) {
-                            auto abs_path = std::filesystem::absolute(mr.file_path).string();
-                            module_files[mr.file_path].push_back(abs_path);
-                        }
                         auto current_fps = cache_mgr.compute_module_fingerprints(module_files);
                         changed_modules = cache_mgr.detect_changed_modules(
                             prev->module_fingerprints, current_fps);
+                    } else {
+                        // 初回ビルドまたは前回情報なし: 全モジュールを変更扱い
+                        for (const auto& [name, _] : module_files) {
+                            changed_modules.push_back(name);
+                        }
                     }
                     if (opts.verbose) {
                         std::cout << "キャッシュミス: フルコンパイルを実行\n";
@@ -1659,29 +1675,26 @@ int main(int argc, char* argv[]) {
                     }
 
                     // モジュール分割情報を事前計算
+                    // 注意: 現在モジュール分割コンパイルは無効化されている
+                    // （フロントエンドが毎回全実行されるため、効果が限定的）
+                    // 将来 --split-modules オプションで有効化可能
                     cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info_pre;
-                    {
-                        auto pre_modules = cm::mir::MirSplitter::split_by_module(mir);
-                        for (const auto& [name, mod] : pre_modules) {
-                            module_info_pre.module_names.push_back(name);
-                            module_info_pre.module_func_count[name] = mod.functions.size();
-                        }
-                    }
 
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     auto phase_llvm_start = std::chrono::steady_clock::now();
 
                     // モジュール別差分コンパイルの判定
-                    bool use_module_compile =
-                        opts.incremental && !changed_modules.empty() &&
-                        changed_modules.size() < module_info_pre.module_names.size();
+                    // 現在は常に全体コンパイルを使用
+                    // モジュール分割はフロントエンドの差分化が実装されるまで無効
+                    bool use_module_compile = false;
 
                     // モジュール情報（事前計算）
                     cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info;
 
                     if (use_module_compile) {
                         // === モジュール別差分コンパイル ===
+                        // 現在無効化中 - フロントエンド差分化後に再有効化予定
                         if (opts.verbose) {
                             std::cout << "⚡ モジュール別差分コンパイル: " << changed_modules.size()
                                       << "/" << module_info_pre.module_names.size()
@@ -1692,7 +1705,11 @@ int main(int argc, char* argv[]) {
                         std::map<std::string, std::filesystem::path> cached_objects;
                         if (opts.incremental) {
                             cache::CacheManager cache_mgr(cache_config);
-                            cached_objects = cache_mgr.get_cached_module_objects(cache_fingerprint);
+                            // 前回のビルドで生成されたオブジェクトファイルを取得
+                            std::string fp_to_use = prev_build_fingerprint.empty()
+                                                        ? cache_fingerprint
+                                                        : prev_build_fingerprint;
+                            cached_objects = cache_mgr.get_cached_module_objects(fp_to_use);
                         }
 
                         // 一時ディレクトリの作成

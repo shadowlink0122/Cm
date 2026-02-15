@@ -11,6 +11,12 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
         return false;
     }
 
+    // 小規模関数の早期リターン: ブロック数が1で文がない場合はスキップ
+    if (func.basic_blocks.size() == 1 && func.basic_blocks[0] &&
+        func.basic_blocks[0]->statements.empty()) {
+        return false;
+    }
+
     rebuild_cfg(func);
 
     const size_t block_count = func.basic_blocks.size();
