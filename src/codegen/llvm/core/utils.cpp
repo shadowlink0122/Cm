@@ -1108,6 +1108,38 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         }
     }
 
+    // モジュール分割コンパイル時: allModuleFunctionsから検索
+    if (!allModuleFunctions.empty()) {
+        for (const auto* func : allModuleFunctions) {
+            if (func && func->name == name) {
+                // 戻り値型
+                llvm::Type* returnType = ctx.getVoidType();
+                if (func->return_local < func->locals.size()) {
+                    auto& returnLocal = func->locals[func->return_local];
+                    if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
+                        returnType = convertType(returnLocal.type);
+                    }
+                }
+
+                // パラメータ型
+                std::vector<llvm::Type*> paramTypes;
+                for (const auto& arg_local : func->arg_locals) {
+                    if (arg_local < func->locals.size()) {
+                        auto& local = func->locals[arg_local];
+                        if (local.type) {
+                            paramTypes.push_back(convertType(local.type));
+                        }
+                    }
+                }
+
+                // 関数型（可変長引数を考慮）
+                auto funcType = llvm::FunctionType::get(returnType, paramTypes, func->is_variadic);
+                auto result = module->getOrInsertFunction(name, funcType);
+                return llvm::cast<llvm::Function>(result.getCallee());
+            }
+        }
+    }
+
     // 最終フォールバック: void() として宣言（本来ここには到達しないはず）
     std::cerr << "[WARN] declareExternalFunction: unknown function '" << name
               << "' - using void() signature\n";

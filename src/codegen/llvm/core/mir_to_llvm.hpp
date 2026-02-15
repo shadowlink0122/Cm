@@ -58,6 +58,10 @@ class MIRToLLVM {
         vtableGlobals;  // type_interface -> vtable
     const mir::MirProgram* currentProgram = nullptr;
 
+    // モジュール分割コンパイル時の全関数参照リスト
+    // declareExternalFunctionでcurrentProgramがNULLの場合に使用
+    std::vector<const mir::MirFunction*> allModuleFunctions;
+
     // ターゲット情報キャッシュ
     bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
 

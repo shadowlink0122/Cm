@@ -208,6 +208,44 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
         for (const auto& file : imported_files) {
             result.resolved_files.push_back(file);
         }
+
+        // ソースマップからモジュール範囲を再構築
+        // process_importsでは正確なバイトオフセットを追跡できないためここで計算
+        if (!result.source_map.empty() && !result.processed_source.empty()) {
+            result.module_ranges.clear();
+
+            std::string current_file;
+            size_t start_offset = 0;
+            size_t line_idx = 0;
+            size_t pos = 0;
+            size_t len = result.processed_source.length();
+
+            while (pos < len && line_idx < result.source_map.size()) {
+                // 次の改行を探す
+                size_t next_newline = result.processed_source.find('\n', pos);
+                // 改行を含む行末位置
+                size_t line_end = (next_newline == std::string::npos) ? len : next_newline + 1;
+
+                const auto& entry = result.source_map[line_idx];
+
+                // ファイルが切り替わったら範囲を保存
+                if (entry.original_file != current_file) {
+                    if (!current_file.empty()) {
+                        result.module_ranges.push_back({current_file, "", 0, start_offset, pos});
+                    }
+                    current_file = entry.original_file;
+                    start_offset = pos;
+                }
+
+                pos = line_end;
+                line_idx++;
+            }
+
+            // 最後の範囲を保存
+            if (!current_file.empty()) {
+                result.module_ranges.push_back({current_file, "", 0, start_offset, len});
+            }
+        }
     } catch (const std::exception& e) {
         result.success = false;
         result.error_message = e.what();

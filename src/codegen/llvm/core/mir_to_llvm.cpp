@@ -716,6 +716,16 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
                             "Starting module conversion: " + module.module_name);
 
+    // allModuleFunctionsを構築（自モジュール + extern の全関数）
+    // declareExternalFunctionでcurrentProgramがNULLの場合のフォールバックに使用
+    allModuleFunctions.clear();
+    for (const auto* func : module.functions) {
+        allModuleFunctions.push_back(func);
+    }
+    for (const auto* func : module.extern_functions) {
+        allModuleFunctions.push_back(func);
+    }
+
     // ターゲット判定をキャッシュ
     std::string triple = this->module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;

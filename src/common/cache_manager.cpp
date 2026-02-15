@@ -731,7 +731,13 @@ QuickCheckResult CacheManager::quick_check(const std::string& input_file, const 
         return result;
     if (!std::getline(ifs, saved_fingerprint))
         return result;
+    if (saved_fingerprint.empty())
+        return result;
+    result.fingerprint = saved_fingerprint;
+
     if (!std::getline(ifs, saved_object))
+        return result;
+    if (saved_object.empty())
         return result;
 
     // 入力ファイル、ターゲット、最適化レベルが一致するか確認
