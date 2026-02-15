@@ -91,7 +91,7 @@ struct Options {
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
     bool use_jit = true;          // JITコンパイラ使用（デフォルト）
     // インクリメンタルビルド設定
-    bool incremental = false;             // --incremental フラグ
+    bool incremental = true;              // デフォルトで有効
     std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
     std::string cache_subcommand;         // cache サブコマンド（clear/stats）
 };
@@ -137,7 +137,7 @@ void print_help(const char* program_name) {
     std::cout << "  --mir-opt             最適化後のMIRを表示\n";
     std::cout << "  --lir-opt             最適化後のLLVM IRを表示（codegen直前）\n\n";
     std::cout << "インクリメンタルビルド:\n";
-    std::cout << "  --incremental         インクリメンタルビルドを有効化\n";
+    std::cout << "  --no-cache            キャッシュを無効化（デフォルト: 有効）\n";
     std::cout << "  --cache-dir=<dir>     キャッシュディレクトリ（デフォルト: .cm-cache）\n";
     std::cout << "  cache clear           キャッシュを全削除\n";
     std::cout << "  cache stats           キャッシュ統計を表示\n\n";
@@ -269,6 +269,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.recursive = true;
         } else if (arg == "--incremental") {
             opts.incremental = true;
+        } else if (arg == "--no-cache") {
+            opts.incremental = false;
         } else if (arg.substr(0, 12) == "--cache-dir=") {
             opts.cache_dir = arg.substr(12);
             opts.incremental = true;  // --cache-dir指定時は暗黙的に有効化
@@ -504,6 +506,9 @@ int main(int argc, char* argv[]) {
 
     // オプションをパース
     Options opts = parse_options(argc, argv);
+
+    // コンパイラバイナリのパスを設定（インクリメンタルビルド用）
+    cache::CacheManager::set_compiler_path(argv[0]);
 
     // コマンドの処理
     if (opts.command == Command::Help) {
@@ -798,10 +803,28 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (opts.cache_subcommand == "stats") {
             auto stats = cache_mgr.get_stats();
+            auto entries = cache_mgr.get_all_entries();
             std::cout << "=== キャッシュ統計 ===\n";
             std::cout << "ディレクトリ: " << opts.cache_dir << "\n";
             std::cout << "エントリ数: " << stats.total_entries << "\n";
             std::cout << "合計サイズ: " << (stats.total_size_bytes / 1024) << " KB\n";
+            if (!entries.empty()) {
+                // 最古・最新のエントリを表示
+                std::string oldest = entries.begin()->second.created_at;
+                std::string newest = entries.begin()->second.created_at;
+                for (const auto& [_, entry] : entries) {
+                    if (!entry.created_at.empty()) {
+                        if (entry.created_at < oldest || oldest.empty())
+                            oldest = entry.created_at;
+                        if (entry.created_at > newest)
+                            newest = entry.created_at;
+                    }
+                }
+                if (!oldest.empty()) {
+                    std::cout << "最古:     " << oldest << "\n";
+                    std::cout << "最新:     " << newest << "\n";
+                }
+            }
             return 0;
         } else {
             std::cerr << "不明なcacheサブコマンド: " << opts.cache_subcommand << "\n";
@@ -1476,7 +1499,7 @@ int main(int argc, char* argv[]) {
                         entry.optimization_level = opts.optimization_level;
                         entry.compiler_version = cache::CacheManager::get_compiler_version();
                         entry.object_file = cache_fingerprint.substr(0, 16) + ".o";
-                        entry.created_at = "";
+                        entry.created_at = cache::CacheManager::current_timestamp();
 
                         // 各ソースファイルのハッシュを記録
                         for (const auto& f : preprocess_result.resolved_files) {

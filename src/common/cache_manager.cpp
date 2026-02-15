@@ -16,6 +16,13 @@
 
 namespace cm::cache {
 
+// コンパイラバイナリのパス（argv[0]から設定）
+std::string CacheManager::compiler_path_;
+
+void CacheManager::set_compiler_path(const std::string& path) {
+    compiler_path_ = path;
+}
+
 // ========== コンストラクタ ==========
 
 CacheManager::CacheManager(const CacheConfig& config) : config_(config) {}
@@ -34,6 +41,17 @@ std::string CacheManager::compute_file_hash(const std::filesystem::path& file_pa
                       hash.begin(), hash.end());
 
     return picosha2::bytes_to_hex_string(hash.begin(), hash.end());
+}
+
+// ========== コンパイラバイナリハッシュ ==========
+
+std::string CacheManager::compute_compiler_hash() {
+    if (compiler_path_.empty()) {
+        return "unknown";
+    }
+    // コンパイラバイナリのSHA-256でコンパイラ変更を検出
+    auto hash = compute_file_hash(compiler_path_);
+    return hash.empty() ? "unknown" : hash;
 }
 
 // ========== 合成フィンガープリント生成 ==========
@@ -60,6 +78,7 @@ std::string CacheManager::compute_fingerprint(const std::vector<std::string>& so
     combined += "target:" + target + "\n";
     combined += "opt:" + std::to_string(optimization_level) + "\n";
     combined += "version:" + get_compiler_version() + "\n";
+    combined += "compiler:" + compute_compiler_hash() + "\n";
 
     // 結合文字列のSHA-256を最終フィンガープリントとする
     return picosha2::hash256_hex_string(combined);
@@ -151,6 +170,12 @@ CacheStats CacheManager::get_stats() const {
     }
 
     return stats;
+}
+
+// ========== 全エントリ取得 ==========
+
+std::map<std::string, CacheEntry> CacheManager::get_all_entries() const {
+    return load_manifest();
 }
 
 // ========== キャッシュクリア ==========

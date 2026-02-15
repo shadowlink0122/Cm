@@ -46,6 +46,9 @@ class CacheManager {
     // ファイルのSHA-256ハッシュを計算
     static std::string compute_file_hash(const std::filesystem::path& file_path);
 
+    // コンパイラバイナリ自体のSHA-256ハッシュを計算
+    static std::string compute_compiler_hash();
+
     // 複数ファイル＋メタ情報から合成フィンガープリントを生成
     std::string compute_fingerprint(const std::vector<std::string>& source_files,
                                     const std::string& target, int optimization_level);
@@ -61,6 +64,9 @@ class CacheManager {
     // キャッシュ統計を取得
     CacheStats get_stats() const;
 
+    // 全エントリを取得（統計表示用）
+    std::map<std::string, CacheEntry> get_all_entries() const;
+
     // キャッシュを全削除
     bool clear();
 
@@ -73,7 +79,14 @@ class CacheManager {
     // キャッシュディレクトリのパスを取得
     std::filesystem::path cache_dir() const { return config_.cache_dir; }
 
+    // コンパイラバイナリのパスを設定（argv[0]から）
+    static void set_compiler_path(const std::string& path);
+
+    // ISO 8601形式の現在日時を取得
+    static std::string current_timestamp();
+
    private:
+    static std::string compiler_path_;
     CacheConfig config_;
 
     // キャッシュディレクトリの初期化（なければ作成）
@@ -90,9 +103,6 @@ class CacheManager {
 
     // マニフェストを書き込み
     bool save_manifest(const std::map<std::string, CacheEntry>& entries) const;
-
-    // ISO 8601形式の現在日時を取得
-    static std::string current_timestamp();
 };
 
 }  // namespace cm::cache
