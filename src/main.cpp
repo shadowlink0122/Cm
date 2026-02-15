@@ -1647,6 +1647,22 @@ int main(int argc, char* argv[]) {
                             std::cout << "  フロントエンド合計: " << frontend_ms << "ms ("
                                       << (compile_ms > 0 ? frontend_ms * 100 / compile_ms : 0)
                                       << "%)\n";
+
+                            // モジュール分割情報を表示
+                            if (!module_info.module_names.empty()) {
+                                std::cout << "  モジュール: " << module_info.module_names.size()
+                                          << " 検出";
+                                if (!module_info.changed_modules.empty() &&
+                                    module_info.changed_modules.size() <
+                                        module_info.module_names.size()) {
+                                    std::cout << " (" << module_info.changed_modules.size()
+                                              << " 変更)";
+                                }
+                                std::cout << "\n";
+                                for (const auto& [name, count] : module_info.module_func_count) {
+                                    std::cout << "    " << name << ": " << count << " 関数\n";
+                                }
+                            }
                         }
                     }
 

@@ -315,6 +315,145 @@ bool CacheManager::store(const std::string& fingerprint, const std::filesystem::
     return save_manifest(entries);
 }
 
+// ========== モジュール別キャッシュ ==========
+
+bool CacheManager::store_module_object(const std::string& fingerprint,
+                                       const std::string& module_name,
+                                       const std::string& module_fingerprint,
+                                       const std::filesystem::path& object_file) {
+    if (fingerprint.empty() || module_name.empty() || !config_.enabled) {
+        return false;
+    }
+
+    try {
+        // モジュール別サブディレクトリを作成
+        auto mod_dir = modules_dir() / fingerprint.substr(0, 16);
+        std::filesystem::create_directories(mod_dir);
+
+        // モジュール名をファイル名安全な文字列に変換
+        std::string safe_name = module_name;
+        for (auto& c : safe_name) {
+            if (c == '/' || c == '\\' || c == ':')
+                c = '_';
+        }
+
+        // .o ファイルをキャッシュにコピー
+        auto dest = mod_dir / (safe_name + "_" + module_fingerprint.substr(0, 8) + ".o");
+        std::filesystem::copy_file(object_file, dest,
+                                   std::filesystem::copy_options::overwrite_existing);
+
+        // メタデータファイルを書き込み（モジュール名 → フィンガープリント対応）
+        auto meta_path = mod_dir / (safe_name + ".meta");
+        std::ofstream ofs(meta_path);
+        if (ofs.is_open()) {
+            ofs << "module=" << module_name << "\n";
+            ofs << "fingerprint=" << module_fingerprint << "\n";
+            ofs << "object=" << dest.filename().string() << "\n";
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[CACHE] モジュールキャッシュ保存エラー: " << e.what() << "\n";
+        return false;
+    }
+}
+
+std::optional<std::filesystem::path> CacheManager::lookup_module_object(
+    const std::string& module_name, const std::string& module_fingerprint) {
+    if (module_name.empty() || module_fingerprint.empty() || !config_.enabled) {
+        return std::nullopt;
+    }
+
+    try {
+        // 全フィンガープリントディレクトリを検索
+        if (!std::filesystem::exists(modules_dir())) {
+            return std::nullopt;
+        }
+
+        std::string safe_name = module_name;
+        for (auto& c : safe_name) {
+            if (c == '/' || c == '\\' || c == ':')
+                c = '_';
+        }
+
+        for (const auto& dir_entry : std::filesystem::directory_iterator(modules_dir())) {
+            if (!dir_entry.is_directory())
+                continue;
+
+            auto meta_path = dir_entry.path() / (safe_name + ".meta");
+            if (!std::filesystem::exists(meta_path))
+                continue;
+
+            // メタデータを読み込んでフィンガープリントを比較
+            std::ifstream ifs(meta_path);
+            std::string line;
+            std::string cached_fp;
+            std::string cached_obj;
+            while (std::getline(ifs, line)) {
+                if (line.substr(0, 12) == "fingerprint=") {
+                    cached_fp = line.substr(12);
+                } else if (line.substr(0, 7) == "object=") {
+                    cached_obj = line.substr(7);
+                }
+            }
+
+            if (cached_fp == module_fingerprint && !cached_obj.empty()) {
+                auto obj_path = dir_entry.path() / cached_obj;
+                if (std::filesystem::exists(obj_path)) {
+                    return obj_path;
+                }
+            }
+        }
+    } catch (const std::exception&) {
+        // 検索エラーは無視
+    }
+
+    return std::nullopt;
+}
+
+std::map<std::string, std::filesystem::path> CacheManager::get_cached_module_objects(
+    const std::string& fingerprint) {
+    std::map<std::string, std::filesystem::path> result;
+
+    if (fingerprint.empty() || !config_.enabled) {
+        return result;
+    }
+
+    try {
+        auto mod_dir = modules_dir() / fingerprint.substr(0, 16);
+        if (!std::filesystem::exists(mod_dir)) {
+            return result;
+        }
+
+        for (const auto& entry : std::filesystem::directory_iterator(mod_dir)) {
+            if (entry.path().extension() == ".meta") {
+                std::ifstream ifs(entry.path());
+                std::string line;
+                std::string mod_name;
+                std::string obj_name;
+                while (std::getline(ifs, line)) {
+                    if (line.substr(0, 7) == "module=") {
+                        mod_name = line.substr(7);
+                    } else if (line.substr(0, 7) == "object=") {
+                        obj_name = line.substr(7);
+                    }
+                }
+
+                if (!mod_name.empty() && !obj_name.empty()) {
+                    auto obj_path = mod_dir / obj_name;
+                    if (std::filesystem::exists(obj_path)) {
+                        result[mod_name] = obj_path;
+                    }
+                }
+            }
+        }
+    } catch (const std::exception&) {
+        // 検索エラーは無視
+    }
+
+    return result;
+}
+
 // ========== キャッシュ統計 ==========
 
 CacheStats CacheManager::get_stats() const {
@@ -414,6 +553,10 @@ std::filesystem::path CacheManager::manifest_path() const {
 
 std::filesystem::path CacheManager::objects_dir() const {
     return config_.cache_dir / "objects";
+}
+
+std::filesystem::path CacheManager::modules_dir() const {
+    return config_.cache_dir / "modules";
 }
 
 // ========== マニフェスト読み込み（簡易JSONパーサー） ==========

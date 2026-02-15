@@ -83,6 +83,29 @@ class CacheManager {
     bool store(const std::string& fingerprint, const std::filesystem::path& object_file,
                const CacheEntry& entry);
 
+    // ========== モジュール別キャッシュ API ==========
+
+    // モジュール単位の .o ファイルをキャッシュに保存
+    // fingerprint: 全体のフィンガープリント
+    // module_name: モジュール名
+    // module_fingerprint: モジュールのSHA-256フィンガープリント
+    // object_file: コンパイル済み .o ファイルのパス
+    bool store_module_object(const std::string& fingerprint, const std::string& module_name,
+                             const std::string& module_fingerprint,
+                             const std::filesystem::path& object_file);
+
+    // キャッシュ済みモジュール .o ファイルを検索
+    // module_fingerprint が一致するキャッシュ済み .o のパスを返す
+    std::optional<std::filesystem::path> lookup_module_object(
+        const std::string& module_name, const std::string& module_fingerprint);
+
+    // 全キャッシュ済みモジュール .o を取得
+    // Returns: モジュール名 → キャッシュ済み .o ファイルパスのマップ
+    std::map<std::string, std::filesystem::path> get_cached_module_objects(
+        const std::string& fingerprint);
+
+    // ========== 統計・管理 ==========
+
     // キャッシュ統計を取得
     CacheStats get_stats() const;
 
@@ -119,6 +142,9 @@ class CacheManager {
 
     // オブジェクトキャッシュディレクトリのパス
     std::filesystem::path objects_dir() const;
+
+    // モジュール別キャッシュディレクトリのパス
+    std::filesystem::path modules_dir() const;
 
     // マニフェストを読み込み（JSON簡易パーサー）
     std::map<std::string, CacheEntry> load_manifest() const;
