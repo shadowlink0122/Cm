@@ -306,7 +306,7 @@ uninstall:
 .PHONY: clean
 clean:
 	@echo "Cleaning build directory..."
-	@rm -rf $(CM) $(BUILD_DIR) .tmp/*
+	@rm -rf $(CM) $(BUILD_DIR) .tmp/* .cm-cache
 	@find . -name "*.o" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
 	@find . -name "*.EFI" -not -path "./.git/*" -delete 2>/dev/null || true
 	@find . -name "*.lib" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true

@@ -1507,7 +1507,7 @@ int main(int argc, char* argv[]) {
                         return 0;
                     }
 
-                    if (opts.verbose) {
+                    if (!opts.quiet) {
                         auto compile_end = std::chrono::steady_clock::now();
                         auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               compile_end - compile_start)
