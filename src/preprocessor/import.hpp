@@ -51,7 +51,8 @@ class ImportPreprocessor {
         imported_modules;  // インポート済みモジュール（再インポート防止）
     std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
     std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ（展開済み）
-    std::unordered_map<std::string, std::string> raw_module_cache;  // オリジナルソースキャッシュ（export抽出用）
+    std::unordered_map<std::string, std::string>
+        raw_module_cache;  // オリジナルソースキャッシュ（export抽出用）
 
     // モジュール名前空間の追跡（モジュール名 -> 名前空間）
     std::unordered_map<std::string, std::string> module_namespaces;

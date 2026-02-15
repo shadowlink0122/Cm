@@ -598,7 +598,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             }
 
             // exportブロック抽出用にサブインポート展開済みソースを保存
-            //（export キーワードあり + Exported symbols セクションあり）
+            // （export キーワードあり + Exported symbols セクションあり）
             std::string export_extraction_source = module_source;
 
             // exportキーワードを削除

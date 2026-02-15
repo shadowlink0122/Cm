@@ -838,19 +838,13 @@ ast::ExprPtr Parser::parse_primary() {
             // 数値リテラル、演算子などが来た場合は比較演算子の<と判断
             {
                 auto first_kind = current().kind;
-                if (first_kind == TokenKind::IntLiteral ||
-                    first_kind == TokenKind::FloatLiteral ||
+                if (first_kind == TokenKind::IntLiteral || first_kind == TokenKind::FloatLiteral ||
                     first_kind == TokenKind::StringLiteral ||
-                    first_kind == TokenKind::CharLiteral ||
-                    first_kind == TokenKind::KwTrue ||
-                    first_kind == TokenKind::KwFalse ||
-                    first_kind == TokenKind::KwNull ||
-                    first_kind == TokenKind::Minus ||
-                    first_kind == TokenKind::Bang ||
-                    first_kind == TokenKind::Eq ||
-                    first_kind == TokenKind::Semicolon ||
-                    first_kind == TokenKind::RBrace ||
-                    first_kind == TokenKind::RParen) {
+                    first_kind == TokenKind::CharLiteral || first_kind == TokenKind::KwTrue ||
+                    first_kind == TokenKind::KwFalse || first_kind == TokenKind::KwNull ||
+                    first_kind == TokenKind::Minus || first_kind == TokenKind::Bang ||
+                    first_kind == TokenKind::Eq || first_kind == TokenKind::Semicolon ||
+                    first_kind == TokenKind::RBrace || first_kind == TokenKind::RParen) {
                     looks_like_type_args = false;
                 }
             }
@@ -874,20 +868,13 @@ ast::ExprPtr Parser::parse_primary() {
                         } else {
                             break;  // パターンに合致しない
                         }
-                    } else if (check(TokenKind::RParen) ||
-                               check(TokenKind::LBrace) ||
-                               check(TokenKind::RBrace) ||
-                               check(TokenKind::Semicolon) ||
-                               check(TokenKind::Eq) ||
-                               check(TokenKind::PlusEq) ||
-                               check(TokenKind::MinusEq) ||
-                               check(TokenKind::StarEq) ||
-                               check(TokenKind::SlashEq) ||
-                               check(TokenKind::PercentEq) ||
-                               check(TokenKind::KwReturn) ||
-                               check(TokenKind::KwIf) ||
-                               check(TokenKind::KwWhile) ||
-                               check(TokenKind::KwFor)) {
+                    } else if (check(TokenKind::RParen) || check(TokenKind::LBrace) ||
+                               check(TokenKind::RBrace) || check(TokenKind::Semicolon) ||
+                               check(TokenKind::Eq) || check(TokenKind::PlusEq) ||
+                               check(TokenKind::MinusEq) || check(TokenKind::StarEq) ||
+                               check(TokenKind::SlashEq) || check(TokenKind::PercentEq) ||
+                               check(TokenKind::KwReturn) || check(TokenKind::KwIf) ||
+                               check(TokenKind::KwWhile) || check(TokenKind::KwFor)) {
                         // ジェネリック型引数<T, U>内に出現し得ないトークン
                         // → <は比較演算子と判断してlookaheadを中止
                         break;
@@ -910,7 +897,8 @@ ast::ExprPtr Parser::parse_primary() {
                     auto type_arg = parse_type();
                     // parse_type()がトークンを消費しなかった場合はスタック防止
                     if (pos_ == type_parse_pos) {
-                        if (!is_at_end() && !check(TokenKind::Gt)) advance();
+                        if (!is_at_end() && !check(TokenKind::Gt))
+                            advance();
                         break;
                     }
                     type_args_str += ast::type_to_string(*type_arg);
@@ -945,7 +933,8 @@ ast::ExprPtr Parser::parse_primary() {
                     auto type_arg = parse_type();
                     // parse_type()がトークンを消費しなかった場合はスタック防止
                     if (pos_ == type_parse_pos) {
-                        if (!is_at_end() && !check(TokenKind::Gt)) advance();
+                        if (!is_at_end() && !check(TokenKind::Gt))
+                            advance();
                         break;
                     }
                     type_args_str += ast::type_to_string(*type_arg);

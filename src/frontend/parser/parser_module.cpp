@@ -45,7 +45,8 @@ ast::DeclPtr Parser::parse_namespace() {
     int ns_iterations = 0;
     const int MAX_NS_ITERATIONS = 5000;
 
-    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof) && ns_iterations < MAX_NS_ITERATIONS) {
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof) &&
+           ns_iterations < MAX_NS_ITERATIONS) {
         // parse_top_level()がnullptrを返しトークンが進まない場合のスタック検出
         if (pos_ == last_pos && ns_iterations > 0) {
             // トークンを強制的に進めてスタックを解消
