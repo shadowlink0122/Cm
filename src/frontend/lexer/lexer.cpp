@@ -13,19 +13,21 @@ std::vector<Token> Lexer::tokenize() {
 
     std::vector<Token> tokens;
     while (!is_at_end()) {
-        // 現在の位置をログ
-        debug::lex::dump_position(get_line_number(pos_), get_column_number(pos_),
-                                  "Scanning at pos " + std::to_string(pos_));
-
         Token tok = next_token();
 
-        // 生成されたトークンをログ
-        std::string tok_value = "";
-        if (tok.kind == TokenKind::Ident) {
-            tok_value = std::string(tok.get_string());
+        // デバッグモード時のみ高コストなログ出力を実行
+        // （get_line_number/get_column_number は O(n) 線形スキャンのため、
+        //   非デバッグ時は引数評価自体をスキップする）
+        if (::cm::debug::g_debug_mode && ::cm::debug::Level::Trace >= ::cm::debug::g_debug_level) {
+            debug::lex::dump_position(get_line_number(pos_), get_column_number(pos_),
+                                      "Scanning at pos " + std::to_string(pos_));
+            std::string tok_value = "";
+            if (tok.kind == TokenKind::Ident) {
+                tok_value = std::string(tok.get_string());
+            }
+            debug::lex::dump_token(token_kind_to_string(tok.kind), tok_value,
+                                   get_line_number(tok.start), get_column_number(tok.start));
         }
-        debug::lex::dump_token(token_kind_to_string(tok.kind), tok_value,
-                               get_line_number(tok.start), get_column_number(tok.start));
 
         tokens.push_back(tok);
         if (tok.kind == TokenKind::Eof)
@@ -152,11 +154,9 @@ void Lexer::skip_whitespace_and_comments() {
         if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
             advance();
         } else if (c == '/' && peek_next() == '/') {
-            debug::lex::log(debug::lex::Id::CommentSkip, "line", debug::Level::Trace);
             while (!is_at_end() && peek() != '\n')
                 advance();
         } else if (c == '/' && peek_next() == '*') {
-            debug::lex::log(debug::lex::Id::CommentSkip, "block", debug::Level::Trace);
             advance();
             advance();
             while (!is_at_end()) {
@@ -175,95 +175,93 @@ void Lexer::skip_whitespace_and_comments() {
 
 // 識別子スキャン
 Token Lexer::scan_identifier(uint32_t start) {
-    debug::lex::log(debug::lex::Id::ScanStart, "identifier", debug::Level::Trace);
+    if (::cm::debug::g_debug_mode)
+        debug::lex::log(debug::lex::Id::ScanStart, "identifier", debug::Level::Trace);
 
     while (!is_at_end() && is_alnum(peek())) {
-        char c = peek();
         advance();
-        debug::lex::log(debug::lex::Id::CharScan, std::string(1, c), debug::Level::Trace);
     }
 
     std::string text(source_.substr(start, pos_ - start));
-    debug::lex::log(debug::lex::Id::TokenText, text, debug::Level::Trace);
+    if (::cm::debug::g_debug_mode)
+        debug::lex::log(debug::lex::Id::TokenText, text, debug::Level::Trace);
 
     auto it = keywords_.find(text);
     if (it != keywords_.end()) {
-        debug::lex::log(debug::lex::Id::Keyword, text, debug::Level::Debug);
-        debug::lex::log(debug::lex::Id::KeywordMatch,
-                        text + " -> " + token_kind_to_string(it->second), debug::Level::Trace);
+        if (::cm::debug::g_debug_mode) {
+            debug::lex::log(debug::lex::Id::Keyword, text, debug::Level::Debug);
+            debug::lex::log(debug::lex::Id::KeywordMatch,
+                            text + " -> " + token_kind_to_string(it->second), debug::Level::Trace);
+        }
         return Token(it->second, start, pos_);
     }
 
-    debug::lex::log(debug::lex::Id::Ident, text, debug::Level::Debug);
-    debug::lex::log(debug::lex::Id::IdentCreate, "Variable/Function name: " + text,
-                    debug::Level::Trace);
+    if (::cm::debug::g_debug_mode) {
+        debug::lex::log(debug::lex::Id::Ident, text, debug::Level::Debug);
+        debug::lex::log(debug::lex::Id::IdentCreate, "Variable/Function name: " + text,
+                        debug::Level::Trace);
+    }
     return Token(TokenKind::Ident, start, pos_, std::move(text));
 }
 
 // 数値リテラルスキャン
 Token Lexer::scan_number(uint32_t start) {
-    debug::lex::log(debug::lex::Id::ScanStart, "number", debug::Level::Trace);
+    if (::cm::debug::g_debug_mode)
+        debug::lex::log(debug::lex::Id::ScanStart, "number", debug::Level::Trace);
     bool is_float = false;
 
     // 16進数チェック
     if (source_[start] == '0' && (peek() == 'x' || peek() == 'X')) {
-        debug::lex::log(debug::lex::Id::HexNumber, "detected hex prefix", debug::Level::Trace);
         advance();
         while (!is_at_end() && is_hex_digit(peek())) {
-            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
         }
         std::string text(source_.substr(start, pos_ - start));
         int64_t val = std::stoll(text, nullptr, 16);
-        debug::lex::log(debug::lex::Id::Number, text + " = " + std::to_string(val),
-                        debug::Level::Debug);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(debug::lex::Id::Number, text + " = " + std::to_string(val),
+                            debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val);
     }
 
     // 8進数チェック (0o/0Oプレフィックス)
     if (source_[start] == '0' && (peek() == 'o' || peek() == 'O')) {
-        debug::lex::log(debug::lex::Id::Number, "detected octal prefix", debug::Level::Trace);
         advance();
         while (!is_at_end() && is_octal_digit(peek())) {
-            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
         }
         std::string text(source_.substr(start + 2, pos_ - start - 2));
         int64_t val = std::stoll(text, nullptr, 8);
-        debug::lex::log(debug::lex::Id::Number, "0o" + text + " = " + std::to_string(val),
-                        debug::Level::Debug);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(debug::lex::Id::Number, "0o" + text + " = " + std::to_string(val),
+                            debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val);
     }
 
     // 2進数チェック
     if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
-        debug::lex::log(debug::lex::Id::BinaryNumber, "detected binary prefix",
-                        debug::Level::Trace);
         advance();
         while (!is_at_end() && (peek() == '0' || peek() == '1')) {
-            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
         }
         std::string text(source_.substr(start + 2, pos_ - start - 2));
         int64_t val = std::stoll(text, nullptr, 2);
-        debug::lex::log(debug::lex::Id::Number, "0b" + text + " = " + std::to_string(val),
-                        debug::Level::Debug);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(debug::lex::Id::Number, "0b" + text + " = " + std::to_string(val),
+                            debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val);
     }
 
     // 10進数の整数部分
     while (!is_at_end() && is_digit(peek())) {
-        debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
         advance();
     }
 
     // 小数点チェック
     if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
         is_float = true;
-        debug::lex::log(debug::lex::Id::FloatDetected, "decimal point found", debug::Level::Trace);
         advance();
         while (!is_at_end() && is_digit(peek())) {
-            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
         }
     }
@@ -271,15 +269,11 @@ Token Lexer::scan_number(uint32_t start) {
     // 指数部チェック
     if (!is_at_end() && (peek() == 'e' || peek() == 'E')) {
         is_float = true;
-        debug::lex::log(debug::lex::Id::ExponentDetected, "exponent notation found",
-                        debug::Level::Trace);
         advance();
         if (peek() == '+' || peek() == '-') {
-            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
         }
         while (!is_at_end() && is_digit(peek())) {
-            debug::lex::log(debug::lex::Id::CharScan, std::string(1, peek()), debug::Level::Trace);
             advance();
         }
     }
@@ -288,13 +282,15 @@ Token Lexer::scan_number(uint32_t start) {
 
     if (is_float) {
         double val = std::stod(text);
-        debug::lex::log(debug::lex::Id::Number, text + " (float) = " + std::to_string(val),
-                        debug::Level::Debug);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(debug::lex::Id::Number, text + " (float) = " + std::to_string(val),
+                            debug::Level::Debug);
         return Token(TokenKind::FloatLiteral, start, pos_, val);
     } else {
         int64_t val = std::stoll(text);
-        debug::lex::log(debug::lex::Id::Number, text + " (int) = " + std::to_string(val),
-                        debug::Level::Debug);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(debug::lex::Id::Number, text + " (int) = " + std::to_string(val),
+                            debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val);
     }
 }
@@ -429,7 +425,9 @@ char Lexer::scan_escape_char() {
 // 演算子スキャン
 Token Lexer::scan_operator(uint32_t start, char c) {
     auto make = [&](TokenKind kind) {
-        debug::lex::log(debug::lex::Id::Operator, token_kind_to_string(kind), debug::Level::Trace);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(debug::lex::Id::Operator, token_kind_to_string(kind),
+                            debug::Level::Trace);
         return Token(kind, start, pos_);
     };
 
