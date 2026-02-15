@@ -194,6 +194,7 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 - ベアメタルコンパイルテストCIジョブ追加
 - GPUテスト全バックエンドスキップ
 - タイムアウトテスト根本修正
+- 不安定なoperator_comprehensiveテストを5つの個別テストに分割
 
 ### テスト構成再編成
 
@@ -262,7 +263,11 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `tests/programs/interface/operator_comprehensive.*` | 全演算子オーバーロードテスト |
+| `tests/programs/interface/operator_arithmetic.*` | 算術演算子テスト（分割） |
+| `tests/programs/interface/operator_compare.*` | 比較演算子テスト（分割） |
+| `tests/programs/interface/operator_bitwise.*` | ビット演算子テスト（分割） |
+| `tests/programs/interface/operator_compound_assign.*` | 算術複合代入テスト（分割） |
+| `tests/programs/interface/operator_bitwise_assign.*` | ビット複合代入テスト（分割） |
 | `tests/programs/interface/operator_add.*` | impl T構文テスト |
 | `tests/programs/enum/associated_data.*` | .error → .expected |
 | `tests/programs/asm/.skip` 等 | JSスキップファイル追加 |
@@ -283,8 +288,8 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 | バックエンド | 通過 | 失敗 | スキップ |
 |------------|-----|------|---------| 
-| JIT (O0) | 372 | 0 | 7 |
-| LLVM Native | 372 | 0 | 7 |
+| JIT (O0) | 343 | 0 | 4 |
+| LLVM Native | 343 | 0 | 4 |
 | LLVM WASM | 338 | 0 | 5 |
 | JavaScript | 298 | 0 | 49 |
 | Baremetal | 11 | 0 | 0 |
@@ -294,21 +299,17 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 ## 📊 統計
 
-- **コミット数**: 52
-- **テスト総数**: 379
-- **JIT/LLVMテスト通過**: 372（0失敗）
+- **テスト総数**: 347
+- **JIT/LLVMテスト通過**: 343（0失敗）
 - **WASMテスト通過**: 338（0失敗）
 - **JSテスト通過**: 298（0失敗、v0.13.1の206から+92改善）
-- **変更ファイル数**: 1,088
-- **追加行数**: +16,017
-- **削除行数**: -6,707
 
 ---
 
 ## ✅ チェックリスト
 
-- [x] `make tip` 全テスト通過（372 PASS / 0 FAIL）
-- [x] `make tlp` 全テスト通過（372 PASS / 0 FAIL）
+- [x] `make tip` 全テスト通過（343 PASS / 0 FAIL）
+- [x] `make tlp` 全テスト通過（343 PASS / 0 FAIL）
 - [x] `make tlwp` 全テスト通過（338 PASS / 0 FAIL）
 - [x] `make tjp` 全テスト通過（298 PASS / 0 FAIL）
 - [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
@@ -322,104 +323,5 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 ---
 
-**リリース日**: 2026年2月14日
+**リリース日**: 2026年2月15日
 **バージョン**: v0.14.0
-
-# feat: テストランナー --no-cache 連携 & モジュール別フィンガープリント
-
-## 概要
-テスト実行時のキャッシュ制御と、インクリメンタルビルドのモジュール粒度変更検出を実装。
-
-## 変更内容
-
-### テストランナー `--no-cache` 連携
-- `unified_test_runner.sh` に `-n`/`--no-cache` オプションを追加
-  - `cm run` / `cm compile` の全バックエンド呼び出し（16箇所）にフラグ伝播
-- `--clean-cache` オプションを追加（テスト前に `.cm-cache` を削除）
-- Makefile に `tipnc`, `tlpnc`, `twpnc`, `tjpnc`, `test-all-parallel-nc` ターゲットを追加
-
-### モジュール別フィンガープリント
-- `CacheEntry` に `module_fingerprints` フィールドを追加
-- `CacheManager::compute_module_fingerprints()`: モジュール→ファイル対応からモジュール単位の SHA-256 フィンガープリント計算
-- `CacheManager::detect_changed_modules()`: 前回キャッシュとの比較で変更されたモジュールのみ検出
-- マニフェスト形式を V2 に拡張（V1 後方互換性あり）
-- JS/LLVM バックエンドのキャッシュ保存時に `preprocess_result.module_ranges` からモジュールフィンガープリントを自動計算・記録
-
-## テスト結果
-- `interpreter -p --no-cache`: **339 PASS / 0 FAIL / 4 SKIP** ✅
-
-## 影響範囲
-- `tests/unified_test_runner.sh`
-- `Makefile`
-- `src/common/cache_manager.hpp` / `cache_manager.cpp`
-- `src/main.cpp`
-
-# feat: MIRモジュール分割ユーティリティ & 分割コンパイルパイプライン
-
-## 概要
-Phase 3 Step 1-2: モジュール別分離コンパイルの基盤を構築。MIRプログラムを`module_path`に基づきモジュール別に分割するユーティリティと、変更モジュール検出付きのコンパイルパイプラインを実装。
-
-## 変更内容
-
-### 新規ファイル
-- `src/mir/mir_splitter.hpp` / `mir_splitter.cpp`: MIR分割ユーティリティ
-  - `MirSplitter::split_by_module()`: ゼロコピーのモジュール別分割
-  - 関数/struct/enumをモジュール別にグループ化
-  - extern依存の自動解決（型・関数の参照追跡）
-
-### 変更ファイル
-- `src/codegen/llvm/native/codegen.hpp` / `codegen.cpp`
-  - `ModuleCompileInfo` 構造体、`compileWithModuleInfo()` メソッド追加
-  - MIR分割情報の収集 + 変更モジュールのデバッグログ
-- `src/common/cache_manager.hpp` / `cache_manager.cpp`
-  - `detect_changed_modules()` staticオーバーロード追加（2マップ直接比較）
-- `src/main.cpp`
-  - キャッシュミス時に変更モジュール検出を統合
-  - `compileWithModuleInfo()` 呼び出しに変更
-- `CMakeLists.txt`: `mir_splitter.cpp` をビルドに追加
-
-## テスト結果
-- インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
-
-# feat: モジュール別キャッシュ API & verbose モジュール情報表示
-
-## 概要
-Phase 3 Step 3: モジュール別キャッシュ統合。`CacheManager` にモジュール単位の `.o` キャッシュ API を追加し、verbose 出力にモジュール分割情報を表示。
-
-## 変更内容
-
-### CacheManager API 拡張
-- `store_module_object()`: モジュール名+フィンガープリントでの `.o` キャッシュ保存
-- `lookup_module_object()`: フィンガープリント一致によるキャッシュ検索
-- `get_cached_module_objects()`: 全キャッシュ済みモジュール `.o` の一覧取得
-- `modules_dir()`: モジュール別サブディレクトリ管理
-
-### verbose 出力強化 (`main.cpp`)
-- コンパイル時のモジュール分割情報（モジュール数、変更数、各モジュール関数数）を表示
-
-## テスト結果
-- インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
-
-# feat: モジュール別差分コンパイル（Phase 4）
-
-## 概要
-Rustスタイルの**モジュール別差分コンパイル**を実装。変更モジュールのみを再コンパイルし、未変更モジュールはキャッシュ済み `.o` をリンクに使用。
-
-## 変更内容
-
-### MIRToLLVM モジュール変換 (`mir_to_llvm.hpp/cpp`)
-- `convert(ModuleProgram)` オーバーロードを追加
-- extern関数は `declare` のみ、自モジュール関数は完全変換
-- struct/enum/interfaceは自モジュール+extern両方を登録
-
-### モジュール別コンパイルパイプライン (`codegen.hpp/cpp`)
-- `compileModules()`: 各モジュールを独立 `LLVMContext` でコンパイル
-- `linkObjects()`: 複数 `.o` を全ターゲット対応でリンク（Native/WASM/UEFI/Baremetal）
-
-### main.cpp 統合
-- `--incremental` + 変更検出時にモジュール別コンパイルを自動有効化
-- キャッシュ連携: 新規 `.o` を `store_module_object()` で保存
-- verbose ログ: キャッシュヒット率を表示
-
-## テスト結果
-- インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅

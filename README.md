@@ -233,8 +233,8 @@ GitHub Actionsで全バックエンドの自動テストを実行しています
 
 ### テスト内容
 - **単体テスト**: GoogleTestによるC++単体テスト（Lexer, HIR, MIR, 最適化）
-- **JIT テスト**: 379個のCmプログラムをJIT実行（372 PASS / 0 FAIL）
-- **LLVM Native テスト**: ネイティブバイナリにコンパイル・実行（372 PASS / 0 FAIL）
+- **JIT テスト**: 347個のCmプログラムをJIT実行（343 PASS / 0 FAIL）
+- **LLVM Native テスト**: ネイティブバイナリにコンパイル・実行（343 PASS / 0 FAIL）
 - **LLVM WASM テスト**: WASMにコンパイル・Wasmtimeで実行（338 PASS / 0 FAIL）
 - **JS テスト**: JavaScriptにコンパイル・Node.jsで実行（298 PASS / 0 FAIL）
 
@@ -289,4 +289,4 @@ make tjitp3   # JIT O3 parallel
 
 © 2025-2026 Cm言語プロジェクト
 
-**最終更新:** 2026-02-14
+**最終更新:** 2026-02-15
