@@ -1,6 +1,7 @@
 // LLVMコード生成器の実装
 #include "codegen.hpp"
 
+#include "../../../mir/mir_splitter.hpp"
 #include "../optimizations/mir_pattern_detector.hpp"
 #include "../optimizations/optimization_manager.hpp"
 #include "../optimizations/pass_limiter.hpp"
@@ -63,6 +64,51 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
     emit();
 
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEnd);
+}
+
+// モジュール分割付きコンパイル
+LLVMCodeGen::ModuleCompileInfo LLVMCodeGen::compileWithModuleInfo(
+    const mir::MirProgram& program, const std::vector<std::string>& changed_modules_hint) {
+    ModuleCompileInfo info;
+
+    // MIRをモジュール別に分割して情報収集
+    auto modules = mir::MirSplitter::split_by_module(program);
+
+    for (const auto& [name, mod] : modules) {
+        info.module_names.push_back(name);
+        info.module_func_count[name] = mod.functions.size();
+    }
+
+    // 変更モジュール情報を記録
+    if (!changed_modules_hint.empty()) {
+        info.changed_modules = changed_modules_hint;
+        if (cm::debug::g_debug_mode) {
+            std::cerr << "[MODULE] " << modules.size() << " モジュール検出, "
+                      << changed_modules_hint.size() << " モジュール変更:" << std::endl;
+            for (const auto& mod_name : changed_modules_hint) {
+                auto it = info.module_func_count.find(mod_name);
+                size_t func_count = (it != info.module_func_count.end()) ? it->second : 0;
+                std::cerr << "[MODULE]   " << mod_name << " (" << func_count << " 関数)"
+                          << std::endl;
+            }
+        }
+    } else {
+        // ヒントなし → 全モジュール変更とみなす
+        info.changed_modules = info.module_names;
+        if (cm::debug::g_debug_mode) {
+            std::cerr << "[MODULE] " << modules.size()
+                      << " モジュール検出（全再コンパイル）:" << std::endl;
+            for (const auto& [name, mod] : modules) {
+                std::cerr << "[MODULE]   " << name << " (" << mod.functions.size() << " 関数)"
+                          << std::endl;
+            }
+        }
+    }
+
+    // 現時点では全体をコンパイル（将来: 変更モジュールのみ再コンパイル）
+    compile(program);
+
+    return info;
 }
 
 // LLVM IR を文字列として取得（デバッグ用）

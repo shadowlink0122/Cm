@@ -230,6 +230,8 @@ set(CM_SOURCES
     # MIR analysis (解析モジュール)
     src/mir/analysis/dominators.cpp
     src/mir/analysis/loop_analysis.cpp
+    # MIR分割ユーティリティ（モジュール別分離コンパイル用）
+    src/mir/mir_splitter.cpp
     # 共通ライブラリ (HPP/CPP分離 Phase5)
     src/fmt/formatter.cpp
     src/common/format_string.cpp

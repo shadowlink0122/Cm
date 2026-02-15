@@ -242,7 +242,33 @@ std::vector<std::string> CacheManager::detect_changed_modules(
     return changed;
 }
 
-// ========== キャッシュ保存 ==========
+// 2つのフィンガープリントマップを直接比較して変更モジュールを検出（static）
+std::vector<std::string> CacheManager::detect_changed_modules(
+    const std::map<std::string, std::string>& prev_fingerprints,
+    const std::map<std::string, std::string>& current_fingerprints) {
+    std::vector<std::string> changed;
+
+    // 現在のモジュールと前回を比較
+    for (const auto& [module_name, current_fp] : current_fingerprints) {
+        auto prev_it = prev_fingerprints.find(module_name);
+        if (prev_it == prev_fingerprints.end()) {
+            // 新規モジュール
+            changed.push_back(module_name);
+        } else if (prev_it->second != current_fp) {
+            // 変更されたモジュール
+            changed.push_back(module_name);
+        }
+    }
+
+    // 前回あったが今回ないモジュール（削除）
+    for (const auto& [prev_module, _] : prev_fingerprints) {
+        if (current_fingerprints.find(prev_module) == current_fingerprints.end()) {
+            changed.push_back(prev_module);
+        }
+    }
+
+    return changed;
+}
 
 bool CacheManager::store(const std::string& fingerprint, const std::filesystem::path& object_file,
                          const CacheEntry& entry) {

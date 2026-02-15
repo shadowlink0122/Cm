@@ -19,6 +19,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils.h>
+#include <map>
 
 namespace cm::codegen::llvm_backend {
 
@@ -65,6 +66,18 @@ class LLVMCodeGen {
 
     /// MIRプログラムをコンパイル
     void compile(const mir::MirProgram& program);
+
+    /// モジュール分割情報付きコンパイル結果
+    struct ModuleCompileInfo {
+        std::vector<std::string> module_names;            // 検出されたモジュール名
+        std::vector<std::string> changed_modules;         // 変更されたモジュール名
+        std::map<std::string, size_t> module_func_count;  // モジュール別関数数
+    };
+
+    /// モジュール分割付きコンパイル（変更モジュール検出 + ログ）
+    /// changed_modules_hint: キャッシュから検出された変更モジュール（空なら全再コンパイル）
+    ModuleCompileInfo compileWithModuleInfo(
+        const mir::MirProgram& program, const std::vector<std::string>& changed_modules_hint = {});
 
     /// LLVM IR を文字列として取得（デバッグ用）
     std::string getIRString() const;

@@ -913,7 +913,8 @@ int main(int argc, char* argv[]) {
         }
 
         // ========== インクリメンタルビルド: キャッシュチェック ==========
-        std::string cache_fingerprint;  // 後でキャッシュ保存に使用
+        std::string cache_fingerprint;             // 後でキャッシュ保存に使用
+        std::vector<std::string> changed_modules;  // 変更されたモジュール一覧
         cache::CacheConfig cache_config;
         cache_config.cache_dir = opts.cache_dir;
         cache_config.enabled = opts.incremental;
@@ -964,12 +965,24 @@ int main(int argc, char* argv[]) {
                         }
                         return 0;
                     } catch (const std::exception& e) {
-                        if (opts.debug) {
-                            std::cerr << "キャッシュコピー失敗: " << e.what()
-                                      << " (フルコンパイルにフォールバック)\n";
+                        if (opts.verbose) {
+                            std::cout << "キャッシュ復元失敗: " << e.what() << " → 再コンパイル\n";
                         }
                     }
                 } else {
+                    // キャッシュミス: 変更モジュールを検出
+                    auto prev = cache_mgr.lookup(cache_fingerprint);
+                    if (prev && !prev->module_fingerprints.empty()) {
+                        // 前回のモジュールフィンガープリントと比較
+                        std::map<std::string, std::vector<std::string>> module_files;
+                        for (const auto& mr : preprocess_result.module_ranges) {
+                            auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                            module_files[mr.file_path].push_back(abs_path);
+                        }
+                        auto current_fps = cache_mgr.compute_module_fingerprints(module_files);
+                        changed_modules = cache_mgr.detect_changed_modules(
+                            prev->module_fingerprints, current_fps);
+                    }
                     if (opts.verbose) {
                         std::cout << "キャッシュミス: フルコンパイルを実行\n";
                         // 変更ファイルを表示
@@ -1598,7 +1611,7 @@ int main(int argc, char* argv[]) {
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     auto phase_llvm_start = std::chrono::steady_clock::now();
-                    codegen.compile(mir);
+                    auto module_info = codegen.compileWithModuleInfo(mir, changed_modules);
                     auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now() - phase_llvm_start)
                                              .count();

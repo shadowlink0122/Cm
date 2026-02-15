@@ -74,6 +74,11 @@ class CacheManager {
         const std::map<std::string, std::vector<std::string>>& module_files,
         const std::string& target, int optimization_level);
 
+    // 2つのフィンガープリントマップを直接比較して変更モジュールを検出
+    static std::vector<std::string> detect_changed_modules(
+        const std::map<std::string, std::string>& prev_fingerprints,
+        const std::map<std::string, std::string>& current_fingerprints);
+
     // コンパイル成果物をキャッシュに保存
     bool store(const std::string& fingerprint, const std::filesystem::path& object_file,
                const CacheEntry& entry);
