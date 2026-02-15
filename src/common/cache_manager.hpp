@@ -57,6 +57,11 @@ class CacheManager {
     // フィンガープリントが一致し、オブジェクトファイルが存在すればキャッシュヒット
     std::optional<CacheEntry> lookup(const std::string& fingerprint);
 
+    // 前回キャッシュとの差分を検出（変更されたファイル一覧を返す）
+    std::vector<std::string> detect_changed_files(const std::vector<std::string>& current_files,
+                                                  const std::string& target,
+                                                  int optimization_level);
+
     // コンパイル成果物をキャッシュに保存
     bool store(const std::string& fingerprint, const std::filesystem::path& object_file,
                const CacheEntry& entry);

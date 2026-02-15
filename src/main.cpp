@@ -35,6 +35,7 @@
 #include "preprocessor/conditional.hpp"
 #include "preprocessor/import.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -911,6 +912,9 @@ int main(int argc, char* argv[]) {
         cache_config.cache_dir = opts.cache_dir;
         cache_config.enabled = opts.incremental;
 
+        // コンパイル時間計測開始
+        auto compile_start = std::chrono::steady_clock::now();
+
         if (opts.incremental && opts.command == Command::Compile) {
             cache::CacheManager cache_mgr(cache_config);
             cache_fingerprint = cache_mgr.compute_fingerprint(
@@ -930,7 +934,12 @@ int main(int argc, char* argv[]) {
                         std::filesystem::copy_file(
                             cached_obj, output, std::filesystem::copy_options::overwrite_existing);
                         if (opts.verbose || !opts.quiet) {
-                            std::cout << "✓ キャッシュヒット: " << output << "\n";
+                            auto hit_end = std::chrono::steady_clock::now();
+                            auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              hit_end - compile_start)
+                                              .count();
+                            std::cout << "✓ キャッシュヒット: " << output << " (" << hit_ms
+                                      << "ms)\n";
                         }
                         return 0;
                     } catch (const std::exception& e) {
@@ -942,6 +951,18 @@ int main(int argc, char* argv[]) {
                 } else {
                     if (opts.verbose) {
                         std::cout << "キャッシュミス: フルコンパイルを実行\n";
+                        // 変更ファイルを表示
+                        auto changed = cache_mgr.detect_changed_files(
+                            preprocess_result.resolved_files,
+                            opts.target.empty() ? "native" : opts.target, opts.optimization_level);
+                        if (!changed.empty()) {
+                            std::cout << "変更検出 (" << changed.size() << "ファイル):\n";
+                            for (const auto& f : changed) {
+                                // ファイル名のみ表示（パスが長い場合）
+                                auto name = std::filesystem::path(f).filename().string();
+                                std::cout << "  → " << name << "\n";
+                            }
+                        }
                     }
                 }
             }
@@ -1487,7 +1508,12 @@ int main(int argc, char* argv[]) {
                     }
 
                     if (opts.verbose) {
-                        std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                        auto compile_end = std::chrono::steady_clock::now();
+                        auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              compile_end - compile_start)
+                                              .count();
+                        std::cout << "✓ コンパイル完了: " << llvm_opts.outputFile << " ("
+                                  << compile_ms << "ms)\n";
                     }
 
                     // インクリメンタルビルド: コンパイル成功後にキャッシュに保存

@@ -106,6 +106,63 @@ std::optional<CacheEntry> CacheManager::lookup(const std::string& fingerprint) {
     return it->second;
 }
 
+// ========== ファイル単位変更検出 ==========
+
+std::vector<std::string> CacheManager::detect_changed_files(
+    const std::vector<std::string>& current_files, const std::string& target,
+    int optimization_level) {
+    std::vector<std::string> changed;
+
+    // 直近のキャッシュエントリから前回のハッシュを探す
+    auto entries = load_manifest();
+    if (entries.empty()) {
+        return changed;  // 初回コンパイル
+    }
+
+    // 同じターゲット・最適化レベルの最新エントリを探す
+    const CacheEntry* best = nullptr;
+    for (const auto& [_, entry] : entries) {
+        if (entry.target == target && entry.optimization_level == optimization_level) {
+            if (!best || entry.created_at > best->created_at) {
+                best = &entry;
+            }
+        }
+    }
+
+    if (!best || best->source_hashes.empty()) {
+        return changed;  // 比較対象なし
+    }
+
+    // 各ファイルの現在のハッシュと前回を比較
+    for (const auto& file : current_files) {
+        auto current_hash = compute_file_hash(file);
+        auto prev_it = best->source_hashes.find(file);
+        if (prev_it == best->source_hashes.end()) {
+            // 新規ファイル
+            changed.push_back(file);
+        } else if (prev_it->second != current_hash) {
+            // 変更されたファイル
+            changed.push_back(file);
+        }
+    }
+
+    // 前回あったが今回ないファイル（削除されたファイル）
+    for (const auto& [prev_file, _] : best->source_hashes) {
+        bool found = false;
+        for (const auto& f : current_files) {
+            if (f == prev_file) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            changed.push_back(prev_file + " (削除)");
+        }
+    }
+
+    return changed;
+}
+
 // ========== キャッシュ保存 ==========
 
 bool CacheManager::store(const std::string& fingerprint, const std::filesystem::path& object_file,
