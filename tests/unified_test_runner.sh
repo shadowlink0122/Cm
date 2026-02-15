@@ -981,25 +981,9 @@ run_tests_parallel() {
     log "Running $TOTAL tests in parallel..."
     log ""
     
-    # 並列ジョブ数の決定
+    # 並列ジョブ数（CPU数に基づく）
     # 環境変数CM_TEST_MAX_JOBSでオーバーライド可能
-    local cpu_count=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
-    local max_jobs=${CM_TEST_MAX_JOBS:-$cpu_count}
-
-    # コンパイル系バックエンド（llvm/wasm/js）はコンパイル+実行で負荷が高いため制限
-    case "$BACKEND" in
-        llvm|llvm-wasm|js)
-            # CI環境ではさらに制限（GitHub Actions runner = 2コア）
-            if [ -n "$CI" ]; then
-                max_jobs=$(( max_jobs > 2 ? 2 : max_jobs ))
-            else
-                max_jobs=$(( max_jobs > cpu_count / 2 ? cpu_count / 2 : max_jobs ))
-                # 最低2並列は確保
-                max_jobs=$(( max_jobs < 2 ? 2 : max_jobs ))
-            fi
-            ;;
-    esac
-    log "並列ジョブ数: $max_jobs (CPU: $cpu_count)"
+    local max_jobs=${CM_TEST_MAX_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}
     
     # 各テストを並列実行
     local pids=()
