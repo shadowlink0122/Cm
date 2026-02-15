@@ -81,7 +81,7 @@ ulong efi_main(void* image_handle, void* system_table) {
                 efi_clear_screen(system_table);
                 show_menu(system_table);
             }
-            case('q' | '5') {
+            case('q') {
                 // 終了
                 return 0;
             }

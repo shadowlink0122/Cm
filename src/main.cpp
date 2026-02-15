@@ -1670,8 +1670,11 @@ int main(int argc, char* argv[]) {
                             cache::CacheManager cache_mgr(cache_config);
                             for (const auto& mo : module_objects) {
                                 if (!mo.from_cache) {
+                                    // モジュール固有のフィンガープリントを生成
+                                    std::string mod_fp =
+                                        cache_fingerprint.substr(0, 16) + "_" + mo.module_name;
                                     cache_mgr.store_module_object(cache_fingerprint, mo.module_name,
-                                                                  mo.object_path.string());
+                                                                  mod_fp, mo.object_path.string());
                                 }
                             }
                         }
