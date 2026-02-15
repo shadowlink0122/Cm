@@ -98,8 +98,20 @@ if(CM_USE_LLVM)
         else()
             get_filename_component(LLVM_LIBRARY_DIR "${LLVM_DIR}/../.." ABSOLUTE)
             message(STATUS "LLVM library directory: ${LLVM_LIBRARY_DIR}")
-            link_directories(${LLVM_LIBRARY_DIR})
-            target_link_libraries(cm_llvm_backend INTERFACE LLVM)
+            # libLLVM.dylibのフルパスを使用（link_directoriesは非推奨で
+            # 複数LLVMインストール環境では正しく動作しないため）
+            find_library(LLVM_SHARED_LIB
+                NAMES LLVM LLVM-17
+                PATHS ${LLVM_LIBRARY_DIR}
+                NO_DEFAULT_PATH
+            )
+            if(LLVM_SHARED_LIB)
+                message(STATUS "LLVM shared library: ${LLVM_SHARED_LIB}")
+                target_link_libraries(cm_llvm_backend INTERFACE ${LLVM_SHARED_LIB})
+            else()
+                message(WARNING "LLVM shared library not found in ${LLVM_LIBRARY_DIR}, falling back to static")
+                target_link_libraries(cm_llvm_backend INTERFACE ${llvm_libs})
+            endif()
             set(CMAKE_INSTALL_RPATH "${LLVM_LIBRARY_DIR}")
             set(CMAKE_BUILD_RPATH "${LLVM_LIBRARY_DIR}")
             set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)

@@ -45,6 +45,20 @@ std::unordered_set<LocalId> ConstantFolding::detect_multi_assigned(const MirFunc
                     }
                 }
             }
+            // ASM出力制約（=r, +r等）も代入としてカウント（Bug1修正）
+            if (stmt->kind == MirStatement::Asm) {
+                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                for (const auto& operand : asm_data.operands) {
+                    if (!operand.constraint.empty() &&
+                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                        if (assigned.count(operand.local_id) > 0) {
+                            multiAssigned.insert(operand.local_id);
+                        } else {
+                            assigned.insert(operand.local_id);
+                        }
+                    }
+                }
+            }
         }
     }
     return multiAssigned;

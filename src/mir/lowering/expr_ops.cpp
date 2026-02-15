@@ -607,12 +607,18 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                      rhs_type->kind == hir::TypeKind::Float) {
                 result_type = hir::make_float();
             }
-            // longがあればlong
+            // longがあればlong（unsigned区別: Bug2修正）
             else if (lhs_type->kind == hir::TypeKind::Long ||
                      rhs_type->kind == hir::TypeKind::Long ||
                      lhs_type->kind == hir::TypeKind::ULong ||
                      rhs_type->kind == hir::TypeKind::ULong) {
-                result_type = hir::make_long();
+                // 片方でもULongならulong型を維持
+                if (lhs_type->kind == hir::TypeKind::ULong ||
+                    rhs_type->kind == hir::TypeKind::ULong) {
+                    result_type = hir::make_ulong();
+                } else {
+                    result_type = hir::make_long();
+                }
             }
             // 整数型のinteger promotion: 大きい方の型に昇格
             else {
