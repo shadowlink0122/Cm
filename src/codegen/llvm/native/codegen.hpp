@@ -79,6 +79,25 @@ class LLVMCodeGen {
     ModuleCompileInfo compileWithModuleInfo(
         const mir::MirProgram& program, const std::vector<std::string>& changed_modules_hint = {});
 
+    /// モジュール別オブジェクトファイル情報
+    struct ModuleObjectFile {
+        std::string module_name;            // モジュール名
+        std::filesystem::path object_path;  // .o のパス
+        bool from_cache;                    // キャッシュから取得したか
+    };
+
+    /// モジュール別差分コンパイル
+    /// changed_modules のみ再コンパイル、他はキャッシュから取得
+    /// output_dir: モジュール .o の出力先ディレクトリ
+    std::vector<ModuleObjectFile> compileModules(
+        const mir::MirProgram& program, const std::vector<std::string>& changed_modules,
+        const std::map<std::string, std::filesystem::path>& cached_objects,
+        const std::filesystem::path& output_dir);
+
+    /// 複数オブジェクトファイルからリンク
+    void linkObjects(const std::vector<std::filesystem::path>& objects,
+                     const std::string& output_file);
+
     /// LLVM IR を文字列として取得（デバッグ用）
     std::string getIRString() const;
 

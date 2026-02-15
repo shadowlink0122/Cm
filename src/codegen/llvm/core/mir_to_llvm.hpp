@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../mir/mir_splitter.hpp"
 #include "../../../mir/nodes.hpp"
 #include "context.hpp"
 
@@ -67,6 +68,10 @@ class MIRToLLVM {
 
     /// MIRプログラム全体を変換
     void convert(const mir::MirProgram& program);
+
+    /// モジュール単位での変換（差分コンパイル用）
+    /// ModuleProgramのextern関数はdeclareのみ、自モジュール関数は完全変換
+    void convert(const mir::ModuleProgram& module);
 
     /// 型変換（公開：関数シグネチャ生成で使用）
     llvm::Type* convertType(const hir::TypePtr& type);

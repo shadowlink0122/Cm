@@ -111,6 +111,245 @@ LLVMCodeGen::ModuleCompileInfo LLVMCodeGen::compileWithModuleInfo(
     return info;
 }
 
+// モジュール別差分コンパイル
+std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
+    const mir::MirProgram& program, const std::vector<std::string>& changed_modules,
+    const std::map<std::string, std::filesystem::path>& cached_objects,
+    const std::filesystem::path& output_dir) {
+    std::vector<ModuleObjectFile> results;
+
+    // 出力ディレクトリを作成
+    std::filesystem::create_directories(output_dir);
+
+    // MIR分割
+    auto modules = mir::MirSplitter::split_by_module(program);
+
+    // 変更モジュールのセット（高速検索用）
+    std::set<std::string> changed_set(changed_modules.begin(), changed_modules.end());
+
+    for (const auto& [mod_name, mod_program] : modules) {
+        ModuleObjectFile result;
+        result.module_name = mod_name;
+
+        // キャッシュから取得可能かチェック
+        auto cache_it = cached_objects.find(mod_name);
+        bool needs_recompile = changed_set.count(mod_name) > 0 || cache_it == cached_objects.end();
+
+        if (!needs_recompile && std::filesystem::exists(cache_it->second)) {
+            // キャッシュヒット: キャッシュ済み.oを使用
+            result.object_path = cache_it->second;
+            result.from_cache = true;
+
+            if (cm::debug::g_debug_mode) {
+                std::cerr << "[MODULE] " << mod_name << ": キャッシュヒット ("
+                          << cache_it->second.string() << ")\n";
+            }
+        } else {
+            // キャッシュミス: コンパイル
+            std::string obj_filename = mod_name + ".o";
+            std::filesystem::path obj_path = output_dir / obj_filename;
+
+            if (cm::debug::g_debug_mode) {
+                std::cerr << "[MODULE] " << mod_name << ": コンパイル中 ("
+                          << mod_program.functions.size() << " 関数)\n";
+            }
+
+            // ターゲット設定
+            TargetConfig config;
+            if (!options.customTriple.empty()) {
+                config.triple = options.customTriple;
+                config.target = BuildTarget::Native;
+            } else {
+                switch (options.target) {
+                    case BuildTarget::Baremetal:
+                        config = TargetConfig::getBaremetalARM();
+                        break;
+                    case BuildTarget::BaremetalX86:
+                        config = TargetConfig::getBaremetalX86();
+                        break;
+                    case BuildTarget::Wasm:
+                        config = TargetConfig::getWasm();
+                        break;
+                    case BuildTarget::BaremetalUEFI:
+                        config = TargetConfig::getBaremetalUEFI();
+                        break;
+                    default:
+                        config = TargetConfig::getNative();
+                }
+            }
+            config.debugInfo = options.debugInfo;
+            config.optLevel = options.optimizationLevel;
+
+            // 独立LLVMContextを作成
+            auto mod_context = std::make_unique<LLVMContext>(mod_name + "_module", config);
+            auto mod_target = std::make_unique<TargetManager>(config);
+            mod_target->initialize();
+            mod_target->configureModule(mod_context->getModule());
+
+            // 組み込み関数を登録
+            auto mod_intrinsics = std::make_unique<IntrinsicsManager>(
+                &mod_context->getModule(), &mod_context->getContext(), config);
+
+            // MIR→LLVM IR変換
+            MIRToLLVM mod_converter(*mod_context);
+            mod_converter.convert(mod_program);
+
+            // LLVM IR検証
+            if (options.verifyIR) {
+                std::string errStr;
+                llvm::raw_string_ostream errStream(errStr);
+                if (llvm::verifyModule(mod_context->getModule(), &errStream)) {
+                    throw std::runtime_error("モジュール " + mod_name + " のLLVM IR検証失敗:\n" +
+                                             errStr);
+                }
+            }
+
+            // 最適化
+            if (options.optimizationLevel > 0) {
+                llvm::LoopAnalysisManager LAM;
+                llvm::FunctionAnalysisManager FAM;
+                llvm::CGSCCAnalysisManager CGAM;
+                llvm::ModuleAnalysisManager MAM;
+                llvm::PassBuilder PB;
+                PB.registerModuleAnalyses(MAM);
+                PB.registerCGSCCAnalyses(CGAM);
+                PB.registerFunctionAnalyses(FAM);
+                PB.registerLoopAnalyses(LAM);
+                PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+                llvm::OptimizationLevel optLevel;
+                switch (options.optimizationLevel) {
+                    case 1:
+                        optLevel = llvm::OptimizationLevel::O1;
+                        break;
+                    case 2:
+                        optLevel = llvm::OptimizationLevel::O2;
+                        break;
+                    default:
+                        optLevel = llvm::OptimizationLevel::O3;
+                        break;
+                }
+                auto MPM = PB.buildPerModuleDefaultPipeline(optLevel);
+                MPM.run(mod_context->getModule(), MAM);
+            }
+
+            // オブジェクトファイル出力
+            mod_target->emitObjectFile(mod_context->getModule(), obj_path.string());
+
+            result.object_path = obj_path;
+            result.from_cache = false;
+        }
+
+        results.push_back(std::move(result));
+    }
+
+    return results;
+}
+
+// 複数オブジェクトファイルからリンク
+void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
+                              const std::string& output_file) {
+    // 初期化が必要（ターゲット情報取得のため）
+    if (!context) {
+        initialize("link_module");
+    }
+
+    // 使用ライブラリの検出
+    bool needsGPU = checkForGPUUsage();
+    bool needsNet = checkForNetUsage();
+    bool needsSync = checkForSyncUsage();
+    bool needsThread = checkForThreadUsage();
+    bool needsHTTP = checkForHTTPUsage();
+    bool needsPthread = needsSync || needsThread;
+    bool needsCppRuntime = needsGPU || needsNet || needsSync || needsThread || needsHTTP;
+
+    // オブジェクトファイルリストを構築
+    std::string obj_list;
+    for (const auto& obj : objects) {
+        obj_list += obj.string() + " ";
+    }
+
+    std::string linkCmd;
+    auto target = context->getTargetConfig().target;
+
+    if (target == BuildTarget::Baremetal) {
+        linkCmd = "arm-none-eabi-ld -T link.ld " + obj_list + "-o " + output_file;
+    } else if (target == BuildTarget::BaremetalUEFI) {
+        linkCmd = "lld-link /subsystem:efi_application /entry:efi_main /out:" + output_file + " " +
+                  obj_list;
+    } else if (target == BuildTarget::Wasm) {
+        std::string runtimePath = findRuntimeLibrary();
+        linkCmd = "wasm-ld --entry=_start --allow-undefined " + obj_list + runtimePath + " -o " +
+                  output_file;
+    } else {
+        // ネイティブリンク
+        std::string runtimePath = findRuntimeLibrary();
+
+#ifdef __APPLE__
+        linkCmd = "/usr/bin/clang++ -mmacosx-version-min=15.0 -Wl,-dead_strip ";
+#ifdef CM_DEFAULT_TARGET_ARCH
+        linkCmd += "-arch " + std::string(CM_DEFAULT_TARGET_ARCH) + " ";
+#endif
+        if (context->getTargetConfig().noStd) {
+            linkCmd += "-nostdlib ";
+        }
+        linkCmd += obj_list + runtimePath;
+
+        if (needsGPU) {
+            std::string gpuRuntimePath = findGPURuntimeLibrary();
+            if (!gpuRuntimePath.empty()) {
+                linkCmd += " " + gpuRuntimePath;
+                linkCmd += " -framework Metal -framework Foundation";
+            }
+        }
+        if (needsNet) {
+            std::string path = findStdRuntimeLibrary("net");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsSync) {
+            std::string path = findStdRuntimeLibrary("sync");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsThread) {
+            std::string path = findStdRuntimeLibrary("thread");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsHTTP) {
+            std::string path = findStdRuntimeLibrary("http");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsCppRuntime)
+            linkCmd += " -lc++";
+        if (needsPthread)
+            linkCmd += " -lpthread";
+        linkCmd += " -o " + output_file;
+#else
+        linkCmd = "clang -Wl,--gc-sections ";
+        if (context->getTargetConfig().noStd) {
+            linkCmd += "-nostdlib ";
+        }
+        linkCmd += obj_list + runtimePath + " -o " + output_file;
+        if (needsCppRuntime)
+            linkCmd += " -lstdc++";
+        if (needsPthread)
+            linkCmd += " -lpthread";
+#endif
+    }
+
+    if (cm::debug::g_debug_mode) {
+        std::cerr << "[LINK] " << linkCmd << "\n";
+    }
+
+    int ret = std::system(linkCmd.c_str());
+    if (ret != 0) {
+        throw std::runtime_error("リンクコマンド失敗: " + linkCmd);
+    }
+}
+
 // LLVM IR を文字列として取得（デバッグ用）
 std::string LLVMCodeGen::getIRString() const {
     std::string str;

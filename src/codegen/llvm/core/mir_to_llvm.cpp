@@ -710,6 +710,178 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
                             "MIR to LLVM conversion complete");
 }
 
+// モジュール単位でのMIR→LLVM IR変換
+// extern関数はdeclareのみ、自モジュール関数は完全変換
+void MIRToLLVM::convert(const mir::ModuleProgram& module) {
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
+                            "Starting module conversion: " + module.module_name);
+
+    // ターゲット判定をキャッシュ
+    std::string triple = this->module->getTargetTriple();
+    isWasmTarget = triple.find("wasm") != std::string::npos;
+
+    // === インターフェース名を収集 ===
+    for (const auto* iface : module.interfaces) {
+        if (iface) {
+            interfaceNames.insert(iface->name);
+        }
+    }
+
+    // === 構造体型を定義（自モジュール + extern） ===
+    // パス1: opaque型として作成
+    auto register_structs_pass1 = [&](const std::vector<const mir::MirStruct*>& structs) {
+        for (const auto* structPtr : structs) {
+            const auto& name = structPtr->name;
+            if (structTypes.count(name) > 0)
+                continue;  // 重複スキップ
+            structDefs[name] = structPtr;
+            auto structType = llvm::StructType::create(ctx.getContext(), name);
+            structTypes[name] = structType;
+        }
+    };
+    register_structs_pass1(module.structs);
+    register_structs_pass1(module.extern_structs);
+
+    // パス2: フィールド型を設定
+    auto register_structs_pass2 = [&](const std::vector<const mir::MirStruct*>& structs) {
+        for (const auto* structPtr : structs) {
+            const auto& name = structPtr->name;
+            auto it = structTypes.find(name);
+            if (it == structTypes.end())
+                continue;
+            if (it->second->isOpaque()) {
+                std::vector<llvm::Type*> fieldTypes;
+                for (const auto& field : structPtr->fields) {
+                    fieldTypes.push_back(convertType(field.type));
+                }
+                it->second->setBody(fieldTypes);
+            }
+        }
+    };
+    register_structs_pass2(module.structs);
+    register_structs_pass2(module.extern_structs);
+
+    // === enum型を定義（自モジュール + extern） ===
+    auto register_enums = [&](const std::vector<const mir::MirEnum*>& enums) {
+        for (const auto* enumPtr : enums) {
+            const auto& enumDef = *enumPtr;
+            if (enumDefs.count(enumDef.name) > 0)
+                continue;  // 重複スキップ
+            enumDefs[enumDef.name] = &enumDef;
+
+            // Tagged Unionの場合は構造体型を生成
+            if (enumDef.is_tagged_union()) {
+                uint32_t maxPayloadSize = enumDef.max_payload_size();
+                if (maxPayloadSize == 0)
+                    maxPayloadSize = 8;
+
+                std::vector<llvm::Type*> enumFieldTypes;
+                enumFieldTypes.push_back(ctx.getI32Type());
+                enumFieldTypes.push_back(llvm::ArrayType::get(ctx.getI8Type(), maxPayloadSize));
+
+                auto enumStructType = llvm::StructType::create(ctx.getContext(), enumFieldTypes,
+                                                               enumDef.name + "_tagged");
+                enumTypes[enumDef.name] = enumStructType;
+            }
+        }
+    };
+    register_enums(module.enums);
+    register_enums(module.extern_enums);
+
+    // === インターフェースfat pointer型 ===
+    for (const auto* iface : module.interfaces) {
+        if (iface) {
+            getInterfaceFatPtrType(iface->name);
+        }
+    }
+
+    // === グローバル変数 ===
+    for (const auto* gv : module.global_vars) {
+        if (!gv)
+            continue;
+        if (globalVariables.count(gv->name) > 0)
+            continue;  // 重複スキップ
+
+        auto llvmType = convertType(gv->type);
+        if (!llvmType)
+            continue;
+
+        auto linkage =
+            gv->is_export ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage;
+
+        llvm::Constant* initialValue = nullptr;
+        if (gv->init_value) {
+            if (std::holds_alternative<std::string>(gv->init_value->value)) {
+                auto& str = std::get<std::string>(gv->init_value->value);
+                auto strConst = builder->CreateGlobalStringPtr(str, gv->name + ".str");
+                initialValue = llvm::cast<llvm::Constant>(strConst);
+            } else if (std::holds_alternative<int64_t>(gv->init_value->value)) {
+                initialValue =
+                    llvm::ConstantInt::get(llvmType, std::get<int64_t>(gv->init_value->value));
+            } else if (std::holds_alternative<double>(gv->init_value->value)) {
+                initialValue =
+                    llvm::ConstantFP::get(llvmType, std::get<double>(gv->init_value->value));
+            } else if (std::holds_alternative<bool>(gv->init_value->value)) {
+                initialValue =
+                    llvm::ConstantInt::get(llvmType, std::get<bool>(gv->init_value->value) ? 1 : 0);
+            }
+        }
+        if (!initialValue) {
+            initialValue = llvm::Constant::getNullValue(llvmType);
+        }
+
+        auto globalVar = new llvm::GlobalVariable(*this->module, llvmType, gv->is_const, linkage,
+                                                  initialValue, gv->name);
+        globalVariables[gv->name] = globalVar;
+    }
+
+    // === 関数シグネチャを宣言 ===
+    std::set<std::string> declaredFunctions;
+
+    // 自モジュールの関数（完全な定義）
+    for (const auto* func : module.functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0)
+            continue;
+        declaredFunctions.insert(funcId);
+        auto llvmFunc = convertFunctionSignature(*func);
+        functions[funcId] = llvmFunc;
+    }
+
+    // extern関数（宣言のみ、ExternalLinkage）
+    for (const auto* func : module.extern_functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0)
+            continue;
+        declaredFunctions.insert(funcId);
+        auto llvmFunc = convertFunctionSignature(*func);
+        // extern関数はExternalLinkageを確保
+        llvmFunc->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        functions[funcId] = llvmFunc;
+    }
+
+    // === vtable生成 ===
+    // currentProgramが必要なのでダミーで対応は難しい
+    // vtable情報はModuleProgramのvtablesから直接生成
+    // 注意: generateVTables()はMirProgramを必要とするため、
+    //        モジュール単位ではvtableを個別に処理する必要がある
+    // 現時点ではvtableを使うプログラムは全体コンパイルにフォールバック
+
+    // === 自モジュール関数の実装を変換 ===
+    declaredFunctions.clear();
+    for (const auto* func : module.functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0)
+            continue;
+        declaredFunctions.insert(funcId);
+        convertFunction(*func);
+    }
+    // extern関数はボディなし（declare）なので変換しない
+
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
+                            "Module conversion complete: " + module.module_name);
+}
+
 // 関数変換
 void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
     // 外部関数（extern）は宣言のみで本体を生成しない

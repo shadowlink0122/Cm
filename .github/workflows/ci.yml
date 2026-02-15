@@ -294,6 +294,8 @@ jobs:
 
       - name: Run ${{ matrix.config.name }} Tests
         id: run_tests
+        env:
+          CM_TEST_MAX_JOBS: "2"
         run: |
           set +e
           make ${{ matrix.config.target }} 2>&1 | tee test_output.log

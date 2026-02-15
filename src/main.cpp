@@ -1608,10 +1608,88 @@ int main(int argc, char* argv[]) {
                         }
                     }
 
+                    // モジュール分割情報を事前計算
+                    cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info_pre;
+                    {
+                        auto pre_modules = cm::mir::MirSplitter::split_by_module(mir);
+                        for (const auto& [name, mod] : pre_modules) {
+                            module_info_pre.module_names.push_back(name);
+                            module_info_pre.module_func_count[name] = mod.functions.size();
+                        }
+                    }
+
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     auto phase_llvm_start = std::chrono::steady_clock::now();
-                    auto module_info = codegen.compileWithModuleInfo(mir, changed_modules);
+
+                    // モジュール別差分コンパイルの判定
+                    bool use_module_compile =
+                        opts.incremental && !changed_modules.empty() &&
+                        changed_modules.size() < module_info_pre.module_names.size();
+
+                    // モジュール情報（事前計算）
+                    cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info;
+
+                    if (use_module_compile) {
+                        // === モジュール別差分コンパイル ===
+                        if (opts.verbose) {
+                            std::cout << "⚡ モジュール別差分コンパイル: " << changed_modules.size()
+                                      << "/" << module_info_pre.module_names.size()
+                                      << " モジュール再コンパイル\n";
+                        }
+
+                        // キャッシュ済みオブジェクトのマップ
+                        std::map<std::string, std::filesystem::path> cached_objects;
+                        if (opts.incremental) {
+                            cache::CacheManager cache_mgr(cache_config);
+                            cached_objects = cache_mgr.get_cached_module_objects(cache_fingerprint);
+                        }
+
+                        // 一時ディレクトリの作成
+                        std::filesystem::path module_output_dir =
+                            std::filesystem::path(cache_config.cache_dir) / "module_objs" /
+                            cache_fingerprint.substr(0, 16);
+
+                        // モジュール別コンパイル実行
+                        auto module_objects = codegen.compileModules(
+                            mir, changed_modules, cached_objects, module_output_dir);
+
+                        // リンク
+                        std::vector<std::filesystem::path> all_objects;
+                        for (const auto& mo : module_objects) {
+                            all_objects.push_back(mo.object_path);
+                        }
+                        codegen.linkObjects(all_objects, llvm_opts.outputFile);
+
+                        // モジュール情報を構築
+                        module_info = module_info_pre;
+                        module_info.changed_modules = changed_modules;
+
+                        // 新しいモジュール .o をキャッシュに保存
+                        if (opts.incremental) {
+                            cache::CacheManager cache_mgr(cache_config);
+                            for (const auto& mo : module_objects) {
+                                if (!mo.from_cache) {
+                                    cache_mgr.store_module_object(cache_fingerprint, mo.module_name,
+                                                                  mo.object_path.string());
+                                }
+                            }
+                        }
+
+                        if (opts.verbose) {
+                            size_t cached_count = 0;
+                            for (const auto& mo : module_objects) {
+                                if (mo.from_cache)
+                                    cached_count++;
+                            }
+                            std::cout << "  キャッシュヒット: " << cached_count << "/"
+                                      << module_objects.size() << " モジュール\n";
+                        }
+                    } else {
+                        // === 従来の全体コンパイル ===
+                        module_info = codegen.compileWithModuleInfo(mir, changed_modules);
+                    }
+
                     auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now() - phase_llvm_start)
                                              .count();

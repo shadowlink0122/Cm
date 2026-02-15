@@ -399,3 +399,27 @@ Phase 3 Step 3: モジュール別キャッシュ統合。`CacheManager` にモ�
 
 ## テスト結果
 - インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
+
+# feat: モジュール別差分コンパイル（Phase 4）
+
+## 概要
+Rustスタイルの**モジュール別差分コンパイル**を実装。変更モジュールのみを再コンパイルし、未変更モジュールはキャッシュ済み `.o` をリンクに使用。
+
+## 変更内容
+
+### MIRToLLVM モジュール変換 (`mir_to_llvm.hpp/cpp`)
+- `convert(ModuleProgram)` オーバーロードを追加
+- extern関数は `declare` のみ、自モジュール関数は完全変換
+- struct/enum/interfaceは自モジュール+extern両方を登録
+
+### モジュール別コンパイルパイプライン (`codegen.hpp/cpp`)
+- `compileModules()`: 各モジュールを独立 `LLVMContext` でコンパイル
+- `linkObjects()`: 複数 `.o` を全ターゲット対応でリンク（Native/WASM/UEFI/Baremetal）
+
+### main.cpp 統合
+- `--incremental` + 変更検出時にモジュール別コンパイルを自動有効化
+- キャッシュ連携: 新規 `.o` を `store_module_object()` で保存
+- verbose ログ: キャッシュヒット率を表示
+
+## テスト結果
+- インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
