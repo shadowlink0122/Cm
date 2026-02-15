@@ -380,3 +380,22 @@ Phase 3 Step 1-2: モジュール別分離コンパイルの基盤を構築。MI
 
 ## テスト結果
 - インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
+
+# feat: モジュール別キャッシュ API & verbose モジュール情報表示
+
+## 概要
+Phase 3 Step 3: モジュール別キャッシュ統合。`CacheManager` にモジュール単位の `.o` キャッシュ API を追加し、verbose 出力にモジュール分割情報を表示。
+
+## 変更内容
+
+### CacheManager API 拡張
+- `store_module_object()`: モジュール名+フィンガープリントでの `.o` キャッシュ保存
+- `lookup_module_object()`: フィンガープリント一致によるキャッシュ検索
+- `get_cached_module_objects()`: 全キャッシュ済みモジュール `.o` の一覧取得
+- `modules_dir()`: モジュール別サブディレクトリ管理
+
+### verbose 出力強化 (`main.cpp`)
+- コンパイル時のモジュール分割情報（モジュール数、変更数、各モジュール関数数）を表示
+
+## テスト結果
+- インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
