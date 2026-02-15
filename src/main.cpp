@@ -896,10 +896,48 @@ int main(int argc, char* argv[]) {
 
         module::initialize_module_resolver();
 
+        // ========== 高速キャッシュ判定（ImportPreprocessor の前に実行）==========
+        // ファイルのタイムスタンプ+サイズで変更がないか高速チェック
+        // ヒットすれば ImportPreprocessor (1.6秒) + SHA-256 (0.4秒) をスキップ
+        if (opts.incremental && opts.command == Command::Compile) {
+            std::string target_key = opts.target.empty() ? "native" : opts.target;
+            cache::CacheConfig qc_config;
+            qc_config.cache_dir = opts.cache_dir;
+            cache::CacheManager qc_mgr(qc_config);
+            auto qc_result =
+                qc_mgr.quick_check(opts.input_file, target_key, opts.optimization_level);
+            if (qc_result.valid) {
+                // 高速キャッシュヒット: ファイルコピーのみ
+                auto cached_obj = qc_mgr.cache_dir() / "objects" / qc_result.object_file;
+                std::string output = opts.output_file;
+                if (output.empty()) {
+                    if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+                        output = "output.js";
+                    } else if (opts.target == "wasm") {
+                        output = "a.wasm";
+                    } else {
+                        output = "a.out";
+                    }
+                }
+                try {
+                    std::filesystem::copy_file(cached_obj, output,
+                                               std::filesystem::copy_options::overwrite_existing);
+                    if (opts.verbose || !opts.quiet) {
+                        std::cout << "✓ キャッシュヒット: " << output << "\n";
+                    }
+                    return 0;
+                } catch (const std::exception& e) {
+                    // 高速パス失敗 → 通常パスにフォールバック
+                    if (opts.verbose) {
+                        std::cout << "高速キャッシュ復元失敗: " << e.what() << " → 通常パス\n";
+                    }
+                }
+            }
+        }
+
         // ========== Import Preprocessor ==========
         if (opts.debug)
             std::cout << "=== Import Preprocessor ===\n";
-
         auto phase_preprocess_start = std::chrono::steady_clock::now();
         preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
         auto preprocess_result = import_preprocessor.process(code, opts.input_file);
@@ -963,6 +1001,10 @@ int main(int argc, char* argv[]) {
                             std::cout << "✓ キャッシュヒット: " << output << " (" << hit_ms
                                       << "ms)\n";
                         }
+                        // 高速キャッシュ判定用の情報を更新（次回は高速パスが使えるように）
+                        cache_mgr.save_quick_check(
+                            opts.input_file, target_key, opts.optimization_level, cache_fingerprint,
+                            cached->object_file, preprocess_result.resolved_files);
                         return 0;
                     } catch (const std::exception& e) {
                         if (opts.verbose) {
@@ -1499,6 +1541,12 @@ int main(int argc, char* argv[]) {
                             if (opts.verbose) {
                                 std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
                             }
+                            // 高速キャッシュ判定用の情報を保存
+                            std::string target_key = opts.target.empty() ? "native" : opts.target;
+                            cache_mgr.save_quick_check(opts.input_file, target_key,
+                                                       opts.optimization_level, cache_fingerprint,
+                                                       entry.object_file,
+                                                       preprocess_result.resolved_files);
                         }
                     }
 
@@ -1780,6 +1828,12 @@ int main(int argc, char* argv[]) {
                             if (opts.verbose) {
                                 std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
                             }
+                            // 高速キャッシュ判定用の情報を保存
+                            std::string target_key = opts.target.empty() ? "native" : opts.target;
+                            cache_mgr.save_quick_check(opts.input_file, target_key,
+                                                       opts.optimization_level, cache_fingerprint,
+                                                       entry.object_file,
+                                                       preprocess_result.resolved_files);
                         }
                     }
 

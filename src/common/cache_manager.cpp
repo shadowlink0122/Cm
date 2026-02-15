@@ -692,4 +692,184 @@ std::string CacheManager::current_timestamp() {
     return oss.str();
 }
 
+// ========== 高速キャッシュ判定 ==========
+
+std::filesystem::path CacheManager::quick_check_path() const {
+    return config_.cache_dir / "quick_check.txt";
+}
+
+QuickCheckResult CacheManager::quick_check(const std::string& input_file, const std::string& target,
+                                           int optimization_level) {
+    QuickCheckResult result;
+    auto qc_path = quick_check_path();
+
+    if (!std::filesystem::exists(qc_path)) {
+        return result;
+    }
+
+    std::ifstream ifs(qc_path);
+    if (!ifs.is_open()) {
+        return result;
+    }
+
+    // フォーマット:
+    // 行1: input_file
+    // 行2: target
+    // 行3: optimization_level
+    // 行4: fingerprint
+    // 行5: object_file
+    // 行6: compiler_mtime_ns compiler_size
+    // 行7以降: mtime_ns size path
+    std::string line;
+    std::string saved_input, saved_target, saved_opt, saved_fingerprint, saved_object;
+
+    if (!std::getline(ifs, saved_input))
+        return result;
+    if (!std::getline(ifs, saved_target))
+        return result;
+    if (!std::getline(ifs, saved_opt))
+        return result;
+    if (!std::getline(ifs, saved_fingerprint))
+        return result;
+    if (!std::getline(ifs, saved_object))
+        return result;
+
+    // 入力ファイル、ターゲット、最適化レベルが一致するか確認
+    auto abs_input = std::filesystem::absolute(input_file).string();
+    if (saved_input != abs_input || saved_target != target ||
+        saved_opt != std::to_string(optimization_level)) {
+        return result;
+    }
+
+    // コンパイラバイナリの変更チェック
+    std::string compiler_line;
+    if (!std::getline(ifs, compiler_line))
+        return result;
+    {
+        std::istringstream css(compiler_line);
+        int64_t saved_compiler_mtime;
+        uintmax_t saved_compiler_size;
+        if (!(css >> saved_compiler_mtime >> saved_compiler_size))
+            return result;
+
+        if (!compiler_path_.empty()) {
+            try {
+                auto compiler_path = std::filesystem::path(compiler_path_);
+                if (std::filesystem::exists(compiler_path)) {
+                    auto ftime = std::filesystem::last_write_time(compiler_path);
+                    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                  ftime.time_since_epoch())
+                                  .count();
+                    auto sz = std::filesystem::file_size(compiler_path);
+                    if (ns != saved_compiler_mtime || sz != saved_compiler_size) {
+                        return result;  // コンパイラ自体が変更された
+                    }
+                }
+            } catch (...) {
+                return result;
+            }
+        }
+    }
+
+    // 各ソースファイルのmtime+sizeチェック
+    while (std::getline(ifs, line)) {
+        if (line.empty())
+            continue;
+        std::istringstream iss(line);
+        int64_t saved_mtime;
+        uintmax_t saved_size;
+        std::string saved_path;
+        if (!(iss >> saved_mtime >> saved_size))
+            return result;
+        // パスは残りの部分（スペースを含む可能性）
+        std::getline(iss >> std::ws, saved_path);
+        if (saved_path.empty())
+            return result;
+
+        try {
+            if (!std::filesystem::exists(saved_path)) {
+                return result;  // ファイルが削除された
+            }
+            auto ftime = std::filesystem::last_write_time(saved_path);
+            auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(ftime.time_since_epoch())
+                          .count();
+            auto sz = std::filesystem::file_size(saved_path);
+            if (ns != saved_mtime || sz != saved_size) {
+                return result;  // ファイルが変更された
+            }
+        } catch (...) {
+            return result;
+        }
+    }
+
+    // オブジェクトファイルがまだ存在するか確認
+    auto obj_path = objects_dir() / saved_object;
+    if (!std::filesystem::exists(obj_path)) {
+        return result;
+    }
+
+    // 全チェック通過 — キャッシュヒット
+    result.valid = true;
+    result.fingerprint = saved_fingerprint;
+    result.object_file = saved_object;
+    result.target = saved_target;
+    return result;
+}
+
+void CacheManager::save_quick_check(const std::string& input_file, const std::string& target,
+                                    int optimization_level, const std::string& fingerprint,
+                                    const std::string& object_file,
+                                    const std::vector<std::string>& source_files) {
+    ensure_cache_dir();
+    auto qc_path = quick_check_path();
+
+    std::ofstream ofs(qc_path);
+    if (!ofs.is_open())
+        return;
+
+    auto abs_input = std::filesystem::absolute(input_file).string();
+    ofs << abs_input << "\n";
+    ofs << target << "\n";
+    ofs << optimization_level << "\n";
+    ofs << fingerprint << "\n";
+    ofs << object_file << "\n";
+
+    // コンパイラバイナリのmtime+size
+    if (!compiler_path_.empty()) {
+        try {
+            auto compiler_path = std::filesystem::path(compiler_path_);
+            if (std::filesystem::exists(compiler_path)) {
+                auto ftime = std::filesystem::last_write_time(compiler_path);
+                auto ns =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(ftime.time_since_epoch())
+                        .count();
+                auto sz = std::filesystem::file_size(compiler_path);
+                ofs << ns << " " << sz << "\n";
+            } else {
+                ofs << "0 0\n";
+            }
+        } catch (...) {
+            ofs << "0 0\n";
+        }
+    } else {
+        ofs << "0 0\n";
+    }
+
+    // 各ソースファイルのmtime+size
+    for (const auto& file : source_files) {
+        try {
+            auto path = std::filesystem::path(file);
+            if (!std::filesystem::exists(path))
+                continue;
+            auto ftime = std::filesystem::last_write_time(path);
+            auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(ftime.time_since_epoch())
+                          .count();
+            auto sz = std::filesystem::file_size(path);
+            ofs << ns << " " << sz << " " << file << "\n";
+        } catch (...) {
+            // ファイル情報取得失敗時はスキップ
+        }
+    }
+}
+
 }  // namespace cm::cache

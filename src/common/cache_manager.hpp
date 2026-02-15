@@ -19,6 +19,21 @@ struct CacheConfig {
     bool enabled = true;                            // キャッシュ有効フラグ
 };
 
+// 高速キャッシュ判定用のファイル情報
+struct QuickCheckFileInfo {
+    std::string path;      // ファイルパス
+    int64_t mtime_ns = 0;  // 最終更新時刻（ナノ秒）
+    uintmax_t size = 0;    // ファイルサイズ
+};
+
+// 高速キャッシュ判定結果
+struct QuickCheckResult {
+    bool valid = false;       // 判定結果
+    std::string fingerprint;  // 前回のフィンガープリント
+    std::string object_file;  // キャッシュ済みオブジェクトファイル名
+    std::string target;       // ビルドターゲット
+};
+
 // キャッシュエントリのメタデータ
 struct CacheEntry {
     std::string fingerprint;                                 // 合成フィンガープリント
@@ -130,6 +145,19 @@ class CacheManager {
     // ISO 8601形式の現在日時を取得
     static std::string current_timestamp();
 
+    // ========== 高速キャッシュ判定 ==========
+
+    // 入力ファイルのタイムスタンプ+サイズで高速にキャッシュヒットを判定
+    // （ImportPreprocessor + SHA-256 計算をスキップする）
+    QuickCheckResult quick_check(const std::string& input_file, const std::string& target,
+                                 int optimization_level);
+
+    // 高速判定用の情報を保存
+    void save_quick_check(const std::string& input_file, const std::string& target,
+                          int optimization_level, const std::string& fingerprint,
+                          const std::string& object_file,
+                          const std::vector<std::string>& source_files);
+
    private:
     static std::string compiler_path_;
     CacheConfig config_;
@@ -151,6 +179,9 @@ class CacheManager {
 
     // マニフェストを書き込み
     bool save_manifest(const std::map<std::string, CacheEntry>& entries) const;
+
+    // 高速判定ファイルのパス
+    std::filesystem::path quick_check_path() const;
 };
 
 }  // namespace cm::cache
