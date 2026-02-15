@@ -1,0 +1,16 @@
+// std::io::stream - ストリームI/O
+// 標準入出力ストリームとバッファ付きI/O
+module native.io.stream;
+
+// ============================================================
+// 標準入出力ストリーム
+// ============================================================
+
+export import native.io.stream.stdin::{Stdin, stdin};
+export import native.io.stream.stdout::{Stdout, Stderr, stdout, stderr};
+
+// ============================================================
+// バッファ付きI/O
+// ============================================================
+
+export import native.io.stream.buffered::{BufferedReader, BufferedWriter};

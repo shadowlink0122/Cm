@@ -1,0 +1,6 @@
+// text モジュール - 文字列ユーティリティ
+module text;
+
+export int str_score(int len) {
+    return len * 10;
+}

@@ -30,9 +30,10 @@ Based on C++ syntax, it eliminates unnecessary complexity while maintaining powe
 
 ### 2. High Portability
 Supports multiple backends:
-- **Native**: Executables via LLVM.
+- **Native**: Executables via LLVM (x86_64, ARM64).
 - **WebAssembly**: For browser-based high-performance applications.
-- **Interpreter**: For quick testing and scripting.
+- **JavaScript**: JS code generation for Node.js/browsers.
+- **JIT**: For quick testing and scripting.
 
 ### 3. Strong Type System
 Strict type checking prevents bugs at compile time.
@@ -56,4 +57,4 @@ int main() {
 **Next Chapter:** [Environment Setup](setup.html)
 ---
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-10

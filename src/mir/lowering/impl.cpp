@@ -42,6 +42,21 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
         case hir::HirOperatorKind::Mod:
             op_name = "op_mod";
             break;
+        case hir::HirOperatorKind::BitAnd:
+            op_name = "op_bitand";
+            break;
+        case hir::HirOperatorKind::BitOr:
+            op_name = "op_bitor";
+            break;
+        case hir::HirOperatorKind::BitXor:
+            op_name = "op_bitxor";
+            break;
+        case hir::HirOperatorKind::Shl:
+            op_name = "op_shl";
+            break;
+        case hir::HirOperatorKind::Shr:
+            op_name = "op_shr";
+            break;
         default:
             op_name = "op_unknown";
             break;
@@ -68,6 +83,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
     // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）
@@ -79,6 +95,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     // 他のパラメータを登録
     for (const auto& param : op_impl.params) {
         auto resolved_param_type = resolve_typedef(param.type);
+
         LocalId param_id = ctx.new_local(param.name, resolved_param_type, false);
         mir_func->arg_locals.push_back(param_id);
         ctx.register_variable(param.name, param_id);
@@ -127,6 +144,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     mir_func->is_export = func.is_export;         // エクスポートフラグを設定
     mir_func->is_extern = func.is_extern;         // externフラグを設定
     mir_func->is_variadic = func.is_variadic;     // 可変長引数フラグを設定
+    mir_func->is_async = func.is_async;           // asyncフラグを設定
 
     // 戻り値用のローカル変数（typedefを解決）
     mir_func->return_local = 0;
@@ -138,6 +156,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         // パラメータを記録
         for (const auto& param : func.params) {
             auto resolved_param_type = resolve_typedef(param.type);
+
             LocalId param_id = static_cast<LocalId>(mir_func->locals.size());
             mir_func->locals.emplace_back(param_id, param.name, resolved_param_type, false, false);
             mir_func->arg_locals.push_back(param_id);
@@ -155,7 +174,17 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
+
+    // グローバル変数をスコープに登録（is_global=trueのLocalDeclとして）
+    for (const auto& gv : mir_program.global_vars) {
+        if (!gv)
+            continue;
+        // グローバル変数をローカル変数として登録（is_global=true）
+        LocalId gv_id = ctx.new_local(gv->name, gv->type, !gv->is_const, true, false, true);
+        ctx.register_variable(gv->name, gv_id);
+    }
 
     // デストラクタを持つ型の情報をコンテキストに渡す
     for (const auto& type_name : types_with_destructor) {
@@ -165,6 +194,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     // 関数パラメータをローカル変数として登録（typedefを解決）
     for (const auto& param : func.params) {
         auto resolved_param_type = resolve_typedef(param.type);
+
         LocalId param_id = ctx.new_local(param.name, resolved_param_type, false);
         mir_func->arg_locals.push_back(param_id);
         ctx.register_variable(param.name, param_id);
@@ -331,6 +361,26 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
                 impl_info[type_name]["Eq"] = mir_func->name;
             } else if (op_impl->op == hir::HirOperatorKind::Lt) {
                 impl_info[type_name]["Ord"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Add) {
+                impl_info[type_name]["Add"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Sub) {
+                impl_info[type_name]["Sub"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Mul) {
+                impl_info[type_name]["Mul"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Div) {
+                impl_info[type_name]["Div"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Mod) {
+                impl_info[type_name]["Mod"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::BitAnd) {
+                impl_info[type_name]["BitAnd"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::BitOr) {
+                impl_info[type_name]["BitOr"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::BitXor) {
+                impl_info[type_name]["BitXor"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Shl) {
+                impl_info[type_name]["Shl"] = mir_func->name;
+            } else if (op_impl->op == hir::HirOperatorKind::Shr) {
+                impl_info[type_name]["Shr"] = mir_func->name;
             }
 
             mir_program.functions.push_back(std::move(mir_func));

@@ -1,0 +1,238 @@
+//! platform: uefi
+// util/graphics - 図形描画プリミティブ
+// GOPフレームバッファに直接ピクセルを書き込む描画関数
+// ピクセルフォーマット: BGRA (Blue, Green, Red, Reserved) 各8bit
+// 注意: UEFIではグローバル変数書き込み不可のため、全パラメータは引数経由で渡す
+
+import ../libs/efi_gop;
+import ../libs/efi_text;
+
+// ============================================================
+// 色定数（BGRA形式: 0xAARRGGBB → メモリ上 BB GG RR AA）
+// ============================================================
+
+export const ulong COLOR_BLACK   = 0x00000000;
+export const ulong COLOR_WHITE   = 0x00FFFFFF;
+export const ulong COLOR_RED     = 0x00FF0000;
+export const ulong COLOR_GREEN   = 0x0000FF00;
+export const ulong COLOR_BLUE    = 0x000000FF;
+export const ulong COLOR_YELLOW  = 0x00FFFF00;
+export const ulong COLOR_CYAN    = 0x0000FFFF;
+export const ulong COLOR_MAGENTA = 0x00FF00FF;
+export const ulong COLOR_GRAY    = 0x00808080;
+export const ulong COLOR_ORANGE  = 0x00FFA500;
+
+/// RGB値から色を作成
+export ulong make_color(ulong r, ulong g, ulong b) {
+    return (r << 16) | (g << 8) | b;
+}
+
+// ============================================================
+// 基本描画（全て引数ベース）
+// ============================================================
+
+/// 1ピクセルを描画
+export void draw_pixel(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong color) {
+    // 範囲外チェック
+    if (x >= width) { return; }
+    if (y >= height) { return; }
+
+    // フレームバッファへの書き込み
+    // offset = (y * stride + x) * 4  (4バイト/ピクセル = BGRA)
+    ulong offset = (y * stride + x) * 4;
+    uint* pixel = (fb + offset) as uint*;
+    *pixel = color as uint;
+}
+
+/// 水平線を描画
+export void draw_hline(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong length, ulong color) {
+    if (y >= height) { return; }
+
+    ulong i = 0;
+    while (i < length) {
+        ulong px = x + i;
+        if (px >= width) { return; }
+        ulong offset = (y * stride + px) * 4;
+        uint* pixel = (fb + offset) as uint*;
+        *pixel = color as uint;
+        i += 1;
+    }
+}
+
+/// 垂直線を描画
+export void draw_vline(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong length, ulong color) {
+    if (x >= width) { return; }
+
+    ulong i = 0;
+    while (i < length) {
+        ulong py = y + i;
+        if (py >= height) { return; }
+        ulong offset = (py * stride + x) * 4;
+        uint* pixel = (fb + offset) as uint*;
+        *pixel = color as uint;
+        i += 1;
+    }
+}
+
+/// 任意の直線を描画（Bresenhamアルゴリズム）
+export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x0, ulong y0, ulong x1, ulong y1, ulong color) {
+    // 水平・垂直の特殊ケース
+    if (y0 == y1) {
+        if (x0 <= x1) {
+            draw_hline(fb, width, height, stride, x0, y0, x1 - x0 + 1, color);
+        } else {
+            draw_hline(fb, width, height, stride, x1, y0, x0 - x1 + 1, color);
+        }
+        return;
+    }
+    if (x0 == x1) {
+        if (y0 <= y1) {
+            draw_vline(fb, width, height, stride, x0, y0, y1 - y0 + 1, color);
+        } else {
+            draw_vline(fb, width, height, stride, x0, y1, y0 - y1 + 1, color);
+        }
+        return;
+    }
+
+    // Bresenhamの直線アルゴリズム
+    long sx0 = x0 as long;
+    long sy0 = y0 as long;
+    long sx1 = x1 as long;
+    long sy1 = y1 as long;
+
+    long dx = sx1 - sx0;
+    long dy = sy1 - sy0;
+    if (dx < 0) { dx = 0 - dx; }
+    if (dy < 0) { dy = 0 - dy; }
+
+    long step_x = 1;
+    if (sx0 > sx1) { step_x = 0 - 1; }
+    long step_y = 1;
+    if (sy0 > sy1) { step_y = 0 - 1; }
+
+    long err = dx - dy;
+    long cx = sx0;
+    long cy = sy0;
+
+    while (true) {
+        if (cx >= 0) {
+            if (cy >= 0) {
+                draw_pixel(fb, width, height, stride, cx as ulong, cy as ulong, color);
+            }
+        }
+
+        if (cx == sx1) {
+            if (cy == sy1) {
+                return;
+            }
+        }
+
+        long e2 = err * 2;
+        if (e2 > (0 - dy)) {
+            err = err - dy;
+            cx = cx + step_x;
+        }
+        if (e2 < dx) {
+            err = err + dx;
+            cy = cy + step_y;
+        }
+    }
+}
+
+// ============================================================
+// 図形描画
+// ============================================================
+
+/// 矩形の枠を描画
+export void draw_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong w, ulong h, ulong color) {
+    draw_hline(fb, width, height, stride, x, y, w, color);
+    draw_hline(fb, width, height, stride, x, y + h - 1, w, color);
+    draw_vline(fb, width, height, stride, x, y, h, color);
+    draw_vline(fb, width, height, stride, x + w - 1, y, h, color);
+}
+
+/// 矩形を塗りつぶし
+export void fill_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong w, ulong h, ulong color) {
+    ulong j = 0;
+    while (j < h) {
+        draw_hline(fb, width, height, stride, x, y + j, w, color);
+        j += 1;
+    }
+}
+
+// ============================================================
+// デモ描画
+// ============================================================
+
+/// グラフィックスデモ: 点・線・矩形を描画
+export void graphics_demo(void* system_table) {
+    // ローカル変数でGOP情報を受け取る
+    ulong fb = 0;
+    ulong w = 0;
+    ulong h = 0;
+    ulong stride = 0;
+
+    // GOP初期化（ポインタ経由で情報を返す）
+    ulong status = gop_init(system_table, &fb, &w, &h, &stride);
+    long signed_status = status as long;
+    if (signed_status < 0) {
+        efi_println(system_table, "Error: GOP not available" as void*);
+        return;
+    }
+
+    efi_println(system_table, "Drawing graphics..." as void*);
+
+    // 画面クリア（暗い青）
+    fill_rect(fb, w, h, stride, 0, 0, w, h, make_color(0, 0, 32));
+
+    // === デモ描画 ===
+
+    // 1. 外枠（白）
+    draw_rect(fb, w, h, stride, 10, 10, w - 20, h - 20, COLOR_WHITE);
+
+    // 2. 対角線（赤・緑）
+    draw_line(fb, w, h, stride, 10, 10, w - 11, h - 11, COLOR_RED);
+    draw_line(fb, w, h, stride, w - 11, 10, 10, h - 11, COLOR_GREEN);
+
+    // 3. 十字線（黄色、画面中央）
+    ulong cx = w / 2;
+    ulong cy = h / 2;
+    draw_hline(fb, w, h, stride, cx - 50, cy, 100, COLOR_YELLOW);
+    draw_vline(fb, w, h, stride, cx, cy - 50, 100, COLOR_YELLOW);
+
+    // 4. カラフルな矩形
+    fill_rect(fb, w, h, stride, 50, 50, 80, 60, COLOR_RED);
+    fill_rect(fb, w, h, stride, 150, 50, 80, 60, COLOR_GREEN);
+    fill_rect(fb, w, h, stride, 250, 50, 80, 60, COLOR_BLUE);
+    fill_rect(fb, w, h, stride, 350, 50, 80, 60, COLOR_YELLOW);
+    fill_rect(fb, w, h, stride, 450, 50, 80, 60, COLOR_CYAN);
+    fill_rect(fb, w, h, stride, 550, 50, 80, 60, COLOR_MAGENTA);
+
+    // 5. 放射状パターン（中央）
+    ulong r = 80;
+    draw_line(fb, w, h, stride, cx, cy, cx + r, cy, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx + r, cy - r / 2, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx + r / 2, cy - r, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx, cy - r, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx - r / 2, cy - r, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx - r, cy - r / 2, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx - r, cy, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx - r, cy + r / 2, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx - r / 2, cy + r, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx, cy + r, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx + r / 2, cy + r, COLOR_ORANGE);
+    draw_line(fb, w, h, stride, cx, cy, cx + r, cy + r / 2, COLOR_ORANGE);
+
+    // 6. ネストした矩形枠
+    ulong n = 0;
+    while (n < 5) {
+        ulong noff = n * 15;
+        ulong col = make_color(255 - n * 50, n * 50, 128);
+        ulong rx = cx - 100 + noff;
+        ulong ry = cy + 100 + noff;
+        ulong rw = 200 - noff * 2;
+        ulong rh = 100 - noff * 2;
+        draw_rect(fb, w, h, stride, rx, ry, rw, rh, col);
+        n += 1;
+    }
+}

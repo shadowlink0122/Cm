@@ -1,0 +1,18 @@
+//! platform: js
+// JS FFI テスト: use "package" でnode_modulesパッケージを利用
+// JSターゲット専用
+
+use "lodash" {
+    int add(int a, int b);
+}
+
+use "path" {
+    string join(string a, string b);
+}
+
+int main() {
+    // lodashのadd関数（テスト用の仮定）
+    int result = add(10, 20);
+    println("add result: {result}");
+    return 0;
+}

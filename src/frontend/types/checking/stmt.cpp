@@ -107,7 +107,6 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         }
     } else if (let.type) {
         auto resolved_type = resolve_typedef(let.type);
-
         // 配列型のsize_param_nameを解決（const強化）
         resolve_array_size(resolved_type);
 

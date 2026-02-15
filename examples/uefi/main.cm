@@ -1,0 +1,103 @@
+//! platform: uefi
+// Cm UEFI サンプルOS - メニュー式デモ
+//
+// ビルド: cd examples/uefi && make clean && make && make run
+
+import ./libs/efi_core;
+import ./libs/efi_text;
+import ./libs/efi_input;
+import ./util/menu;
+import ./util/memmap;
+import ./util/keyboard;
+import ./util/sysinfo;
+import ./util/convert;
+import ./util/graphics;
+
+// ============================================================
+// メイン
+// ============================================================
+
+ulong efi_main(void* image_handle, void* system_table) {
+    efi_clear_screen(system_table);
+
+    // バナー表示
+    efi_println(system_table, "========================================" as void*);
+    efi_println(system_table, "  Cm UEFI Sample OS v0.14.0" as void*);
+    efi_println(system_table, "========================================" as void*);
+    efi_println(system_table, "" as void*);
+
+    // 初回メニュー表示
+    show_menu(system_table);
+
+    // メニューループ: キー待ち → 処理 → メニュー再表示
+    while (true) {
+        ushort scan = 0;
+        ushort ch = 0;
+
+        // キー入力をブロッキング待機
+        ulong status = efi_read_key_blocking(system_table, &scan, &ch);
+
+        // エラー時はリトライ
+        long signed_status = status as long;
+        if (signed_status < 0) {
+            continue;
+        }
+
+        // 入力文字をエコー
+        efi_put_char(system_table, ch);
+        efi_println(system_table, "" as void*);
+
+        // デバッグ: ch値を表示
+        efi_print(system_table, "  key=" as void*);
+        efi_print_ushort_hex(system_table, ch);
+        efi_print(system_table, " (" as void*);
+        efi_print_ushort(system_table, ch);
+        efi_println(system_table, ")" as void*);
+
+        switch(ch as char) {
+            case('1') {
+                // メモリマップ表示
+                dump_memory_map(system_table);
+                show_menu(system_table);
+            }
+            case('2') {
+                // キーボードテスト
+                keyboard_test(system_table);
+                show_menu(system_table);
+            }
+            case('3') {
+                // システム情報表示
+                show_system_info(system_table);
+                show_menu(system_table);
+            }
+            case('4') {
+                // グラフィクスデモ
+                graphics_demo(system_table);
+                efi_println(system_table, "" as void*);
+                efi_println(system_table, "Graphics demo complete. Press any key..." as void*);
+                ushort dummy_scan = 0;
+                ushort dummy_ch = 0;
+                efi_read_key_blocking(system_table, &dummy_scan, &dummy_ch);
+                efi_clear_screen(system_table);
+                show_menu(system_table);
+            }
+            case('q' | '5') {
+                // 終了
+                return 0;
+            }
+            else {
+                efi_print(system_table, "Invalid input (ch=" as void*);
+                efi_print_ushort(system_table, ch);
+                efi_println(system_table, ")" as void*);
+                show_menu(system_table);
+            }
+        }
+    }
+
+    // HLTで停止
+    while (true) {
+        __asm__("hlt");
+    }
+
+    return 0;
+}

@@ -1,0 +1,34 @@
+//! platform: uefi
+// UEFI制御フロー・ループテスト
+// ブートシーケンスで使用するパターンをコンパイルレベルで検証
+
+ulong process_status(ulong status) {
+    // ビット63チェック（エラーかどうか）
+    long signed_status = status as long;
+    if (signed_status < 0) {
+        return 1;  // エラー
+    }
+    return 0;  // 成功
+}
+
+ulong retry_operation(int max_retries) {
+    int attempts = 0;
+    ulong status = 1;
+    while (attempts < max_retries) {
+        if (status == 0) {
+            return 0;
+        }
+        attempts += 1;
+        // 偶数回目で成功するシミュレーション
+        if (attempts % 2 == 0) {
+            status = 0;
+        }
+    }
+    return status;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    ulong s1 = process_status(0);
+    ulong s2 = retry_operation(4);
+    return s1 + s2;
+}

@@ -38,6 +38,7 @@ class ImportPreprocessor {
         std::vector<std::string> imported_modules;  // インポートされたモジュール
         SourceMap source_map;                       // ソースマップ
         std::vector<ModuleRange> module_ranges;     // モジュール範囲情報
+        std::vector<std::string> resolved_files;  // 全参照ファイルの絶対パス（キャッシュキー用）
         bool success;
         std::string error_message;
     };
@@ -49,7 +50,9 @@ class ImportPreprocessor {
     std::unordered_set<std::string>
         imported_modules;  // インポート済みモジュール（再インポート防止）
     std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
-    std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ
+    std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ（展開済み）
+    std::unordered_map<std::string, std::string>
+        raw_module_cache;  // オリジナルソースキャッシュ（export抽出用）
 
     // モジュール名前空間の追跡（モジュール名 -> 名前空間）
     std::unordered_map<std::string, std::string> module_namespaces;
@@ -159,6 +162,10 @@ class ImportPreprocessor {
 
     // 階層再構築エクスポート処理: export { ns::{item1, item2} }
     std::string process_hierarchical_reexport(const std::string& source);
+
+    // exportされたブロック（関数・struct・const等）を抽出
+    // namespace外へのforward展開用
+    std::string extract_exported_blocks(const std::string& module_source);
 };
 
 }  // namespace cm::preprocessor

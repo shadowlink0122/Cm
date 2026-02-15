@@ -1,0 +1,13 @@
+// ベアメタルエラーテスト: ファイルI/O使用禁止
+// fopen/fwrite はOSファイルシステムに依存するため使用不可
+
+use libc {
+    int fopen(string path, string mode);
+    void fclose(int fp);
+}
+
+int main() {
+    int fp = fopen("/tmp/test.txt", "w");
+    fclose(fp);
+    return 0;
+}

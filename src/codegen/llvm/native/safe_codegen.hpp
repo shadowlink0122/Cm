@@ -143,8 +143,12 @@ class SafeCodeGenerator {
     static void emitObjectFileSafe(llvm::Module& module, llvm::TargetMachine* targetMachine,
                                    const std::string& filename,
                                    std::chrono::seconds timeout = DEFAULT_TIMEOUT) {
-        // コード生成前の検証
-        if (!PreCodeGenValidator::validate(module)) {
+        // UEFI/baremetalターゲットではPreCodeGenValidatorをスキップ
+        // 意図的な無限ループ（halt/hang）や最小モジュールが正常なため
+        std::string triple = module.getTargetTriple();
+        bool isBaremetalOrUefi =
+            triple.find("windows") != std::string::npos || triple.find("none") != std::string::npos;
+        if (!isBaremetalOrUefi && !PreCodeGenValidator::validate(module)) {
             throw std::runtime_error(
                 "Code generation aborted: infinite loop or excessive complexity detected");
         }
@@ -182,8 +186,11 @@ class SafeCodeGenerator {
     static void emitAssemblySafe(llvm::Module& module, llvm::TargetMachine* targetMachine,
                                  const std::string& filename,
                                  std::chrono::seconds timeout = DEFAULT_TIMEOUT) {
-        // コード生成前の検証
-        if (!PreCodeGenValidator::validate(module)) {
+        // UEFI/baremetalターゲットではPreCodeGenValidatorをスキップ
+        std::string triple = module.getTargetTriple();
+        bool isBaremetalOrUefi =
+            triple.find("windows") != std::string::npos || triple.find("none") != std::string::npos;
+        if (!isBaremetalOrUefi && !PreCodeGenValidator::validate(module)) {
             throw std::runtime_error(
                 "Code generation aborted: infinite loop or excessive complexity detected");
         }

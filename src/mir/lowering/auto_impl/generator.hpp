@@ -54,6 +54,7 @@ class AutoImplGenerator {
     void generate_builtin_debug_method(const hir::HirStruct& st);
     void generate_builtin_display_method(const hir::HirStruct& st);
     void generate_builtin_css_method(const hir::HirStruct& st);
+    void generate_builtin_to_css_method(const hir::HirStruct& st);
     void generate_builtin_is_css_method(const hir::HirStruct& st);
 
     // ============================================================
@@ -66,6 +67,7 @@ class AutoImplGenerator {
     void generate_builtin_debug_method_for_monomorphized(const MirStruct& st);
     void generate_builtin_display_method_for_monomorphized(const MirStruct& st);
     void generate_builtin_css_method_for_monomorphized(const MirStruct& st);
+    void generate_builtin_to_css_method_for_monomorphized(const MirStruct& st);
     void generate_builtin_is_css_method_for_monomorphized(const MirStruct& st);
 
     // ユーザー定義演算子の自動実装

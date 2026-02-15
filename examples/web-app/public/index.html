@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cm Todo App</title>
+    <meta name="description" content="Cm言語で構築されたWebアプリケーション - ロジックもスタイルも全てCmで記述">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app" id="app">
+        <div class="header">
+            <h1>📝 Cm Todo App</h1>
+            <p>Cm言語 + JSバックエンドで構築</p>
+        </div>
+
+        <div class="card">
+            <div style="display: flex; gap: 8px;">
+                <input class="input" type="text" id="taskInput" placeholder="新しいタスクを入力..." style="flex: 1;">
+                <button class="btn" id="addBtn">追加</button>
+            </div>
+        </div>
+
+        <div class="card" id="taskList">
+            <h2 style="margin-bottom: 12px; color: #374151;">タスク一覧</h2>
+            <div id="tasks"></div>
+            <p id="emptyMsg" style="color: #9ca3af; text-align: center; padding: 20px;">
+                タスクがありません。上のフォームから追加してください。
+            </p>
+        </div>
+
+        <div class="card" style="text-align: center; color: #6b7280; font-size: 13px;">
+            <p>このアプリはロジックもCSSも全て <code>Cm言語</code> で記述されています</p>
+            <p>ソース: <code>src/app.cm</code>（ロジック）+ <code>src/styles.cm</code>（CSS）</p>
+        </div>
+    </div>
+
+    <!-- DOMランタイムブリッジ（Cm FFI用） -->
+    <script src="dom_runtime.js"></script>
+    <!-- Cm生成のアプリケーションロジック -->
+    <script src="app.js"></script>
+</body>
+
+</html>

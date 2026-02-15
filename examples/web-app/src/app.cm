@@ -1,0 +1,145 @@
+//! platform: js
+// Cm Todo App - アプリケーションロジック
+// ブラウザ上で動作するTodoアプリケーション
+// DOM操作とデータ管理は dom_runtime.js のブリッジ関数経由
+//
+// ビルド: cm compile --target=js src/app.cm -o public/app.js
+
+// === FFI宣言: dom_runtime.js のブリッジ関数 ===
+
+use js {
+    // --- データストア操作 ---
+    int storeAddTask(string text);
+    void storeToggleTask(int id);
+    void storeDeleteTask(int id);
+    int storeGetCount();
+    int storeGetId(int index);
+    string storeGetText(int index);
+    bool storeIsDone(int index);
+
+    // --- DOM操作 ---
+    void domSetHTML(string id, string html);
+    string domGetValue(string id);
+    void domClearValue(string id);
+    void domSetDisplay(string id, string display);
+
+    // --- イベント登録 ---
+    void domOnEnter(string id, string callbackName);
+    void domOnClick(string id, string callbackName);
+    void domBindCheckbox(string elementId, int taskId);
+    void domBindDelete(string elementId, int taskId);
+}
+
+// === タスク操作 ===
+
+// タスクを追加
+void addTask() {
+    string text = domGetValue("taskInput");
+    if (text == "") {
+        return;
+    }
+
+    storeAddTask(text);
+    domClearValue("taskInput");
+    render();
+}
+
+// タスクの完了状態をトグル
+void toggleTask(int id) {
+    storeToggleTask(id);
+    render();
+}
+
+// タスクを削除
+void deleteTask(int id) {
+    storeDeleteTask(id);
+    render();
+}
+
+// === 描画 ===
+
+// タスクリストを描画
+void render() {
+    int count = storeGetCount();
+
+    // 空メッセージの表示/非表示
+    if (count == 0) {
+        domSetDisplay("emptyMsg", "block");
+    } else {
+        domSetDisplay("emptyMsg", "none");
+    }
+
+    // タスクリストHTML構築
+    string html = "";
+    int i = 0;
+    while (i < count) {
+        int id = storeGetId(i);
+        string text = storeGetText(i);
+        bool done = storeIsDone(i);
+
+        string checkId = "chk-{id}";
+        string delId = "del-{id}";
+
+        // チェックボックス属性
+        string checked = "";
+        if (done) {
+            checked = " checked";
+        }
+
+        // テキストスタイル（完了時は取り消し線）
+        string textStyle = "flex: 1;";
+        if (done) {
+            textStyle = "flex: 1; text-decoration: line-through; color: #9ca3af;";
+        }
+
+        // タスクアイテムHTML（変数埋め込みで1つの文字列として定義）
+        string item = `
+            <div class="task-item">
+                <input type="checkbox" id="{checkId}"{checked} style="margin-right: 12px; width: 18px; height: 18px;">
+                <span style="{textStyle}">{text}</span>
+                <button id="{delId}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;">✕</button>
+            </div>
+        `;
+        html = html + item;
+
+        i = i + 1;
+    }
+
+    // DOMに反映
+    domSetHTML("tasks", html);
+
+    // イベントバインド（DOM更新後に再登録）
+    i = 0;
+    while (i < count) {
+        int id = storeGetId(i);
+        string checkId = "chk-{id}";
+        string delId = "del-{id}";
+
+        domBindCheckbox(checkId, id);
+        domBindDelete(delId, id);
+
+        i = i + 1;
+    }
+}
+
+// === エントリポイント ===
+
+int main() {
+    // イベント登録
+    domOnClick("addBtn", "addTask");
+    domOnEnter("taskInput", "addTask");
+
+    // 初期描画
+    render();
+
+    // コールバック関数の参照保持（DCE回避）
+    // domOnClick等は文字列参照のためコンパイラが関数を削除してしまう
+    // 実行時にはstoreGetCount()は0なのでこのブロックは実行されない
+    if (storeGetCount() < 0) {
+        addTask();
+        toggleTask(0);
+        deleteTask(0);
+    }
+
+    return 0;
+}

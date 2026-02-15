@@ -19,12 +19,17 @@ RUN apt-get update && apt-get install -y \
     # GCC
     gcc-13 \
     g++-13 \
-    # Clang
+    # Clang / LLVM
     clang-17 \
+    llvm-17-dev \
     clang-format-17 \
     clang-tidy-17 \
     lld-17 \
-    # テスト・カバレッジ
+    # OpenSSL（HTTPS対応）
+    libssl-dev \
+    # テスト
+    libgtest-dev \
+    # カバレッジ
     lcov \
     # その他
     python3 \

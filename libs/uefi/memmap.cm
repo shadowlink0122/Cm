@@ -1,0 +1,114 @@
+// uefi::memmap - UEFI メモリマップ取得
+// Boot ServicesのGetMemoryMapを使用してメモリ領域情報を取得
+module uefi.memmap;
+
+import uefi::types::*;
+import uefi::table::*;
+
+// ============================================================
+// Win64 ABI 間接呼び出しヘルパー
+// ============================================================
+
+/// 5引数 間接呼び出し（GetMemoryMap用）
+/// レジスタ不足を回避するため、引数を配列経由で渡す
+ulong bs_call5(ulong fn, ulong a1, ulong a2, ulong a3, ulong a4, ulong a5) {
+    // 引数を配列に格納してASMに渡す（レジスタ節約）
+    ulong[6] args;
+    args[0] = fn;
+    args[1] = a1;
+    args[2] = a2;
+    args[3] = a3;
+    args[4] = a4;
+    args[5] = a5;
+
+    ulong result = 0;
+    ulong args_ptr = args as ulong;
+    __asm__(`
+        pushq %rbx;
+        pushq %r12;
+        pushq %r13;
+        pushq %r14;
+        pushq %r15;
+        pushq %rdi;
+        movq ${r:args_ptr}, %rbx;
+        movq 0(%rbx), %r12;
+        movq 8(%rbx), %rcx;
+        movq 16(%rbx), %rdx;
+        movq 24(%rbx), %r8;
+        movq 32(%rbx), %r9;
+        movq 40(%rbx), %rdi;
+        subq $$48, %rsp;
+        movq %rdi, 32(%rsp);
+        callq *%r12;
+        addq $$48, %rsp;
+        movq %rax, ${=r:result};
+        popq %rdi;
+        popq %r15;
+        popq %r14;
+        popq %r13;
+        popq %r12;
+        popq %rbx
+    `);
+    return result;
+}
+
+// ============================================================
+// メモリマップ取得
+// ============================================================
+
+/// GetMemoryMapを呼び出し
+/// map_size:     [入出力] バッファサイズ
+/// map:          メモリマップバッファ
+/// map_key:      [出力] マップキー（ExitBootServicesで使用）
+/// desc_size:    [出力] 1ディスクリプタのサイズ
+/// desc_version: [出力] ディスクリプタバージョン
+export ulong uefi_get_memory_map(
+EfiSystemTable* st,
+ulong* map_size,
+void* map,
+ulong* map_key,
+ulong* desc_size,
+ulong* desc_version
+) {
+    EfiBootServices* bs = st->boot_services;
+    if (bs == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    void* get_map_fn = bs->get_memory_map;
+    if (get_map_fn == null) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    ulong fn_addr = get_map_fn as ulong;
+    ulong ms_addr = map_size as ulong;
+    ulong map_addr = map as ulong;
+    ulong mk_addr = map_key as ulong;
+    ulong ds_addr = desc_size as ulong;
+    ulong dv_addr = desc_version as ulong;
+    return bs_call5(fn_addr, ms_addr, map_addr, mk_addr, ds_addr, dv_addr);
+}
+
+// ============================================================
+// メモリタイプ名変換
+// ============================================================
+
+/// メモリタイプ番号から人間可読な名前文字列を返す
+export string uefi_memory_type_name(uint mem_type) {
+    if (mem_type == 0)  { return "Reserved"; }
+    if (mem_type == 1)  { return "LoaderCode"; }
+    if (mem_type == 2)  { return "LoaderData"; }
+    if (mem_type == 3)  { return "BS_Code"; }
+    if (mem_type == 4)  { return "BS_Data"; }
+    if (mem_type == 5)  { return "RT_Code"; }
+    if (mem_type == 6)  { return "RT_Data"; }
+    if (mem_type == 7)  { return "Conventional"; }
+    if (mem_type == 8)  { return "Unusable"; }
+    if (mem_type == 9)  { return "ACPI_Reclaim"; }
+    if (mem_type == 10) { return "ACPI_NVS"; }
+    if (mem_type == 11) { return "MMIO"; }
+    if (mem_type == 12) { return "MMIO_Port"; }
+    if (mem_type == 13) { return "PalCode"; }
+    if (mem_type == 14) { return "Persistent"; }
+    return "Unknown";
+}

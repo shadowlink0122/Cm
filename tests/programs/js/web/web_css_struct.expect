@@ -1,0 +1,11 @@
+Button CSS:
+background-color: #4A90D9; border-radius: 8px; color: white; font-size: 16px; padding: 12px 24px; 
+
+Button to_css():
+background-color: #4A90D9; border-radius: 8px; color: white; font-size: 16px; padding: 12px 24px; 
+
+Card CSS:
+background-color: #ffffff; border: 1px solid #e0e0e0; padding: 24px; 
+
+ButtonStyle is CSS: true
+CardStyle is CSS: true

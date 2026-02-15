@@ -29,7 +29,7 @@ nav_order: 1
   - [Basics](tutorials/en/basics/introduction.html) - Variables, functions, control flow
   - [Types](tutorials/en/types/structs.html) - Structs, enums, interfaces
   - [Advanced](tutorials/en/advanced/match.html) - Generics, macros, match
-  - [Compiler](tutorials/en/compiler/usage.html) - LLVM backend, optimization
+  - [Compiler](tutorials/en/compiler/usage.html) - LLVM/JS backend, optimization
   - [Standard Library](tutorials/ja/stdlib/) - HTTP, Networking, Threading, GPU
 
 - **[Quick Start Guide](QUICKSTART.html)** - Get started in 5 minutes
@@ -50,7 +50,7 @@ nav_order: 1
 
 ## 🎯 Language Features
 
-### ✅ Language Core (v0.13.1)
+### ✅ Language Core (v0.14.0)
 
 - **C++ Style Syntax** - Familiar and readable
 - **Strong Type System** - Compile-time safety
@@ -64,6 +64,7 @@ nav_order: 1
 
 - **LLVM Native** - ARM64/x86_64 native code generation
 - **WASM** - WebAssembly backend
+- **JavaScript** - JS code generation for Node.js/browsers (77% pass rate)
 
 ### ✅ Standard Library (Native)
 
@@ -76,7 +77,6 @@ nav_order: 1
 
 - **Package Management** - `cm pkg init/add`
 - **Ownership System** - Borrow checker improvements
-- **JS Backend** - JavaScript code generation (planned for v0.14.0)
 
 ---
 
@@ -127,6 +127,7 @@ ctest --test-dir build
 | HIR/MIR | ✅ Complete | 80%+ |
 | LLVM Backend | ✅ Complete | 85%+ |
 | WASM Backend | ✅ Complete | 80%+ |
+| JS Backend | ✅ Complete | 77% |
 | Standard Library | 🔄 In Progress | 30%+ |
 
 ---
@@ -150,7 +151,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Last Updated:** v0.13.1 (February 2026)
+**Last Updated:** v0.14.0 (February 2026)
 
 © 2025-2026 Cm Language Project
 

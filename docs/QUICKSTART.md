@@ -14,62 +14,79 @@ title: Quick Start
 | OS | アーキテクチャ | ステータス |
 |----|-------------|----------|
 | **macOS 14+** | ARM64 (Apple Silicon) | ✅ |
+| **macOS 14+** | x86_64 (Intel) | ✅ |
 | **Ubuntu 22.04** | x86_64 | ✅ |
 
 ### 必要環境
+
 - C++20対応コンパイラ（Clang 17+推奨）
-- CMake 3.16+
-- LLVM 17+（オプション、ネイティブコンパイル用）
+- CMake 3.20+
+- Make
+- LLVM 17（ネイティブコンパイル・JIT実行用）
+- macOSの場合: Xcodeコマンドラインツール（Objective-C++含む）
+
+> 📖 詳細な環境構築手順は [環境構築チュートリアル](tutorials/ja/basics/setup.html) を参照してください。
 
 ### ビルド
 
 ```bash
-# プロジェクトルートで
-cmake -B build -DCM_USE_LLVM=ON
-cmake --build build -j4
+git clone https://github.com/shadowlink0122/Cm.git
+cd Cm
+
+# makeでビルド（推奨）
+make all      # コンパイラ + ランタイムライブラリ
+
+# アーキテクチャ指定ビルド
+make build ARCH=arm64     # Apple Silicon
+make build ARCH=x86_64    # Intel / Linux
 ```
+
+> `./cm` は `build/bin/cm` へのシンボリックリンクです。  
+> Docker環境では `docker compose run --rm test` でビルド・テストが実行できます。
+
+> CMakeの直接実行や詳細なオプションについては [環境構築](tutorials/ja/basics/setup.html) を参照。
 
 ## 📝 基本的な使い方
 
-### インタプリタで実行（推奨）
+### JITで実行
 
 ```bash
-# プログラムを実行
-./cm run examples/hello.cm
+./cm run hello.cm
 
 # デバッグモード
-./cm run examples/hello.cm -d
+./cm run hello.cm -d
 ```
 
-### ネイティブコンパイル（LLVM必須）
+### コンパイル
 
 ```bash
-# ネイティブ実行ファイル生成
-./cm compile examples/hello.cm -o hello
+# ネイティブ実行ファイル
+./cm compile hello.cm -o hello
 ./hello
 
-# WASMコンパイル
-./cm compile examples/hello.cm --target=wasm -o hello.wasm
+# WebAssembly（wasmtime必要）
+./cm compile hello.cm --target=wasm -o hello.wasm
+wasmtime hello.wasm
+
+# JavaScript（Node.js必要）
+./cm compile --target=js hello.cm -o hello.js
+node hello.js
 ```
 
-### 構文チェック
+### 構文チェック・品質ツール
 
 ```bash
-./cm check examples/hello.cm
+# 構文・型チェック（コンパイルなし）
+./cm check hello.cm
+
+# 静的解析（コード品質チェック）
+./cm lint hello.cm
+
+# コードフォーマット
+./cm fmt -w hello.cm
 ```
 
-### 中間表現の表示
-
-```bash
-# AST表示
-./cm run examples/hello.cm --ast
-
-# HIR表示
-./cm run examples/hello.cm --hir
-
-# MIR表示
-./cm run examples/hello.cm --mir
-```
+> 📖 各ツールの詳細は [Linter](tutorials/ja/compiler/linter.html) / [Formatter](tutorials/ja/compiler/formatter.html) を参照。
 
 ## 📊 サンプルプログラム
 
@@ -82,18 +99,18 @@ int main() {
 }
 ```
 
-### 変数と演算
+### 変数と文字列補間
 
 ```cm
 int main() {
     int x = 10;
     int y = 20;
-    println("x + y = {x + y}");  // 文字列補間
+    println("x + y = {x + y}");
     return 0;
 }
 ```
 
-### 構造体とメソッド
+### 構造体とwith自動実装
 
 ```cm
 struct Point with Eq {
@@ -112,20 +129,40 @@ int main() {
 }
 ```
 
-### モジュールシステム
+### Enumとパターンマッチ
 
 ```cm
-// math.cm
-export int add(int a, int b) {
-    return a + b;
+enum Color {
+    Red,
+    Green,
+    Blue,
+    Custom(int, int, int)
 }
 
-// main.cm
-import "math";
+int main() {
+    Color c = Color::Custom(255, 128, 0);
+    match (c) {
+        Color::Red => println("Red");
+        Color::Custom(r, g, b) => println("RGB: {r}, {g}, {b}");
+        _ => println("Other");
+    }
+    return 0;
+}
+```
+
+### インラインユニオン型とnull型
+
+```cm
+typedef MaybeInt = int | null;
 
 int main() {
-    int result = math::add(10, 20);
-    println("Result: {result}");
+    // typedefユニオン型
+    MaybeInt x = null;
+    MaybeInt y = 42 as MaybeInt;
+    
+    // インラインユニオン型（typedef不要）
+    int | null a = null;
+    int | string | null b = null;
     return 0;
 }
 ```
@@ -133,35 +170,55 @@ int main() {
 ## 🧪 テスト実行
 
 ```bash
-# C++ユニットテスト
-ctest --test-dir build
+# C++ユニットテスト（GTest必須）
+make test
 
-# インタプリタテスト（203テスト）
+# JITテスト（並列）
 make tip
 
-# LLVMテスト
+# LLVMテスト（並列）
 make tlp
 
-# WASMテスト
+# WASMテスト（並列・wasmtime必要）
 make tlwp
+
+# JSテスト（並列・Node.js必要）
+make tjp
+
+# Dockerでテスト
+docker compose run --rm test
 ```
 
-## 📖 詳細ドキュメント
+> 📖 makeコマンドの全一覧は [環境構築](tutorials/ja/basics/setup.html) を参照。
 
-- [言語仕様](docs/spec/) - 型システム、構文
-- [設計文書](docs/design/) - モジュールシステム、アーキテクチャ
-- [チュートリアル](docs/tutorials/) - 詳細な使い方
+## 📖 ドキュメント
 
-## ✅ 実装済み機能（v0.10.0）
+| ドキュメント | 内容 |
+|------------|------|
+| [チュートリアル](tutorials/ja/) | 40+ファイルの段階的な学習ガイド |
+| [環境構築](tutorials/ja/basics/setup.html) | 依存関係・makeコマンド一覧 |
+| [コンパイラの使い方](tutorials/ja/compiler/usage.html) | コマンド・オプション |
+| [JSバックエンド](tutorials/ja/compiler/js-compilation.html) | JavaScript出力ガイド |
+| [VSCode拡張機能](../vscode-extension/README.html) | 構文ハイライト・アイコン・開発ガイド |
+| [機能リファレンス](FEATURES.html) | 実装済み機能一覧 |
+| [言語仕様](design/CANONICAL_SPEC.html) | 完全な言語仕様 |
+| [リリースノート](releases/) | バージョン履歴 |
+
+## ✅ 実装済み機能（v0.14.0）
 
 - **型システム**: int, uint, float, double, bool, char, string, ポインタ, 配列
-- **構造体**: ネスト、配列メンバ、リテラル構文
+- **ユニオン型**: インラインユニオン (`int | null`)、typedefユニオン、null型
+- **構造体**: コンストラクタ (`self()`)、デストラクタ (`~self()`)、ネスト
 - **インターフェース**: interface/impl、with自動実装（Eq, Ord, Clone, Hash）
-- **ジェネリクス**: 関数、構造体、インターフェース
-- **パターンマッチ**: match式、パターンガード
-- **モジュール**: import/export、名前空間、相対/絶対パス
-- **バックエンド**: インタプリタ、LLVM Native、WASM
+- **ジェネリクス**: 関数・構造体・ジェネリックコンストラクタ・複数型パラメータ
+- **Enum/Tagged Union**: Associated Data、match分解、Option, Result
+- **パターンマッチ**: match式、パターンガード、網羅性チェック
+- **所有権**: 移動セマンティクス、借用チェック
+- **モジュール**: import/export、名前空間
+- **標準ライブラリ**: Vector\<T\>, Queue\<T\>, HashMap\<K,V\>, HTTP/HTTPS, Thread, Mutex, GPU
+- **バックエンド**: JIT, LLVM Native (x86_64/ARM64), WASM, JavaScript, UEFI
+- **ツール**: cm lint, cm fmt, cm check, プリプロセッサ (#ifdef)
 
 ---
 
-**最終更新:** 2026-02-08
+**最終更新:** 2026-02-14

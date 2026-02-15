@@ -1,0 +1,32 @@
+// reimport.cm - モジュール再インポート防止のテスト
+// 同じモジュールを複数の形式でインポートしても正しく動作することを確認
+
+import std::io::println;
+import std::io::println;  // 重複インポート（同一シンボル）
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int multiply(int a, int b) {
+    return a * b;
+}
+
+int main() {
+    println("Testing reimport prevention:");
+
+    // 基本演算テスト（重複インポートされたprintlnが正しく動作）
+    int sum = add(10, 20);
+    println("add(10, 20) = {sum}");
+
+    int prod = multiply(3, 7);
+    println("multiply(3, 7) = {prod}");
+
+    // ネストした呼び出し
+    int result = add(multiply(2, 3), multiply(4, 5));
+    println("add(2*3, 4*5) = {result}");
+
+    println("Success: Multiple imports work correctly");
+    println("=== PASS ===");
+    return 0;
+}

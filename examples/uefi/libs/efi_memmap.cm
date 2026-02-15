@@ -1,0 +1,162 @@
+//! platform: uefi
+// libs::efi_memmap - UEFI メモリマップ取得
+// Boot ServicesのGetMemoryMapとAllocatePool/FreePoolを使用
+// 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用
+
+// ============================================================
+// メモリ管理
+// ============================================================
+
+/// AllocatePool (BootServices + 0x40)
+export ulong efi_alloc_pool(void* system_table, ulong size, void** out_buffer) {
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);  // offset 0x60
+    ulong* bs = bs_addr as ulong*;
+
+    ulong alloc_fn = *(bs + 8);  // 8 * 8 = 0x40 = AllocatePool
+
+    // AllocatePool(PoolType=EFI_LOADER_DATA=2, Size, *Buffer)
+    ulong fn_val = alloc_fn;
+    ulong pool_type = 2;  // EFI_LOADER_DATA
+    ulong buf_addr = out_buffer as ulong;
+
+    ulong result = 0;
+    must {
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:pool_type};
+            pushq ${r:size};
+            pushq ${r:buf_addr};
+            popq %r8;
+            popq %rdx;
+            popq %rcx;
+            popq %r10;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$32, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
+    return result;
+}
+
+/// FreePool (BootServices + 0x48)
+export ulong efi_free_pool(void* system_table, void* buffer) {
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);
+    ulong* bs = bs_addr as ulong*;
+
+    ulong free_fn = *(bs + 9);  // 9 * 8 = 0x48 = FreePool
+
+    ulong fn_val = free_fn;
+    ulong buf_val = buffer as ulong;
+
+    ulong result = 0;
+    must {
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:buf_val};
+            popq %rcx;
+            popq %r10;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$32, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
+    return result;
+}
+
+/// GetMemoryMap (BootServices + 0x38)
+/// map_size [in/out], map, map_key [out], desc_size [out], desc_ver [out]
+export ulong efi_get_memory_map(void* system_table, ulong* map_size, void* map,
+                                 ulong* map_key, ulong* desc_size, ulong* desc_ver) {
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);
+    ulong* bs = bs_addr as ulong*;
+
+    ulong get_map_fn = *(bs + 7);  // 7 * 8 = 0x38 = GetMemoryMap
+
+    // 5引数: Win64 ABI - 最初4つはレジスタ、5つ目はスタック
+    ulong fn_val = get_map_fn;
+    ulong ms_val = map_size as ulong;
+    ulong mp_val = map as ulong;
+    ulong mk_val = map_key as ulong;
+    ulong ds_val = desc_size as ulong;
+    ulong dv_val = desc_ver as ulong;
+
+    ulong result = 0;
+    must {
+        // 6つの値をpush/popで安全にレジスタへ配置
+        // R10=fn, R11=dv(5th arg→stack)
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:ms_val};
+            pushq ${r:mp_val};
+            pushq ${r:mk_val};
+            pushq ${r:ds_val};
+            pushq ${r:dv_val};
+            popq %r11;
+            popq %r9;
+            popq %r8;
+            popq %rdx;
+            popq %rcx;
+            popq %r10;
+            subq $$48, %rsp;
+            movq %r11, 32(%rsp);
+            callq *%r10;
+            addq $$48, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
+    return result;
+}
+
+// ============================================================
+// メモリタイプ名変換
+// ============================================================
+
+export string efi_memory_type_name(ulong mem_type) {
+    if (mem_type == 0)  { return "Reserved"; }
+    if (mem_type == 1)  { return "LoaderCode"; }
+    if (mem_type == 2)  { return "LoaderData"; }
+    if (mem_type == 3)  { return "BS_Code"; }
+    if (mem_type == 4)  { return "BS_Data"; }
+    if (mem_type == 5)  { return "RT_Code"; }
+    if (mem_type == 6)  { return "RT_Data"; }
+    if (mem_type == 7)  { return "Available"; }
+    if (mem_type == 8)  { return "Unusable"; }
+    if (mem_type == 9)  { return "ACPI_Rclm"; }
+    if (mem_type == 10) { return "ACPI_NVS"; }
+    if (mem_type == 11) { return "MMIO"; }
+    if (mem_type == 12) { return "MMIO_Port"; }
+    if (mem_type == 13) { return "PalCode"; }
+    if (mem_type == 14) { return "Persistent"; }
+    return "Unknown";
+}
+
+/// Stall (BootServices + 0x100)
+export ulong efi_stall(void* system_table, ulong microseconds) {
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);
+    ulong* bs = bs_addr as ulong*;
+
+    ulong stall_fn = *(bs + 32);  // 32 * 8 = 0x100 = Stall
+
+    ulong fn_val = stall_fn;
+
+    ulong result = 0;
+    must {
+        __asm__(`
+            pushq ${r:fn_val};
+            pushq ${r:microseconds};
+            popq %rcx;
+            popq %r10;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$32, %rsp;
+            movq %rax, ${=r:result}
+        `);
+    }
+    return result;
+}

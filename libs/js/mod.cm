@@ -1,0 +1,19 @@
+// js - Cm言語 JavaScript専用ライブラリ
+// JSバックエンド（Node.js / ブラウザ）でのみ利用可能
+//
+// JavaScript固有のAPI（タイマー、fetch等）を
+// Cm言語から安全に利用するためのFFIラッパー群。
+//
+// モジュール構成:
+//   js::timer     - setTimeout, setInterval等のタイマーAPI
+//   js::fetch     - HTTP fetch API（async対応）
+//   js::console   - console拡張API（warn, error等）
+//
+// 使用例:
+//   import js::timer::{set_timeout, set_interval};
+//   import js::fetch::{fetch_text, fetch_json};
+
+module js;
+
+// サブモジュールへのアクセスは直接インポートで行う
+// 例: import js::timer::set_timeout;

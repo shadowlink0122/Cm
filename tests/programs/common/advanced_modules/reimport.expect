@@ -1,0 +1,6 @@
+Testing reimport prevention:
+add(10, 20) = 30
+multiply(3, 7) = 21
+add(2*3, 4*5) = 26
+Success: Multiple imports work correctly
+=== PASS ===

@@ -7,10 +7,10 @@ has_children: true
 
 [日本語](../ja/)
 
-# Cm Language Tutorials v0.13.0
+# Cm Language Tutorials v0.14.0
 
-**Target Version:** v0.13.0  
-**Last Updated:** 2026-02-08
+**Target Version:** v0.14.0  
+**Last Updated:** 2026-02-10
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
 
@@ -55,7 +55,7 @@ Estimated Time: 5-6 hours
 3. **[Advanced Features](advanced/match.html)** - Powerful language features
    - [match Expression](advanced/match.html) - Pattern matching, guards, exhaustiveness
    - [Auto Implementation](advanced/with-keyword.html) - with Eq/Ord/Clone/Hash
-   - [Operator Overloading](advanced/operators.html) - Custom operators
+   - [Operator Overloading](advanced/operators.html) - impl T syntax, compound assignment (+=), bitwise
    - [Function Pointers](advanced/function-pointers.html) - Higher-order functions
    - [Lambda](advanced/lambda.html) - Closures
    - [String Operations](advanced/strings.html) - Methods and slicing
@@ -74,6 +74,7 @@ Estimated Time: 3 hours
    - [Usage](compiler/usage.html) - Commands and options
    - [LLVM Backend](compiler/llvm.html) - Native compilation
    - [WASM Backend](compiler/wasm.html) - WebAssembly output
+   - [JS Backend](compiler/js-compilation.html) - JavaScript output
    - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
    - [Linter](compiler/linter.html) - Static analysis (cm lint)
    - [Formatter](compiler/formatter.html) - Code formatting (cm fmt)
@@ -119,17 +120,17 @@ Estimated Time: 3 hours
 
 - [Language Specification](../../design/CANONICAL_SPEC.html) - Full language spec
 - [Design Documents](../../design/) - Architecture and design docs
-- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 368 files
+- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 376 files
 
 ---
 
-**Total Tutorials:** 40 files  
+**Total Tutorials:** 42 files  
 **Estimated Time:** 18-22 hours  
-**Target Version:** v0.13.0
+**Target Version:** v0.14.0
 
 ---
 
-**Last Updated:** 2026-02-08  
+**Last Updated:** 2026-02-10  
 **Author:** Cm Language Development Team
 
 ---

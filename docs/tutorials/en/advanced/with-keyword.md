@@ -268,6 +268,19 @@ impl Person for Eq {
 
 ---
 
+## Implementation Status
+
+| Trait | JIT | LLVM | WASM | JS |
+|-------|-----|------|------|-----|
+| Eq | ✅ | ✅ | ✅ | ✅ |
+| Ord | ✅ | ✅ | ✅ | ✅ |
+| Clone | ✅ | ✅ | ✅ | ✅ |
+| Hash | ✅ | ✅ | ✅ | ✅ |
+| Debug | ⬜ | ⬜ | ⬜ | ⬜ |
+| Display | ⬜ | ⬜ | ⬜ | ⬜ |
+
+---
+
 ## Next Steps
 
 ✅ Learned how to use `with`  

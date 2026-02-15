@@ -1,0 +1,18 @@
+// ベアメタル正常テスト: 固定長配列
+// OS依存のメモリアロケーションなし: スタック上の配列のみ
+
+int sum_array(int[5] arr) {
+    int total = 0;
+    int i = 0;
+    while (i < 5) {
+        total = total + arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+int main() {
+    int[5] data = [10, 20, 30, 40, 50];
+    int result = sum_array(data);
+    return result;  // 150
+}

@@ -1,0 +1,13 @@
+{
+  "iconDefinitions": {
+    "cm-file": {
+      "iconPath": "./images/icon.svg"
+    }
+  },
+  "fileExtensions": {
+    "cm": "cm-file"
+  },
+  "languageIds": {
+    "cm": "cm-file"
+  }
+}

@@ -1,0 +1,38 @@
+// js::fetch - HTTP Fetch API
+// Node.js 18+ / ブラウザ環境のfetch APIを提供
+module js.fetch;
+
+// ============================================================
+// JavaScript Fetch API (グローバル)
+// ============================================================
+
+use js {
+    // fetch: HTTPリクエストを送信（Responseオブジェクトを返す）
+    // JSのfetchはPromiseを返すため、async関数内でawaitと共に使用する
+    int fetch(string url);
+}
+
+// ============================================================
+// 高レベル Fetch ラッパー（async関数）
+// ============================================================
+
+/// URLからテキストを取得（async/await対応）
+/// 使用例:
+///   async fn main() -> int {
+///     string body = await fetch_text("https://example.com");
+///     println("{body}");
+///     return 0;
+///   }
+export async int fetch_text(string url) {
+    // NOTE: 実際のfetch APIの戻り値は Response オブジェクトだが、
+    // 現時点ではCm言語にPromise/Objectサポートがないため、
+    // 簡略化した整数型で代用。将来のバージョンで型安全なAPIに拡張予定。
+    int response = await fetch(url);
+    return response;
+}
+
+/// URLからJSONを取得（async/await対応）
+export async int fetch_json(string url) {
+    int response = await fetch(url);
+    return response;
+}

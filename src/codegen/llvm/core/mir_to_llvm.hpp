@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../mir/mir_splitter.hpp"
 #include "../../../mir/nodes.hpp"
 #include "context.hpp"
 
@@ -36,6 +37,9 @@ class MIRToLLVM {
     std::unordered_map<std::string, llvm::GlobalVariable*> globals;
     std::unordered_map<std::string, llvm::Function*> functions;
 
+    // グローバル変数マッピング（MirGlobalVar名 -> LLVM GlobalVariable）
+    std::unordered_map<std::string, llvm::GlobalVariable*> globalVariables;
+
     // static変数マッピング（関数名_変数名 -> グローバル変数）
     std::unordered_map<std::string, llvm::GlobalVariable*> staticVariables;
 
@@ -54,6 +58,10 @@ class MIRToLLVM {
         vtableGlobals;  // type_interface -> vtable
     const mir::MirProgram* currentProgram = nullptr;
 
+    // モジュール分割コンパイル時の全関数参照リスト
+    // declareExternalFunctionでcurrentProgramがNULLの場合に使用
+    std::vector<const mir::MirFunction*> allModuleFunctions;
+
     // ターゲット情報キャッシュ
     bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
 
@@ -64,6 +72,10 @@ class MIRToLLVM {
 
     /// MIRプログラム全体を変換
     void convert(const mir::MirProgram& program);
+
+    /// モジュール単位での変換（差分コンパイル用）
+    /// ModuleProgramのextern関数はdeclareのみ、自モジュール関数は完全変換
+    void convert(const mir::ModuleProgram& module);
 
     /// 型変換（公開：関数シグネチャ生成で使用）
     llvm::Type* convertType(const hir::TypePtr& type);

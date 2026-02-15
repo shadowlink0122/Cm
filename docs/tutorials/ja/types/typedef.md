@@ -70,6 +70,34 @@ int main() {
 
 > **ポイント:** 値をユニオン型に格納するには `as Value`、取り出すには `as string` のようにキャストします。
 
+### インラインユニオン型（v0.14.0）
+
+typedefなしで、型宣言の中に直接ユニオン型を記述できます。
+
+```cm
+import std::io::println;
+
+int main() {
+    // null許容型（intまたはnull）
+    int | null a = null;
+    int | null b = 42 as int | null;
+    
+    // 3型以上のユニオン
+    int | string | null c = null;
+    
+    // 構造体フィールドでも使用可能
+    // struct Config {
+    //     int | null timeout;
+    //     string | null host;
+    // }
+    
+    println("インラインユニオン型のテスト完了");
+    return 0;
+}
+```
+
+> **注意:** `operator` 戻り値型では `|` がビットOR演算子と競合するため、インラインユニオンは使用できません。`typedef` を使用してください。
+
 ### ユニオン型の配列（タプル的な使い方）
 
 ユニオン型の配列を使うと、**異なる型の値を一つの配列にまとめて**扱えます。  
@@ -192,4 +220,4 @@ int main() {
 
 ---
 
-**最終更新:** 2026-02-09
+**最終更新:** 2026-02-12

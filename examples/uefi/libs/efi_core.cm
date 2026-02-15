@@ -1,0 +1,22 @@
+//! platform: uefi
+// libs::efi_core - UEFI基本型とSystemTableアクセスヘルパー
+// ポインタ演算でUEFI構造体にアクセスする方式
+// module efi_core;
+
+// ============================================================
+// SystemTable アクセスヘルパー
+// ============================================================
+
+/// SystemTable から ConOut (offset 0x40) を取得
+export void* efi_get_con_out(void* system_table) {
+    ulong* st = system_table as ulong*;
+    ulong con_out_addr = *(st + 8);  // 8 * 8 = offset 0x40
+    return con_out_addr as void*;
+}
+
+/// SystemTable から BootServices (offset 0x60) を取得
+export void* efi_get_boot_services(void* system_table) {
+    ulong* st = system_table as ulong*;
+    ulong bs_addr = *(st + 12);  // 12 * 8 = offset 0x60
+    return bs_addr as void*;
+}

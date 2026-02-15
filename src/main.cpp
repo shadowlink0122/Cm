@@ -12,6 +12,9 @@
 
 // JavaScript codegen
 #include "codegen/js/codegen.hpp"
+
+// MIR validation
+#include "common/cache_manager.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
 #include "fmt/formatter.hpp"
@@ -23,12 +26,16 @@
 #include "lint/config.hpp"
 #include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
+#include "mir/passes/cleanup/dce.hpp"
+#include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
+#include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
 #include "preprocessor/conditional.hpp"
 #include "preprocessor/import.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -38,7 +45,9 @@
 #include <sstream>
 #include <string>
 #if !defined(_WIN32)
+#include <fcntl.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #endif
 #include <vector>
 
@@ -59,7 +68,7 @@ std::string get_version() {
 }
 
 // コマンドラインオプション
-enum class Command { None, Run, Compile, Check, Lint, Fmt, Help };
+enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Cache };
 
 struct Options {
     Command command = Command::None;
@@ -80,9 +89,14 @@ struct Options {
     bool debug = false;
     std::string debug_level = "info";
     bool verbose = false;         // デフォルトは静かなモード
+    bool quiet = false;           // 出力を抑制するモード
     std::string output_file;      // -o オプション
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
     bool use_jit = true;          // JITコンパイラ使用（デフォルト）
+    // インクリメンタルビルド設定
+    bool incremental = false;             // デフォルトで無効（--incrementalで有効化）
+    std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
+    std::string cache_subcommand;         // cache サブコマンド（clear/stats）
 };
 
 // ヘルプメッセージを表示
@@ -102,16 +116,21 @@ void print_help(const char* program_name) {
     std::cout << "  -o <file>             出力ファイル名を指定\n";
     std::cout << "  -O<n>                 最適化レベル（0-3）\n";
     std::cout << "  --verbose, -v         詳細な出力を表示\n";
+    std::cout << "  --quiet, -q           出力を抑制\n";
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
     std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
 
     std::cout << "コンパイル時オプション:\n";
-    std::cout << "  --target=<target>     コンパイルターゲット (native/wasm/js/web)\n";
-    std::cout << "                        native: ネイティブ実行ファイル（デフォルト）\n";
-    std::cout << "                        wasm:   WebAssembly\n";
-    std::cout << "                        js:     JavaScript (Node.js向け)\n";
-    std::cout << "                        web:    JavaScript + HTML (ブラウザ向け)\n";
+    std::cout << "  --target=<target>     コンパイルターゲット\n";
+    std::cout << "                        native:        ネイティブ実行ファイル（デフォルト）\n";
+    std::cout << "                        wasm:          WebAssembly\n";
+    std::cout << "                        js:            JavaScript (Node.js向け)\n";
+    std::cout << "                        web:           JavaScript + HTML (ブラウザ向け)\n";
+    std::cout << "                        baremetal-arm: ベアメタル ARM Cortex-M\n";
+    std::cout << "                        baremetal-x86: ベアメタル x86_64\n";
+    std::cout << "                        uefi:          UEFI Application\n";
+    std::cout << "                        bm:            baremetal-arm の短縮形\n";
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --emit-js             JavaScriptを生成\n";
     std::cout << "  --run                 生成後に実行\n";
@@ -120,6 +139,11 @@ void print_help(const char* program_name) {
     std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
     std::cout << "  --mir-opt             最適化後のMIRを表示\n";
     std::cout << "  --lir-opt             最適化後のLLVM IRを表示（codegen直前）\n\n";
+    std::cout << "インクリメンタルビルド:\n";
+    std::cout << "  --no-cache            キャッシュを無効化（デフォルト: 有効）\n";
+    std::cout << "  --cache-dir=<dir>     キャッシュディレクトリ（デフォルト: .cm-cache）\n";
+    std::cout << "  cache clear           キャッシュを全削除\n";
+    std::cout << "  cache stats           キャッシュ統計を表示\n\n";
     std::cout << "その他のオプション:\n";
     std::cout << "  --lang=ja             日本語デバッグメッセージ\n";
     std::cout << "  --version             バージョン情報を表示\n\n";
@@ -153,11 +177,17 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Lint;
     } else if (cmd == "fmt") {
         opts.command = Command::Fmt;
-
+    } else if (cmd == "cache") {
+        opts.command = Command::Cache;
+        // サブコマンドを取得
+        if (argc > 2) {
+            opts.cache_subcommand = argv[2];
+        }
+        return opts;
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
-    } else if (cmd == "--version") {
+    } else if (cmd == "--version" || cmd == "-v" || cmd == "-V") {
         std::cout << get_version() << "\n";
         std::exit(0);
     } else if (cmd[0] != '-') {
@@ -179,6 +209,8 @@ Options parse_options(int argc, char* argv[]) {
 
         if (arg == "--verbose" || arg == "-v") {
             opts.verbose = true;
+        } else if (arg == "--quiet" || arg == "-q") {
+            opts.quiet = true;
         } else if (arg == "--ast") {
             opts.show_ast = true;
         } else if (arg == "--hir") {
@@ -238,6 +270,13 @@ Options parse_options(int argc, char* argv[]) {
         } else if (arg == "-r" || arg == "--recursive") {
             // -r オプション: 再帰的にディレクトリをチェック
             opts.recursive = true;
+        } else if (arg == "--incremental") {
+            opts.incremental = true;
+        } else if (arg == "--no-cache") {
+            opts.incremental = false;
+        } else if (arg.substr(0, 12) == "--cache-dir=") {
+            opts.cache_dir = arg.substr(12);
+            opts.incremental = true;  // --cache-dir指定時は暗黙的に有効化
         } else if (arg.substr(0, 10) == "--exclude=") {
             // --exclude=PATTERN: 除外パターン
             opts.exclude_patterns.push_back(arg.substr(10));
@@ -276,6 +315,70 @@ std::string read_file(const std::string& filename) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
+}
+
+// ソースコード先頭から //! platform: ディレクティブを解析
+// 戻り値: ディレクティブ文字列（例: "js", "js|web", "!native"）、なければ空文字列
+std::string parse_platform_directive(const std::string& code_content) {
+    std::istringstream iss(code_content);
+    std::string line;
+    int line_count = 0;
+    while (std::getline(iss, line) && line_count < 5) {
+        line_count++;
+        auto pos = line.find("//! platform:");
+        if (pos == std::string::npos) {
+            pos = line.find("//!platform:");
+        }
+        if (pos != std::string::npos) {
+            std::string directive = line.substr(line.find("platform:") + 9);
+            directive.erase(0, directive.find_first_not_of(" \t"));
+            directive.erase(directive.find_last_not_of(" \t\r\n") + 1);
+            return directive;
+        }
+    }
+    return "";
+}
+
+// platformディレクティブと現在のターゲットを比較
+// or形式: "js|web" → jsまたはwebならtrue
+// not形式: "!native" → native以外ならtrue
+bool match_platform_directive(const std::string& directive, const std::string& current_target) {
+    if (directive.empty()) {
+        return true;
+    }
+
+    if (directive[0] == '!') {
+        // NOT形式: !native|jit
+        std::string negated = directive.substr(1);
+        std::istringstream ss(negated);
+        std::string token;
+        while (std::getline(ss, token, '|')) {
+            if (token == current_target) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // OR形式: js|web
+    std::istringstream ss(directive);
+    std::string token;
+    while (std::getline(ss, token, '|')) {
+        if (token == current_target) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// プラットフォームディレクティブからターゲット種別を判定
+// baremetal/uefi系ならtrue
+bool is_baremetal_platform(const std::string& directive) {
+    if (directive.empty())
+        return false;
+    // directiveに "baremetal" や "uefi" が含まれるか
+    return directive.find("baremetal") != std::string::npos ||
+           directive.find("uefi") != std::string::npos;
 }
 
 // 除外パターンにマッチするか判定
@@ -407,6 +510,9 @@ int main(int argc, char* argv[]) {
     // オプションをパース
     Options opts = parse_options(argc, argv);
 
+    // コンパイラバイナリのパスを設定（インクリメンタルビルド用）
+    cache::CacheManager::set_compiler_path(argv[0]);
+
     // コマンドの処理
     if (opts.command == Command::Help) {
         print_help(argv[0]);
@@ -452,6 +558,10 @@ int main(int argc, char* argv[]) {
         for (const auto& file : cm_files) {
             try {
                 std::string code = read_file(file);
+
+                // //! platform: ディレクティブ検出
+                std::string platform_directive = parse_platform_directive(code);
+                bool is_baremetal_file = is_baremetal_platform(platform_directive);
 
                 // モジュールリゾルバ初期化
                 module::initialize_module_resolver();
@@ -564,6 +674,46 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
+                // ベアメタルファイルの場合、ソースコード上で禁止関数呼び出しを検出
+                if (is_baremetal_file && opts.command == Command::Lint) {
+                    static const std::vector<std::string> forbidden = {
+                        "println", "print",  "printf",         "puts",         "putchar",
+                        "malloc",  "free",   "calloc",         "realloc",      "exit",
+                        "fopen",   "fclose", "fread",          "fwrite",       "socket",
+                        "connect", "bind",   "pthread_create", "pthread_join",
+                    };
+                    // ソースコードの各行をスキャン
+                    std::istringstream scan(code);
+                    std::string scan_line;
+                    int line_num = 0;
+                    while (std::getline(scan, scan_line)) {
+                        line_num++;
+                        // コメント行はスキップ
+                        auto trimmed = scan_line;
+                        trimmed.erase(0, trimmed.find_first_not_of(" \t"));
+                        if (trimmed.find("//") == 0)
+                            continue;
+
+                        for (const auto& func : forbidden) {
+                            // "func_name(" パターンを検出
+                            std::string pattern = func + "(";
+                            auto fpos = scan_line.find(pattern);
+                            if (fpos != std::string::npos) {
+                                // 直前が英数字やアンダースコアならスキップ（部分一致防止）
+                                if (fpos > 0) {
+                                    char prev = scan_line[fpos - 1];
+                                    if (std::isalnum(prev) || prev == '_')
+                                        continue;
+                                }
+                                std::cerr << file << ":" << line_num
+                                          << ": warning: ベアメタル環境では '" << func
+                                          << "' は使用できません [B001]\n";
+                                total_warnings++;
+                            }
+                        }
+                    }
+                }
+
                 files_checked++;
 
             } catch (const std::exception& e) {
@@ -631,12 +781,59 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // サマリー表示
-        std::cout << "\n=== フォーマット完了 ===\n";
-        std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
-        std::cout << "整形箇所: " << total_changes << " 箇所\n";
+        // サマリー表示（quietモードでは抑制）
+        if (!opts.quiet) {
+            std::cout << "\n=== フォーマット完了 ===\n";
+            std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
+            std::cout << "整形箇所: " << total_changes << " 箇所\n";
+        }
 
         return 0;
+    }
+
+    // ========== cache コマンド ==========
+    if (opts.command == Command::Cache) {
+        cache::CacheConfig config;
+        config.cache_dir = opts.cache_dir;
+        cache::CacheManager cache_mgr(config);
+
+        if (opts.cache_subcommand == "clear") {
+            if (cache_mgr.clear()) {
+                std::cout << "✓ キャッシュを削除しました: " << opts.cache_dir << "\n";
+            } else {
+                std::cout << "キャッシュが存在しません: " << opts.cache_dir << "\n";
+            }
+            return 0;
+        } else if (opts.cache_subcommand == "stats") {
+            auto stats = cache_mgr.get_stats();
+            auto entries = cache_mgr.get_all_entries();
+            std::cout << "=== キャッシュ統計 ===\n";
+            std::cout << "ディレクトリ: " << opts.cache_dir << "\n";
+            std::cout << "エントリ数: " << stats.total_entries << "\n";
+            std::cout << "合計サイズ: " << (stats.total_size_bytes / 1024) << " KB\n";
+            if (!entries.empty()) {
+                // 最古・最新のエントリを表示
+                std::string oldest = entries.begin()->second.created_at;
+                std::string newest = entries.begin()->second.created_at;
+                for (const auto& [_, entry] : entries) {
+                    if (!entry.created_at.empty()) {
+                        if (entry.created_at < oldest || oldest.empty())
+                            oldest = entry.created_at;
+                        if (entry.created_at > newest)
+                            newest = entry.created_at;
+                    }
+                }
+                if (!oldest.empty()) {
+                    std::cout << "最古:     " << oldest << "\n";
+                    std::cout << "最新:     " << newest << "\n";
+                }
+            }
+            return 0;
+        } else {
+            std::cerr << "不明なcacheサブコマンド: " << opts.cache_subcommand << "\n";
+            std::cerr << "使用法: cm cache clear | cm cache stats\n";
+            return 1;
+        }
     }
 
     // run/compileコマンドは単一ファイル
@@ -652,6 +849,29 @@ int main(int argc, char* argv[]) {
 
     // ファイルを読み込む
     std::string code = read_file(opts.input_file);
+
+    // //! platform: ディレクティブチェック
+    {
+        std::string directive = parse_platform_directive(code);
+        if (!directive.empty()) {
+            std::string current = opts.target;
+            if (current.empty()) {
+                if (opts.emit_js)
+                    current = "js";
+                else
+                    current = "native";
+            }
+
+            if (!match_platform_directive(directive, current)) {
+                std::cerr << "警告: このファイルはプラットフォーム '" << directive
+                          << "' 向けです（現在: " << current << "）\n";
+                std::cerr << "  ファイル: " << opts.input_file << "\n";
+                std::cerr << "ヒント: --target=" << directive
+                          << " オプションで対象プラットフォームを指定してください\n\n";
+                return 1;
+            }
+        }
+    }
 
     if (opts.verbose) {
         switch (opts.command) {
@@ -676,16 +896,165 @@ int main(int argc, char* argv[]) {
 
         module::initialize_module_resolver();
 
+        // ========== 高速キャッシュ判定（ImportPreprocessor の前に実行）==========
+        // ファイルのタイムスタンプ+サイズで変更がないか高速チェック
+        // ヒットすれば ImportPreprocessor (1.6秒) + SHA-256 (0.4秒) をスキップ
+        std::string prev_build_fingerprint;
+        if (opts.incremental && opts.command == Command::Compile) {
+            std::string target_key = opts.target.empty() ? "native" : opts.target;
+            cache::CacheConfig qc_config;
+            qc_config.cache_dir = opts.cache_dir;
+            cache::CacheManager qc_mgr(qc_config);
+            auto qc_result =
+                qc_mgr.quick_check(opts.input_file, target_key, opts.optimization_level);
+            prev_build_fingerprint = qc_result.fingerprint;
+            if (qc_result.valid) {
+                // 高速キャッシュヒット: ファイルコピーのみ
+                auto cached_obj = qc_mgr.cache_dir() / "objects" / qc_result.object_file;
+                std::string output = opts.output_file;
+                if (output.empty()) {
+                    if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+                        output = "output.js";
+                    } else if (opts.target == "wasm") {
+                        output = "a.wasm";
+                    } else {
+                        output = "a.out";
+                    }
+                }
+                try {
+                    std::filesystem::copy_file(cached_obj, output,
+                                               std::filesystem::copy_options::overwrite_existing);
+                    if (opts.verbose || !opts.quiet) {
+                        std::cout << "✓ キャッシュヒット: " << output << "\n";
+                    }
+                    return 0;
+                } catch (const std::exception& e) {
+                    // 高速パス失敗 → 通常パスにフォールバック
+                    if (opts.verbose) {
+                        std::cout << "高速キャッシュ復元失敗: " << e.what() << " → 通常パス\n";
+                    }
+                }
+            }
+        }
+
         // ========== Import Preprocessor ==========
         if (opts.debug)
             std::cout << "=== Import Preprocessor ===\n";
-
+        auto phase_preprocess_start = std::chrono::steady_clock::now();
         preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
         auto preprocess_result = import_preprocessor.process(code, opts.input_file);
+        auto phase_preprocess_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - phase_preprocess_start)
+                                       .count();
 
         if (!preprocess_result.success) {
             std::cerr << "プリプロセッサエラー: " << preprocess_result.error_message << "\n";
             return 1;
+        }
+
+        // ========== インクリメンタルビルド: キャッシュチェック ==========
+        std::string cache_fingerprint;             // 後でキャッシュ保存に使用
+        std::vector<std::string> changed_modules;  // 変更されたモジュール一覧
+        cache::CacheConfig cache_config;
+        cache_config.cache_dir = opts.cache_dir;
+        cache_config.enabled = opts.incremental;
+
+        // コンパイル時間計測開始
+        auto compile_start = std::chrono::steady_clock::now();
+
+        if (opts.incremental) {
+            // Run/Compile両方でフィンガープリントを計算
+            std::string target_key;
+            if (opts.command == Command::Run) {
+                target_key = "jit";
+            } else {
+                target_key = opts.target.empty() ? "native" : opts.target;
+            }
+
+            cache::CacheManager cache_mgr(cache_config);
+            cache_fingerprint = cache_mgr.compute_fingerprint(preprocess_result.resolved_files,
+                                                              target_key, opts.optimization_level);
+
+            if (!cache_fingerprint.empty() && opts.command == Command::Compile) {
+                auto cached = cache_mgr.lookup(cache_fingerprint);
+                if (cached) {
+                    // キャッシュヒット: オブジェクトファイルをコピーしてコンパイルをスキップ
+                    auto cached_obj = cache_mgr.cache_dir() / "objects" / cached->object_file;
+                    std::string output = opts.output_file;
+                    if (output.empty()) {
+                        // ターゲットに応じたデフォルト出力ファイル名
+                        if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+                            output = "output.js";
+                        } else if (opts.target == "wasm") {
+                            output = "a.wasm";
+                        } else {
+                            output = "a.out";
+                        }
+                    }
+
+                    try {
+                        std::filesystem::copy_file(
+                            cached_obj, output, std::filesystem::copy_options::overwrite_existing);
+                        if (opts.verbose || !opts.quiet) {
+                            auto hit_end = std::chrono::steady_clock::now();
+                            auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              hit_end - compile_start)
+                                              .count();
+                            std::cout << "✓ キャッシュヒット: " << output << " (" << hit_ms
+                                      << "ms)\n";
+                        }
+                        // 高速キャッシュ判定用の情報を更新（次回は高速パスが使えるように）
+                        cache_mgr.save_quick_check(
+                            opts.input_file, target_key, opts.optimization_level, cache_fingerprint,
+                            cached->object_file, preprocess_result.resolved_files);
+                        return 0;
+                    } catch (const std::exception& e) {
+                        if (opts.verbose) {
+                            std::cout << "キャッシュ復元失敗: " << e.what() << " → 再コンパイル\n";
+                        }
+                    }
+                } else {
+                    // キャッシュミス: 変更モジュールを検出
+                    // モジュール情報の構築
+                    std::map<std::string, std::vector<std::string>> module_files;
+                    for (const auto& mr : preprocess_result.module_ranges) {
+                        auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                        auto mod_name =
+                            cm::mir::MirSplitter::source_file_to_module_name(mr.file_path);
+                        module_files[mod_name].push_back(abs_path);
+                    }
+
+                    // キャッシュミス: 変更モジュールを検出
+                    auto prev = prev_build_fingerprint.empty()
+                                    ? std::nullopt
+                                    : cache_mgr.lookup(prev_build_fingerprint);
+
+                    if (prev && !prev->module_fingerprints.empty()) {
+                        // 前回のモジュールフィンガープリントと比較
+                        auto current_fps = cache_mgr.compute_module_fingerprints(module_files);
+                        changed_modules = cache_mgr.detect_changed_modules(
+                            prev->module_fingerprints, current_fps);
+                    } else {
+                        // 初回ビルドまたは前回情報なし: 全モジュールを変更扱い
+                        for (const auto& [name, _] : module_files) {
+                            changed_modules.push_back(name);
+                        }
+                    }
+                    if (opts.verbose) {
+                        std::cout << "キャッシュミス: フルコンパイルを実行\n";
+                        // 変更ファイルを表示
+                        auto changed = cache_mgr.detect_changed_files(
+                            preprocess_result.resolved_files, target_key, opts.optimization_level);
+                        if (!changed.empty()) {
+                            std::cout << "変更検出 (" << changed.size() << "ファイル):\n";
+                            for (const auto& f : changed) {
+                                auto name = std::filesystem::path(f).filename().string();
+                                std::cout << "  → " << name << "\n";
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (opts.debug && !preprocess_result.imported_modules.empty()) {
@@ -703,6 +1072,17 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Conditional Preprocessor ===\n";
         preprocessor::ConditionalPreprocessor conditional;
+        // ターゲットに応じたプリプロセッサ定数を追加
+        if (opts.target == "baremetal-arm" || opts.target == "bm" ||
+            opts.target == "baremetal-x86" || opts.target == "bm-x86") {
+            conditional.define("__NO_STD__");
+            conditional.define("__BAREMETAL__");
+        } else if (opts.target == "uefi") {
+            conditional.define("__NO_STD__");
+            conditional.define("__BAREMETAL__");  // UEFIもベアメタルサブカテゴリ
+            conditional.define("__UEFI__");
+            conditional.define("__EFI__");
+        }
         code = conditional.process(code);
         if (opts.debug) {
             std::cout << "定義済みシンボル: ";
@@ -722,6 +1102,7 @@ int main(int argc, char* argv[]) {
         // ========== Lexer ==========
         if (opts.debug)
             std::cout << "=== Lexer ===\n";
+        auto phase_parse_start = std::chrono::steady_clock::now();
         Lexer lexer(code);
         auto tokens = lexer.tokenize();
         if (opts.debug)
@@ -775,12 +1156,19 @@ int main(int argc, char* argv[]) {
         // ========== Type Checker ==========
         if (opts.debug)
             std::cout << "=== Type Checker ===\n";
+        auto phase_parse_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - phase_parse_start)
+                                  .count();
+        auto phase_typecheck_start = std::chrono::steady_clock::now();
         TypeChecker checker;
         // Check/Lintコマンドの場合のみLint警告を有効化
         if (opts.command == Command::Check) {
             checker.set_enable_lint_warnings(true);
         }
         bool type_check_ok = checker.check(program);
+        auto phase_typecheck_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - phase_typecheck_start)
+                                      .count();
 
         // 診断情報（エラー・警告）を表示
         if (!checker.diagnostics().empty()) {
@@ -906,8 +1294,12 @@ int main(int argc, char* argv[]) {
         // ========== HIR Lowering ==========
         if (opts.debug)
             std::cout << "=== HIR Lowering ===\n";
+        auto phase_hir_start = std::chrono::steady_clock::now();
         hir::HirLowering hir_lowering;
         auto hir = hir_lowering.lower(program);
+        auto phase_hir_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - phase_hir_start)
+                                .count();
         if (opts.debug)
             std::cout << "HIR宣言数: " << hir.declarations.size() << "\n\n";
 
@@ -921,10 +1313,16 @@ int main(int argc, char* argv[]) {
             std::cout << "=== MIR Lowering ===\n";
 
         debug::log(debug::Stage::Mir, debug::Level::Info, "Starting MIR lowering");
+        auto phase_mir_start = std::chrono::steady_clock::now();
         mir::MirLowering mir_lowering;
+        // プリプロセッサのモジュール範囲情報を設定（ソースファイルベースの分割用）
+        mir_lowering.set_module_ranges(&preprocess_result.module_ranges);
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
+        auto phase_mir_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - phase_mir_start)
+                                .count();
 
         if (opts.debug)
             std::cout << "MIR関数数: " << mir.functions.size() << "\n\n" << std::flush;
@@ -937,7 +1335,7 @@ int main(int argc, char* argv[]) {
         }
 
         // ========== Optimization ==========
-
+        auto phase_opt_start = std::chrono::steady_clock::now();
         if (opts.optimization_level > 0 || opts.show_mir_opt) {
             if (cm::debug::g_debug_mode)
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
@@ -955,6 +1353,9 @@ int main(int argc, char* argv[]) {
             if (opts.debug)
                 std::cout << "最適化完了\n\n";
         }
+        auto phase_opt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - phase_opt_start)
+                                .count();
 
         // 関数レベルのDCE（コンパイル時のみ）
         if (opts.command == Command::Compile) {
@@ -983,14 +1384,91 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
+        // ========== async/awaitバリデーション ==========
+        // 非JSターゲットでasync/awaitが使用されている場合はエラー
+        {
+            bool is_js_target = (opts.target == "js" || opts.target == "web" || opts.emit_js);
+            if (!is_js_target) {
+                bool has_async = false;
+                std::string async_func_name;
+                bool has_await = false;
+                std::string await_func_name;
+
+                for (const auto& func : mir.functions) {
+                    if (!func)
+                        continue;
+                    if (func->is_async) {
+                        has_async = true;
+                        async_func_name = func->name;
+                    }
+                    for (const auto& block : func->basic_blocks) {
+                        if (!block || !block->terminator)
+                            continue;
+                        if (block->terminator->kind == mir::MirTerminator::Call) {
+                            const auto& data =
+                                std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                            if (data.is_awaited) {
+                                has_await = true;
+                                await_func_name = func->name;
+                            }
+                        }
+                    }
+                }
+
+                if (has_async || has_await) {
+                    std::cerr << "エラー: async/awaitはJSターゲット専用の機能です" << std::endl;
+                    if (has_async) {
+                        std::cerr << "  async関数が検出されました: " << async_func_name
+                                  << std::endl;
+                    }
+                    if (has_await) {
+                        std::cerr << "  await式が検出されました（関数: " << await_func_name << "）"
+                                  << std::endl;
+                    }
+                    std::cerr << "ヒント: --target=js オプションでJSターゲットを指定して"
+                                 "ください"
+                              << std::endl;
+                    return 1;
+                }
+            }
+        }
+
         // ========== Backend ==========
         if (opts.command == Command::Run) {
 #ifdef CM_LLVM_ENABLED
+            // JITキャッシュ: ソースが変更されていない場合、キャッシュされたバイナリを直接実行
+            if (opts.incremental && !cache_fingerprint.empty()) {
+                cache::CacheManager cache_mgr(cache_config);
+                auto cached = cache_mgr.lookup(cache_fingerprint);
+                if (cached) {
+                    auto cached_exec = cache_mgr.cache_dir() / "objects" / cached->object_file;
+                    if (std::filesystem::exists(cached_exec)) {
+                        if (opts.verbose) {
+                            auto hit_end = std::chrono::steady_clock::now();
+                            auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              hit_end - compile_start)
+                                              .count();
+                            std::cout << "✓ JITキャッシュヒット (" << hit_ms << "ms)\n";
+                        }
+                        // キャッシュされたバイナリを直接実行
+                        std::string cmd = cached_exec.string();
+                        int exec_result = std::system(cmd.c_str());
+#if defined(_WIN32)
+                        return exec_result;
+#else
+                        return WEXITSTATUS(exec_result);
+#endif
+                    }
+                }
+            }
+
             // JITコンパイラで実行
             if (opts.verbose) {
                 std::cout << "=== JIT Compiler ===" << std::endl;
             }
 
+            // JITキャッシュ用: バックグラウンドでネイティブバイナリも生成
+            // MIRからLLVMコンパイルしてJIT実行
             cm::codegen::jit::JITEngine jit;
 
             // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
@@ -1002,6 +1480,10 @@ int main(int argc, char* argv[]) {
                 std::cerr << "JIT実行エラー: " << result.errorMessage << std::endl;
                 return 1;
             }
+
+            // 注意: JIT実行後のキャッシュ保存（codegen.compile）は、
+            // LLVM globalの再初期化問題とstdout汚染のため実装しない。
+            // JITキャッシュは「cm compile」で生成されたキャッシュの再利用のみサポート。
 
             if (opts.verbose) {
                 std::cout << "プログラム終了コード: " << result.exitCode << std::endl;
@@ -1045,6 +1527,44 @@ int main(int argc, char* argv[]) {
                         std::cout << "✓ JavaScript コード生成完了: " << js_opts.outputFile << "\n";
                     }
 
+                    // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
+                    if (opts.incremental && !cache_fingerprint.empty()) {
+                        cache::CacheManager cache_mgr(cache_config);
+                        cache::CacheEntry entry;
+                        entry.fingerprint = cache_fingerprint;
+                        entry.target = opts.target.empty() ? "js" : opts.target;
+                        entry.optimization_level = opts.optimization_level;
+                        entry.compiler_version = cache::CacheManager::get_compiler_version();
+                        entry.object_file = cache_fingerprint.substr(0, 16) + ".js";
+                        entry.created_at = cache::CacheManager::current_timestamp();
+                        for (const auto& f : preprocess_result.resolved_files) {
+                            entry.source_hashes[f] = cache::CacheManager::compute_file_hash(f);
+                        }
+
+                        // モジュール別フィンガープリントを計算
+                        std::map<std::string, std::vector<std::string>> module_files;
+                        for (const auto& mr : preprocess_result.module_ranges) {
+                            auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                            module_files[mr.file_path].push_back(abs_path);
+                        }
+                        if (!module_files.empty()) {
+                            entry.module_fingerprints =
+                                cache_mgr.compute_module_fingerprints(module_files);
+                        }
+
+                        if (cache_mgr.store(cache_fingerprint, js_opts.outputFile, entry)) {
+                            if (opts.verbose) {
+                                std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
+                            }
+                            // 高速キャッシュ判定用の情報を保存
+                            std::string target_key = opts.target.empty() ? "native" : opts.target;
+                            cache_mgr.save_quick_check(opts.input_file, target_key,
+                                                       opts.optimization_level, cache_fingerprint,
+                                                       entry.object_file,
+                                                       preprocess_result.resolved_files);
+                        }
+                    }
+
                     // --runオプションがある場合は実行（Node.js）
                     if (opts.run_after_emit && opts.target != "web") {
                         if (opts.verbose) {
@@ -1077,9 +1597,22 @@ int main(int argc, char* argv[]) {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Wasm;
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable;
+                } else if (opts.target == "uefi") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
+                } else if (opts.target == "baremetal-arm" || opts.target == "bm") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Baremetal;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
+                } else if (opts.target == "baremetal-x86" || opts.target == "bm-x86") {
+                    llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::BaremetalX86;
+                    llvm_opts.format =
+                        cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
                 } else if (!opts.target.empty() && opts.target != "native") {
                     std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
-                    std::cerr << "有効なターゲット: native, wasm, js, web\n";
+                    std::cerr << "有効なターゲット: native, wasm, js, web, bm, bm-x86, "
+                                 "baremetal-arm, baremetal-x86, uefi\n";
                     return 1;
                 } else {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
@@ -1091,6 +1624,14 @@ int main(int argc, char* argv[]) {
                 if (opts.output_file.empty()) {
                     if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm) {
                         llvm_opts.outputFile = "a.wasm";
+                    } else if (llvm_opts.target ==
+                               cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI) {
+                        llvm_opts.outputFile = "bootx64.efi";
+                    } else if (llvm_opts.target ==
+                                   cm::codegen::llvm_backend::BuildTarget::Baremetal ||
+                               llvm_opts.target ==
+                                   cm::codegen::llvm_backend::BuildTarget::BaremetalX86) {
+                        llvm_opts.outputFile = "firmware.o";
                     } else {
                         llvm_opts.outputFile = "a.out";
                     }
@@ -1117,9 +1658,110 @@ int main(int argc, char* argv[]) {
                     }
 
                     cm::codegen::llvm_backend::LLVMCodeGen codegen(llvm_opts);
+
+                    // no_std環境でのOS依存機能チェック
+                    if (llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Baremetal ||
+                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalX86 ||
+                        llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI) {
+                        cm::mir::opt::NoStdChecker checker;
+                        auto check_result = checker.check(mir);
+                        if (check_result.has_errors) {
+                            for (const auto& err : check_result.errors) {
+                                std::cerr << err << "\n";
+                            }
+                            return 1;
+                        }
+                    }
+
+                    // モジュール分割情報を事前計算
+                    // 注意: 現在モジュール分割コンパイルは無効化されている
+                    // （フロントエンドが毎回全実行されるため、効果が限定的）
+                    // 将来 --split-modules オプションで有効化可能
+                    cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info_pre;
+
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
-                    codegen.compile(mir);
+                    auto phase_llvm_start = std::chrono::steady_clock::now();
+
+                    // モジュール別差分コンパイルの判定
+                    // 現在は常に全体コンパイルを使用
+                    // モジュール分割はフロントエンドの差分化が実装されるまで無効
+                    bool use_module_compile = false;
+
+                    // モジュール情報（事前計算）
+                    cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info;
+
+                    if (use_module_compile) {
+                        // === モジュール別差分コンパイル ===
+                        // 現在無効化中 - フロントエンド差分化後に再有効化予定
+                        if (opts.verbose) {
+                            std::cout << "⚡ モジュール別差分コンパイル: " << changed_modules.size()
+                                      << "/" << module_info_pre.module_names.size()
+                                      << " モジュール再コンパイル\n";
+                        }
+
+                        // キャッシュ済みオブジェクトのマップ
+                        std::map<std::string, std::filesystem::path> cached_objects;
+                        if (opts.incremental) {
+                            cache::CacheManager cache_mgr(cache_config);
+                            // 前回のビルドで生成されたオブジェクトファイルを取得
+                            std::string fp_to_use = prev_build_fingerprint.empty()
+                                                        ? cache_fingerprint
+                                                        : prev_build_fingerprint;
+                            cached_objects = cache_mgr.get_cached_module_objects(fp_to_use);
+                        }
+
+                        // 一時ディレクトリの作成
+                        std::filesystem::path module_output_dir =
+                            std::filesystem::path(cache_config.cache_dir) / "module_objs" /
+                            cache_fingerprint.substr(0, 16);
+
+                        // モジュール別コンパイル実行
+                        auto module_objects = codegen.compileModules(
+                            mir, changed_modules, cached_objects, module_output_dir);
+
+                        // リンク
+                        std::vector<std::filesystem::path> all_objects;
+                        for (const auto& mo : module_objects) {
+                            all_objects.push_back(mo.object_path);
+                        }
+                        codegen.linkObjects(all_objects, llvm_opts.outputFile);
+
+                        // モジュール情報を構築
+                        module_info = module_info_pre;
+                        module_info.changed_modules = changed_modules;
+
+                        // 新しいモジュール .o をキャッシュに保存
+                        if (opts.incremental) {
+                            cache::CacheManager cache_mgr(cache_config);
+                            for (const auto& mo : module_objects) {
+                                if (!mo.from_cache) {
+                                    // モジュール固有のフィンガープリントを生成
+                                    std::string mod_fp =
+                                        cache_fingerprint.substr(0, 16) + "_" + mo.module_name;
+                                    cache_mgr.store_module_object(cache_fingerprint, mo.module_name,
+                                                                  mod_fp, mo.object_path.string());
+                                }
+                            }
+                        }
+
+                        if (opts.verbose) {
+                            size_t cached_count = 0;
+                            for (const auto& mo : module_objects) {
+                                if (mo.from_cache)
+                                    cached_count++;
+                            }
+                            std::cout << "  キャッシュヒット: " << cached_count << "/"
+                                      << module_objects.size() << " モジュール\n";
+                        }
+                    } else {
+                        // === 従来の全体コンパイル ===
+                        module_info = codegen.compileWithModuleInfo(mir, changed_modules);
+                    }
+
+                    auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                             std::chrono::steady_clock::now() - phase_llvm_start)
+                                             .count();
                     if (cm::debug::g_debug_mode)
                         std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
 
@@ -1131,8 +1773,84 @@ int main(int argc, char* argv[]) {
                         return 0;
                     }
 
-                    if (opts.verbose) {
-                        std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                    if (!opts.quiet) {
+                        auto compile_end = std::chrono::steady_clock::now();
+                        auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              compile_end - compile_start)
+                                              .count();
+                        std::cout << "✓ コンパイル完了: " << llvm_opts.outputFile << " ("
+                                  << compile_ms << "ms)\n";
+                        if (opts.verbose) {
+                            auto frontend_ms = phase_preprocess_ms + phase_parse_ms +
+                                               phase_typecheck_ms + phase_hir_ms + phase_mir_ms +
+                                               phase_opt_ms;
+                            std::cout << "  プリプロセス: " << phase_preprocess_ms << "ms\n";
+                            std::cout
+                                << "  パース+型チェック: " << phase_parse_ms + phase_typecheck_ms
+                                << "ms\n";
+                            std::cout << "  HIR+MIR変換: " << phase_hir_ms + phase_mir_ms << "ms\n";
+                            std::cout << "  MIR最適化: " << phase_opt_ms << "ms\n";
+                            std::cout << "  LLVM codegen: " << phase_llvm_ms << "ms\n";
+                            std::cout << "  フロントエンド合計: " << frontend_ms << "ms ("
+                                      << (compile_ms > 0 ? frontend_ms * 100 / compile_ms : 0)
+                                      << "%)\n";
+
+                            // モジュール分割情報を表示
+                            if (!module_info.module_names.empty()) {
+                                std::cout << "  モジュール: " << module_info.module_names.size()
+                                          << " 検出";
+                                if (!module_info.changed_modules.empty() &&
+                                    module_info.changed_modules.size() <
+                                        module_info.module_names.size()) {
+                                    std::cout << " (" << module_info.changed_modules.size()
+                                              << " 変更)";
+                                }
+                                std::cout << "\n";
+                                for (const auto& [name, count] : module_info.module_func_count) {
+                                    std::cout << "    " << name << ": " << count << " 関数\n";
+                                }
+                            }
+                        }
+                    }
+
+                    // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
+                    if (opts.incremental && !cache_fingerprint.empty()) {
+                        cache::CacheManager cache_mgr(cache_config);
+                        cache::CacheEntry entry;
+                        entry.fingerprint = cache_fingerprint;
+                        entry.target = opts.target.empty() ? "native" : opts.target;
+                        entry.optimization_level = opts.optimization_level;
+                        entry.compiler_version = cache::CacheManager::get_compiler_version();
+                        entry.object_file = cache_fingerprint.substr(0, 16) + ".o";
+                        entry.created_at = cache::CacheManager::current_timestamp();
+
+                        // 各ソースファイルのハッシュを記録
+                        for (const auto& f : preprocess_result.resolved_files) {
+                            entry.source_hashes[f] = cache::CacheManager::compute_file_hash(f);
+                        }
+
+                        // モジュール別フィンガープリントを計算
+                        std::map<std::string, std::vector<std::string>> module_files;
+                        for (const auto& mr : preprocess_result.module_ranges) {
+                            auto abs_path = std::filesystem::absolute(mr.file_path).string();
+                            module_files[mr.file_path].push_back(abs_path);
+                        }
+                        if (!module_files.empty()) {
+                            entry.module_fingerprints =
+                                cache_mgr.compute_module_fingerprints(module_files);
+                        }
+
+                        if (cache_mgr.store(cache_fingerprint, llvm_opts.outputFile, entry)) {
+                            if (opts.verbose) {
+                                std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
+                            }
+                            // 高速キャッシュ判定用の情報を保存
+                            std::string target_key = opts.target.empty() ? "native" : opts.target;
+                            cache_mgr.save_quick_check(opts.input_file, target_key,
+                                                       opts.optimization_level, cache_fingerprint,
+                                                       entry.object_file,
+                                                       preprocess_result.resolved_files);
+                        }
                     }
 
                     // --runオプションがある場合は実行

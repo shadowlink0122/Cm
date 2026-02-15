@@ -1,0 +1,32 @@
+// thread_basic.cm - 基本的なスレッドテスト
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
+
+// スレッドで実行する関数
+void* worker(void* arg) {
+    sleep_ms(50);
+    println("Worker thread started");
+    sleep_ms(10);
+    println("Worker thread finished");
+    return 42 as void*;
+}
+
+int main() {
+    println("Main thread starting worker");
+
+    // スレッドを生成（関数ポインタをvoid*にキャスト）
+    ulong t = spawn(worker as void*);
+
+    // spawnの直後に表示（ワーカーは50ms待つので必ず先に表示される）
+    println("Main thread waiting for worker");
+
+    // スレッドの終了を待機
+    int result = join(t);
+
+    print("Worker returned: ");
+    println(result);
+    println("Main thread done");
+
+    return 0;
+}

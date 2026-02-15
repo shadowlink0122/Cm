@@ -44,6 +44,7 @@ enum class TypeKind {
     Function,  // (T1, T2) -> R
 
     // 特殊
+    Null,          // null型（ユニオン内でのみ使用可能: int | null）
     Generic,       // <T>
     Error,         // 型エラー（エラー回復用）
     Inferred,      // 型推論待ち
@@ -267,6 +268,9 @@ inline TypePtr make_cstring() {
 inline TypePtr make_error() {
     return std::make_shared<Type>(TypeKind::Error);
 }
+inline TypePtr make_null() {
+    return std::make_shared<Type>(TypeKind::Null);
+}
 
 inline TypePtr make_pointer(TypePtr elem) {
     auto t = std::make_shared<Type>(TypeKind::Pointer);
@@ -320,45 +324,46 @@ inline TypePtr make_function_ptr(TypePtr return_type, std::vector<TypePtr> param
 // 型の文字列表現
 // ============================================================
 inline std::string type_to_string(const Type& t) {
+    std::string prefix = "";
     switch (t.kind) {
         case TypeKind::Void:
-            return "void";
+            return prefix + "void";
         case TypeKind::Bool:
-            return "bool";
+            return prefix + "bool";
         case TypeKind::Tiny:
-            return "tiny";
+            return prefix + "tiny";
         case TypeKind::Short:
-            return "short";
+            return prefix + "short";
         case TypeKind::Int:
-            return "int";
+            return prefix + "int";
         case TypeKind::Long:
-            return "long";
+            return prefix + "long";
         case TypeKind::UTiny:
-            return "utiny";
+            return prefix + "utiny";
         case TypeKind::UShort:
-            return "ushort";
+            return prefix + "ushort";
         case TypeKind::UInt:
-            return "uint";
+            return prefix + "uint";
         case TypeKind::ULong:
-            return "ulong";
+            return prefix + "ulong";
         case TypeKind::ISize:
-            return "isize";
+            return prefix + "isize";
         case TypeKind::USize:
-            return "usize";
+            return prefix + "usize";
         case TypeKind::Float:
-            return "float";
+            return prefix + "float";
         case TypeKind::Double:
-            return "double";
+            return prefix + "double";
         case TypeKind::UFloat:
-            return "ufloat";
+            return prefix + "ufloat";
         case TypeKind::UDouble:
-            return "udouble";
+            return prefix + "udouble";
         case TypeKind::Char:
-            return "char";
+            return prefix + "char";
         case TypeKind::String:
-            return "string";
+            return prefix + "string";
         case TypeKind::CString:
-            return "cstring";
+            return prefix + "cstring";
         case TypeKind::Pointer:
             return "*" + (t.element_type ? type_to_string(*t.element_type) : "?");
         case TypeKind::Reference:
@@ -375,7 +380,7 @@ inline std::string type_to_string(const Type& t) {
             return (t.element_type ? type_to_string(*t.element_type) : "?") + "[]";
         case TypeKind::Struct:
         case TypeKind::Interface: {
-            std::string result = t.name;
+            std::string result = prefix + t.name;
             if (!t.type_args.empty()) {
                 result += "<";
                 for (size_t i = 0; i < t.type_args.size(); ++i) {
@@ -406,6 +411,25 @@ inline std::string type_to_string(const Type& t) {
             return "<error>";
         case TypeKind::Inferred:
             return "<inferred>";
+        case TypeKind::Null:
+            return "null";
+        case TypeKind::Union: {
+            // 名前付きユニオン（typedef）はその名前を使用
+            if (!t.name.empty()) {
+                return prefix + t.name;
+            }
+            // インラインユニオン: type_argsから "int | null" 形式で表示
+            if (!t.type_args.empty()) {
+                std::string result;
+                for (size_t i = 0; i < t.type_args.size(); ++i) {
+                    if (i > 0)
+                        result += " | ";
+                    result += type_to_string(*t.type_args[i]);
+                }
+                return prefix + result;
+            }
+            return prefix + "<union>";
+        }
         default:
             return "<unknown>";
     }

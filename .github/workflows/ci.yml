@@ -5,30 +5,61 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   BUILD_TYPE: Debug
+  LLVM_VERSION: "17"
 
 jobs:
   # ========================================
-  # Lint - コードフォーマットチェック
+  # Lint - コードフォーマットチェック（独立・並列）
   # ========================================
   lint:
     name: Lint
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
-      
+
       - name: Check C++ format
         run: |
           find src -name '*.cpp' -o -name '*.hpp' | head -50 | \
             xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
 
   # ========================================
-  # Build - ビルド (Linux/macOS)
+  # Extension Lint - VSCode拡張機能チェック（独立・並列）
+  # ========================================
+  extension-lint:
+    name: Extension Lint
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: TypeScript compile
+        run: npm run compile
+
+      - name: ESLint check
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npm run format:check
+
+  # ========================================
+  # Build - 全テスト共通（OS別1回のみ）
   # ========================================
   build:
     name: Build (${{ matrix.os }})
@@ -38,49 +69,53 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            llvm_version: "17"
             arch: x86_64
           - os: macos-14
-            llvm_version: "17"
             arch: arm64
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
-      # LLVM インストール (Ubuntu)
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        id: cache-llvm
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
       - name: Install LLVM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh ${{ matrix.llvm_version }}
-          sudo apt-get install -y llvm-${{ matrix.llvm_version }}-dev clang-${{ matrix.llvm_version }} libssl-dev
-          echo "/usr/lib/llvm-${{ matrix.llvm_version }}/bin" >> $GITHUB_PATH
-          echo "LLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/lib/cmake/llvm" >> $GITHUB_ENV
-      
-      # LLVM インストール (macOS)
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LLVM_DIR=/usr/lib/llvm-${{ env.LLVM_VERSION }}/lib/cmake/llvm" >> $GITHUB_ENV
+
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@${{ matrix.llvm_version }} openssl@3
-          echo "$(brew --prefix llvm@${{ matrix.llvm_version }})/bin" >> $GITHUB_PATH
-          echo "LDFLAGS=-L$(brew --prefix llvm@${{ matrix.llvm_version }})/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ matrix.llvm_version }})/include" >> $GITHUB_ENV
-          echo "LLVM_DIR=$(brew --prefix llvm@${{ matrix.llvm_version }})/lib/cmake/llvm" >> $GITHUB_ENV
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+          echo "LDFLAGS=-L$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix llvm@${{ env.LLVM_VERSION }})/include" >> $GITHUB_ENV
+          echo "LLVM_DIR=$(brew --prefix llvm@${{ env.LLVM_VERSION }})/lib/cmake/llvm" >> $GITHUB_ENV
           echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
-      
-      # Google Test インストール (Ubuntu)
+
       - name: Install Google Test (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y libgtest-dev
-      
-      # Google Test インストール (macOS)
+
       - name: Install Google Test (macOS)
         if: runner.os == 'macOS'
         run: brew install googletest
-      
-      # ビルド
+
       - name: Configure CMake
         run: |
           CMAKE_EXTRA_FLAGS=""
@@ -93,13 +128,321 @@ jobs:
             -DCM_TARGET_ARCH=${{ matrix.arch }} \
             -DBUILD_TESTING=ON \
             $CMAKE_EXTRA_FLAGS
-      
+
       - name: Build
         run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-      
+
+      - name: Build runtime libraries
+        run: make libs
+
       - name: Verify build
         run: |
           echo "=== Build Verification ==="
-          ls -la build/bin/ || echo "No bin directory"
-          ./cm --version || echo "cm not found in root"
-          echo "✅ Build completed successfully"
+          ls -la build/lib/ || echo "No lib directory"
+          ./cm --version || echo "cm not found"
+          echo "✅ Build completed (${{ matrix.arch }})"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+          path: |
+            build/bin/
+            build/lib/
+            cm
+          retention-days: 1
+
+  # ========================================
+  # Unit Tests（ビルド共有、matrix並列）
+  # ========================================
+  unit-test:
+    name: 単体テスト ${{ matrix.test_name }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        include:
+          - os: ubuntu-22.04
+            test_name: Lexer
+            test_bin: lexer_test
+          - os: macos-14
+            test_name: Lexer
+            test_bin: lexer_test
+          - os: ubuntu-22.04
+            test_name: HIR Lowering
+            test_bin: hir_lowering_test
+          - os: macos-14
+            test_name: HIR Lowering
+            test_bin: hir_lowering_test
+          - os: ubuntu-22.04
+            test_name: MIR Lowering
+            test_bin: mir_lowering_test
+          - os: macos-14
+            test_name: MIR Lowering
+            test_bin: mir_lowering_test
+          - os: ubuntu-22.04
+            test_name: MIR Optimization
+            test_bin: mir_optimization_test
+          - os: macos-14
+            test_name: MIR Optimization
+            test_bin: mir_optimization_test
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+
+      - run: chmod +x build/bin/* cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+
+      - name: Run ${{ matrix.test_name }} Test
+        run: ./build/bin/${{ matrix.test_bin }} --gtest_output=xml:test-results.xml
+
+  # ========================================
+  # Integration Tests（ビルド共有、16並列）
+  # 4バックエンド × O0/O3 × 2OS
+  # ========================================
+  integration-test:
+    name: 統合テスト ${{ matrix.config.name }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        config:
+          - { id: jit-o0,  name: "JIT実行 O0",            target: tjitp0, backend: jit,       needs_node: false }
+          - { id: jit-o3,  name: "JIT実行 O3",            target: tjitp3, backend: jit,       needs_node: false }
+          - { id: llvm-o0, name: "LLVMネイティブ実行 O0",  target: tlp0,   backend: llvm,      needs_node: false }
+          - { id: llvm-o3, name: "LLVMネイティブ実行 O3",  target: tlp3,   backend: llvm,      needs_node: false }
+          - { id: wasm-o0, name: "WASMコンパイル+実行 O0", target: tlwp0,  backend: llvm-wasm, needs_node: false }
+          - { id: wasm-o3, name: "WASMコンパイル+実行 O3", target: tlwp3,  backend: llvm-wasm, needs_node: false }
+          - { id: js-o0,   name: "JSコード生成+実行 O0",  target: tjp0,   backend: js,        needs_node: true  }
+          - { id: js-o3,   name: "JSコード生成+実行 O3",  target: tjp3,   backend: js,        needs_node: true  }
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+
+      - name: Setup Node.js
+        if: matrix.config.needs_node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install wasmtime
+        if: matrix.config.backend == 'llvm-wasm'
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "latest"
+
+      - name: Run ${{ matrix.config.name }} Tests
+        id: run_tests
+        env:
+          CM_TEST_MAX_JOBS: "2"
+        run: |
+          set +e
+          make ${{ matrix.config.target }} 2>&1 | tee test_output.log
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          echo "test_exit_code=${TEST_EXIT_CODE}" >> $GITHUB_OUTPUT
+          # FAIL行と詳細をAnnotationに出力
+          awk '
+          /\[FAIL\]/ {
+            fail_line = $0
+            gsub(/\033\[[0-9;]*m/, "", fail_line)
+            detail = ""
+            collecting = 1
+            next
+          }
+          collecting && /^  (Expected|Got|Diff|Output)/ {
+            line = $0
+            gsub(/\033\[[0-9;]*m/, "", line)
+            detail = detail " | " line
+            next
+          }
+          collecting && !/^  / {
+            print "::error::" fail_line detail
+            collecting = 0
+          }
+          END {
+            if (collecting) {
+              print "::error::" fail_line detail
+            }
+          }
+          ' test_output.log
+          grep -E "^(Total|Passed|Failed|Skipped|Status):" test_output.log | while read -r line; do
+            echo "::notice::${line}"
+          done
+          exit ${TEST_EXIT_CODE}
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.config.id }}-${{ matrix.os }}
+          path: test_output.log
+          retention-days: 7
+
+  # ========================================
+  # Baremetal / UEFI コンパイルテスト（Linuxのみ）
+  # ========================================
+  baremetal-test:
+    name: Baremetal / UEFI
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-22.04
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04
+
+      - name: Install LLVM
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Run Baremetal compile tests
+        run: make test-baremetal
+
+      - name: Run UEFI compile tests
+        run: make test-uefi
+
+  # ========================================
+  # Benchmark - パフォーマンスベンチマーク
+  # ========================================
+  benchmark:
+    name: Benchmark
+    needs: build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-22.04
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04
+
+      - name: Install LLVM
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev clang-${{ env.LLVM_VERSION }} libssl-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Run Benchmarks
+        run: |
+          echo "=== Running Cm JIT Benchmarks ==="
+
+          PASS=0
+          FAIL=0
+
+          for bench in 06_prime_sieve 07_fibonacci_memoized 04_array_sort 05_matrix_multiply; do
+            echo ""
+            echo "--- $bench ---"
+
+            if [ -f "tests/bench_marks/cm/${bench}.cm" ]; then
+              echo "Running tests/bench_marks/cm/${bench}.cm..."
+              if timeout 120 ./cm run tests/bench_marks/cm/${bench}.cm > /dev/null 2>&1; then
+                echo "✅ $bench: PASS"
+                PASS=$((PASS + 1))
+              else
+                echo "❌ $bench: FAIL"
+                FAIL=$((FAIL + 1))
+              fi
+            else
+              echo "⚠️ $bench: SKIP (file not found)"
+            fi
+          done
+
+          echo ""
+          echo "=== Benchmark Results ==="
+          echo "Passed: $PASS"
+          echo "Failed: $FAIL"
+
+          # ベンチマーク失敗時はCIを失敗扱い
+          if [ $FAIL -gt 0 ]; then
+            echo "❌ Some benchmarks failed"
+            exit 1
+          else
+            echo "✅ All benchmarks passed!"
+          fi
+

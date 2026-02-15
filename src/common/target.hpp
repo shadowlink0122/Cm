@@ -3,7 +3,7 @@
 
 namespace cm {
 
-enum class Target { Native, Wasm, JS, Web };
+enum class Target { Native, Wasm, JS, Web, Baremetal, UEFI };
 
 inline Target string_to_target(const std::string& s) {
     if (s == "wasm")
@@ -12,6 +12,10 @@ inline Target string_to_target(const std::string& s) {
         return Target::JS;
     if (s == "web")
         return Target::Web;
+    if (s == "baremetal-arm" || s == "baremetal-x86" || s == "bm")
+        return Target::Baremetal;
+    if (s == "uefi")
+        return Target::UEFI;
     return Target::Native;
 }
 
@@ -23,6 +27,10 @@ inline std::string target_to_string(Target t) {
             return "js";
         case Target::Web:
             return "web";
+        case Target::Baremetal:
+            return "baremetal";
+        case Target::UEFI:
+            return "uefi";
         default:
             return "native";
     }

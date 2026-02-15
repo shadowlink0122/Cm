@@ -373,12 +373,35 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 std::string enumName = lookupName.substr(14);
 
                 // enumDefsから最大ペイロードサイズを取得
+                // LLVM DataLayoutを使用して構造体型のサイズも正確に計算
                 uint32_t maxPayloadSize = 8;  // デフォルト8バイト
                 auto enumIt = enumDefs.find(enumName);
                 if (enumIt != enumDefs.end() && enumIt->second) {
-                    maxPayloadSize = enumIt->second->max_payload_size();
-                    if (maxPayloadSize == 0)
-                        maxPayloadSize = 8;
+                    uint32_t computedMax = 0;
+                    for (const auto& member : enumIt->second->members) {
+                        uint32_t memberSize = 0;
+                        // 一時的なLLVM
+                        // struct型を構築し、DataLayoutで正確なサイズ（パディング込み）を計算
+                        std::vector<llvm::Type*> fieldLlvmTypes;
+                        for (const auto& [fieldName, fieldType] : member.fields) {
+                            if (!fieldType)
+                                continue;
+                            auto llvmFieldType = convertType(fieldType);
+                            if (llvmFieldType) {
+                                fieldLlvmTypes.push_back(llvmFieldType);
+                            }
+                        }
+                        if (!fieldLlvmTypes.empty()) {
+                            auto tempStruct =
+                                llvm::StructType::get(ctx.getContext(), fieldLlvmTypes);
+                            auto dl = module->getDataLayout();
+                            memberSize = static_cast<uint32_t>(dl.getTypeAllocSize(tempStruct));
+                        }
+                        if (memberSize > computedMax) {
+                            computedMax = memberSize;
+                        }
+                    }
+                    maxPayloadSize = (computedMax > 0) ? computedMax : 8;
                 }
 
                 auto structType = llvm::StructType::create(ctx.getContext(), lookupName);

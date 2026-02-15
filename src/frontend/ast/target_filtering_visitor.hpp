@@ -164,6 +164,10 @@ class TargetFilteringVisitor {
             return Target::JS;
         if (s == "web")
             return Target::Web;
+        if (s == "baremetal" || s == "baremetal-arm" || s == "baremetal-x86" || s == "bm")
+            return Target::Baremetal;
+        if (s == "uefi")
+            return Target::UEFI;
         return Target::Native;
     }
 

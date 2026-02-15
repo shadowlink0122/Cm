@@ -1,0 +1,13 @@
+{
+    "name": "cm-web-app-example",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Cm言語 Webアプリケーションサンプル",
+    "scripts": {
+        "build": "./build.sh",
+        "serve": "http-server public -p 3000 -c-1"
+    },
+    "devDependencies": {
+        "http-server": "^14.1.1"
+    }
+}

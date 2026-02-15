@@ -78,9 +78,9 @@ bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
 
 // 関数の一意なIDを生成（オーバーロードを区別するため）
 std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
-    // main関数は特別扱い
-    if (func.name == "main") {
-        return "main";
+    // main/efi_main関数は特別扱い（エントリポイント）
+    if (func.name == "main" || func.name == "efi_main") {
+        return func.name;
     }
 
     // ラムダ関数はそのまま
@@ -174,9 +174,9 @@ std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
 // 呼び出し時の引数型から関数IDを生成
 std::string MIRToLLVM::generateCallFunctionId(const std::string& baseName,
                                               const std::vector<mir::MirOperandPtr>& args) {
-    // main関数は特別扱い
-    if (baseName == "main") {
-        return "main";
+    // main/efi_main関数は特別扱い（エントリポイント）
+    if (baseName == "main" || baseName == "efi_main") {
+        return baseName;
     }
 
     // ラムダ関数はそのまま
@@ -378,13 +378,12 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     }
 
-    // main関数には以前optnone属性を追加していたが、
-    // これはパフォーマンス上重大な問題を引き起こす（バブルソート1000要素が終わらない等）
-    // control flowの問題は別途対処する必要がある
-    // if (func.name == "main") {
-    //     llvmFunc->addFnAttr(llvm::Attribute::NoInline);
-    //     llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
-    // }
+    // UEFIエントリポイント: efi_mainにWin64呼出規約とDLLExportを設定
+    // DLLExportにより最適化で関数が除去されるのを防ぐ
+    if (func.name == "efi_main") {
+        llvmFunc->setCallingConv(llvm::CallingConv::Win64);
+        llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+    }
 
     // パラメータ名設定
     size_t idx = 0;
@@ -617,7 +616,57 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         }
     }
 
-    // 関数宣言（先に全て宣言）- vtable生成前に必要
+    // グローバル変数を生成
+    for (const auto& gv : program.global_vars) {
+        if (!gv)
+            continue;
+
+        auto llvmType = convertType(gv->type);
+        if (!llvmType)
+            continue;
+
+        // リンケージの決定
+        auto linkage =
+            gv->is_export ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage;
+
+        // 初期値の決定
+        llvm::Constant* initialValue = nullptr;
+        if (gv->init_value) {
+            // 文字列型の場合
+            if (std::holds_alternative<std::string>(gv->init_value->value)) {
+                auto& str = std::get<std::string>(gv->init_value->value);
+                auto strConst = builder->CreateGlobalStringPtr(str, gv->name + ".str");
+                initialValue = llvm::cast<llvm::Constant>(strConst);
+            }
+            // 整数型の場合
+            else if (std::holds_alternative<int64_t>(gv->init_value->value)) {
+                auto val = std::get<int64_t>(gv->init_value->value);
+                initialValue = llvm::ConstantInt::get(llvmType, val);
+            }
+            // 浮動小数点型の場合
+            else if (std::holds_alternative<double>(gv->init_value->value)) {
+                auto val = std::get<double>(gv->init_value->value);
+                initialValue = llvm::ConstantFP::get(llvmType, val);
+            }
+            // bool型の場合
+            else if (std::holds_alternative<bool>(gv->init_value->value)) {
+                auto val = std::get<bool>(gv->init_value->value);
+                initialValue = llvm::ConstantInt::get(llvmType, val ? 1 : 0);
+            }
+        }
+
+        // 初期値が設定されなかった場合はゼロ初期化
+        if (!initialValue) {
+            initialValue = llvm::Constant::getNullValue(llvmType);
+        }
+
+        // LLVM GlobalVariableを作成
+        auto globalVar = new llvm::GlobalVariable(*module, llvmType, gv->is_const, linkage,
+                                                  initialValue, gv->name);
+
+        // グローバル変数マップに登録
+        globalVariables[gv->name] = globalVar;
+    }
     // 重複した関数はスキップ
     // std::cerr << "[MIR2LLVM] Declaring function signatures...\n";
     std::set<std::string> declaredFunctions;
@@ -659,6 +708,188 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     // std::cerr << "[MIR2LLVM] Conversion complete!\n";
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
                             "MIR to LLVM conversion complete");
+}
+
+// モジュール単位でのMIR→LLVM IR変換
+// extern関数はdeclareのみ、自モジュール関数は完全変換
+void MIRToLLVM::convert(const mir::ModuleProgram& module) {
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
+                            "Starting module conversion: " + module.module_name);
+
+    // allModuleFunctionsを構築（自モジュール + extern の全関数）
+    // declareExternalFunctionでcurrentProgramがNULLの場合のフォールバックに使用
+    allModuleFunctions.clear();
+    for (const auto* func : module.functions) {
+        allModuleFunctions.push_back(func);
+    }
+    for (const auto* func : module.extern_functions) {
+        allModuleFunctions.push_back(func);
+    }
+
+    // ターゲット判定をキャッシュ
+    std::string triple = this->module->getTargetTriple();
+    isWasmTarget = triple.find("wasm") != std::string::npos;
+
+    // === インターフェース名を収集 ===
+    for (const auto* iface : module.interfaces) {
+        if (iface) {
+            interfaceNames.insert(iface->name);
+        }
+    }
+
+    // === 構造体型を定義（自モジュール + extern） ===
+    // パス1: opaque型として作成
+    auto register_structs_pass1 = [&](const std::vector<const mir::MirStruct*>& structs) {
+        for (const auto* structPtr : structs) {
+            const auto& name = structPtr->name;
+            if (structTypes.count(name) > 0)
+                continue;  // 重複スキップ
+            structDefs[name] = structPtr;
+            auto structType = llvm::StructType::create(ctx.getContext(), name);
+            structTypes[name] = structType;
+        }
+    };
+    register_structs_pass1(module.structs);
+    register_structs_pass1(module.extern_structs);
+
+    // パス2: フィールド型を設定
+    auto register_structs_pass2 = [&](const std::vector<const mir::MirStruct*>& structs) {
+        for (const auto* structPtr : structs) {
+            const auto& name = structPtr->name;
+            auto it = structTypes.find(name);
+            if (it == structTypes.end())
+                continue;
+            if (it->second->isOpaque()) {
+                std::vector<llvm::Type*> fieldTypes;
+                for (const auto& field : structPtr->fields) {
+                    fieldTypes.push_back(convertType(field.type));
+                }
+                it->second->setBody(fieldTypes);
+            }
+        }
+    };
+    register_structs_pass2(module.structs);
+    register_structs_pass2(module.extern_structs);
+
+    // === enum型を定義（自モジュール + extern） ===
+    auto register_enums = [&](const std::vector<const mir::MirEnum*>& enums) {
+        for (const auto* enumPtr : enums) {
+            const auto& enumDef = *enumPtr;
+            if (enumDefs.count(enumDef.name) > 0)
+                continue;  // 重複スキップ
+            enumDefs[enumDef.name] = &enumDef;
+
+            // Tagged Unionの場合は構造体型を生成
+            if (enumDef.is_tagged_union()) {
+                uint32_t maxPayloadSize = enumDef.max_payload_size();
+                if (maxPayloadSize == 0)
+                    maxPayloadSize = 8;
+
+                std::vector<llvm::Type*> enumFieldTypes;
+                enumFieldTypes.push_back(ctx.getI32Type());
+                enumFieldTypes.push_back(llvm::ArrayType::get(ctx.getI8Type(), maxPayloadSize));
+
+                auto enumStructType = llvm::StructType::create(ctx.getContext(), enumFieldTypes,
+                                                               enumDef.name + "_tagged");
+                enumTypes[enumDef.name] = enumStructType;
+            }
+        }
+    };
+    register_enums(module.enums);
+    register_enums(module.extern_enums);
+
+    // === インターフェースfat pointer型 ===
+    for (const auto* iface : module.interfaces) {
+        if (iface) {
+            getInterfaceFatPtrType(iface->name);
+        }
+    }
+
+    // === グローバル変数 ===
+    for (const auto* gv : module.global_vars) {
+        if (!gv)
+            continue;
+        if (globalVariables.count(gv->name) > 0)
+            continue;  // 重複スキップ
+
+        auto llvmType = convertType(gv->type);
+        if (!llvmType)
+            continue;
+
+        auto linkage =
+            gv->is_export ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage;
+
+        llvm::Constant* initialValue = nullptr;
+        if (gv->init_value) {
+            if (std::holds_alternative<std::string>(gv->init_value->value)) {
+                auto& str = std::get<std::string>(gv->init_value->value);
+                auto strConst = builder->CreateGlobalStringPtr(str, gv->name + ".str");
+                initialValue = llvm::cast<llvm::Constant>(strConst);
+            } else if (std::holds_alternative<int64_t>(gv->init_value->value)) {
+                initialValue =
+                    llvm::ConstantInt::get(llvmType, std::get<int64_t>(gv->init_value->value));
+            } else if (std::holds_alternative<double>(gv->init_value->value)) {
+                initialValue =
+                    llvm::ConstantFP::get(llvmType, std::get<double>(gv->init_value->value));
+            } else if (std::holds_alternative<bool>(gv->init_value->value)) {
+                initialValue =
+                    llvm::ConstantInt::get(llvmType, std::get<bool>(gv->init_value->value) ? 1 : 0);
+            }
+        }
+        if (!initialValue) {
+            initialValue = llvm::Constant::getNullValue(llvmType);
+        }
+
+        auto globalVar = new llvm::GlobalVariable(*this->module, llvmType, gv->is_const, linkage,
+                                                  initialValue, gv->name);
+        globalVariables[gv->name] = globalVar;
+    }
+
+    // === 関数シグネチャを宣言 ===
+    std::set<std::string> declaredFunctions;
+
+    // 自モジュールの関数（完全な定義）
+    for (const auto* func : module.functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0)
+            continue;
+        declaredFunctions.insert(funcId);
+        auto llvmFunc = convertFunctionSignature(*func);
+        functions[funcId] = llvmFunc;
+    }
+
+    // extern関数（宣言のみ、ExternalLinkage）
+    for (const auto* func : module.extern_functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0)
+            continue;
+        declaredFunctions.insert(funcId);
+        auto llvmFunc = convertFunctionSignature(*func);
+        // extern関数はExternalLinkageを確保
+        llvmFunc->setLinkage(llvm::GlobalValue::ExternalLinkage);
+        functions[funcId] = llvmFunc;
+    }
+
+    // === vtable生成 ===
+    // currentProgramが必要なのでダミーで対応は難しい
+    // vtable情報はModuleProgramのvtablesから直接生成
+    // 注意: generateVTables()はMirProgramを必要とするため、
+    //        モジュール単位ではvtableを個別に処理する必要がある
+    // 現時点ではvtableを使うプログラムは全体コンパイルにフォールバック
+
+    // === 自モジュール関数の実装を変換 ===
+    declaredFunctions.clear();
+    for (const auto* func : module.functions) {
+        auto funcId = generateFunctionId(*func);
+        if (declaredFunctions.count(funcId) > 0)
+            continue;
+        declaredFunctions.insert(funcId);
+        convertFunction(*func);
+    }
+    // extern関数はボディなし（declare）なので変換しない
+
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
+                            "Module conversion complete: " + module.module_name);
 }
 
 // 関数変換
@@ -899,7 +1130,15 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
                     // ベアメタル対応: すべての配列はスタックに割り当て（ヒープ不使用）
                     // static変数はグローバル変数として作成
-                    if (local.is_static) {
+                    // グローバル変数はconvert()で既に作成済み
+                    if (local.is_global) {
+                        // グローバル変数への参照
+                        auto it = globalVariables.find(local.name);
+                        if (it != globalVariables.end()) {
+                            locals[i] = it->second;
+                            allocatedLocals.insert(i);
+                        }
+                    } else if (local.is_static) {
                         std::string staticKey = func.name + "_" + local.name;
                         auto it = staticVariables.find(staticKey);
                         if (it == staticVariables.end()) {
@@ -1220,6 +1459,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         if (currentMIRFunction &&
                             srcPlace.local < currentMIRFunction->locals.size()) {
                             auto& srcLocal = currentMIRFunction->locals[srcPlace.local];
+
                             if (srcLocal.type && srcLocal.type->name.find("__TaggedUnion_") == 0) {
                                 isSrcTaggedUnionPayload = true;
                             }
@@ -1237,33 +1477,55 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         }
                     }
 
-                    // Tagged Unionペイロードから構造体へのコピー -> memcpy
-                    if (isSrcTaggedUnionPayload && isTargetStruct) {
-                        // ソースアドレス（Tagged Unionのfield[1] = i8配列）
-                        auto srcAddr = convertPlaceToAddress(srcPlace);
+                    // Tagged Unionペイロードからの値コピー
+                    if (isSrcTaggedUnionPayload) {
+                        if (isTargetStruct) {
+                            // 構造体ペイロード → memcpyで直接コピー
+                            auto srcAddr = convertPlaceToAddress(srcPlace);
 
-                        // ターゲットアドレス（構造体ローカル）
-                        auto destAddr = locals[assign.place.local];
-                        if (!destAddr && allocatedLocals.count(assign.place.local) > 0) {
-                            destAddr = locals[assign.place.local];
-                        }
+                            // ターゲットアドレス（構造体ローカル）
+                            auto destAddr = locals[assign.place.local];
+                            if (!destAddr && allocatedLocals.count(assign.place.local) > 0) {
+                                destAddr = locals[assign.place.local];
+                            }
 
-                        if (srcAddr && destAddr) {
-                            // 構造体サイズを取得
-                            auto llvmTargetType = convertType(targetType);
-                            auto dataLayout = module->getDataLayout();
-                            auto structSize = dataLayout.getTypeAllocSize(llvmTargetType);
+                            if (srcAddr && destAddr) {
+                                // 構造体サイズを取得
+                                auto llvmTargetType = convertType(targetType);
+                                auto dataLayout = module->getDataLayout();
+                                auto structSize = dataLayout.getTypeAllocSize(llvmTargetType);
 
-                            // memcpy: dest=構造体ローカル, src=i8配列, size=構造体サイズ
-                            builder->CreateMemCpy(destAddr, llvm::MaybeAlign(), srcAddr,
-                                                  llvm::MaybeAlign(), structSize);
-                            break;
+                                // memcpy: dest=構造体ローカル, src=i8配列, size=構造体サイズ
+                                builder->CreateMemCpy(destAddr, llvm::MaybeAlign(), srcAddr,
+                                                      llvm::MaybeAlign(), structSize);
+                                break;
+                            }
+                        } else if (targetType) {
+                            // 非構造体ペイロード（string/ptr/int等）
+                            // ペイロードバイト配列からターゲット型でロード
+                            auto srcAddr = convertPlaceToAddress(srcPlace);
+                            if (srcAddr) {
+                                auto llvmTargetType = convertType(targetType);
+                                auto loadVal =
+                                    builder->CreateLoad(llvmTargetType, srcAddr, "payload_load");
+
+                                auto destAddr = locals[assign.place.local];
+                                if (destAddr && allocatedLocals.count(assign.place.local) > 0) {
+                                    // allocaモード: load→store
+                                    builder->CreateStore(loadVal, destAddr);
+                                } else {
+                                    // SSAモード（string等allocaなし）: 直接値を設定
+                                    locals[assign.place.local] = loadVal;
+                                }
+                                break;
+                            }
                         }
                     }
                 }
             }
 
             auto rvalue = convertRvalue(*assign.rvalue);
+
             if (rvalue) {
                 // 関数参照の特別処理
                 // bool isFunctionValue = false;
@@ -1767,6 +2029,16 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(localPtr)) {
                         // allocaから実際の型を取得
                         elemType = allocaInst->getAllocatedType();
+                    } else if (currentMIRFunction &&
+                               operand.local_id < currentMIRFunction->locals.size()) {
+                        // SSA値（ConstantInt等）の場合、MIR型情報から型を推定
+                        auto& localInfo = currentMIRFunction->locals[operand.local_id];
+                        if (localInfo.type) {
+                            auto llvmType = convertType(localInfo.type);
+                            if (llvmType && !llvmType->isVoidTy()) {
+                                elemType = llvmType;
+                            }
+                        }
                     }
                     // AArch64用: オペランドの型とメモリ制約を記録
                     operandElemTypes[i] = elemType;
@@ -1879,6 +2151,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     initStore->setVolatile(true);
                                 }
                                 localPtr = alloca;
+                                // localsマップを更新して、後続のcopy操作が
+                                // allocaからvolatile loadで値を読み取れるようにする
+                                locals[operand.local_id] = alloca;
                                 allocatedLocals.insert(operand.local_id);
                             }
                             outputPtrs.push_back(localPtr);
@@ -2042,6 +2317,100 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         llvmConstraints += clob;
                     } else {
                         llvmConstraints += "~{" + clob + "}";
+                    }
+                }
+
+                // ハードコードレジスタの自動クロバー検出
+                // ASMコード内の %reg パターンを検出し、入出力オペランドでないものを
+                // 自動的にクロバーとして追加する
+                // （LLVMのインライン展開時にレジスタの値が不正に再利用されることを防止）
+                {
+                    // x86-64のレジスタ名一覧（LLVM形式）
+                    // 64bit → LLVM名のマッピング
+                    static const std::vector<std::pair<std::string, std::string>> regPatterns = {
+                        // 64ビットレジスタ
+                        {"%rax", "rax"},
+                        {"%rbx", "rbx"},
+                        {"%rcx", "rcx"},
+                        {"%rdx", "rdx"},
+                        {"%rsi", "rsi"},
+                        {"%rdi", "rdi"},
+                        {"%rbp", "rbp"},
+                        {"%r8", "r8"},
+                        {"%r9", "r9"},
+                        {"%r10", "r10"},
+                        {"%r11", "r11"},
+                        {"%r12", "r12"},
+                        {"%r13", "r13"},
+                        {"%r14", "r14"},
+                        {"%r15", "r15"},
+                        // 32ビットレジスタ（対応する64ビットをクロバー）
+                        {"%eax", "rax"},
+                        {"%ebx", "rbx"},
+                        {"%ecx", "rcx"},
+                        {"%edx", "rdx"},
+                        {"%esi", "rsi"},
+                        {"%edi", "rdi"},
+                        // 16ビットレジスタ
+                        {"%ax", "rax"},
+                        {"%bx", "rbx"},
+                        {"%cx", "rcx"},
+                        {"%dx", "rdx"},
+                        // 8ビットレジスタ
+                        {"%al", "rax"},
+                        {"%bl", "rbx"},
+                        {"%cl", "rcx"},
+                        {"%dl", "rdx"},
+                        {"%ah", "rax"},
+                        {"%bh", "rbx"},
+                        {"%ch", "rcx"},
+                        {"%dh", "rdx"},
+                    };
+
+                    std::set<std::string> detectedClobbers;
+                    std::string asmCode = asmData.code;
+
+                    for (const auto& [pattern, llvmName] : regPatterns) {
+                        size_t searchPos = 0;
+                        while ((searchPos = asmCode.find(pattern, searchPos)) !=
+                               std::string::npos) {
+                            // レジスタ名の直後が英数字やアンダースコアでないことを確認
+                            // （%r12の検出で%r12bを誤検出しないように）
+                            size_t afterPos = searchPos + pattern.size();
+                            bool isFullMatch = true;
+                            if (afterPos < asmCode.size()) {
+                                char nextChar = asmCode[afterPos];
+                                // %r8, %r9等の短いパターンと%r8d等の区別
+                                if (std::isalnum(nextChar) || nextChar == '_') {
+                                    // ただし%eax等→%eaxl等は普通ないので、
+                                    // 32bit以上のパターンは次の文字がレジスタ拡張子でなければOK
+                                    if (pattern.size() >= 4) {
+                                        // %rax, %eax等: 後ろの文字は通常ない
+                                        isFullMatch = false;
+                                    } else {
+                                        // %r8, %al等: %r8d のような拡張をチェック
+                                        isFullMatch = false;
+                                    }
+                                }
+                            }
+                            if (isFullMatch) {
+                                detectedClobbers.insert(llvmName);
+                            }
+                            searchPos += pattern.size();
+                        }
+                    }
+
+                    // オペランドとして使用されているレジスタは除外しない
+                    // （LLVMは入出力オペランドと重複するクロバーを自動的に無視する）
+                    // 既に追加済みのクロバーとの重複チェック
+                    for (const auto& reg : detectedClobbers) {
+                        std::string clobStr = "~{" + reg + "}";
+                        if (llvmConstraints.find(clobStr) == std::string::npos) {
+                            if (!llvmConstraints.empty()) {
+                                llvmConstraints += ",";
+                            }
+                            llvmConstraints += clobStr;
+                        }
                     }
                 }
 

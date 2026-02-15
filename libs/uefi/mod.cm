@@ -1,0 +1,29 @@
+// uefi - UEFI Application開発ライブラリ
+// UEFI Specification 2.10 準拠のCmバインディング
+//
+// 使い方:
+//   import uefi::text::uefi_println;
+//   import uefi::mem::uefi_alloc_pool;
+//
+// コンパイル:
+//   cm compile --target=uefi -o app.o main.cm
+//   lld-link /subsystem:efi_application /entry:efi_main /out:BOOTX64.EFI app.o
+module uefi;
+
+// UEFI基本型・ステータスコード
+export import uefi.types::*;
+
+// SystemTable / Boot Services / Runtime Services 構造体
+export import uefi.table::*;
+
+// テキスト出力ユーティリティ
+export import uefi.text::{uefi_puts, uefi_println, uefi_clear_screen, uefi_set_color, uefi_print_hex, uefi_print_dec};
+
+// メモリ管理ユーティリティ
+export import uefi.mem::{uefi_alloc_pool, uefi_free_pool, uefi_alloc_pages, uefi_free_pages, uefi_stall};
+
+// キーボード入力
+export import uefi.input::{uefi_reset_input, uefi_read_key, uefi_wait_for_key, uefi_read_key_blocking};
+
+// メモリマップ
+export import uefi.memmap::{uefi_get_memory_map, uefi_memory_type_name};

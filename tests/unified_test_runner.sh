@@ -18,7 +18,7 @@ else
     IS_WINDOWS=false
 fi
 
-TEST_DIR="$PROJECT_ROOT/tests/test_programs"
+PROGRAMS_DIR="$PROJECT_ROOT/tests/programs"
 TEMP_DIR="$PROJECT_ROOT/.tmp/test_runner"
 
 # カラー出力
@@ -52,10 +52,13 @@ trap cleanup SIGINT SIGTERM
 # NOTE: interpreterバックエンドは未実装のため、デフォルトはjit
 BACKEND="jit"
 CATEGORIES=""
+SUITE=""
 VERBOSE=false
 OPT_LEVEL=${OPT_LEVEL:-3}  # デフォルトはO3
 PARALLEL=false
 TIMEOUT=15
+NO_CACHE=false
+CLEAN_CACHE=false
 
 # タイムアウトコマンドの検出
 TIMEOUT_CMD=""
@@ -82,18 +85,102 @@ if [ -z "$TIMEOUT_CMD" ]; then
     echo ""
 fi
 
+# バックエンドに応じたプラットフォームディレクトリの解決
+# common/ は全バックエンドで実行
+# llvm/ は llvm, jit で実行
+# wasm/ は llvm-wasm で実行
+# js/ は js で実行
+# baremetal/ は llvm-baremetal で実行
+# uefi/ は llvm-uefi で実行
+# jit/ は jit で実行
+get_platform_dirs() {
+    local backend="$1"
+    case "$backend" in
+        interpreter)
+            echo "common"
+            ;;
+        jit)
+            echo "common llvm jit"
+            ;;
+        llvm)
+            echo "common llvm"
+            ;;
+        llvm-wasm)
+            echo "common wasm"
+            ;;
+        llvm-uefi)
+            echo "uefi"
+            ;;
+        llvm-baremetal)
+            echo "baremetal"
+            ;;
+        js)
+            echo "common js"
+            ;;
+        *)
+            echo "common"
+            ;;
+    esac
+}
+
+# テストスイート定義
+# 各スイートはカテゴリのグループを定義する（common/ 内のカテゴリ名）
+expand_suite() {
+    local suite="$1"
+    case "$suite" in
+        core)
+            echo "basic types control_flow functions function_ptr loops literal auto const const_interpolation casting errors type_checking"
+            ;;
+        syntax)
+            echo "array arrays array_higher_order dynamic_array slice string formatting enum match structs impl interface lambda chaining result must defer pointer ownership generics iterator"
+            ;;
+        stdlib)
+            echo "collections io std allocator memory intrinsics preprocessor"
+            ;;
+        modules)
+            echo "modules advanced_modules macro advanced"
+            ;;
+        platform)
+            echo "gpu"
+            ;;
+        runtime)
+            echo "file_io fs net thread sync"
+            ;;
+        all)
+            echo ""
+            ;;
+        *)
+            echo "Error: Unknown suite '$suite'" >&2
+            echo "Valid suites: core, syntax, stdlib, modules, platform, runtime, all" >&2
+            exit 1
+            ;;
+    esac
+}
+
 # ヘルプメッセージ
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js (default: interpreter)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js (default: jit)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
+    echo "  -s, --suite <suite>        Test suite: core|syntax|stdlib|modules|platform|runtime|all (default: all)"
     echo "  -v, --verbose              Show detailed output"
     echo "  -p, --parallel             Run tests in parallel (experimental)"
     echo "  -t, --timeout <seconds>    Test timeout in seconds (default: 5)"
+    echo "  -n, --no-cache             キャッシュを無効化してテスト実行"
+    echo "  --clean-cache              テスト前にキャッシュを削除"
     echo "  -h, --help                 Show this help message"
     echo ""
-    echo "Categories are auto-detected from directories in tests/test_programs/"
+    echo "Suites:"
+    echo "  core     - 言語基盤テスト（全ターゲット共通）"
+    echo "  syntax   - 構文機能テスト（配列・構造体・ジェネリクス等）"
+    echo "  stdlib   - 標準ライブラリテスト"
+    echo "  modules  - モジュール・マクロテスト"
+    echo "  platform - ターゲット固有テスト（UEFI・ベアメタル・ASM等）"
+    echo "  runtime  - OS依存ランタイムテスト（ファイルI/O・ネット・スレッド等）"
+    echo "  all      - 全テスト（デフォルト）"
+    echo ""
+    echo "Categories are auto-detected from directories in tests/programs/"
     exit 0
 }
 
@@ -108,6 +195,10 @@ while [[ $# -gt 0 ]]; do
             CATEGORIES="$2"
             shift 2
             ;;
+        -s|--suite)
+            SUITE="$2"
+            shift 2
+            ;;
         -v|--verbose)
             VERBOSE=true
             shift
@@ -120,6 +211,14 @@ while [[ $# -gt 0 ]]; do
             TIMEOUT="$2"
             shift 2
             ;;
+        -n|--no-cache)
+            NO_CACHE=true
+            shift
+            ;;
+        --clean-cache)
+            CLEAN_CACHE=true
+            shift
+            ;;
         -h|--help)
             usage
             ;;
@@ -131,27 +230,65 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|js)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, js"
+    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js"
     exit 1
 fi
 
+# キャッシュオプションの構築
+CACHE_OPTS=""
+if [ "$NO_CACHE" = true ]; then
+    CACHE_OPTS="--no-cache"
+fi
+
+# テスト前キャッシュクリア
+if [ "$CLEAN_CACHE" = true ]; then
+    rm -rf "$PROJECT_ROOT/.cm-cache"
+    echo -e "${YELLOW}[INFO]${NC} キャッシュをクリアしました"
+fi
+
+# スイート展開
+if [ -n "$SUITE" ] && [ -z "$CATEGORIES" ]; then
+    CATEGORIES=$(expand_suite "$SUITE")
+fi
+
+# プラットフォームディレクトリの解決
+PLATFORM_DIRS=$(get_platform_dirs "$BACKEND")
+
 # カテゴリー設定
 if [ -z "$CATEGORIES" ]; then
-    # test_programsディレクトリ内の全サブディレクトリを自動検出
+    # バックエンドに応じたプラットフォームディレクトリからカテゴリを自動検出
     CATEGORIES=""
-    for dir in "$TEST_DIR"/*/; do
-        if [ -d "$dir" ]; then
-            dirname="$(basename "$dir")"
-            # .cmファイルがあるディレクトリのみ追加
-            if ls "$dir"/*.cm 1> /dev/null 2>&1; then
-                CATEGORIES="$CATEGORIES $dirname"
-            fi
+    for platform_dir in $PLATFORM_DIRS; do
+        base_dir="$PROGRAMS_DIR/$platform_dir"
+        if [ ! -d "$base_dir" ]; then
+            continue
         fi
+        for dir in "$base_dir"/*/; do
+            if [ -d "$dir" ]; then
+                dirname="$(basename "$dir")"
+                # .cmファイルがあるディレクトリのみ追加
+                if ls "$dir"/*.cm 1> /dev/null 2>&1; then
+                    # プラットフォーム:カテゴリ の形式で保持
+                    CATEGORIES="$CATEGORIES ${platform_dir}:${dirname}"
+                fi
+            fi
+        done
     done
     # 先頭のスペースを削除
     CATEGORIES="${CATEGORIES# }"
+else
+    # ユーザー指定のカテゴリ（スイート展開含む）は common/ 内として扱う
+    expanded=""
+    for cat in $CATEGORIES; do
+        if [[ "$cat" != *:* ]]; then
+            expanded="$expanded common:$cat"
+        else
+            expanded="$expanded $cat"
+        fi
+    done
+    CATEGORIES="${expanded# }"
 fi
 
 # 一時ディレクトリ作成
@@ -171,30 +308,115 @@ log() {
     echo "$1" | tee -a "$LOG_FILE"
 }
 
+# プラットフォームディレクティブチェック
+# //! platform: js|web  (or形式)
+# //! platform: !native (not形式)
+# 戻り値: 0=マッチ(実行可), 1=不一致(スキップ)
+# 標準出力: マッチしなかった場合のスキップ理由
+check_platform_directive() {
+    local test_file="$1"
+    local backend="$2"
+
+    # ファイル先頭5行から //! platform: ディレクティブを検索（macOS互換）
+    local directive
+    directive=$(head -5 "$test_file" | grep '//! *platform:' | sed 's|.*//! *platform: *||' | head -1)
+
+    # ディレクティブがなければマッチ扱い
+    if [ -z "$directive" ]; then
+        return 0
+    fi
+
+    # 空白を除去
+    directive=$(echo "$directive" | tr -d '[:space:]')
+
+    # バックエンド名をプラットフォーム名にマッピング
+    local platform
+    case "$backend" in
+        llvm-baremetal) platform="baremetal" ;;
+        llvm-uefi)      platform="uefi" ;;
+        llvm-wasm)      platform="wasm" ;;
+        llvm)           platform="native" ;;
+        interpreter)    platform="native" ;;
+        jit)            platform="native" ;;
+        js)             platform="js" ;;
+        *)              platform="$backend" ;;
+    esac
+
+    # NOT形式: !platform|platform2
+    if [[ "$directive" == !* ]]; then
+        # !を除去
+        local negated="${directive#!}"
+        # |で分割してチェック
+        IFS='|' read -ra platforms <<< "$negated"
+        for p in "${platforms[@]}"; do
+            if [ "$platform" = "$p" ]; then
+                echo "Platform directive excludes $platform"
+                return 1
+            fi
+        done
+        return 0
+    fi
+
+    # OR形式: platform|platform2
+    IFS='|' read -ra platforms <<< "$directive"
+    for p in "${platforms[@]}"; do
+        if [ "$platform" = "$p" ]; then
+            return 0
+        fi
+    done
+
+    echo "Platform directive requires $directive (current: $platform)"
+    return 1
+}
+
 # テスト実行関数
 run_single_test() {
     local test_file="$1"
     local test_name="$(basename "${test_file%.cm}")"
-    local category="$(basename "$(dirname "$test_file")")"
+    # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+    local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
     local expect_file="${test_file%.cm}.expect"
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local error_expect_file="${test_file%.cm}.error"
     local backend_error_file="${test_file%.cm}.error.${BACKEND}"
-    local output_file="$TEMP_DIR/${category}_${test_name}.out"
-    local error_file="$TEMP_DIR/${category}_${test_name}.err"
+    local output_file="$TEMP_DIR/${category//\//_}_${test_name}.out"
+    local error_file="$TEMP_DIR/${category//\//_}_${test_name}.err"
     local is_error_test=false
+
+    # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
+    local test_timeout="$TIMEOUT"
+    local timeout_file="${test_file%.cm}.timeout"
+    if [ -f "$timeout_file" ]; then
+        test_timeout=$(cat "$timeout_file" | tr -d '[:space:]')
+    fi
+
+    # //! platform: ディレクティブチェック
+    local platform_skip_reason
+    platform_skip_reason=$(check_platform_directive "$test_file" "$BACKEND")
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - $platform_skip_reason"
+        ((SKIPPED++))
+        return
+    fi
 
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
     local category_skip_file="$(dirname "$test_file")/.skip"
+    local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
 
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
-            # ファイルに内容がある場合、バックエンド名でフィルタ
+            # バックエンド名の完全一致チェック
             if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND"
+                ((SKIPPED++))
+                return
+            fi
+            # backend:os 形式のチェック (例: llvm:linux)
+            if grep -qx "${BACKEND}:${current_os}" "$skip_file" 2>/dev/null; then
+                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND on $current_os"
                 ((SKIPPED++))
                 return
             fi
@@ -230,8 +452,10 @@ run_single_test() {
     fi
 
     # バックエンド固有のexpectファイルがあれば優先して使用
+    # バックエンド固有のexpectファイルがある場合、汎用errorファイルよりも優先する
     if [ -f "$backend_expect_file" ]; then
         expect_file="$backend_expect_file"
+        is_error_test=false
     fi
 
     # expectファイルもerrorファイルもない場合はスキップ
@@ -259,7 +483,7 @@ run_single_test() {
     run_with_timeout() {
         if [ -n "$TIMEOUT_CMD" ]; then
             if [ "$TIMEOUT_MODE" = "python" ]; then
-                "$TIMEOUT_CMD" - "$TIMEOUT" "$@" <<'PY'
+                "$TIMEOUT_CMD" - "$test_timeout" "$@" <<'PY'
 import subprocess
 import sys
 
@@ -282,7 +506,7 @@ except FileNotFoundError:
 PY
             else
                 # --kill-after: タイムアウト後さらに2秒待ってもプロセスが終了しなければSIGKILL
-                $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" "$@"
+                $TIMEOUT_CMD --kill-after=2 "$test_timeout" "$@"
             fi
         else
             # タイムアウトコマンドがない場合は直接実行
@@ -297,7 +521,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # インタプリタで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL $CACHE_OPTS "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         jit)
@@ -306,7 +530,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # JITで実行
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" run -O$OPT_LEVEL $CACHE_OPTS "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
 
         typescript)
@@ -315,7 +539,7 @@ PY
             rm -rf "$ts_dir"
 
             # コンパイル（エラー時は出力ファイルにエラーメッセージを書き込む）
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-ts "$test_file" -o "$ts_dir" > "$output_file" 2>&1 || exit_code=$?
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-ts $CACHE_OPTS "$test_file" -o "$ts_dir" > "$output_file" 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # TypeScriptプロジェクトのビルドと実行
@@ -337,7 +561,7 @@ PY
             rm -rf "$rust_dir"
 
             # コンパイル（エラー時は出力ファイルにエラーメッセージを書き込む）
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-rust "$test_file" -o "$rust_dir" > "$output_file" 2>&1 || exit_code=$?
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-rust $CACHE_OPTS "$test_file" -o "$rust_dir" > "$output_file" 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # Rustコンパイルと実行
@@ -356,7 +580,7 @@ PY
             rm -rf "$cpp_dir"
 
             # コンパイル
-            run_with_timeout "$CM_EXECUTABLE" compile --emit-cpp "$test_file" -o "$cpp_dir" > /dev/null 2>&1 || exit_code=$?
+            run_with_timeout "$CM_EXECUTABLE" compile --emit-cpp $CACHE_OPTS "$test_file" -o "$cpp_dir" > /dev/null 2>&1 || exit_code=$?
 
             if [ $exit_code -eq 0 ]; then
                 # C++コンパイルと実行
@@ -383,7 +607,7 @@ PY
             local test_basename="$(basename "$test_file")"
 
             # LLVM経由でネイティブ実行ファイル生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
                 # テストディレクトリで実行（相対パス解決のため）
@@ -406,7 +630,7 @@ PY
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 # WASMランタイムで実行
@@ -525,7 +749,7 @@ EOJS
             local test_basename="$(basename "$test_file")"
 
             # JavaScript生成（エラー時は出力ファイルにエラーメッセージを書き込む）
-            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 # Node.jsで実行
@@ -538,11 +762,52 @@ EOJS
                 fi
             fi
             ;;
+
+        llvm-uefi)
+            # UEFI ターゲットへのコンパイルのみ検証（実行不可）
+            local uefi_obj="$TEMP_DIR/uefi_${test_name}.efi"
+            rm -f "$uefi_obj"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # UEFI ターゲットでコンパイル（オブジェクト出力のみ）
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
+
+            # コンパイル成功 = PASS（実行はしない）
+            if [ $exit_code -eq 0 ]; then
+                # expectファイルが "COMPILE_OK" なら出力比較をスキップ
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$uefi_obj"
+            ;;
+
+        llvm-baremetal)
+            # ベアメタルターゲットへのコンパイルのみ検証（実行不可）
+            local baremetal_obj="$TEMP_DIR/baremetal_${test_name}.o"
+            rm -f "$baremetal_obj"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # ベアメタルターゲットでコンパイル（オブジェクト出力のみ）
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+
+            # コンパイル成功 = PASS（実行はしない）
+            if [ $exit_code -eq 0 ]; then
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$baremetal_obj"
+            ;;
     esac
 
     # タイムアウト処理
     if [ $exit_code -eq 124 ] || [ $exit_code -eq 143 ]; then
-        echo -e "${RED}[FAIL]${NC} $category/$test_name - Timeout (>${TIMEOUT}s)"
+        echo -e "${RED}[FAIL]${NC} $category/$test_name - Timeout (>${test_timeout}s)"
         ((FAILED++))
         return
     fi
@@ -667,15 +932,18 @@ main() {
 
 # 順次実行モード
 run_tests_sequential() {
-    for category in $CATEGORIES; do
-        local category_dir="$TEST_DIR/$category"
+    for entry in $CATEGORIES; do
+        # platform:category フォーマットをパース
+        local platform_dir="${entry%%:*}"
+        local category="${entry##*:}"
+        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
 
         if [ ! -d "$category_dir" ]; then
-            log "Warning: Category directory '$category' not found, skipping"
+            log "Warning: Category directory '$platform_dir/$category' not found, skipping"
             continue
         fi
 
-        log "Testing category: $category"
+        log "Testing category: $platform_dir/$category"
         log "----------------------------------------"
 
         for test_file in "$category_dir"/*.cm; do
@@ -696,8 +964,10 @@ run_tests_parallel() {
     mkdir -p "$results_dir"
     
     # 全テストファイルを収集
-    for category in $CATEGORIES; do
-        local category_dir="$TEST_DIR/$category"
+    for entry in $CATEGORIES; do
+        local platform_dir="${entry%%:*}"
+        local category="${entry##*:}"
+        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
         if [ -d "$category_dir" ]; then
             for test_file in "$category_dir"/*.cm; do
                 if [ -f "$test_file" ]; then
@@ -712,7 +982,8 @@ run_tests_parallel() {
     log ""
     
     # 並列ジョブ数（CPU数に基づく）
-    local max_jobs=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    # 環境変数CM_TEST_MAX_JOBSでオーバーライド可能
+    local max_jobs=${CM_TEST_MAX_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}
     
     # 各テストを並列実行
     local pids=()
@@ -720,8 +991,9 @@ run_tests_parallel() {
     
     for test_file in "${test_files[@]}"; do
         local test_name="$(basename "${test_file%.cm}")"
-        local category="$(basename "$(dirname "$test_file")")"
-        local result_file="$results_dir/${category}_${test_name}.result"
+        # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+        local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
+        local result_file="$results_dir/${category//\//_}_${test_name}.result"
         
         # バックグラウンドでテスト実行
         (
@@ -746,8 +1018,9 @@ run_tests_parallel() {
     # 結果を集計
     for test_file in "${test_files[@]}"; do
         local test_name="$(basename "${test_file%.cm}")"
-        local category="$(basename "$(dirname "$test_file")")"
-        local result_file="$results_dir/${category}_${test_name}.result"
+        # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+        local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
+        local result_file="$results_dir/${category//\//_}_${test_name}.result"
         
         if [ -f "$result_file" ]; then
             local result=$(cat "$result_file")
@@ -786,13 +1059,29 @@ run_parallel_test() {
     local test_file="$1"
     local result_file="$2"
     local test_name="$(basename "${test_file%.cm}")"
-    local category="$(basename "$(dirname "$test_file")")"
+    # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
+    local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
     local expect_file="${test_file%.cm}.expect"
     local backend_expect_file="${test_file%.cm}.expect.${BACKEND}"
     local error_expect_file="${test_file%.cm}.error"
     local backend_error_file="${test_file%.cm}.error.${BACKEND}"
-    local output_file="$TEMP_DIR/${category}_${test_name}_$$.out"
+    local output_file="$TEMP_DIR/${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.out"
     local is_error_test=false
+
+    # テスト別タイムアウト: .timeoutファイルがあれば値を上書き
+    local test_timeout="$TIMEOUT"
+    local timeout_file="${test_file%.cm}.timeout"
+    if [ -f "$timeout_file" ]; then
+        test_timeout=$(cat "$timeout_file" | tr -d '[:space:]')
+    fi
+
+    # //! platform: ディレクティブチェック
+    local platform_skip_reason
+    platform_skip_reason=$(check_platform_directive "$test_file" "$BACKEND")
+    if [ $? -ne 0 ]; then
+        echo "SKIP:$platform_skip_reason" > "$result_file"
+        return
+    fi
 
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
@@ -801,9 +1090,15 @@ run_parallel_test() {
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
-            # ファイルに内容がある場合、バックエンド名でフィルタ
+            local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+            # バックエンド名の完全一致チェック
             if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
                 echo "SKIP:Skipped for $BACKEND" > "$result_file"
+                return
+            fi
+            # backend:os 形式のチェック (例: llvm:linux)
+            if grep -qx "${BACKEND}:${current_os}" "$skip_file" 2>/dev/null; then
+                echo "SKIP:Skipped for $BACKEND on $current_os" > "$result_file"
                 return
             fi
         else
@@ -851,7 +1146,7 @@ run_parallel_test() {
     run_with_timeout_silent() {
         if [ -n "$TIMEOUT_CMD" ]; then
             if [ "$TIMEOUT_MODE" = "python" ]; then
-                "$TIMEOUT_CMD" - "$TIMEOUT" "$@" <<'PY'
+                "$TIMEOUT_CMD" - "$test_timeout" "$@" <<'PY'
 import subprocess
 import sys
 
@@ -873,7 +1168,7 @@ except FileNotFoundError:
     sys.exit(127)
 PY
             else
-                $TIMEOUT_CMD --kill-after=2 "$TIMEOUT" "$@"
+                $TIMEOUT_CMD --kill-after=2 "$test_timeout" "$@"
             fi
         else
             "$@"
@@ -885,17 +1180,17 @@ PY
             # テストファイルのディレクトリに移動して実行（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run -O$OPT_LEVEL "$test_basename" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" run -O$OPT_LEVEL $CACHE_OPTS "$test_basename" > "$output_file" 2>&1) || exit_code=$?
             ;;
         llvm)
             # テストファイルのディレクトリに移動してコンパイル（モジュールの相対パス解決のため）
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            local llvm_exec="$TEMP_DIR/llvm_${test_name}_$$"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+            local llvm_exec="$TEMP_DIR/llvm_${category//\//_}_${test_name}_${BASHPID}"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$llvm_exec" ]; then
-                # テストディレクトリで実行（相対パス解決のため）
-                (cd "$test_dir" && "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
+                # テストディレクトリで実行（タイムアウト付き）
+                (cd "$test_dir" && run_with_timeout_silent "$llvm_exec" > "$output_file" 2>&1) || exit_code=$?
                 
                 # セグフォ時にgdbでデバッグ情報を取得（CI環境のみ）
                 if [ $exit_code -eq 139 ] && [ -n "$CI" ] && command -v gdb >/dev/null 2>&1; then
@@ -907,13 +1202,13 @@ PY
             fi
             ;;
         llvm-wasm)
-            local wasm_file="$TEMP_DIR/wasm_${test_name}_$$.wasm"
+            local wasm_file="$TEMP_DIR/wasm_${category//\//_}_${test_name}_${BASHPID}.wasm"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=wasm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$wasm_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 if command -v wasmtime >/dev/null 2>&1; then
-                    run_with_timeout_silent wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                    run_with_timeout_silent wasmtime run --dir=. "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
                     echo "SKIP:No WASM runtime" > "$result_file"
                     rm -f "$wasm_file"
@@ -926,10 +1221,12 @@ PY
             local js_file="$TEMP_DIR/js_${test_name}_$$.js"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
-            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                    # nodeプロセスがゾンビ化する場合に備えてクリーンアップ
+                    kill %% 2>/dev/null || true
                 else
                     echo "SKIP:Node.js not found" > "$result_file"
                     rm -f "$js_file"
@@ -937,6 +1234,32 @@ PY
                 fi
                 rm -f "$js_file"
             fi
+            ;;
+        llvm-uefi)
+            # UEFI ターゲットへのコンパイルのみ検証
+            local uefi_obj="$TEMP_DIR/uefi_${test_name}_$$.efi"
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ]; then
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$uefi_obj"
+            ;;
+        llvm-baremetal)
+            # ベアメタルターゲットへのコンパイルのみ検証
+            local baremetal_obj="$TEMP_DIR/baremetal_${test_name}_$$.o"
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ]; then
+                if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                    echo "COMPILE_OK" > "$output_file"
+                fi
+            fi
+            rm -f "$baremetal_obj"
             ;;
         *)
             echo "SKIP:Backend not supported for parallel" > "$result_file"
@@ -946,7 +1269,7 @@ PY
 
     # タイムアウト
     if [ $exit_code -eq 124 ] || [ $exit_code -eq 143 ]; then
-        echo "FAIL:Timeout (>${TIMEOUT}s)" > "$result_file"
+        echo "FAIL:Timeout (>${test_timeout}s)" > "$result_file"
         rm -f "$output_file"
         return
     fi

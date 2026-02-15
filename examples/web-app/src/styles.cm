@@ -1,0 +1,163 @@
+//! platform: js
+// Cm Webアプリケーション - スタイル付きコンポーネント生成
+// `with Css` による自動CSS生成を活用したWebアプリサンプル
+//
+// ビルド: cm compile --target=js src/app.cm -o public/app.js
+// CSS生成: node public/app.js > public/styles.css
+
+// === CSSスタイル定義 ===
+// `with Css` により、構造体フィールドがCSSプロパティに自動変換される
+
+// アプリ全体のコンテナスタイル
+struct AppStyle with Css {
+    string max_width;
+    string margin;
+    string padding;
+    string font_family;
+    string background_color;
+    string min_height;
+}
+
+// ヘッダーのスタイル
+struct HeaderStyle with Css {
+    string background_color;
+    string color;
+    string padding;
+    string border_radius;
+    string text_align;
+    string margin_bottom;
+}
+
+// カードコンポーネントのスタイル
+struct CardStyle with Css {
+    string background_color;
+    string border;
+    string border_radius;
+    string padding;
+    string margin_bottom;
+    string box_shadow;
+}
+
+// ボタンのスタイル
+struct ButtonStyle with Css {
+    string background_color;
+    string color;
+    string padding;
+    string border;
+    string border_radius;
+    string font_size;
+    string cursor;
+}
+
+// 入力フィールドのスタイル
+struct InputStyle with Css {
+    string padding;
+    string border;
+    string border_radius;
+    string font_size;
+    string width;
+}
+
+// タスクアイテムのスタイル
+struct TaskItemStyle with Css {
+    string padding;
+    string border_bottom;
+    string display;
+    string align_items;
+}
+
+// === ヘルパー関数 ===
+
+// CSSルールを出力（セレクタ + プロパティ）
+void css_rule(string selector, string properties) {
+    print(selector);
+    print(" { ");
+    print(properties);
+    println("}");
+}
+
+// === CSS生成関数 ===
+
+// アプリ全体のスタイルシートを生成して標準出力に書き出す
+void generate_stylesheet() {
+    // 構造体リテラルで初期化
+    AppStyle app = {
+        max_width: "640px",
+        margin: "0 auto",
+        padding: "24px",
+        font_family: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+        background_color: "#f5f5f5",
+        min_height: "100vh"
+    };
+
+    HeaderStyle header = {
+        background_color: "#2563eb",
+        color: "white",
+        padding: "24px",
+        border_radius: "12px",
+        text_align: "center",
+        margin_bottom: "24px"
+    };
+
+    CardStyle card = {
+        background_color: "#ffffff",
+        border: "1px solid #e5e7eb",
+        border_radius: "12px",
+        padding: "20px",
+        margin_bottom: "16px",
+        box_shadow: "0 1px 3px rgba(0,0,0,0.1)"
+    };
+
+    ButtonStyle btn = {
+        background_color: "#2563eb",
+        color: "white",
+        padding: "10px 20px",
+        border: "none",
+        border_radius: "8px",
+        font_size: "14px",
+        cursor: "pointer"
+    };
+
+    InputStyle input = {
+        padding: "10px 14px",
+        border: "1px solid #d1d5db",
+        border_radius: "8px",
+        font_size: "14px",
+        width: "100%"
+    };
+
+    TaskItemStyle item = {
+        padding: "12px 0",
+        border_bottom: "1px solid #f3f4f6",
+        display: "flex",
+        align_items: "center"
+    };
+
+    // CSS出力（to_css()はCSSプロパティ文字列を返す）
+    css_rule(".app", app.to_css());
+    css_rule(".header", header.to_css());
+    css_rule(".card", card.to_css());
+    css_rule(".btn", btn.to_css());
+    css_rule(".input", input.to_css());
+    css_rule(".task-item", item.to_css());
+}
+
+int main() {
+    println("/* Cm Auto-Generated Stylesheet */");
+    println("/* with Css による自動CSS生成 */");
+
+    // リセットCSS
+    css_rule("*", "margin: 0; padding: 0; box-sizing: border-box; ");
+    println("");
+
+    // コンポーネントスタイル生成
+    generate_stylesheet();
+
+    // 追加スタイル（ホバー・フォーカス等）
+    println("");
+    css_rule(".btn:hover", "background-color: #1d4ed8; transform: translateY(-1px); ");
+    css_rule(".input:focus", "outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); ");
+    css_rule(".task-item:last-child", "border-bottom: none; ");
+
+    return 0;
+}

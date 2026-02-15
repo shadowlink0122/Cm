@@ -2,7 +2,11 @@
 #include "../../src/frontend/parser/parser.hpp"
 #include "../../src/hir/lowering/lowering.hpp"
 #include "../../src/mir/lowering/lowering.hpp"
+#include "../../src/mir/passes/cleanup/dce.hpp"
+#include "../../src/mir/passes/cleanup/simplify_cfg.hpp"
 #include "../../src/mir/passes/core/manager.hpp"
+#include "../../src/mir/passes/scalar/folding.hpp"
+#include "../../src/mir/passes/scalar/propagation.hpp"
 #include "../../src/mir/printer.hpp"
 
 #include <gtest/gtest.h>

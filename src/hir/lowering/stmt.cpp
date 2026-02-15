@@ -719,6 +719,21 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                                 break;
                             }
                         }
+                        // ジェネリック型パラメータを具体型に置換
+                        // Result<T, E>のTをint等に置換する
+                        if (payload_type && match.scrutinee && match.scrutinee->type &&
+                            !match.scrutinee->type->type_args.empty() &&
+                            !enum_it->second->generic_params.empty()) {
+                            const auto& generic_params = enum_it->second->generic_params;
+                            const auto& type_args = match.scrutinee->type->type_args;
+                            for (size_t gi = 0; gi < generic_params.size() && gi < type_args.size();
+                                 ++gi) {
+                                if (payload_type->name == generic_params[gi]) {
+                                    payload_type = type_args[gi];
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -774,7 +789,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
             // EnumVariantWithBindingの場合、ガード内のバインディング変数をペイロードで置換
             if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::EnumVariantWithBinding &&
                 !arm.pattern->binding_name.empty()) {
-                // ペイロード型を取得（677-702行と同じロジック）
+                // ペイロード型を取得（上記のペイロード抽出と同じロジック）
                 TypePtr payload_type = scrutinee_type;
                 std::string variant_name = arm.pattern->enum_variant;
                 if (!original_enum_name.empty()) {
@@ -788,6 +803,20 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                             if (member.name == short_variant && !member.fields.empty()) {
                                 payload_type = member.fields[0].second;
                                 break;
+                            }
+                        }
+                        // ジェネリック型パラメータを具体型に置換
+                        if (payload_type && match.scrutinee && match.scrutinee->type &&
+                            !match.scrutinee->type->type_args.empty() &&
+                            !enum_it->second->generic_params.empty()) {
+                            const auto& generic_params = enum_it->second->generic_params;
+                            const auto& type_args = match.scrutinee->type->type_args;
+                            for (size_t gi = 0; gi < generic_params.size() && gi < type_args.size();
+                                 ++gi) {
+                                if (payload_type->name == generic_params[gi]) {
+                                    payload_type = type_args[gi];
+                                    break;
+                                }
                             }
                         }
                     }

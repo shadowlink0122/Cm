@@ -73,6 +73,17 @@ cm compile program.cm -o output
 - ✅ Optimization enabled
 - ❌ Compilation time
 
+### check - Syntax & Type Checking
+
+```bash
+cm check program.cm
+```
+
+**Pros/Cons:**
+- ✅ No compilation needed
+- ✅ Detailed error location
+- ✅ No LLVM required
+
 ---
 
 ## Compiler Options
@@ -101,6 +112,9 @@ cm compile program.cm -o program
 
 # WebAssembly
 cm compile program.cm --target=wasm -o program.wasm
+
+# JavaScript
+cm compile program.cm --target=js -o program.js
 ```
 
 ### Output Formats
@@ -147,7 +161,15 @@ gdb ./program_debug
 ✅ Understood `cm` command basics  
 ✅ Learned debugging methods  
 ✅ Learned optimization options  
+✅ Understood targets (Native/WASM/JS)  
 ⏭️ Next, learn about [LLVM Backend](llvm.html)
+
+## Related Links
+
+- [Environment Setup](../basics/setup.html) - Make command reference
+- [Linter](linter.html) - Static analysis
+- [Formatter](formatter.html) - Code formatting
+- [JS Backend](js-compilation.html) - JavaScript output
 
 ---
 
@@ -156,4 +178,4 @@ gdb ./program_debug
 
 ---
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-10

@@ -1,0 +1,44 @@
+// 多次元配列のfirst()とlast()メソッドのテスト
+import std::io::println;
+
+int main() {
+    // 2次元配列
+    int[3][2] arr2d = [[1, 2, 3], [4, 5, 6]];
+
+    // first()は最初の行（int[3]）を返す
+    int[3] first_row = arr2d.first();
+    println("first row: [{first_row[0]}, {first_row[1]}, {first_row[2]}]");
+
+    // last()は最後の行（int[3]）を返す
+    int[3] last_row = arr2d.last();
+    println("last row: [{last_row[0]}, {last_row[1]}, {last_row[2]}]");
+
+    // 3次元配列
+    int[3][2][2] arr3d = [
+        [[1, 2, 3], [4, 5, 6]],
+        [[7, 8, 9], [10, 11, 12]]
+    ];
+
+    // first()は最初の平面（int[3][2]）を返す
+    int[3][2] first_plane = arr3d.first();
+    println("first plane [0][0]: {first_plane[0][0]}, [1][0]: {first_plane[1][0]}");
+
+    // last()は最後の平面を返す
+    int[3][2] last_plane = arr3d.last();
+    println("last plane [0][0]: {last_plane[0][0]}, [1][0]: {last_plane[1][0]}");
+
+    // 文字列のfirst/last
+    string s = "Hello";
+    char first_char = s.first();
+    char last_char = s.last();
+    println("string first: {first_char}, last: {last_char}");
+
+    // 空文字列
+    string empty = "";
+    char empty_first = empty.first();
+    char empty_last = empty.last();
+    // 空文字の場合は'\0'が返る
+    println("empty string first/last done");
+
+    return 0;
+}

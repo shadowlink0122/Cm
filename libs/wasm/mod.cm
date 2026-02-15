@@ -1,0 +1,11 @@
+// wasm - Cm言語 WASM専用ライブラリ
+// wasmtime等のWASMランタイム上でのみ利用可能
+//
+// WASI APIやWASM固有の機能を提供予定。
+//
+// 使用例:
+//   import wasm::wasi::{...};
+
+module wasm;
+
+// 将来拡張: WASI API等のWASM固有機能をここに追加

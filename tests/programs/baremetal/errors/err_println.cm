@@ -1,0 +1,7 @@
+// ベアメタルエラーテスト: println使用禁止
+// println はOS標準出力に依存するため、ベアメタルでは使用不可
+
+int main() {
+    println("Hello from baremetal");
+    return 0;
+}

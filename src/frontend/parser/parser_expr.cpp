@@ -1,3 +1,4 @@
+#include "../../common/debug/par.hpp"
 #include "parser.hpp"
 
 namespace cm {
@@ -224,8 +225,14 @@ ast::ExprPtr Parser::parse_equality() {
 // 関係比較
 ast::ExprPtr Parser::parse_relational() {
     auto left = parse_shift();
+    int rel_iters = 0;
 
     while (true) {
+        rel_iters++;
+        if (rel_iters > 100) {
+            // パーサーが無限ループに陥った場合の安全ガード
+            break;
+        }
         if (consume_if(TokenKind::Lt)) {
             auto right = parse_shift();
             left = ast::make_binary(ast::BinaryOp::Lt, std::move(left), std::move(right));
@@ -822,28 +829,58 @@ ast::ExprPtr Parser::parse_primary() {
             advance();  // < を消費
 
             // 型引数をスキップ（ネストした<>を考慮）
+            // <> 内の最初のトークンが型として妥当かも検証する
             int angle_depth = 1;
             bool found_close = false;
-            while (!is_at_end() && angle_depth > 0) {
-                if (check(TokenKind::Lt)) {
-                    angle_depth++;
-                } else if (check(TokenKind::Gt)) {
-                    angle_depth--;
-                    if (angle_depth == 0) {
-                        found_close = true;
-                    }
-                } else if (check(TokenKind::GtGt)) {
-                    // >> は >> または > > として扱う可能性がある
-                    if (angle_depth >= 2) {
-                        angle_depth -= 2;
+            bool looks_like_type_args = true;
+
+            // <直後のトークンが型引数として妥当かチェック
+            // 数値リテラル、演算子などが来た場合は比較演算子の<と判断
+            {
+                auto first_kind = current().kind;
+                if (first_kind == TokenKind::IntLiteral || first_kind == TokenKind::FloatLiteral ||
+                    first_kind == TokenKind::StringLiteral ||
+                    first_kind == TokenKind::CharLiteral || first_kind == TokenKind::KwTrue ||
+                    first_kind == TokenKind::KwFalse || first_kind == TokenKind::KwNull ||
+                    first_kind == TokenKind::Minus || first_kind == TokenKind::Bang ||
+                    first_kind == TokenKind::Eq || first_kind == TokenKind::Semicolon ||
+                    first_kind == TokenKind::RBrace || first_kind == TokenKind::RParen) {
+                    looks_like_type_args = false;
+                }
+            }
+
+            if (looks_like_type_args) {
+                while (!is_at_end() && angle_depth > 0) {
+                    if (check(TokenKind::Lt)) {
+                        angle_depth++;
+                    } else if (check(TokenKind::Gt)) {
+                        angle_depth--;
                         if (angle_depth == 0) {
                             found_close = true;
                         }
-                    } else {
-                        break;  // パターンに合致しない
+                    } else if (check(TokenKind::GtGt)) {
+                        // >> は >> または > > として扱う可能性がある
+                        if (angle_depth >= 2) {
+                            angle_depth -= 2;
+                            if (angle_depth == 0) {
+                                found_close = true;
+                            }
+                        } else {
+                            break;  // パターンに合致しない
+                        }
+                    } else if (check(TokenKind::RParen) || check(TokenKind::LBrace) ||
+                               check(TokenKind::RBrace) || check(TokenKind::Semicolon) ||
+                               check(TokenKind::Eq) || check(TokenKind::PlusEq) ||
+                               check(TokenKind::MinusEq) || check(TokenKind::StarEq) ||
+                               check(TokenKind::SlashEq) || check(TokenKind::PercentEq) ||
+                               check(TokenKind::KwReturn) || check(TokenKind::KwIf) ||
+                               check(TokenKind::KwWhile) || check(TokenKind::KwFor)) {
+                        // ジェネリック型引数<T, U>内に出現し得ないトークン
+                        // → <は比較演算子と判断してlookaheadを中止
+                        break;
                     }
+                    advance();
                 }
-                advance();
             }
 
             // >の後に::が続くかチェック
@@ -856,7 +893,14 @@ ast::ExprPtr Parser::parse_primary() {
                 std::string type_args_str = "<";
                 std::vector<ast::TypePtr> type_args;
                 do {
+                    size_t type_parse_pos = pos_;
                     auto type_arg = parse_type();
+                    // parse_type()がトークンを消費しなかった場合はスタック防止
+                    if (pos_ == type_parse_pos) {
+                        if (!is_at_end() && !check(TokenKind::Gt))
+                            advance();
+                        break;
+                    }
                     type_args_str += ast::type_to_string(*type_arg);
                     type_args.push_back(std::move(type_arg));
                     if (consume_if(TokenKind::Comma)) {
@@ -885,7 +929,14 @@ ast::ExprPtr Parser::parse_primary() {
 
                 std::string type_args_str = "<";
                 do {
+                    size_t type_parse_pos = pos_;
                     auto type_arg = parse_type();
+                    // parse_type()がトークンを消費しなかった場合はスタック防止
+                    if (pos_ == type_parse_pos) {
+                        if (!is_at_end() && !check(TokenKind::Gt))
+                            advance();
+                        break;
+                    }
                     type_args_str += ast::type_to_string(*type_arg);
                     if (consume_if(TokenKind::Comma)) {
                         type_args_str += ", ";

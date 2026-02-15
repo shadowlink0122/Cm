@@ -24,6 +24,43 @@
 
 namespace cm::preprocessor {
 
+// ========== 高速文字列ユーティリティ（std::regex 置換用） ==========
+
+// 行頭の空白をスキップした位置を返す
+static size_t skip_ws(const std::string& s, size_t pos = 0) {
+    while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t'))
+        pos++;
+    return pos;
+}
+
+// 指定位置からキーワードが始まるか（キーワード後に非英数字 or 行末）
+static bool starts_with_keyword(const std::string& s, size_t pos, const char* keyword) {
+    size_t klen = std::strlen(keyword);
+    if (pos + klen > s.size())
+        return false;
+    if (s.compare(pos, klen, keyword) != 0)
+        return false;
+    // キーワード後は非英数字 or 行末であること
+    if (pos + klen < s.size()) {
+        char next = s[pos + klen];
+        if (std::isalnum(static_cast<unsigned char>(next)) || next == '_')
+            return false;
+    }
+    return true;
+}
+
+// 行が空白の後に import or from で始まるかを高速チェック
+static bool is_import_line(const std::string& line) {
+    size_t pos = skip_ws(line);
+    return starts_with_keyword(line, pos, "import") || starts_with_keyword(line, pos, "from");
+}
+
+// 行が空白の後に指定キーワードで始まるかチェック
+static bool line_starts_with(const std::string& line, const char* keyword) {
+    size_t pos = skip_ws(line);
+    return starts_with_keyword(line, pos, keyword);
+}
+
 // 実行ファイルのディレクトリを取得するヘルパー関数
 static std::filesystem::path get_executable_directory() {
 #ifdef __APPLE__
@@ -76,15 +113,19 @@ ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
     }
 
     // 4. 実行ファイルの場所を基準（異なるディレクトリから実行される場合に重要）
-    // 注: std::io は std/io に変換されるため、exe_dir 自体を追加
+    // 注: std::io は std/io に変換される。libs/std/io を見つけるため exe_dir/libs を追加
     auto exe_dir = get_executable_directory();
-    if (!exe_dir.empty() && std::filesystem::exists(exe_dir / "std")) {
-        search_paths.push_back(exe_dir);
+    if (!exe_dir.empty()) {
+        auto exe_libs = exe_dir / "libs";
+        if (std::filesystem::exists(exe_libs)) {
+            search_paths.push_back(exe_libs);
+        }
     }
 
-    // 5. プロジェクトルート（project_root/std/io を探すため）
-    if (std::filesystem::exists(project_root / "std")) {
-        search_paths.push_back(project_root);
+    // 5. プロジェクトルート（project_root/libs/std/io 等を探すため）
+    auto project_libs = project_root / "libs";
+    if (std::filesystem::exists(project_libs)) {
+        search_paths.push_back(project_libs);
     }
 
     // 5. システムインストールパス（プラットフォーム依存）
@@ -157,6 +198,54 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
         for (const auto& file : imported_files) {
             result.imported_modules.push_back(file);
         }
+
+        // resolved_filesを構築（キャッシュフィンガープリント用）
+        // メインのソースファイルを追加
+        if (!source_file.empty() && std::filesystem::exists(source_file)) {
+            result.resolved_files.push_back(std::filesystem::canonical(source_file).string());
+        }
+        // インポートされた全ファイルを追加
+        for (const auto& file : imported_files) {
+            result.resolved_files.push_back(file);
+        }
+
+        // ソースマップからモジュール範囲を再構築
+        // process_importsでは正確なバイトオフセットを追跡できないためここで計算
+        if (!result.source_map.empty() && !result.processed_source.empty()) {
+            result.module_ranges.clear();
+
+            std::string current_file;
+            size_t start_offset = 0;
+            size_t line_idx = 0;
+            size_t pos = 0;
+            size_t len = result.processed_source.length();
+
+            while (pos < len && line_idx < result.source_map.size()) {
+                // 次の改行を探す
+                size_t next_newline = result.processed_source.find('\n', pos);
+                // 改行を含む行末位置
+                size_t line_end = (next_newline == std::string::npos) ? len : next_newline + 1;
+
+                const auto& entry = result.source_map[line_idx];
+
+                // ファイルが切り替わったら範囲を保存
+                if (entry.original_file != current_file) {
+                    if (!current_file.empty()) {
+                        result.module_ranges.push_back({current_file, "", 0, start_offset, pos});
+                    }
+                    current_file = entry.original_file;
+                    start_offset = pos;
+                }
+
+                pos = line_end;
+                line_idx++;
+            }
+
+            // 最後の範囲を保存
+            if (!current_file.empty()) {
+                result.module_ranges.push_back({current_file, "", 0, start_offset, len});
+            }
+        }
     } catch (const std::exception& e) {
         result.success = false;
         result.error_message = e.what();
@@ -208,16 +297,14 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
         // エイリアス: import module as alias;
         // from構文: import { items } from module;
         // 相対: import ./module;
-        std::regex import_regex(R"(^\s*(import|from)\s+.+)");
-        std::smatch match;
-
+        // std::regex を排除 — 高速な文字列チェックに置換
         if (debug_mode) {
             std::cout << "[PREPROCESSOR] Processing line: " << line << "\n";
         }
 
-        if (std::regex_search(line, match, import_regex)) {
+        if (is_import_line(line)) {
             if (debug_mode) {
-                std::cout << "[PREPROCESSOR] Matched import regex: " << match[0] << "\n";
+                std::cout << "[PREPROCESSOR] Matched import line: " << line << "\n";
             }
             // コメントを除去してからパース（複数行対応）
             auto strip_comment = [](const std::string& text) {
@@ -312,6 +399,25 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                               << base_dir << "\n";
                 }
 
+                // 選択的インポートの場合、モジュール名でフィルタリング
+                // import ./path/*::{mod1, mod2} 形式
+                if (!import_info.items.empty()) {
+                    std::vector<std::filesystem::path> filtered;
+                    for (const auto& mod_path : all_modules) {
+                        std::string stem = mod_path.stem().string();
+                        if (std::find(import_info.items.begin(), import_info.items.end(), stem) !=
+                            import_info.items.end()) {
+                            filtered.push_back(mod_path);
+                        }
+                    }
+                    all_modules = std::move(filtered);
+
+                    if (debug_mode) {
+                        std::cout << "[PREPROCESSOR] Filtered to " << all_modules.size()
+                                  << " modules\n";
+                    }
+                }
+
                 // 基準パスからの相対パスを計算（正規化する）
                 auto parent_dir = current_file.parent_path();
                 if (parent_dir.empty()) {
@@ -377,6 +483,9 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     sub_module_source =
                         process_imports(sub_module_source, sub_module_path, imported_files,
                                         source_map, module_ranges, sub_chain, line_number);
+
+                    // exportブロック抽出用にオリジナルソースを保存（remove前に）
+                    std::string original_sub_source = sub_module_source;
                     sub_module_source = remove_export_keywords(sub_module_source);
 
                     import_stack.pop_back();
@@ -408,6 +517,15 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     // 名前空間を逆順で閉じる
                     for (auto it = ns_parts.rbegin(); it != ns_parts.rend(); ++it) {
                         result << "} // namespace " << *it << "\n";
+                    }
+
+                    // exportされたシンボルをnamespace外にも展開
+                    std::string sub_exported = extract_exported_blocks(original_sub_source);
+                    if (!sub_exported.empty()) {
+                        result << "// ===== Exported symbols from " << rel_str
+                               << " (direct access) =====\n";
+                        result << sub_exported << "\n";
+                        result << "// ===== End exported symbols =====\n";
                     }
 
                     imported_files.insert(sub_canonical);
@@ -516,11 +634,18 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             SourceMap dummy_source_map;
             std::vector<ModuleRange> dummy_module_ranges;
 
+            // export抽出用にオリジナルファイル（再帰import展開前）を保存
+            std::string raw_module_source;
+
             if (module_cache.count(canonical_path) > 0) {
                 module_source = module_cache[canonical_path];
+                // キャッシュからraw sourceも取得
+                raw_module_source = raw_module_cache[canonical_path];
             } else {
                 // モジュールファイルを読み込む
                 module_source = load_module_file(module_path);
+                // 再帰import展開前のソースを保存（export抽出用）
+                raw_module_source = module_source;
 
                 // モジュール内のインポートを再帰的に処理（ダミーソースマップを使用）
                 module_source =
@@ -529,6 +654,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
                 // キャッシュに保存
                 module_cache[canonical_path] = module_source;
+                raw_module_cache[canonical_path] = raw_module_source;
             }
 
             // インポートスタックから削除
@@ -543,6 +669,10 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     module_source = filter_exports(module_source, import_info.items);
                 }
             }
+
+            // exportブロック抽出用にサブインポート展開済みソースを保存
+            // （export キーワードあり + Exported symbols セクションあり）
+            std::string export_extraction_source = module_source;
 
             // exportキーワードを削除
             module_source = remove_export_keywords(module_source);
@@ -729,6 +859,20 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 }
                 emit_line("// ===== End module: " + import_info.module_name + " =====",
                           "<generated>", 0, import_chain);
+
+                // exportされたシンボルをnamespace外にも展開
+                // これにより名前空間修飾なしでも呼び出し可能になる
+                // サブインポート展開済みソースを使用し推移的エクスポートも含める
+                std::string exported_blocks = extract_exported_blocks(export_extraction_source);
+                if (!exported_blocks.empty()) {
+                    emit_line("// ===== Exported symbols from " + import_info.module_name +
+                                  " (direct access) =====",
+                              "<generated>", 0, import_chain);
+                    emit_source(exported_blocks, module_file_str, module_chain, 1);
+                    emit_line("// ===== End exported symbols =====", "<generated>", 0,
+                              import_chain);
+                }
+
                 emit_line("", "<generated>", 0, import_chain);
             }
 
@@ -800,38 +944,105 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
     bool found_opening_brace = false;
 
     while (std::getline(input, line)) {
-        // エクスポートされた関数/構造体/定数/implを検出
-        std::smatch match;
-        // 定数: export const type name = ...
-        std::regex const_export_regex(
-            R"(export\s+const\s+(?:int|float|double|bool|char|string|uint)\s+(\w+)\s*=)");
-        // impl: export impl Type for Interface (implはexportが付かないこともある)
-        std::regex impl_regex(R"(^\s*(?:export\s+)?impl\s+(\w+)\s+for\s+(\w+))");
-        // 関数/構造体など: export [extern "C"] [<T>] [static] [inline] [async]
-        // (type|struct|interface|enum) name
-        // ジェネリック関数: export <T> uint size_of() もマッチ
-        std::regex export_regex(
-            R"(export\s+(?:extern\s+"C"\s+)?(?:<[^>]+>\s+)?(?:static\s+)?(?:inline\s+)?(?:async\s+)?(?:int|void|float|double|bool|char|string|uint|struct|interface|enum|\w+\*?)\s+(\w+))");
+        // エクスポートされた関数/構造体/定数/implを検出（regexなし）
         bool matched = false;
+        size_t pos = skip_ws(line);
 
-        // まず定数パターンを試す
-        if (!in_wanted_block && !in_unwanted_block &&
-            std::regex_search(line, match, const_export_regex)) {
-            current_export_name = match[1];
-            matched = true;
+        // impl パターンを先にチェック: [export] impl Type for Interface
+        if (!in_wanted_block && !in_unwanted_block) {
+            size_t impl_pos = pos;
+            bool has_exp = starts_with_keyword(line, pos, "export");
+            if (has_exp)
+                impl_pos = skip_ws(line, pos + 6);
+
+            if (starts_with_keyword(line, impl_pos, "impl")) {
+                size_t after_impl = skip_ws(line, impl_pos + 4);
+                size_t name_start = after_impl;
+                while (after_impl < line.size() &&
+                       (std::isalnum(static_cast<unsigned char>(line[after_impl])) ||
+                        line[after_impl] == '_'))
+                    after_impl++;
+                if (after_impl > name_start) {
+                    current_export_name = line.substr(name_start, after_impl - name_start);
+                    matched = true;
+                }
+            }
         }
-        // implパターンを試す (Type for Interface) - exportの有無に関わらず
-        else if (!in_wanted_block && !in_unwanted_block &&
-                 std::regex_search(line, match, impl_regex)) {
-            // impl TypeはインポートリストのTypeに一致
-            current_export_name = match[1];
-            matched = true;
-        }
-        // 次に通常のパターンを試す
-        else if (!in_wanted_block && !in_unwanted_block &&
-                 std::regex_search(line, match, export_regex)) {
-            current_export_name = match[1];
-            matched = true;
+
+        // export キーワードで始まる場合
+        if (!matched && !in_wanted_block && !in_unwanted_block &&
+            starts_with_keyword(line, pos, "export")) {
+            size_t after_export = skip_ws(line, pos + 6);
+
+            // const パターン: export const type name =
+            if (starts_with_keyword(line, after_export, "const")) {
+                size_t after_const = skip_ws(line, after_export + 5);
+                // 型名をスキップ
+                while (after_const < line.size() &&
+                       (std::isalnum(static_cast<unsigned char>(line[after_const])) ||
+                        line[after_const] == '_'))
+                    after_const++;
+                after_const = skip_ws(line, after_const);
+                // 名前を取得
+                size_t name_start = after_const;
+                while (after_const < line.size() &&
+                       (std::isalnum(static_cast<unsigned char>(line[after_const])) ||
+                        line[after_const] == '_'))
+                    after_const++;
+                if (after_const > name_start) {
+                    current_export_name = line.substr(name_start, after_const - name_start);
+                    matched = true;
+                }
+            }
+
+            // 一般的な export パターン: export [修飾子...] type name
+            if (!matched) {
+                size_t p = after_export;
+                // 修飾子をスキップ: extern "C", <T>, static, inline, async
+                while (p < line.size()) {
+                    if (starts_with_keyword(line, p, "extern")) {
+                        p += 6;
+                        p = skip_ws(line, p);
+                        if (p < line.size() && line[p] == '"') {
+                            auto close = line.find('"', p + 1);
+                            if (close != std::string::npos)
+                                p = close + 1;
+                        }
+                        p = skip_ws(line, p);
+                    } else if (line[p] == '<') {
+                        auto close = line.find('>', p);
+                        if (close != std::string::npos)
+                            p = close + 1;
+                        p = skip_ws(line, p);
+                    } else if (starts_with_keyword(line, p, "static") ||
+                               starts_with_keyword(line, p, "inline") ||
+                               starts_with_keyword(line, p, "async")) {
+                        size_t kw_len = starts_with_keyword(line, p, "static")   ? 6
+                                        : starts_with_keyword(line, p, "inline") ? 6
+                                                                                 : 5;
+                        p = skip_ws(line, p + kw_len);
+                    } else {
+                        break;
+                    }
+                }
+                // 型名を取得
+                size_t type_start = p;
+                while (p < line.size() && (std::isalnum(static_cast<unsigned char>(line[p])) ||
+                                           line[p] == '_' || line[p] == '*'))
+                    p++;
+                if (p > type_start) {
+                    p = skip_ws(line, p);
+                    // 名前を取得
+                    size_t name_start = p;
+                    while (p < line.size() &&
+                           (std::isalnum(static_cast<unsigned char>(line[p])) || line[p] == '_'))
+                        p++;
+                    if (p > name_start) {
+                        current_export_name = line.substr(name_start, p - name_start);
+                        matched = true;
+                    }
+                }
+            }
         }
 
         if (matched) {
@@ -944,34 +1155,39 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
 
     while (std::getline(input, line)) {
         // module 宣言を削除（namespace内で不要）
-        // module名はワードキャラクター、コロン、ドットを含む
-        std::regex module_regex(R"(^\s*module\s+[\w:.]+\s*;\s*$)");
-        if (std::regex_match(line, module_regex)) {
-            result << "// " << line << " (removed)\n";
-            continue;
+        if (line_starts_with(line, "module")) {
+            // "module <name>;" パターンかチェック
+            auto trimmed_line = line;
+            while (!trimmed_line.empty() &&
+                   (trimmed_line.back() == ' ' || trimmed_line.back() == '\t'))
+                trimmed_line.pop_back();
+            if (!trimmed_line.empty() && trimmed_line.back() == ';') {
+                result << "// " << line << " (removed)\n";
+                continue;
+            }
         }
 
         // import 宣言もコメント化（既に処理済み）
-        std::regex import_regex(R"(^\s*import\s+)");
-        if (std::regex_search(line, import_regex)) {
+        if (line_starts_with(line, "import")) {
             result << "// " << line << "\n";
             continue;
         }
 
         // ジェネリック関数の export <T> type name() から export を除去
         // パーサーは export <T> 構文を未サポートのため
-        // 例: "export <T> uint size_of()" → "<T> uint size_of()"
-        std::regex export_generic_regex(R"((\s*)export\s+(<[^>]+>\s+))");
-        std::smatch gen_match;
-        if (std::regex_search(line, gen_match, export_generic_regex)) {
-            line = std::regex_replace(line, export_generic_regex, "$1$2");
+        {
+            size_t pos = skip_ws(line);
+            if (starts_with_keyword(line, pos, "export")) {
+                size_t after_export = pos + 6;
+                size_t next = skip_ws(line, after_export);
+                if (next < line.size() && line[next] == '<') {
+                    // export <T> ... → <T> ...
+                    line = line.substr(0, pos) + line.substr(next);
+                }
+            }
         }
 
         // Note: 通常のexportキーワードは保持する
-        // 以前はエクスポートされた宣言からexportを削除していたが、
-        // これにより関数定義がパーサーで変数宣言として誤認識される問題があった
-        // パーサーはexportキーワードを適切に処理するため、削除不要
-
         result << line << "\n";
     }
 
@@ -996,152 +1212,215 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
 
     // Phase 1: 定義を収集
     for (size_t i = 0; i < lines.size(); ++i) {
-        const std::string& line = lines[i];
+        const std::string& cur_line = lines[i];
+        size_t pos = skip_ws(cur_line);
 
         // use libc { ... } ブロックを検出
-        std::regex use_libc_regex(R"(^\s*use\s+libc\s*(?:as\s+\w+\s*)?\{)");
-        std::smatch match;
-        if (std::regex_search(line, match, use_libc_regex)) {
-            // ブロック全体を収集
-            std::string def = line;
-            int brace_count = 1;
-            size_t start_i = i;
+        if (starts_with_keyword(cur_line, pos, "use")) {
+            size_t after_use = skip_ws(cur_line, pos + 3);
+            if (starts_with_keyword(cur_line, after_use, "libc") &&
+                cur_line.find('{') != std::string::npos) {
+                // ブロック全体を収集
+                std::string def = cur_line;
+                int brace_count = 1;
+                size_t start_i = i;
 
-            // use libc ブロック内の関数名も収集
-            std::vector<std::string> ffi_func_names;
+                // use libc ブロック内の関数名も収集
+                std::vector<std::string> ffi_func_names;
 
-            for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
-                def += "\n" + lines[j];
-                for (char c : lines[j]) {
-                    if (c == '{')
-                        brace_count++;
-                    else if (c == '}')
-                        brace_count--;
-                }
-
-                // 関数宣言を検出: 戻り値型 関数名(...)
-                std::regex ffi_func_regex(R"(\s+(\w+)\s*\()");
-                std::smatch func_match;
-                if (std::regex_search(lines[j], func_match, ffi_func_regex)) {
-                    ffi_func_names.push_back(func_match[1].str());
-                }
-
-                if (brace_count == 0) {
-                    i = j;
-                    break;
-                }
-            }
-
-            // 各FFI関数を定義として登録
-            for (const auto& func_name : ffi_func_names) {
-                definitions[func_name] = {static_cast<int>(start_i), def};
-            }
-            continue;
-        }
-
-        // 関数定義を検出
-        std::regex func_regex(
-            R"(^\s*(?:export\s+)?(?:int|float|double|void|bool|char)\s+(\w+)\s*\()");
-        if (std::regex_search(line, match, func_regex)) {
-            std::string name = match[1];
-            std::string def = line;
-            int brace_count = 0;
-            size_t j = i;
-
-            // 関数本体を収集
-            for (; j < lines.size(); ++j) {
-                if (j > i)
+                for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
                     def += "\n" + lines[j];
-                for (char c : lines[j]) {
-                    if (c == '{')
-                        brace_count++;
-                    else if (c == '}') {
-                        brace_count--;
-                        if (brace_count == 0)
-                            break;
+                    for (char c : lines[j]) {
+                        if (c == '{')
+                            brace_count++;
+                        else if (c == '}')
+                            brace_count--;
+                    }
+
+                    // 関数宣言を検出: 空白 関数名(
+                    {
+                        size_t fpos = skip_ws(lines[j]);
+                        // 戻り型をスキップ
+                        while (fpos < lines[j].size() &&
+                               (std::isalnum(static_cast<unsigned char>(lines[j][fpos])) ||
+                                lines[j][fpos] == '_'))
+                            fpos++;
+                        fpos = skip_ws(lines[j], fpos);
+                        // 関数名を取得
+                        size_t fname_start = fpos;
+                        while (fpos < lines[j].size() &&
+                               (std::isalnum(static_cast<unsigned char>(lines[j][fpos])) ||
+                                lines[j][fpos] == '_'))
+                            fpos++;
+                        if (fpos > fname_start && fpos < lines[j].size() && lines[j][fpos] == '(') {
+                            ffi_func_names.push_back(
+                                lines[j].substr(fname_start, fpos - fname_start));
+                        }
+                    }
+
+                    if (brace_count == 0) {
+                        i = j;
+                        break;
                     }
                 }
-                if (brace_count == 0 && lines[j].find('}') != std::string::npos)
-                    break;
-            }
 
-            definitions[name] = {static_cast<int>(i), def};
-            i = j;  // スキップ
+                // 各FFI関数を定義として登録
+                for (const auto& func_name : ffi_func_names) {
+                    definitions[func_name] = {static_cast<int>(start_i), def};
+                }
+                continue;
+            }
         }
 
-        // 構造体定義を検出
-        std::regex struct_regex(R"(^\s*(?:export\s+)?struct\s+(\w+)\s*\{)");
-        if (std::regex_search(line, match, struct_regex)) {
-            std::string name = match[1];
-            std::string def = line;
-            int brace_count = 1;
+        // export があれば除去して検査
+        bool has_export = starts_with_keyword(cur_line, pos, "export");
+        size_t decl_pos = has_export ? skip_ws(cur_line, pos + 6) : pos;
 
-            // 構造体本体を収集
-            for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
-                def += "\n" + lines[j];
-                for (char c : lines[j]) {
-                    if (c == '{')
-                        brace_count++;
-                    else if (c == '}')
-                        brace_count--;
-                }
-                if (brace_count == 0) {
-                    i = j;
-                    break;
+        // 関数定義を検出: 型名 関数名(
+        // 簡易チェック: 識別子 空白 識別子 ( のパターン
+        {
+            size_t p = decl_pos;
+            // 型名をスキップ
+            size_t type_start = p;
+            while (p < cur_line.size() &&
+                   (std::isalnum(static_cast<unsigned char>(cur_line[p])) || cur_line[p] == '_'))
+                p++;
+            if (p > type_start) {
+                size_t after_type = skip_ws(cur_line, p);
+                // 関数名を取得
+                size_t fname_start = after_type;
+                while (after_type < cur_line.size() &&
+                       (std::isalnum(static_cast<unsigned char>(cur_line[after_type])) ||
+                        cur_line[after_type] == '_'))
+                    after_type++;
+                if (after_type > fname_start && after_type < cur_line.size() &&
+                    cur_line[after_type] == '(') {
+                    std::string name = cur_line.substr(fname_start, after_type - fname_start);
+                    std::string def = cur_line;
+                    int brace_count = 0;
+                    size_t j = i;
+
+                    // 関数本体を収集
+                    for (; j < lines.size(); ++j) {
+                        if (j > i)
+                            def += "\n" + lines[j];
+                        for (char c : lines[j]) {
+                            if (c == '{')
+                                brace_count++;
+                            else if (c == '}') {
+                                brace_count--;
+                                if (brace_count == 0)
+                                    break;
+                            }
+                        }
+                        if (brace_count == 0 && lines[j].find('}') != std::string::npos)
+                            break;
+                    }
+
+                    definitions[name] = {static_cast<int>(i), def};
+                    i = j;  // スキップ
+                    continue;
                 }
             }
+        }
 
-            definitions[name] = {static_cast<int>(i), def};
+        // 構造体定義を検出: [export] struct Name {
+        if (starts_with_keyword(cur_line, decl_pos, "struct")) {
+            size_t after_struct = skip_ws(cur_line, decl_pos + 6);
+            size_t sname_start = after_struct;
+            while (after_struct < cur_line.size() &&
+                   (std::isalnum(static_cast<unsigned char>(cur_line[after_struct])) ||
+                    cur_line[after_struct] == '_'))
+                after_struct++;
+            if (after_struct > sname_start) {
+                std::string name = cur_line.substr(sname_start, after_struct - sname_start);
+                size_t brace_pos = cur_line.find('{', after_struct);
+                if (brace_pos != std::string::npos) {
+                    std::string def = cur_line;
+                    int brace_count = 1;
+
+                    // 構造体本体を収集
+                    for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
+                        def += "\n" + lines[j];
+                        for (char c : lines[j]) {
+                            if (c == '{')
+                                brace_count++;
+                            else if (c == '}')
+                                brace_count--;
+                        }
+                        if (brace_count == 0) {
+                            i = j;
+                            break;
+                        }
+                    }
+
+                    definitions[name] = {static_cast<int>(i), def};
+                }
+            }
         }
     }
 
     // Phase 2: export { name1, name2, ... } および export { ns::{item1, item2} } を検出
-    std::regex export_list_regex(R"(^\s*export\s*\{([^}]+)\})");
-    // 階層再構築パターン: ns::{item1, item2}
-    std::regex hierarchical_regex(R"((\w+)::\{([^}]+)\})");
     bool has_export_list = false;
 
     for (size_t i = 0; i < lines.size(); ++i) {
-        std::smatch match;
-        if (std::regex_search(lines[i], match, export_list_regex)) {
-            has_export_list = true;
-            std::string names = match[1];
+        // export { ... } パターンを文字列で検出
+        size_t pos = skip_ws(lines[i]);
+        if (!starts_with_keyword(lines[i], pos, "export"))
+            continue;
+        size_t after_export = skip_ws(lines[i], pos + 6);
+        if (after_export >= lines[i].size() || lines[i][after_export] != '{')
+            continue;
 
-            // 階層再構築パターンをチェック: io::{file, stream}
-            std::smatch hier_match;
-            if (std::regex_search(names, hier_match, hierarchical_regex)) {
-                std::string namespace_name = hier_match[1];
-                std::string sub_items = hier_match[2];
+        size_t close_brace = lines[i].find('}', after_export + 1);
+        if (close_brace == std::string::npos)
+            continue;
 
-                // サブアイテムをパース
-                std::stringstream sub_ss(sub_items);
-                std::string sub_item;
-                while (std::getline(sub_ss, sub_item, ',')) {
-                    // トリム
-                    sub_item.erase(0, sub_item.find_first_not_of(" \t\n\r"));
-                    sub_item.erase(sub_item.find_last_not_of(" \t\n\r") + 1);
-                    if (!sub_item.empty()) {
-                        // 階層形式: namespace::item として記録
-                        exported_names.insert(namespace_name + "::" + sub_item);
-                    }
-                }
-            } else {
-                // 通常の名前リストをパース
-                std::stringstream ss(names);
-                std::string name;
-                while (std::getline(ss, name, ',')) {
-                    // トリム
-                    name.erase(0, name.find_first_not_of(" \t\n\r"));
-                    name.erase(name.find_last_not_of(" \t\n\r") + 1);
-                    if (!name.empty()) {
-                        exported_names.insert(name);
+        has_export_list = true;
+        std::string names = lines[i].substr(after_export + 1, close_brace - after_export - 1);
+
+        // 階層再構築パターンをチェック: ns::{item1, item2}
+        size_t hier_pos = names.find("::{");
+        if (hier_pos != std::string::npos) {
+            // 名前空間名を抽出
+            std::string before = names.substr(0, hier_pos);
+            // 末尾のトリム
+            size_t ns_end = before.find_last_not_of(" \t");
+            // 先頭のトリム
+            size_t ns_start = before.find_first_not_of(" \t");
+            if (ns_start != std::string::npos && ns_end != std::string::npos) {
+                std::string namespace_name = before.substr(ns_start, ns_end - ns_start + 1);
+                size_t sub_close = names.find('}', hier_pos + 3);
+                if (sub_close != std::string::npos) {
+                    std::string sub_items = names.substr(hier_pos + 3, sub_close - hier_pos - 3);
+
+                    // サブアイテムをパース
+                    std::stringstream sub_ss(sub_items);
+                    std::string sub_item;
+                    while (std::getline(sub_ss, sub_item, ',')) {
+                        sub_item.erase(0, sub_item.find_first_not_of(" \t\n\r"));
+                        sub_item.erase(sub_item.find_last_not_of(" \t\n\r") + 1);
+                        if (!sub_item.empty()) {
+                            exported_names.insert(namespace_name + "::" + sub_item);
+                        }
                     }
                 }
             }
-
-            // export {...} 行をコメント化
-            lines[i] = "// " + lines[i] + " (processed)";
+        } else {
+            // 通常の名前リストをパース
+            std::stringstream ss(names);
+            std::string name;
+            while (std::getline(ss, name, ',')) {
+                name.erase(0, name.find_first_not_of(" \t\n\r"));
+                name.erase(name.find_last_not_of(" \t\n\r") + 1);
+                if (!name.empty()) {
+                    exported_names.insert(name);
+                }
+            }
         }
+
+        // export {...} 行をコメント化
+        lines[i] = "// " + lines[i] + " (processed)";
     }
 
     // Phase 3: 出力を生成
@@ -1197,26 +1476,43 @@ std::string ImportPreprocessor::process_namespace_exports(const std::string& sou
     int brace_depth = 0;
 
     while (std::getline(input, line)) {
-        // export NS { ... } を検出
-        std::regex ns_export_regex(R"(^\s*export\s+(\w+)\s*\{)");
-        std::smatch match;
+        // export NS { ... } を検出（regexなし）
+        if (!in_namespace_export) {
+            size_t pos = skip_ws(line);
+            bool matched_ns_export = false;
+            if (starts_with_keyword(line, pos, "export")) {
+                size_t after_export = skip_ws(line, pos + 6);
+                // 名前を取得
+                size_t name_start = after_export;
+                while (after_export < line.size() &&
+                       (std::isalnum(static_cast<unsigned char>(line[after_export])) ||
+                        line[after_export] == '_'))
+                    after_export++;
+                if (after_export > name_start) {
+                    size_t after_name = skip_ws(line, after_export);
+                    if (after_name < line.size() && line[after_name] == '{') {
+                        // サブ名前空間エクスポートの開始
+                        namespace_name = line.substr(name_start, after_export - name_start);
+                        in_namespace_export = true;
+                        brace_depth = 1;
+                        matched_ns_export = true;
 
-        if (!in_namespace_export && std::regex_search(line, match, ns_export_regex)) {
-            // サブ名前空間エクスポートの開始
-            namespace_name = match[1];
-            in_namespace_export = true;
-            brace_depth = 1;
+                        // namespace宣言に変換
+                        result << "namespace " << namespace_name << " {\n";
 
-            // namespace宣言に変換
-            result << "namespace " << namespace_name << " {\n";
-
-            // 開き括弧の後の内容があればそれも処理
-            size_t brace_pos = line.find('{');
-            if (brace_pos != std::string::npos && brace_pos + 1 < line.length()) {
-                std::string rest = line.substr(brace_pos + 1);
-                namespace_content.push_back(rest);
+                        // 開き括弧の後の内容があればそれも処理
+                        if (after_name + 1 < line.length()) {
+                            std::string rest = line.substr(after_name + 1);
+                            namespace_content.push_back(rest);
+                        }
+                    }
+                }
             }
-        } else if (in_namespace_export) {
+            if (!matched_ns_export) {
+                // 通常の行
+                result << line << "\n";
+            }
+        } else {
             // サブ名前空間内のコンテンツを収集
             for (char c : line) {
                 if (c == '{')
@@ -1252,9 +1548,6 @@ std::string ImportPreprocessor::process_namespace_exports(const std::string& sou
                 // まだ名前空間内
                 namespace_content.push_back(line);
             }
-        } else {
-            // 通常の行
-            result << line << "\n";
         }
     }
 
@@ -1267,123 +1560,153 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
 
     // セミコロンを削除
     std::string line = import_line;
-    if (line.back() == ';') {
+    while (!line.empty() && (line.back() == ';' || line.back() == ' ' || line.back() == '\t'))
         line.pop_back();
-    }
 
     // 相対パスチェック
     if (line.find("./") != std::string::npos || line.find("../") != std::string::npos) {
         info.is_relative = true;
     }
 
-    // パターン1: import module as alias
-    std::regex import_as(R"(^\s*import\s+([^\s]+)\s+as\s+(\w+)\s*$)");
+    // トリムヘルパー
+    auto trim = [](const std::string& s) -> std::string {
+        size_t start = s.find_first_not_of(" \t");
+        if (start == std::string::npos)
+            return "";
+        size_t end = s.find_last_not_of(" \t");
+        return s.substr(start, end - start + 1);
+    };
 
-    // パターン2: import { items } from module
-    std::regex from_import(R"(^\s*import\s+\{([^}]+)\}\s+from\s+([^\s]+)\s*$)");
+    std::string trimmed = trim(line);
 
-    // パターン3: from module import { items }
-    std::regex from_import_alt(R"(^\s*from\s+([^\s]+)\s+import\s+\{([^}]+)\}\s*$)");
-
-    // パターン4: import module::*  (ワイルドカード)
-    std::regex wildcard_import(R"(^\s*import\s+([^\s]+)::\*\s*$)");
-
-    // パターン5: import * from module
-    std::regex wildcard_from(R"(^\s*import\s+\*\s+from\s+([^\s]+)\s*$)");
-
-    // パターン6: import module::{items}  (選択的)
-    std::regex selective_import(R"(^\s*import\s+([^\s]+)::\{([^}]+)\}\s*$)");
-
-    // パターン7: import ./path/* (ワイルドカード - ディレクトリ内全モジュール)
-    std::regex wildcard_dir_import(R"(^\s*import\s+([^\s]+)/\*\s*$)");
-
-    // パターン8: import module  (シンプル)
-    std::regex simple_import(R"(^\s*import\s+([^\s]+)\s*$)");
-
-    std::smatch match;
-
-    // import module as alias
-    if (std::regex_match(line, match, import_as)) {
-        info.module_name = match[1];
-        info.alias = match[2];
+    // ========== from module import { items } ==========
+    if (trimmed.rfind("from ", 0) == 0) {
+        // from MODULE import { ITEMS }
+        std::string rest = trim(trimmed.substr(5));
+        size_t import_pos = rest.find(" import ");
+        if (import_pos != std::string::npos) {
+            info.module_name = trim(rest.substr(0, import_pos));
+            info.is_from_import = true;
+            std::string items_part = trim(rest.substr(import_pos + 8));
+            // { items } の中身を抽出
+            if (items_part.front() == '{' && items_part.back() == '}') {
+                std::string items_str = items_part.substr(1, items_part.size() - 2);
+                parse_import_items(items_str, info);
+            }
+        }
+        goto finalize;
     }
-    // import { items } from module
-    else if (std::regex_match(line, match, from_import)) {
-        info.module_name = match[2];
-        info.is_from_import = true;
-        // アイテムをパース
-        std::string items_str = match[1];
-        parse_import_items(items_str, info);
-    }
-    // from module import { items }
-    else if (std::regex_match(line, match, from_import_alt)) {
-        info.module_name = match[1];
-        info.is_from_import = true;
-        // アイテムをパース
-        std::string items_str = match[2];
-        parse_import_items(items_str, info);
-    }
-    // import * from module
-    else if (std::regex_match(line, match, wildcard_from)) {
-        info.module_name = match[1];
-        info.is_wildcard = true;
-        info.is_from_import = true;
-    }
-    // import ./path/* (ワイルドカード)
-    else if (std::regex_match(line, match, wildcard_dir_import)) {
-        info.module_name = match[1];
-        info.is_recursive_wildcard = true;
-        info.is_wildcard = true;
-    }
-    // import module::*
-    else if (std::regex_match(line, match, wildcard_import)) {
-        info.module_name = match[1];
-        info.is_wildcard = true;
-    }
-    // import module::{items}
-    else if (std::regex_match(line, match, selective_import)) {
-        info.module_name = match[1];
-        // アイテムをパース
-        std::string items_str = match[2];
-        parse_import_items(items_str, info);
-    }
-    // import module (シンプル)
-    else if (std::regex_match(line, match, simple_import)) {
-        info.module_name = match[1];
+
+    // import で始まる場合
+    if (trimmed.rfind("import ", 0) == 0) {
+        std::string rest = trim(trimmed.substr(7));
+
+        // ========== import { items } from module ==========
+        if (!rest.empty() && rest.front() == '{') {
+            size_t close_brace = rest.find('}');
+            if (close_brace != std::string::npos) {
+                std::string items_str = rest.substr(1, close_brace - 1);
+                std::string after_brace = trim(rest.substr(close_brace + 1));
+                if (after_brace.rfind("from ", 0) == 0) {
+                    info.module_name = trim(after_brace.substr(5));
+                    info.is_from_import = true;
+                    parse_import_items(items_str, info);
+                    goto finalize;
+                }
+            }
+        }
+
+        // ========== import * from module ==========
+        if (rest.rfind("* from ", 0) == 0) {
+            info.module_name = trim(rest.substr(7));
+            info.is_wildcard = true;
+            info.is_from_import = true;
+            goto finalize;
+        }
+
+        // ========== import module as alias ==========
+        {
+            size_t as_pos = rest.find(" as ");
+            if (as_pos != std::string::npos) {
+                info.module_name = trim(rest.substr(0, as_pos));
+                info.alias = trim(rest.substr(as_pos + 4));
+                goto finalize;
+            }
+        }
+
+        // ========== import path/*::{items} ==========
+        {
+            size_t wildcard_sel = rest.find("/*::{");
+            if (wildcard_sel != std::string::npos) {
+                info.module_name = trim(rest.substr(0, wildcard_sel));
+                info.is_recursive_wildcard = true;
+                info.is_wildcard = true;
+                size_t close = rest.find('}', wildcard_sel + 5);
+                if (close != std::string::npos) {
+                    std::string items_str = rest.substr(wildcard_sel + 5, close - wildcard_sel - 5);
+                    parse_import_items(items_str, info);
+                }
+                goto finalize;
+            }
+        }
+
+        // ========== import path/* ==========
+        if (rest.size() >= 2 && rest.substr(rest.size() - 2) == "/*") {
+            info.module_name = trim(rest.substr(0, rest.size() - 2));
+            info.is_recursive_wildcard = true;
+            info.is_wildcard = true;
+            goto finalize;
+        }
+
+        // ========== import module::{items} ==========
+        {
+            size_t sel_pos = rest.find("::{");
+            if (sel_pos != std::string::npos) {
+                size_t close = rest.find('}', sel_pos + 3);
+                if (close != std::string::npos) {
+                    // module::* (ワイルドカード) チェック
+                    std::string items_str = rest.substr(sel_pos + 3, close - sel_pos - 3);
+                    if (trim(items_str) == "*") {
+                        info.module_name = trim(rest.substr(0, sel_pos));
+                        info.is_wildcard = true;
+                    } else {
+                        info.module_name = trim(rest.substr(0, sel_pos));
+                        parse_import_items(items_str, info);
+                    }
+                    goto finalize;
+                }
+            }
+        }
+
+        // ========== import module::* ==========
+        if (rest.size() >= 3 && rest.substr(rest.size() - 3) == "::*") {
+            info.module_name = trim(rest.substr(0, rest.size() - 3));
+            info.is_wildcard = true;
+            goto finalize;
+        }
+
+        // ========== import module (シンプル) ==========
+        info.module_name = rest;
 
         // ./path/module::submodule::item 形式をチェック
-        // 最後が ::identifier (小文字始まり = 関数/変数) の場合、それをアイテムとして扱う
         std::string& name = info.module_name;
-        // 最後の :: の位置を見つける
         size_t last_colon = name.rfind("::");
         if (last_colon != std::string::npos && last_colon > 0) {
             std::string last_part = name.substr(last_colon + 2);
-            // * の場合はワイルドカード
             if (last_part == "*") {
                 info.is_wildcard = true;
                 info.module_name = name.substr(0, last_colon);
-            }
-            // 小文字始まりの場合、関数/変数として扱う
-            // ただし、相対パスで :: が1つだけの場合はサブモジュール全体として扱う
-            // 例: ./path/module::submodule → サブモジュール全体
-            // 例: ./path/module::submodule::func → funcを選択的インポート
-            // 例: std::io::println → printlnを選択的インポート
-            else if (!last_part.empty() && std::islower(last_part[0])) {
-                // 相対パスの場合、::が2つ以上あるかチェック
-                // ./path/module::sub::func のように、funcは関数として扱う
+            } else if (!last_part.empty() && std::islower(last_part[0])) {
                 size_t first_colon = name.find("::");
                 if (!info.is_relative || first_colon != last_colon) {
-                    // 絶対パス、または相対パスで::が複数ある場合
-                    // 最後のセグメントは関数/変数
                     info.items.push_back(last_part);
                     info.module_name = name.substr(0, last_colon);
                 }
-                // 相対パスで::が1つだけの場合（例: ./path/std::io）
-                // サブモジュールパスとして保持（名前空間としてインポート）
             }
         }
     }
 
+finalize:
     // 引用符を除去
     if (info.module_name.size() >= 2) {
         if ((info.module_name.front() == '"' && info.module_name.back() == '"') ||
@@ -1897,24 +2220,10 @@ std::vector<std::filesystem::path> ImportPreprocessor::find_all_modules_recursiv
     }
 
     // 再帰的にディレクトリを探索
+    // .cmファイルはすべてモジュールとして扱う
     for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
         if (entry.is_regular_file() && entry.path().extension() == ".cm") {
-            // module宣言があるか確認
-            std::ifstream file(entry.path());
-            std::string line;
-            int line_count = 0;
-            while (std::getline(file, line) && line_count++ < 20) {
-                // コメントをスキップ
-                if (line.find("//") == 0)
-                    continue;
-
-                // module文を検出
-                std::regex module_regex(R"(^\s*module\s+([a-zA-Z_][a-zA-Z0-9_:]*)\s*;)");
-                if (std::regex_search(line, module_regex)) {
-                    modules.push_back(entry.path());
-                    break;
-                }
-            }
+            modules.push_back(entry.path());
         }
     }
 
@@ -2183,3 +2492,135 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
 }
 
 }  // namespace cm::preprocessor
+
+// exportされたブロック（関数・struct・const等）をモジュールソースから抽出する
+// namespace外へのforward展開用: namespaceラップされたモジュールのexportシンボルを
+// namespace外にも出力して、名前空間修飾なしで呼び出し可能にする
+std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
+    const std::string& module_source) {
+    std::stringstream result;
+    std::stringstream input(module_source);
+    std::string line;
+    bool in_export_block = false;
+    bool in_sub_exported_section = false;
+    std::vector<std::string> block_lines;
+    int brace_depth = 0;
+    bool found_opening_brace = false;
+
+    while (std::getline(input, line)) {
+        // サブモジュールのExported symbolsセクションを検出してパススルー
+        // これにより推移的なエクスポートが可能になる
+        // （モジュールAがBをimport、BがCをimport → AからCのexport関数を呼べる）
+        if (!in_export_block && !in_sub_exported_section &&
+            line.find("// ===== Exported symbols from ") != std::string::npos) {
+            in_sub_exported_section = true;
+            continue;  // セクション開始コメントはスキップ
+        }
+        if (in_sub_exported_section) {
+            if (line.find("// ===== End exported symbols =====") != std::string::npos) {
+                in_sub_exported_section = false;
+                continue;  // セクション終了コメントはスキップ
+            }
+            // サブモジュールのexported関数をそのまま出力
+            result << line << "\n";
+            continue;
+        }
+
+        // module宣言やimport文はスキップ
+        if (line.find("module ") != std::string::npos && line.find(';') != std::string::npos) {
+            std::regex module_regex(R"(^\s*/?\s*module\s+[\w:.]+\s*;\s*$)");
+            if (std::regex_match(line, module_regex)) {
+                continue;
+            }
+        }
+        if (line.find("import ") != std::string::npos) {
+            std::regex import_regex(R"(^\s*import\s+)");
+            if (std::regex_search(line, import_regex)) {
+                continue;
+            }
+        }
+
+        // exportで始まる行を検出（シンプルなパターン）
+        if (!in_export_block && line.find("export ") != std::string::npos) {
+            // 行がexportで始まるか確認（先頭空白は許容）
+            std::regex export_start(R"(^\s*export\s+)");
+            if (std::regex_search(line, export_start)) {
+                // 再エクスポート構文（export { ... }）はスキップ
+                // export NAME1, NAME2; 形式のリストエクスポートもスキップ
+                std::regex reexport_regex(R"(^\s*export\s*\{)");
+                std::regex list_export_regex(R"(^\s*export\s+\w+\s*,)");
+                std::regex name_only_export_regex(R"(^\s*export\s+\w+\s*;)");
+                if (std::regex_search(line, reexport_regex) ||
+                    std::regex_search(line, list_export_regex) ||
+                    std::regex_search(line, name_only_export_regex)) {
+                    continue;
+                }
+                in_export_block = true;
+                block_lines.clear();
+                block_lines.push_back(line);
+                brace_depth = 0;
+                found_opening_brace = false;
+
+                // 開き括弧をチェック
+                for (char c : line) {
+                    if (c == '{') {
+                        found_opening_brace = true;
+                        brace_depth++;
+                    } else if (c == '}') {
+                        brace_depth--;
+                    }
+                }
+
+                // 1行で完結する場合（セミコロンで終わる宣言、括弧なし）
+                if (!found_opening_brace && line.find(';') != std::string::npos) {
+                    for (auto& bl : block_lines) {
+                        std::regex rm_export(R"(\bexport\s+)");
+                        result << std::regex_replace(bl, rm_export, "") << "\n";
+                    }
+                    in_export_block = false;
+                    block_lines.clear();
+                }
+                // 1行で括弧が閉じている場合
+                else if (found_opening_brace && brace_depth == 0) {
+                    for (auto& bl : block_lines) {
+                        std::regex rm_export(R"(\bexport\s+)");
+                        result << std::regex_replace(bl, rm_export, "") << "\n";
+                    }
+                    in_export_block = false;
+                    block_lines.clear();
+                }
+
+                continue;
+            }
+        }
+
+        if (in_export_block) {
+            block_lines.push_back(line);
+
+            if (!found_opening_brace && line.find('{') != std::string::npos) {
+                found_opening_brace = true;
+            }
+
+            for (char c : line) {
+                if (c == '{')
+                    brace_depth++;
+                else if (c == '}')
+                    brace_depth--;
+            }
+
+            if (found_opening_brace && brace_depth == 0) {
+                // exportキーワードを除去して出力
+                for (auto& bl : block_lines) {
+                    std::regex rm_export(R"(\bexport\s+)");
+                    result << std::regex_replace(bl, rm_export, "") << "\n";
+                }
+                in_export_block = false;
+                block_lines.clear();
+                found_opening_brace = false;
+            }
+        }
+        // exportされていない行はスキップ（namespace外にはexportのみ展開）
+    }
+
+    return result.str();
+}

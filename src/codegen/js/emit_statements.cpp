@@ -55,7 +55,15 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                     const auto& funcName = std::get<std::string>(useData.operand->data);
                     const auto& local = func.locals[target_local];
                     std::string rvalue = emitLambdaRef(funcName, func, local.captured_locals);
-                    emitter_.emitLine(place + " = " + rvalue + ";");
+                    // 通常の代入と同じlet宣言チェックを適用
+                    if (data.place.projections.empty() &&
+                        declare_on_assign_.count(target_local) > 0 &&
+                        declared_locals_.count(target_local) == 0) {
+                        emitter_.emitLine("let " + place + " = " + rvalue + ";");
+                        declared_locals_.insert(target_local);
+                    } else {
+                        emitter_.emitLine(place + " = " + rvalue + ";");
+                    }
                     break;
                 }
             }
@@ -116,26 +124,23 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             const auto& data = std::get<mir::MirTerminator::SwitchIntData>(term.data);
             std::string discrim = emitOperand(*data.discriminant, func);
 
-            // 判別式の型がboolかどうかを判定
-            bool isBoolType = false;
-            if (data.discriminant->kind == mir::MirOperand::Copy ||
-                data.discriminant->kind == mir::MirOperand::Move) {
-                const auto& place = std::get<mir::MirPlace>(data.discriminant->data);
-                if (place.local < func.locals.size()) {
-                    const auto& local = func.locals[place.local];
-                    if (local.type && local.type->kind == ast::TypeKind::Bool) {
-                        isBoolType = true;
-                    }
-                }
-            }
+            // discriminantの型を判定してboolean/integerで分岐
+            auto discrimType = getOperandType(*data.discriminant, func);
+            bool isBoolDiscrim = (discrimType && discrimType->kind == hir::TypeKind::Bool);
 
             for (const auto& [value, target] : data.targets) {
-                // bool型の場合のみtruthy/falsy比較を使用
-                if (isBoolType && value == 1) {
-                    emitter_.emitLine("if (" + discrim + ") {");
-                } else if (isBoolType && value == 0) {
-                    emitter_.emitLine("if (!" + discrim + ") {");
+                if (isBoolDiscrim) {
+                    // Boolean型: truthy/falsy評価（JS: true === 1 は false になるため）
+                    if (value == 1) {
+                        emitter_.emitLine("if (" + discrim + ") {");
+                    } else if (value == 0) {
+                        emitter_.emitLine("if (!" + discrim + ") {");
+                    } else {
+                        emitter_.emitLine("if (" + discrim + " === " + std::to_string(value) +
+                                          ") {");
+                    }
                 } else {
+                    // 整数型: 厳密比較（値2がcase 1にマッチする等のバグ防止）
                     emitter_.emitLine("if (" + discrim + " === " + std::to_string(value) + ") {");
                 }
                 emitter_.increaseIndent();
@@ -169,9 +174,22 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             auto it_func = function_map_.find(funcName);
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
-                if (calleeFunc->is_extern &&
-                    (calleeFunc->package_name == "js" || calleeFunc->package_name.empty())) {
-                    funcName = mapExternJsName(calleeFunc->name);
+                if (calleeFunc->is_extern) {
+                    if (calleeFunc->package_name == "js" || calleeFunc->package_name.empty()) {
+                        funcName = mapExternJsName(calleeFunc->name);
+                    } else if (calleeFunc->package_name != "libc") {
+                        // 外部パッケージ: pkg.func() 形式に変換
+                        std::string alias = calleeFunc->package_name;
+                        size_t slashPos = alias.rfind('/');
+                        if (slashPos != std::string::npos) {
+                            alias = alias.substr(slashPos + 1);
+                        }
+                        for (auto& c : alias) {
+                            if (c == '-')
+                                c = '_';
+                        }
+                        funcName = alias + "." + sanitizeIdentifier(calleeFunc->name);
+                    }
                 }
             }
 
@@ -200,17 +218,25 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     // フォーマット関数の場合、char型引数を文字に変換
                     // 引数インデックス2以降が実際のフォーマット値
                     if (isFormatFunc && i >= 2) {
-                        // オペランドの型をチェック
-                        if (arg->kind == mir::MirOperand::Copy ||
-                            arg->kind == mir::MirOperand::Move) {
+                        bool isCharArg = false;
+                        // オペランドの型情報を直接チェック（Constant含む全種別対応）
+                        if (arg->type && arg->type->kind == ast::TypeKind::Char) {
+                            isCharArg = true;
+                        }
+                        // フォールバック: Copy/Moveの場合はローカル変数の型もチェック
+                        if (!isCharArg && (arg->kind == mir::MirOperand::Copy ||
+                                           arg->kind == mir::MirOperand::Move)) {
                             const auto& place = std::get<mir::MirPlace>(arg->data);
                             if (place.local < func.locals.size()) {
                                 const auto& local = func.locals[place.local];
                                 if (local.type && local.type->kind == ast::TypeKind::Char) {
-                                    // char型は文字に変換
-                                    argStr = "String.fromCharCode(" + argStr + ")";
+                                    isCharArg = true;
                                 }
                             }
+                        }
+                        if (isCharArg) {
+                            // char型は文字に変換
+                            argStr = "String.fromCharCode(" + argStr + ")";
                         }
                     }
 
@@ -260,16 +286,33 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 callExpr += ")";
             }
 
+            // await式の場合、callExprをawaitでラップ
+            if (data.is_awaited) {
+                callExpr = "await " + callExpr;
+            }
+
             // 戻り値の格納
             bool skip_dest = false;
             if (data.destination && data.destination->projections.empty()) {
                 if (!isLocalUsed(data.destination->local)) {
                     skip_dest = true;
                 }
+                // インライン値としてスキップ
+                if (inline_values_.count(data.destination->local) > 0) {
+                    skip_dest = true;
+                }
             }
             if (data.destination && !skip_dest) {
                 std::string dest = emitPlace(*data.destination, func);
-                emitter_.emitLine(dest + " = " + callExpr + ";");
+                // declare_on_assign対応
+                if (data.destination->projections.empty() &&
+                    declare_on_assign_.count(data.destination->local) > 0 &&
+                    declared_locals_.count(data.destination->local) == 0) {
+                    emitter_.emitLine("let " + dest + " = " + callExpr + ";");
+                    declared_locals_.insert(data.destination->local);
+                } else {
+                    emitter_.emitLine(dest + " = " + callExpr + ";");
+                }
             } else {
                 emitter_.emitLine(callExpr + ";");
             }
@@ -354,9 +397,22 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
             auto it_func = function_map_.find(funcName);
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
-                if (calleeFunc->is_extern &&
-                    (calleeFunc->package_name == "js" || calleeFunc->package_name.empty())) {
-                    funcName = mapExternJsName(calleeFunc->name);
+                if (calleeFunc->is_extern) {
+                    if (calleeFunc->package_name == "js" || calleeFunc->package_name.empty()) {
+                        funcName = mapExternJsName(calleeFunc->name);
+                    } else if (calleeFunc->package_name != "libc") {
+                        // 外部パッケージ: pkg.func() 形式に変換
+                        std::string alias = calleeFunc->package_name;
+                        size_t slashPos = alias.rfind('/');
+                        if (slashPos != std::string::npos) {
+                            alias = alias.substr(slashPos + 1);
+                        }
+                        for (auto& c : alias) {
+                            if (c == '-')
+                                c = '_';
+                        }
+                        funcName = alias + "." + sanitizeIdentifier(calleeFunc->name);
+                    }
                 }
             }
 
@@ -391,15 +447,24 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
 
                     // フォーマット関数の場合、char型引数を文字に変換
                     if (isFormatFunc && i >= 2) {
-                        if (arg->kind == mir::MirOperand::Copy ||
-                            arg->kind == mir::MirOperand::Move) {
+                        bool isCharArg = false;
+                        // オペランドの型情報を直接チェック（Constant含む全種別対応）
+                        if (arg->type && arg->type->kind == ast::TypeKind::Char) {
+                            isCharArg = true;
+                        }
+                        // フォールバック: Copy/Moveの場合はローカル変数の型もチェック
+                        if (!isCharArg && (arg->kind == mir::MirOperand::Copy ||
+                                           arg->kind == mir::MirOperand::Move)) {
                             const auto& place = std::get<mir::MirPlace>(arg->data);
                             if (place.local < func.locals.size()) {
                                 const auto& local = func.locals[place.local];
                                 if (local.type && local.type->kind == ast::TypeKind::Char) {
-                                    argStr = "String.fromCharCode(" + argStr + ")";
+                                    isCharArg = true;
                                 }
                             }
+                        }
+                        if (isCharArg) {
+                            argStr = "String.fromCharCode(" + argStr + ")";
                         }
                     }
 
@@ -449,16 +514,33 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                 callExpr += ")";
             }
 
+            // await式の場合、callExprをawaitでラップ
+            if (data.is_awaited) {
+                callExpr = "await " + callExpr;
+            }
+
             // 戻り値の格納
             bool skip_dest = false;
             if (data.destination && data.destination->projections.empty()) {
                 if (!isLocalUsed(data.destination->local)) {
                     skip_dest = true;
                 }
+                // インライン値としてスキップ
+                if (inline_values_.count(data.destination->local) > 0) {
+                    skip_dest = true;
+                }
             }
             if (data.destination && !skip_dest) {
                 std::string dest = emitPlace(*data.destination, func);
-                emitter_.emitLine(dest + " = " + callExpr + ";");
+                // declare_on_assign対応
+                if (data.destination->projections.empty() &&
+                    declare_on_assign_.count(data.destination->local) > 0 &&
+                    declared_locals_.count(data.destination->local) == 0) {
+                    emitter_.emitLine("let " + dest + " = " + callExpr + ";");
+                    declared_locals_.insert(data.destination->local);
+                } else {
+                    emitter_.emitLine(dest + " = " + callExpr + ";");
+                }
             } else {
                 emitter_.emitLine(callExpr + ";");
             }

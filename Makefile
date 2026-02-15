@@ -8,36 +8,62 @@ BUILD_DIR := build
 # 使用例: make build ARCH=arm64 / make build ARCH=x86_64
 ARCH ?= $(shell llvm-config --host-target 2>/dev/null | cut -d- -f1 || uname -m)
 
-# アーキテクチャに応じたHomebrewプレフィックスを自動設定
-# ARM64: /opt/homebrew, x86_64: /usr/local
-ifeq ($(ARCH),arm64)
-  BREW_PREFIX ?= /opt/homebrew
-else ifeq ($(ARCH),aarch64)
-  BREW_PREFIX ?= /opt/homebrew
+# OS判定
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+  # ========================================
+  # macOS: Homebrew前提
+  # ========================================
+
+  # アーキテクチャに応じたHomebrewプレフィックスを自動設定
+  ifeq ($(ARCH),arm64)
+    BREW_PREFIX ?= /opt/homebrew
+  else ifeq ($(ARCH),aarch64)
+    BREW_PREFIX ?= /opt/homebrew
+  else
+    BREW_PREFIX ?= /usr/local
+  endif
+
+  # LLVM/OpenSSLパスの自動設定
+  LLVM_PREFIX := $(BREW_PREFIX)/opt/llvm@17
+  OPENSSL_PREFIX := $(BREW_PREFIX)/opt/openssl@3
+
+  # CMake共通フラグ（Homebrew依存のパスを統一）
+  CMAKE_ARCH_FLAGS := \
+    -DCM_TARGET_ARCH=$(ARCH) \
+    -DCMAKE_PREFIX_PATH="$(LLVM_PREFIX);$(OPENSSL_PREFIX)" \
+    -DOPENSSL_ROOT_DIR=$(OPENSSL_PREFIX) \
+    -DOPENSSL_SSL_LIBRARY=$(OPENSSL_PREFIX)/lib/libssl.dylib \
+    -DOPENSSL_CRYPTO_LIBRARY=$(OPENSSL_PREFIX)/lib/libcrypto.dylib \
+    -DOPENSSL_INCLUDE_DIR=$(OPENSSL_PREFIX)/include \
+    -DCMAKE_C_COMPILER=/usr/bin/clang \
+    -DCMAKE_CXX_COMPILER=/usr/bin/clang++
+
+  # ビルド時の環境変数（x86 LDFLAGSの混入防止）
+  BUILD_ENV := \
+    LDFLAGS="-L$(LLVM_PREFIX)/lib -L$(OPENSSL_PREFIX)/lib" \
+    CPPFLAGS="-I$(LLVM_PREFIX)/include -I$(OPENSSL_PREFIX)/include" \
+    PATH="$(LLVM_PREFIX)/bin:$(BREW_PREFIX)/bin:$(PATH)"
+
 else
-  BREW_PREFIX ?= /usr/local
+  # ========================================
+  # Linux: システムパッケージ前提
+  # ========================================
+
+  # CMakeフラグ（システムのfind_packageに任せる）
+  CMAKE_ARCH_FLAGS := \
+    -DCM_TARGET_ARCH=$(ARCH)
+
+  # LLVM_DIRが設定されている場合はそれを使用
+  ifneq ($(LLVM_DIR),)
+    CMAKE_ARCH_FLAGS += -DLLVM_DIR=$(LLVM_DIR)
+  endif
+
+  # ビルド時の環境変数
+  BUILD_ENV :=
+
 endif
-
-# LLVM/OpenSSLパスの自動設定
-LLVM_PREFIX := $(BREW_PREFIX)/opt/llvm@17
-OPENSSL_PREFIX := $(BREW_PREFIX)/opt/openssl@3
-
-# CMake共通フラグ（アーキテクチャ依存のパスを統一）
-CMAKE_ARCH_FLAGS := \
-  -DCM_TARGET_ARCH=$(ARCH) \
-  -DCMAKE_PREFIX_PATH="$(LLVM_PREFIX);$(OPENSSL_PREFIX)" \
-  -DOPENSSL_ROOT_DIR=$(OPENSSL_PREFIX) \
-  -DOPENSSL_SSL_LIBRARY=$(OPENSSL_PREFIX)/lib/libssl.dylib \
-  -DOPENSSL_CRYPTO_LIBRARY=$(OPENSSL_PREFIX)/lib/libcrypto.dylib \
-  -DOPENSSL_INCLUDE_DIR=$(OPENSSL_PREFIX)/include \
-  -DCMAKE_C_COMPILER=/usr/bin/clang \
-  -DCMAKE_CXX_COMPILER=/usr/bin/clang++
-
-# ビルド時の環境変数（x86 LDFLAGSの混入防止）
-BUILD_ENV := \
-  LDFLAGS="-L$(LLVM_PREFIX)/lib -L$(OPENSSL_PREFIX)/lib" \
-  CPPFLAGS="-I$(LLVM_PREFIX)/include -I$(OPENSSL_PREFIX)/include" \
-  PATH="$(LLVM_PREFIX)/bin:$(BREW_PREFIX)/bin:$(PATH)"
 
 # デフォルトターゲット
 .PHONY: help
@@ -46,9 +72,15 @@ help:
 	@echo ""
 	@echo "Build Commands:"
 	@echo "  make all            - ビルド（テスト含む）"
-	@echo "  make build          - cmコンパイラのみビルド"
-	@echo "  make build-all      - テストを含むビルド"
+	@echo "  make build          - コンパイラ + ランタイムのビルド"
+	@echo "  make build-compiler - コンパイラのみビルド"
+	@echo "  make libs           - ランタイムライブラリのビルド"
+	@echo "  make build-all      - テストを含む全ビルド"
+	@echo "  make configure      - CMake configure (明示的再構成)"
 	@echo "  make release        - リリースビルド"
+	@echo "  make dist           - 配布用アーカイブ作成 (.tar.gz)"
+	@echo "  make install        - ~/.cm/ にインストール"
+	@echo "  make uninstall      - ~/.cm/ からアンインストール"
 	@echo "  make clean          - ビルドディレクトリをクリーン"
 	@echo "  make rebuild        - クリーン後に再ビルド"
 	@echo ""
@@ -84,6 +116,10 @@ help:
 	@echo "  make test-llvm-wasm-all-opts       - WASM全最適化レベルテスト"
 	@echo "  make test-js-all-opts              - JS全最適化レベルテスト"
 	@echo "  make test-all-opts                 - 全プラットフォーム・全最適化レベルテスト"
+	@echo ""
+	@echo "Test Commands (Baremetal/UEFI):"
+	@echo "  make test-baremetal   - ベアメタルコンパイルテスト"
+	@echo "  make test-uefi        - UEFIコンパイルテスト"
 	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
 	@echo ""
@@ -124,37 +160,161 @@ help:
 # ========================================
 
 .PHONY: all
-all: build-all
+all: build
 
-.PHONY: build
-build:
-	@echo "Building Cm compiler (debug mode, arch=$(ARCH))..."
+# CMake configure（初回 or 明示的に実行）
+.PHONY: configure
+configure:
+	@echo "Configuring CMake (debug mode, arch=$(ARCH))..."
 	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
-	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@echo "✅ Configure complete!"
+
+.PHONY: configure-release
+configure-release:
+	@echo "Configuring CMake (release mode, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
+	@echo "✅ Configure complete!"
+
+.PHONY: configure-test
+configure-test:
+	@echo "Configuring CMake (debug mode with tests, arch=$(ARCH))..."
+	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
+	@echo "✅ Configure complete!"
+
+# コンパイラのみビルド（configureは初回のみ自動実行）
+.PHONY: build-compiler
+build-compiler:
+	@if [ ! -f $(BUILD_DIR)/CMakeCache.txt ]; then \
+		echo "初回ビルド: CMake configureを実行..."; \
+		$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS); \
+	fi
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
+	@echo "✅ Compiler build complete! ($(ARCH))"
+
+# コンパイラ + ランタイムライブラリをビルド
+.PHONY: build
+build: build-compiler libs
 	@echo "✅ Build complete! ($(ARCH))"
+
+.PHONY: libs
+libs:
+	@echo "Building runtime libraries (arch=$(ARCH))..."
+	@$(MAKE) -C libs/native ARCH=$(ARCH) all-with-wasm
+	@echo "✅ Runtime libraries build complete!"
+
+.PHONY: libs-clean
+libs-clean:
+	@$(MAKE) -C libs/native clean
 
 .PHONY: build-all
 build-all:
-	@echo "Building Cm compiler with tests (debug mode, arch=$(ARCH))..."
-	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS)
-	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/CMakeCache.txt ] || ! grep -q 'BUILD_TESTING:BOOL=ON' $(BUILD_DIR)/CMakeCache.txt 2>/dev/null; then \
+		echo "テスト有効で CMake configureを実行..."; \
+		$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DCM_USE_LLVM=ON -DBUILD_TESTING=ON $(CMAKE_ARCH_FLAGS); \
+	fi
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
+	@$(MAKE) libs
 	@echo "✅ Build complete (with tests, $(ARCH))!"
 
 .PHONY: release
 release:
-	@echo "Building Cm compiler (release mode, arch=$(ARCH))..."
-	@$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS)
-	@$(BUILD_ENV) cmake --build $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/CMakeCache.txt ] || ! grep -q 'CMAKE_BUILD_TYPE:STRING=Release' $(BUILD_DIR)/CMakeCache.txt 2>/dev/null; then \
+		echo "リリースモードで CMake configureを実行..."; \
+		$(BUILD_ENV) cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCM_USE_LLVM=ON $(CMAKE_ARCH_FLAGS); \
+	fi
+	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
+	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
+
+# 配布物ビルド（tar.gz作成）
+# 含まれるもの: コンパイラ, stdランタイム, VSCode拡張, チュートリアル, examples, README
+.PHONY: dist
+dist: release
+	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
+	OS=$$(uname -s | tr 'A-Z' 'a-z'); \
+	DIST_DIR=".tmp/cm-v$${VERSION}-$${OS}-$(ARCH)"; \
+	DIST_ARCHIVE=".tmp/cm-v$${VERSION}-$${OS}-$(ARCH).tar.gz"; \
+	echo "Building distribution: cm-v$${VERSION}-$${OS}-$(ARCH)..."; \
+	rm -rf "$${DIST_DIR}" "$${DIST_ARCHIVE}"; \
+	mkdir -p "$${DIST_DIR}"/{bin,lib,vscode-extension,docs/tutorials,examples}; \
+	cp cm "$${DIST_DIR}/bin/"; \
+	cp build/lib/*.o build/lib/*.a "$${DIST_DIR}/lib/" 2>/dev/null || true; \
+	if [ -d vscode-extension ]; then \
+		(cd vscode-extension && npm install --silent 2>/dev/null && npm run compile --silent 2>/dev/null && \
+		 npx @vscode/vsce package --allow-missing-repository --skip-license 2>/dev/null || true); \
+		cp vscode-extension/cm-language-*.vsix "$${DIST_DIR}/vscode-extension/" 2>/dev/null || true; \
+	fi; \
+	cp -r docs/tutorials/ja "$${DIST_DIR}/docs/tutorials/" 2>/dev/null || true; \
+	cp -r docs/tutorials/en "$${DIST_DIR}/docs/tutorials/" 2>/dev/null || true; \
+	printf '# Cm ドキュメント\n\n## オンラインドキュメント\n\n🌐 https://shadowlink0122.github.io/Cm/\n\n- [クイックスタート](https://shadowlink0122.github.io/Cm/QUICKSTART.html)\n- [言語仕様](https://shadowlink0122.github.io/Cm/design/CANONICAL_SPEC.html)\n- [チュートリアル](https://shadowlink0122.github.io/Cm/tutorials/)\n- [リリースノート](https://shadowlink0122.github.io/Cm/releases/)\n\n## オフラインドキュメント\n\n- tutorials/ja/ - 日本語チュートリアル\n- tutorials/en/ - 英語チュートリアル\n' > "$${DIST_DIR}/docs/DOCUMENTATION.md"; \
+	cp -r examples/* "$${DIST_DIR}/examples/" 2>/dev/null || true; \
+	find "$${DIST_DIR}/examples" -name "node_modules" -type d -prune -exec rm -rf {} + 2>/dev/null || true; \
+	find "$${DIST_DIR}/examples" -name ".DS_Store" -delete 2>/dev/null || true; \
+	cp README.md VERSION "$${DIST_DIR}/"; \
+	(cd .tmp && tar czf "cm-v$${VERSION}-$${OS}-$(ARCH).tar.gz" "cm-v$${VERSION}-$${OS}-$(ARCH)/"); \
+	echo ""; \
+	echo "=========================================="; \
+	echo "  ✅ Distribution build complete!"; \
+	echo "=========================================="; \
+	echo "  Archive: $${DIST_ARCHIVE}"; \
+	ls -lh "$${DIST_ARCHIVE}" | awk '{print "  Size:    " $$5}'; \
+	echo "  Contents:"; \
+	echo "    bin/cm             - コンパイラ"; \
+	echo "    lib/               - ランタイムライブラリ"; \
+	echo "    vscode-extension/  - VSCode拡張 (.vsix)"; \
+	echo "    docs/tutorials/    - チュートリアル (ja/en)"; \
+	echo "    examples/          - サンプルコード"; \
+	echo "    README.md          - プロジェクト説明"; \
+	echo "=========================================="
+
+# インストール: ~/.cm/bin/cm と ~/.cm/lib/ にインストール
+CM_INSTALL_DIR = $(HOME)/.cm
+
+.PHONY: install
+install: release
+	@echo "=========================================="
+	@echo "  Cm インストール"
+	@echo "=========================================="
+	@mkdir -p $(CM_INSTALL_DIR)/bin
+	@mkdir -p $(CM_INSTALL_DIR)/lib
+	@cp -L $(CM) $(CM_INSTALL_DIR)/bin/cm
+	@cp build/lib/*.o $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
+	@cp build/lib/*.a $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
+	@echo ""
+	@echo "✅ インストール完了!"
+	@echo "  バイナリ: $(CM_INSTALL_DIR)/bin/cm"
+	@echo "  ライブラリ: $(CM_INSTALL_DIR)/lib/"
+	@echo ""
+	@if echo "$$PATH" | grep -q "$(CM_INSTALL_DIR)/bin"; then \
+		echo "  PATHは設定済みです"; \
+	else \
+		echo "  以下をシェル設定ファイルに追加してください:"; \
+		echo ""; \
+		echo "    export PATH=\"$(CM_INSTALL_DIR)/bin:\$$PATH\""; \
+		echo ""; \
+		echo "  例: echo 'export PATH=\"$(CM_INSTALL_DIR)/bin:\$$PATH\"' >> ~/.zshrc"; \
+	fi
+	@echo "=========================================="
+
+.PHONY: uninstall
+uninstall:
+	@echo "Cm をアンインストール中..."
+	@rm -rf $(CM_INSTALL_DIR)
+	@echo "✅ $(CM_INSTALL_DIR) を削除しました"
+	@echo "  シェル設定ファイルからPATH設定も削除してください"
 
 .PHONY: clean
 clean:
 	@echo "Cleaning build directory..."
-	@rm -rf $(CM) $(BUILD_DIR) .tmp/*
+	@rm -rf $(CM) $(BUILD_DIR) .tmp/* .cm-cache
+	@find . -name "*.o" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
+	@find . -name "*.EFI" -not -path "./.git/*" -delete 2>/dev/null || true
+	@find . -name "*.lib" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
 	@echo "✅ Clean complete!"
 
 .PHONY: rebuild
 rebuild: clean build-all
+
 
 # ========================================
 # Unit Test Commands (C++ tests via ctest)
@@ -188,375 +348,104 @@ test-opt:
 	@ctest --test-dir $(BUILD_DIR) -R "MirOptimizationTest" --output-on-failure
 
 # ========================================
-# Integration Test Commands
+# Integration Test Commands（マクロで自動生成）
 # ========================================
 
-# インタプリタテスト（デフォルトはO3）
-.PHONY: test-interpreter
-test-interpreter:
-	@echo "Running interpreter tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter
+# テストターゲット自動生成マクロ
+# 引数: $(1)=バックエンド名, $(2)=表示名
+define BACKEND_DEFAULT_TARGETS
+.PHONY: test-$(1)
+test-$(1):
+	@echo "Running $(2) tests (O3)..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b $(1)
 
-# 並列インタプリタテスト
-.PHONY: test-interpreter-parallel
-test-interpreter-parallel:
-	@echo "Running interpreter tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
+.PHONY: test-$(1)-parallel
+test-$(1)-parallel:
+	@echo "Running $(2) tests (parallel, O3)..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b $(1) -p
+endef
 
-# インタプリタ最適化レベル別テスト（シリアル）
-.PHONY: test-interpreter-o0
-test-interpreter-o0:
-	@echo "Running interpreter tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b interpreter
+# 最適化レベル別テスト自動生成マクロ
+# 引数: $(1)=バックエンド名, $(2)=表示名, $(3)=最適化レベル(0-3)
+define BACKEND_OPT_TARGETS
+.PHONY: test-$(1)-o$(3)
+test-$(1)-o$(3):
+	@echo "Running $(2) tests (O$(3), serial)..."
+	@OPT_LEVEL=$(3) tests/unified_test_runner.sh -b $(1)
 
-.PHONY: test-interpreter-o1
-test-interpreter-o1:
-	@echo "Running interpreter tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b interpreter
+.PHONY: test-$(1)-o$(3)-parallel
+test-$(1)-o$(3)-parallel:
+	@echo "Running $(2) tests (O$(3), parallel)..."
+	@OPT_LEVEL=$(3) tests/unified_test_runner.sh -b $(1) -p
+endef
 
-.PHONY: test-interpreter-o2
-test-interpreter-o2:
-	@echo "Running interpreter tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b interpreter
-
-.PHONY: test-interpreter-o3
-test-interpreter-o3:
-	@echo "Running interpreter tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter
-
-# インタプリタ最適化レベル別テスト（パラレル）
-.PHONY: test-interpreter-o0-parallel
-test-interpreter-o0-parallel:
-	@echo "Running interpreter tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-o1-parallel
-test-interpreter-o1-parallel:
-	@echo "Running interpreter tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-o2-parallel
-test-interpreter-o2-parallel:
-	@echo "Running interpreter tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-o3-parallel
-test-interpreter-o3-parallel:
-	@echo "Running interpreter tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
-
-.PHONY: test-interpreter-all-opts
-test-interpreter-all-opts: test-interpreter-o0-parallel test-interpreter-o1-parallel test-interpreter-o2-parallel test-interpreter-o3-parallel
+# 全最適化レベルテスト集約マクロ
+# 引数: $(1)=バックエンド名, $(2)=表示名
+define BACKEND_ALL_OPTS_TARGET
+.PHONY: test-$(1)-all-opts
+test-$(1)-all-opts: test-$(1)-o0-parallel test-$(1)-o1-parallel test-$(1)-o2-parallel test-$(1)-o3-parallel
 	@echo ""
 	@echo "=========================================="
-	@echo "✅ All interpreter optimization level tests completed!"
+	@echo "✅ All $(2) optimization level tests completed!"
 	@echo "=========================================="
+endef
+
+# バックエンド定義: 名前 表示名 ショートカット
+# --- interpreter ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,interpreter,interpreter))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,interpreter,interpreter,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,interpreter,interpreter))
+
+# --- jit ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,jit,JIT))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,jit,JIT,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,jit,JIT))
+
+# --- llvm ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,llvm,LLVM native))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,llvm,LLVM native,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,llvm,LLVM native))
+
+# --- llvm-wasm ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,llvm-wasm,LLVM WASM))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,llvm-wasm,LLVM WASM,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,llvm-wasm,LLVM WASM))
+
+# --- js ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,js,JavaScript))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,js,JavaScript,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,js,JavaScript))
 
 # ========================================
-# LLVM Backend Test Commands
+# UEFI / Baremetal Test Commands
 # ========================================
 
-# LLVM ネイティブテスト（デフォルトはO3）
-.PHONY: test-llvm
-test-llvm:
-	@echo "Running LLVM native code generation tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm
+# UEFI コンパイルテスト
+.PHONY: test-uefi
+test-uefi:
+	@echo "Running UEFI compile tests..."
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-uefi -c uefi:uefi_compile
 
-# LLVM ネイティブテスト（並列）
-.PHONY: test-llvm-parallel
-test-llvm-parallel:
-	@echo "Running LLVM native code generation tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
-
-# LLVM最適化レベル別テスト（シリアル）
-.PHONY: test-llvm-o0
-test-llvm-o0:
-	@echo "Running LLVM native tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm
-
-.PHONY: test-llvm-o1
-test-llvm-o1:
-	@echo "Running LLVM native tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm
-
-.PHONY: test-llvm-o2
-test-llvm-o2:
-	@echo "Running LLVM native tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm
-
-.PHONY: test-llvm-o3
-test-llvm-o3:
-	@echo "Running LLVM native tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm
-
-# LLVM最適化レベル別テスト（パラレル）
-.PHONY: test-llvm-o0-parallel
-test-llvm-o0-parallel:
-	@echo "Running LLVM native tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-o1-parallel
-test-llvm-o1-parallel:
-	@echo "Running LLVM native tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-o2-parallel
-test-llvm-o2-parallel:
-	@echo "Running LLVM native tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-o3-parallel
-test-llvm-o3-parallel:
-	@echo "Running LLVM native tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
-
-.PHONY: test-llvm-all-opts
-test-llvm-all-opts: test-llvm-o0-parallel test-llvm-o1-parallel test-llvm-o2-parallel test-llvm-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All LLVM optimization level tests completed!"
-	@echo "=========================================="
+# ベアメタル コンパイルテスト
+.PHONY: test-baremetal
+test-baremetal:
+	@echo "Running Baremetal compile tests..."
+	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-baremetal -c "baremetal:baremetal baremetal:errors baremetal:allowed"
 
 # ========================================
-# JIT Backend Test Commands
+# Test Suite Commands
 # ========================================
 
-# JITテスト（デフォルトはO3）
-.PHONY: test-jit
-test-jit:
-	@echo "Running JIT tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit
+# スイート別テスト自動生成マクロ
+# 引数: $(1)=スイート名
+define SUITE_TARGET
+.PHONY: test-suite-$(1)
+test-suite-$(1):
+	@echo "Running $(1) suite tests..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -s $(1) -p
+endef
 
-# JITテスト（並列）
-.PHONY: test-jit-parallel
-test-jit-parallel:
-	@echo "Running JIT tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -p
-
-# JIT最適化レベル別テスト（シリアル）
-.PHONY: test-jit-o0
-test-jit-o0:
-	@echo "Running JIT tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b jit
-
-.PHONY: test-jit-o1
-test-jit-o1:
-	@echo "Running JIT tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b jit
-
-.PHONY: test-jit-o2
-test-jit-o2:
-	@echo "Running JIT tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b jit
-
-.PHONY: test-jit-o3
-test-jit-o3:
-	@echo "Running JIT tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit
-
-# JIT最適化レベル別テスト（パラレル）
-.PHONY: test-jit-o0-parallel
-test-jit-o0-parallel:
-	@echo "Running JIT tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-o1-parallel
-test-jit-o1-parallel:
-	@echo "Running JIT tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-o2-parallel
-test-jit-o2-parallel:
-	@echo "Running JIT tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-o3-parallel
-test-jit-o3-parallel:
-	@echo "Running JIT tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b jit -p
-
-.PHONY: test-jit-all-opts
-test-jit-all-opts: test-jit-o0-parallel test-jit-o1-parallel test-jit-o2-parallel test-jit-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All JIT optimization level tests completed!"
-	@echo "=========================================="
-
-# LLVM WebAssemblyテスト（デフォルトはO3）
-.PHONY: test-llvm-wasm
-test-llvm-wasm:
-	@echo "Running LLVM WebAssembly code generation tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm
-
-# LLVM WebAssemblyテスト（並列）
-.PHONY: test-llvm-wasm-parallel
-test-llvm-wasm-parallel:
-	@echo "Running LLVM WebAssembly code generation tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
-
-# WASM最適化レベル別テスト（シリアル）
-.PHONY: test-llvm-wasm-o0
-test-llvm-wasm-o0:
-	@echo "Running WASM tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm-wasm
-
-.PHONY: test-llvm-wasm-o1
-test-llvm-wasm-o1:
-	@echo "Running WASM tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm-wasm
-
-.PHONY: test-llvm-wasm-o2
-test-llvm-wasm-o2:
-	@echo "Running WASM tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-wasm
-
-.PHONY: test-llvm-wasm-o3
-test-llvm-wasm-o3:
-	@echo "Running WASM tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm
-
-# WASM最適化レベル別テスト（パラレル）
-.PHONY: test-llvm-wasm-o0-parallel
-test-llvm-wasm-o0-parallel:
-	@echo "Running WASM tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-o1-parallel
-test-llvm-wasm-o1-parallel:
-	@echo "Running WASM tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-o2-parallel
-test-llvm-wasm-o2-parallel:
-	@echo "Running WASM tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-o3-parallel
-test-llvm-wasm-o3-parallel:
-	@echo "Running WASM tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
-
-.PHONY: test-llvm-wasm-all-opts
-test-llvm-wasm-all-opts: test-llvm-wasm-o0-parallel test-llvm-wasm-o1-parallel test-llvm-wasm-o2-parallel test-llvm-wasm-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All WASM optimization level tests completed!"
-	@echo "=========================================="
-
-# ========================================
-# JavaScript Backend Test Commands
-# ========================================
-
-# JavaScript テスト（デフォルトはO3）
-.PHONY: test-js
-test-js:
-	@echo "Running JavaScript code generation tests (O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js
-
-# JavaScript テスト（並列）
-.PHONY: test-js-parallel
-test-js-parallel:
-	@echo "Running JavaScript code generation tests (parallel, O3)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p
-
-# JS最適化レベル別テスト（シリアル）
-.PHONY: test-js-o0
-test-js-o0:
-	@echo "Running JS tests (O0, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b js
-
-.PHONY: test-js-o1
-test-js-o1:
-	@echo "Running JS tests (O1, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b js
-
-.PHONY: test-js-o2
-test-js-o2:
-	@echo "Running JS tests (O2, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b js
-
-.PHONY: test-js-o3
-test-js-o3:
-	@echo "Running JS tests (O3, serial)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js
-
-# JS最適化レベル別テスト（パラレル）
-.PHONY: test-js-o0-parallel
-test-js-o0-parallel:
-	@echo "Running JS tests (O0, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=0 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-o1-parallel
-test-js-o1-parallel:
-	@echo "Running JS tests (O1, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=1 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-o2-parallel
-test-js-o2-parallel:
-	@echo "Running JS tests (O2, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=2 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-o3-parallel
-test-js-o3-parallel:
-	@echo "Running JS tests (O3, parallel)..."
-	@chmod +x tests/unified_test_runner.sh
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p
-
-.PHONY: test-js-all-opts
-test-js-all-opts: test-js-o0-parallel test-js-o1-parallel test-js-o2-parallel test-js-o3-parallel
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All JS optimization level tests completed!"
-	@echo "=========================================="
+$(foreach s,core syntax stdlib modules platform runtime,$(eval $(call SUITE_TARGET,$(s))))
 
 # すべてのLLVMテストを実行
 .PHONY: test-llvm-all
@@ -582,7 +471,6 @@ test-all-opts: test-interpreter-all-opts test-llvm-all-opts test-llvm-wasm-all-o
 .PHONY: test-all-parallel
 test-all-parallel:
 	@echo "Running all tests in parallel..."
-	@chmod +x tests/unified_test_runner.sh
 	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
 	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
 	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
@@ -590,6 +478,31 @@ test-all-parallel:
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All parallel tests completed!"
+	@echo "=========================================="
+
+# キャッシュ無効テスト（並列）
+.PHONY: tipnc tlpnc twpnc tjpnc test-all-parallel-nc
+tipnc: build  ## インタプリタ（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p --no-cache
+
+tlpnc: build  ## LLVM（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p --no-cache
+
+twpnc: build  ## WASM（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p --no-cache
+
+tjpnc: build  ## JavaScript（パラレル、キャッシュ無効）
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p --no-cache
+
+test-all-parallel-nc: build  ## 全バックエンド（パラレル、キャッシュ無効）
+	@echo "Running all tests in parallel (no cache)..."
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p --no-cache
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All parallel tests (no cache) completed!"
 	@echo "=========================================="
 
 # すべてのテストを実行
@@ -603,6 +516,9 @@ test-all: test test-interpreter test-llvm-all
 # ========================================
 # Run Commands
 # ========================================
+
+# デフォルトファイル設定
+FILE ?=
 
 .PHONY: run
 run:
@@ -643,7 +559,7 @@ format:
 	@find src tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
 		-exec clang-format -i -style=file {} \;
 	@echo "Formatting Cm code..."
-	@find tests/test_programs std -type f -name "*.cm" -exec ./cm fmt {} \;
+	@find tests/programs libs -type f -name "*.cm" -exec ./cm fmt -q {} \;
 	@echo "✅ Format complete!"
 
 .PHONY: format-check
@@ -658,9 +574,10 @@ format-check:
 lint: format-check
 
 # ========================================
-# Quick Development Shortcuts
+# Quick Shortcuts（マクロで自動生成）
 # ========================================
 
+# 基本ショートカット
 .PHONY: b
 b: build
 
@@ -679,159 +596,60 @@ tao: test-all-opts
 .PHONY: c
 c: clean
 
-.PHONY: ti
-ti: test-jit
+# バックエンド別ショートカット自動生成マクロ
+# 引数: $(1)=ショートカットプレフィクス, $(2)=バックエンド名
+define SHORTCUT_TEMPLATE
+.PHONY: $(1)
+$(1): test-$(2)
 
-.PHONY: tip
-tip: test-jit-parallel
+.PHONY: $(1)p
+$(1)p: test-$(2)-parallel
 
-.PHONY: ti0
-ti0: test-jit-o0
+.PHONY: $(1)0
+$(1)0: test-$(2)-o0
 
-.PHONY: ti1
-ti1: test-jit-o1
+.PHONY: $(1)1
+$(1)1: test-$(2)-o1
 
-.PHONY: ti2
-ti2: test-jit-o2
+.PHONY: $(1)2
+$(1)2: test-$(2)-o2
 
-.PHONY: ti3
-ti3: test-jit-o3
+.PHONY: $(1)3
+$(1)3: test-$(2)-o3
 
-.PHONY: tip0
-tip0: test-jit-o0-parallel
+.PHONY: $(1)p0
+$(1)p0: test-$(2)-o0-parallel
 
-.PHONY: tip1
-tip1: test-jit-o1-parallel
+.PHONY: $(1)p1
+$(1)p1: test-$(2)-o1-parallel
 
-.PHONY: tip2
-tip2: test-jit-o2-parallel
+.PHONY: $(1)p2
+$(1)p2: test-$(2)-o2-parallel
 
-.PHONY: tip3
-tip3: test-jit-o3-parallel
+.PHONY: $(1)p3
+$(1)p3: test-$(2)-o3-parallel
+endef
 
-.PHONY: tl
-tl: test-llvm
+# ショートカット生成
+$(eval $(call SHORTCUT_TEMPLATE,ti,interpreter))
+$(eval $(call SHORTCUT_TEMPLATE,tjit,jit))
+$(eval $(call SHORTCUT_TEMPLATE,tl,llvm))
+$(eval $(call SHORTCUT_TEMPLATE,tlw,llvm-wasm))
+$(eval $(call SHORTCUT_TEMPLATE,tj,js))
 
-.PHONY: tlp
-tlp: test-llvm-parallel
-
-.PHONY: tl0
-tl0: test-llvm-o0
-
-.PHONY: tl1
-tl1: test-llvm-o1
-
-.PHONY: tl2
-tl2: test-llvm-o2
-
-.PHONY: tl3
-tl3: test-llvm-o3
-
-.PHONY: tlp0
-tlp0: test-llvm-o0-parallel
-
-.PHONY: tlp1
-tlp1: test-llvm-o1-parallel
-
-.PHONY: tlp2
-tlp2: test-llvm-o2-parallel
-
-.PHONY: tlp3
-tlp3: test-llvm-o3-parallel
-
-.PHONY: tlw
-tlw: test-llvm-wasm
-
-.PHONY: tlwp
-tlwp: test-llvm-wasm-parallel
-
-.PHONY: tlw0
-tlw0: test-llvm-wasm-o0
-
-.PHONY: tlw1
-tlw1: test-llvm-wasm-o1
-
-.PHONY: tlw2
-tlw2: test-llvm-wasm-o2
-
-.PHONY: tlw3
-tlw3: test-llvm-wasm-o3
-
-.PHONY: tlwp0
-tlwp0: test-llvm-wasm-o0-parallel
-
-.PHONY: tlwp1
-tlwp1: test-llvm-wasm-o1-parallel
-
-.PHONY: tlwp2
-tlwp2: test-llvm-wasm-o2-parallel
-
-.PHONY: tlwp3
-tlwp3: test-llvm-wasm-o3-parallel
-
+# LLVM集約ショートカット
 .PHONY: tla
 tla: test-llvm-all
 
-.PHONY: tj
-tj: test-js
+# Baremetal/UEFI ショートカット
+.PHONY: tb
+tb: test-baremetal
 
-.PHONY: tjp
-tjp: test-js-parallel
+.PHONY: tu
+tu: test-uefi
 
-.PHONY: tj0
-tj0: test-js-o0
-
-.PHONY: tj1
-tj1: test-js-o1
-
-.PHONY: tj2
-tj2: test-js-o2
-
-.PHONY: tj3
-tj3: test-js-o3
-
-.PHONY: tjp0
-tjp0: test-js-o0-parallel
-
-.PHONY: tjp1
-tjp1: test-js-o1-parallel
-
-.PHONY: tjp2
-tjp2: test-js-o2-parallel
-
-.PHONY: tjp3
-tjp3: test-js-o3-parallel
-
-# JIT shortcuts
-.PHONY: tjit
-tjit: test-jit
-
-.PHONY: tjitp
-tjitp: test-jit-parallel
-
-.PHONY: tjit0
-tjit0: test-jit-o0
-
-.PHONY: tjit1
-tjit1: test-jit-o1
-
-.PHONY: tjit2
-tjit2: test-jit-o2
-
-.PHONY: tjit3
-tjit3: test-jit-o3
-
-.PHONY: tjitp0
-tjitp0: test-jit-o0-parallel
-
-.PHONY: tjitp1
-tjitp1: test-jit-o1-parallel
-
-.PHONY: tjitp2
-tjitp2: test-jit-o2-parallel
-
-.PHONY: tjitp3
-tjitp3: test-jit-o3-parallel
+.PHONY: tbu
+tbu: test-baremetal test-uefi
 
 # ========================================
 # Benchmark Commands
@@ -915,9 +733,6 @@ bench-clean:
 	@rm -f /tmp/bench_*
 	@echo "✅ Benchmark cleanup complete!"
 
-# デフォルトファイル設定
-FILE ?=
-
 # ========================================
 # Standard Library Test Commands
 # ========================================
@@ -979,5 +794,3 @@ sc: security-check
 
 .PHONY: pc
 pc: pre-commit
-
-

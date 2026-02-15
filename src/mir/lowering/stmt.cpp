@@ -106,6 +106,74 @@ static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, Lower
     return std::nullopt;
 }
 
+// 文のlowering（variant dispatch）
+void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ctx) {
+    // variant訪問用のvisitor
+    std::visit(
+        [&](const auto& stmt_ptr) {
+            using T = std::decay_t<decltype(stmt_ptr)>;
+
+            if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLet>>) {
+                lower_let(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAssign>>) {
+                lower_assign(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirReturn>>) {
+                lower_return(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirIf>>) {
+                lower_if(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirWhile>>) {
+                lower_while(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirFor>>) {
+                lower_for(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLoop>>) {
+                lower_loop(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirSwitch>>) {
+                lower_switch(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirBlock>>) {
+                lower_block(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirBreak>>) {
+                // break文の処理
+                if (auto* loop = ctx.current_loop()) {
+                    // defer文を実行してからbreak
+                    auto defers = ctx.get_defer_stmts();
+                    for (const auto* defer_stmt : defers) {
+                        lower_statement(*defer_stmt, ctx);
+                    }
+                    auto term = MirTerminator::goto_block(loop->exit);
+                    ctx.set_terminator(std::move(term));
+                    ctx.switch_to_block(ctx.new_block());
+                }
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirContinue>>) {
+                // continue文の処理
+                if (auto* loop = ctx.current_loop()) {
+                    // defer文を実行してからcontinue
+                    auto defers = ctx.get_defer_stmts();
+                    for (const auto* defer_stmt : defers) {
+                        lower_statement(*defer_stmt, ctx);
+                    }
+                    // forループの場合は更新ブロックへ、whileループの場合はヘッダーへ
+                    auto term = MirTerminator::goto_block(loop->update);
+                    ctx.set_terminator(std::move(term));
+                    ctx.switch_to_block(ctx.new_block());
+                }
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirDefer>>) {
+                lower_defer(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirExprStmt>>) {
+                // 式文
+                if (stmt_ptr->expr) {
+                    expr_lowering->lower_expression(*stmt_ptr->expr, ctx);
+                }
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAsm>>) {
+                // インラインアセンブリ
+                lower_asm(*stmt_ptr, ctx);
+            } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirMustBlock>>) {
+                // must {} ブロック（最適化禁止）
+                lower_must_block(*stmt_ptr, ctx);
+            }
+        },
+        stmt.kind);
+}
+
 // let文のlowering
 void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     // move初期化の場合、新しいローカルを作成せずエイリアスとして登録（真のゼロコストmove）
@@ -1164,6 +1232,23 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
     // 判別式をlowering
     LocalId discriminant = expr_lowering->lower_expression(*switch_stmt.expr, ctx);
 
+    // ヘルパー: HirExprからcase値（int64_t）を抽出
+    auto extract_case_value = [](const hir::HirExprPtr& expr) -> int64_t {
+        if (!expr)
+            return 0;
+        if (auto lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr->kind)) {
+            if (*lit) {
+                auto& val = (*lit)->value;
+                if (std::holds_alternative<int64_t>(val)) {
+                    return std::get<int64_t>(val);
+                } else if (std::holds_alternative<char>(val)) {
+                    return static_cast<int64_t>(std::get<char>(val));
+                }
+            }
+        }
+        return 0;
+    };
+
     // 各caseのブロックを作成
     std::vector<std::pair<int64_t, BlockId>> cases;
     std::vector<BlockId> case_blocks;
@@ -1177,41 +1262,40 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
         BlockId case_block = ctx.new_block();
         case_blocks.push_back(case_block);
 
-        // case値を評価
-        int64_t case_value = 0;
+        const auto& pat = *switch_stmt.cases[i].pattern;
 
-        // patternがSingleValueの場合、その値を取得
-        if (switch_stmt.cases[i].pattern &&
-            switch_stmt.cases[i].pattern->kind == hir::HirSwitchPattern::SingleValue &&
-            switch_stmt.cases[i].pattern->value) {
-            // pattern->valueから値を取得
-            if (auto lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(
-                    &switch_stmt.cases[i].pattern->value->kind)) {
-                if (*lit) {
-                    auto& val = (*lit)->value;
-                    if (std::holds_alternative<int64_t>(val)) {
-                        case_value = std::get<int64_t>(val);
-                    } else if (std::holds_alternative<char>(val)) {
-                        case_value = static_cast<int64_t>(std::get<char>(val));
-                    }
+        if (pat.kind == hir::HirSwitchPattern::SingleValue) {
+            // 単一値パターン: patternのvalueから値を取得
+            int64_t case_value = 0;
+            if (pat.value) {
+                case_value = extract_case_value(pat.value);
+            }
+            // 旧互換性のためvalueフィールドも確認
+            else if (switch_stmt.cases[i].value) {
+                case_value = extract_case_value(switch_stmt.cases[i].value);
+            }
+            cases.push_back({case_value, case_block});
+
+        } else if (pat.kind == hir::HirSwitchPattern::Or) {
+            // Orパターン: 各サブパターンの値を同じブロックに分岐
+            for (const auto& sub_pat : pat.or_patterns) {
+                if (sub_pat && sub_pat->kind == hir::HirSwitchPattern::SingleValue) {
+                    int64_t sub_value = extract_case_value(sub_pat->value);
+                    cases.push_back({sub_value, case_block});
+                }
+            }
+
+        } else if (pat.kind == hir::HirSwitchPattern::Range) {
+            // Rangeパターン: 範囲内の全値を個別のcaseとして展開
+            int64_t range_start = extract_case_value(pat.range_start);
+            int64_t range_end = extract_case_value(pat.range_end);
+            // 安全制限: 最大256エントリまで
+            if (range_end - range_start <= 256) {
+                for (int64_t v = range_start; v <= range_end; ++v) {
+                    cases.push_back({v, case_block});
                 }
             }
         }
-        // 旧互換性のためvalueフィールドも確認
-        else if (switch_stmt.cases[i].value) {
-            if (auto lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(
-                    &switch_stmt.cases[i].value->kind)) {
-                if (*lit) {
-                    auto& val = (*lit)->value;
-                    if (std::holds_alternative<int64_t>(val)) {
-                        case_value = std::get<int64_t>(val);
-                    } else if (std::holds_alternative<char>(val)) {
-                        case_value = static_cast<int64_t>(std::get<char>(val));
-                    }
-                }
-            }
-        }
-        cases.push_back({case_value, case_block});
     }
 
     // defaultブロック

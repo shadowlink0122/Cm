@@ -1,0 +1,38 @@
+// js::timer - タイマーAPI
+// Node.js / ブラウザ環境のタイマー機能を提供
+module js.timer;
+
+// ============================================================
+// JavaScript グローバルタイマーAPI
+// ============================================================
+
+use js {
+    // setTimeout: 指定ミリ秒後にコールバックを実行
+    // 戻り値: タイマーID（clearTimeout用）
+    int setTimeout(int callback, int delay_ms);
+
+    // clearTimeout: setTimeoutをキャンセル
+    void clearTimeout(int timer_id);
+
+    // setInterval: 指定ミリ秒間隔でコールバックを繰り返し実行
+    // 戻り値: タイマーID（clearInterval用）
+    int setInterval(int callback, int interval_ms);
+
+    // clearInterval: setIntervalをキャンセル
+    void clearInterval(int timer_id);
+}
+
+// ============================================================
+// ラッパー関数
+// ============================================================
+
+/// 指定ミリ秒間処理をブロック（同期的なスリープ）
+/// 注意: Node.jsではメインスレッドをブロックする
+export void sleep_ms(int ms) {
+    // JavaScriptにはsleepがないため、ビジーウェイトで代替
+    // 実際のプロダクションでは await + setTimeout を使うべき
+    // この関数はテスト・デバッグ用
+    int end = 0;  // Date.now() + ms 相当（簡易実装）
+    // ビジーウェイトは非推奨のため、実装せず注意メッセージのみ
+    println("警告: sleep_ms()はJSでは非推奨です。async/awaitを使用してください。");
+}

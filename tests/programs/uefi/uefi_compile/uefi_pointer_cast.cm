@@ -1,0 +1,22 @@
+//! platform: uefi
+// UEFIポインタキャスト・ポインタ演算テスト
+// void*経由のアクセスをコンパイルレベルで検証
+
+ulong read_table_entry(void* table, int offset) {
+    ulong* entries = table as ulong*;
+    return *(entries + offset);
+}
+
+void write_buffer(void* buf, int index, utiny value) {
+    utiny* p = buf as utiny*;
+    *(p + index) = value;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    // ポインタキャスト演算の検証
+    ulong dummy = 0;
+    ulong* ptr = &dummy;
+    void* vptr = ptr as void*;
+    ulong result = read_table_entry(vptr, 0);
+    return result;
+}

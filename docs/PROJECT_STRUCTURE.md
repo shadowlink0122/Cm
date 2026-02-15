@@ -81,7 +81,7 @@ Cm/
 ├── ROADMAP.md               # 開発ロードマップ
 ├── README.md                # プロジェクト説明
 ├── CONTRIBUTING.md          # 貢献ガイド
-└── CHANGELOG.md             # 変更履歴
+└── VERSION                  # バージョン番号
 ```
 
 ## アーキテクチャ

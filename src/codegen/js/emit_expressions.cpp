@@ -25,18 +25,43 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             std::string rhs = emitOperand(*data.rhs, func);
             std::string op = emitBinaryOp(data.op);
 
+            // ポインタ演算: result_typeがPointerの場合（加算・減算）
+            if (data.result_type && data.result_type->kind == TypeKind::Pointer) {
+                // ポインタ加算: ptr + n → __cm_ptr_add(ptr, n)
+                if (data.op == mir::MirBinaryOp::Add) {
+                    return "__cm_ptr_add(" + lhs + ", " + rhs + ")";
+                }
+                // ポインタ減算: ptr - n → __cm_ptr_sub(ptr, n)
+                if (data.op == mir::MirBinaryOp::Sub) {
+                    return "__cm_ptr_sub(" + lhs + ", " + rhs + ")";
+                }
+            }
+
+            // ポインタ比較: 両オペランドがPointerの場合
+            auto lhsType = getOperandType(*data.lhs, func);
+            auto rhsType = getOperandType(*data.rhs, func);
+            if (lhsType && lhsType->kind == TypeKind::Pointer && rhsType &&
+                rhsType->kind == TypeKind::Pointer) {
+                // Eq/Neは__arrも含めて比較（異なる配列上の同一インデックスが等しくなるバグ防止）
+                if (data.op == mir::MirBinaryOp::Eq) {
+                    return "(" + lhs + ".__arr === " + rhs + ".__arr && " + lhs +
+                           ".__idx === " + rhs + ".__idx)";
+                }
+                if (data.op == mir::MirBinaryOp::Ne) {
+                    return "(" + lhs + ".__arr !== " + rhs + ".__arr || " + lhs +
+                           ".__idx !== " + rhs + ".__idx)";
+                }
+                // Lt/Gt/Le/Geは同一配列前提で__idxのみ比較
+                if (data.op == mir::MirBinaryOp::Lt || data.op == mir::MirBinaryOp::Gt ||
+                    data.op == mir::MirBinaryOp::Le || data.op == mir::MirBinaryOp::Ge) {
+                    return "(" + lhs + ".__idx " + op + " " + rhs + ".__idx)";
+                }
+            }
+
             // 配列・構造体の比較には深い比較を使用
             if (data.op == mir::MirBinaryOp::Eq || data.op == mir::MirBinaryOp::Ne) {
-                auto lhsType = getOperandType(*data.lhs, func);
                 if (lhsType &&
                     (lhsType->kind == TypeKind::Array || lhsType->kind == TypeKind::Struct)) {
-                    // Note: String is primitive in JS/Cm generated code usually?
-                    // If string, === is fine.
-                    // Slice is structure {ptr, len}. But dynamic array slice is JS Array?
-                    // Fixed array is JS Array.
-                    // Struct is JS Object.
-                    // All are Objects.
-
                     std::string check = "__cm_deep_equal(" + lhs + ", " + rhs + ")";
                     if (data.op == mir::MirBinaryOp::Ne) {
                         return "!" + check;
@@ -106,8 +131,50 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
 
         case mir::MirRvalue::Ref: {
             const auto& data = std::get<mir::MirRvalue::RefData>(rvalue.data);
+            // 配列要素へのRef（&arr[i]）→ ポインタオブジェクト {__arr, __idx}
+            if (!data.place.projections.empty()) {
+                const auto& lastProj = data.place.projections.back();
+                if (lastProj.kind == mir::ProjectionKind::Index) {
+                    // 配列のベースを取得（indexプロジェクション前まで）
+                    std::string base = getLocalVarName(func, data.place.local);
+                    if (boxed_locals_.count(data.place.local)) {
+                        base += "[0]";
+                    }
+                    // index前のプロジェクションを適用
+                    for (size_t i = 0; i < data.place.projections.size() - 1; ++i) {
+                        const auto& proj = data.place.projections[i];
+                        if (proj.kind == mir::ProjectionKind::Field) {
+                            hir::TypePtr currentType = nullptr;
+                            if (data.place.local < func.locals.size()) {
+                                currentType = func.locals[data.place.local].type;
+                            }
+                            if (currentType && currentType->kind == TypeKind::Struct) {
+                                auto it = struct_map_.find(currentType->name);
+                                if (it != struct_map_.end() && it->second &&
+                                    proj.field_id < it->second->fields.size()) {
+                                    base += "." + sanitizeIdentifier(
+                                                      it->second->fields[proj.field_id].name);
+                                }
+                            }
+                        } else if (proj.kind == mir::ProjectionKind::Deref) {
+                            // 構造体ポインタのDerefはno-op
+                        }
+                    }
+                    // インデックス値（inline_values_フォールバック付き）
+                    std::string idxStr;
+                    auto it_idx = inline_values_.find(lastProj.index_local);
+                    if (it_idx != inline_values_.end()) {
+                        idxStr = it_idx->second;
+                    } else {
+                        idxStr = getLocalVarName(func, lastProj.index_local);
+                    }
+                    return "{__arr: " + base + ", __idx: " + idxStr + "}";
+                }
+            }
             if (boxed_locals_.count(data.place.local)) {
-                return getLocalVarName(func, data.place.local);
+                // boxed変数へのRef → {__arr: boxed_wrapper, __idx: 0}
+                // boxed変数は[value]形式なので.__arr[.__idx] = [value][0] = valueで正しく動作
+                return "{__arr: " + getLocalVarName(func, data.place.local) + ", __idx: 0}";
             }
             return getLocalVarName(func, data.place.local);
         }
@@ -259,12 +326,18 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
     }
 
     // プロジェクション
-    for (const auto& proj : place.projections) {
+    for (size_t pi = 0; pi < place.projections.size(); ++pi) {
+        const auto& proj = place.projections[pi];
         switch (proj.kind) {
             case mir::ProjectionKind::Field: {
                 // 構造体のフィールド名を取得
                 if (currentType && currentType->kind == TypeKind::Struct) {
                     auto it = struct_map_.find(currentType->name);
+                    // ジェネリック構造体: base nameで見つからない場合、mangled nameで再検索
+                    if (it == struct_map_.end() && !currentType->type_args.empty()) {
+                        std::string mangled = ast::type_to_mangled_name(*currentType);
+                        it = struct_map_.find(mangled);
+                    }
                     if (it != struct_map_.end() && it->second) {
                         const auto* mirStruct = it->second;
                         if (proj.field_id < mirStruct->fields.size()) {
@@ -286,8 +359,15 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
             }
 
             case mir::ProjectionKind::Index: {
-                std::string indexVar = getLocalVarName(func, proj.index_local);
-                result += "[" + indexVar + "]";
+                // インライン値がある場合はそれを使用（変数宣言がスキップされる場合があるため）
+                std::string indexExpr;
+                auto inlineIt = inline_values_.find(proj.index_local);
+                if (inlineIt != inline_values_.end()) {
+                    indexExpr = inlineIt->second;
+                } else {
+                    indexExpr = getLocalVarName(func, proj.index_local);
+                }
+                result += "[" + indexExpr + "]";
                 // 配列のelement_typeに更新
                 if (currentType && currentType->element_type) {
                     currentType = currentType->element_type;
@@ -298,8 +378,39 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
             }
 
             case mir::ProjectionKind::Deref: {
-                // ポインタ参照外し: ポインタ変数はボックス(配列)なので、[0]で実体にアクセス
-                result += "[0]";
+                // ポインタ参照外し:
+                if (boxed_locals_.count(place.local)) {
+                    // ボックス化変数: emitPlaceの先頭で既に[0]が追加されているため追加不要
+                } else if (currentType && currentType->kind == TypeKind::Pointer &&
+                           currentType->element_type &&
+                           currentType->element_type->kind != ast::TypeKind::Struct) {
+                    // ポインタオブジェクト{__arr, __idx}のデリファレンス
+                    std::string ptrExpr = result;
+                    // 先読み: 次のプロジェクションがIndexの場合、複合変換
+                    // ptr[Deref][Index(idx)] → ptr.__arr[ptr.__idx + idx]
+                    if (pi + 1 < place.projections.size() &&
+                        place.projections[pi + 1].kind == mir::ProjectionKind::Index) {
+                        const auto& nextProj = place.projections[pi + 1];
+                        std::string indexExpr;
+                        auto inlineIt = inline_values_.find(nextProj.index_local);
+                        if (inlineIt != inline_values_.end()) {
+                            indexExpr = inlineIt->second;
+                        } else {
+                            indexExpr = getLocalVarName(func, nextProj.index_local);
+                        }
+                        result = ptrExpr + ".__arr[" + ptrExpr + ".__idx + " + indexExpr + "]";
+                        // Indexプロジェクションを消費
+                        ++pi;
+                    } else {
+                        result = ptrExpr + ".__arr[" + ptrExpr + ".__idx]";
+                    }
+                } else if (currentType && currentType->element_type &&
+                           currentType->element_type->kind == ast::TypeKind::Struct) {
+                    // 構造体ポインタ: JSオブジェクトは参照型なのでDerefはno-op
+                } else {
+                    // その他: ボックス配列の[0]でアクセス
+                    result += "[0]";
+                }
                 // ポインタのelement_typeに更新
                 if (currentType && currentType->element_type) {
                     currentType = currentType->element_type;
@@ -315,6 +426,10 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
 }
 
 std::string JSCodeGen::emitConstant(const mir::MirConstant& constant) {
+    // nullリテラル（Void型定数）はJSのnullとして出力
+    if (constant.type && constant.type->kind == ast::TypeKind::Void) {
+        return "null";
+    }
     return std::visit(
         [](auto&& val) -> std::string {
             using T = std::decay_t<decltype(val)>;
@@ -443,6 +558,12 @@ cm::hir::TypePtr JSCodeGen::getOperandType(const mir::MirOperand& operand,
     if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
         const auto& place = std::get<mir::MirPlace>(operand.data);
         return getPlaceType(place, func);
+    }
+
+    // 定数オペランド（true/false/整数リテラル等）の型情報を返す
+    if (operand.kind == mir::MirOperand::Constant) {
+        const auto& constant = std::get<mir::MirConstant>(operand.data);
+        return constant.type;
     }
 
     return nullptr;

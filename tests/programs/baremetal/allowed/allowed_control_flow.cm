@@ -1,0 +1,25 @@
+// ベアメタル正常テスト: 制御フローとループ
+// OS依存機能を使わないロジックはコンパイル可能
+
+int sum_range(int n) {
+    int total = 0;
+    int i = 1;
+    while (i <= n) {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+int max_val(int a, int b) {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+int main() {
+    int s = sum_range(10);
+    int m = max_val(s, 100);
+    return m;
+}

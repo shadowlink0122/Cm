@@ -7,13 +7,13 @@ build/
 /build-*/
 cmake-build-*/
 target/
-web/
 *.o
 *.a
 *.so
 *.dylib
 *.dll
 *.lib
+output.js
 
 # テスト実行ファイル
 *_test
@@ -33,6 +33,7 @@ Thumbs.db
 # Dependencies
 deps/
 cm_modules/
+node_modules/
 
 # Test artifacts
 *.log
@@ -40,6 +41,7 @@ coverage.info
 
 # Temp
 .tmp/
+.cm-cache/
 *.cm.tmp
 test_transpile.cm
 Testing/
@@ -60,6 +62,11 @@ link.ld
 *.ll
 *.bc
 *.wasm
+
+# UEFI
+*.EFI
+tests/uefi/esp/
+third-party/ovmf/
 
 # Jekyll
 .jekyll-cache/

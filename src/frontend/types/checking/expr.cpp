@@ -135,6 +135,20 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
 
     if (inferred_type && !expr.type) {
         expr.type = inferred_type;
+    } else if (inferred_type && expr.type) {
+        // 推論された型がexpr.typeより情報豊富な場合は上書き
+        // 例: パーサーがname=空のStruct型を設定していても、
+        //      スコープから取得した型がname="Result"でtype_argsを持つ場合
+        bool inferred_has_more_info = false;
+        if (expr.type->name.empty() && !inferred_type->name.empty()) {
+            inferred_has_more_info = true;
+        }
+        if (expr.type->type_args.empty() && !inferred_type->type_args.empty()) {
+            inferred_has_more_info = true;
+        }
+        if (inferred_has_more_info) {
+            expr.type = inferred_type;
+        }
     } else if (!expr.type) {
         expr.type = ast::make_error();
     }
@@ -220,7 +234,10 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     bool is_assignment =
         (binary.op == ast::BinaryOp::Assign || binary.op == ast::BinaryOp::AddAssign ||
          binary.op == ast::BinaryOp::SubAssign || binary.op == ast::BinaryOp::MulAssign ||
-         binary.op == ast::BinaryOp::DivAssign);
+         binary.op == ast::BinaryOp::DivAssign || binary.op == ast::BinaryOp::ModAssign ||
+         binary.op == ast::BinaryOp::BitAndAssign || binary.op == ast::BinaryOp::BitOrAssign ||
+         binary.op == ast::BinaryOp::BitXorAssign || binary.op == ast::BinaryOp::ShlAssign ||
+         binary.op == ast::BinaryOp::ShrAssign);
     if (is_assignment) {
         if (auto* ident = binary.left->as<ast::IdentExpr>()) {
             // move済み変数への代入は禁止
@@ -258,7 +275,13 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
         case ast::BinaryOp::AddAssign:
         case ast::BinaryOp::SubAssign:
         case ast::BinaryOp::MulAssign:
-        case ast::BinaryOp::DivAssign: {
+        case ast::BinaryOp::DivAssign:
+        case ast::BinaryOp::ModAssign:
+        case ast::BinaryOp::BitAndAssign:
+        case ast::BinaryOp::BitOrAssign:
+        case ast::BinaryOp::BitXorAssign:
+        case ast::BinaryOp::ShlAssign:
+        case ast::BinaryOp::ShrAssign: {
             if (auto* ident = binary.left->as<ast::IdentExpr>()) {
                 auto sym = scopes_.current().lookup(ident->name);
                 if (sym && sym->is_const) {
@@ -318,6 +341,54 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                     }
                 }
             }
+            // 複合代入演算子の場合、構造体のオペレーターオーバーロードをチェック
+            if (binary.op != ast::BinaryOp::Assign && ltype->kind == ast::TypeKind::Struct) {
+                std::string type_name = ltype->name;
+                std::string iface_name;
+                switch (binary.op) {
+                    case ast::BinaryOp::AddAssign:
+                        iface_name = "Add";
+                        break;
+                    case ast::BinaryOp::SubAssign:
+                        iface_name = "Sub";
+                        break;
+                    case ast::BinaryOp::MulAssign:
+                        iface_name = "Mul";
+                        break;
+                    case ast::BinaryOp::DivAssign:
+                        iface_name = "Div";
+                        break;
+                    case ast::BinaryOp::ModAssign:
+                        iface_name = "Mod";
+                        break;
+                    case ast::BinaryOp::BitAndAssign:
+                        iface_name = "BitAnd";
+                        break;
+                    case ast::BinaryOp::BitOrAssign:
+                        iface_name = "BitOr";
+                        break;
+                    case ast::BinaryOp::BitXorAssign:
+                        iface_name = "BitXor";
+                        break;
+                    case ast::BinaryOp::ShlAssign:
+                        iface_name = "Shl";
+                        break;
+                    case ast::BinaryOp::ShrAssign:
+                        iface_name = "Shr";
+                        break;
+                    default:
+                        break;
+                }
+                if (!iface_name.empty()) {
+                    auto it = impl_interfaces_.find(type_name);
+                    if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
+                        return ltype;  // オペレーターオーバーロード対応
+                    }
+                    error(binary.left->span, "Type '" + type_name + "' does not implement " +
+                                                 iface_name + " operator for compound assignment");
+                    return ast::make_error();
+                }
+            }
             if (!types_compatible(ltype, rtype)) {
                 error(binary.left->span, "Assignment type mismatch");
             }
@@ -338,6 +409,14 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->is_integer() && rtype->kind == ast::TypeKind::Pointer) {
                 return rtype;  // int + pointer = pointer
             }
+            // 演算子オーバーロード: impl for Add
+            if (ltype->kind == ast::TypeKind::Struct) {
+                std::string type_name = ltype->name;
+                auto it = impl_interfaces_.find(type_name);
+                if (it != impl_interfaces_.end() && it->second.count("Add")) {
+                    return ltype;
+                }
+            }
             error(current_span_, "Add operator requires numeric operands or string concatenation");
             return ast::make_error();
 
@@ -353,11 +432,46 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->kind == ast::TypeKind::Pointer && rtype->kind == ast::TypeKind::Pointer) {
                 return ast::make_long();  // ポインタ差分はlong
             }
+            // 演算子オーバーロード: impl for Sub
+            if (ltype->kind == ast::TypeKind::Struct) {
+                std::string type_name = ltype->name;
+                auto it = impl_interfaces_.find(type_name);
+                if (it != impl_interfaces_.end() && it->second.count("Sub")) {
+                    return ltype;
+                }
+            }
             error(current_span_, "Sub operator requires numeric operands");
             return ast::make_error();
 
         default:
             if (!ltype->is_numeric() || !rtype->is_numeric()) {
+                // 演算子オーバーロード: impl for Mul/Div/Mod
+                if (ltype->kind == ast::TypeKind::Struct) {
+                    std::string type_name = ltype->name;
+                    std::string iface_name;
+                    if (binary.op == ast::BinaryOp::Mul)
+                        iface_name = "Mul";
+                    else if (binary.op == ast::BinaryOp::Div)
+                        iface_name = "Div";
+                    else if (binary.op == ast::BinaryOp::Mod)
+                        iface_name = "Mod";
+                    else if (binary.op == ast::BinaryOp::BitAnd)
+                        iface_name = "BitAnd";
+                    else if (binary.op == ast::BinaryOp::BitOr)
+                        iface_name = "BitOr";
+                    else if (binary.op == ast::BinaryOp::BitXor)
+                        iface_name = "BitXor";
+                    else if (binary.op == ast::BinaryOp::Shl)
+                        iface_name = "Shl";
+                    else if (binary.op == ast::BinaryOp::Shr)
+                        iface_name = "Shr";
+                    if (!iface_name.empty()) {
+                        auto it = impl_interfaces_.find(type_name);
+                        if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
+                            return ltype;
+                        }
+                    }
+                }
                 error(current_span_, "Arithmetic operators require numeric operands");
                 return ast::make_error();
             }
@@ -584,6 +698,35 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
                             if (member.name == variant_name && !member.fields.empty()) {
                                 // 最初のフィールドの型を使用（設計: 1フィールド推奨）
                                 binding_type = member.fields[0].second;
+
+                                // ジェネリック型パラメータを具象型に置換
+                                // 例: Result<int, string> の Ok(T) → T を int に置換
+                                if (binding_type && !scrutinee_type->type_args.empty()) {
+                                    const auto& enum_decl = enum_it->second;
+                                    const auto& gparams = enum_decl->generic_params.empty()
+                                                              ? std::vector<std::string>{}
+                                                              : enum_decl->generic_params;
+                                    // generic_params_v2からも名前を取得
+                                    std::vector<std::string> param_names;
+                                    if (!gparams.empty()) {
+                                        param_names = gparams;
+                                    } else {
+                                        for (const auto& gp : enum_decl->generic_params_v2) {
+                                            param_names.push_back(gp.name);
+                                        }
+                                    }
+
+                                    // マッピング構築: T → int, E → string
+                                    if (param_names.size() == scrutinee_type->type_args.size()) {
+                                        for (size_t i = 0; i < param_names.size(); ++i) {
+                                            if (binding_type->name == param_names[i]) {
+                                                binding_type = scrutinee_type->type_args[i];
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                         }

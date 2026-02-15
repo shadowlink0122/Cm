@@ -11,49 +11,7 @@ namespace cm::mir {
 class ExprLowering : public MirLoweringBase {
    public:
     // 式のlowering（結果を一時変数に格納して返す）
-    LocalId lower_expression(const hir::HirExpr& expr, LoweringContext& ctx) {
-        // variant訪問用のvisitor
-        return std::visit(
-            [&](const auto& expr_ptr) -> LocalId {
-                using T = std::decay_t<decltype(expr_ptr)>;
-
-                if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLiteral>>) {
-                    return lower_literal(*expr_ptr, expr.type, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirVarRef>>) {
-                    return lower_var_ref(*expr_ptr, expr.type, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirBinary>>) {
-                    return lower_binary(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirUnary>>) {
-                    return lower_unary(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirCall>>) {
-                    return lower_call(*expr_ptr, expr.type, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirIndex>>) {
-                    return lower_index(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirMember>>) {
-                    return lower_member(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirTernary>>) {
-                    return lower_ternary(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirStructLiteral>>) {
-                    return lower_struct_literal(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirArrayLiteral>>) {
-                    return lower_array_literal(*expr_ptr, expr.type, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLambda>>) {
-                    // ラムダはHIR段階で関数参照に変換されるため、ここには来ない
-                    // 万が一来た場合はエラー
-                    return ctx.new_temp(hir::make_error());
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirCast>>) {
-                    return lower_cast(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirEnumConstruct>>) {
-                    return lower_enum_construct(*expr_ptr, ctx);
-                } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirEnumPayload>>) {
-                    return lower_enum_payload(*expr_ptr, ctx);
-                } else {
-                    // 未実装の式種別
-                    return ctx.new_temp(hir::make_error());
-                }
-            },
-            expr.kind);
-    }
+    LocalId lower_expression(const hir::HirExpr& expr, LoweringContext& ctx);
 
     // 各式タイプのlowering
     LocalId lower_literal(const hir::HirLiteral& lit, const hir::TypePtr& expr_type,
@@ -75,7 +33,6 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_enum_payload(const hir::HirEnumPayload& ep, LoweringContext& ctx);
 
     // メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
-    // 成功時はtrue、失敗時はfalseを返す
     bool get_member_place(const hir::HirMember& mem, LoweringContext& ctx, MirPlace& out_place,
                           hir::TypePtr& out_type);
 
@@ -97,7 +54,7 @@ class ExprLowering : public MirLoweringBase {
     // HIR単項演算子をMIRに変換
     MirUnaryOp convert_unary_op(hir::HirUnaryOp op);
 
-    // 値を文字列に変換するヘルパー（文字列連結用）
+    // 値を文字列に変換するヘルパー
     LocalId convert_to_string(LocalId value, const hir::TypePtr& type, LoweringContext& ctx);
 };
 

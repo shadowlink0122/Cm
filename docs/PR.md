@@ -1,318 +1,327 @@
 [English](PR.en.html)
 
-# v0.13.1 Release - Cm言語コンパイラ
+# v0.14.0 Release - Cm言語コンパイラ
 
 ## 概要
 
-v0.13.1は**GPU/Metal対応**、**ARM64ネイティブビルド**、**標準ライブラリ安定化**、**HTTPS対応**、**リテラル型完全サポート**に焦点を当てた大規模アップデートです。さらに**OpenSSLリンカパスのアーキテクチャ対応修正**、**WASMテスト安定化**、**サポート環境の明確化**、**CI環境の固定化**を行いました。
+v0.14.0は**JavaScriptバックエンドの大規模改善**、**演算子オーバーロードの設計改善**、**ベアメタル/UEFIサポート**、**インラインユニオン型 (`int | null`)**、**プラットフォームディレクティブ**、**VSCode拡張機能の品質改善**を含むメジャーリリースです。JSテスト通過率が55%から87%に向上し、UEFIターゲットでのベアメタル開発が可能になりました。また、VSCode拡張機能をTypeScriptに移行し、ESLint/Prettierによるコード品質管理をCI統合しました。
 
-## 🎯 主要な新機能
+---
 
-### 1. GPU/Metal対応
+## 🎯 主要な変更
 
-Apple Metal GPUバックエンドによるGPU演算を実装しました。
+### 1. JSバックエンド大規模リファクタリング
 
-```cm
-import std::gpu::create_context;
-import std::gpu::gpu_alloc;
-import std::gpu::gpu_compute;
+JSコードジェネレータを大幅にリファクタリングし、1,600行以上の不要コードを削除しました。
 
-int main() {
-    long ctx = create_context();
-    long buf_a = gpu_alloc(ctx, a_data, 4);
-    long buf_b = gpu_alloc(ctx, b_data, 4);
-    gpu_compute(ctx, "vector_add", buf_a, buf_b, buf_out, 4);
-    return 0;
-}
-```
+| 変更 | 詳細 |
+|------|------|
+| codegen.cpp | -1,618行（大規模整理） |
+| emit_expressions.cpp | +124行（式出力改善） |
+| emit_statements.cpp | +80行（文出力改善） |
+| builtins.hpp | +71行（ビルトイン拡充） |
 
-- Metal Shading Language (MSL) カーネル実行
-- int/float/double型のGPUバッファ管理
-- Nativeコンパイル対応（GPU XOR NN学習テスト搭載）
+#### JSテスト通過率
 
-### 2. ARM64ネイティブビルド & マルチアーキテクチャ対応
+| バージョン | パス | 失敗 | スキップ | 通過率 |
+|-----------|------|------|---------|--------|
+| v0.13.1 | 206 | 119 | 47 | 55% |
+| **v0.14.0** | **298** | **0** | **49** | **87%** |
 
-x86_64 LLVM（Rosetta 2）からARM64 LLVMへ移行し、`ARCH`オプションで自動切替が可能になりました。
+#### JSコンパイルの使い方
 
 ```bash
-make build              # デフォルト（LLVM自動検出）
-make build ARCH=arm64   # ARM64ビルド
-make build ARCH=x86_64  # x86_64ビルド
+./cm compile --target=js hello.cm -o output.js
+node output.js
 ```
 
-### 3. HTTPS (TLS) 対応
+### 2. 演算子オーバーロード改善
 
-OpenSSL 3.6.0による暗号化通信:
+#### `impl T { operator ... }` 構文
+
+演算子を`impl T for InterfaceName`ではなく、直接`impl T { operator ... }`で定義可能になりました。
 
 ```cm
-import std::http::request;
+struct Vec2 { int x; int y; }
 
-int main() {
-    request("https://example.com", "GET");
+impl Vec2 {
+    operator Vec2 +(Vec2 other) {
+        return Vec2{x: self.x + other.x, y: self.y + other.y};
+    }
+}
+```
+
+#### 複合代入演算子
+
+二項演算子を定義すると、対応する複合代入演算子が自動的に使えます。
+
+```cm
+Vec2 v = Vec2{x: 10, y: 20};
+v += Vec2{x: 5, y: 3};   // v = v + Vec2{5, 3} と同等
+v -= Vec2{x: 2, y: 1};   // v = v - Vec2{2, 1} と同等
+```
+
+**サポートする複合代入演算子**: `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`
+
+#### ビット演算子オーバーロード
+
+`&`, `|`, `^`, `<<`, `>>` の全ビット演算子をオーバーロード可能になりました。
+
+#### interface存在チェック
+
+`impl T for I` の `I` が宣言済みinterfaceでない場合、コンパイルエラーになります。
+
+### 3. インラインユニオン型とnull型
+
+#### インラインユニオン構文 (`int | null`)
+
+typedefなしで直接ユニオン型を使用可能になりました。
+
+```cm
+int | null a = null;           // nullが代入可能
+int | null b = 42 as MaybeInt; // int値も代入可能
+int | string | null c = null;  // 3型以上のユニオンも可能
+```
+
+| 変更 | 詳細 |
+|------|------|
+| `null`型追加 | `TypeKind::Null`、`make_null()` |
+| `parse_type_with_union()` | 変数宣言・関数戻り値・構造体フィールドで使用 |
+| 型互換性 | Unionメンバー型とのnull代入・値代入に対応 |
+
+### 4. プラットフォームディレクティブ
+
+ファイル先頭に `//! platform:` で実行可能なプラットフォームを制約可能。
+
+```cm
+//! platform: native
+// このファイルはLLVM Native/JITでのみコンパイル可能
+```
+
+対応プラットフォーム: `native`, `js`, `wasm`, `uefi`, `baremetal`
+
+### 5. ベアメタル / UEFIサポート
+
+`--target=uefi` でUEFIアプリケーションをコンパイル可能。QEMUでHello World出力確認済み。
+
+```cm
+// UEFI Hello World
+import ./libs/efi_core;
+import ./libs/efi_text;
+
+ulong efi_main(void* image_handle, void* system_table) {
+    efi_clear_screen(system_table);
+    string msg = "Hello World from Cm!";
+    efi_println(system_table, msg as void*);
+    while (true) { __asm__("hlt"); }
     return 0;
 }
 ```
 
-### 4. ジェネリックコンストラクタ/デストラクタ
+- インラインASM自動クロバー検出を実装
+- UEFIライブラリ (`libs/uefi/`) を新規作成
+- ベアメタル向けno_std実行プロファイル対応
 
-`self()`/`~self()`構文による慣用的なライフサイクル管理:
+### 6. VSCode拡張機能の追加と改善
 
-```cm
-struct Vector<T> {
-    T* data;
-    int size;
-    int capacity;
+#### 拡張機能の新規追加
 
-    self() {
-        this.data = malloc(8 * sizeof(T)) as T*;
-        this.size = 0;
-        this.capacity = 8;
-    }
+Cm言語用VSCode拡張機能を新規作成しました。
 
-    ~self() {
-        free(this.data as void*);
-    }
-}
-```
+- **構文ハイライト**: TextMate文法定義 (`cm.tmLanguage.json`)
+- **ファイルアイコン**: `.cm`ファイルにCmアイコンを表示
+- **言語設定**: ブラケットマッチング、折りたたみ、インデント支援
+- **VSIXパッケージ**: `pnpm run package` でインストール可能なパッケージを生成
 
-### 5. 標準ライブラリ安定化
+#### TypeScript移行 + ESLint/Prettier導入
 
-| モジュール | 内容 |
-|-----------|------|
-| `std::collections` | Vector, Queue, HashMap（self()/~self()） |
-| `std::sync` | Mutex, Channel, Atomic |
-| `std::http` | HTTP/HTTPS通信（struct+impl API） |
-| `std::core::result` | CmResult\<T, E\>型 |
+スクリプト（`update-version`, `verify-version`）をJavaScript→TypeScriptに移行し、ESLint + Prettierで品質管理を自動化。
 
-### 6. const定数評価拡張
+| ツール | 設定 | コマンド |
+|--------|------|---------|
+| TypeScript | `tsconfig.json` (strict, ES2020) | `pnpm run compile` |
+| ESLint | `eslint.config.mjs` (Flat Config v9+) | `pnpm run lint` |
+| Prettier | `.prettierrc` | `pnpm run format:check` |
 
-- **const folding**: コンパイル時定数畳み込みの改善
-- **Octalリテラル**: `0o777`形式の8進数リテラルサポート
+#### CI統合
 
-### 7. リテラル型の関数引数・戻り値サポート
+`ci.yml` に `extension-lint` ジョブを追加。push/PRごとにcompile → lint → format:checkを自動チェック。
 
-リテラル型が関数の引数・戻り値として完全にサポートされました。
+### 7. サンプルプロジェクト
 
-```cm
-typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
-typedef StatusCode = 200 | 400 | 404 | 500;
+#### Webアプリサンプル (`examples/web-app/`)
 
-void handle_request(HttpMethod method) {
-    println("Method: {method}");
-}
+Cm言語でロジックを記述し、JSバックエンドでコンパイルしてブラウザ上で動作するWebアプリのサンプルを追加。HTMLテンプレートをバッククォート複数行文字列で記述する構成。
 
-HttpMethod get_method() {
-    return "GET";
-}
-```
+#### UEFIサンプル (`examples/uefi/`)
 
-### 8. typedef Union配列の関数引数・戻り値対応
-
-Union型配列を関数間で受け渡しできるようになりました。
-
-```cm
-typedef Value = string | int | bool;
-
-Value[3] make_values() {
-    Value[3] arr = ["hello" as Value, 42 as Value, true as Value];
-    return arr;
-}
-
-void print_values(Value[3] vals) {
-    string s = vals[0] as string;
-    println("s={s}");
-}
-```
+UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行手順を含む。
 
 ---
 
 ## 🐛 バグ修正
 
-### 配列リテラル内Union Castの二重生成バグ修正
-
-| 問題 | 原因 | 修正 |
-|-----|------|------|
-| Union配列の値が破壊される | `lower_array_literal`でtypedef未解決の型を使用 | `expr_basic.cpp`で解決済みの型から取得 |
-
-### リテラル型の関数引数での文字列値破壊バグ修正
-
-| 問題 | 原因 | 修正 |
-|-----|------|------|
-| 文字列リテラル型がゴミ値に | `resolve_typedef()`がLiteralUnion型を素通り | `base.hpp`/`context.hpp`に基底型変換を追加 |
+| 問題 | 原因 | 修正ファイル |
+|-----|------|------------|
+| println型判定の誤り | AST型チェッカーがmatch armのpayload変数の型を`int`に設定 | `expr_call.cpp` |
+| ペイロードロードエラー | Tagged Unionの非構造体ペイロード型が`i32`にハードコード | `mir_to_llvm.cpp` |
+| 構造体ペイロードサイズ計算 | `max_payload_size()`がStruct型をデフォルト8バイトで計算 | `types.cpp` |
+| プラットフォーム不一致セグフォ | プラットフォーム制約のないファイルでクラッシュ | プリプロセッサ修正 |
+| Boolean定数オペランドの型判定 | JSバックエンドでBoolean定数の型が不正 | JS codegen修正 |
+| 並列テストのレースコンディション | テストランナーのファイル名衝突 | テストランナー修正 |
+| utiny*デリファレンスバグ | UEFI文字列操作でポインタデリファレンスが不正 | ASM実装に変更 |
 
 ---
 
-## 🔧 ビルド・インフラ改善
+## 🔧 ビルド・テスト改善
 
-### OpenSSLリンカパスのアーキテクチャ対応修正
+### JSスキップファイル整理
 
-ネイティブビルド時のOpenSSLリンクで、ARM64環境にもかかわらずx86_64版のパスを参照するバグを修正しました。
+| カテゴリ | 理由 |
+|---------|------|
+| `asm/` | インラインアセンブリはJS非対応 |
+| `io/` | ファイルI/OはJS非対応 |
+| `net/` | TCP/HTTPはJS非対応 |
+| `sync/` | Mutex/Channel/AtomicはJS非対応 |
+| `thread/` | スレッドはJS非対応 |
 
-| 問題 | 原因 | 修正 |
-|-----|------|------|
-| ARM64でOpenSSLリンクエラー | `brew --prefix openssl`がx86_64パスを返す | アーキテクチャに応じたパス優先参照に変更 |
+### CI改善
 
-- ARM64: `/opt/homebrew/opt/openssl@3` を優先
-- x86_64: `/usr/local/opt/openssl@3` を優先
-- フォールバック: `brew --prefix openssl@3`
+- JSバックエンドテストをCIに追加
+- VERSIONファイルとブランチ名の整合チェックCI追加
+- VSCode拡張機能lint CIジョブ追加
+- UEFIコンパイルテストCIジョブ追加
+- ベアメタルコンパイルテストCIジョブ追加
+- GPUテスト全バックエンドスキップ
+- タイムアウトテスト根本修正
+- 不安定なoperator_comprehensiveテストを5つの個別テストに分割
 
-### WASMテスト安定化
+### テスト構成再編成
 
-WASMバックエンドで未サポートのネイティブAPI（sync, net, gpu）を使うテストに`.skip`ファイルを追加し、WASMテスト全体が0 FAILになりました。
-
-### サポート環境の明確化
-
-ドキュメントにサポート環境を明記しました:
-
-| OS | アーキテクチャ | ステータス |
-|----|-------------|----------|
-| **macOS 14+** | ARM64 (Apple Silicon) | ✅ 完全サポート |
-| **Ubuntu 22.04** | x86_64 | ✅ 完全サポート |
-| Windows | - | ❌ 未サポート |
-
-- README.md、QUICKSTART.md、index.md（日英）、setup.md からWindows記述を削除
-- アーキテクチャ別インストール手順を追加（macOS ARM64/Intel分割）
-
-### CI環境の固定化
-
-全CIワークフローで明示的なOS/アーキテクチャ指定を導入:
-
-| 変更前 | 変更後 | アーキテクチャ |
-|--------|--------|---------------|
-| `macos-latest` | `macos-14` | ARM64 |
-| `ubuntu-latest` | `ubuntu-22.04` | x86_64 |
-
-- CMake構成に `-DCM_TARGET_ARCH=${{ matrix.arch }}` を追加
-- 対象: ci.yml, test-interpreter.yml, test-llvm-native.yml, test-llvm-wasm.yml, unit-tests.yml, benchmark.yml
+- `tests/test_programs` → `tests/programs` にリネーム
+- ライブラリを `libs/` 配下にプラットフォーム別で再構成
 
 ---
 
-## 🔧 チュートリアル・ドキュメント改善
+## 📁 変更ファイル一覧
 
-### 新規チュートリアル
+### JSバックエンド
 
-| ドキュメント | 内容 |
-|------------|------|
-| `docs/tutorials/ja/stdlib/` | 標準ライブラリ（Vector, Queue, HashMap, IO, HTTP, GPU, Math, Mem） |
-| `docs/tutorials/ja/stdlib/concurrency/` | 並行処理（Thread, Mutex, Channel, Atomic） |
-| `docs/tutorials/ja/advanced/extern.md` | extern/FFI連携 |
-| `docs/tutorials/ja/advanced/inline-asm.md` | インラインアセンブリ |
-| `docs/tutorials/ja/internals/` | コンパイラ内部構造 |
+| ファイル | 変更内容 |
+|---------|---------| 
+| `src/codegen/js/codegen.cpp` | 大規模リファクタリング（-1,618行） |
+| `src/codegen/js/emit_expressions.cpp` | 式出力改善 |
+| `src/codegen/js/emit_statements.cpp` | 文出力改善 |
+| `src/codegen/js/builtins.hpp` | ビルトイン関数拡充 |
+| `src/codegen/js/runtime.hpp` | ランタイムヘルパー追加 |
+| `src/codegen/js/types.hpp` | 型マッピング改善 |
 
-### 更新チュートリアル
-
-| ドキュメント | 変更 |
-|------------|------|
-| `docs/tutorials/*/types/typedef.md` | リテラル型セクション拡充（関数引数・戻り値の例を追加） |
-| `docs/tutorials/*/types/enums.md` | Tagged Union/Match式の解説強化 |
-| 各チュートリアル | 親ページ（index.md）リンクを追加 |
-
----
-
-## 📁 変更ファイル一覧（主要）
-
-### 新機能
+### LLVMバックエンド/MIR修正
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `std/gpu/mod.cm` | Metal GPU演算モジュール |
-| `std/gpu/gpu_runtime.mm` | Objective-C++ Metal GPU ランタイム |
-| `std/http/mod.cm` | HTTP/HTTPS通信モジュール |
-| `std/http/http_runtime.cpp` | HTTP通信ランタイム（OpenSSL統合） |
-| `std/sync/mod.cm` | Mutex/Channel/Atomic同期プリミティブ |
-| `std/sync/sync_runtime.cpp` | 同期ランタイム（pthread） |
-| `std/sync/channel_runtime.cpp` | Channelランタイム |
-| `std/collections/` | Vector/Queue/HashMap(self()/~self()) |
-| `std/core/result.cm` | CmResult\<T, E\>型 |
-| `std/net/net_runtime.cpp` | TCP/UDPネットワーキングランタイム |
+| `src/codegen/llvm/core/types.cpp` | Tagged Unionペイロードサイズ計算修正 |
+| `src/codegen/llvm/core/mir_to_llvm.cpp` | ペイロードロード修正、自動クロバー検出 |
+| `src/mir/lowering/expr_call.cpp` | println型判定修正 |
+| `src/mir/lowering/impl.cpp` | impl lowering改善 |
 
-### コンパイラ修正
+### 型チェッカー/パーサー
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `src/mir/lowering/base.hpp` | LiteralUnion→基底型変換、typedef解決強化 |
-| `src/mir/lowering/context.hpp` | 同上（LoweringContext版） |
-| `src/mir/lowering/expr_basic.cpp` | 配列リテラルのelem_type解決修正 |
-| `src/mir/lowering/stmt.cpp` | MIR文の改善 |
-| `src/codegen/llvm/core/mir_to_llvm.cpp` | Union Cast安全性改善 |
-| `src/codegen/llvm/core/types.cpp` | 型変換ロジック改善 |
-| `src/codegen/llvm/core/utils.cpp` | ユーティリティ追加 |
-| `src/codegen/llvm/native/codegen.hpp` | ARM64フラグ対応、OpenSSLパスのアーキテクチャ対応 |
-| `src/codegen/llvm/native/target.hpp` | ARM64トリプル対応 |
-| `src/frontend/lexer/lexer.hpp` | Octalリテラルサポート |
-| `src/frontend/parser/parser_expr.cpp` | パーサー改善 |
-| `src/frontend/types/checking/call.cpp` | 型チェック改善 |
+| `src/frontend/parser/parser.hpp` | `impl T { operator ... }` 構文、インラインユニオン型 |
+| `src/frontend/types/checking/expr.cpp` | 複合代入演算子の構造体オーバーロード対応 |
+| `src/frontend/types/checking/decl.cpp` | interface存在チェック・operator自動登録 |
 
-### ビルドシステム・CI
+### VSCode拡張機能
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `CMakeLists.txt` | ARM64自動検出、LLVM/OpenSSLパス設定 |
-| `Makefile` | マルチアーキテクチャ自動環境設定 |
-| `.github/workflows/ci.yml` | macos-14/ubuntu-22.04固定、CM_TARGET_ARCH追加 |
-| `.github/workflows/test-interpreter.yml` | 同上 |
-| `.github/workflows/test-llvm-native.yml` | 同上 |
-| `.github/workflows/test-llvm-wasm.yml` | 同上 |
-| `.github/workflows/unit-tests.yml` | 同上 |
-| `.github/workflows/benchmark.yml` | ubuntu-22.04固定 |
+| `vscode-extension/` | 拡張機能全体を新規追加 |
+| `vscode-extension/syntaxes/cm.tmLanguage.json` | TextMate文法定義（710行） |
+| `vscode-extension/scripts/*.ts` | TypeScript版スクリプト |
+| `vscode-extension/eslint.config.mjs` | ESLint Flat Config |
+| `vscode-extension/.prettierrc` | Prettier設定 |
+| `vscode-extension/tsconfig.json` | TypeScript設定 |
+| `.github/workflows/ci.yml` | extension-lintジョブ、baremetal-testジョブ追加 |
 
-### ドキュメント
+### チュートリアル・ドキュメント
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `README.md` | サポート環境テーブル追加、CIマトリクス更新 |
-| `docs/QUICKSTART.md` | サポート環境テーブル追加 |
-| `docs/index.md` | サポート環境注記追加 |
-| `docs/index.en.md` | Supported Platforms注記追加 |
-| `docs/tutorials/ja/basics/setup.md` | macOS ARM64/Intel分割、Windows削除 |
-| `docs/ROADMAP.md` | 削除 |
+| `docs/tutorials/ja/advanced/operators.md` | 演算子チュートリアル全面改訂 |
+| `docs/tutorials/en/advanced/operators.md` | 英語版演算子チュートリアル全面改訂 |
+| `docs/tutorials/ja/basics/operators.md` | ビット演算子チュートリアル追加 |
+| `docs/tutorials/ja/basics/setup.md` | エディタ設定セクション大幅拡充 |
+| `docs/tutorials/ja/compiler/uefi.md` | UEFIチュートリアル追加 |
+| `docs/tutorials/ja/compiler/js-compilation.md` | JSチュートリアル追加 |
+| `docs/releases/v0.14.0.md` | リリースノート更新 |
+| `docs/QUICKSTART.md` | VSCode拡張機能リンク追加 |
+| `vscode-extension/README.md` | 開発ガイド全面刷新 |
+
+### テスト
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `tests/programs/interface/operator_arithmetic.*` | 算術演算子テスト（分割） |
+| `tests/programs/interface/operator_compare.*` | 比較演算子テスト（分割） |
+| `tests/programs/interface/operator_bitwise.*` | ビット演算子テスト（分割） |
+| `tests/programs/interface/operator_compound_assign.*` | 算術複合代入テスト（分割） |
+| `tests/programs/interface/operator_bitwise_assign.*` | ビット複合代入テスト（分割） |
+| `tests/programs/interface/operator_add.*` | impl T構文テスト |
+| `tests/programs/enum/associated_data.*` | .error → .expected |
+| `tests/programs/asm/.skip` 等 | JSスキップファイル追加 |
+| `tests/unified_test_runner.sh` | テストランナー改善 |
+| `tests/programs/uefi/uefi_compile/*` | UEFIコンパイルテスト5件追加 |
+| `tests/programs/baremetal/allowed/*` | ベアメタルテスト3件追加（enum/配列/ポインタ） |
+
+### サンプル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `examples/web-app/` | Webアプリサンプル追加 |
+| `examples/uefi/` | UEFIサンプル整理 |
 
 ---
 
 ## 🧪 テスト状況
 
-| カテゴリ | 通過 | 失敗 | スキップ |
-|---------|-----|------|---------|
-| JIT (O0) | 363 | 0 | 9 |
-
-### v0.13.0からの新規テスト (+12)
-
-| テスト | カテゴリ |
-|-------|---------|
-| `gpu/gpu_basic.cm` | GPU |
-| `gpu/gpu_xor_nn_test.cm` | GPU |
-| `gpu/gpu_float_test.cm` | GPU |
-| `http/http_external_test.cm` | HTTP |
-| `http/http_rest_test.cm` | HTTP |
-| `sync/thread_channel_atomic_test.cm` | 同期 |
-| `const/octal_test.cm` | const |
-| `const/const_eval_test.cm` | const |
-| `types/typedef_literal_func.cm` | 型 |
-| `types/typedef_union_comprehensive.cm` | 型 |
-| `types/union_array_func.cm` | 型 |
-| `enum/union_array_tuple_test.cm` | enum |
+| バックエンド | 通過 | 失敗 | スキップ |
+|------------|-----|------|---------| 
+| JIT (O0) | 343 | 0 | 4 |
+| LLVM Native | 343 | 0 | 4 |
+| LLVM WASM | 338 | 0 | 5 |
+| JavaScript | 298 | 0 | 49 |
+| Baremetal | 11 | 0 | 0 |
+| UEFI | 5 | 0 | 0 |
 
 ---
 
 ## 📊 統計
 
-- **テスト総数**: 372（v0.13.0の360から12増加）
-- **テスト通過**: 363
-- **変更ファイル数**: 189
-- **追加行数**: +12,149
-- **削除行数**: -1,947
-- **新規標準ライブラリモジュール**: gpu, http, collections, core/result, sync
+- **テスト総数**: 347
+- **JIT/LLVMテスト通過**: 343（0失敗）
+- **WASMテスト通過**: 338（0失敗）
+- **JSテスト通過**: 298（0失敗、v0.13.1の206から+92改善）
 
 ---
 
 ## ✅ チェックリスト
 
-- [x] `make tip` 全テスト通過（363 PASS / 0 FAIL）
-- [x] リリースノート更新（`docs/releases/v0.13.1.md`）
-- [x] チュートリアル更新（日英両方）
+- [x] `make tip` 全テスト通過（343 PASS / 0 FAIL）
+- [x] `make tlp` 全テスト通過（343 PASS / 0 FAIL）
+- [x] `make tlwp` 全テスト通過（338 PASS / 0 FAIL）
+- [x] `make tjp` 全テスト通過（298 PASS / 0 FAIL）
+- [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
+- [x] ベアメタルテスト通過（11 PASS / 0 FAIL）
+- [x] UEFIテスト通過（5 PASS / 0 FAIL）
+- [x] リリースノート更新（`docs/releases/v0.14.0.md`）
+- [x] チュートリアル更新（演算子、UEFI、JS、環境構築）
+- [x] VSCode拡張機能README更新
+- [x] QUICKSTART.md更新
 - [x] ローカルパス情報なし
 
 ---
 
-**リリース日**: 2026年2月10日
-**バージョン**: v0.13.1
+**リリース日**: 2026年2月15日
+**バージョン**: v0.14.0

@@ -58,20 +58,14 @@ endif()
 
 # LLVM Configuration
 if(CM_USE_LLVM)
-    # Try to find LLVM using CMake config files
-    find_package(LLVM 18 CONFIG QUIET)
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 17 CONFIG QUIET)
-    endif()
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 16 CONFIG QUIET)
-    endif()
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 15 CONFIG QUIET)
-    endif()
-    if(NOT LLVM_FOUND)
-        find_package(LLVM 14 CONFIG QUIET)
-    endif()
+    # サポートするLLVMバージョン（降順で検索）
+    set(CM_LLVM_SUPPORTED_VERSIONS 18 17 16 15 14)
+    foreach(_ver IN LISTS CM_LLVM_SUPPORTED_VERSIONS)
+        if(NOT LLVM_FOUND)
+            find_package(LLVM ${_ver} CONFIG QUIET)
+        endif()
+    endforeach()
+    # バージョン指定なしのフォールバック
     if(NOT LLVM_FOUND)
         find_package(LLVM CONFIG QUIET)
     endif()
@@ -143,7 +137,7 @@ elseif(MSVC)
 endif()
 
 # Output directories
-# cm実行ファイルはルートに、テスト実行ファイルはbuild/binに配置
+# cm実行ファイルはプロジェクトルートに配置（CI/Docker互換性のため）
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -154,6 +148,7 @@ set(TEST_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/src/mir_cpp)
+include_directories(${CMAKE_SOURCE_DIR}/third-party/picosha2)
 
 # Common library (header-only for now)
 add_library(cm_common INTERFACE)
@@ -168,10 +163,14 @@ target_link_libraries(cm_frontend INTERFACE cm_common)
 set(CM_SOURCES
     src/main.cpp
     src/frontend/lexer/token.cpp
+    src/frontend/lexer/lexer.cpp
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
+    src/frontend/parser/parser_decl.cpp
+    src/frontend/parser/parser_type.cpp
     # Type checking (分割済み)
+    src/frontend/types/scope.cpp
     src/frontend/types/checking/decl.cpp
     src/frontend/types/checking/stmt.cpp
     src/frontend/types/checking/expr.cpp
@@ -191,11 +190,16 @@ set(CM_SOURCES
     src/hir/lowering/expr.cpp
     # MIR lowering (HIR -> MIR)
     src/mir/optimizations/optimization_pipeline.cpp
+    src/mir/printer.cpp
+    src/mir/lowering/context.cpp
+    src/mir/lowering/base.cpp
+    src/mir/lowering/lowering.cpp
     src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp
     src/mir/lowering/monomorphization_utils.cpp
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt.cpp
+    src/mir/lowering/expr.cpp
     src/mir/lowering/expr_basic.cpp
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
@@ -205,14 +209,54 @@ set(CM_SOURCES
     src/mir/lowering/auto_impl/ord.cpp
     src/mir/lowering/auto_impl/clone_hash.cpp
     src/mir/lowering/auto_impl/debug_display_css.cpp
+    # MIR passes (最適化パス実装)
+    src/mir/passes/scalar/sccp.cpp
+    src/mir/passes/scalar/folding.cpp
+    src/mir/passes/scalar/propagation.cpp
+    src/mir/passes/scalar/array_base_extraction.cpp
+    src/mir/passes/cleanup/dce.cpp
+    src/mir/passes/cleanup/dse.cpp
+    src/mir/passes/cleanup/simplify_cfg.cpp
+    src/mir/passes/cleanup/program_dce.cpp
+    src/mir/passes/interprocedural/inlining.cpp
+    src/mir/passes/interprocedural/tail_call_elimination.cpp
+    src/mir/passes/loop/licm.cpp
+    src/mir/passes/redundancy/gvn.cpp
+    src/mir/passes/core/base.cpp
+    src/mir/passes/core/manager.cpp
+    src/mir/passes/convergence/manager.cpp
+    src/mir/passes/convergence/smart.cpp
+    src/mir/passes/validation/no_std_checker.cpp
+    # MIR analysis (解析モジュール)
+    src/mir/analysis/dominators.cpp
+    src/mir/analysis/loop_analysis.cpp
+    # MIR分割ユーティリティ（モジュール別分離コンパイル用）
+    src/mir/mir_splitter.cpp
+    # 共通ライブラリ (HPP/CPP分離 Phase5)
+    src/fmt/formatter.cpp
+    src/common/format_string.cpp
+    src/common/source_location.cpp
+    src/common/diagnostics.cpp
+    src/common/cache_manager.cpp
+    src/hir/string_interpolation.cpp
+    src/diagnostics/engine.cpp
+    src/diagnostics/catalog.cpp
 )
 
 # JavaScript backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/codegen/js/codegen.cpp
+    src/codegen/js/utilities.cpp
+    src/codegen/js/emit_function.cpp
+    src/codegen/js/analysis.cpp
+    src/codegen/js/css_optimization.cpp
+    src/codegen/js/structured_flow.cpp
     src/codegen/js/control_flow.cpp
     src/codegen/js/emit_statements.cpp
     src/codegen/js/emit_expressions.cpp
+    src/codegen/js/validation.cpp
+    src/codegen/js/builtins.cpp
+    src/codegen/js/runtime.cpp
 )
 
 # Add LLVM sources if enabled
@@ -240,20 +284,21 @@ if(CM_USE_LLVM)
         # LLVM native backend
         src/codegen/llvm/native/codegen.cpp
         src/codegen/llvm/native/target.cpp
+        src/codegen/llvm/native/loop_detector.cpp
         # JIT backend
         src/codegen/llvm/jit/jit_engine.cpp
         # std バッキング実装（C/C++/Obj-C++）
-        std/sync/sync_runtime.cpp
-        std/sync/channel_runtime.cpp
-        std/thread/thread_runtime.cpp
-        std/net/net_runtime.cpp
-        std/http/http_runtime.cpp
+        libs/native/sync/sync_runtime.cpp
+        libs/native/sync/channel_runtime.cpp
+        libs/native/thread/thread_runtime.cpp
+        libs/native/net/net_runtime.cpp
+        libs/native/http/http_runtime.cpp
     )
 
     # Apple環境: GPU(Metal)バッキング実装を追加
     if(APPLE)
         list(APPEND CM_SOURCES
-            std/gpu/gpu_runtime.mm
+            libs/native/gpu/gpu_runtime.mm
         )
     endif()
 endif()
@@ -272,13 +317,13 @@ if(APPLE)
     endif()
 endif()
 find_package(OpenSSL QUIET)
-if(OpenSSL_FOUND)
+if(OpenSSL_FOUND AND TARGET OpenSSL::SSL)
     message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
     target_include_directories(cm PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(cm PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     target_compile_definitions(cm PRIVATE CM_HAS_OPENSSL)
 else()
-    message(WARNING "OpenSSL not found - HTTPS support disabled")
+    message(STATUS "OpenSSL not found - HTTPS support disabled")
 endif()
 
 # Link LLVM backend if enabled
@@ -350,9 +395,8 @@ if(CM_USE_LLVM)
         
         message(STATUS "Runtime arch flag: ${CM_RUNTIME_ARCH_FLAG}")
         
-        # Build LLVM runtime library
-        # Cランタイムをコンパイルしてbuild/lib/に配置
-        # -ffunction-sections: 関数ごとにセクションを分離（デッドコード削除を有効化）
+        # コアランタイムのビルド（JITシンボル解決に必須）
+        # cm_runtime.oはcm実行ファイルにリンクされるためCMakeで管理
         set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime.c)
         set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
@@ -361,137 +405,55 @@ if(CM_USE_LLVM)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
             COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
-            COMMENT "Building Cm runtime library (${LLVM_HOST_TARGET})"
+            COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 
-        # Apple環境: GPUランタイムを別途ビルド（ネイティブコンパイル用）
-        if(APPLE)
-            set(CM_GPU_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/gpu/gpu_runtime.mm)
-            set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
-            add_custom_command(
-                OUTPUT ${CM_GPU_RUNTIME_OUTPUT}
-                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-                COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_GPU_RUNTIME_SOURCE}
-                        -o ${CM_GPU_RUNTIME_OUTPUT} -O2 -std=c++17
-                        -fobjc-arc ${CM_RUNTIME_ARCH_FLAG}
-                DEPENDS ${CM_GPU_RUNTIME_SOURCE}
-                COMMENT "Building Cm GPU runtime library (Metal)"
-            )
-        endif()
-
-        # stdランタイムを個別オブジェクトファイルとしてビルド（LLVM Nativeリンク用）
-        # --- Net Runtime ---
-        set(CM_NET_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/net/net_runtime.cpp)
-        set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
-        add_custom_command(
-            OUTPUT ${CM_NET_RUNTIME_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_NET_RUNTIME_SOURCE}
-                    -o ${CM_NET_RUNTIME_OUTPUT} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_NET_RUNTIME_SOURCE}
-            COMMENT "Building Cm net runtime library"
-        )
-
-        # --- Sync Runtime (sync + channel を1つのアーカイブに) ---
-        set(CM_SYNC_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/sync_runtime.cpp)
-        set(CM_CHANNEL_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/sync/channel_runtime.cpp)
-        set(CM_SYNC_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime_obj.o)
-        set(CM_CHANNEL_RUNTIME_OBJ ${CMAKE_BINARY_DIR}/lib/cm_channel_runtime_obj.o)
-        set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
-        add_custom_command(
-            OUTPUT ${CM_SYNC_RUNTIME_OBJ}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_SYNC_RUNTIME_SOURCE}
-                    -o ${CM_SYNC_RUNTIME_OBJ} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_SYNC_RUNTIME_SOURCE}
-            COMMENT "Building Cm sync runtime object"
-        )
-        add_custom_command(
-            OUTPUT ${CM_CHANNEL_RUNTIME_OBJ}
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_CHANNEL_RUNTIME_SOURCE}
-                    -o ${CM_CHANNEL_RUNTIME_OBJ} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_CHANNEL_RUNTIME_SOURCE}
-            COMMENT "Building Cm channel runtime object"
-        )
-        add_custom_command(
-            OUTPUT ${CM_SYNC_RUNTIME_OUTPUT}
-            COMMAND ar rcs ${CM_SYNC_RUNTIME_OUTPUT} ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
-            DEPENDS ${CM_SYNC_RUNTIME_OBJ} ${CM_CHANNEL_RUNTIME_OBJ}
-            COMMENT "Creating Cm sync runtime archive"
-        )
-
-        # --- Thread Runtime ---
-        set(CM_THREAD_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/thread/thread_runtime.cpp)
-        set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
-        add_custom_command(
-            OUTPUT ${CM_THREAD_RUNTIME_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_THREAD_RUNTIME_SOURCE}
-                    -o ${CM_THREAD_RUNTIME_OUTPUT} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_THREAD_RUNTIME_SOURCE}
-            COMMENT "Building Cm thread runtime library"
-        )
-
-        # --- HTTP Runtime ---
-        set(CM_HTTP_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/std/http/http_runtime.cpp)
-        set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
-        # OpenSSLが見つかった場合はHTTPSサポート付きでビルド
-        # CMakeリスト形式で個別引数として展開されるようにする
-        set(CM_HTTP_EXTRA_FLAGS "")
-        if(OpenSSL_FOUND)
-            set(CM_HTTP_EXTRA_FLAGS -DCM_HAS_OPENSSL -I${OPENSSL_INCLUDE_DIR})
-        endif()
-        add_custom_command(
-            OUTPUT ${CM_HTTP_RUNTIME_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND ${CM_RUNTIME_CLANG}++ -c ${CM_HTTP_RUNTIME_SOURCE}
-                    -o ${CM_HTTP_RUNTIME_OUTPUT} -O2 -std=c++17
-                    -ffunction-sections -fdata-sections ${CM_HTTP_EXTRA_FLAGS} ${CM_RUNTIME_ARCH_FLAG}
-            DEPENDS ${CM_HTTP_RUNTIME_SOURCE}
-            COMMENT "Building Cm HTTP runtime library"
-        )
-
-        # Build WASM runtime library
-        set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
-        set(CM_RUNTIME_WASM_FORMAT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c)
-        set(CM_RUNTIME_WASM_PRINT ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c)
-        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
-
-        add_custom_command(
-            OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
-            COMMAND clang -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT} -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
-            DEPENDS ${CM_RUNTIME_WASM_SOURCE} ${CM_RUNTIME_WASM_FORMAT} ${CM_RUNTIME_WASM_PRINT}
-            COMMENT "Building Cm WASM runtime library"
-        )
-
-        # ランタイムターゲット
-        set(CM_STD_RUNTIME_DEPS
-            ${CM_NET_RUNTIME_OUTPUT}
-            ${CM_SYNC_RUNTIME_OUTPUT}
-            ${CM_THREAD_RUNTIME_OUTPUT}
-            ${CM_HTTP_RUNTIME_OUTPUT}
-        )
-        if(APPLE)
-            add_custom_target(cm_runtime ALL DEPENDS
-                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT} ${CM_GPU_RUNTIME_OUTPUT}
-                ${CM_STD_RUNTIME_DEPS}
-            )
-        else()
-            add_custom_target(cm_runtime ALL DEPENDS
-                ${CM_RUNTIME_OUTPUT} ${CM_RUNTIME_WASM_OUTPUT}
-                ${CM_STD_RUNTIME_DEPS}
-            )
-        endif()
+        add_custom_target(cm_runtime ALL DEPENDS ${CM_RUNTIME_OUTPUT})
         add_dependencies(cm cm_runtime)
-        
-        # ランタイムライブラリをcm実行ファイルにリンク（JIT用）
-        # これによりランタイム関数がホストプロセスのシンボルテーブルに追加される
+
+        # WASMランタイムのビルド（wasm32ターゲット用クロスコンパイル）
+        # Homebrew LLVMのclangを使用（システムclangはwasm32をサポートしない）
+        set(CM_RUNTIME_WASM_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime_wasm.o)
+        find_program(CM_WASM_CLANG
+            NAMES clang
+            PATHS /opt/homebrew/opt/llvm@17/bin /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm@17/bin
+            NO_DEFAULT_PATH
+        )
+        if(CM_WASM_CLANG)
+            set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_wasm.c)
+            add_custom_command(
+                OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
+                COMMAND ${CM_WASM_CLANG} -c ${CM_RUNTIME_WASM_SOURCE} -o ${CM_RUNTIME_WASM_OUTPUT}
+                    --target=wasm32-wasi -O2 -ffunction-sections -fdata-sections
+                    -nostdlib -D__wasi__
+                    -I${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm
+                DEPENDS ${CM_RUNTIME_WASM_SOURCE}
+                    ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_format.c
+                    ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_print.c
+                    ${CMAKE_SOURCE_DIR}/src/codegen/llvm/wasm/runtime_slice.c
+                COMMENT "Building Cm WASM runtime library (wasm32-wasi)"
+            )
+            add_custom_target(cm_runtime_wasm ALL DEPENDS ${CM_RUNTIME_WASM_OUTPUT})
+            add_dependencies(cm cm_runtime_wasm)
+            message(STATUS "WASM runtime: ${CM_WASM_CLANG} -> ${CM_RUNTIME_WASM_OUTPUT}")
+        else()
+            message(STATUS "WASM clang not found - WASM runtime will be compiled on-demand")
+        endif()
+
+        # コアランタイムをcm実行ファイルにリンク（JIT用シンボルエクスポート）
         target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})
+        
+        # stdランタイムライブラリのパス定義
+        # ビルドは make libs (libs/native/Makefile) で実行
+        # CM_RUNTIME_WASM_OUTPUT は上のWASMビルドセクションで定義済み
+        set(CM_NET_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_net_runtime.o)
+        set(CM_SYNC_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_sync_runtime.a)
+        set(CM_THREAD_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_thread_runtime.o)
+        set(CM_HTTP_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_http_runtime.o)
+        if(APPLE)
+            set(CM_GPU_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_gpu_runtime.o)
+        endif()
         
         # ランタイムライブラリのパスをコンパイル時に埋め込む
         if(APPLE)
@@ -530,82 +492,156 @@ endif()
 if(BUILD_TESTING)
     enable_testing()
     
-    # Find Google Test
-    find_package(GTest QUIET)
+    # FetchContentでGoogle Testをソースからビルド（アーキテクチャ整合性を保証）
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.17.0
+        GIT_SHALLOW TRUE
+    )
+    # GMockを無効化（AppleClangでの互換性問題を回避）
+    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
     
-    if(GTest_FOUND)
-        include(GoogleTest)
+    # FetchContentのGTestインクルードパスを取得
+    FetchContent_GetProperties(googletest SOURCE_DIR GTEST_SRC_DIR)
+    set(GTEST_INCLUDE_DIR "${GTEST_SRC_DIR}/googletest/include")
+    
+    include(GoogleTest)
         
         # Unit tests - Lexer
         add_executable(lexer_test
             tests/unit/lexer_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
         )
         set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(lexer_test GTest::gtest_main cm_frontend)
+        target_include_directories(lexer_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(lexer_test gtest_main cm_frontend)
         gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
 
         # Unit tests - HIR Lowering
         add_executable(hir_lowering_test
             tests/unit/hir_lowering_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/frontend/parser/parser_decl.cpp
+            src/frontend/parser/parser_type.cpp
             src/hir/lowering/impl.cpp
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
         )
         set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(hir_lowering_test GTest::gtest_main cm_frontend)
+        target_include_directories(hir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(hir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Lowering
         add_executable(mir_lowering_test
             tests/unit/mir_lowering_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/frontend/parser/parser_decl.cpp
+            src/frontend/parser/parser_type.cpp
             src/hir/lowering/impl.cpp
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
+            src/mir/lowering/context.cpp
+            src/mir/lowering/base.cpp
+            src/mir/lowering/lowering.cpp
             src/mir/lowering/impl.cpp
             src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr.cpp
             src/mir/lowering/expr_basic.cpp
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
             src/mir/lowering/monomorphization_utils.cpp
+            src/mir/passes/scalar/sccp.cpp
+            src/mir/passes/scalar/folding.cpp
+            src/mir/passes/scalar/propagation.cpp
+            src/mir/passes/scalar/array_base_extraction.cpp
+            src/mir/passes/cleanup/dce.cpp
+            src/mir/passes/cleanup/dse.cpp
+            src/mir/passes/cleanup/simplify_cfg.cpp
+            src/mir/passes/cleanup/program_dce.cpp
+            src/mir/passes/interprocedural/inlining.cpp
+            src/mir/passes/interprocedural/tail_call_elimination.cpp
+            src/mir/passes/loop/licm.cpp
+            src/mir/passes/redundancy/gvn.cpp
+            src/mir/passes/core/base.cpp
+            src/mir/passes/core/manager.cpp
+            src/mir/passes/convergence/manager.cpp
+            src/mir/passes/convergence/smart.cpp
+            src/mir/passes/validation/no_std_checker.cpp
+            src/mir/analysis/dominators.cpp
+            src/mir/analysis/loop_analysis.cpp
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(mir_lowering_test GTest::gtest_main cm_frontend)
+        target_include_directories(mir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(mir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Optimization
         add_executable(mir_optimization_test
             tests/unit/mir_optimization_test.cpp
             src/frontend/lexer/token.cpp
+            src/frontend/lexer/lexer.cpp
             src/frontend/parser/parser_stmt.cpp
             src/frontend/parser/parser_expr.cpp
             src/frontend/parser/parser_module.cpp
+            src/frontend/parser/parser_decl.cpp
+            src/frontend/parser/parser_type.cpp
             src/hir/lowering/impl.cpp
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
+            src/mir/lowering/context.cpp
+            src/mir/lowering/base.cpp
+            src/mir/lowering/lowering.cpp
             src/mir/lowering/impl.cpp
             src/mir/lowering/stmt.cpp
+            src/mir/lowering/expr.cpp
             src/mir/lowering/expr_basic.cpp
             src/mir/lowering/expr_ops.cpp
             src/mir/lowering/expr_call.cpp
             src/mir/lowering/monomorphization_impl.cpp
             src/mir/lowering/monomorphization_utils.cpp
             src/mir/optimizations/optimization_pipeline.cpp
+            src/mir/passes/scalar/sccp.cpp
+            src/mir/passes/scalar/folding.cpp
+            src/mir/passes/scalar/propagation.cpp
+            src/mir/passes/scalar/array_base_extraction.cpp
+            src/mir/passes/cleanup/dce.cpp
+            src/mir/passes/cleanup/dse.cpp
+            src/mir/passes/cleanup/simplify_cfg.cpp
+            src/mir/passes/cleanup/program_dce.cpp
+            src/mir/passes/interprocedural/inlining.cpp
+            src/mir/passes/interprocedural/tail_call_elimination.cpp
+            src/mir/passes/loop/licm.cpp
+            src/mir/passes/redundancy/gvn.cpp
+            src/mir/passes/core/base.cpp
+            src/mir/passes/core/manager.cpp
+            src/mir/passes/convergence/manager.cpp
+            src/mir/passes/convergence/smart.cpp
+            src/mir/passes/validation/no_std_checker.cpp
+            src/mir/analysis/dominators.cpp
+            src/mir/analysis/loop_analysis.cpp
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
-        target_link_libraries(mir_optimization_test GTest::gtest_main cm_frontend)
+        target_include_directories(mir_optimization_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(mir_optimization_test gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
@@ -618,10 +654,6 @@ if(BUILD_TESTING)
         # )
         # target_link_libraries(mir_interpreter_test GTest::gtest_main cm_frontend)
         # gtest_discover_tests(mir_interpreter_test PROPERTIES LABELS "unit")
-    else()
-        message(STATUS "Google Test not found, skipping C++ tests")
-        message(STATUS "Install with: brew install googletest (macOS)")
-    endif()
 endif()
 
 # Installation

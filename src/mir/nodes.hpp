@@ -602,6 +602,7 @@ struct LocalDecl {
     bool is_mutable;
     bool is_user_variable;  // ユーザー定義の変数か、コンパイラ生成の一時変数か
     bool is_static = false;  // static変数（関数呼び出し間で値が保持される）
+    bool is_global = false;  // グローバル変数（MirGlobalVarへの参照）
 
     // クロージャ関数ポインタの場合のキャプチャ情報
     bool is_closure = false;
@@ -609,13 +610,14 @@ struct LocalDecl {
     std::vector<LocalId> captured_locals;  // キャプチャされた変数のローカルID
 
     LocalDecl(LocalId i, std::string n, hir::TypePtr t, bool mut = true, bool user = true,
-              bool is_static_ = false)
+              bool is_static_ = false, bool is_global_ = false)
         : id(i),
           name(std::move(n)),
           type(std::move(t)),
           is_mutable(mut),
           is_user_variable(user),
-          is_static(is_static_) {}
+          is_static(is_static_),
+          is_global(is_global_) {}
 };
 
 // ============================================================
@@ -624,11 +626,13 @@ struct LocalDecl {
 struct MirFunction {
     std::string name;
     std::string module_path;  // モジュールパス（例："std::io", ""は現在のモジュール）
-    std::string package_name;         // パッケージ名 (FFI用)
-    bool is_export = false;           // エクスポートされているか
-    bool is_extern = false;           // extern "C" 関数か
-    bool is_variadic = false;         // 可変長引数（FFI用）
-    std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
+    std::string source_file;        // 元ソースファイルパス（モジュール分割用）
+    std::string package_name;       // パッケージ名 (FFI用)
+    bool is_export = false;         // エクスポートされているか
+    bool is_extern = false;         // extern "C" 関数か
+    bool is_variadic = false;       // 可変長引数（FFI用）
+    bool is_async = false;          // async関数（JSバックエンド用）
+    std::vector<LocalDecl> locals;  // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
     LocalId return_local;             // 戻り値用のローカル（_0）
     std::vector<BasicBlockPtr> basic_blocks;
@@ -636,9 +640,10 @@ struct MirFunction {
 
     // ローカル変数の追加
     LocalId add_local(std::string name, hir::TypePtr type, bool is_mutable = true,
-                      bool is_user = true, bool is_static = false) {
+                      bool is_user = true, bool is_static = false, bool is_global = false) {
         LocalId id = locals.size();
-        locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user, is_static);
+        locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user, is_static,
+                            is_global);
         return id;
     }
 
@@ -700,6 +705,7 @@ struct MirStructField {
 struct MirStruct {
     std::string name;
     std::string module_path;  // モジュールパス
+    std::string source_file;  // 元ソースファイルパス（モジュール分割用）
     bool is_export = false;   // エクスポートされているか
     std::vector<MirStructField> fields;
     uint32_t size;   // 構造体全体のサイズ
@@ -728,6 +734,7 @@ struct MirEnumMember {
 struct MirEnum {
     std::string name;
     std::string module_path;
+    std::string source_file;  // 元ソースファイルパス（モジュール分割用）
     bool is_export = false;
     std::vector<MirEnumMember> members;
 
@@ -862,14 +869,28 @@ struct MirModule {
 
 using MirModulePtr = std::unique_ptr<MirModule>;
 
+// ============================================================
+// グローバル変数
+// ============================================================
+struct MirGlobalVar {
+    std::string name;
+    hir::TypePtr type;
+    std::unique_ptr<MirConstant> init_value;  // 初期値（nullptrならゼロ初期化）
+    bool is_const = false;
+    bool is_export = false;
+};
+
+using MirGlobalVarPtr = std::unique_ptr<MirGlobalVar>;
+
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
-    std::vector<MirStructPtr> structs;        // 構造体定義
-    std::vector<MirEnumPtr> enums;            // enum定義（Tagged Union含む）
-    std::vector<MirInterfacePtr> interfaces;  // インターフェース定義
-    std::vector<VTablePtr> vtables;           // vtable（動的ディスパッチ用）
-    std::vector<MirModulePtr> modules;        // モジュール
-    std::vector<MirImportPtr> imports;        // インポート
+    std::vector<MirStructPtr> structs;         // 構造体定義
+    std::vector<MirEnumPtr> enums;             // enum定義（Tagged Union含む）
+    std::vector<MirInterfacePtr> interfaces;   // インターフェース定義
+    std::vector<VTablePtr> vtables;            // vtable（動的ディスパッチ用）
+    std::vector<MirModulePtr> modules;         // モジュール
+    std::vector<MirImportPtr> imports;         // インポート
+    std::vector<MirGlobalVarPtr> global_vars;  // グローバル変数
     std::string filename;
 
     // 関数を名前で検索

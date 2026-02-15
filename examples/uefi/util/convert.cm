@@ -1,0 +1,37 @@
+//! platform: uefi
+// util/convert - 型変換ユーティリティ
+// ushort値のデバッグ表示用文字列変換
+// 注意: ASM内ではvolatileレジスタのみ使用
+
+import ../libs/efi_text;
+
+// ============================================================
+// ushort → 10進文字列
+// ============================================================
+
+/// ushort値を10進数のASCII文字列としてUEFI出力
+export void efi_print_ushort(void* st, ushort value) {
+    ulong v = value as ulong;
+    efi_print_dec(st, v);
+}
+
+// ============================================================
+// ushort → 16進文字列
+// ============================================================
+
+/// ushort値を16進数(0x????)としてUEFI出力
+export void efi_print_ushort_hex(void* st, ushort value) {
+    // "0x" プレフィックス
+    efi_print(st, "0x" as void*);
+
+    // 4桁を上位から出力
+    ulong v = value as ulong;
+    ulong i = 0;
+    while (i < 4) {
+        ulong shift = (3 - i) * 4;
+        ulong mask = 15;
+        ulong nibble = (v >> shift) & mask;
+        efi_put_char(st, nibble_to_hex_char(nibble));
+        i += 1;
+    }
+}
