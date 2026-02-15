@@ -26,7 +26,6 @@
 #include "lint/config.hpp"
 #include "lint/lint_runner.hpp"
 #include "mir/lowering/lowering.hpp"
-#include "mir/mir_splitter.hpp"
 #include "mir/passes/cleanup/dce.hpp"
 #include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
@@ -188,7 +187,7 @@ Options parse_options(int argc, char* argv[]) {
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
-    } else if (cmd == "--version") {
+    } else if (cmd == "--version" || cmd == "-v" || cmd == "-V") {
         std::cout << get_version() << "\n";
         std::exit(0);
     } else if (cmd[0] != '-') {
