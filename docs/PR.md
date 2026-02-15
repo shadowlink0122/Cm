@@ -324,3 +324,59 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 **リリース日**: 2026年2月14日
 **バージョン**: v0.14.0
+
+# feat: テストランナー --no-cache 連携 & モジュール別フィンガープリント
+
+## 概要
+テスト実行時のキャッシュ制御と、インクリメンタルビルドのモジュール粒度変更検出を実装。
+
+## 変更内容
+
+### テストランナー `--no-cache` 連携
+- `unified_test_runner.sh` に `-n`/`--no-cache` オプションを追加
+  - `cm run` / `cm compile` の全バックエンド呼び出し（16箇所）にフラグ伝播
+- `--clean-cache` オプションを追加（テスト前に `.cm-cache` を削除）
+- Makefile に `tipnc`, `tlpnc`, `twpnc`, `tjpnc`, `test-all-parallel-nc` ターゲットを追加
+
+### モジュール別フィンガープリント
+- `CacheEntry` に `module_fingerprints` フィールドを追加
+- `CacheManager::compute_module_fingerprints()`: モジュール→ファイル対応からモジュール単位の SHA-256 フィンガープリント計算
+- `CacheManager::detect_changed_modules()`: 前回キャッシュとの比較で変更されたモジュールのみ検出
+- マニフェスト形式を V2 に拡張（V1 後方互換性あり）
+- JS/LLVM バックエンドのキャッシュ保存時に `preprocess_result.module_ranges` からモジュールフィンガープリントを自動計算・記録
+
+## テスト結果
+- `interpreter -p --no-cache`: **339 PASS / 0 FAIL / 4 SKIP** ✅
+
+## 影響範囲
+- `tests/unified_test_runner.sh`
+- `Makefile`
+- `src/common/cache_manager.hpp` / `cache_manager.cpp`
+- `src/main.cpp`
+
+# feat: MIRモジュール分割ユーティリティ & 分割コンパイルパイプライン
+
+## 概要
+Phase 3 Step 1-2: モジュール別分離コンパイルの基盤を構築。MIRプログラムを`module_path`に基づきモジュール別に分割するユーティリティと、変更モジュール検出付きのコンパイルパイプラインを実装。
+
+## 変更内容
+
+### 新規ファイル
+- `src/mir/mir_splitter.hpp` / `mir_splitter.cpp`: MIR分割ユーティリティ
+  - `MirSplitter::split_by_module()`: ゼロコピーのモジュール別分割
+  - 関数/struct/enumをモジュール別にグループ化
+  - extern依存の自動解決（型・関数の参照追跡）
+
+### 変更ファイル
+- `src/codegen/llvm/native/codegen.hpp` / `codegen.cpp`
+  - `ModuleCompileInfo` 構造体、`compileWithModuleInfo()` メソッド追加
+  - MIR分割情報の収集 + 変更モジュールのデバッグログ
+- `src/common/cache_manager.hpp` / `cache_manager.cpp`
+  - `detect_changed_modules()` staticオーバーロード追加（2マップ直接比較）
+- `src/main.cpp`
+  - キャッシュミス時に変更モジュール検出を統合
+  - `compileWithModuleInfo()` 呼び出しに変更
+- `CMakeLists.txt`: `mir_splitter.cpp` をビルドに追加
+
+## テスト結果
+- インタプリタ: **339 PASS / 0 FAIL / 4 Skipped** ✅
