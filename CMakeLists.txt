@@ -148,6 +148,7 @@ set(TEST_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/src/mir_cpp)
+include_directories(${CMAKE_SOURCE_DIR}/third-party/picosha2)
 
 # Common library (header-only for now)
 add_library(cm_common INTERFACE)
@@ -234,6 +235,7 @@ set(CM_SOURCES
     src/common/format_string.cpp
     src/common/source_location.cpp
     src/common/diagnostics.cpp
+    src/common/cache_manager.cpp
     src/hir/string_interpolation.cpp
     src/diagnostics/engine.cpp
     src/diagnostics/catalog.cpp

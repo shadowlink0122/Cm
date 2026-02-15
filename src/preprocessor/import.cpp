@@ -161,6 +161,16 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
         for (const auto& file : imported_files) {
             result.imported_modules.push_back(file);
         }
+
+        // resolved_filesを構築（キャッシュフィンガープリント用）
+        // メインのソースファイルを追加
+        if (!source_file.empty() && std::filesystem::exists(source_file)) {
+            result.resolved_files.push_back(std::filesystem::canonical(source_file).string());
+        }
+        // インポートされた全ファイルを追加
+        for (const auto& file : imported_files) {
+            result.resolved_files.push_back(file);
+        }
     } catch (const std::exception& e) {
         result.success = false;
         result.error_message = e.what();

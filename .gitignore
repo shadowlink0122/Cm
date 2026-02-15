@@ -41,6 +41,7 @@ coverage.info
 
 # Temp
 .tmp/
+.cm-cache/
 *.cm.tmp
 test_transpile.cm
 Testing/

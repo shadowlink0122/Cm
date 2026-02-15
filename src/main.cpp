@@ -14,6 +14,7 @@
 #include "codegen/js/codegen.hpp"
 
 // MIR validation
+#include "common/cache_manager.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
 #include "fmt/formatter.hpp"
@@ -64,7 +65,7 @@ std::string get_version() {
 }
 
 // コマンドラインオプション
-enum class Command { None, Run, Compile, Check, Lint, Fmt, Help };
+enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Cache };
 
 struct Options {
     Command command = Command::None;
@@ -89,6 +90,10 @@ struct Options {
     std::string output_file;      // -o オプション
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
     bool use_jit = true;          // JITコンパイラ使用（デフォルト）
+    // インクリメンタルビルド設定
+    bool incremental = false;             // --incremental フラグ
+    std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
+    std::string cache_subcommand;         // cache サブコマンド（clear/stats）
 };
 
 // ヘルプメッセージを表示
@@ -131,6 +136,11 @@ void print_help(const char* program_name) {
     std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
     std::cout << "  --mir-opt             最適化後のMIRを表示\n";
     std::cout << "  --lir-opt             最適化後のLLVM IRを表示（codegen直前）\n\n";
+    std::cout << "インクリメンタルビルド:\n";
+    std::cout << "  --incremental         インクリメンタルビルドを有効化\n";
+    std::cout << "  --cache-dir=<dir>     キャッシュディレクトリ（デフォルト: .cm-cache）\n";
+    std::cout << "  cache clear           キャッシュを全削除\n";
+    std::cout << "  cache stats           キャッシュ統計を表示\n\n";
     std::cout << "その他のオプション:\n";
     std::cout << "  --lang=ja             日本語デバッグメッセージ\n";
     std::cout << "  --version             バージョン情報を表示\n\n";
@@ -164,7 +174,13 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Lint;
     } else if (cmd == "fmt") {
         opts.command = Command::Fmt;
-
+    } else if (cmd == "cache") {
+        opts.command = Command::Cache;
+        // サブコマンドを取得
+        if (argc > 2) {
+            opts.cache_subcommand = argv[2];
+        }
+        return opts;
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
@@ -251,6 +267,11 @@ Options parse_options(int argc, char* argv[]) {
         } else if (arg == "-r" || arg == "--recursive") {
             // -r オプション: 再帰的にディレクトリをチェック
             opts.recursive = true;
+        } else if (arg == "--incremental") {
+            opts.incremental = true;
+        } else if (arg.substr(0, 12) == "--cache-dir=") {
+            opts.cache_dir = arg.substr(12);
+            opts.incremental = true;  // --cache-dir指定時は暗黙的に有効化
         } else if (arg.substr(0, 10) == "--exclude=") {
             // --exclude=PATTERN: 除外パターン
             opts.exclude_patterns.push_back(arg.substr(10));
@@ -762,6 +783,33 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // ========== cache コマンド ==========
+    if (opts.command == Command::Cache) {
+        cache::CacheConfig config;
+        config.cache_dir = opts.cache_dir;
+        cache::CacheManager cache_mgr(config);
+
+        if (opts.cache_subcommand == "clear") {
+            if (cache_mgr.clear()) {
+                std::cout << "✓ キャッシュを削除しました: " << opts.cache_dir << "\n";
+            } else {
+                std::cout << "キャッシュが存在しません: " << opts.cache_dir << "\n";
+            }
+            return 0;
+        } else if (opts.cache_subcommand == "stats") {
+            auto stats = cache_mgr.get_stats();
+            std::cout << "=== キャッシュ統計 ===\n";
+            std::cout << "ディレクトリ: " << opts.cache_dir << "\n";
+            std::cout << "エントリ数: " << stats.total_entries << "\n";
+            std::cout << "合計サイズ: " << (stats.total_size_bytes / 1024) << " KB\n";
+            return 0;
+        } else {
+            std::cerr << "不明なcacheサブコマンド: " << opts.cache_subcommand << "\n";
+            std::cerr << "使用法: cm cache clear | cm cache stats\n";
+            return 1;
+        }
+    }
+
     // run/compileコマンドは単一ファイル
     if (opts.command == Command::None || opts.input_file.empty()) {
         if (argc == 1) {
@@ -832,6 +880,48 @@ int main(int argc, char* argv[]) {
         if (!preprocess_result.success) {
             std::cerr << "プリプロセッサエラー: " << preprocess_result.error_message << "\n";
             return 1;
+        }
+
+        // ========== インクリメンタルビルド: キャッシュチェック ==========
+        std::string cache_fingerprint;  // 後でキャッシュ保存に使用
+        cache::CacheConfig cache_config;
+        cache_config.cache_dir = opts.cache_dir;
+        cache_config.enabled = opts.incremental;
+
+        if (opts.incremental && opts.command == Command::Compile) {
+            cache::CacheManager cache_mgr(cache_config);
+            cache_fingerprint = cache_mgr.compute_fingerprint(
+                preprocess_result.resolved_files, opts.target.empty() ? "native" : opts.target,
+                opts.optimization_level);
+
+            if (!cache_fingerprint.empty()) {
+                auto cached = cache_mgr.lookup(cache_fingerprint);
+                if (cached) {
+                    // キャッシュヒット: オブジェクトファイルをコピーしてコンパイルをスキップ
+                    auto cached_obj = cache_mgr.cache_dir() / "objects" / cached->object_file;
+                    std::string output = opts.output_file;
+                    if (output.empty())
+                        output = "a.out";
+
+                    try {
+                        std::filesystem::copy_file(
+                            cached_obj, output, std::filesystem::copy_options::overwrite_existing);
+                        if (opts.verbose || !opts.quiet) {
+                            std::cout << "✓ キャッシュヒット: " << output << "\n";
+                        }
+                        return 0;
+                    } catch (const std::exception& e) {
+                        if (opts.debug) {
+                            std::cerr << "キャッシュコピー失敗: " << e.what()
+                                      << " (フルコンパイルにフォールバック)\n";
+                        }
+                    }
+                } else {
+                    if (opts.verbose) {
+                        std::cout << "キャッシュミス: フルコンパイルを実行\n";
+                    }
+                }
+            }
         }
 
         if (opts.debug && !preprocess_result.imported_modules.empty()) {
@@ -1375,6 +1465,29 @@ int main(int argc, char* argv[]) {
 
                     if (opts.verbose) {
                         std::cout << "✓ LLVM コード生成完了: " << llvm_opts.outputFile << "\n";
+                    }
+
+                    // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
+                    if (opts.incremental && !cache_fingerprint.empty()) {
+                        cache::CacheManager cache_mgr(cache_config);
+                        cache::CacheEntry entry;
+                        entry.fingerprint = cache_fingerprint;
+                        entry.target = opts.target.empty() ? "native" : opts.target;
+                        entry.optimization_level = opts.optimization_level;
+                        entry.compiler_version = cache::CacheManager::get_compiler_version();
+                        entry.object_file = cache_fingerprint.substr(0, 16) + ".o";
+                        entry.created_at = "";
+
+                        // 各ソースファイルのハッシュを記録
+                        for (const auto& f : preprocess_result.resolved_files) {
+                            entry.source_hashes[f] = cache::CacheManager::compute_file_hash(f);
+                        }
+
+                        if (cache_mgr.store(cache_fingerprint, llvm_opts.outputFile, entry)) {
+                            if (opts.verbose) {
+                                std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
+                            }
+                        }
                     }
 
                     // --runオプションがある場合は実行

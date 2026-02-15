@@ -38,6 +38,7 @@ class ImportPreprocessor {
         std::vector<std::string> imported_modules;  // インポートされたモジュール
         SourceMap source_map;                       // ソースマップ
         std::vector<ModuleRange> module_ranges;     // モジュール範囲情報
+        std::vector<std::string> resolved_files;  // 全参照ファイルの絶対パス（キャッシュキー用）
         bool success;
         std::string error_message;
     };
