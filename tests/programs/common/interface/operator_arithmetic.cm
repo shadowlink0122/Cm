@@ -1,0 +1,50 @@
+import std::io::println;
+
+// 算術演算子オーバーロードテスト
+struct Num {
+    int value;
+}
+
+impl Num {
+    operator Num +(Num other) {
+        return Num{value: self.value + other.value};
+    }
+
+    operator Num -(Num other) {
+        return Num{value: self.value - other.value};
+    }
+
+    operator Num *(Num other) {
+        return Num{value: self.value * other.value};
+    }
+
+    operator Num /(Num other) {
+        return Num{value: self.value / other.value};
+    }
+
+    operator Num %(Num other) {
+        return Num{value: self.value % other.value};
+    }
+}
+
+int main() {
+    Num a = Num{value: 10};
+    Num b = Num{value: 3};
+
+    Num sum = a + b;
+    println("10 + 3 = {sum.value}");
+
+    Num diff = a - b;
+    println("10 - 3 = {diff.value}");
+
+    Num prod = a * b;
+    println("10 * 3 = {prod.value}");
+
+    Num quot = a / b;
+    println("10 / 3 = {quot.value}");
+
+    Num rem = a % b;
+    println("10 % 3 = {rem.value}");
+
+    return 0;
+}

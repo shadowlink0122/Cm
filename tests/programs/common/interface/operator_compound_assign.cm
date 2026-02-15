@@ -1,0 +1,50 @@
+import std::io::println;
+
+// 算術複合代入演算子テスト
+struct Num {
+    int value;
+}
+
+impl Num {
+    operator Num +(Num other) {
+        return Num{value: self.value + other.value};
+    }
+
+    operator Num -(Num other) {
+        return Num{value: self.value - other.value};
+    }
+
+    operator Num *(Num other) {
+        return Num{value: self.value * other.value};
+    }
+
+    operator Num /(Num other) {
+        return Num{value: self.value / other.value};
+    }
+
+    operator Num %(Num other) {
+        return Num{value: self.value % other.value};
+    }
+}
+
+int main() {
+    Num c = Num{value: 10};
+    c += Num{value: 5};
+    println("10 += 5 -> {c.value}");
+
+    c -= Num{value: 3};
+    println("15 -= 3 -> {c.value}");
+
+    c *= Num{value: 2};
+    println("12 *= 2 -> {c.value}");
+
+    c = Num{value: 20};
+    c /= Num{value: 4};
+    println("20 /= 4 -> {c.value}");
+
+    c = Num{value: 17};
+    c %= Num{value: 5};
+    println("17 %= 5 -> {c.value}");
+
+    return 0;
+}

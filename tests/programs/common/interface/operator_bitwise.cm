@@ -1,0 +1,50 @@
+import std::io::println;
+
+// ビット演算子オーバーロードテスト
+struct Num {
+    int value;
+}
+
+impl Num {
+    operator Num &(Num other) {
+        return Num{value: self.value & other.value};
+    }
+
+    operator Num | (Num other) {
+        return Num{value: self.value | other.value};
+    }
+
+    operator Num ^(Num other) {
+        return Num{value: self.value ^ other.value};
+    }
+
+    operator Num <<(Num other) {
+        return Num{value: self.value << other.value};
+    }
+
+    operator Num >>(Num other) {
+        return Num{value: self.value >> other.value};
+    }
+}
+
+int main() {
+    Num m = Num{value: 0xFF};
+    Num n = Num{value: 0x0F};
+
+    Num band = m & n;
+    println("0xFF & 0x0F = {band.value}");
+
+    Num bor = m | n;
+    println("0xFF | 0x0F = {bor.value}");
+
+    Num bxor = m ^ n;
+    println("0xFF ^ 0x0F = {bxor.value}");
+
+    Num shl = Num{value: 1} << Num{value: 4};
+    println("1 << 4 = {shl.value}");
+
+    Num shr = Num{value: 32} >> Num{value: 2};
+    println("32 >> 2 = {shr.value}");
+
+    return 0;
+}
