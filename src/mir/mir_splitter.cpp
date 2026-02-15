@@ -2,6 +2,7 @@
 
 #include "mir_splitter.hpp"
 
+#include <algorithm>
 #include <set>
 #include <unordered_set>
 
@@ -13,6 +14,62 @@ std::string MirSplitter::normalize_module_name(const std::string& module_path) {
         return "main";
     }
     return module_path;
+}
+
+// ソースファイルパスからモジュール名を導出
+// 例: "libs/efi_core.cm" → "libs_efi_core"
+//     "main.cm" → "main"
+//     "" → "main"
+std::string MirSplitter::source_file_to_module_name(const std::string& source_file) {
+    if (source_file.empty()) {
+        return "main";
+    }
+
+    std::string name = source_file;
+
+    // .cm 拡張子を削除
+    if (name.size() > 3 && name.substr(name.size() - 3) == ".cm") {
+        name = name.substr(0, name.size() - 3);
+    }
+
+    // 先頭の ./ を削除
+    if (name.size() > 2 && name.substr(0, 2) == "./") {
+        name = name.substr(2);
+    }
+
+    // / と \ を _ に変換
+    std::replace(name.begin(), name.end(), '/', '_');
+    std::replace(name.begin(), name.end(), '\\', '_');
+
+    // :: を _ に変換
+    size_t pos = 0;
+    while ((pos = name.find("::", pos)) != std::string::npos) {
+        name.replace(pos, 2, "_");
+    }
+
+    // . を _ に変換
+    std::replace(name.begin(), name.end(), '.', '_');
+
+    // 先頭の _ を削除
+    while (!name.empty() && name[0] == '_') {
+        name = name.substr(1);
+    }
+
+    if (name.empty()) {
+        return "main";
+    }
+
+    return name;
+}
+
+// MIR要素のモジュール名を決定する内部ヘルパー
+// source_fileが設定されていればそれを使用、なければmodule_pathにフォールバック
+static std::string determine_module_name(const std::string& source_file,
+                                         const std::string& module_path) {
+    if (!source_file.empty()) {
+        return MirSplitter::source_file_to_module_name(source_file);
+    }
+    return MirSplitter::normalize_module_name(module_path);
 }
 
 // 関数が参照する型名を収集（構造体・enum）
@@ -62,7 +119,7 @@ std::vector<std::string> MirSplitter::collect_called_functions(const MirFunction
     return std::vector<std::string>(called.begin(), called.end());
 }
 
-// MirProgramをmodule_pathに基づきモジュール別に分割
+// MirProgramをsource_file（優先）またはmodule_pathに基づきモジュール別に分割
 std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgram& program) {
     std::map<std::string, ModuleProgram> modules;
 
@@ -72,7 +129,7 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
     for (const auto& func : program.functions) {
         if (!func)
             continue;
-        std::string mod_name = normalize_module_name(func->module_path);
+        std::string mod_name = determine_module_name(func->source_file, func->module_path);
 
         auto& mod = modules[mod_name];
         mod.module_name = mod_name;
@@ -88,7 +145,7 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
     for (const auto& st : program.structs) {
         if (!st)
             continue;
-        std::string mod_name = normalize_module_name(st->module_path);
+        std::string mod_name = determine_module_name(st->source_file, st->module_path);
 
         auto& mod = modules[mod_name];
         mod.module_name = mod_name;
@@ -104,7 +161,7 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
     for (const auto& en : program.enums) {
         if (!en)
             continue;
-        std::string mod_name = normalize_module_name(en->module_path);
+        std::string mod_name = determine_module_name(en->source_file, en->module_path);
 
         auto& mod = modules[mod_name];
         mod.module_name = mod_name;

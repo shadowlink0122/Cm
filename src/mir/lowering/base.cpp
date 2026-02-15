@@ -372,4 +372,20 @@ MirStruct MirLoweringBase::create_mir_struct(const hir::HirStruct& st) {
     return mir_struct;
 }
 
+// ソースファイルパスの解決（module_rangesから）
+std::string MirLoweringBase::resolve_source_file(uint32_t offset) const {
+    if (!module_ranges_ || module_ranges_->empty()) {
+        return "";
+    }
+
+    // module_rangesをバイトオフセット範囲で検索
+    for (const auto& range : *module_ranges_) {
+        if (offset >= range.start_offset && offset < range.end_offset) {
+            return range.file_path;
+        }
+    }
+
+    return "";
+}
+
 }  // namespace cm::mir

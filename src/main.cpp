@@ -1258,6 +1258,8 @@ int main(int argc, char* argv[]) {
         debug::log(debug::Stage::Mir, debug::Level::Info, "Starting MIR lowering");
         auto phase_mir_start = std::chrono::steady_clock::now();
         mir::MirLowering mir_lowering;
+        // プリプロセッサのモジュール範囲情報を設定（ソースファイルベースの分割用）
+        mir_lowering.set_module_ranges(&preprocess_result.module_ranges);
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         auto mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");

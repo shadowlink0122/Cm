@@ -209,6 +209,10 @@ void MirLowering::register_declarations(const hir::HirProgram& hir_program) {
     for (const auto& decl : hir_program.declarations) {
         if (auto* e = std::get_if<std::unique_ptr<hir::HirEnum>>(&decl->kind)) {
             register_enum(**e);
+            // ソースファイル情報を設定（モジュール分割用）
+            if (!mir_program.enums.empty()) {
+                mir_program.enums.back()->source_file = resolve_source_file(decl->span.start);
+            }
         }
     }
 
@@ -229,6 +233,8 @@ void MirLowering::register_declarations(const hir::HirProgram& hir_program) {
             }
             // MIR構造体を生成してプログラムに追加
             auto mir_struct = create_mir_struct(**st);
+            // ソースファイル情報を設定（モジュール分割用）
+            mir_struct.source_file = resolve_source_file(decl->span.start);
             mir_program.structs.push_back(std::make_unique<MirStruct>(std::move(mir_struct)));
         }
     }
@@ -2751,6 +2757,8 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
     for (const auto& decl : hir_program.declarations) {
         if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
             if (auto mir_func = lower_function(**func)) {
+                // ソースファイル情報を設定（モジュール分割用）
+                mir_func->source_file = resolve_source_file(decl->span.start);
                 // HIR関数の参照を保存
                 hir_functions[(*func)->name] = func->get();
                 mir_program.functions.push_back(std::move(mir_func));
@@ -2761,6 +2769,8 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
             for (const auto& func : (*extern_block)->functions) {
                 if (auto mir_func = lower_function(*func)) {
                     mir_func->package_name = (*extern_block)->package_name;
+                    // ソースファイル情報を設定（モジュール分割用）
+                    mir_func->source_file = resolve_source_file(decl->span.start);
                     hir_functions[func->name] = func.get();
                     mir_program.functions.push_back(std::move(mir_func));
                 }
@@ -2773,7 +2783,16 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
 void MirLowering::lower_impl_methods(const hir::HirProgram& hir_program) {
     for (const auto& decl : hir_program.declarations) {
         if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
+            // lowering前の関数数を記録
+            size_t prev_count = mir_program.functions.size();
             lower_impl(**impl);
+            // 新たに追加された関数にソースファイル情報を設定
+            std::string src = resolve_source_file(decl->span.start);
+            for (size_t i = prev_count; i < mir_program.functions.size(); ++i) {
+                if (mir_program.functions[i]) {
+                    mir_program.functions[i]->source_file = src;
+                }
+            }
         }
     }
 }

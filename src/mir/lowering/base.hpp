@@ -2,6 +2,7 @@
 
 #include "../../frontend/ast/typedef.hpp"
 #include "../../hir/nodes.hpp"
+#include "../../preprocessor/import.hpp"
 #include "../nodes.hpp"
 #include "context.hpp"
 
@@ -63,9 +64,18 @@ class MirLoweringBase {
     // グローバル変数名のセット
     std::unordered_set<std::string> global_var_names;
 
+    // モジュール範囲情報（ソースファイルベースのモジュール分割用）
+    const std::vector<preprocessor::ImportPreprocessor::ModuleRange>* module_ranges_ = nullptr;
+
    public:
     MirLoweringBase() = default;
     virtual ~MirLoweringBase() = default;
+
+    // モジュール範囲情報を設定（ソースファイルベースの分割用）
+    void set_module_ranges(
+        const std::vector<preprocessor::ImportPreprocessor::ModuleRange>* ranges) {
+        module_ranges_ = ranges;
+    }
 
     // 共有impl_infoを設定
     void set_shared_impl_info(
@@ -111,6 +121,9 @@ class MirLoweringBase {
 
     // MIR構造体を生成
     MirStruct create_mir_struct(const hir::HirStruct& st);
+
+    // ソースファイルパスの解決（module_rangesから）
+    std::string resolve_source_file(uint32_t offset) const;
 
    private:
     // グローバルconst用のコンパイル時定数評価
