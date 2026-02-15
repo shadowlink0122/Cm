@@ -561,11 +561,18 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             SourceMap dummy_source_map;
             std::vector<ModuleRange> dummy_module_ranges;
 
+            // export抽出用にオリジナルファイル（再帰import展開前）を保存
+            std::string raw_module_source;
+
             if (module_cache.count(canonical_path) > 0) {
                 module_source = module_cache[canonical_path];
+                // キャッシュからraw sourceも取得
+                raw_module_source = raw_module_cache[canonical_path];
             } else {
                 // モジュールファイルを読み込む
                 module_source = load_module_file(module_path);
+                // 再帰import展開前のソースを保存（export抽出用）
+                raw_module_source = module_source;
 
                 // モジュール内のインポートを再帰的に処理（ダミーソースマップを使用）
                 module_source =
@@ -574,6 +581,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
                 // キャッシュに保存
                 module_cache[canonical_path] = module_source;
+                raw_module_cache[canonical_path] = raw_module_source;
             }
 
             // インポートスタックから削除
@@ -589,8 +597,9 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 }
             }
 
-            // exportブロック抽出用にオリジナルソースを保存（remove前に）
-            std::string original_module_source = module_source;
+            // exportブロック抽出用にサブインポート展開済みソースを保存
+            //（export キーワードあり + Exported symbols セクションあり）
+            std::string export_extraction_source = module_source;
 
             // exportキーワードを削除
             module_source = remove_export_keywords(module_source);
@@ -780,8 +789,8 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
                 // exportされたシンボルをnamespace外にも展開
                 // これにより名前空間修飾なしでも呼び出し可能になる
-                // 注意: original_module_sourceを使う（exportキーワード削除前のソース）
-                std::string exported_blocks = extract_exported_blocks(original_module_source);
+                // サブインポート展開済みソースを使用し推移的エクスポートも含める
+                std::string exported_blocks = extract_exported_blocks(export_extraction_source);
                 if (!exported_blocks.empty()) {
                     emit_line("// ===== Exported symbols from " + import_info.module_name +
                                   " (direct access) =====",
@@ -2253,14 +2262,33 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
     std::stringstream input(module_source);
     std::string line;
     bool in_export_block = false;
+    bool in_sub_exported_section = false;
     std::vector<std::string> block_lines;
     int brace_depth = 0;
     bool found_opening_brace = false;
 
     while (std::getline(input, line)) {
+        // サブモジュールのExported symbolsセクションを検出してパススルー
+        // これにより推移的なエクスポートが可能になる
+        // （モジュールAがBをimport、BがCをimport → AからCのexport関数を呼べる）
+        if (!in_export_block && !in_sub_exported_section &&
+            line.find("// ===== Exported symbols from ") != std::string::npos) {
+            in_sub_exported_section = true;
+            continue;  // セクション開始コメントはスキップ
+        }
+        if (in_sub_exported_section) {
+            if (line.find("// ===== End exported symbols =====") != std::string::npos) {
+                in_sub_exported_section = false;
+                continue;  // セクション終了コメントはスキップ
+            }
+            // サブモジュールのexported関数をそのまま出力
+            result << line << "\n";
+            continue;
+        }
+
         // module宣言やimport文はスキップ
         if (line.find("module ") != std::string::npos && line.find(';') != std::string::npos) {
-            std::regex module_regex(R"(^\s*//?\s*module\s+[\w:.]+\s*;\s*$)");
+            std::regex module_regex(R"(^\s*/?\s*module\s+[\w:.]+\s*;\s*$)");
             if (std::regex_match(line, module_regex)) {
                 continue;
             }

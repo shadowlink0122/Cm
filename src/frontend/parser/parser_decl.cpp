@@ -1,4 +1,3 @@
-// パーサ - 宣言パース（トップレベル、関数、構造体、インターフェース、impl）
 #include "../../common/debug/par.hpp"
 #include "parser.hpp"
 
@@ -14,6 +13,11 @@ ast::Program Parser::parse() {
     size_t last_pos = pos_;
 
     while (!is_at_end() && iterations < MAX_ITERATIONS) {
+        // エラーが蓄積しすぎた場合はコンパイルを中断
+        if (diagnostics_.size() > 50) {
+            error("エラーが多すぎるためコンパイルを中断します");
+            break;
+        }
         // 無限ループ検出
         if (pos_ == last_pos && iterations > 0) {
             error("Parser stuck - no progress made");

@@ -41,11 +41,27 @@ ast::DeclPtr Parser::parse_namespace() {
 
     // namespace内の宣言をパース
     std::vector<ast::DeclPtr> declarations;
-    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+    size_t last_pos = pos_;
+    int ns_iterations = 0;
+    const int MAX_NS_ITERATIONS = 5000;
+
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof) && ns_iterations < MAX_NS_ITERATIONS) {
+        // parse_top_level()がnullptrを返しトークンが進まない場合のスタック検出
+        if (pos_ == last_pos && ns_iterations > 0) {
+            // トークンを強制的に進めてスタックを解消
+            if (!is_at_end() && !check(TokenKind::RBrace)) {
+                advance();
+            } else {
+                break;
+            }
+        }
+        last_pos = pos_;
+
         auto decl = parse_top_level();
         if (decl) {
             declarations.push_back(std::move(decl));
         }
+        ns_iterations++;
     }
 
     expect(TokenKind::RBrace);

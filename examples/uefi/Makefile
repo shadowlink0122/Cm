@@ -29,7 +29,7 @@ all: $(EFI)
 
 # Cmソースをコンパイル（uefiターゲット）
 compile: $(OBJ)
-$(OBJ): $(SRC)
+$(OBJ): $(SRC) $(CM)
 	$(CM) compile --target=uefi -o $(OBJ) $(SRC)
 
 # PE/COFF EFIアプリケーションにリンク

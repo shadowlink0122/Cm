@@ -383,6 +383,15 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
             }
         }
 
+        // グローバルconst変数をチェック（COLOR_RED等のexport const定数）
+        auto const_val = ctx.get_const_value(var.name);
+        if (const_val) {
+            LocalId temp = ctx.new_temp(const_val->type ? const_val->type : hir::make_int());
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{temp}, MirRvalue::use(MirOperand::constant(*const_val))));
+            return temp;
+        }
+
         // 変数が見つからない場合は仮の値を返す
         LocalId temp = ctx.new_temp(hir::make_int());
         MirConstant zero_const;
