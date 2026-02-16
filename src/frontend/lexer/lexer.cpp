@@ -220,10 +220,12 @@ Token Lexer::scan_number(uint32_t start) {
         // stoullで符号なし64bit全域をパース後、ビットキャスト（Bug3: 0x8000000000000000以上対応）
         uint64_t uval = std::stoull(text, nullptr, 16);
         int64_t val = static_cast<int64_t>(uval);
+        // uint32_t範囲を超える場合はunsignedフラグを設定
+        bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
         if (::cm::debug::g_debug_mode)
             debug::lex::log(debug::lex::Id::Number, text + " = " + std::to_string(val),
                             debug::Level::Debug);
-        return Token(TokenKind::IntLiteral, start, pos_, val);
+        return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
     }
 
     // 8進数チェック (0o/0Oプレフィックス)
@@ -235,10 +237,11 @@ Token Lexer::scan_number(uint32_t start) {
         std::string text(source_.substr(start + 2, pos_ - start - 2));
         uint64_t uval = std::stoull(text, nullptr, 8);
         int64_t val = static_cast<int64_t>(uval);
+        bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
         if (::cm::debug::g_debug_mode)
             debug::lex::log(debug::lex::Id::Number, "0o" + text + " = " + std::to_string(val),
                             debug::Level::Debug);
-        return Token(TokenKind::IntLiteral, start, pos_, val);
+        return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
     }
 
     // 2進数チェック
@@ -250,10 +253,11 @@ Token Lexer::scan_number(uint32_t start) {
         std::string text(source_.substr(start + 2, pos_ - start - 2));
         uint64_t uval = std::stoull(text, nullptr, 2);
         int64_t val = static_cast<int64_t>(uval);
+        bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
         if (::cm::debug::g_debug_mode)
             debug::lex::log(debug::lex::Id::Number, "0b" + text + " = " + std::to_string(val),
                             debug::Level::Debug);
-        return Token(TokenKind::IntLiteral, start, pos_, val);
+        return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
     }
 
     // 10進数の整数部分

@@ -13,13 +13,13 @@ int main() {
     long l3 = -100;
     println(l3);
 
-    long l4 = 2147483647;    // i32最大値
+    long l4 = 2147483647;  // i32最大値
     println(l4);
 
-    long l5 = 2147483648;    // i32最大値+1
+    long l5 = 2147483648;  // i32最大値+1
     println(l5);
 
-    long l6 = -2147483648;   // i32最小値
+    long l6 = -2147483648;  // i32最小値
     println(l6);
 
     // === ulong型 (符号なし64bit) ===
@@ -29,10 +29,10 @@ int main() {
     ulong u2 = 100;
     println(u2);
 
-    ulong u3 = 4294967295;   // u32最大値
+    ulong u3 = 4294967295;  // u32最大値
     println(u3);
 
-    ulong u4 = 4294967296;   // u32最大値+1
+    ulong u4 = 4294967296;  // u32最大値+1
     println(u4);
 
     // === 文字列補間でのlong/ulong ===

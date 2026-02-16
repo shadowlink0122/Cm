@@ -2919,10 +2919,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                     bool use_zext = false;
                     if (castData.target_type) {
                         auto kind = castData.target_type->kind;
-                        use_zext = (kind == hir::TypeKind::UTiny ||
-                                    kind == hir::TypeKind::UShort ||
-                                    kind == hir::TypeKind::UInt ||
-                                    kind == hir::TypeKind::ULong);
+                        use_zext = (kind == hir::TypeKind::UTiny || kind == hir::TypeKind::UShort ||
+                                    kind == hir::TypeKind::UInt || kind == hir::TypeKind::ULong);
                     }
                     if (use_zext) {
                         return builder->CreateZExt(value, targetType, "zext");

@@ -112,7 +112,8 @@ bool FunctionInlining::should_inline(const MirFunction& callee) {
     // ASM文を含む関数はインライン化しない
     // （レジスタ割当前提の崩壊、ret命令の帰先消失を防止）
     for (const auto& b : callee.basic_blocks) {
-        if (!b) continue;
+        if (!b)
+            continue;
         for (const auto& stmt : b->statements) {
             if (stmt->kind == MirStatement::Asm) {
                 return false;

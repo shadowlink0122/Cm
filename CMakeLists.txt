@@ -10,6 +10,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# VERSIONファイルからバージョンを読み取り、コンパイル時定数として埋め込む
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" CM_VERSION_RAW)
+string(STRIP "${CM_VERSION_RAW}" CM_VERSION)
+add_compile_definitions(CM_VERSION="${CM_VERSION}")
+
 # Options
 option(CM_DEBUG_BUILD "Enable debug logging macros" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)

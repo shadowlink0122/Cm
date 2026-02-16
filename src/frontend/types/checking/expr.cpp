@@ -161,8 +161,31 @@ ast::TypePtr TypeChecker::infer_literal(ast::LiteralExpr& lit) {
         return ast::make_void();
     if (lit.is_bool())
         return std::make_shared<ast::Type>(ast::TypeKind::Bool);
-    if (lit.is_int())
-        return ast::make_int();
+    if (lit.is_int()) {
+        int64_t val = std::get<int64_t>(lit.value);
+
+        // unsignedリテラル（hex/binary/octalで32bit超の値）の場合
+        // lexerが uint64_t → int64_t にbit_castしているため、
+        // int64_t値だけでは元の大きさを判別できない
+        if (lit.is_unsigned_literal) {
+            uint64_t uval = static_cast<uint64_t>(val);
+            // int64_t正範囲 (INT32_MAX+1 ～ INT64_MAX) なら long
+            // UIntではなくLongを使う: LLVM codegenでi32→i64の符号拡張を避ける
+            if (uval <= static_cast<uint64_t>(INT64_MAX)) {
+                return std::make_shared<ast::Type>(ast::TypeKind::Long);
+            }
+            // それ以上 (0x8000000000000000 ～ 0xFFFFFFFFFFFFFFFF) なら ulong
+            return std::make_shared<ast::Type>(ast::TypeKind::ULong);
+        }
+
+        // 通常の10進数リテラルの型推論
+        // i32範囲: -2147483648 ～ 2147483647
+        if (val >= INT32_MIN && val <= INT32_MAX) {
+            return ast::make_int();
+        }
+        // i32範囲外: long型
+        return std::make_shared<ast::Type>(ast::TypeKind::Long);
+    }
     if (lit.is_float())
         return ast::make_double();
     if (lit.is_char())

@@ -586,10 +586,11 @@ ast::ExprPtr Parser::parse_primary() {
     // 数値リテラル
     if (check(TokenKind::IntLiteral)) {
         int64_t val = current().get_int();
+        bool is_unsigned = current().is_unsigned;
         debug::par::log(debug::par::Id::IntLiteral, "Found integer literal: " + std::to_string(val),
                         debug::Level::Debug);
         advance();
-        return ast::make_int_literal(val, Span{start_pos, previous().end});
+        return ast::make_int_literal(val, is_unsigned, Span{start_pos, previous().end});
     }
 
     if (check(TokenKind::FloatLiteral)) {

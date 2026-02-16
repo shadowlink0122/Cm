@@ -6,6 +6,27 @@
 
 namespace cm::mir {
 
+// 型の幅を数値化（二項演算の結果型決定用）
+static int type_width(const hir::TypePtr& type) {
+    if (!type)
+        return 32;
+    switch (type->kind) {
+        case hir::TypeKind::ULong:
+            return 65;  // ulongは最も広い
+        case hir::TypeKind::Long:
+            return 64;
+        case hir::TypeKind::UInt:
+            return 33;
+        default:
+            return 32;  // int
+    }
+}
+
+// LHS/RHSの型のうち広い方を返す
+static hir::TypePtr wider_type(const hir::TypePtr& lhs, const hir::TypePtr& rhs) {
+    return type_width(lhs) >= type_width(rhs) ? lhs : rhs;
+}
+
 // コンパイル時定数評価（const folding）
 // HIR式がコンパイル時に評価可能な場合、MirConstantを返す
 static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, LoweringContext& ctx) {
@@ -95,7 +116,8 @@ static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, Lower
                 }
                 if (ok) {
                     MirConstant c;
-                    c.type = lhs->type;
+                    // LHS/RHSの型のうち広い方を結果型とする
+                    c.type = wider_type(lhs->type, rhs->type);
                     c.value = result;
                     return c;
                 }

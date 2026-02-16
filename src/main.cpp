@@ -55,16 +55,13 @@ namespace fs = std::filesystem;
 
 namespace cm {
 
-// バージョン情報を取得
+// バージョン情報を取得（CMakeでコンパイル時に埋め込み）
 std::string get_version() {
-    std::ifstream version_file("VERSION");
-    if (!version_file.is_open()) {
-        // フォールバック
-        return "0.13.0";
-    }
-    std::string version;
-    std::getline(version_file, version);
-    return version;
+#ifdef CM_VERSION
+    return CM_VERSION;
+#else
+    return "0.14.1";
+#endif
 }
 
 // コマンドラインオプション
