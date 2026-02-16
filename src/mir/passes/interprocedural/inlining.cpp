@@ -109,6 +109,17 @@ bool FunctionInlining::should_inline(const MirFunction& callee) {
         return false;
     }
 
+    // ASM文を含む関数はインライン化しない
+    // （レジスタ割当前提の崩壊、ret命令の帰先消失を防止）
+    for (const auto& b : callee.basic_blocks) {
+        if (!b) continue;
+        for (const auto& stmt : b->statements) {
+            if (stmt->kind == MirStatement::Asm) {
+                return false;
+            }
+        }
+    }
+
     size_t stmt_count = 0;
     for (const auto& b : callee.basic_blocks) {
         if (b)
@@ -208,6 +219,7 @@ MirStatementPtr FunctionInlining::clone_statement(const MirStatement& src) {
     auto stmt = std::make_unique<MirStatement>();
     stmt->kind = src.kind;
     stmt->span = src.span;
+    stmt->no_opt = src.no_opt;
 
     if (std::holds_alternative<MirStatement::AssignData>(src.data)) {
         const auto& d = std::get<MirStatement::AssignData>(src.data);
@@ -217,6 +229,15 @@ MirStatementPtr FunctionInlining::clone_statement(const MirStatement& src) {
     } else if (std::holds_alternative<MirStatement::StorageData>(src.data)) {
         const auto& d = std::get<MirStatement::StorageData>(src.data);
         stmt->data = MirStatement::StorageData{d.local};
+    } else if (std::holds_alternative<MirStatement::AsmData>(src.data)) {
+        // ASM文のクローン（安全策：should_inlineで通常ブロックされるが、念のため）
+        const auto& d = std::get<MirStatement::AsmData>(src.data);
+        MirStatement::AsmData nd;
+        nd.code = d.code;
+        nd.is_must = d.is_must;
+        nd.clobbers = d.clobbers;
+        nd.operands = d.operands;
+        stmt->data = std::move(nd);
     }
     return stmt;
 }
@@ -333,6 +354,13 @@ void FunctionInlining::remap_statement(MirStatement& stmt, LocalId offset) {
         remap_rvalue(*d->rvalue, offset);
     } else if (auto* d = std::get_if<MirStatement::StorageData>(&stmt.data)) {
         d->local += offset;
+    } else if (auto* d = std::get_if<MirStatement::AsmData>(&stmt.data)) {
+        // ASMオペランドのローカルID再マッピング
+        for (auto& op : d->operands) {
+            if (!op.is_constant) {
+                op.local_id += offset;
+            }
+        }
     }
 }
 

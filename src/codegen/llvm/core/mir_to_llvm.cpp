@@ -2910,11 +2910,23 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateFPToSI(value, targetType, "fptosi");
             }
 
-            // int サイズ変換
+            // int サイズ変換（target_typeのsignednessに応じてsext/zext切り替え）
             if (sourceType->isIntegerTy() && targetType->isIntegerTy()) {
                 auto srcBits = sourceType->getIntegerBitWidth();
                 auto dstBits = targetType->getIntegerBitWidth();
                 if (srcBits < dstBits) {
+                    // unsigned型（UTiny,UShort,UInt,ULong）へのキャストはゼロ拡張
+                    bool use_zext = false;
+                    if (castData.target_type) {
+                        auto kind = castData.target_type->kind;
+                        use_zext = (kind == hir::TypeKind::UTiny ||
+                                    kind == hir::TypeKind::UShort ||
+                                    kind == hir::TypeKind::UInt ||
+                                    kind == hir::TypeKind::ULong);
+                    }
+                    if (use_zext) {
+                        return builder->CreateZExt(value, targetType, "zext");
+                    }
                     return builder->CreateSExt(value, targetType, "sext");
                 } else if (srcBits > dstBits) {
                     return builder->CreateTrunc(value, targetType, "trunc");

@@ -268,7 +268,28 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypeP
                 constant.type = hir::make_bool();
                 constant.value = val;
             } else if constexpr (std::is_same_v<T, int64_t>) {
-                constant.type = hir::make_int();
+                // リテラル値が32bit範囲に収まるかで型を決定
+                // expr_typeが設定されている場合はそれを優先
+                if (expr_type && (expr_type->kind == hir::TypeKind::Long ||
+                                  expr_type->kind == hir::TypeKind::ULong ||
+                                  expr_type->kind == hir::TypeKind::UInt ||
+                                  expr_type->kind == hir::TypeKind::Short ||
+                                  expr_type->kind == hir::TypeKind::UShort ||
+                                  expr_type->kind == hir::TypeKind::Tiny ||
+                                  expr_type->kind == hir::TypeKind::UTiny)) {
+                    constant.type = expr_type;
+                } else if (val > 2147483647LL || val < -2147483648LL) {
+                    // i32範囲外 → long(i64)
+                    // 符号なし領域（MSBが立つ場合）はulongとして扱う
+                    if (val < 0) {
+                        // ビットキャストされた巨大unsigned値（例: 0xFE6C6C...）
+                        constant.type = hir::make_ulong();
+                    } else {
+                        constant.type = hir::make_long();
+                    }
+                } else {
+                    constant.type = hir::make_int();
+                }
                 constant.value = val;
             } else if constexpr (std::is_same_v<T, double>) {
                 constant.type = hir::make_double();

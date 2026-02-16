@@ -2136,9 +2136,26 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     args.push_back(MirOperand::constant(str_const));
                 }
             } else {
-                // その他のリテラル（整数など）
-                runtime_func = "cm_println_int";
+                // その他のリテラル（整数など）- 型に応じてランタイム関数を選択
                 LocalId arg_local = lower_expression(*first_arg, ctx);
+                // MIRローカルの型情報を確認
+                hir::TypePtr lit_type = first_arg->type;
+                if (arg_local < ctx.func->locals.size() && ctx.func->locals[arg_local].type) {
+                    lit_type = ctx.func->locals[arg_local].type;
+                }
+                if (lit_type && (lit_type->kind == hir::TypeKind::Long ||
+                                 lit_type->kind == hir::TypeKind::ISize)) {
+                    runtime_func = "cm_println_long";
+                } else if (lit_type && (lit_type->kind == hir::TypeKind::ULong ||
+                                        lit_type->kind == hir::TypeKind::USize)) {
+                    runtime_func = "cm_println_ulong";
+                } else if (lit_type && (lit_type->kind == hir::TypeKind::UInt ||
+                                        lit_type->kind == hir::TypeKind::UShort ||
+                                        lit_type->kind == hir::TypeKind::UTiny)) {
+                    runtime_func = "cm_println_uint";
+                } else {
+                    runtime_func = "cm_println_int";
+                }
                 args.push_back(MirOperand::copy(MirPlace{arg_local}));
             }
         } else {
@@ -2206,6 +2223,19 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                         break;
                     case hir::TypeKind::Char:
                         runtime_func = "cm_println_char";
+                        break;
+                    case hir::TypeKind::Long:
+                    case hir::TypeKind::ISize:
+                        runtime_func = "cm_println_long";
+                        break;
+                    case hir::TypeKind::ULong:
+                    case hir::TypeKind::USize:
+                        runtime_func = "cm_println_ulong";
+                        break;
+                    case hir::TypeKind::UInt:
+                    case hir::TypeKind::UShort:
+                    case hir::TypeKind::UTiny:
+                        runtime_func = "cm_println_uint";
                         break;
                     default:
                         runtime_func = "cm_println_int";

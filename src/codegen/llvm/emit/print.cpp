@@ -52,27 +52,37 @@ llvm::Value* MIRToLLVM::generateValueToString(llvm::Value* value, const hir::Typ
             return builder->CreateCall(formatFunc, {charVal});
         }
 
-        // 整数型
-        auto intVal = value;
-        if (intType->getBitWidth() != 32) {
-            unsigned srcBits = intType->getBitWidth();
-            if (srcBits < 32) {
-                // 小さい型から32ビットへの拡張
-                if (isUnsigned) {
-                    intVal = builder->CreateZExt(value, ctx.getI32Type());
+        // 整数型: 64bit整数は専用のフォーマット関数を使用
+        unsigned srcBits = intType->getBitWidth();
+        if (srcBits > 32) {
+            // 64bit整数: cm_format_long / cm_format_ulong を使用
+            auto longVal = value;
+            if (srcBits != 64) {
+                if (srcBits < 64) {
+                    longVal = isUnsigned ? builder->CreateZExt(value, ctx.getI64Type())
+                                         : builder->CreateSExt(value, ctx.getI64Type());
                 } else {
-                    intVal = builder->CreateSExt(value, ctx.getI32Type());
+                    longVal = builder->CreateTrunc(value, ctx.getI64Type());
                 }
-            } else {
-                // 大きい型から32ビットへの切り捨て
-                intVal = builder->CreateTrunc(value, ctx.getI32Type());
             }
+            auto formatFunc = module->getOrInsertFunction(
+                isUnsigned ? "cm_format_ulong" : "cm_format_long",
+                llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI64Type()}, false));
+            return builder->CreateCall(formatFunc, {longVal});
+        } else {
+            // 32bit以下: cm_format_int / cm_format_uint を使用
+            auto intVal = value;
+            if (srcBits != 32) {
+                if (srcBits < 32) {
+                    intVal = isUnsigned ? builder->CreateZExt(value, ctx.getI32Type())
+                                        : builder->CreateSExt(value, ctx.getI32Type());
+                }
+            }
+            auto formatFunc = module->getOrInsertFunction(
+                isUnsigned ? "cm_format_uint" : "cm_format_int",
+                llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI32Type()}, false));
+            return builder->CreateCall(formatFunc, {intVal});
         }
-
-        auto formatFunc = module->getOrInsertFunction(
-            isUnsigned ? "cm_format_uint" : "cm_format_int",
-            llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI32Type()}, false));
-        return builder->CreateCall(formatFunc, {intVal});
     }
 
     if (valueType->isFloatingPointTy()) {
@@ -461,25 +471,53 @@ void MIRToLLVM::generatePrintCall(const mir::MirTerminator::CallData& callData, 
                     llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI8Type()}, false));
                 builder->CreateCall(printCharFunc, {charArg});
             } else {
-                llvm::FunctionCallee printFunc;
-                if (isUnsigned) {
-                    printFunc = module->getOrInsertFunction(
-                        isNewline ? "cm_println_uint" : "cm_print_uint",
-                        llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type()}, false));
-                } else {
-                    printFunc = module->getOrInsertFunction(
-                        isNewline ? "cm_println_int" : "cm_print_int",
-                        llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type()}, false));
-                }
+                // 64bit整数はcm_println_long/cm_println_ulongを使用
+                unsigned bits = intType->getBitWidth();
+                bool isLong = (hirType && (hirType->kind == hir::TypeKind::Long ||
+                                           hirType->kind == hir::TypeKind::ULong ||
+                                           hirType->kind == hir::TypeKind::ISize ||
+                                           hirType->kind == hir::TypeKind::USize)) ||
+                              bits > 32;
 
-                auto intArg = arg;
-                if (intType->getBitWidth() < 32) {
-                    intArg = isUnsigned ? builder->CreateZExt(arg, ctx.getI32Type())
-                                        : builder->CreateSExt(arg, ctx.getI32Type());
-                } else if (intType->getBitWidth() > 32) {
-                    intArg = builder->CreateTrunc(arg, ctx.getI32Type());
+                if (isLong) {
+                    llvm::FunctionCallee printFunc;
+                    if (isUnsigned) {
+                        printFunc = module->getOrInsertFunction(
+                            isNewline ? "cm_println_ulong" : "cm_print_ulong",
+                            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI64Type()}, false));
+                    } else {
+                        printFunc = module->getOrInsertFunction(
+                            isNewline ? "cm_println_long" : "cm_print_long",
+                            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI64Type()}, false));
+                    }
+                    auto longArg = arg;
+                    if (bits != 64) {
+                        if (bits < 64) {
+                            longArg = isUnsigned ? builder->CreateZExt(arg, ctx.getI64Type())
+                                                 : builder->CreateSExt(arg, ctx.getI64Type());
+                        } else {
+                            longArg = builder->CreateTrunc(arg, ctx.getI64Type());
+                        }
+                    }
+                    builder->CreateCall(printFunc, {longArg});
+                } else {
+                    llvm::FunctionCallee printFunc;
+                    if (isUnsigned) {
+                        printFunc = module->getOrInsertFunction(
+                            isNewline ? "cm_println_uint" : "cm_print_uint",
+                            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type()}, false));
+                    } else {
+                        printFunc = module->getOrInsertFunction(
+                            isNewline ? "cm_println_int" : "cm_print_int",
+                            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type()}, false));
+                    }
+                    auto intArg = arg;
+                    if (bits < 32) {
+                        intArg = isUnsigned ? builder->CreateZExt(arg, ctx.getI32Type())
+                                            : builder->CreateSExt(arg, ctx.getI32Type());
+                    }
+                    builder->CreateCall(printFunc, {intArg});
                 }
-                builder->CreateCall(printFunc, {intArg});
             }
         } else if (argType->isFloatingPointTy()) {
             auto printFunc = module->getOrInsertFunction(

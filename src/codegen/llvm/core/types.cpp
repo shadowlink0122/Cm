@@ -639,7 +639,6 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
         return llvm::ConstantInt::get(ctx.getI8Type(), std::get<char>(constant.value));
     } else if (std::holds_alternative<int64_t>(constant.value)) {
         int64_t val = std::get<int64_t>(constant.value);
-        // std::cerr << "[MIR2LLVM]             convertConstant: val=" << val << "\n";
 
         // 型情報がある場合、適切な型で生成
         if (constant.type) {

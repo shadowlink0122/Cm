@@ -536,13 +536,52 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             return builder->CreateICmpSGE(lhs, rhs, "ge");
         }
 
-        // ビット演算
-        case mir::MirBinaryOp::BitXor:
+        // ビット演算（整数型のビット幅を揃える: ulong & int 等）
+        case mir::MirBinaryOp::BitXor: {
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
             return builder->CreateXor(lhs, rhs, "xor");
-        case mir::MirBinaryOp::BitAnd:
+        }
+        case mir::MirBinaryOp::BitAnd: {
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
             return builder->CreateAnd(lhs, rhs, "bitand");
-        case mir::MirBinaryOp::BitOr:
+        }
+        case mir::MirBinaryOp::BitOr: {
+            if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
+                auto lhsBits = lhs->getType()->getIntegerBitWidth();
+                auto rhsBits = rhs->getType()->getIntegerBitWidth();
+                bool is_unsigned = isUnsignedType(result_type);
+                if (lhsBits < rhsBits) {
+                    lhs = is_unsigned ? builder->CreateZExt(lhs, rhs->getType(), "zext")
+                                      : builder->CreateSExt(lhs, rhs->getType(), "sext");
+                } else if (rhsBits < lhsBits) {
+                    rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
+                                      : builder->CreateSExt(rhs, lhs->getType(), "sext");
+                }
+            }
             return builder->CreateOr(lhs, rhs, "bitor");
+        }
         case mir::MirBinaryOp::Shl: {
             // ビット幅を揃える（LLVMはShlの両オペランドに同一型を要求）
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
