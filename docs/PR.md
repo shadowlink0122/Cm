@@ -1,10 +1,45 @@
 [English](PR.en.html)
 
-# v0.14.0 Release - Cm言語コンパイラ
+# v0.14.1 Release - Cm言語コンパイラ
 
 ## 概要
 
-v0.14.0は**JavaScriptバックエンドの大規模改善**、**演算子オーバーロードの設計改善**、**ベアメタル/UEFIサポート**、**インラインユニオン型 (`int | null`)**、**プラットフォームディレクティブ**、**VSCode拡張機能の品質改善**を含むメジャーリリースです。JSテスト通過率が55%から87%に向上し、UEFIターゲットでのベアメタル開発が可能になりました。また、VSCode拡張機能をTypeScriptに移行し、ESLint/Prettierによるコード品質管理をCI統合しました。
+v0.14.1は**整数型出力の完全対応**と**全バックエンドの安定化**を含むパッチリリースです。大きな16進リテラル（`0x80000000`以上）のprintln出力バグを修正し、JS/WASMランタイムにlong/ulong/uint出力関数を追加しました。回帰テスト4件を追加し、全バックエンドで0 FAILを達成しています。
+
+v0.14.0の主な変更: **JavaScriptバックエンドの大規模改善**、**演算子オーバーロードの設計改善**、**ベアメタル/UEFIサポート**、**インラインユニオン型 (`int | null`)**、**プラットフォームディレクティブ**、**VSCode拡張機能の品質改善**。
+
+---
+
+## 🔥 v0.14.1 変更点
+
+### 整数型出力の完全対応
+
+MIR loweringのprintln関数選択ロジックにlong/ulong/uint/isize/usize型のケースを追加。i32範囲を超える値が正しく出力されるようになりました。
+
+```cm
+long v = 0x80000000;  // 2147483648
+println(v);           // 修正前: -2147483648 (i32切り詰め)
+                      // 修正後: 2147483648 (正しい出力)
+```
+
+### JS/WASMランタイム改善
+
+| ファイル | 変更内容 |
+|---------|----------|
+| `src/codegen/js/builtins.cpp` | `cm_println_long`/`ulong`/`uint`とformat/to_string版追加 |
+| `src/codegen/llvm/wasm/runtime_print.c` | `cm_println_long`/`ulong`出力関数追加 |
+| `src/codegen/llvm/core/operators.cpp` | ビット演算（BitAnd/BitOr/BitXor）の型幅統一ロジック追加 |
+| `src/mir/lowering/expr_call.cpp` | println型選択にlong/ulong/uint/isize/usizeケース追加 |
+| `src/mir/passes/interprocedural/inlining.cpp` | ASM含有関数のインライン展開禁止 |
+
+### 回帰テスト追加（4件）
+
+| テスト | 対象 |
+|-------|------|
+| `hex_literal_large` | i32範囲超え16進リテラルのprintln出力 |
+| `long_println` | long/ulong型の直接出力と文字列補間 |
+| `bitwise_type_widening` | ulong/longとintリテラルのビット演算型拡張 |
+| `const_arithmetic` | const定数間の四則演算 |
 
 ---
 
@@ -163,6 +198,10 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 | 問題 | 原因 | 修正ファイル |
 |-----|------|------------|
+| **[v0.14.1]** 大きな16進リテラルのprintln出力 | MIR loweringのprintln関数選択にlong/ulong未対応 | `expr_call.cpp` |
+| **[v0.14.1]** ビット演算の型幅不一致 | BitAnd/BitOr/BitXorに型統一ロジック欠落 | `operators.cpp` |
+| **[v0.14.1]** ASM関数のインライン展開 | ASM含有関数がインライン展開され不正コード生成 | `inlining.cpp` |
+| **[v0.14.1]** JS/WASMでlong/ulong未出力 | ランタイムにcm_println_long等が未定義 | `builtins.cpp`, `runtime_print.c` |
 | println型判定の誤り | AST型チェッカーがmatch armのpayload変数の型を`int`に設定 | `expr_call.cpp` |
 | ペイロードロードエラー | Tagged Unionの非構造体ペイロード型が`i32`にハードコード | `mir_to_llvm.cpp` |
 | 構造体ペイロードサイズ計算 | `max_payload_size()`がStruct型をデフォルト8バイトで計算 | `types.cpp` |
@@ -288,10 +327,10 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 | バックエンド | 通過 | 失敗 | スキップ |
 |------------|-----|------|---------| 
-| JIT (O0) | 343 | 0 | 4 |
-| LLVM Native | 343 | 0 | 4 |
-| LLVM WASM | 338 | 0 | 5 |
-| JavaScript | 298 | 0 | 49 |
+| JIT (O0) | 347 | 0 | 4 |
+| LLVM Native | 380 | 0 | 7 |
+| LLVM WASM | 346 | 0 | 5 |
+| JavaScript | 306 | 0 | 49 |
 | Baremetal | 11 | 0 | 0 |
 | UEFI | 5 | 0 | 0 |
 
@@ -299,19 +338,20 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 ## 📊 統計
 
-- **テスト総数**: 347
-- **JIT/LLVMテスト通過**: 343（0失敗）
-- **WASMテスト通過**: 338（0失敗）
-- **JSテスト通過**: 298（0失敗、v0.13.1の206から+92改善）
+- **テスト総数**: 351
+- **JIT通過**: 347（0失敗）
+- **LLVM通過**: 380（0失敗）
+- **WASM通過**: 346（0失敗）
+- **JS通過**: 306（0失敗、v0.13.1の206から+100改善）
 
 ---
 
 ## ✅ チェックリスト
 
-- [x] `make tip` 全テスト通過（343 PASS / 0 FAIL）
-- [x] `make tlp` 全テスト通過（343 PASS / 0 FAIL）
-- [x] `make tlwp` 全テスト通過（338 PASS / 0 FAIL）
-- [x] `make tjp` 全テスト通過（298 PASS / 0 FAIL）
+- [x] `make tip` 全テスト通過（347 PASS / 0 FAIL）
+- [x] `make tlp` 全テスト通過（380 PASS / 0 FAIL）
+- [x] `make tlw` 全テスト通過（346 PASS / 0 FAIL）
+- [x] `make tjp` 全テスト通過（306 PASS / 0 FAIL）
 - [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
 - [x] ベアメタルテスト通過（11 PASS / 0 FAIL）
 - [x] UEFIテスト通過（5 PASS / 0 FAIL）
@@ -323,5 +363,5 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 ---
 
-**リリース日**: 2026年2月15日
-**バージョン**: v0.14.0
+**リリース日**: 2026年2月17日
+**バージョン**: v0.14.1
