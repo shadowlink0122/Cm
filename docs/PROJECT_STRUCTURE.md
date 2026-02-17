@@ -149,7 +149,7 @@ make tip
 make tlp
 
 # WASMテスト
-make tlwp
+make twp
 
 # JSテスト
 make tjp

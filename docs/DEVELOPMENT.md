@@ -92,7 +92,7 @@ make tip
 make tlp
 
 # WASMテスト（wasmtime必要）
-make tlwp
+make twp
 
 # 全テスト
 make tall

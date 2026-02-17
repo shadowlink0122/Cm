@@ -350,7 +350,7 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 - [x] `make tip` 全テスト通過（347 PASS / 0 FAIL）
 - [x] `make tlp` 全テスト通過（380 PASS / 0 FAIL）
-- [x] `make tlw` 全テスト通過（346 PASS / 0 FAIL）
+- [x] `make tw` 全テスト通過（346 PASS / 0 FAIL）
 - [x] `make tjp` 全テスト通過（306 PASS / 0 FAIL）
 - [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
 - [x] ベアメタルテスト通過（11 PASS / 0 FAIL）

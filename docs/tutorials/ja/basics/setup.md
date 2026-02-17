@@ -310,7 +310,7 @@ cmake --build build -j8
 | `make test` | `make t` | C++ユニットテスト (ctest) |
 | `make test-jit-parallel` | `make tip` | JIT全テスト（並列） |
 | `make test-llvm-parallel` | `make tlp` | LLVM全テスト（並列） |
-| `make test-llvm-wasm-parallel` | `make tlwp` | WASM全テスト（並列） |
+| `make test-llvm-wasm-parallel` | `make twp` | WASM全テスト（並列） |
 | `make test-js-parallel` | `make tjp` | JS全テスト（並列） |
 | `make test-lint` | `make tli` | Lintテスト |
 
@@ -329,7 +329,7 @@ make tip3  # -O3
 make tlp0 / make tlp1 / make tlp2 / make tlp3
 
 # WASMテスト（O0〜O3）
-make tlwp0 / make tlwp1 / make tlwp2 / make tlwp3
+make twp0 / make twp1 / make twp2 / make twp3
 
 # JSテスト（O0〜O3）
 make tjp0 / make tjp1 / make tjp2 / make tjp3

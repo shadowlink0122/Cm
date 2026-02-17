@@ -247,7 +247,7 @@ make test
 # バックエンド別（並列実行）
 make tip    # JITテスト（= test-jit-parallel）
 make tlp    # LLVMネイティブテスト
-make tlwp   # LLVM WASMテスト
+make twp   # LLVM WASMテスト
 make tjp    # JSテスト
 
 # 最適化レベル指定
