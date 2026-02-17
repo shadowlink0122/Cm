@@ -4,6 +4,17 @@
 
 ---
 
+## Bug #1: 3引数関数でのポインタ破損（UEFI）
+
+**状態**: ✅ 修正済み
+
+Win64呼出規約（RCX, RDX, R8, R9）が`efi_main`のみに設定され、
+他の関数はSystem V ABI（RDI, RSI, RDX, RCX）のまま。3引数以上でレジスタ齟齬が発生。
+
+**修正**: `mir_to_llvm.cpp`: UEFIターゲット時に全関数にWin64呼出規約を設定。
+
+---
+
 ## Bug #2: `*ptr as ulong` でデリファレンスエラー
 
 **状態**: ✅ 解決済み（仕様通りの動作）
@@ -36,6 +47,18 @@ while条件を定数trueに置換していた。
 
 ---
 
+## Bug #7: `must { __asm__() }` の制御フロー干渉
+
+**状態**: ✅ 修正済み
+
+`must { }` ブロックで `__asm__` をラップすると、ASMの`hasSideEffects`フラグが
+不十分で、LLVMがASM周辺の制御フローを不正に最適化していた。
+
+**修正**: `mir_to_llvm.cpp`: 全ASMに`hasSideEffects=true`と
+`~{memory},~{dirflag},~{fpsr},~{flags}`クロバーを設定。
+
+---
+
 ## Bug #8: const式でのI/Oポート計算
 
 **状態**: ✅ 修正済み
@@ -54,11 +77,6 @@ const変数同士の加算式が関数引数で正しく評価されなかった
 `&arr as void*` で配列アドレスを取得すると、パーサー優先順位により
 `&(arr as void*)` と解析され、配列全体がコピーされてバッファオーバーフロー。
 
-**根本原因（3重問題）**:
-1. パーサー: `as` が `&` より高優先度 → `&(b as void*)`
-2. MIR lowering: 配列全体コピー → ポインタキャスト
-3. LLVM codegen: `Pointer<Array>`型のalloca skipで型不一致
-
 **修正**:
 - `mir_to_llvm.cpp`: `Pointer<Array>`型のalloca skipルール削除
 - `expr_basic.cpp`: `lower_cast`にarray-to-pointer decay（暗黙的Ref）実装
@@ -69,7 +87,7 @@ const変数同士の加算式が関数引数で正しく評価されなかった
 
 ## Bug #10: `impl`メソッドのネスト呼び出しで`self`変更が消失
 
-**状態**: ✅ JITモードで修正済み（UEFIポインタ経由は未修正）
+**状態**: ✅ 修正済み（JIT/LLVM/UEFI全環境）
 
 `impl`メソッドが`self.method()`で別メソッドを呼ぶと、
 呼び出し先での`self`フィールド変更が反映されなかった。
@@ -78,8 +96,27 @@ const変数同士の加算式が関数引数で正しく評価されなかった
 - `expr_call.cpp`: impl self書き戻しロジックの修正
 - `monomorphization_impl.cpp`: ネストメソッド呼び出し時のself伝播
 
-**テスト**: `common/impl/impl_nested_self`, `impl_nested_self_deep`, `impl_ptr_self`
+**テスト**: `common/impl/impl_nested_self`, `impl_nested_self_deep`, `impl_ptr_self`, `impl_ptr_large_struct`
 
-> [!NOTE]
-> JITおよびLLVMネイティブでは修正済み。UEFIターゲットのポインタ経由
-> （`ptr->method()`）では未修正。Bug #10bとして別途追跡。
+---
+
+## Bug #11: インライン展開によるASMレジスタ割当変更
+
+**状態**: ✅ 修正済み
+
+`__asm__`内で`%rdi`や`%rsi`を直接参照する関数がインライン展開されると、
+パラメータが別レジスタに配置され不正動作。
+
+**修正**: `mir_to_llvm.cpp`: ASM文を含む関数にLLVM `NoInline`属性を付与。
+MIRレベルの`should_inline`抑制と合わせて二重の防御。
+
+---
+
+## Bug #12: インライン展開時のret先不在
+
+**状態**: ✅ 修正済み
+
+`__asm__`内で`ret`命令を使う関数がインライン展開されると、
+`call`命令が省略されスタック上にreturn addressが不在。
+
+**修正**: Bug #11と同じ（ASM含む関数のNoInline属性付与）。

@@ -378,11 +378,37 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     }
 
-    // UEFIエントリポイント: efi_mainにWin64呼出規約とDLLExportを設定
-    // DLLExportにより最適化で関数が除去されるのを防ぐ
-    if (func.name == "efi_main") {
+    // Bug#11/12修正: ASM文を含む関数にnoinline属性を追加
+    // MIRレベルではshould_inlineで抑制済みだが、LLVMの最適化パスによる
+    // インライン展開も防止する必要がある（レジスタ割当変更・ret先不在を防ぐ）
+    {
+        bool hasAsm = false;
+        for (const auto& bb : func.basic_blocks) {
+            if (!bb)
+                continue;
+            for (const auto& stmt : bb->statements) {
+                if (stmt && stmt->kind == mir::MirStatement::Asm) {
+                    hasAsm = true;
+                    break;
+                }
+            }
+            if (hasAsm)
+                break;
+        }
+        if (hasAsm) {
+            llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+        }
+    }
+
+    // Bug#1修正: UEFIターゲットでは全関数にWin64呼出規約を設定
+    // UEFIはWindows x64 ABIを使用（RCX, RDX, R8, R9）
+    // efi_mainだけでなく全関数に適用しないと3引数以上の関数でポインタが破損する
+    if (isUefiTarget) {
         llvmFunc->setCallingConv(llvm::CallingConv::Win64);
-        llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        // efi_mainはDLLExportで最適化除去を防ぐ
+        if (func.name == "efi_main") {
+            llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        }
     }
 
     // パラメータ名設定
@@ -406,9 +432,10 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     currentProgram = &program;
 
-    // ターゲット判定をキャッシュ（境界チェックで使用）
+    // ターゲット判定をキャッシュ（境界チェック・ABI設定で使用）
     std::string triple = module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;
+    isUefiTarget = triple.find("windows") != std::string::npos;
 
     // インターフェース名を収集
     // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
@@ -1949,9 +1976,12 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             if (asmData.operands.empty()) {
                 // オペランドなし: シンプルなasm
                 auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
-                std::string constraints = asmData.is_must ? "~{memory}" : "";
+                // Bug#7修正: 全ASMにhasSideEffects=trueとフラグクロバーを設定
+                // must { __asm__("hlt"); } がループから脱出する問題を防止
+                // LLVMがASM周辺の制御フローを不正に最適化しないようにする
+                std::string constraints = "~{memory},~{dirflag},~{fpsr},~{flags}";
                 auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
-                                                       asmData.is_must  // hasSideEffects
+                                                       true  // hasSideEffects: 常にtrue
                 );
                 builder->CreateCall(asmFuncTy, inlineAsm);
             } else {

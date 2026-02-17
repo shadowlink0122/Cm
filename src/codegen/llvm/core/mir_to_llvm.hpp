@@ -63,7 +63,8 @@ class MIRToLLVM {
     std::vector<const mir::MirFunction*> allModuleFunctions;
 
     // ターゲット情報キャッシュ
-    bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
+    bool isWasmTarget = false;   // WASMターゲットかどうか（境界チェックで使用）
+    bool isUefiTarget = false;   // UEFIターゲットかどうか（Win64 ABI適用に使用）
 
    public:
     /// コンストラクタ
