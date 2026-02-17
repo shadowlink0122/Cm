@@ -2545,6 +2545,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     // 通常の関数呼び出し
     std::vector<MirOperandPtr> args;
 
+    // Bug#10修正: ptr->method()後の書き戻し情報
+    // deref_tempへの変更を*ptrに書き戻すために記録
+    struct PtrWriteback {
+        LocalId deref_temp;
+        LocalId ptr_var;
+    };
+    std::optional<PtrWriteback> pending_writeback;
+
     // メソッド呼び出しかどうかを判定
     // 関数名が "TypeName__MethodName" の形式の場合
     bool is_method_call = false;
@@ -2594,6 +2602,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                     MirPlace{ref_temp},
                                     MirRvalue::ref(MirPlace{deref_temp}, false)));
                                 args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                                // 書き戻し情報を記録
+                                pending_writeback = PtrWriteback{deref_temp, ptr_var};
                                 debug_msg("mir_call",
                                           "[MIR] Bug#10: ptr->method() self: deref+ref "
                                           "local " +
@@ -2618,6 +2628,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                             ctx.push_statement(MirStatement::assign(
                                 MirPlace{ref_temp}, MirRvalue::ref(MirPlace{deref_temp}, false)));
                             args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                            // 書き戻し情報を記録
+                            pending_writeback = PtrWriteback{deref_temp, ptr_local};
                             debug_msg("mir_call",
                                       "[MIR] Bug#10: ptr->method() self: passing evaluated "
                                       "deref+ref for " +
@@ -2786,6 +2798,20 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     // 次のブロックへ移動
     ctx.switch_to_block(success_block);
+
+    // Bug#10修正: ptr->method()後の書き戻し
+    // メソッドがderef_temp(コピー)を変更した場合、*ptrに書き戻す
+    if (pending_writeback) {
+        MirPlace deref_place{pending_writeback->ptr_var};
+        deref_place.projections.push_back(PlaceProjection::deref());
+        ctx.push_statement(MirStatement::assign(
+            deref_place,
+            MirRvalue::use(MirOperand::copy(MirPlace{pending_writeback->deref_temp}))));
+        debug_msg("mir_call", "[MIR] Bug#10: writeback deref_temp " +
+                                  std::to_string(pending_writeback->deref_temp) +
+                                  " -> *ptr local " + std::to_string(pending_writeback->ptr_var) +
+                                  " for " + call.func_name);
+    }
 
     return result;
 }

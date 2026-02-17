@@ -120,3 +120,18 @@ MIRレベルの`should_inline`抑制と合わせて二重の防御。
 `call`命令が省略されスタック上にreturn addressが不在。
 
 **修正**: Bug #11と同じ（ASM含む関数のNoInline属性付与）。
+
+---
+
+## Bug #13: インライン展開時のレジスタ上書き（UEFIクラッシュ）
+
+**状態**: ✅ 修正済み
+
+`impl`メソッド/コンストラクタがLLVM O2パイプラインでインライン展開されると、
+`efi_main`の引数レジスタ（rcx=image_handle, rdx=system_table）がインライン展開された
+コードのself/引数として上書きされ、UEFIデータ構造が破壊されて`#UD`例外が発生していた。
+
+**修正**: `mir_to_llvm.cpp`: UEFIターゲットの全関数に`NoInline`属性を付与。
+`efi_main`にはさらに`OptimizeNone`属性を追加し、DCE（デッドコード削除）も防止。
+
+**テスト**: `uefi/uefi_compile/uefi_impl_inline`
