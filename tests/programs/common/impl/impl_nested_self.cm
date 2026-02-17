@@ -42,7 +42,7 @@ impl Cursor {
 
 int main() {
     Cursor c = Cursor { x: 0, y: 0 };
-    
+
     // ケース1: 単一メソッド呼出し
     c.move_right();
     c.print_pos();

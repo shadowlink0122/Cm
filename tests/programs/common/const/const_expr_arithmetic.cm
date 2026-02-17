@@ -3,7 +3,7 @@
 import std::io::println;
 
 // const定数定義（I/Oポート計算を模倣）
-const int BASE_PORT = 1016;   // 0x3F8
+const int BASE_PORT = 1016;  // 0x3F8
 const int REG_OFFSET = 1;
 
 const long LARGE_BASE = 1000000;
