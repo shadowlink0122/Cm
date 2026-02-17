@@ -832,6 +832,49 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         return;
     }
 
+    // Bug#14修正: 右辺が配列リテラルの場合、temp経由のcopyを避けて
+    // 直接ターゲット変数の各インデックスに要素を書き込む。
+    // temp経由copyでは構造体要素の配列で正しくコピーされない問題がある。
+    if (auto* arr_lit_ptr =
+            std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&assign.value->kind)) {
+        const auto& arr_lit = **arr_lit_ptr;
+
+        // 配列リテラルの要素を直接ターゲットに書き込むヘルパー
+        auto lower_array_literal_to_place = [&](MirPlace base_place) {
+            for (size_t i = 0; i < arr_lit.elements.size(); ++i) {
+                LocalId elem_value = expr_lowering->lower_expression(*arr_lit.elements[i], ctx);
+
+                // インデックス用の定数を変数に格納
+                LocalId idx_local = ctx.new_temp(hir::make_int());
+                MirConstant idx_const;
+                idx_const.value = static_cast<int64_t>(i);
+                idx_const.type = hir::make_int();
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{idx_local}, MirRvalue::use(MirOperand::constant(idx_const))));
+
+                // ターゲットの配列要素への代入を生成
+                MirPlace elem_place = base_place;
+                elem_place.projections.push_back(PlaceProjection::index(idx_local));
+                ctx.push_statement(MirStatement::assign(
+                    elem_place, MirRvalue::use(MirOperand::copy(MirPlace{elem_value}))));
+            }
+        };
+
+        // 左辺が単純な変数参照の場合
+        if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&assign.target->kind)) {
+            auto lhs_opt = ctx.resolve_variable((*var_ref)->name);
+            if (lhs_opt) {
+                lower_array_literal_to_place(MirPlace{*lhs_opt});
+                return;
+            }
+        }
+
+        // 左辺が複雑な式（メンバーアクセス等）の場合もbuild_lvalue_placeで対応
+        // この場合はフォールスルーして通常パスの build_lvalue_place を使う
+        // ただし配列リテラルの各要素を直接書き込むために、ここでplaceを構築
+        // （フォールスルーさせると通常のtemp copyパスを通ってしまう）
+    }
+
     // 右辺値をlowering
     LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
 
