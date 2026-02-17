@@ -405,9 +405,16 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     // efi_mainだけでなく全関数に適用しないと3引数以上の関数でポインタが破損する
     if (isUefiTarget) {
         llvmFunc->setCallingConv(llvm::CallingConv::Win64);
-        // efi_mainはDLLExportで最適化除去を防ぐ
+        // Bug#13修正: LLVMのO2パイプラインのインライン展開を防止
+        // インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)が
+        // インライン展開されたコードのself/引数として上書きされ、
+        // UEFIデータ構造が破壊される
+        llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+        // efi_mainはDLLExportで最適化除去を防ぎ、optnoneで全最適化を無効化
+        // optnoneはインライン展開 + DCE(デッドコード削除)を両方防止
         if (func.name == "efi_main") {
             llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+            llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
         }
     }
 
