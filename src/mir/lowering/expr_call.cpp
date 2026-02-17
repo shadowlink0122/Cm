@@ -2570,7 +2570,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                 // Bug#10修正: ptr->method() パターン検出
                 // パーサーが -> を Deref(ptr) に変換するため、
                 // self引数が HirUnary(Deref, HirVarRef(ptr)) の形式になる。
-                // この場合、Derefせずにポインタをそのまま渡す。
+                // Deref結果への参照を作成して渡す（通常のs.method()と同じRef方式）。
                 if (auto unary_ptr = std::get_if<std::unique_ptr<hir::HirUnary>>(&arg->kind)) {
                     const auto& unary = **unary_ptr;
                     if (unary.op == hir::HirUnaryOp::Deref && unary.operand) {
@@ -2580,26 +2580,47 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                             const auto& var_ref = **inner_var_ref;
                             auto ptr_var_opt = ctx.resolve_variable(var_ref.name);
                             if (ptr_var_opt) {
-                                // ポインタ変数をそのまま渡す（Deref+Ref不要）
+                                // ポインタをDerefして構造体コピーを取得
                                 LocalId ptr_var = *ptr_var_opt;
-                                args.push_back(MirOperand::copy(MirPlace{ptr_var}));
+                                LocalId deref_temp = ctx.new_temp(arg_type);
+                                MirPlace deref_place{ptr_var};
+                                deref_place.projections.push_back(PlaceProjection::deref());
+                                ctx.push_statement(MirStatement::assign(
+                                    MirPlace{deref_temp},
+                                    MirRvalue::use(MirOperand::copy(deref_place))));
+                                // 構造体コピーへの参照を作成
+                                LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                                ctx.push_statement(MirStatement::assign(
+                                    MirPlace{ref_temp},
+                                    MirRvalue::ref(MirPlace{deref_temp}, false)));
+                                args.push_back(MirOperand::copy(MirPlace{ref_temp}));
                                 debug_msg("mir_call",
-                                          "[MIR] Bug#10: ptr->method() self: passing pointer "
+                                          "[MIR] Bug#10: ptr->method() self: deref+ref "
                                           "local " +
-                                              std::to_string(ptr_var) + " directly for " +
+                                              std::to_string(ptr_var) + " via deref_temp " +
+                                              std::to_string(deref_temp) + " for " +
                                               call.func_name);
                                 continue;
                             }
                         }
                         // Derefのオペランドが変数参照でない場合（式の場合）
-                        // 式を評価してポインタを取得し、そのまま渡す
+                        // 式を評価してDeref結果を取得し、参照を渡す
                         if (unary.operand->type &&
                             unary.operand->type->kind == hir::TypeKind::Pointer) {
                             LocalId ptr_local = lower_expression(*unary.operand, ctx);
-                            args.push_back(MirOperand::copy(MirPlace{ptr_local}));
+                            LocalId deref_temp = ctx.new_temp(arg_type);
+                            MirPlace deref_place{ptr_local};
+                            deref_place.projections.push_back(PlaceProjection::deref());
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{deref_temp},
+                                MirRvalue::use(MirOperand::copy(deref_place))));
+                            LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{ref_temp}, MirRvalue::ref(MirPlace{deref_temp}, false)));
+                            args.push_back(MirOperand::copy(MirPlace{ref_temp}));
                             debug_msg("mir_call",
                                       "[MIR] Bug#10: ptr->method() self: passing evaluated "
-                                      "pointer for " +
+                                      "deref+ref for " +
                                           call.func_name);
                             continue;
                         }
