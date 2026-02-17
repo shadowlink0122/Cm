@@ -1,0 +1,50 @@
+// Bug#5修正テスト: whileループ内での変数更新がSCCPで消されないことを確認
+// SCCPが初期代入からwhile条件を誤って定数畳み込みする問題の回帰テスト
+import std::io::println;
+
+int main() {
+    // ケース1: 初期値0のカウンタをwhileループで更新
+    int count = 0;
+    int i = 0;
+    while (i < 5) {
+        count = count + 1;
+        i = i + 1;
+    }
+    println("count after while: {count}");
+
+    // ケース2: 初期値0からの条件変化（SCCPが条件を常にfalseと推論しないか確認）
+    int value = 0;
+    int step = 0;
+    while (step < 3) {
+        value = value + 10;
+        step = step + 1;
+    }
+    println("value after loop: {value}");
+
+    // ケース3: ネストwhileループ
+    int outer = 0;
+    int total = 0;
+    while (outer < 3) {
+        int inner = 0;
+        while (inner < 2) {
+            total = total + 1;
+            inner = inner + 1;
+        }
+        outer = outer + 1;
+    }
+    println("nested total: {total}");
+
+    // ケース4: whileループの条件が変数に依存（初期値false → true変化）
+    int flag = 0;
+    int attempts = 0;
+    while (flag == 0) {
+        attempts = attempts + 1;
+        if (attempts >= 3) {
+            flag = 1;
+        }
+    }
+    println("attempts: {attempts}");
+
+    println("PASS");
+    return 0;
+}

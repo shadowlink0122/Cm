@@ -1,0 +1,65 @@
+// Bug#10修正テスト: implメソッドのネスト呼出しでselfフィールド変更が反映されることを確認
+// fix_struct_method_self_argsのネスト呼出し対応の回帰テスト
+import std::io::println;
+
+struct Cursor {
+    int x;
+    int y;
+}
+
+impl Cursor {
+    void move_right() {
+        self.x = self.x + 1;
+    }
+
+    void move_down() {
+        self.y = self.y + 1;
+    }
+
+    // ネストメソッド呼出し: move_rightをループ内で呼ぶ
+    void move_right_n(int n) {
+        int i = 0;
+        while (i < n) {
+            self.move_right();  // ← selfフィールド変更が反映されるべき
+            i = i + 1;
+        }
+    }
+
+    // 複数のネストメソッド呼出し
+    void move_diagonal(int n) {
+        int i = 0;
+        while (i < n) {
+            self.move_right();
+            self.move_down();
+            i = i + 1;
+        }
+    }
+
+    void print_pos() {
+        println("({self.x}, {self.y})");
+    }
+}
+
+int main() {
+    Cursor c = Cursor { x: 0, y: 0 };
+    
+    // ケース1: 単一メソッド呼出し
+    c.move_right();
+    c.print_pos();
+
+    // ケース2: ネスト呼出し（ループ内でmove_rightを3回）
+    c.move_right_n(3);
+    c.print_pos();
+
+    // ケース3: 複数ネスト呼出し（対角移動2回）
+    c.move_diagonal(2);
+    c.print_pos();
+
+    // ケース4: 直接呼出しとネスト呼出しの組み合わせ
+    c.move_down();
+    c.move_right_n(2);
+    c.print_pos();
+
+    println("PASS");
+    return 0;
+}

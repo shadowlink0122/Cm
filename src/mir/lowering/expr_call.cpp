@@ -1727,7 +1727,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 // 追加引数を解析（簡易実装）
                                                 if (!args_str.empty()) {
                                                     try {
-                                                        int64_t value = std::stoll(args_str);
+                                                        // stoullで符号なし64bit全域をパース（Bug#6:
+                                                        // stoll out of range修正）
+                                                        uint64_t uval =
+                                                            std::stoull(args_str, nullptr, 0);
+                                                        int64_t value = static_cast<int64_t>(uval);
                                                         MirConstant arg_const;
                                                         arg_const.type = hir::make_int();
                                                         arg_const.value = value;
@@ -1909,7 +1913,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 for (const auto& arg_str : func_args) {
                                                     // 簡易実装：整数リテラルのみサポート
                                                     try {
-                                                        int64_t value = std::stoll(arg_str);
+                                                        // stoullで符号なし64bit全域をパース（Bug#6:
+                                                        // stoll out of range修正）
+                                                        uint64_t uval =
+                                                            std::stoull(arg_str, nullptr, 0);
+                                                        int64_t value = static_cast<int64_t>(uval);
                                                         MirConstant arg_const;
                                                         arg_const.type = hir::make_int();
                                                         arg_const.value = value;
@@ -1967,7 +1975,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 for (const auto& arg_str : func_args) {
                                                     // 簡易実装：整数リテラルのみサポート
                                                     try {
-                                                        int64_t value = std::stoll(arg_str);
+                                                        // stoullで符号なし64bit全域をパース（Bug#6:
+                                                        // stoll out of range修正）
+                                                        uint64_t uval =
+                                                            std::stoull(arg_str, nullptr, 0);
+                                                        int64_t value = static_cast<int64_t>(uval);
                                                         MirConstant arg_const;
                                                         arg_const.type = hir::make_int();
                                                         arg_const.value = value;
@@ -2555,6 +2567,45 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
             // 引数が構造体型の場合、アドレスを取得
             if (arg_type && arg_type->kind == hir::TypeKind::Struct) {
+                // Bug#10修正: ptr->method() パターン検出
+                // パーサーが -> を Deref(ptr) に変換するため、
+                // self引数が HirUnary(Deref, HirVarRef(ptr)) の形式になる。
+                // この場合、Derefせずにポインタをそのまま渡す。
+                if (auto unary_ptr = std::get_if<std::unique_ptr<hir::HirUnary>>(&arg->kind)) {
+                    const auto& unary = **unary_ptr;
+                    if (unary.op == hir::HirUnaryOp::Deref && unary.operand) {
+                        // Derefのオペランドが変数参照かチェック
+                        if (auto inner_var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(
+                                &unary.operand->kind)) {
+                            const auto& var_ref = **inner_var_ref;
+                            auto ptr_var_opt = ctx.resolve_variable(var_ref.name);
+                            if (ptr_var_opt) {
+                                // ポインタ変数をそのまま渡す（Deref+Ref不要）
+                                LocalId ptr_var = *ptr_var_opt;
+                                args.push_back(MirOperand::copy(MirPlace{ptr_var}));
+                                debug_msg("mir_call",
+                                          "[MIR] Bug#10: ptr->method() self: passing pointer "
+                                          "local " +
+                                              std::to_string(ptr_var) + " directly for " +
+                                              call.func_name);
+                                continue;
+                            }
+                        }
+                        // Derefのオペランドが変数参照でない場合（式の場合）
+                        // 式を評価してポインタを取得し、そのまま渡す
+                        if (unary.operand->type &&
+                            unary.operand->type->kind == hir::TypeKind::Pointer) {
+                            LocalId ptr_local = lower_expression(*unary.operand, ctx);
+                            args.push_back(MirOperand::copy(MirPlace{ptr_local}));
+                            debug_msg("mir_call",
+                                      "[MIR] Bug#10: ptr->method() self: passing evaluated "
+                                      "pointer for " +
+                                          call.func_name);
+                            continue;
+                        }
+                    }
+                }
+
                 // 引数がHirVarRefかどうかチェック
                 if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
                     const auto& var_ref = **var_ref_ptr;

@@ -1,0 +1,64 @@
+// テスト: ポインタ経由implメソッドでselfへの変更が元構造体に反映されることを確認 (Bug#10)
+
+import std::io::println;
+
+struct FBConsole {
+    ulong fb_addr;
+    int width;
+    int height;
+    int cursor_x;
+    int cursor_y;
+}
+
+impl FBConsole {
+    void init(ulong addr, int w) {
+        self.fb_addr = addr;
+        self.width = w;
+        self.height = 600;
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+    }
+
+    void move_cursor(int x, int y) {
+        self.cursor_x = x;
+        self.cursor_y = y;
+    }
+
+    ulong get_fb_addr() {
+        return self.fb_addr;
+    }
+
+    int get_cursor_x() {
+        return self.cursor_x;
+    }
+}
+
+int main() {
+    // パターン1: ローカル変数経由
+    FBConsole con1;
+    con1.init(12345, 800);
+    con1.move_cursor(10, 20);
+    println("local fb_addr: {con1.fb_addr}");
+    println("local cursor_x: {con1.cursor_x}");
+
+    // パターン2: ポインタ経由
+    FBConsole con2;
+    FBConsole* ptr = &con2;
+    ptr->init(67890, 1024);
+    println("ptr fb_addr: {con2.fb_addr}");
+    println("ptr width: {con2.width}");
+    ptr->move_cursor(30, 40);
+    println("ptr cursor_x: {con2.cursor_x}");
+
+    // パターン3: getterメソッドのポインタ経由呼出し
+    FBConsole con3;
+    FBConsole* ptr3 = &con3;
+    ptr3->init(99999, 640);
+    ulong addr = ptr3->get_fb_addr();
+    println("getter fb_addr: {addr}");
+    ptr3->move_cursor(50, 60);
+    int cx = ptr3->get_cursor_x();
+    println("getter cursor_x: {cx}");
+
+    return 0;
+}

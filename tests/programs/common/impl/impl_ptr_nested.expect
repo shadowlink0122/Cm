@@ -1,0 +1,8 @@
+p1 cursor: 5,0
+p1 fb_addr: 57005
+p2 cursor: 0,1
+p3 getter: 3,0
+heap cursor: 2,1
+heap fb_addr: 99999
+p5 cursor: 5,2
+PASS

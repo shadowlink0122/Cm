@@ -1,0 +1,34 @@
+// Bug#6修正テスト: 大きな16進リテラルがstoll範囲外でクラッシュしないことを確認
+// std::stoll → std::stoull変更の回帰テスト
+import std::io::println;
+
+int main() {
+    // i64の最大値ちょうど（これはstollでもOK）
+    ulong max_i64 = 0x7FFFFFFFFFFFFFFF;
+    println(max_i64);
+
+    // i64の最大値+1（stollではout_of_range）
+    ulong over_i64 = 0x8000000000000000;
+    println(over_i64);
+
+    // u64の最大値
+    ulong max_u64 = 0xFFFFFFFFFFFFFFFF;
+    println(max_u64);
+
+    // 大きなhex値（stollでは範囲外）
+    ulong big1 = 0xABCDEF0123456789;
+    println(big1);
+
+    // ビットパターン確認
+    ulong top_bit = 0x8000000000000000;
+    ulong shifted = top_bit >> 63;
+    println("top bit shift: {shifted}");
+
+    // 定数演算
+    ulong a = 0xF000000000000000;
+    ulong b = 0x0000000000000001;
+    println("sum check");
+
+    println("PASS");
+    return 0;
+}

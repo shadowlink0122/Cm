@@ -1043,14 +1043,12 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                           local.type->element_type->kind == hir::TypeKind::Function))) {
                         continue;
                     }
-                    // 配列へのポインタ型の一時変数はアロケーションしない（SSA形式で扱う）
-                    // ただしasm出力変数は例外
-                    if (!isAsmOutput && local.type->kind == hir::TypeKind::Pointer &&
-                        local.type->element_type &&
-                        local.type->element_type->kind == hir::TypeKind::Array &&
-                        !local.is_user_variable) {
-                        continue;
-                    }
+                    // 配列へのポインタ型の一時変数もallocaを生成する（Bug#9修正）
+                    // 以前はSSA形式で扱っていたが、Ref(array)の結果がSSA代入されると
+                    // locals[ref_result] = locals[array] (配列alloca) となり、
+                    // Copy時にCreateLoad(allocatedType=[N x T])が配列全体をloadしてしまう。
+                    // これにより後続のstore先(ptr alloca=8B)にバッファオーバーフローが発生。
+                    // allocaを生成してstore ptr → load ptrの正しいパスを通すことで修正。
                     // 文字列型の一時変数はアロケーションしない（直接値を使用）
                     // ただしasm出力変数は例外
                     if (!isAsmOutput && local.type->kind == hir::TypeKind::String &&

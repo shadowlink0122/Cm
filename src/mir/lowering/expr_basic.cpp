@@ -1279,6 +1279,37 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // オペランドをlowering
     LocalId operand = lower_expression(*cast.operand, ctx);
 
+    // 配列→ポインタ型キャストの場合、array-to-pointer decay（暗黙的Ref）を挿入
+    // Bug#9修正: パーサーは &b as void* を &(b as void*) として解析する
+    // b as void* で配列全体がコピーされるのを防ぐため、
+    // 配列のアドレスを取得してからポインタキャストを行う
+    if (cast.target_type &&
+        (cast.target_type->kind == hir::TypeKind::Pointer ||
+         cast.target_type->kind == hir::TypeKind::Reference) &&
+        operand < ctx.func->locals.size()) {
+        auto& operand_local = ctx.func->locals[operand];
+        if (operand_local.type && operand_local.type->kind == hir::TypeKind::Array &&
+            operand_local.type->array_size.has_value()) {
+            // 固定サイズ配列→ポインタ: 暗黙的に&arrを挿入
+            hir::TypePtr ptr_type = hir::make_pointer(operand_local.type);
+            LocalId ref_temp = ctx.new_temp(ptr_type);
+
+            auto ref_rvalue = std::make_unique<MirRvalue>();
+            ref_rvalue->kind = MirRvalue::Ref;
+            ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, MirPlace{operand}};
+
+            ctx.push_statement(MirStatement::assign(MirPlace{ref_temp}, std::move(ref_rvalue)));
+
+            // Ref結果をポインタキャスト
+            LocalId result = ctx.new_temp(cast.target_type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{result},
+                MirRvalue::cast(MirOperand::copy(MirPlace{ref_temp}), cast.target_type)));
+
+            return result;
+        }
+    }
+
     // ターゲット型で結果変数を作成
     LocalId result = ctx.new_temp(cast.target_type);
 

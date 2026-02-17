@@ -1,0 +1,58 @@
+// Bug#8修正テスト: const式の定数畳み込みが正しく動作することを確認
+// SCCPのcan_bind_constantが整数型間で定数バインドを許可する回帰テスト
+import std::io::println;
+
+// const定数定義（I/Oポート計算を模倣）
+const int BASE_PORT = 1016;   // 0x3F8
+const int REG_OFFSET = 1;
+
+const long LARGE_BASE = 1000000;
+const long LARGE_OFFSET = 500;
+
+const ulong UBASE = 4096;
+const ulong UOFFSET = 256;
+
+// 定数値を引数として受け取り出力する関数
+void print_port(int port) {
+    println("port: {port}");
+}
+
+void print_addr(long addr) {
+    println("addr: {addr}");
+}
+
+void print_uaddr(ulong addr) {
+    println("uaddr: {addr}");
+}
+
+int main() {
+    // ケース1: const int + const int → 関数引数
+    print_port(BASE_PORT + REG_OFFSET);
+
+    // ケース2: const int同士の算術演算
+    int result1 = BASE_PORT + REG_OFFSET;
+    println("base + offset = {result1}");
+
+    // ケース3: const int同士の乗算
+    int result2 = BASE_PORT * 2;
+    println("base * 2 = {result2}");
+
+    // ケース4: const long + const long → 関数引数
+    print_addr(LARGE_BASE + LARGE_OFFSET);
+
+    // ケース5: const ulong + const ulong → 関数引数
+    print_uaddr(UBASE + UOFFSET);
+
+    // ケース6: const式の複合演算
+    int complex_val = BASE_PORT + REG_OFFSET * 2;
+    println("complex: {complex_val}");
+
+    // ケース7: const式をローカル変数経由で使用
+    const int PORT_A = BASE_PORT + 0;
+    const int PORT_B = BASE_PORT + 1;
+    const int PORT_C = BASE_PORT + 2;
+    println("ports: {PORT_A}, {PORT_B}, {PORT_C}");
+
+    println("PASS");
+    return 0;
+}

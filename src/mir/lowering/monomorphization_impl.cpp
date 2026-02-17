@@ -2342,6 +2342,9 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
         // まず、全ブロックのCopy代入をスキャンしてコピー元マップを構築
         // copy_sources[dest_local] = source_local
         std::unordered_map<LocalId, LocalId> copy_sources;
+        // Bug#10修正: Deref経由のコピー元マップ
+        // deref_sources[dest_local] = ptr_local （_tmp = Use(Copy(Deref(ptr)))）
+        std::unordered_map<LocalId, LocalId> deref_sources;
 
         for (auto& block : func->basic_blocks) {
             if (!block)
@@ -2363,6 +2366,12 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
                 if (assign_data.place.projections.empty() && source_place.projections.empty()) {
                     // 単純なlocal-to-localコピー
                     copy_sources[assign_data.place.local] = source_place.local;
+                } else if (assign_data.place.projections.empty() &&
+                           source_place.projections.size() == 1 &&
+                           source_place.projections[0].kind == ProjectionKind::Deref) {
+                    // Bug#10: _tmp = Use(Copy(Deref(ptr))) パターン
+                    // ポインタ経由のimplメソッド呼出し（ptr->method()）で発生
+                    deref_sources[assign_data.place.local] = source_place.local;
                 }
             }
         }
@@ -2410,6 +2419,28 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
                 chain_depth++;
             }
 
+            // Bug#10修正: コピーチェーン末端がderef_sourcesにある場合
+            // ptr->method() パターン: original_localはDeref(ptr)で作られた一時変数
+            // この場合、ptrを直接渡す（ポインタ自体がself参照として機能）
+            if (deref_sources.count(original_local) > 0) {
+                LocalId ptr_local = deref_sources[original_local];
+                if (ptr_local < func->locals.size()) {
+                    auto& ptr_type = func->locals[ptr_local].type;
+                    if (ptr_type && ptr_type->kind == hir::TypeKind::Pointer &&
+                        ptr_type->element_type &&
+                        (ptr_type->element_type->name == type_name ||
+                         ptr_type->element_type->name.find(type_name + "__") == 0)) {
+                        // ポインタをそのまま渡す（Deref+Ref不要）
+                        call_data.args[0] = MirOperand::copy(MirPlace{ptr_local});
+                        debug_msg("MONO", "Bug#10: ptr->method() fixed for " + func_name_ref +
+                                              " in " + func->name + " (deref_source: local " +
+                                              std::to_string(original_local) + " -> ptr local " +
+                                              std::to_string(ptr_local) + ")");
+                        continue;
+                    }
+                }
+            }
+
             if (original_local >= func->locals.size())
                 continue;
 
@@ -2417,9 +2448,22 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
             if (!local_type)
                 continue;
 
-            // 既にポインタ型ならスキップ
-            if (local_type->kind == hir::TypeKind::Pointer)
+            // Bug#10修正: ネスト呼出しでselfが既にポインタ型の場合
+            // 外側のfixで既にポインタ化されている場合は、そのポインタを
+            // そのまま渡す（デリファレンスしてコピーを作らない）
+            if (local_type->kind == hir::TypeKind::Pointer) {
+                // ポインタの要素型が対象構造体型であれば、ポインタをそのまま渡す
+                if (local_type->element_type &&
+                    (local_type->element_type->name == type_name ||
+                     local_type->element_type->name.find(type_name + "__") == 0)) {
+                    // 既にポインタなので、そのまま渡す（参照作成不要）
+                    call_data.args[0] = MirOperand::copy(MirPlace{original_local});
+                    debug_msg("MONO", "Reused existing self-ptr for " + func_name_ref + " in " +
+                                          func->name + " (local " + std::to_string(original_local) +
+                                          ")");
+                }
                 continue;
+            }
 
             // 構造体型であれば参照を取る
             if (local_type->kind == hir::TypeKind::Struct ||

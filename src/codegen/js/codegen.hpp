@@ -173,6 +173,11 @@ class JSCodeGen {
 
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;
+
+    // implメソッドのself引数ソース: クローン不要な構造体ローカル
+    // impl呼出し時にselfの変更を元変数に反映するため、__cm_cloneをスキップする
+    std::unordered_set<mir::LocalId> impl_self_sources_;
+    void collectImplSelfSources(const mir::MirFunction& func);
 };
 
 }  // namespace cm::codegen::js
