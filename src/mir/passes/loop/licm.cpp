@@ -44,6 +44,20 @@ bool LoopInvariantCodeMotion::process_loop(MirFunction& func, cm::mir::Loop* loo
                 auto& assign = std::get<MirStatement::AssignData>(stmt->data);
                 modified_locals.insert(assign.place.local);
             }
+            // ASMステートメントの出力変数も変更対象に追加
+            // 出力制約 (=r, +r 等) のオペランドはループ不変ではない
+            if (stmt->kind == MirStatement::Asm) {
+                auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+                for (const auto& operand : asm_data.operands) {
+                    if (operand.is_constant)
+                        continue;
+                    // 出力制約: '=' で始まる (=r, =m等) または '+' で始まる (+r等)
+                    if (!operand.constraint.empty() &&
+                        (operand.constraint[0] == '=' || operand.constraint[0] == '+')) {
+                        modified_locals.insert(operand.local_id);
+                    }
+                }
+            }
         }
         if (bb.terminator && bb.terminator->kind == MirTerminator::Call) {
             auto& call = std::get<MirTerminator::CallData>(bb.terminator->data);
@@ -61,6 +75,9 @@ bool LoopInvariantCodeMotion::process_loop(MirFunction& func, cm::mir::Loop* loo
 
     for (int i = 0; i < (int)header_stmts.size(); ++i) {
         const auto& stmt = header_stmts[i];
+        // no_opt フラグが設定されたステートメントはホイスト対象外
+        if (stmt->no_opt)
+            continue;
         if (stmt->kind == MirStatement::Assign) {
             auto& assign = std::get<MirStatement::AssignData>(stmt->data);
 
