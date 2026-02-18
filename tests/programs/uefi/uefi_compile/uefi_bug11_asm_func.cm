@@ -1,0 +1,37 @@
+//! platform: uefi
+// Bug#11回帰テスト: 回避策なし — ${r:var}構文でASM関数呼出
+// ASM関数がインライン展開されないことを確認
+// Bug#11はABIレジスタ直接指定が問題だが、${r:var}構文使用は正しい書き方
+// テストの目的: ASM含む関数がcallqで呼出され、インライン展開されないこと
+
+export void write_port(ulong port, ulong value) {
+    // ${r:var}構文でCmにレジスタ割当を任せる
+    __asm__(`
+        movq ${r:port}, %rdx;
+        movq ${r:value}, %rax;
+        outb %al, %dx
+    `);
+}
+
+export ulong read_value(ulong addr) {
+    ulong result = 0;
+    __asm__(`
+        movq ${r:addr}, %r10;
+        xorq %rax, %rax;
+        movb (%r10), %al;
+        movq %rax, ${=r:result}
+    `);
+    return result;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    // ASM含む関数をefi_mainから呼出（インライン展開されないことが重要）
+    write_port(0x3F8, 0x48);
+    ulong val = read_value(0x1000);
+
+    while (true) { __asm__("hlt"); }
+    return val;
+}

@@ -1,0 +1,26 @@
+//! platform: uefi
+// Bug#7回帰テスト: 回避策なし — must { __asm__("hlt") } のループ
+// 回避策の「mustなし」パターンではなく、元のバグパターンそのものをテスト
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    // mustブロック内のASM出力変数がスコープ外で動作することを確認
+    ulong result = 0;
+    must {
+        __asm__("movq $$42, ${=r:result}");
+    }
+
+    // ❌ 以前はmust内のASM出力変数がスコープ外で不正だった
+    // ✅ 修正後はresult == 42が正しく反映される
+    ulong check = result;
+
+    // ❌ 以前はwhile(true) + must { hlt } がhltループを脱出していた
+    // ✅ 修正後は正しいhltループが生成される
+    while (true) {
+        must { __asm__("hlt"); }
+    }
+
+    return 0;
+}
