@@ -1,0 +1,30 @@
+import std::io::println;
+// ポインタ→整数キャスト（Bug #16修正テスト）
+// &x as ulong が (&x) as ulong として正しくパースされることを確認
+
+int main() {
+    int x = 42;
+
+    // 括弧なし: &x as ulong（パーサー優先順位テスト）
+    ulong addr1 = &x as ulong;
+
+    // 括弧あり: (&x) as ulong（明示的グループ化）
+    ulong addr2 = (&x) as ulong;
+
+    // 同一変数のアドレスなので一致するはず
+    if (addr1 == addr2) {
+        println("PASS: addresses match");
+    } else {
+        println("FAIL: addresses differ");
+    }
+
+    // アドレスはゼロではないはず
+    if (addr1 != 0) {
+        println("PASS: address is non-zero");
+    } else {
+        println("FAIL: address is zero");
+    }
+
+    // キャスト後も元の値にアクセス可能
+    println("x = {x}");
+}

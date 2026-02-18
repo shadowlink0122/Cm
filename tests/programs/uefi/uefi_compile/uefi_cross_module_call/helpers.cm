@@ -1,0 +1,18 @@
+// Bug#15リグレッションテスト用ヘルパーモジュール
+// 非export関数がexport関数から呼ばれるケースを検証
+
+// 非export関数（内部ヘルパー）
+ulong double_value(ulong x) {
+    return x * 2;
+}
+
+// 非export関数（内部ヘルパー2）
+ulong add_offset(ulong x, ulong offset) {
+    return x + offset;
+}
+
+// export関数から非export関数を呼び出す
+export ulong compute(ulong x) {
+    ulong doubled = double_value(x);
+    return add_offset(doubled, 10);
+}

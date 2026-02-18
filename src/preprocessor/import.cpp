@@ -2499,19 +2499,22 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
 std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
     const std::string& module_source) {
     std::stringstream result;
+    std::stringstream non_export_result;  // 非export定義を格納
     std::stringstream input(module_source);
     std::string line;
     bool in_export_block = false;
     bool in_sub_exported_section = false;
+    bool in_non_export_block = false;  // 非exportブロック内
     std::vector<std::string> block_lines;
     int brace_depth = 0;
     bool found_opening_brace = false;
+    bool has_export_blocks = false;  // export関数が存在するか
 
     while (std::getline(input, line)) {
         // サブモジュールのExported symbolsセクションを検出してパススルー
         // これにより推移的なエクスポートが可能になる
         // （モジュールAがBをimport、BがCをimport → AからCのexport関数を呼べる）
-        if (!in_export_block && !in_sub_exported_section &&
+        if (!in_export_block && !in_sub_exported_section && !in_non_export_block &&
             line.find("// ===== Exported symbols from ") != std::string::npos) {
             in_sub_exported_section = true;
             continue;  // セクション開始コメントはスキップ
@@ -2541,7 +2544,7 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
         }
 
         // exportで始まる行を検出（シンプルなパターン）
-        if (!in_export_block && line.find("export ") != std::string::npos) {
+        if (!in_export_block && !in_non_export_block && line.find("export ") != std::string::npos) {
             // 行がexportで始まるか確認（先頭空白は許容）
             std::regex export_start(R"(^\s*export\s+)");
             if (std::regex_search(line, export_start)) {
@@ -2556,6 +2559,7 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                     continue;
                 }
                 in_export_block = true;
+                has_export_blocks = true;
                 block_lines.clear();
                 block_lines.push_back(line);
                 brace_depth = 0;
@@ -2618,9 +2622,161 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 block_lines.clear();
                 found_opening_brace = false;
             }
+            continue;
         }
-        // exportされていない行はスキップ（namespace外にはexportのみ展開）
+
+        // Bug#15修正: 非export関数定義のみ収集
+        // export関数から呼ばれる内部ヘルパー関数をnamespace外でも参照可能にする
+        // 注意: struct/impl/interfaceは重複定義を避けるため除外
+        if (!in_non_export_block) {
+            size_t pos = skip_ws(line);
+            bool is_definition = false;
+
+            // キーワードブロック（interface/struct/impl/enum等）内の行はスキップ
+            // これらのブロック内の宣言（void print(); 等）は関数定義ではない
+            if (pos < line.size() && line[pos] != '/' && line[pos] != '#') {
+                bool is_excluded_block = starts_with_keyword(line, pos, "impl") ||
+                                         starts_with_keyword(line, pos, "struct") ||
+                                         starts_with_keyword(line, pos, "interface") ||
+                                         starts_with_keyword(line, pos, "typedef") ||
+                                         starts_with_keyword(line, pos, "enum");
+                if (is_excluded_block) {
+                    // ブロック全体をスキップ
+                    int skip_depth = 0;
+                    bool skip_found_brace = false;
+                    for (char c : line) {
+                        if (c == '{') {
+                            skip_found_brace = true;
+                            skip_depth++;
+                        } else if (c == '}') {
+                            skip_depth--;
+                        }
+                    }
+                    // 1行で閉じていない場合、ブロック終了まで読み進める
+                    if (skip_found_brace && skip_depth > 0) {
+                        while (std::getline(input, line)) {
+                            for (char c : line) {
+                                if (c == '{')
+                                    skip_depth++;
+                                else if (c == '}')
+                                    skip_depth--;
+                            }
+                            if (skip_depth <= 0)
+                                break;
+                        }
+                    } else if (!skip_found_brace && line.find('{') == std::string::npos) {
+                        // 括弧なし宣言: 次の行に括弧がある可能性（struct Name\n{）
+                        // セミコロンで終わるなら1行宣言
+                        if (line.find(';') == std::string::npos) {
+                            // 次の行に { があるかチェック
+                            // この場合は安全のためスキップしない
+                        }
+                    }
+                    continue;
+                }
+
+                // namespace行やclosing braceもスキップ
+                if (starts_with_keyword(line, pos, "namespace") ||
+                    starts_with_keyword(line, pos, "const") ||
+                    starts_with_keyword(line, pos, "}") || starts_with_keyword(line, pos, "use")) {
+                    continue;
+                }
+
+                // 関数定義: type name( パターンのみ
+                size_t p = pos;
+                // 型名チェック（識別子 + オプションのポインタ修飾子）
+                size_t type_start = p;
+                while (p < line.size() && (std::isalnum(static_cast<unsigned char>(line[p])) ||
+                                           line[p] == '_' || line[p] == '*'))
+                    p++;
+                if (p > type_start) {
+                    p = skip_ws(line, p);
+                    // 関数名チェック
+                    size_t fname_start = p;
+                    while (p < line.size() &&
+                           (std::isalnum(static_cast<unsigned char>(line[p])) || line[p] == '_'))
+                        p++;
+                    if (p > fname_start && p < line.size() && line[p] == '(') {
+                        // efi_main は通常エントリポイントなので除外
+                        std::string fname = line.substr(fname_start, p - fname_start);
+                        if (fname != "efi_main" && fname != "main") {
+                            is_definition = true;
+                        }
+                    }
+                }
+            }
+
+            if (is_definition) {
+                in_non_export_block = true;
+                block_lines.clear();
+                block_lines.push_back(line);
+                brace_depth = 0;
+                found_opening_brace = false;
+
+                for (char c : line) {
+                    if (c == '{') {
+                        found_opening_brace = true;
+                        brace_depth++;
+                    } else if (c == '}') {
+                        brace_depth--;
+                    }
+                }
+
+                // 1行完結（セミコロン終了、括弧なし）
+                if (!found_opening_brace && line.find(';') != std::string::npos) {
+                    for (const auto& bl : block_lines) {
+                        non_export_result << bl << "\n";
+                    }
+                    in_non_export_block = false;
+                    block_lines.clear();
+                }
+                // 1行で括弧が閉じている場合
+                else if (found_opening_brace && brace_depth == 0) {
+                    for (const auto& bl : block_lines) {
+                        non_export_result << bl << "\n";
+                    }
+                    in_non_export_block = false;
+                    block_lines.clear();
+                }
+                continue;
+            }
+        }
+
+        if (in_non_export_block) {
+            block_lines.push_back(line);
+
+            if (!found_opening_brace && line.find('{') != std::string::npos) {
+                found_opening_brace = true;
+            }
+
+            for (char c : line) {
+                if (c == '{')
+                    brace_depth++;
+                else if (c == '}')
+                    brace_depth--;
+            }
+
+            if (found_opening_brace && brace_depth == 0) {
+                for (const auto& bl : block_lines) {
+                    non_export_result << bl << "\n";
+                }
+                in_non_export_block = false;
+                block_lines.clear();
+                found_opening_brace = false;
+            }
+            continue;
+        }
     }
 
-    return result.str();
+    // export関数が存在する場合のみ、非export定義も含める
+    // （内部ヘルパー関数がexport関数から参照される可能性がある）
+    std::string exported = result.str();
+    if (has_export_blocks) {
+        std::string non_exported = non_export_result.str();
+        if (!non_exported.empty()) {
+            exported = non_exported + exported;
+        }
+    }
+
+    return exported;
 }

@@ -1,0 +1,11 @@
+//! platform: uefi
+// Bug#15リグレッションテスト: 非export関数がexport関数から呼出可能であること
+// export関数から非exportヘルパー関数を呼び出すクロスモジュールケース
+
+import ./uefi_cross_module_call/helpers;
+
+ulong efi_main(void* image_handle, void* system_table) {
+    // helpers::compute() はexport関数で、内部でdouble_value()とadd_offset()を呼ぶ
+    ulong result = compute(21);
+    return result;
+}

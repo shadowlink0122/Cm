@@ -85,6 +85,7 @@ class Parser {
     ast::ExprPtr parse_shift();
     ast::ExprPtr parse_additive();
     ast::ExprPtr parse_multiplicative();
+    ast::ExprPtr parse_cast_expr();
     ast::ExprPtr parse_unary();
     ast::ExprPtr parse_postfix();
     ast::ExprPtr parse_primary();

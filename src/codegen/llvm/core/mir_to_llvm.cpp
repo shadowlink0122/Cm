@@ -1255,8 +1255,14 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         if (func.return_local < func.locals.size()) {
             auto& returnLocal = func.locals[func.return_local];
             if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
-                auto llvmType = convertType(returnLocal.type);
+                // main関数はC標準でi32を返すため、retval allocaもi32に強制
+                auto llvmType =
+                    (func.name == "main") ? ctx.getI32Type() : convertType(returnLocal.type);
                 auto alloca = builder->CreateAlloca(llvmType, nullptr, "retval");
+                // main関数のretvalは0で初期化（C標準: 正常終了=0）
+                if (func.name == "main") {
+                    builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), 0), alloca);
+                }
                 locals[func.return_local] = alloca;
                 allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
             }
