@@ -410,6 +410,10 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         // インライン展開されたコードのself/引数として上書きされ、
         // UEFIデータ構造が破壊される
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+        // Bug#17修正: スタックプローブ無効化
+        // LLVMはWindowsターゲットで4KB以上のスタックフレームに___chkstk_msを挿入するが、
+        // UEFI/ベアメタル環境ではこの関数が存在しないためリンクエラーになる
+        llvmFunc->addFnAttr("no-stack-arg-probe");
         // efi_mainはDLLExportで最適化除去を防ぎ、optnoneで全最適化を無効化
         // optnoneはインライン展開 + DCE(デッドコード削除)を両方防止
         if (func.name == "efi_main") {
