@@ -383,20 +383,60 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     // インライン展開も防止する必要がある（レジスタ割当変更・ret先不在を防ぐ）
     {
         bool hasAsm = false;
+        bool hasRetInAsm = false;
+        bool hasAsmOperands = false;
         for (const auto& bb : func.basic_blocks) {
             if (!bb)
                 continue;
             for (const auto& stmt : bb->statements) {
                 if (stmt && stmt->kind == mir::MirStatement::Asm) {
                     hasAsm = true;
-                    break;
+                    const auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+                    if (!asmData.operands.empty()) {
+                        hasAsmOperands = true;
+                    }
+                    // Bug#12修正: ASMコード内にret/iret命令があるか検出
+                    std::string code = asmData.code;
+                    for (size_t p = 0; p < code.size(); ++p) {
+                        bool found = false;
+                        if (p + 3 <= code.size() && code.substr(p, 3) == "ret") {
+                            size_t end = p + 3;
+                            if (end < code.size() && code[end] == 'q')
+                                end++;
+                            bool prevOk = (p == 0 || !std::isalnum(code[p - 1]));
+                            bool nextOk = (end >= code.size() || !std::isalnum(code[end]));
+                            if (prevOk && nextOk)
+                                found = true;
+                        }
+                        if (p + 4 <= code.size() && code.substr(p, 4) == "iret") {
+                            size_t end = p + 4;
+                            if (end < code.size() && code[end] == 'q')
+                                end++;
+                            bool prevOk = (p == 0 || !std::isalnum(code[p - 1]));
+                            bool nextOk = (end >= code.size() || !std::isalnum(code[end]));
+                            if (prevOk && nextOk)
+                                found = true;
+                        }
+                        if (found)
+                            hasRetInAsm = true;
+                    }
                 }
             }
-            if (hasAsm)
-                break;
         }
         if (hasAsm) {
             llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+            // Bug#12修正: ret/iretを含むASM関数の処理
+            if (hasRetInAsm) {
+                if (!hasAsmOperands) {
+                    // オペランドなし + ret: Naked属性でprologue/epilogue除去
+                    // convertFunctionで専用コード生成パスを使用
+                    llvmFunc->addFnAttr(llvm::Attribute::Naked);
+                }
+                // オペランドあり + ret: module-level asmで関数body定義
+                // → convertFunctionでdeleteBody()を呼び宣言のみにする
+                // LLVM 17のバグ: naked関数内のcall asm + operandでcrash
+                // (SelectionDAGBuilder::visitInlineAsm → getCopyToRegs)
+            }
         }
     }
 
@@ -767,6 +807,7 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     // ターゲット判定をキャッシュ
     std::string triple = this->module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;
+    isUefiTarget = triple.find("windows") != std::string::npos;
 
     // === インターフェース名を収集 ===
     for (const auto* iface : module.interfaces) {
@@ -979,6 +1020,227 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         blocks.clear();
         allocatedLocals.clear();
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
+
+        // Bug#12修正: naked関数（ret/iret含むASM）の専用コード生成パス
+        // naked関数ではalloca/load/storeを生成せず、関数引数を
+        // ASMオペランドに直接マッピングする
+        if (currentFunction->hasFnAttribute(llvm::Attribute::Naked)) {
+            // エントリーブロック作成（ASM呼び出しのみ）
+            auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
+            builder->SetInsertPoint(entryBB);
+
+            // ASMステートメントを探す
+            for (const auto& bb : func.basic_blocks) {
+                if (!bb)
+                    continue;
+                for (const auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Asm)
+                        continue;
+                    auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+
+                    // Bug#11修正: UEFIターゲットのレジスタリマップ
+                    std::string nakedAsmCode = asmData.code;
+                    if (isUefiTarget) {
+                        struct RegMapping {
+                            std::string sysV;
+                            std::string placeholder;
+                            std::string win64;
+                        };
+                        static const std::vector<RegMapping> regMappings = {
+                            {"%rdi", "@@SYSV_ARG1_64@@", "%rcx"},
+                            {"%rsi", "@@SYSV_ARG2_64@@", "%rdx"},
+                            {"%edi", "@@SYSV_ARG1_32@@", "%ecx"},
+                            {"%esi", "@@SYSV_ARG2_32@@", "%edx"},
+                            {"%di", "@@SYSV_ARG1_16@@", "%cx"},
+                            {"%si", "@@SYSV_ARG2_16@@", "%dx"},
+                        };
+                        for (const auto& m : regMappings) {
+                            size_t pos = 0;
+                            while ((pos = nakedAsmCode.find(m.sysV, pos)) != std::string::npos) {
+                                nakedAsmCode.replace(pos, m.sysV.size(), m.placeholder);
+                                pos += m.placeholder.size();
+                            }
+                        }
+                        for (const auto& m : regMappings) {
+                            size_t pos = 0;
+                            while ((pos = nakedAsmCode.find(m.placeholder, pos)) !=
+                                   std::string::npos) {
+                                nakedAsmCode.replace(pos, m.placeholder.size(), m.win64);
+                                pos += m.win64.size();
+                            }
+                        }
+                    }
+
+                    if (asmData.operands.empty()) {
+                        // オペランドなし: シンプルASM
+                        auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                        std::string constraints = "~{memory},~{dirflag},~{fpsr},~{flags}";
+                        auto* inlineAsm =
+                            llvm::InlineAsm::get(asmFuncTy, nakedAsmCode, constraints, true);
+                        builder->CreateCall(asmFuncTy, inlineAsm);
+                    }
+                }
+            }
+
+            // naked関数はASM内のretで戻るため、unreachableで終了
+            builder->CreateUnreachable();
+            return;  // 通常のコード生成をスキップ
+        }
+
+        // Bug#12修正: operand付きASM+retの関数はmodule-level asmで生成
+        // LLVM 17バグ: naked関数内のcall asm + operandでSelectionDAGBuilder crash
+        // → 関数body全体をmodule asmで直接定義し、LLVM関数は宣言のみにする
+        {
+            bool hasRetInAsm = false;
+            bool hasAsmOperands = false;
+            for (const auto& bb : func.basic_blocks) {
+                if (!bb)
+                    continue;
+                for (const auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Asm)
+                        continue;
+                    auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+                    if (!asmData.operands.empty())
+                        hasAsmOperands = true;
+                    // ret/iret検出
+                    std::string code = asmData.code;
+                    for (size_t p = 0; p < code.size(); ++p) {
+                        if (p + 3 <= code.size() && code.substr(p, 3) == "ret") {
+                            size_t end = p + 3;
+                            if (end < code.size() && code[end] == 'q')
+                                end++;
+                            bool prevOk = (p == 0 || !std::isalnum(code[p - 1]));
+                            bool nextOk = (end >= code.size() || !std::isalnum(code[end]));
+                            if (prevOk && nextOk)
+                                hasRetInAsm = true;
+                        }
+                        if (p + 4 <= code.size() && code.substr(p, 4) == "iret") {
+                            size_t end = p + 4;
+                            if (end < code.size() && code[end] == 'q')
+                                end++;
+                            bool prevOk = (p == 0 || !std::isalnum(code[p - 1]));
+                            bool nextOk = (end >= code.size() || !std::isalnum(code[end]));
+                            if (prevOk && nextOk)
+                                hasRetInAsm = true;
+                        }
+                    }
+                }
+            }
+
+            if (hasRetInAsm && hasAsmOperands) {
+                // 呼び出し規約に基づくレジスタ名
+                std::vector<std::string> argRegs;
+                if (isUefiTarget) {
+                    argRegs = {"%rcx", "%rdx", "%r8", "%r9"};
+                } else {
+                    argRegs = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
+                }
+
+                for (const auto& bb : func.basic_blocks) {
+                    if (!bb)
+                        continue;
+                    for (const auto& stmt : bb->statements) {
+                        if (!stmt || stmt->kind != mir::MirStatement::Asm)
+                            continue;
+                        auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+
+                        std::string asmCode = asmData.code;
+
+                        // Bug#11修正: UEFIターゲットのレジスタリマップ（module-asm用）
+                        if (isUefiTarget) {
+                            struct RegMapping {
+                                std::string sysV;
+                                std::string placeholder;
+                                std::string win64;
+                            };
+                            static const std::vector<RegMapping> regMappings = {
+                                {"%rdi", "@@SYSV_ARG1_64@@", "%rcx"},
+                                {"%rsi", "@@SYSV_ARG2_64@@", "%rdx"},
+                                {"%edi", "@@SYSV_ARG1_32@@", "%ecx"},
+                                {"%esi", "@@SYSV_ARG2_32@@", "%edx"},
+                                {"%di", "@@SYSV_ARG1_16@@", "%cx"},
+                                {"%si", "@@SYSV_ARG2_16@@", "%dx"},
+                            };
+                            for (const auto& m : regMappings) {
+                                size_t pos = 0;
+                                while ((pos = asmCode.find(m.sysV, pos)) != std::string::npos) {
+                                    asmCode.replace(pos, m.sysV.size(), m.placeholder);
+                                    pos += m.placeholder.size();
+                                }
+                            }
+                            for (const auto& m : regMappings) {
+                                size_t pos = 0;
+                                while ((pos = asmCode.find(m.placeholder, pos)) !=
+                                       std::string::npos) {
+                                    asmCode.replace(pos, m.placeholder.size(), m.win64);
+                                    pos += m.win64.size();
+                                }
+                            }
+                        }
+
+                        // $N → 呼び出し規約のレジスタ名に置換（2段階で交差防止）
+                        struct OpMapping {
+                            std::string src;
+                            std::string placeholder;
+                            std::string reg;
+                        };
+                        std::vector<OpMapping> opMappings;
+                        for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                            std::string src = "$" + std::to_string(i);
+                            std::string ph = "@@MODASM_OP" + std::to_string(i) + "@@";
+                            std::string reg =
+                                (i < argRegs.size()) ? argRegs[i] : ("%r" + std::to_string(10 + i));
+                            opMappings.push_back({src, ph, reg});
+                        }
+                        // Phase 1: $N → placeholder
+                        for (const auto& m : opMappings) {
+                            size_t pos = 0;
+                            while ((pos = asmCode.find(m.src, pos)) != std::string::npos) {
+                                if (pos > 0 && asmCode[pos - 1] == '$') {
+                                    pos += m.src.size();
+                                    continue;
+                                }
+                                asmCode.replace(pos, m.src.size(), m.placeholder);
+                                pos += m.placeholder.size();
+                            }
+                        }
+                        // Phase 2: placeholder → レジスタ名
+                        for (const auto& m : opMappings) {
+                            size_t pos = 0;
+                            while ((pos = asmCode.find(m.placeholder, pos)) != std::string::npos) {
+                                asmCode.replace(pos, m.placeholder.size(), m.reg);
+                                pos += m.reg.size();
+                            }
+                        }
+
+                        // module-level inline asmで関数bodyを定義
+                        // .globl でシンボルをエクスポートし、関数ラベルとASMコードを出力
+                        module->appendModuleInlineAsm(".globl " + func.name);
+                        module->appendModuleInlineAsm(func.name + ":");
+
+                        // ASMコードを行ごとに分割してmodule asmに追加
+                        std::istringstream stream(asmCode);
+                        std::string line;
+                        while (std::getline(stream, line)) {
+                            // 行の前後の空白をトリミング
+                            size_t start = line.find_first_not_of(" \t");
+                            size_t end = line.find_last_not_of(" \t;");
+                            if (start != std::string::npos && end != std::string::npos) {
+                                std::string trimmed = line.substr(start, end - start + 1);
+                                if (!trimmed.empty()) {
+                                    module->appendModuleInlineAsm("  " + trimmed);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // LLVM関数のbodyを削除し、宣言のみにする
+                // module asmで定義済みのため、リンカが解決する
+                currentFunction->deleteBody();
+                return;  // 通常のコード生成をスキップ
+            }
+        }
 
         // asm出力オペランドを持つ変数を事前スキャンしてallocatedLocalsに登録
         // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
@@ -1990,6 +2252,62 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code +
                                       " operands=" + std::to_string(asmData.operands.size()));
 
+            // Bug#11修正: UEFIターゲットでSystem V ABIレジスタをwin64ccに自動リマップ
+            // UEFIはwin64cc (rcx/rdx/r8/r9) を使用するが、System V ABI の
+            // %rdi/%rsi/%rdx/%rcx を直接参照するコードが不正動作する
+            // → コード生成時に自動置換して正しいレジスタを使用させる
+            std::string asmCodeRemapped = asmData.code;
+            if (isUefiTarget) {
+                // System V → win64cc レジスタマッピング（引数レジスタのみ）
+                // 交差置換を防ぐため、一時プレースホルダーを経由する2段階方式
+                // Phase1: System V レジスタ → プレースホルダー
+                // Phase2: プレースホルダー → win64cc レジスタ
+                struct RegMapping {
+                    std::string sysV;         // System V レジスタ名
+                    std::string placeholder;  // 一時プレースホルダー
+                    std::string win64;        // win64cc レジスタ名
+                };
+                // 64bit/32bit/16bitレジスタを全てマッピング
+                // 長い名前から先に置換することで部分一致を防止
+                static const std::vector<RegMapping> regMappings = {
+                    // 64bitレジスタ（引数順）
+                    {"%rdi", "@@SYSV_ARG1_64@@", "%rcx"},  // 1st arg
+                    {"%rsi", "@@SYSV_ARG2_64@@", "%rdx"},  // 2nd arg
+                    // 32bitレジスタ
+                    {"%edi", "@@SYSV_ARG1_32@@", "%ecx"},  // 1st arg
+                    {"%esi", "@@SYSV_ARG2_32@@", "%edx"},  // 2nd arg
+                    // 16bitレジスタ
+                    {"%di", "@@SYSV_ARG1_16@@", "%cx"},  // 1st arg
+                    {"%si", "@@SYSV_ARG2_16@@", "%dx"},  // 2nd arg
+                };
+
+                bool hasRemap = false;
+                // Phase1: System V → プレースホルダー
+                for (const auto& m : regMappings) {
+                    size_t pos = 0;
+                    while ((pos = asmCodeRemapped.find(m.sysV, pos)) != std::string::npos) {
+                        asmCodeRemapped.replace(pos, m.sysV.size(), m.placeholder);
+                        pos += m.placeholder.size();
+                        hasRemap = true;
+                    }
+                }
+                // Phase2: プレースホルダー → win64cc
+                for (const auto& m : regMappings) {
+                    size_t pos = 0;
+                    while ((pos = asmCodeRemapped.find(m.placeholder, pos)) != std::string::npos) {
+                        asmCodeRemapped.replace(pos, m.placeholder.size(), m.win64);
+                        pos += m.win64.size();
+                    }
+                }
+                // 置換が発生した場合に警告を出力
+                if (hasRemap) {
+                    std::cerr << "[情報] UEFIターゲット: ASM内のSystem V ABIレジスタを"
+                              << "win64ccに自動リマップしました。\n"
+                              << "  関数: " << currentMIRFunction->name << "\n"
+                              << "  推奨: ${r:varname} 構文の使用\n";
+                }
+            }
+
             if (asmData.operands.empty()) {
                 // オペランドなし: シンプルなasm
                 auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
@@ -1997,7 +2315,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 // must { __asm__("hlt"); } がループから脱出する問題を防止
                 // LLVMがASM周辺の制御フローを不正に最適化しないようにする
                 std::string constraints = "~{memory},~{dirflag},~{fpsr},~{flags}";
-                auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
+                auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmCodeRemapped, constraints,
                                                        true  // hasSideEffects: 常にtrue
                 );
                 builder->CreateCall(asmFuncTy, inlineAsm);
@@ -2413,7 +2731,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     };
 
                     std::set<std::string> detectedClobbers;
-                    std::string asmCode = asmData.code;
+                    std::string asmCode = asmCodeRemapped;
 
                     for (const auto& [pattern, llvmName] : regPatterns) {
                         size_t searchPos = 0;
@@ -2462,7 +2780,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 // asmコード内のオペランド番号を更新
                 // 2段階方式: まず一時プレースホルダーに置換、次に最終番号に置換
                 // これにより$0→$1と$1→$0のような交差置換が正しく処理される
-                std::string remappedCode = asmData.code;
+                std::string remappedCode = asmCodeRemapped;
 
                 // 第1段階: $N を一時プレースホルダー __TMP_N__ に置換
                 // ただし $$N（即値エスケープ）はスキップする
