@@ -278,6 +278,10 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     if (!ltype || !rtype)
         return ast::make_error();
 
+    // typedef型を基底型に解決（算術演算のis_numeric()チェック用）
+    ltype = resolve_typedef(ltype);
+    rtype = resolve_typedef(rtype);
+
     switch (binary.op) {
         case ast::BinaryOp::Eq:
         case ast::BinaryOp::Ne:
@@ -506,6 +510,9 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
     auto otype = infer_type(*unary.operand);
     if (!otype)
         return ast::make_error();
+
+    // typedef型を基底型に解決（単項演算のis_numeric()チェック用）
+    otype = resolve_typedef(otype);
 
     switch (unary.op) {
         case ast::UnaryOp::Neg:
