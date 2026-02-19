@@ -4,7 +4,7 @@
 
 ## 概要
 
-v0.14.1は**整数型出力の完全対応**と**全バックエンドの安定化**を含むパッチリリースです。大きな16進リテラル（`0x80000000`以上）のprintln出力バグを修正し、JS/WASMランタイムにlong/ulong/uint出力関数を追加しました。回帰テスト4件を追加し、全バックエンドで0 FAILを達成しています。
+v0.14.1は**UEFIコンパイラバグ17件の修正**、**typedef算術演算サポート**、**GCC/Linux CIビルド修正**を含むパッチリリースです。CosmOS UEFI開発で発見されたコンパイラバグを全件修正し、回帰テストを多数追加。整数型出力の完全対応、naked関数コード生成の根本修正、MIR最適化パスのASM対応など広範な安定化を実施しています。
 
 v0.14.0の主な変更: **JavaScriptバックエンドの大規模改善**、**演算子オーバーロードの設計改善**、**ベアメタル/UEFIサポート**、**インラインユニオン型 (`int | null`)**、**プラットフォームディレクティブ**、**VSCode拡張機能の品質改善**。
 
@@ -12,15 +12,44 @@ v0.14.0の主な変更: **JavaScriptバックエンドの大規模改善**、**�
 
 ## 🔥 v0.14.1 変更点
 
-### 整数型出力の完全対応
+### UEFIコンパイラバグ全件修正（Bug#1〜#17）
 
-MIR loweringのprintln関数選択ロジックにlong/ulong/uint/isize/usize型のケースを追加。i32範囲を超える値が正しく出力されるようになりました。
+CosmOS UEFI開発中に発見されたコンパイラバグ17件を全て修正しました。
+
+| Bug# | 問題 | 修正内容 |
+|------|------|----------|
+| #1 | char switchの符号拡張 | switch_intのchar型比較を修正 |
+| #5 | LICM最適化がASM出力変数を移動 | ASM出力変数をループ不変と誤判定しない修正 |
+| #6 | constant foldingのASM出力追跡 | ASM→変数代入チェーンの最適化を抑制 |
+| #7 | `utiny*`デリファレンスのi32切り詰め | ポインタデリファレンスの型幅修正 |
+| #8 | `int→utiny`キャストの符号拡張 | trunc命令の正しい適用 |
+| #9 | 構造体フィールドの定数畳み込み | フィールドアクセスの最適化を抑制 |
+| #10 | `ptr->method()`のself書き戻し | MIR loweringでポインタ経由の書き戻し実装 |
+| #11 | UEFIレジスタマッピング不正 | x86_64 UEFI ABIに合わせたレジスタリマップ |
+| #12 | naked関数のプロローグ/エピローグ干渉 | Naked+$N事前置換方式に統一 |
+| #13 | LLVM最適化によるcall/ret消滅 | UEFIターゲットの最適化レベル調整 |
+| #14 | 構造体配列の全体再代入でゴミ値 | memcpy/配列代入の型サイズ修正 |
+| #15 | 非export関数がexport関数から呼出不可 | シンボル解決の修正 |
+| #16 | `&local as ulong`キャスト不正 | ポインタ→整数キャストの修正 |
+| #17 | UEFIスタックプローブクラッシュ | スタックプローブの無効化 |
+
+### typedef算術演算サポート
+
+typedef型の値に対する算術演算と、typedef引数のstatic→static関数呼び出し時の型不整合を修正しました。
 
 ```cm
-long v = 0x80000000;  // 2147483648
-println(v);           // 修正前: -2147483648 (i32切り詰め)
-                      // 修正後: 2147483648 (正しい出力)
+typedef EFI_STATUS = ulong;
+EFI_STATUS status = 0;
+if (status != 0) { /* 修正前: コンパイルエラー → 修正後: 正常動作 */ }
 ```
+
+### 整数型出力の完全対応
+
+MIR loweringのprintln関数選択ロジックにlong/ulong/uint/isize/usize型のケースを追加。
+
+### GCC/Linux CIビルド修正
+
+`src/mir/nodes.hpp`に`<unordered_map>`ヘッダーを追加。AppleClangでは間接インクルードで解決されていたが、GCCでは明示的なインクルードが必要。
 
 ### JS/WASMランタイム改善
 
@@ -31,15 +60,6 @@ println(v);           // 修正前: -2147483648 (i32切り詰め)
 | `src/codegen/llvm/core/operators.cpp` | ビット演算（BitAnd/BitOr/BitXor）の型幅統一ロジック追加 |
 | `src/mir/lowering/expr_call.cpp` | println型選択にlong/ulong/uint/isize/usizeケース追加 |
 | `src/mir/passes/interprocedural/inlining.cpp` | ASM含有関数のインライン展開禁止 |
-
-### 回帰テスト追加（4件）
-
-| テスト | 対象 |
-|-------|------|
-| `hex_literal_large` | i32範囲超え16進リテラルのprintln出力 |
-| `long_println` | long/ulong型の直接出力と文字列補間 |
-| `bitwise_type_widening` | ulong/longとintリテラルのビット演算型拡張 |
-| `const_arithmetic` | const定数間の四則演算 |
 
 ---
 
@@ -196,19 +216,42 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 ## 🐛 バグ修正
 
+### v0.14.1 修正（UEFIコンパイラバグ + 言語機能）
+
 | 問題 | 原因 | 修正ファイル |
 |-----|------|------------|
-| **[v0.14.1]** 大きな16進リテラルのprintln出力 | MIR loweringのprintln関数選択にlong/ulong未対応 | `expr_call.cpp` |
-| **[v0.14.1]** ビット演算の型幅不一致 | BitAnd/BitOr/BitXorに型統一ロジック欠落 | `operators.cpp` |
-| **[v0.14.1]** ASM関数のインライン展開 | ASM含有関数がインライン展開され不正コード生成 | `inlining.cpp` |
-| **[v0.14.1]** JS/WASMでlong/ulong未出力 | ランタイムにcm_println_long等が未定義 | `builtins.cpp`, `runtime_print.c` |
+| **Bug#1** char switchの符号拡張 | switch_intがchar型を符号拡張 | `mir_to_llvm.cpp` |
+| **Bug#5** LICMがASM出力を移動 | ASM出力変数をループ不変と誤判定 | `licm.cpp` |
+| **Bug#6** constant foldingのASM追跡 | ASM→変数代入の最適化抑制漏れ | `folding.cpp` |
+| **Bug#7** `utiny*`デリファレンスi32切り詰め | ポインタデリファレンスの型幅不正 | `mir_to_llvm.cpp` |
+| **Bug#8** `int→utiny`キャスト不正 | trunc命令の適用ミス | `mir_to_llvm.cpp` |
+| **Bug#9** 構造体フィールドの定数畳み込み | フィールドアクセス最適化の抑制漏れ | `folding.cpp` |
+| **Bug#10** `ptr->method()`のself書き戻し | ポインタ経由の書き戻し未実装 | `stmt.cpp` (MIR) |
+| **Bug#11** UEFIレジスタマッピング不正 | UEFI ABIレジスタリマップ欠落 | `mir_to_llvm.cpp` |
+| **Bug#12** naked関数のプロローグ干渉 | module-asm方式の不具合 | `mir_to_llvm.cpp` |
+| **Bug#13** LLVM最適化でcall/ret消滅 | 最適化レベル調整 | `codegen.cpp` (native) |
+| **Bug#14** 構造体配列の再代入でゴミ値 | 配列代入のサイズ計算不正 | `mir_to_llvm.cpp` |
+| **Bug#15** 非export関数がexportから呼出不可 | シンボル解決の不備 | `import.cpp` |
+| **Bug#16** `&local as ulong`キャスト不正 | ポインタ→整数キャスト未対応 | `mir_to_llvm.cpp` |
+| **Bug#17** UEFIスタックプローブクラッシュ | スタックプローブの無効化 | `codegen.cpp` (native) |
+| typedef算術演算エラー | typedef型のis_numeric判定漏れ | `checking/expr.cpp` |
+| typedef引数の型不整合 | static→static呼び出し時の型解決 | `monomorphization_impl.cpp` |
+| GCC CIビルドエラー | `<unordered_map>`ヘッダー未インクルード | `nodes.hpp` |
+| 大きな16進リテラルのprintln | println関数選択にlong/ulong未対応 | `expr_call.cpp` |
+| ビット演算の型幅不一致 | BitAnd/BitOr/BitXorに型統一ロジック欠落 | `operators.cpp` |
+| ASM関数のインライン展開 | ASM含有関数がインライン展開 | `inlining.cpp` |
+| JS/WASMでlong/ulong未出力 | ランタイムにcm_println_long等未定義 | `builtins.cpp`, `runtime_print.c` |
+
+### v0.14.0 修正
+
+| 問題 | 原因 | 修正ファイル |
+|-----|------|------------|
 | println型判定の誤り | AST型チェッカーがmatch armのpayload変数の型を`int`に設定 | `expr_call.cpp` |
 | ペイロードロードエラー | Tagged Unionの非構造体ペイロード型が`i32`にハードコード | `mir_to_llvm.cpp` |
 | 構造体ペイロードサイズ計算 | `max_payload_size()`がStruct型をデフォルト8バイトで計算 | `types.cpp` |
 | プラットフォーム不一致セグフォ | プラットフォーム制約のないファイルでクラッシュ | プリプロセッサ修正 |
 | Boolean定数オペランドの型判定 | JSバックエンドでBoolean定数の型が不正 | JS codegen修正 |
 | 並列テストのレースコンディション | テストランナーのファイル名衝突 | テストランナー修正 |
-| utiny*デリファレンスバグ | UEFI文字列操作でポインタデリファレンスが不正 | ASM実装に変更 |
 
 ---
 
@@ -260,9 +303,17 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 | ファイル | 変更内容 |
 |---------|---------|
 | `src/codegen/llvm/core/types.cpp` | Tagged Unionペイロードサイズ計算修正 |
-| `src/codegen/llvm/core/mir_to_llvm.cpp` | ペイロードロード修正、自動クロバー検出 |
+| `src/codegen/llvm/core/mir_to_llvm.cpp` | ペイロードロード修正、自動クロバー検出、naked関数統一、Bug#1/7/8/11/14/16修正 |
+| `src/codegen/llvm/native/codegen.cpp` | Bug#13/17: UEFI最適化レベル調整、スタックプローブ無効化 |
 | `src/mir/lowering/expr_call.cpp` | println型判定修正 |
+| `src/mir/lowering/stmt.cpp` | Bug#10: ptr->method()のself書き戻し |
+| `src/mir/lowering/monomorphization_impl.cpp` | typedef引数の型解決修正 |
 | `src/mir/lowering/impl.cpp` | impl lowering改善 |
+| `src/mir/passes/scalar/folding.cpp` | Bug#6/9: ASM出力・構造体フィールド最適化抑制 |
+| `src/mir/passes/loop/licm.cpp` | Bug#5: ASM出力変数のループ不変判定修正 |
+| `src/mir/nodes.hpp` | GCC CIビルド修正（unordered_mapヘッダー追加） |
+| `src/frontend/types/checking/expr.cpp` | typedef算術演算サポート |
+| `src/preprocessor/import.cpp` | Bug#15: 非export関数のシンボル解決修正 |
 
 ### 型チェッカー/パーサー
 
@@ -311,8 +362,10 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 | `tests/programs/enum/associated_data.*` | .error → .expected |
 | `tests/programs/asm/.skip` 等 | JSスキップファイル追加 |
 | `tests/unified_test_runner.sh` | テストランナー改善 |
-| `tests/programs/uefi/uefi_compile/*` | UEFIコンパイルテスト5件追加 |
+| `tests/programs/uefi/uefi_compile/*` | UEFIコンパイルテスト多数追加（Bug#1-17回帰テスト含む） |
 | `tests/programs/baremetal/allowed/*` | ベアメタルテスト3件追加（enum/配列/ポインタ） |
+| `tests/programs/common/types/ptr_to_int_cast.*` | ポインタ→整数キャストテスト追加 |
+| `tests/programs/common/types/typedef_arithmetic.*` | typedef算術演算テスト追加 |
 
 ### サンプル
 
@@ -355,6 +408,7 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 - [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
 - [x] ベアメタルテスト通過（11 PASS / 0 FAIL）
 - [x] UEFIテスト通過（5 PASS / 0 FAIL）
+- [x] GCC/Linux CIビルド通過
 - [x] リリースノート更新（`docs/releases/v0.14.0.md`）
 - [x] チュートリアル更新（演算子、UEFI、JS、環境構築）
 - [x] VSCode拡張機能README更新
@@ -363,5 +417,5 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 
 ---
 
-**リリース日**: 2026年2月17日
+**リリース日**: 2026年2月19日
 **バージョン**: v0.14.1
