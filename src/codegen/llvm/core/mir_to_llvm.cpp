@@ -385,11 +385,14 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         bool hasAsm = false;
         bool hasRetInAsm = false;
         bool hasAsmOperands = false;
+        bool hasNonAsmStmt = false;  // ASM以外のステートメントが存在するか
         for (const auto& bb : func.basic_blocks) {
             if (!bb)
                 continue;
             for (const auto& stmt : bb->statements) {
-                if (stmt && stmt->kind == mir::MirStatement::Asm) {
+                if (!stmt)
+                    continue;
+                if (stmt->kind == mir::MirStatement::Asm) {
                     hasAsm = true;
                     const auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
                     if (!asmData.operands.empty()) {
@@ -420,16 +423,20 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
                         if (found)
                             hasRetInAsm = true;
                     }
+                } else {
+                    // ASM以外のステートメント（関数呼び出し、変数宣言等）
+                    hasNonAsmStmt = true;
                 }
             }
         }
         if (hasAsm) {
             llvmFunc->addFnAttr(llvm::Attribute::NoInline);
-            // Bug#12修正: ret/iretを含むASM関数にNaked属性を付与
+            // Bug#12修正: ret/iretを含む純ASM関数にのみNaked属性を付与
             // Naked属性でprologue/epilogue除去（operandの有無に関わらず）
-            // operandありの場合: convertFunctionで$N→レジスタ名に事前置換し
-            // operandなしASMとして生成（LLVM17のnaked+operand crashを回避）
-            if (hasRetInAsm) {
+            // 注意: ASMとCmコードが混在する関数（例: syscall_entry）には
+            // Naked属性を付与しない。Naked関数ではASM文のみ出力されるため、
+            // 混在関数の通常コード（関数呼び出し等）が省略されてGPFを引き起こす
+            if (hasRetInAsm && !hasNonAsmStmt) {
                 llvmFunc->addFnAttr(llvm::Attribute::Naked);
             }
         }
@@ -2159,61 +2166,11 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code +
                                       " operands=" + std::to_string(asmData.operands.size()));
 
-            // Bug#11修正: UEFIターゲットでSystem V ABIレジスタをwin64ccに自動リマップ
-            // UEFIはwin64cc (rcx/rdx/r8/r9) を使用するが、System V ABI の
-            // %rdi/%rsi/%rdx/%rcx を直接参照するコードが不正動作する
-            // → コード生成時に自動置換して正しいレジスタを使用させる
+            // ASMコードをそのまま使用（レジスタの自動リマップは行わない）
+            // 理由: %rdi/%rsi等はABI引数参照だけでなく汎用スクラッチレジスタとしても
+            // 使用されるため、一律リマップは意図しない動作を引き起こす
+            // ABI引数を参照する場合は ${r:varname} 構文を使用すること
             std::string asmCodeRemapped = asmData.code;
-            if (isUefiTarget) {
-                // System V → win64cc レジスタマッピング（引数レジスタのみ）
-                // 交差置換を防ぐため、一時プレースホルダーを経由する2段階方式
-                // Phase1: System V レジスタ → プレースホルダー
-                // Phase2: プレースホルダー → win64cc レジスタ
-                struct RegMapping {
-                    std::string sysV;         // System V レジスタ名
-                    std::string placeholder;  // 一時プレースホルダー
-                    std::string win64;        // win64cc レジスタ名
-                };
-                // 64bit/32bit/16bitレジスタを全てマッピング
-                // 長い名前から先に置換することで部分一致を防止
-                static const std::vector<RegMapping> regMappings = {
-                    // 64bitレジスタ（引数順）
-                    {"%rdi", "@@SYSV_ARG1_64@@", "%rcx"},  // 1st arg
-                    {"%rsi", "@@SYSV_ARG2_64@@", "%rdx"},  // 2nd arg
-                    // 32bitレジスタ
-                    {"%edi", "@@SYSV_ARG1_32@@", "%ecx"},  // 1st arg
-                    {"%esi", "@@SYSV_ARG2_32@@", "%edx"},  // 2nd arg
-                    // 16bitレジスタ
-                    {"%di", "@@SYSV_ARG1_16@@", "%cx"},  // 1st arg
-                    {"%si", "@@SYSV_ARG2_16@@", "%dx"},  // 2nd arg
-                };
-
-                bool hasRemap = false;
-                // Phase1: System V → プレースホルダー
-                for (const auto& m : regMappings) {
-                    size_t pos = 0;
-                    while ((pos = asmCodeRemapped.find(m.sysV, pos)) != std::string::npos) {
-                        asmCodeRemapped.replace(pos, m.sysV.size(), m.placeholder);
-                        pos += m.placeholder.size();
-                        hasRemap = true;
-                    }
-                }
-                // Phase2: プレースホルダー → win64cc
-                for (const auto& m : regMappings) {
-                    size_t pos = 0;
-                    while ((pos = asmCodeRemapped.find(m.placeholder, pos)) != std::string::npos) {
-                        asmCodeRemapped.replace(pos, m.placeholder.size(), m.win64);
-                        pos += m.win64.size();
-                    }
-                }
-                // 置換が発生した場合に警告を出力
-                if (hasRemap) {
-                    std::cerr << "[情報] UEFIターゲット: ASM内のSystem V ABIレジスタを"
-                              << "win64ccに自動リマップしました。\n"
-                              << "  関数: " << currentMIRFunction->name << "\n"
-                              << "  推奨: ${r:varname} 構文の使用\n";
-                }
-            }
 
             if (asmData.operands.empty()) {
                 // オペランドなし: シンプルなasm
@@ -2225,7 +2182,23 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmCodeRemapped, constraints,
                                                        true  // hasSideEffects: 常にtrue
                 );
+                // Bug#7修正: must { __asm__() } の場合のみコンパイラバリアを挿入
+                // LLVMの制御フロー最適化（hlt後のコードを到達不能と判断）を阻止
+                // ハードウェアfence (mfence) ではなくコンパイラバリアを使用
+                // （UEFIベアメタル環境ではmfenceがGPFを引き起こす可能性があるため）
+                if (asmData.is_must) {
+                    auto* barrierTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                    auto* barrier = llvm::InlineAsm::get(
+                        barrierTy, "", "~{memory},~{dirflag},~{fpsr},~{flags}", true);
+                    builder->CreateCall(barrierTy, barrier);
+                }
                 builder->CreateCall(asmFuncTy, inlineAsm);
+                if (asmData.is_must) {
+                    auto* barrierTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                    auto* barrier = llvm::InlineAsm::get(
+                        barrierTy, "", "~{memory},~{dirflag},~{fpsr},~{flags}", true);
+                    builder->CreateCall(barrierTy, barrier);
+                }
             } else {
                 // オペランド付き: 制約文字列とオペランドを生成
                 // 出力/入出力オペランドを分類
