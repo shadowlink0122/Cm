@@ -15,6 +15,36 @@
 
 namespace cm::codegen::llvm_backend {
 
+// TypeAlias（typedef）を基底型に再帰的に解決するヘルパー
+// MemAddr → ulong, FsError → ulong のように typedef チェーンを展開する
+hir::TypePtr MIRToLLVM::resolveTypeAlias(const hir::TypePtr& type) const {
+    if (!type)
+        return nullptr;
+    auto current = type;
+    // TypeAlias チェーンを辿って基底型まで解決
+    while (current && current->kind == hir::TypeKind::TypeAlias) {
+        if (current->element_type) {
+            current = current->element_type;
+        } else {
+            // element_type が未設定の場合、typedefDefsで名前ベースの解決を試行
+            auto it = typedefDefs.find(current->name);
+            if (it != typedefDefs.end()) {
+                current = it->second;
+            } else {
+                break;
+            }
+        }
+    }
+    // Struct kindだがtypedefの場合も解決（MIRでStruct名としてtypedef名が残る場合）
+    if (current && current->kind == hir::TypeKind::Struct) {
+        auto it = typedefDefs.find(current->name);
+        if (it != typedefDefs.end()) {
+            return resolveTypeAlias(it->second);
+        }
+    }
+    return current;
+}
+
 // 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
 // System V ABI: 16バイト以下の構造体はレジスタで値渡し
 bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
@@ -36,7 +66,9 @@ bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
         if (!field.type)
             continue;
 
-        switch (field.type->kind) {
+        // TypeAlias（typedef）を基底型に解決
+        auto resolvedFieldType = resolveTypeAlias(field.type);
+        switch (resolvedFieldType->kind) {
             case hir::TypeKind::Bool:
             case hir::TypeKind::Char:
             case hir::TypeKind::Tiny:
@@ -111,7 +143,9 @@ std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
             if (local.type) {
                 if (!suffix.empty())
                     suffix += "_";
-                switch (local.type->kind) {
+                // TypeAlias（typedef）を基底型に解決してからマングリング
+                auto resolvedType = resolveTypeAlias(local.type);
+                switch (resolvedType->kind) {
                     case hir::TypeKind::Void:
                         suffix += "v";
                         break;
@@ -206,7 +240,9 @@ std::string MIRToLLVM::generateCallFunctionId(const std::string& baseName,
         if (type) {
             if (!suffix.empty())
                 suffix += "_";
-            switch (type->kind) {
+            // TypeAlias（typedef）を基底型に解決してからマングリング
+            auto resolvedType = resolveTypeAlias(type);
+            switch (resolvedType->kind) {
                 case hir::TypeKind::Void:
                     suffix += "v";
                     break;
@@ -484,6 +520,9 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     //           << " functions\n";
 
     currentProgram = &program;
+
+    // typedef定義マップをコピー（convertTypeでTypeAlias/Struct名の解決に使用）
+    typedefDefs = program.typedef_defs;
 
     // ターゲット判定をキャッシュ（境界チェック・ABI設定で使用）
     std::string triple = module->getTargetTriple();
@@ -795,6 +834,11 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
                             "Starting module conversion: " + module.module_name);
+
+    // typedef定義マップをコピー（convertTypeでTypeAlias/Struct名の解決に使用）
+    if (module.typedef_defs) {
+        typedefDefs = *module.typedef_defs;
+    }
 
     // allModuleFunctionsを構築（自モジュール + extern の全関数）
     // declareExternalFunctionでcurrentProgramがNULLの場合のフォールバックに使用
@@ -1468,16 +1512,19 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 各ブロックを変換（CompilationGuardによる監視）
-        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " << func.basic_blocks.size()
+        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " <<
+        // func.basic_blocks.size()
         //           << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロックはスキップ
             if (!func.basic_blocks[i]) {
-                // std::cerr << "[MIR2LLVM]   Block " << i << " is null (DCE removed), skipping\n";
+                // std::cerr << "[MIR2LLVM]   Block " << i << " is null (DCE removed),
+                // skipping\n";
                 continue;
             }
 
-            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" << func.basic_blocks.size()
+            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" <<
+            // func.basic_blocks.size()
             //           << "\n";
 
             // プログレス表示
@@ -1505,13 +1552,15 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
     }
 
     // blocksはunordered_mapなので、countで存在確認
-    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks map...\n";
+    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks
+    // map...\n";
     if (blocks.count(block.id) > 0) {
         // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
-        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
+        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map,
+        // skipping\n";
         if (cm::debug::g_debug_mode) {
             debug_msg("CODEGEN",
                       "Warning: BB " + std::to_string(block.id) + " not in blocks map, skipping");
@@ -1555,7 +1604,8 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
-                // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local << "\n";
+                // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local <<
+                // "\n";
                 if (assign.rvalue) {
                     // std::cerr << "[MIR2LLVM]       Rvalue kind: "
                     //           << static_cast<int>(assign.rvalue->kind) << "\n";
@@ -1577,14 +1627,16 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         convertStatement(*stmt);
 
-        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed successfully\n";
-        // std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " << stmt_idx << " to "
+        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed
+        // successfully\n"; std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " <<
+        // stmt_idx << " to "
         // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
         if (stmt_idx == block.statements.size() - 1) {
             // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
         }
-        // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx << "\n";
+        // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx <<
+        // "\n";
     }
 
     // ターミネータ処理
@@ -1607,7 +1659,8 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
                 } else if (callData.func->kind == mir::MirOperand::Constant) {
                     auto& constant = std::get<mir::MirConstant>(callData.func->data);
                     if (auto* name = std::get_if<std::string>(&constant.value)) {
-                        // std::cerr << "[MIR2LLVM]       Call target (const): " << *name << "\n";
+                        // std::cerr << "[MIR2LLVM]       Call target (const): " << *name <<
+                        // "\n";
                         term_str << "_" << *name;
                     }
                 }
@@ -1644,7 +1697,8 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
     auto& count = statementProcessCount[&stmt];
     count++;
     if (count > 100) {
-        // std::cerr << "[MIR2LLVM] ERROR: Infinite loop detected! Statement at address " << &stmt
+        // std::cerr << "[MIR2LLVM] ERROR: Infinite loop detected! Statement at address " <<
+        // &stmt
         // << " processed " << count << " times\n";
         if (currentMIRFunction) {
             // std::cerr << "[MIR2LLVM] Function: " << currentMIRFunction->name << "\n";
@@ -2984,7 +3038,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                         if (typeArg->kind == hir::TypeKind::Struct) {
                                             // ネストジェネリックの場合、再帰的にマングリング
                                             std::string nestedName = typeArg->name;
-                                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
+                                            // type_argsがある場合（例:
+                                            // Vector<int>）、再帰的に処理
                                             if (!typeArg->type_args.empty()) {
                                                 for (const auto& nestedArg : typeArg->type_args) {
                                                     if (nestedArg) {
@@ -3224,7 +3279,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                             builder->CreateMemCpy(payloadGEP, llvm::MaybeAlign(), srcAlloca,
                                                   llvm::MaybeAlign(), payloadSize);
                         } else {
-                            // プリミティブ型（int/long/bool/float/double/ptr等）: bitcastしてストア
+                            // プリミティブ型（int/long/bool/float/double/ptr等）:
+                            // bitcastしてストア
                             auto* payloadAsType = builder->CreateBitCast(
                                 payloadGEP, llvm::PointerType::get(sourceType, 0),
                                 "payload_as_type");
@@ -3266,7 +3322,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                                   llvm::MaybeAlign(), copySize);
                             return builder->CreateLoad(targetType, destAlloca, "struct_from_union");
                         } else {
-                            // プリミティブ型（int/long/bool/float/double/ptr等）: bitcastしてロード
+                            // プリミティブ型（int/long/bool/float/double/ptr等）:
+                            // bitcastしてロード
                             auto* payloadAsType = builder->CreateBitCast(
                                 payloadGEP, llvm::PointerType::get(targetType, 0),
                                 "payload_as_target");
@@ -3671,7 +3728,8 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                                         currentType = baseLocal->type_args[0];
                                                     } else if (baseLocal->name.find("__") !=
                                                                std::string::npos) {
-                                                        // マングリング名から型引数を抽出 (Box__int
+                                                        // マングリング名から型引数を抽出
+                                                        // (Box__int
                                                         // -> int)
                                                         mangledName = baseLocal->name;
                                                         size_t pos = mangledName.find("__");
@@ -4294,12 +4352,14 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         // 通常のポインタ型: element_typeを使用
                         elemType = convertType(currentType->element_type);
                     } else if (currentType && llvm::isa<llvm::LoadInst>(addr)) {
-                        // Deref後（LoadInst結果へのインデックスアクセス）: currentType自体が要素型
+                        // Deref後（LoadInst結果へのインデックスアクセス）:
+                        // currentType自体が要素型
                         elemType = convertType(currentType);
                     }
 
                     // addrがポインタ変数を格納している場合、まずポインタ値をロード
-                    // これはField projection後（構造体のポインタフィールドへのGEP）にも適用される
+                    // これはField
+                    // projection後（構造体のポインタフィールドへのGEP）にも適用される
                     llvm::Value* ptrVal = addr;
                     bool needsLoad = false;
 

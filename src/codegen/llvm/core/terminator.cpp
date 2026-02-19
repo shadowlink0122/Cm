@@ -873,6 +873,23 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     builder->CreateLoad(expectedType, ptrToStruct, "struct_load");
                             }
                         }
+                        // MIR lowering バグ修正: typedef引数コピーの型不整合
+                        // 例: MemAddr(=ulong) 引数が Pointer<ULong> として伝搬され
+                        // load ptr (actualType=ptr) → call @func(i64) (expectedType=i64) の不整合
+                        // 引数が LoadInst の場合、元の alloca から expectedType で再 load する
+                        else if (!expectedType->isPointerTy() && actualType->isPointerTy() &&
+                                 (expectedType->isIntegerTy() ||
+                                  expectedType->isFloatingPointTy())) {
+                            if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(args[i])) {
+                                auto* sourcePtr = loadInst->getPointerOperand();
+                                args[i] =
+                                    builder->CreateLoad(expectedType, sourcePtr, "typedef_reload");
+                            } else {
+                                // LoadInstでない場合は ptrtoint でフォールバック
+                                args[i] =
+                                    builder->CreatePtrToInt(args[i], expectedType, "ptr_to_int");
+                            }
+                        }
                         // 整数型のサイズが異なる場合、変換
                         else if (expectedType->isIntegerTy() && actualType->isIntegerTy()) {
                             unsigned expectedBits = expectedType->getIntegerBitWidth();

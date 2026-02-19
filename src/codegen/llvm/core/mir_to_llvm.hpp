@@ -45,6 +45,8 @@ class MIRToLLVM {
 
     // 構造体型キャッシュ
     std::unordered_map<std::string, llvm::StructType*> structTypes;
+    // typedef定義マップ（名前→解決済み型）: MirProgramから取得
+    std::unordered_map<std::string, hir::TypePtr> typedefDefs;
     std::unordered_map<std::string, const mir::MirStruct*> structDefs;
 
     // enum型キャッシュ（Tagged Union対応）
@@ -155,6 +157,8 @@ class MIRToLLVM {
     /// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
     /// System V ABI: 16バイト以下の構造体はレジスタで値渡し
     bool isSmallStruct(const hir::TypePtr& type) const;
+    // TypeAlias（typedef）を基底型に再帰的に解決するヘルパー
+    hir::TypePtr resolveTypeAlias(const hir::TypePtr& type) const;
 
     /// インターフェース用のfat pointer型を取得（{i8* data, i8** vtable}）
     llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);

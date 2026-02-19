@@ -263,6 +263,8 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
                 mod.global_vars.push_back(gv.get());
             }
         }
+        // typedef定義マップへのポインタを設定（LLVM backendで使用）
+        mod.typedef_defs = &program.typedef_defs;
     }
 
     return modules;

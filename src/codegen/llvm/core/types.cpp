@@ -13,6 +13,16 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
     if (!type)
         return ctx.getI32Type();
 
+    // TypeAlias/typedef を基底型に解決してからkind-based dispatch
+    // resolveTypeAlias() は Struct 名の typedef も解決する
+    auto resolved = resolveTypeAlias(type);
+    if (!resolved)
+        return ctx.getI32Type();
+    // 解決済み型が元の型と異なる場合、解決済み型で再帰呼び出し
+    if (resolved.get() != type.get()) {
+        return convertType(resolved);
+    }
+
     switch (type->kind) {
         case hir::TypeKind::Void:
             return ctx.getVoidType();
@@ -642,7 +652,9 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
 
         // 型情報がある場合、適切な型で生成
         if (constant.type) {
-            switch (constant.type->kind) {
+            // TypeAlias（typedef）を基底型に解決してから型判定
+            auto resolvedType = resolveTypeAlias(constant.type);
+            switch (resolvedType->kind) {
                 case hir::TypeKind::Pointer:
                 case hir::TypeKind::Reference:
                 case hir::TypeKind::String:

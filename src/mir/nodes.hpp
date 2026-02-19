@@ -893,6 +893,10 @@ struct MirProgram {
     std::vector<MirGlobalVarPtr> global_vars;  // グローバル変数
     std::string filename;
 
+    // typedef定義マップ（名前→解決済み型）
+    // LLVM backendでTypeAlias/Struct名の透過的解決に使用
+    std::unordered_map<std::string, hir::TypePtr> typedef_defs;
+
     // 関数を名前で検索
     const MirFunction* find_function(const std::string& name) const {
         for (const auto& func : functions) {
