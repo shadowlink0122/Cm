@@ -95,3 +95,5 @@ ja版とen版を同時に作成すること。
 | Match Guard | v0.13.0 | advanced/match.md | ✅ 存在 |
 | mustキーワード | v0.13.0 | advanced/must.md | ✅ 存在 |
 | プリプロセッサ | v0.13.0 | compiler/preprocessor.md | ✅ 存在 |
+| UEFI安定化（バグ17件修正） | v0.14.1 | compiler/uefi.md | ✅ 存在 |
+| typedef算術演算 | v0.14.1 | types/typedef.md | ✅ 存在 |
