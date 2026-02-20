@@ -293,17 +293,17 @@ ast::ExprPtr Parser::parse_additive() {
 
 // 乗除算
 ast::ExprPtr Parser::parse_multiplicative() {
-    auto left = parse_unary();
+    auto left = parse_cast_expr();
 
     while (true) {
         if (consume_if(TokenKind::Star)) {
-            auto right = parse_unary();
+            auto right = parse_cast_expr();
             left = ast::make_binary(ast::BinaryOp::Mul, std::move(left), std::move(right));
         } else if (consume_if(TokenKind::Slash)) {
-            auto right = parse_unary();
+            auto right = parse_cast_expr();
             left = ast::make_binary(ast::BinaryOp::Div, std::move(left), std::move(right));
         } else if (consume_if(TokenKind::Percent)) {
-            auto right = parse_unary();
+            auto right = parse_cast_expr();
             left = ast::make_binary(ast::BinaryOp::Mod, std::move(left), std::move(right));
         } else {
             break;
@@ -311,6 +311,21 @@ ast::ExprPtr Parser::parse_multiplicative() {
     }
 
     return left;
+}
+
+// キャスト式: expr as Type
+// 単項演算子より低い優先度で処理することで、&x as ulong が (&x) as ulong として解釈される
+ast::ExprPtr Parser::parse_cast_expr() {
+    auto expr = parse_unary();
+
+    while (consume_if(TokenKind::KwAs)) {
+        debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
+                        debug::Level::Debug);
+        auto target_type = parse_type();
+        expr = ast::make_cast(std::move(expr), std::move(target_type));
+    }
+
+    return expr;
 }
 
 // 単項演算子
@@ -562,14 +577,7 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
-        // キャスト式: expr as Type
-        if (consume_if(TokenKind::KwAs)) {
-            debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
-                            debug::Level::Debug);
-            auto target_type = parse_type();
-            expr = ast::make_cast(std::move(expr), std::move(target_type));
-            continue;
-        }
+        // キャスト式はparse_cast_expr()で処理（&x as ulongを(&x) as ulongとして解釈するため）
 
         break;
     }
@@ -586,10 +594,11 @@ ast::ExprPtr Parser::parse_primary() {
     // 数値リテラル
     if (check(TokenKind::IntLiteral)) {
         int64_t val = current().get_int();
+        bool is_unsigned = current().is_unsigned;
         debug::par::log(debug::par::Id::IntLiteral, "Found integer literal: " + std::to_string(val),
                         debug::Level::Debug);
         advance();
-        return ast::make_int_literal(val, Span{start_pos, previous().end});
+        return ast::make_int_literal(val, is_unsigned, Span{start_pos, previous().end});
     }
 
     if (check(TokenKind::FloatLiteral)) {

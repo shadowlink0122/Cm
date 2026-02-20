@@ -148,7 +148,14 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
                 }
             }
             config.debugInfo = options.debugInfo;
-            config.optLevel = options.optimizationLevel;
+            // Bug#13修正: UEFIターゲットではCodeGen最適化を無効化
+            // LLVM TargetMachineのISel/SelectionDAG最適化が
+            // efi_mainのcall/ret命令を削除してフォールスルークラッシュを起こす
+            if (config.target == BuildTarget::BaremetalUEFI) {
+                config.optLevel = 0;
+            } else {
+                config.optLevel = options.optimizationLevel;
+            }
 
             // 独立LLVMContextを作成
             auto mod_context = std::make_unique<LLVMContext>(mod_name + "_module", config);
@@ -175,7 +182,11 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
             }
 
             // 最適化
-            if (options.optimizationLevel > 0) {
+            // Bug#13修正: UEFIターゲットではLLVM最適化パスをスキップ
+            // O2のインライン展開+DCEがefi_mainの制御フローを破壊し、
+            // call/ret命令が消滅してフォールスルークラッシュを引き起こす
+            bool isUefiModule = config.target == BuildTarget::BaremetalUEFI;
+            if (options.optimizationLevel > 0 && !isUefiModule) {
                 llvm::LoopAnalysisManager LAM;
                 llvm::FunctionAnalysisManager FAM;
                 llvm::CGSCCAnalysisManager CGAM;
@@ -356,7 +367,13 @@ void LLVMCodeGen::initialize(const std::string& moduleName) {
         }
     }
     config.debugInfo = options.debugInfo;
-    config.optLevel = options.optimizationLevel;
+    // Bug#13修正: UEFIターゲットではCodeGen最適化を無効化
+    // LLVM最適化パスがefi_mainのcall/ret命令を削除してフォールスルークラッシュを起こす
+    if (options.target == BuildTarget::BaremetalUEFI) {
+        config.optLevel = 0;
+    } else {
+        config.optLevel = options.optimizationLevel;
+    }
 
     // コンテキスト作成
     context = std::make_unique<LLVMContext>(moduleName, config);
@@ -406,6 +423,12 @@ void LLVMCodeGen::verifyModule() {
 
 // 最適化
 void LLVMCodeGen::optimize() {
+    // Bug#13修正: UEFIターゲットでは全最適化をスキップ
+    // O2のインライン展開+DCEがefi_mainの制御フローを破壊する
+    if (context->getTargetConfig().target == BuildTarget::BaremetalUEFI) {
+        return;
+    }
+
     if (options.optimizationLevel == 0) {
         return;
     }

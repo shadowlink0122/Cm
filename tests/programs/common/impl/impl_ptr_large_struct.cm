@@ -1,0 +1,82 @@
+// テスト: ポインタ経由implメソッドで8フィールド構造体のGEPとself書き戻しを検証 (Bug#10 問題2/3)
+// 問題2: GEPインデックス5以上でInvalid indices for GEP → 修正済み
+// 問題3: Load operandの型不整合 → 修正済み
+
+import std::io::println;
+
+struct FBConsole {
+    ulong fb_addr;
+    ulong width;
+    ulong height;
+    ulong cursor_x;
+    ulong cursor_y;
+    ulong pitch;
+    ulong font_width;
+    ulong font_height;
+}
+
+impl FBConsole {
+    // 全8フィールドを設定（問題2: フィールド6個以上でGEPエラーが出ていた）
+    void init(ulong addr, ulong w, ulong h, ulong p) {
+        self.fb_addr = addr;
+        self.width = w;
+        self.height = h;
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.pitch = p;
+        self.font_width = 8;
+        self.font_height = 16;
+    }
+
+    // ネストメソッド呼び出し：putsがputcを呼ぶ
+    void putc(ulong ch) {
+        self.cursor_x = self.cursor_x + 1;
+    }
+
+    void puts(ulong count) {
+        ulong i = 0;
+        while (i < count) {
+            self.putc(65);
+            i = i + 1;
+        }
+    }
+
+    ulong get_cursor_x() {
+        return self.cursor_x;
+    }
+
+    ulong get_fb_addr() {
+        return self.fb_addr;
+    }
+
+    ulong get_font_height() {
+        return self.font_height;
+    }
+}
+
+int main() {
+    // テスト1: ポインタ経由のinit（問題1: self書き戻し + 問題3: Load operand）
+    FBConsole con;
+    FBConsole* ptr = &con;
+    ptr->init(67890, 1024, 768, 4096);
+    println("fb_addr: {con.fb_addr}");
+    println("width: {con.width}");
+    println("height: {con.height}");
+    println("pitch: {con.pitch}");
+    // 問題2: フィールドインデックス6,7のGEP
+    println("font_width: {con.font_width}");
+    println("font_height: {con.font_height}");
+
+    // テスト2: ポインタ経由のネストメソッド（puts → putc）
+    ptr->puts(5);
+    ulong cx = ptr->get_cursor_x();
+    println("cursor_x: {cx}");
+
+    // テスト3: getter経由のフィールド取得
+    ulong addr = ptr->get_fb_addr();
+    println("get_fb_addr: {addr}");
+    ulong fh = ptr->get_font_height();
+    println("get_font_height: {fh}");
+
+    return 0;
+}

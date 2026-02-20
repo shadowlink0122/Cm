@@ -7,10 +7,10 @@ has_children: true
 
 [日本語](../ja/)
 
-# Cm Language Tutorials v0.14.0
+# Cm Language Tutorials v0.14.1
 
-**Target Version:** v0.14.0  
-**Last Updated:** 2026-02-10
+**Target Version:** v0.14.1  
+**Last Updated:** 2026-02-20
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
 
@@ -75,6 +75,7 @@ Estimated Time: 3 hours
    - [LLVM Backend](compiler/llvm.html) - Native compilation
    - [WASM Backend](compiler/wasm.html) - WebAssembly output
    - [JS Backend](compiler/js-compilation.html) - JavaScript output
+   - [UEFI Baremetal](compiler/uefi.html) - UEFI application development (no_std)
    - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
    - [Linter](compiler/linter.html) - Static analysis (cm lint)
    - [Formatter](compiler/formatter.html) - Code formatting (cm fmt)
@@ -120,17 +121,17 @@ Estimated Time: 3 hours
 
 - [Language Specification](../../design/CANONICAL_SPEC.html) - Full language spec
 - [Design Documents](../../design/) - Architecture and design docs
-- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/test_programs/) - 376 files
+- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/programs/) - 380+ files
 
 ---
 
-**Total Tutorials:** 42 files  
+**Total Tutorials:** 43 files  
 **Estimated Time:** 18-22 hours  
-**Target Version:** v0.14.0
+**Target Version:** v0.14.1
 
 ---
 
-**Last Updated:** 2026-02-10  
+**Last Updated:** 2026-02-20  
 **Author:** Cm Language Development Team
 
 ---

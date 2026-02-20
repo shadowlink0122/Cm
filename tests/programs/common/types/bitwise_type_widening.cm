@@ -1,0 +1,40 @@
+// ビット演算での型幅拡張テスト (bugs2#4/bugs1#2修正)
+// ulong/long変数と整数リテラルの二項演算で型が正しく統一されること確認
+import std::io::println;
+
+int main() {
+    // === ulong と int リテラルのビット演算 ===
+    ulong mask_val = 0xFF;
+    ulong val1 = 0x1234;
+    ulong result1 = val1 & 0xFF;
+    println(result1);  // 52 (0x34)
+
+    ulong val2 = 0xABCD;
+    ulong result2 = val2 | 0xF000;
+    println(result2);  // 0xFBCD = 64461
+
+    ulong val3 = 0xFF00;
+    ulong result3 = val3 ^ 0x0F0F;
+    println(result3);  // 0xF00F = 61455
+
+    // === long と int リテラルのビット演算 ===
+    long lval1 = 0x1234;
+    long lresult1 = lval1 & 0xFF;
+    println(lresult1);  // 52
+
+    // === シフト演算 ===
+    ulong shift1 = 1;
+    ulong shifted = shift1 << 16;
+    println(shifted);  // 65536
+
+    // === 複合ビット演算 ===
+    ulong bits = 0xFF00FF00;
+    ulong low_byte = bits & 0xFF;
+    println(low_byte);  // 0
+
+    ulong mid_byte = (bits >> 8) & 0xFF;
+    println(mid_byte);  // 255
+
+    println("PASS");
+    return 0;
+}

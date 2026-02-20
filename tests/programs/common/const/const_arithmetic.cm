@@ -1,0 +1,42 @@
+// const式の計算テスト
+// const定数間の演算が正しく評価されることを確認
+import std::io::println;
+
+const int BASE = 100;
+const int OFFSET1 = 5;
+const int OFFSET2 = 10;
+
+int use_value(int v) {
+    return v;
+}
+
+int main() {
+    // === const + const ===
+    int sum = BASE + OFFSET1;
+    println(sum);  // 105
+
+    // === const - const ===
+    int diff = BASE - OFFSET1;
+    println(diff);  // 95
+
+    // === const * const ===
+    int prod = OFFSET1 * OFFSET2;
+    println(prod);  // 50
+
+    // === 関数引数にconst式 ===
+    int result = use_value(BASE + OFFSET2);
+    println(result);  // 110
+
+    // === printlnの補間でconst式 ===
+    int combined = BASE + OFFSET1 + OFFSET2;
+    println("combined: {combined}");  // combined: 115
+
+    // === ulong const ===
+    const ulong LARGE_BASE = 0x3F8;
+    const ulong LARGE_OFF = 1;
+    ulong port = LARGE_BASE + LARGE_OFF;
+    println(port);  // 1017
+
+    println("PASS");
+    return 0;
+}

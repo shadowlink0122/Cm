@@ -15,6 +15,36 @@
 
 namespace cm::codegen::llvm_backend {
 
+// TypeAlias（typedef）を基底型に再帰的に解決するヘルパー
+// MemAddr → ulong, FsError → ulong のように typedef チェーンを展開する
+hir::TypePtr MIRToLLVM::resolveTypeAlias(const hir::TypePtr& type) const {
+    if (!type)
+        return nullptr;
+    auto current = type;
+    // TypeAlias チェーンを辿って基底型まで解決
+    while (current && current->kind == hir::TypeKind::TypeAlias) {
+        if (current->element_type) {
+            current = current->element_type;
+        } else {
+            // element_type が未設定の場合、typedefDefsで名前ベースの解決を試行
+            auto it = typedefDefs.find(current->name);
+            if (it != typedefDefs.end()) {
+                current = it->second;
+            } else {
+                break;
+            }
+        }
+    }
+    // Struct kindだがtypedefの場合も解決（MIRでStruct名としてtypedef名が残る場合）
+    if (current && current->kind == hir::TypeKind::Struct) {
+        auto it = typedefDefs.find(current->name);
+        if (it != typedefDefs.end()) {
+            return resolveTypeAlias(it->second);
+        }
+    }
+    return current;
+}
+
 // 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
 // System V ABI: 16バイト以下の構造体はレジスタで値渡し
 bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
@@ -36,7 +66,9 @@ bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
         if (!field.type)
             continue;
 
-        switch (field.type->kind) {
+        // TypeAlias（typedef）を基底型に解決
+        auto resolvedFieldType = resolveTypeAlias(field.type);
+        switch (resolvedFieldType->kind) {
             case hir::TypeKind::Bool:
             case hir::TypeKind::Char:
             case hir::TypeKind::Tiny:
@@ -111,7 +143,9 @@ std::string MIRToLLVM::generateFunctionId(const mir::MirFunction& func) {
             if (local.type) {
                 if (!suffix.empty())
                     suffix += "_";
-                switch (local.type->kind) {
+                // TypeAlias（typedef）を基底型に解決してからマングリング
+                auto resolvedType = resolveTypeAlias(local.type);
+                switch (resolvedType->kind) {
                     case hir::TypeKind::Void:
                         suffix += "v";
                         break;
@@ -206,7 +240,9 @@ std::string MIRToLLVM::generateCallFunctionId(const std::string& baseName,
         if (type) {
             if (!suffix.empty())
                 suffix += "_";
-            switch (type->kind) {
+            // TypeAlias（typedef）を基底型に解決してからマングリング
+            auto resolvedType = resolveTypeAlias(type);
+            switch (resolvedType->kind) {
                 case hir::TypeKind::Void:
                     suffix += "v";
                     break;
@@ -378,11 +414,90 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
     }
 
-    // UEFIエントリポイント: efi_mainにWin64呼出規約とDLLExportを設定
-    // DLLExportにより最適化で関数が除去されるのを防ぐ
-    if (func.name == "efi_main") {
+    // Bug#11/12修正: ASM文を含む関数にnoinline属性を追加
+    // MIRレベルではshould_inlineで抑制済みだが、LLVMの最適化パスによる
+    // インライン展開も防止する必要がある（レジスタ割当変更・ret先不在を防ぐ）
+    {
+        bool hasAsm = false;
+        bool hasRetInAsm = false;
+        bool hasAsmOperands = false;
+        bool hasNonAsmStmt = false;  // ASM以外のステートメントが存在するか
+        for (const auto& bb : func.basic_blocks) {
+            if (!bb)
+                continue;
+            for (const auto& stmt : bb->statements) {
+                if (!stmt)
+                    continue;
+                if (stmt->kind == mir::MirStatement::Asm) {
+                    hasAsm = true;
+                    const auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+                    if (!asmData.operands.empty()) {
+                        hasAsmOperands = true;
+                    }
+                    // Bug#12修正: ASMコード内にret/iret命令があるか検出
+                    std::string code = asmData.code;
+                    for (size_t p = 0; p < code.size(); ++p) {
+                        bool found = false;
+                        if (p + 3 <= code.size() && code.substr(p, 3) == "ret") {
+                            size_t end = p + 3;
+                            if (end < code.size() && code[end] == 'q')
+                                end++;
+                            bool prevOk = (p == 0 || !std::isalnum(code[p - 1]));
+                            bool nextOk = (end >= code.size() || !std::isalnum(code[end]));
+                            if (prevOk && nextOk)
+                                found = true;
+                        }
+                        if (p + 4 <= code.size() && code.substr(p, 4) == "iret") {
+                            size_t end = p + 4;
+                            if (end < code.size() && code[end] == 'q')
+                                end++;
+                            bool prevOk = (p == 0 || !std::isalnum(code[p - 1]));
+                            bool nextOk = (end >= code.size() || !std::isalnum(code[end]));
+                            if (prevOk && nextOk)
+                                found = true;
+                        }
+                        if (found)
+                            hasRetInAsm = true;
+                    }
+                } else {
+                    // ASM以外のステートメント（関数呼び出し、変数宣言等）
+                    hasNonAsmStmt = true;
+                }
+            }
+        }
+        if (hasAsm) {
+            llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+            // Bug#12修正: ret/iretを含む純ASM関数にのみNaked属性を付与
+            // Naked属性でprologue/epilogue除去（operandの有無に関わらず）
+            // 注意: ASMとCmコードが混在する関数（例: syscall_entry）には
+            // Naked属性を付与しない。Naked関数ではASM文のみ出力されるため、
+            // 混在関数の通常コード（関数呼び出し等）が省略されてGPFを引き起こす
+            if (hasRetInAsm && !hasNonAsmStmt) {
+                llvmFunc->addFnAttr(llvm::Attribute::Naked);
+            }
+        }
+    }
+
+    // Bug#1修正: UEFIターゲットでは全関数にWin64呼出規約を設定
+    // UEFIはWindows x64 ABIを使用（RCX, RDX, R8, R9）
+    // efi_mainだけでなく全関数に適用しないと3引数以上の関数でポインタが破損する
+    if (isUefiTarget) {
         llvmFunc->setCallingConv(llvm::CallingConv::Win64);
-        llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        // Bug#13修正: LLVMのO2パイプラインのインライン展開を防止
+        // インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)が
+        // インライン展開されたコードのself/引数として上書きされ、
+        // UEFIデータ構造が破壊される
+        llvmFunc->addFnAttr(llvm::Attribute::NoInline);
+        // Bug#17修正: スタックプローブ無効化
+        // LLVMはWindowsターゲットで4KB以上のスタックフレームに___chkstk_msを挿入するが、
+        // UEFI/ベアメタル環境ではこの関数が存在しないためリンクエラーになる
+        llvmFunc->addFnAttr("no-stack-arg-probe");
+        // efi_mainはDLLExportで最適化除去を防ぎ、optnoneで全最適化を無効化
+        // optnoneはインライン展開 + DCE(デッドコード削除)を両方防止
+        if (func.name == "efi_main") {
+            llvmFunc->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+            llvmFunc->addFnAttr(llvm::Attribute::OptimizeNone);
+        }
     }
 
     // パラメータ名設定
@@ -406,9 +521,13 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     currentProgram = &program;
 
-    // ターゲット判定をキャッシュ（境界チェックで使用）
+    // typedef定義マップをコピー（convertTypeでTypeAlias/Struct名の解決に使用）
+    typedefDefs = program.typedef_defs;
+
+    // ターゲット判定をキャッシュ（境界チェック・ABI設定で使用）
     std::string triple = module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;
+    isUefiTarget = triple.find("windows") != std::string::npos;
 
     // インターフェース名を収集
     // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
@@ -716,6 +835,11 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
                             "Starting module conversion: " + module.module_name);
 
+    // typedef定義マップをコピー（convertTypeでTypeAlias/Struct名の解決に使用）
+    if (module.typedef_defs) {
+        typedefDefs = *module.typedef_defs;
+    }
+
     // allModuleFunctionsを構築（自モジュール + extern の全関数）
     // declareExternalFunctionでcurrentProgramがNULLの場合のフォールバックに使用
     allModuleFunctions.clear();
@@ -729,6 +853,7 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     // ターゲット判定をキャッシュ
     std::string triple = this->module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;
+    isUefiTarget = triple.find("windows") != std::string::npos;
 
     // === インターフェース名を収集 ===
     for (const auto* iface : module.interfaces) {
@@ -942,6 +1067,139 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         allocatedLocals.clear();
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
+        // Bug#12修正: naked関数（ret/iret含むASM）の専用コード生成パス
+        // naked関数ではalloca/load/storeを生成せず、関数引数を
+        // ASMオペランドに直接マッピングする
+        if (currentFunction->hasFnAttribute(llvm::Attribute::Naked)) {
+            // エントリーブロック作成（ASM呼び出しのみ）
+            auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
+            builder->SetInsertPoint(entryBB);
+
+            // ASMステートメントを探す
+            for (const auto& bb : func.basic_blocks) {
+                if (!bb)
+                    continue;
+                for (const auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Asm)
+                        continue;
+                    auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
+
+                    // Bug#11修正: UEFIターゲットのレジスタリマップ
+                    std::string nakedAsmCode = asmData.code;
+                    if (isUefiTarget) {
+                        struct RegMapping {
+                            std::string sysV;
+                            std::string placeholder;
+                            std::string win64;
+                        };
+                        static const std::vector<RegMapping> regMappings = {
+                            {"%rdi", "@@SYSV_ARG1_64@@", "%rcx"},
+                            {"%rsi", "@@SYSV_ARG2_64@@", "%rdx"},
+                            {"%edi", "@@SYSV_ARG1_32@@", "%ecx"},
+                            {"%esi", "@@SYSV_ARG2_32@@", "%edx"},
+                            {"%di", "@@SYSV_ARG1_16@@", "%cx"},
+                            {"%si", "@@SYSV_ARG2_16@@", "%dx"},
+                        };
+                        for (const auto& m : regMappings) {
+                            size_t pos = 0;
+                            while ((pos = nakedAsmCode.find(m.sysV, pos)) != std::string::npos) {
+                                nakedAsmCode.replace(pos, m.sysV.size(), m.placeholder);
+                                pos += m.placeholder.size();
+                            }
+                        }
+                        for (const auto& m : regMappings) {
+                            size_t pos = 0;
+                            while ((pos = nakedAsmCode.find(m.placeholder, pos)) !=
+                                   std::string::npos) {
+                                nakedAsmCode.replace(pos, m.placeholder.size(), m.win64);
+                                pos += m.win64.size();
+                            }
+                        }
+                    }
+
+                    // operandの有無に関わらず、$N→レジスタ名に事前置換して
+                    // operandなしASMとして生成（LLVM17 naked+operand crash回避）
+                    std::string finalAsmCode = nakedAsmCode;
+                    if (!asmData.operands.empty()) {
+                        // 呼び出し規約に基づくレジスタ名
+                        std::vector<std::string> argRegs;
+                        if (isUefiTarget) {
+                            // Win64cc: RCX, RDX, R8, R9
+                            argRegs = {"%rcx", "%rdx", "%r8", "%r9"};
+                        } else {
+                            // System V: RDI, RSI, RDX, RCX, R8, R9
+                            argRegs = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
+                        }
+
+                        // $N → レジスタ名に置換（2段階で交差防止）
+                        struct OpMapping {
+                            std::string src;
+                            std::string placeholder;
+                            std::string reg;
+                        };
+                        std::vector<OpMapping> opMappings;
+                        for (size_t i = 0; i < asmData.operands.size(); ++i) {
+                            std::string src = "$" + std::to_string(i);
+                            std::string ph = "@@NAKED_OP" + std::to_string(i) + "@@";
+                            std::string reg =
+                                (i < argRegs.size()) ? argRegs[i] : ("%r" + std::to_string(10 + i));
+                            opMappings.push_back({src, ph, reg});
+                        }
+                        // Phase 1: $N → placeholder
+                        for (const auto& m : opMappings) {
+                            size_t pos = 0;
+                            while ((pos = finalAsmCode.find(m.src, pos)) != std::string::npos) {
+                                // $$N（エスケープ）はスキップ
+                                if (pos > 0 && finalAsmCode[pos - 1] == '$') {
+                                    pos += m.src.size();
+                                    continue;
+                                }
+                                finalAsmCode.replace(pos, m.src.size(), m.placeholder);
+                                pos += m.placeholder.size();
+                            }
+                        }
+                        // Phase 2: placeholder → レジスタ名
+                        for (const auto& m : opMappings) {
+                            size_t pos = 0;
+                            while ((pos = finalAsmCode.find(m.placeholder, pos)) !=
+                                   std::string::npos) {
+                                finalAsmCode.replace(pos, m.placeholder.size(), m.reg);
+                                pos += m.reg.size();
+                            }
+                        }
+                    }
+
+                    // クロバー制約を生成（ASMコード内で使用されているレジスタを検出）
+                    std::string constraints = "~{memory},~{dirflag},~{fpsr},~{flags}";
+                    static const std::vector<std::pair<std::string, std::string>> nakedRegPatterns =
+                        {
+                            {"%r10", "r10"}, {"%r11", "r11"}, {"%r12", "r12"}, {"%r13", "r13"},
+                            {"%r14", "r14"}, {"%r15", "r15"}, {"%rax", "rax"}, {"%rbx", "rbx"},
+                            {"%rcx", "rcx"}, {"%rdx", "rdx"}, {"%rdi", "rdi"}, {"%rsi", "rsi"},
+                            {"%r8", "r8"},   {"%r9", "r9"},
+                        };
+                    for (const auto& [pattern, clobberName] : nakedRegPatterns) {
+                        if (finalAsmCode.find(pattern) != std::string::npos) {
+                            constraints += ",~{" + clobberName + "}";
+                        }
+                    }
+                    // rspが使われている場合もクロバーに追加
+                    if (finalAsmCode.find("%rsp") != std::string::npos) {
+                        constraints += ",~{rsp}";
+                    }
+
+                    auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                    auto* inlineAsm =
+                        llvm::InlineAsm::get(asmFuncTy, finalAsmCode, constraints, true);
+                    builder->CreateCall(asmFuncTy, inlineAsm);
+                }
+            }
+
+            // naked関数はASM内のretで戻るため、unreachableで終了
+            builder->CreateUnreachable();
+            return;  // 通常のコード生成をスキップ
+        }
+
         // asm出力オペランドを持つ変数を事前スキャンしてallocatedLocalsに登録
         // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
         std::set<unsigned int> asmOutputLocals;
@@ -1043,14 +1301,12 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                           local.type->element_type->kind == hir::TypeKind::Function))) {
                         continue;
                     }
-                    // 配列へのポインタ型の一時変数はアロケーションしない（SSA形式で扱う）
-                    // ただしasm出力変数は例外
-                    if (!isAsmOutput && local.type->kind == hir::TypeKind::Pointer &&
-                        local.type->element_type &&
-                        local.type->element_type->kind == hir::TypeKind::Array &&
-                        !local.is_user_variable) {
-                        continue;
-                    }
+                    // 配列へのポインタ型の一時変数もallocaを生成する（Bug#9修正）
+                    // 以前はSSA形式で扱っていたが、Ref(array)の結果がSSA代入されると
+                    // locals[ref_result] = locals[array] (配列alloca) となり、
+                    // Copy時にCreateLoad(allocatedType=[N x T])が配列全体をloadしてしまう。
+                    // これにより後続のstore先(ptr alloca=8B)にバッファオーバーフローが発生。
+                    // allocaを生成してstore ptr → load ptrの正しいパスを通すことで修正。
                     // 文字列型の一時変数はアロケーションしない（直接値を使用）
                     // ただしasm出力変数は例外
                     if (!isAsmOutput && local.type->kind == hir::TypeKind::String &&
@@ -1223,8 +1479,14 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         if (func.return_local < func.locals.size()) {
             auto& returnLocal = func.locals[func.return_local];
             if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
-                auto llvmType = convertType(returnLocal.type);
+                // main関数はC標準でi32を返すため、retval allocaもi32に強制
+                auto llvmType =
+                    (func.name == "main") ? ctx.getI32Type() : convertType(returnLocal.type);
                 auto alloca = builder->CreateAlloca(llvmType, nullptr, "retval");
+                // main関数のretvalは0で初期化（C標準: 正常終了=0）
+                if (func.name == "main") {
+                    builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), 0), alloca);
+                }
                 locals[func.return_local] = alloca;
                 allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
             }
@@ -1250,16 +1512,19 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 各ブロックを変換（CompilationGuardによる監視）
-        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " << func.basic_blocks.size()
+        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " <<
+        // func.basic_blocks.size()
         //           << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロックはスキップ
             if (!func.basic_blocks[i]) {
-                // std::cerr << "[MIR2LLVM]   Block " << i << " is null (DCE removed), skipping\n";
+                // std::cerr << "[MIR2LLVM]   Block " << i << " is null (DCE removed),
+                // skipping\n";
                 continue;
             }
 
-            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" << func.basic_blocks.size()
+            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" <<
+            // func.basic_blocks.size()
             //           << "\n";
 
             // プログレス表示
@@ -1287,13 +1552,15 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
     }
 
     // blocksはunordered_mapなので、countで存在確認
-    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks map...\n";
+    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks
+    // map...\n";
     if (blocks.count(block.id) > 0) {
         // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
-        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
+        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map,
+        // skipping\n";
         if (cm::debug::g_debug_mode) {
             debug_msg("CODEGEN",
                       "Warning: BB " + std::to_string(block.id) + " not in blocks map, skipping");
@@ -1337,7 +1604,8 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
-                // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local << "\n";
+                // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local <<
+                // "\n";
                 if (assign.rvalue) {
                     // std::cerr << "[MIR2LLVM]       Rvalue kind: "
                     //           << static_cast<int>(assign.rvalue->kind) << "\n";
@@ -1359,14 +1627,16 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         convertStatement(*stmt);
 
-        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed successfully\n";
-        // std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " << stmt_idx << " to "
+        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed
+        // successfully\n"; std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " <<
+        // stmt_idx << " to "
         // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
         if (stmt_idx == block.statements.size() - 1) {
             // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
         }
-        // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx << "\n";
+        // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx <<
+        // "\n";
     }
 
     // ターミネータ処理
@@ -1389,7 +1659,8 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
                 } else if (callData.func->kind == mir::MirOperand::Constant) {
                     auto& constant = std::get<mir::MirConstant>(callData.func->data);
                     if (auto* name = std::get_if<std::string>(&constant.value)) {
-                        // std::cerr << "[MIR2LLVM]       Call target (const): " << *name << "\n";
+                        // std::cerr << "[MIR2LLVM]       Call target (const): " << *name <<
+                        // "\n";
                         term_str << "_" << *name;
                     }
                 }
@@ -1426,7 +1697,8 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
     auto& count = statementProcessCount[&stmt];
     count++;
     if (count > 100) {
-        // std::cerr << "[MIR2LLVM] ERROR: Infinite loop detected! Statement at address " << &stmt
+        // std::cerr << "[MIR2LLVM] ERROR: Infinite loop detected! Statement at address " <<
+        // &stmt
         // << " processed " << count << " times\n";
         if (currentMIRFunction) {
             // std::cerr << "[MIR2LLVM] Function: " << currentMIRFunction->name << "\n";
@@ -1948,14 +2220,39 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
             debug_msg("llvm_asm", "Emitting inline asm: " + asmData.code +
                                       " operands=" + std::to_string(asmData.operands.size()));
 
+            // ASMコードをそのまま使用（レジスタの自動リマップは行わない）
+            // 理由: %rdi/%rsi等はABI引数参照だけでなく汎用スクラッチレジスタとしても
+            // 使用されるため、一律リマップは意図しない動作を引き起こす
+            // ABI引数を参照する場合は ${r:varname} 構文を使用すること
+            std::string asmCodeRemapped = asmData.code;
+
             if (asmData.operands.empty()) {
                 // オペランドなし: シンプルなasm
                 auto* asmFuncTy = llvm::FunctionType::get(ctx.getVoidType(), false);
-                std::string constraints = asmData.is_must ? "~{memory}" : "";
-                auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmData.code, constraints,
-                                                       asmData.is_must  // hasSideEffects
+                // Bug#7修正: 全ASMにhasSideEffects=trueとフラグクロバーを設定
+                // must { __asm__("hlt"); } がループから脱出する問題を防止
+                // LLVMがASM周辺の制御フローを不正に最適化しないようにする
+                std::string constraints = "~{memory},~{dirflag},~{fpsr},~{flags}";
+                auto* inlineAsm = llvm::InlineAsm::get(asmFuncTy, asmCodeRemapped, constraints,
+                                                       true  // hasSideEffects: 常にtrue
                 );
+                // Bug#7修正: must { __asm__() } の場合のみコンパイラバリアを挿入
+                // LLVMの制御フロー最適化（hlt後のコードを到達不能と判断）を阻止
+                // ハードウェアfence (mfence) ではなくコンパイラバリアを使用
+                // （UEFIベアメタル環境ではmfenceがGPFを引き起こす可能性があるため）
+                if (asmData.is_must) {
+                    auto* barrierTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                    auto* barrier = llvm::InlineAsm::get(
+                        barrierTy, "", "~{memory},~{dirflag},~{fpsr},~{flags}", true);
+                    builder->CreateCall(barrierTy, barrier);
+                }
                 builder->CreateCall(asmFuncTy, inlineAsm);
+                if (asmData.is_must) {
+                    auto* barrierTy = llvm::FunctionType::get(ctx.getVoidType(), false);
+                    auto* barrier = llvm::InlineAsm::get(
+                        barrierTy, "", "~{memory},~{dirflag},~{fpsr},~{flags}", true);
+                    builder->CreateCall(barrierTy, barrier);
+                }
             } else {
                 // オペランド付き: 制約文字列とオペランドを生成
                 // 出力/入出力オペランドを分類
@@ -2368,7 +2665,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     };
 
                     std::set<std::string> detectedClobbers;
-                    std::string asmCode = asmData.code;
+                    std::string asmCode = asmCodeRemapped;
 
                     for (const auto& [pattern, llvmName] : regPatterns) {
                         size_t searchPos = 0;
@@ -2417,7 +2714,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 // asmコード内のオペランド番号を更新
                 // 2段階方式: まず一時プレースホルダーに置換、次に最終番号に置換
                 // これにより$0→$1と$1→$0のような交差置換が正しく処理される
-                std::string remappedCode = asmData.code;
+                std::string remappedCode = asmCodeRemapped;
 
                 // 第1段階: $N を一時プレースホルダー __TMP_N__ に置換
                 // ただし $$N（即値エスケープ）はスキップする
@@ -2741,7 +3038,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                         if (typeArg->kind == hir::TypeKind::Struct) {
                                             // ネストジェネリックの場合、再帰的にマングリング
                                             std::string nestedName = typeArg->name;
-                                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
+                                            // type_argsがある場合（例:
+                                            // Vector<int>）、再帰的に処理
                                             if (!typeArg->type_args.empty()) {
                                                 for (const auto& nestedArg : typeArg->type_args) {
                                                     if (nestedArg) {
@@ -2910,11 +3208,21 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateFPToSI(value, targetType, "fptosi");
             }
 
-            // int サイズ変換
+            // int サイズ変換（target_typeのsignednessに応じてsext/zext切り替え）
             if (sourceType->isIntegerTy() && targetType->isIntegerTy()) {
                 auto srcBits = sourceType->getIntegerBitWidth();
                 auto dstBits = targetType->getIntegerBitWidth();
                 if (srcBits < dstBits) {
+                    // unsigned型（UTiny,UShort,UInt,ULong）へのキャストはゼロ拡張
+                    bool use_zext = false;
+                    if (castData.target_type) {
+                        auto kind = castData.target_type->kind;
+                        use_zext = (kind == hir::TypeKind::UTiny || kind == hir::TypeKind::UShort ||
+                                    kind == hir::TypeKind::UInt || kind == hir::TypeKind::ULong);
+                    }
+                    if (use_zext) {
+                        return builder->CreateZExt(value, targetType, "zext");
+                    }
                     return builder->CreateSExt(value, targetType, "sext");
                 } else if (srcBits > dstBits) {
                     return builder->CreateTrunc(value, targetType, "trunc");
@@ -2971,7 +3279,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                             builder->CreateMemCpy(payloadGEP, llvm::MaybeAlign(), srcAlloca,
                                                   llvm::MaybeAlign(), payloadSize);
                         } else {
-                            // プリミティブ型（int/long/bool/float/double/ptr等）: bitcastしてストア
+                            // プリミティブ型（int/long/bool/float/double/ptr等）:
+                            // bitcastしてストア
                             auto* payloadAsType = builder->CreateBitCast(
                                 payloadGEP, llvm::PointerType::get(sourceType, 0),
                                 "payload_as_type");
@@ -3013,7 +3322,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                                                   llvm::MaybeAlign(), copySize);
                             return builder->CreateLoad(targetType, destAlloca, "struct_from_union");
                         } else {
-                            // プリミティブ型（int/long/bool/float/double/ptr等）: bitcastしてロード
+                            // プリミティブ型（int/long/bool/float/double/ptr等）:
+                            // bitcastしてロード
                             auto* payloadAsType = builder->CreateBitCast(
                                 payloadGEP, llvm::PointerType::get(targetType, 0),
                                 "payload_as_target");
@@ -3418,7 +3728,8 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                                         currentType = baseLocal->type_args[0];
                                                     } else if (baseLocal->name.find("__") !=
                                                                std::string::npos) {
-                                                        // マングリング名から型引数を抽出 (Box__int
+                                                        // マングリング名から型引数を抽出
+                                                        // (Box__int
                                                         // -> int)
                                                         mangledName = baseLocal->name;
                                                         size_t pos = mangledName.find("__");
@@ -4041,12 +4352,14 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         // 通常のポインタ型: element_typeを使用
                         elemType = convertType(currentType->element_type);
                     } else if (currentType && llvm::isa<llvm::LoadInst>(addr)) {
-                        // Deref後（LoadInst結果へのインデックスアクセス）: currentType自体が要素型
+                        // Deref後（LoadInst結果へのインデックスアクセス）:
+                        // currentType自体が要素型
                         elemType = convertType(currentType);
                     }
 
                     // addrがポインタ変数を格納している場合、まずポインタ値をロード
-                    // これはField projection後（構造体のポインタフィールドへのGEP）にも適用される
+                    // これはField
+                    // projection後（構造体のポインタフィールドへのGEP）にも適用される
                     llvm::Value* ptrVal = addr;
                     bool needsLoad = false;
 

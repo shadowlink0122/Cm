@@ -299,10 +299,15 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
         if (operand.kind == mir::MirOperand::Copy) {
             std::string result = emitPlace(place, func);
             // 構造体の場合は深いコピーを作成
+            // ただしimplメソッドのself引数ソースの場合はスキップ
+            // （JSの参照渡しでselfの変更を元変数に伝搬させるため）
             if (place.local < func.locals.size() && place.projections.empty()) {
                 const auto& local = func.locals[place.local];
                 if (local.type && local.type->kind == ast::TypeKind::Struct) {
-                    return "__cm_clone(" + result + ")";
+                    if (impl_self_sources_.count(place.local) == 0) {
+                        return "__cm_clone(" + result + ")";
+                    }
+                    // impl selfソース: クローンなしで参照渡し
                 }
             }
             return result;

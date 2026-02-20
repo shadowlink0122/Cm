@@ -12,21 +12,33 @@ bool isBuiltinFunction(const std::string& name) {
         "print",
         "cm_println_string",
         "cm_println_int",
+        "cm_println_long",
+        "cm_println_ulong",
+        "cm_println_uint",
         "cm_println_double",
         "cm_println_bool",
         "cm_println_char",
         "cm_println_format",
         "cm_print_string",
         "cm_print_int",
+        "cm_print_long",
+        "cm_print_ulong",
+        "cm_print_uint",
         "cm_print_double",
         "cm_print_bool",
         "cm_print_char",
         "cm_print_format",
         "cm_string_concat",
         "cm_int_to_string",
+        "cm_long_to_string",
+        "cm_ulong_to_string",
+        "cm_uint_to_string",
         "cm_double_to_string",
         "cm_bool_to_string",
         "cm_format_int",
+        "cm_format_long",
+        "cm_format_ulong",
+        "cm_format_uint",
         "cm_format_double",
         "cm_format_bool",
         "cm_format_char",
@@ -169,6 +181,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
 
     // println系
     if (name == "println" || name == "cm_println_string" || name == "cm_println_int" ||
+        name == "cm_println_long" || name == "cm_println_ulong" || name == "cm_println_uint" ||
         name == "cm_println_double" || name == "cm_println_bool") {
         if (argStrs.empty()) {
             return "console.log()";
@@ -209,7 +222,9 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // 型変換
-    if (name == "cm_int_to_string" && argStrs.size() >= 1) {
+    if ((name == "cm_int_to_string" || name == "cm_long_to_string" ||
+         name == "cm_ulong_to_string" || name == "cm_uint_to_string") &&
+        argStrs.size() >= 1) {
         return "String(" + argStrs[0] + ")";
     }
     if (name == "cm_double_to_string" && argStrs.size() >= 1) {
@@ -220,7 +235,9 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // cm_format_*
-    if (name == "cm_format_int" && argStrs.size() >= 1) {
+    if ((name == "cm_format_int" || name == "cm_format_long" || name == "cm_format_ulong" ||
+         name == "cm_format_uint") &&
+        argStrs.size() >= 1) {
         return "String(" + argStrs[0] + ")";
     }
     if (name == "cm_format_double" && argStrs.size() >= 1) {
@@ -251,6 +268,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
 
     // print系
     if (name == "print" || name == "cm_print_string" || name == "cm_print_int" ||
+        name == "cm_print_long" || name == "cm_print_ulong" || name == "cm_print_uint" ||
         name == "cm_print_double" || name == "cm_print_bool" || name == "cm_print_char") {
         if (argStrs.empty()) {
             return "process.stdout.write('')";

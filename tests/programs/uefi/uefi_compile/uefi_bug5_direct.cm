@@ -1,0 +1,28 @@
+//! platform: uefi
+// Bug#5回帰テスト: 回避策なし — ASM出力変数をwhile条件で直接使用
+// 回避策の「スコープ宣言+break」パターンではなく、元のバグパターンそのものをテスト
+
+ulong process_bytes(ulong start_addr) {
+    ulong addr = start_addr;
+    ulong byte_val = 1;
+
+    // ASMで値を設定（シミュレーション: アドレスから0を読み取り）
+    __asm__("movq $$0, ${=r:byte_val}");
+
+    // ❌ 以前はこの条件が初期値(1)で固定化され、無限ループになっていた
+    // ✅ 修正後はASM出力で更新された値(0)が正しく評価される
+    ulong count = 0;
+    while (byte_val != 0) {
+        count = count + 1;
+        addr = addr + 1;
+        __asm__("movq $$0, ${=r:byte_val}");
+    }
+
+    return count;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+    return process_bytes(0x1000);
+}

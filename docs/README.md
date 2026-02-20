@@ -66,7 +66,7 @@ docs/
 ### テスト
 - `make tip` - インタプリタテスト
 - `make tlp` - LLVMテスト
-- `make tlwp` - WASMテスト
+- `make twp` - WASMテスト
 
 ## 📝 ルート文書
 

@@ -7,6 +7,6 @@ Test 2: Method call via pointer member
   node1->next->get_value() = 20
 
 Test 3: Set value via pointer member method
-  After set_value(99): node1->next->get_value() = 20
+  After set_value(99): node1->next->get_value() = 99
 
 === Done ===

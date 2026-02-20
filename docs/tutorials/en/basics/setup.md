@@ -232,7 +232,7 @@ cmake --build build -j8
 | `make test` | `make t` | C++ unit tests (ctest) |
 | `make test-jit-parallel` | `make tip` | All JIT tests (parallel) |
 | `make test-llvm-parallel` | `make tlp` | All LLVM tests (parallel) |
-| `make test-llvm-wasm-parallel` | `make tlwp` | All WASM tests (parallel) |
+| `make test-llvm-wasm-parallel` | `make twp` | All WASM tests (parallel) |
 | `make test-js-parallel` | `make tjp` | All JS tests (parallel) |
 | `make test-lint` | `make tli` | Lint tests |
 
@@ -246,7 +246,7 @@ make tip0 / make tip1 / make tip2 / make tip3
 make tlp0 / make tlp1 / make tlp2 / make tlp3
 
 # WASM tests (O0-O3)
-make tlwp0 / make tlwp1 / make tlwp2 / make tlwp3
+make twp0 / make twp1 / make twp2 / make twp3
 
 # JS tests (O0-O3)
 make tjp0 / make tjp1 / make tjp2 / make tjp3

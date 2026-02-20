@@ -20,10 +20,12 @@ using LiteralValue = std::variant<std::monostate,  // null
 
 struct LiteralExpr {
     LiteralValue value;
+    bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
 
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}
     explicit LiteralExpr(int64_t v) : value(v) {}
+    LiteralExpr(int64_t v, bool unsigned_flag) : value(v), is_unsigned_literal(unsigned_flag) {}
     explicit LiteralExpr(double v) : value(v) {}
     explicit LiteralExpr(char v) : value(v) {}
     explicit LiteralExpr(std::string v) : value(std::move(v)) {}
@@ -526,6 +528,11 @@ struct AwaitExpr {
 // ============================================================
 inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<LiteralExpr>(v), s);
+}
+
+// unsignedフラグ付き整数リテラル生成（hex/binary/octalリテラル用）
+inline ExprPtr make_int_literal(int64_t v, bool is_unsigned, Span s = {}) {
+    return std::make_unique<Expr>(std::make_unique<LiteralExpr>(v, is_unsigned), s);
 }
 
 inline ExprPtr make_float_literal(double v, Span s = {}) {

@@ -1,0 +1,42 @@
+//! platform: uefi
+// Bug#12回帰テスト: ASM内ret命令を含む関数のコンパイル検証
+// naked関数 (ret含むASM) はprologue/epilogueなしで生成される
+// - operandあり + ret: module-level asmで関数body全体を定義
+// - operandなし + ret: Naked属性で直接生成
+
+// テスト1: operand付きnaked関数（module-level asm方式）
+// ${r:var}はLLVM IRで$0/$1に変換され、
+// module-level asm生成時に呼び出し規約のレジスタ名(%rcx/%rdx)に置換される
+export void context_switch(ulong old_rsp_ptr, ulong new_rsp) {
+    __asm__(`
+        movq ${r:old_rsp_ptr}, %r10;
+        movq %rsp, (%r10);
+        movq ${r:new_rsp}, %rsp;
+        ret;
+    `);
+}
+
+// テスト2: operandなしnaked関数（Naked属性方式）
+export void my_ret_func() {
+    __asm__(`
+        xorq %rax, %rax;
+        ret;
+    `);
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    ulong old_rsp = 0;
+    ulong new_rsp = 0x80000;
+
+    // operand付きnaked関数の呼び出し
+    context_switch(old_rsp, new_rsp);
+
+    // operandなしnaked関数の呼び出し
+    my_ret_func();
+
+    while (true) { __asm__("hlt"); }
+    return 0;
+}

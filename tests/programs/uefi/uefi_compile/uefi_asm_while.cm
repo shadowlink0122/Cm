@@ -1,0 +1,24 @@
+//! platform: uefi
+// Bug#5回帰テスト: ASM出力変数がwhile条件で正しく動作すること
+// 定数畳み込みがASM出力変数を定数として固定化しないことを検証
+// 修正: detect_multi_assignedでASM出力変数を複数代入として認識
+
+ulong efi_main(void* image_handle, void* system_table) {
+    // ASM出力変数の基本テスト
+    ulong status = 0;
+    __asm__("movq $$1, ${=r:status}");
+
+    // while条件でASM出力変数を使用する場合の代用パターン
+    // （定数畳み込みがstatus=0を固定化しないことを確認）
+    ulong count = 0;
+    while (status != 0) {
+        count = count + 1;
+        status = 0;
+    }
+
+    // ASM出力変数がwhile外でも正しく参照されること
+    ulong result = 0;
+    __asm__("movq $$42, ${=r:result}");
+
+    return result + count;
+}

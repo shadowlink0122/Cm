@@ -180,7 +180,7 @@ make tip
 make tlp
 
 # WASMテスト（並列・wasmtime必要）
-make tlwp
+make twp
 
 # JSテスト（並列・Node.js必要）
 make tjp

@@ -30,6 +30,9 @@ struct ModuleProgram {
     std::vector<const MirInterface*> interfaces;
     std::vector<const VTable*> vtables;
     std::vector<const MirGlobalVar*> global_vars;
+
+    // typedef定義マップ（LLVM backendでTypeAlias/Struct名の解決に使用）
+    const std::unordered_map<std::string, hir::TypePtr>* typedef_defs = nullptr;
 };
 
 // MIR分割ユーティリティ

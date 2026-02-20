@@ -1,0 +1,40 @@
+// 構造体配列の全体再代入テスト (Bug#14)
+import std::io::println;
+
+struct Vec2 {
+    int x;
+    int y;
+}
+
+struct Color {
+    int r;
+    int g;
+    int b;
+}
+
+int main() {
+    // 初期化
+    Vec2[3] points = [{x: 1, y: 2}, {x: 3, y: 4}, {x: 5, y: 6}];
+    println("init: ({points[0].x},{points[0].y}) ({points[1].x},{points[1].y}) ({points[2].x},{points[2].y})");
+
+    // 全体再代入
+    points = [{x: 10, y: 20}, {x: 30, y: 40}, {x: 50, y: 60}];
+    println("reassign: ({points[0].x},{points[0].y}) ({points[1].x},{points[1].y}) ({points[2].x},{points[2].y})");
+
+    // 2要素配列の再代入
+    Vec2[2] pair = [{x: 100, y: 200}, {x: 300, y: 400}];
+    pair = [{x: 1000, y: 2000}, {x: 3000, y: 4000}];
+    println("pair: ({pair[0].x},{pair[0].y}) ({pair[1].x},{pair[1].y})");
+
+    // 3フィールド構造体の配列再代入
+    Color[2] colors = [{r: 255, g: 0, b: 0}, {r: 0, g: 255, b: 0}];
+    colors = [{r: 0, g: 0, b: 255}, {r: 128, g: 128, b: 128}];
+    println("colors: ({colors[0].r},{colors[0].g},{colors[0].b}) ({colors[1].r},{colors[1].g},{colors[1].b})");
+
+    // プリミティブ配列の再代入（リグレッション確認）
+    int[3] arr = [1, 2, 3];
+    arr = [10, 20, 30];
+    println("arr: [{arr[0]},{arr[1]},{arr[2]}]");
+
+    return 0;
+}

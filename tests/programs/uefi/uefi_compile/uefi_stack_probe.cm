@@ -1,0 +1,35 @@
+//! platform: uefi
+// Bug#17回帰テスト: 大スタックフレームで___chkstk_msリンクエラーが発生しないこと
+// LLVMはWindowsターゲットで4KB以上のスタック使用時に___chkstk_msを自動挿入する
+// UEFI/ベアメタルではこの関数が存在しないためリンクエラーになる
+// 修正: 全UEFI関数に "no-stack-arg-probe" 属性を追加
+
+// 大きなスタックフレームを持つヘルパー関数（4KB超）
+ulong large_stack_function() {
+    // 512 * 8 = 4096バイト = ちょうど4KB（閾値境界）
+    ulong[512] buffer;
+    buffer[0] = 0xDEAD;
+    buffer[511] = 0xBEEF;
+    return buffer[0] + buffer[511];
+}
+
+// さらに大きなスタックフレーム（8KB超）
+ulong very_large_stack_function() {
+    // 1024 * 8 = 8192バイト = 8KB（閾値を大幅に超過）
+    ulong[1024] big_buffer;
+    big_buffer[0] = 0x1111;
+    big_buffer[1023] = 0x2222;
+    return big_buffer[0] + big_buffer[1023];
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    ulong r1 = large_stack_function();
+    ulong r2 = very_large_stack_function();
+
+    // efi_main内でも大きなスタック確保
+    ulong[256] local_buffer;
+    local_buffer[0] = 0xAAAA;
+    local_buffer[255] = 0xBBBB;
+
+    return r1 + r2 + local_buffer[0];
+}

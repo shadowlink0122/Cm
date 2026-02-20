@@ -182,6 +182,27 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
     mir_program.global_vars.push_back(std::move(mir_gv));
 }
 
+// 型の幅を数値化（二項演算の結果型決定用）
+static int global_type_width(const hir::TypePtr& type) {
+    if (!type)
+        return 32;
+    switch (type->kind) {
+        case hir::TypeKind::ULong:
+            return 65;
+        case hir::TypeKind::Long:
+            return 64;
+        case hir::TypeKind::UInt:
+            return 33;
+        default:
+            return 32;
+    }
+}
+
+// LHS/RHSの型のうち広い方を返す
+static hir::TypePtr global_wider_type(const hir::TypePtr& lhs, const hir::TypePtr& rhs) {
+    return global_type_width(lhs) >= global_type_width(rhs) ? lhs : rhs;
+}
+
 // グローバルconst用のコンパイル時定数評価
 std::optional<MirConstant> MirLoweringBase::try_global_const_eval(const hir::HirExpr& expr) {
     // リテラルの場合
@@ -270,7 +291,8 @@ std::optional<MirConstant> MirLoweringBase::try_global_const_eval(const hir::Hir
                 }
                 if (ok) {
                     MirConstant c;
-                    c.type = lval->type;
+                    // LHS/RHSの型のうち広い方を結果型とする
+                    c.type = global_wider_type(lval->type, rval->type);
                     c.value = result;
                     return c;
                 }

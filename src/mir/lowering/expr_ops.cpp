@@ -11,6 +11,43 @@ namespace cm::mir {
 LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& ctx) {
     // 代入演算の処理
     if (bin.op == hir::HirBinaryOp::Assign) {
+        // Bug#14修正: 右辺が配列リテラルの場合、temp経由のcopyを避けて
+        // 直接ターゲット変数の各インデックスに要素を書き込む。
+        // temp経由copyでは構造体要素の配列で正しくコピーされない問題がある。
+        if (auto* arr_lit_ptr =
+                std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&bin.rhs->kind)) {
+            const auto& arr_lit = **arr_lit_ptr;
+
+            // 左辺が単純な変数参照の場合
+            if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&bin.lhs->kind)) {
+                auto lhs_opt = ctx.resolve_variable((*var_ref)->name);
+                if (lhs_opt) {
+                    MirPlace base_place{*lhs_opt};
+                    for (size_t i = 0; i < arr_lit.elements.size(); ++i) {
+                        LocalId elem_value = lower_expression(*arr_lit.elements[i], ctx);
+
+                        // インデックス用の定数を変数に格納
+                        LocalId idx_local = ctx.new_temp(hir::make_int());
+                        MirConstant idx_const;
+                        idx_const.value = static_cast<int64_t>(i);
+                        idx_const.type = hir::make_int();
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{idx_local}, MirRvalue::use(MirOperand::constant(idx_const))));
+
+                        // ターゲットの配列要素への代入を生成
+                        MirPlace elem_place = base_place;
+                        elem_place.projections.push_back(PlaceProjection::index(idx_local));
+                        ctx.push_statement(MirStatement::assign(
+                            elem_place, MirRvalue::use(MirOperand::copy(MirPlace{elem_value}))));
+                    }
+                    // 最後の要素の値を返す（代入式の戻り値）
+                    if (!arr_lit.elements.empty()) {
+                        return *lhs_opt;
+                    }
+                }
+            }
+        }
+
         // 右辺を先に評価
         LocalId rhs_value = lower_expression(*bin.rhs, ctx);
 
@@ -607,12 +644,18 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                      rhs_type->kind == hir::TypeKind::Float) {
                 result_type = hir::make_float();
             }
-            // longがあればlong
+            // longがあればlong（unsigned区別: Bug2修正）
             else if (lhs_type->kind == hir::TypeKind::Long ||
                      rhs_type->kind == hir::TypeKind::Long ||
                      lhs_type->kind == hir::TypeKind::ULong ||
                      rhs_type->kind == hir::TypeKind::ULong) {
-                result_type = hir::make_long();
+                // 片方でもULongならulong型を維持
+                if (lhs_type->kind == hir::TypeKind::ULong ||
+                    rhs_type->kind == hir::TypeKind::ULong) {
+                    result_type = hir::make_ulong();
+                } else {
+                    result_type = hir::make_long();
+                }
             }
             // 整数型のinteger promotion: 大きい方の型に昇格
             else {

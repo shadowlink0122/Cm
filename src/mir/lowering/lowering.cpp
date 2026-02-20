@@ -63,6 +63,9 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
 
     if (cm::debug::g_debug_mode)
         std::cerr << "[MIR] All passes complete" << std::endl;
+    // typedef定義をMirProgramにコピー（LLVM backendでTypeAlias解決に使用）
+    mir_program.typedef_defs = typedef_defs;
+
     return std::move(mir_program);
 }
 

@@ -1727,7 +1727,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 // 追加引数を解析（簡易実装）
                                                 if (!args_str.empty()) {
                                                     try {
-                                                        int64_t value = std::stoll(args_str);
+                                                        // stoullで符号なし64bit全域をパース（Bug#6:
+                                                        // stoll out of range修正）
+                                                        uint64_t uval =
+                                                            std::stoull(args_str, nullptr, 0);
+                                                        int64_t value = static_cast<int64_t>(uval);
                                                         MirConstant arg_const;
                                                         arg_const.type = hir::make_int();
                                                         arg_const.value = value;
@@ -1909,7 +1913,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 for (const auto& arg_str : func_args) {
                                                     // 簡易実装：整数リテラルのみサポート
                                                     try {
-                                                        int64_t value = std::stoll(arg_str);
+                                                        // stoullで符号なし64bit全域をパース（Bug#6:
+                                                        // stoll out of range修正）
+                                                        uint64_t uval =
+                                                            std::stoull(arg_str, nullptr, 0);
+                                                        int64_t value = static_cast<int64_t>(uval);
                                                         MirConstant arg_const;
                                                         arg_const.type = hir::make_int();
                                                         arg_const.value = value;
@@ -1967,7 +1975,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 for (const auto& arg_str : func_args) {
                                                     // 簡易実装：整数リテラルのみサポート
                                                     try {
-                                                        int64_t value = std::stoll(arg_str);
+                                                        // stoullで符号なし64bit全域をパース（Bug#6:
+                                                        // stoll out of range修正）
+                                                        uint64_t uval =
+                                                            std::stoull(arg_str, nullptr, 0);
+                                                        int64_t value = static_cast<int64_t>(uval);
                                                         MirConstant arg_const;
                                                         arg_const.type = hir::make_int();
                                                         arg_const.value = value;
@@ -2136,9 +2148,26 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     args.push_back(MirOperand::constant(str_const));
                 }
             } else {
-                // その他のリテラル（整数など）
-                runtime_func = "cm_println_int";
+                // その他のリテラル（整数など）- 型に応じてランタイム関数を選択
                 LocalId arg_local = lower_expression(*first_arg, ctx);
+                // MIRローカルの型情報を確認
+                hir::TypePtr lit_type = first_arg->type;
+                if (arg_local < ctx.func->locals.size() && ctx.func->locals[arg_local].type) {
+                    lit_type = ctx.func->locals[arg_local].type;
+                }
+                if (lit_type && (lit_type->kind == hir::TypeKind::Long ||
+                                 lit_type->kind == hir::TypeKind::ISize)) {
+                    runtime_func = "cm_println_long";
+                } else if (lit_type && (lit_type->kind == hir::TypeKind::ULong ||
+                                        lit_type->kind == hir::TypeKind::USize)) {
+                    runtime_func = "cm_println_ulong";
+                } else if (lit_type && (lit_type->kind == hir::TypeKind::UInt ||
+                                        lit_type->kind == hir::TypeKind::UShort ||
+                                        lit_type->kind == hir::TypeKind::UTiny)) {
+                    runtime_func = "cm_println_uint";
+                } else {
+                    runtime_func = "cm_println_int";
+                }
                 args.push_back(MirOperand::copy(MirPlace{arg_local}));
             }
         } else {
@@ -2206,6 +2235,19 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                         break;
                     case hir::TypeKind::Char:
                         runtime_func = "cm_println_char";
+                        break;
+                    case hir::TypeKind::Long:
+                    case hir::TypeKind::ISize:
+                        runtime_func = "cm_println_long";
+                        break;
+                    case hir::TypeKind::ULong:
+                    case hir::TypeKind::USize:
+                        runtime_func = "cm_println_ulong";
+                        break;
+                    case hir::TypeKind::UInt:
+                    case hir::TypeKind::UShort:
+                    case hir::TypeKind::UTiny:
+                        runtime_func = "cm_println_uint";
                         break;
                     default:
                         runtime_func = "cm_println_int";
@@ -2503,6 +2545,14 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     // 通常の関数呼び出し
     std::vector<MirOperandPtr> args;
 
+    // Bug#10修正: ptr->method()後の書き戻し情報
+    // deref_tempへの変更を*ptrに書き戻すために記録
+    struct PtrWriteback {
+        LocalId deref_temp;
+        LocalId ptr_var;
+    };
+    std::optional<PtrWriteback> pending_writeback;
+
     // メソッド呼び出しかどうかを判定
     // 関数名が "TypeName__MethodName" の形式の場合
     bool is_method_call = false;
@@ -2525,6 +2575,70 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
             // 引数が構造体型の場合、アドレスを取得
             if (arg_type && arg_type->kind == hir::TypeKind::Struct) {
+                // Bug#10修正: ptr->method() パターン検出
+                // パーサーが -> を Deref(ptr) に変換するため、
+                // self引数が HirUnary(Deref, HirVarRef(ptr)) の形式になる。
+                // Deref結果への参照を作成して渡す（通常のs.method()と同じRef方式）。
+                if (auto unary_ptr = std::get_if<std::unique_ptr<hir::HirUnary>>(&arg->kind)) {
+                    const auto& unary = **unary_ptr;
+                    if (unary.op == hir::HirUnaryOp::Deref && unary.operand) {
+                        // Derefのオペランドが変数参照かチェック
+                        if (auto inner_var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(
+                                &unary.operand->kind)) {
+                            const auto& var_ref = **inner_var_ref;
+                            auto ptr_var_opt = ctx.resolve_variable(var_ref.name);
+                            if (ptr_var_opt) {
+                                // ポインタをDerefして構造体コピーを取得
+                                LocalId ptr_var = *ptr_var_opt;
+                                LocalId deref_temp = ctx.new_temp(arg_type);
+                                MirPlace deref_place{ptr_var};
+                                deref_place.projections.push_back(PlaceProjection::deref());
+                                ctx.push_statement(MirStatement::assign(
+                                    MirPlace{deref_temp},
+                                    MirRvalue::use(MirOperand::copy(deref_place))));
+                                // 構造体コピーへの参照を作成
+                                LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                                ctx.push_statement(MirStatement::assign(
+                                    MirPlace{ref_temp},
+                                    MirRvalue::ref(MirPlace{deref_temp}, false)));
+                                args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                                // 書き戻し情報を記録
+                                pending_writeback = PtrWriteback{deref_temp, ptr_var};
+                                debug_msg("mir_call",
+                                          "[MIR] Bug#10: ptr->method() self: deref+ref "
+                                          "local " +
+                                              std::to_string(ptr_var) + " via deref_temp " +
+                                              std::to_string(deref_temp) + " for " +
+                                              call.func_name);
+                                continue;
+                            }
+                        }
+                        // Derefのオペランドが変数参照でない場合（式の場合）
+                        // 式を評価してDeref結果を取得し、参照を渡す
+                        if (unary.operand->type &&
+                            unary.operand->type->kind == hir::TypeKind::Pointer) {
+                            LocalId ptr_local = lower_expression(*unary.operand, ctx);
+                            LocalId deref_temp = ctx.new_temp(arg_type);
+                            MirPlace deref_place{ptr_local};
+                            deref_place.projections.push_back(PlaceProjection::deref());
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{deref_temp},
+                                MirRvalue::use(MirOperand::copy(deref_place))));
+                            LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{ref_temp}, MirRvalue::ref(MirPlace{deref_temp}, false)));
+                            args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                            // 書き戻し情報を記録
+                            pending_writeback = PtrWriteback{deref_temp, ptr_local};
+                            debug_msg("mir_call",
+                                      "[MIR] Bug#10: ptr->method() self: passing evaluated "
+                                      "deref+ref for " +
+                                          call.func_name);
+                            continue;
+                        }
+                    }
+                }
+
                 // 引数がHirVarRefかどうかチェック
                 if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
                     const auto& var_ref = **var_ref_ptr;
@@ -2684,6 +2798,20 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     // 次のブロックへ移動
     ctx.switch_to_block(success_block);
+
+    // Bug#10修正: ptr->method()後の書き戻し
+    // メソッドがderef_temp(コピー)を変更した場合、*ptrに書き戻す
+    if (pending_writeback) {
+        MirPlace deref_place{pending_writeback->ptr_var};
+        deref_place.projections.push_back(PlaceProjection::deref());
+        ctx.push_statement(MirStatement::assign(
+            deref_place,
+            MirRvalue::use(MirOperand::copy(MirPlace{pending_writeback->deref_temp}))));
+        debug_msg("mir_call", "[MIR] Bug#10: writeback deref_temp " +
+                                  std::to_string(pending_writeback->deref_temp) +
+                                  " -> *ptr local " + std::to_string(pending_writeback->ptr_var) +
+                                  " for " + call.func_name);
+    }
 
     return result;
 }

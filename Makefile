@@ -138,7 +138,7 @@ help:
 	@echo "  make ta  - test-all"
 	@echo "  make tao - test-all-opts (全最適化レベルテスト)"
 	@echo "  make tl  - test-llvm"
-	@echo "  make tlw - test-llvm-wasm"
+	@echo "  make tw  - test-llvm-wasm"
 	@echo "  make tla - test-llvm-all"
 	@echo "  make tj  - test-js"
 	@echo "  make tjp - test-js-parallel"
@@ -146,12 +146,12 @@ help:
 	@echo "  make tjitp - test-jit-parallel"
 	@echo "  make ti0/ti1/ti2/ti3 - インタプリタ O0-O3（シリアル）"
 	@echo "  make tl0/tl1/tl2/tl3 - LLVM O0-O3（シリアル）"
-	@echo "  make tlw0/tlw1/tlw2/tlw3 - WASM O0-O3（シリアル）"
+	@echo "  make tw0/tw1/tw2/tw3 - WASM O0-O3（シリアル）"
 	@echo "  make tj0/tj1/tj2/tj3 - JS O0-O3（シリアル）"
 	@echo "  make tjit0/tjit1/tjit2/tjit3 - JIT O0-O3（シリアル）"
 	@echo "  make tip0/tip1/tip2/tip3 - インタプリタ O0-O3（パラレル）"
 	@echo "  make tlp0/tlp1/tlp2/tlp3 - LLVM O0-O3（パラレル）"
-	@echo "  make tlwp0/tlwp1/tlwp2/tlwp3 - WASM O0-O3（パラレル）"
+	@echo "  make twp0/twp1/twp2/twp3 - WASM O0-O3（パラレル）"
 	@echo "  make tjp0/tjp1/tjp2/tjp3 - JS O0-O3（パラレル）"
 	@echo "  make tjitp0/tjitp1/tjitp2/tjitp3 - JIT O0-O3（パラレル）"
 
@@ -634,7 +634,7 @@ endef
 $(eval $(call SHORTCUT_TEMPLATE,ti,interpreter))
 $(eval $(call SHORTCUT_TEMPLATE,tjit,jit))
 $(eval $(call SHORTCUT_TEMPLATE,tl,llvm))
-$(eval $(call SHORTCUT_TEMPLATE,tlw,llvm-wasm))
+$(eval $(call SHORTCUT_TEMPLATE,tw,llvm-wasm))
 $(eval $(call SHORTCUT_TEMPLATE,tj,js))
 
 # LLVM集約ショートカット

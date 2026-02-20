@@ -1,0 +1,49 @@
+//! platform: uefi
+// Bug#14回帰テスト: 多数のexport関数があってもコンパイルがハングしないこと
+// 以前は6以上のexport関数でコンパイラがハング/OOM killされていた
+// 修正: シンボル解決・リンクフェーズの計算量改善
+
+export ulong func_a(ulong x) {
+    return x + 1;
+}
+
+export ulong func_b(ulong x) {
+    return x + 2;
+}
+
+export ulong func_c(ulong x) {
+    return x + 3;
+}
+
+export ulong func_d(ulong x) {
+    return x + 4;
+}
+
+export ulong func_e(ulong x) {
+    return x + 5;
+}
+
+export ulong func_f(ulong x) {
+    return x + 6;
+}
+
+export ulong func_g(ulong x) {
+    return x + 7;
+}
+
+export ulong func_h(ulong x) {
+    return x + 8;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    ulong result = 0;
+    result = result + func_a(result);
+    result = result + func_b(result);
+    result = result + func_c(result);
+    result = result + func_d(result);
+    result = result + func_e(result);
+    result = result + func_f(result);
+    result = result + func_g(result);
+    result = result + func_h(result);
+    return result;
+}

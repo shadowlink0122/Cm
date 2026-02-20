@@ -1,0 +1,85 @@
+// ネスト構造体・配列リテラル代入の網羅テスト
+import std::io::println;
+
+// --- 構造体定義 ---
+struct Vec2 {
+    int x;
+    int y;
+}
+
+struct Color {
+    int r;
+    int g;
+    int b;
+}
+
+struct Rect {
+    Vec2 pos;
+    Vec2 size;
+}
+
+struct Container {
+    int[3] values;
+    int count;
+}
+
+struct Matrix {
+    int[2] row0;
+    int[2] row1;
+}
+
+int main() {
+    // === T1: ネスト2段の構造体リテラル初期化 ===
+    Rect r = {pos: {x: 10, y: 20}, size: {x: 100, y: 200}};
+    println("T1: ({r.pos.x},{r.pos.y}) ({r.size.x},{r.size.y})");
+
+    // === T2: ネスト構造体フィールドへの再代入 ===
+    r.pos = {x: 999, y: 888};
+    println("T2: ({r.pos.x},{r.pos.y})");
+
+    // === T3: 構造体全体の再代入（ネスト2段） ===
+    r = {pos: {x: 1, y: 2}, size: {x: 3, y: 4}};
+    println("T3: ({r.pos.x},{r.pos.y}) ({r.size.x},{r.size.y})");
+
+    // === T4: 配列フィールドを含む構造体の初期化 ===
+    Container c = {values: [10, 20, 30], count: 3};
+    println("T4: [{c.values[0]},{c.values[1]},{c.values[2]}] count={c.count}");
+
+    // === T5: 配列フィールドの再代入 ===
+    c.values = [100, 200, 300];
+    println("T5: [{c.values[0]},{c.values[1]},{c.values[2]}]");
+
+    // === T6: 構造体の配列の初期化 ===
+    Vec2[3] points = [{x: 1, y: 2}, {x: 3, y: 4}, {x: 5, y: 6}];
+    println("T6: ({points[0].x},{points[0].y}) ({points[1].x},{points[1].y}) ({points[2].x},{points[2].y})");
+
+    // === T7: 構造体の配列の全体再代入（Bug#14で修正） ===
+    points = [{x: 10, y: 20}, {x: 30, y: 40}, {x: 50, y: 60}];
+    println("T7: ({points[0].x},{points[0].y}) ({points[1].x},{points[1].y}) ({points[2].x},{points[2].y})");
+
+    // === T8: ネスト構造体の配列の初期化 ===
+    Rect[2] rects = [{pos: {x: 0, y: 0}, size: {x: 10, y: 10}}, {pos: {x: 20, y: 20}, size: {x: 30, y: 30}}];
+    println("T8: r0=({rects[0].pos.x},{rects[0].pos.y},{rects[0].size.x},{rects[0].size.y}) r1=({rects[1].pos.x},{rects[1].pos.y},{rects[1].size.x},{rects[1].size.y})");
+
+    // === T9: ネスト構造体の配列の全体再代入 ===
+    rects = [{pos: {x: 100, y: 200}, size: {x: 300, y: 400}}, {pos: {x: 500, y: 600}, size: {x: 700, y: 800}}];
+    println("T9: r0=({rects[0].pos.x},{rects[0].pos.y},{rects[0].size.x},{rects[0].size.y}) r1=({rects[1].pos.x},{rects[1].pos.y},{rects[1].size.x},{rects[1].size.y})");
+
+    // === T10: 2D配列的な構造体の初期化と再代入 ===
+    Matrix m = {row0: [1, 2], row1: [3, 4]};
+    println("T10a: [{m.row0[0]},{m.row0[1]}] [{m.row1[0]},{m.row1[1]}]");
+    m = {row0: [10, 20], row1: [30, 40]};
+    println("T10b: [{m.row0[0]},{m.row0[1]}] [{m.row1[0]},{m.row1[1]}]");
+
+    // === T11: 3フィールド構造体の配列の再代入 ===
+    Color[2] colors = [{r: 255, g: 0, b: 0}, {r: 0, g: 255, b: 0}];
+    colors = [{r: 0, g: 0, b: 255}, {r: 128, g: 128, b: 128}];
+    println("T11: ({colors[0].r},{colors[0].g},{colors[0].b}) ({colors[1].r},{colors[1].g},{colors[1].b})");
+
+    // === T12: プリミティブ配列の再代入（リグレッション確認） ===
+    int[3] arr = [1, 2, 3];
+    arr = [10, 20, 30];
+    println("T12: [{arr[0]},{arr[1]},{arr[2]}]");
+
+    return 0;
+}

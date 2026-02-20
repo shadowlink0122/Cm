@@ -1,0 +1,31 @@
+//! platform: uefi
+// テスト: static メソッドから static メソッドへの typedef 引数渡し
+
+typedef MemAddr = ulong;
+
+struct Result {
+    ulong is_err;
+    ulong value;
+}
+
+impl Result {
+    static Result ok(ulong value) {
+        return {is_err: 0, value: value};
+    }
+
+    static Result err() {
+        return {is_err: 1, value: 0};
+    }
+
+    static Result from_alloc(MemAddr addr) {
+        if (addr == 0) {
+            return Result::err();
+        }
+        return Result::ok(addr);
+    }
+}
+
+export void efi_main() {
+    MemAddr addr = 42;
+    Result r = Result::from_alloc(addr);
+}

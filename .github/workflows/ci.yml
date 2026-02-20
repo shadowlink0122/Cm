@@ -241,8 +241,8 @@ jobs:
           - { id: jit-o3,  name: "JIT実行 O3",            target: tjitp3, backend: jit,       needs_node: false }
           - { id: llvm-o0, name: "LLVMネイティブ実行 O0",  target: tlp0,   backend: llvm,      needs_node: false }
           - { id: llvm-o3, name: "LLVMネイティブ実行 O3",  target: tlp3,   backend: llvm,      needs_node: false }
-          - { id: wasm-o0, name: "WASMコンパイル+実行 O0", target: tlwp0,  backend: llvm-wasm, needs_node: false }
-          - { id: wasm-o3, name: "WASMコンパイル+実行 O3", target: tlwp3,  backend: llvm-wasm, needs_node: false }
+          - { id: wasm-o0, name: "WASMコンパイル+実行 O0", target: twp0,  backend: llvm-wasm, needs_node: false }
+          - { id: wasm-o3, name: "WASMコンパイル+実行 O3", target: twp3,  backend: llvm-wasm, needs_node: false }
           - { id: js-o0,   name: "JSコード生成+実行 O0",  target: tjp0,   backend: js,        needs_node: true  }
           - { id: js-o3,   name: "JSコード生成+実行 O3",  target: tjp3,   backend: js,        needs_node: true  }
     runs-on: ${{ matrix.os }}

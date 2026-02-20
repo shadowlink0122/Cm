@@ -38,6 +38,32 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
         }
     }
 
+    // Bug#5修正: ASM出力変数を事前にOverdefined化
+    // インラインアセンブリの出力変数は実行時に決定されるため、定数として扱えない。
+    // ループ前の初期代入（例: byte_val = 0）により定数推論されると、
+    // compute_successorsがループ本体への到達を遮断し、ASM出力のOverdefined化が
+    // 反復解析で反映されない。事前マーキングで安全に回避する。
+    for (const auto& block : func.basic_blocks) {
+        if (!block)
+            continue;
+        for (const auto& stmt : block->statements) {
+            if (!stmt || stmt->kind != MirStatement::Asm)
+                continue;
+            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
+            for (const auto& operand : asm_data.operands) {
+                if (!operand.constraint.empty() &&
+                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
+                    if (operand.local_id < local_count) {
+                        for (size_t b = 0; b < block_count; ++b) {
+                            in_states[b][operand.local_id] = {LatticeKind::Overdefined, {}};
+                            out_states[b][operand.local_id] = {LatticeKind::Overdefined, {}};
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     analyze(func, in_states, out_states, reachable);
 
     bool changed = false;
@@ -494,7 +520,38 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
     if (local >= func.locals.size()) {
         return false;
     }
-    return same_type(func.locals[local].type, constant.type);
+    const auto& local_type = func.locals[local].type;
+    const auto& const_type = constant.type;
+    if (same_type(local_type, const_type)) {
+        return true;
+    }
+    // Bug#8修正: 整数型同士の場合は型が異なっても定数バインドを許可
+    // const ulong同士の加算結果がint型変数に代入される場合等に
+    // 定数畳み込みが効かない問題を解消する
+    auto is_integer_type = [](const hir::TypePtr& t) -> bool {
+        if (!t)
+            return false;
+        switch (t->kind) {
+            case hir::TypeKind::Int:
+            case hir::TypeKind::Long:
+            case hir::TypeKind::Short:
+            case hir::TypeKind::Tiny:
+            case hir::TypeKind::Char:
+            case hir::TypeKind::UTiny:
+            case hir::TypeKind::UShort:
+            case hir::TypeKind::UInt:
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::ISize:
+            case hir::TypeKind::USize:
+                return true;
+            default:
+                return false;
+        }
+    };
+    if (is_integer_type(local_type) && is_integer_type(const_type)) {
+        return true;
+    }
+    return false;
 }
 
 std::optional<MirConstant> SparseConditionalConstantPropagation::eval_binary_op(
@@ -844,8 +901,23 @@ bool SparseConditionalConstantPropagation::rewrite_operand(const MirFunction& fu
     if (!operand.type && place->local < func.locals.size()) {
         operand.type = func.locals[place->local].type;
     }
+
+    // 定数の型がローカル変数の型と異なる場合、定数の型を更新
+    // Bug#8修正でcan_bind_constantが整数型間の定数バインドを許可したため、
+    // int定数がlong型ローカルに伝播される場合がある。
+    // その際、定数の型もlongに更新しないと、
+    // union cast（例: long as IntOrLong）で不正なタグ値が設定される問題がある。
+    MirConstant adjusted_constant = value.constant;
+    if (place->local < func.locals.size()) {
+        const auto& local_type = func.locals[place->local].type;
+        if (local_type && adjusted_constant.type &&
+            !same_type(local_type, adjusted_constant.type)) {
+            adjusted_constant.type = local_type;
+        }
+    }
+
     operand.kind = MirOperand::Constant;
-    operand.data = value.constant;
+    operand.data = adjusted_constant;
     return true;
 }
 

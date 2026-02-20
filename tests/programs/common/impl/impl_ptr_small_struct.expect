@@ -1,0 +1,8 @@
+local a: 42
+local b: 99
+ptr a: 42
+ptr b: 99
+after set a: 777
+after set b: 888
+s.a: 777
+s.b: 888

@@ -1,0 +1,49 @@
+//! platform: uefi
+// Bug#13回帰テスト: implメソッド/コンストラクタがefi_mainでインライン展開されない
+// インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)が上書きされ、
+// UEFIデータ構造が破壊されて#UD例外が発生していた
+// 修正: 全UEFI関数にNoInline属性を付与
+
+struct SerialPort {
+    ulong port;
+}
+
+impl SerialPort {
+    void putc(ulong ch) {
+        // selfとchを使用するメソッド
+        ulong p = self.port;
+    }
+
+    ulong get_port() {
+        return self.port;
+    }
+}
+
+struct Counter {
+    int value;
+}
+
+impl Counter {
+    void increment() {
+        self.value = self.value + 1;
+    }
+
+    int get_value() {
+        return self.value;
+    }
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    // implコンストラクタ + メソッド呼び出し
+    // 修正前: インライン展開でrcx/rdxが上書きされ#UD発生
+    SerialPort serial;
+    serial.port = 0x3F8;
+    serial.putc(0x48);
+
+    // ローカル変数のimplメソッド
+    Counter c;
+    c.value = 0;
+    c.increment();
+
+    return 0;
+}

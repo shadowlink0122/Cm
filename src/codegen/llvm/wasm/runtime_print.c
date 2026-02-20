@@ -88,6 +88,55 @@ void cm_println_uint(unsigned int value) {
 }
 
 // ============================================================
+// 64-bit Integer Output (long / ulong)
+// ============================================================
+// wasm_int64_to_str はruntime_format.c内で定義されている（staticなので再宣言）
+static void wasm_ulong_to_str(unsigned long long value, char* buffer, size_t* len) {
+    char temp[32];
+    int i = 0;
+    do {
+        temp[i++] = '0' + (value % 10);
+        value /= 10;
+    } while (value > 0);
+
+    int j = 0;
+    while (i > 0) {
+        buffer[j++] = temp[--i];
+    }
+    *len = j;
+}
+
+void cm_print_long(long long value) {
+    char buffer[32];
+    size_t len;
+    wasm_int64_to_str(value, buffer, &len);
+    wasm_write_stdout(buffer, len);
+}
+
+void cm_println_long(long long value) {
+    char buffer[32];
+    size_t len;
+    wasm_int64_to_str(value, buffer, &len);
+    wasm_write_stdout(buffer, len);
+    wasm_write_stdout("\n", 1);
+}
+
+void cm_print_ulong(unsigned long long value) {
+    char buffer[32];
+    size_t len;
+    wasm_ulong_to_str(value, buffer, &len);
+    wasm_write_stdout(buffer, len);
+}
+
+void cm_println_ulong(unsigned long long value) {
+    char buffer[32];
+    size_t len;
+    wasm_ulong_to_str(value, buffer, &len);
+    wasm_write_stdout(buffer, len);
+    wasm_write_stdout("\n", 1);
+}
+
+// ============================================================
 // Floating Point Output (simplified)
 // ============================================================
 void cm_print_double(double value) {

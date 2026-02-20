@@ -171,11 +171,15 @@ struct Token {
     uint32_t start;  // 開始位置
     uint32_t end;    // 終了位置
     TokenValue value;
+    bool is_unsigned = false;  // hex/binary/octalリテラルで32bit超の場合true
 
     Token(TokenKind k, uint32_t s, uint32_t e)
         : kind(k), start(s), end(e), value(std::monostate{}) {}
 
     Token(TokenKind k, uint32_t s, uint32_t e, int64_t v) : kind(k), start(s), end(e), value(v) {}
+
+    Token(TokenKind k, uint32_t s, uint32_t e, int64_t v, bool unsigned_flag)
+        : kind(k), start(s), end(e), value(v), is_unsigned(unsigned_flag) {}
 
     Token(TokenKind k, uint32_t s, uint32_t e, double v) : kind(k), start(s), end(e), value(v) {}
 

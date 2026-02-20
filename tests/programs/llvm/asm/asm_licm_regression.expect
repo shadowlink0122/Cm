@@ -1,0 +1,6 @@
+=== LICM ASM Output Regression Test ===
+case1 counter: 3
+case2 steps: 5
+case2 inc_val: 50
+case3 iterations: 4
+=== All Tests Passed ===

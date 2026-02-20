@@ -991,7 +991,6 @@ run_tests_parallel() {
     
     for test_file in "${test_files[@]}"; do
         local test_name="$(basename "${test_file%.cm}")"
-        # programs/以下の相対パスをカテゴリとして使用（例: common/thread）
         local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
         local result_file="$results_dir/${category//\//_}_${test_name}.result"
         
@@ -1004,11 +1003,26 @@ run_tests_parallel() {
         CHILD_PIDS+=($!)
         ((job_count++))
         
-        # 最大ジョブ数に達したら待機
+        # 最大ジョブ数に達したら、完了済みPIDを回収して空きスロットを作る
         if [ $job_count -ge $max_jobs ]; then
-            wait "${pids[0]}"
-            pids=("${pids[@]:1}")
-            ((job_count--))
+            # 完了済みPIDを全て回収
+            local new_pids=()
+            for pid in "${pids[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    new_pids+=("$pid")
+                else
+                    wait "$pid" 2>/dev/null
+                    ((job_count--))
+                fi
+            done
+            pids=("${new_pids[@]}")
+            
+            # まだスロットが空いていなければ、最古のPIDを待機
+            if [ $job_count -ge $max_jobs ]; then
+                wait "${pids[0]}"
+                pids=("${pids[@]:1}")
+                ((job_count--))
+            fi
         fi
     done
     

@@ -1,0 +1,4 @@
+get: 5
+after set: 42
+after double: 84
+w.value: 84

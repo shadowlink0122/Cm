@@ -33,10 +33,15 @@ void JSCodeGen::emitFunction(const mir::MirFunction& func, const mir::MirProgram
                 if (data.rvalue->kind == mir::MirRvalue::Ref) {
                     const auto& refData = std::get<mir::MirRvalue::RefData>(data.rvalue->data);
                     mir::LocalId localId = refData.place.local;
-                    // 構造体型・配列型はJSオブジェクト（参照型）なのでボクシング不要
+                    // 構造体型・配列型・ポインタ-to-構造体型はJSオブジェクト（参照型）なのでボクシング不要
+                    // ※monomorphizationでself引数がPointer型に変換されるケースに対応
                     if (localId < func.locals.size() && func.locals[localId].type &&
                         (func.locals[localId].type->kind == ast::TypeKind::Struct ||
-                         func.locals[localId].type->kind == ast::TypeKind::Array)) {
+                         func.locals[localId].type->kind == ast::TypeKind::Array ||
+                         (func.locals[localId].type->kind == ast::TypeKind::Pointer &&
+                          func.locals[localId].type->element_type &&
+                          func.locals[localId].type->element_type->kind ==
+                              ast::TypeKind::Struct))) {
                         continue;
                     }
                     boxed_locals_.insert(localId);
@@ -70,6 +75,90 @@ void JSCodeGen::emitFunction(const mir::MirFunction& func, const mir::MirProgram
     emitter_.decreaseIndent();
     emitter_.emitLine("}");
     emitter_.emitLine();
+}
+
+// implメソッドのself引数ソースを事前分析
+// パターン: _tempN = Use(Copy(original_struct)) → Call(StructType__method, [Copy(_tempN), ...])
+// このパターンで_tempNがimplメソッドのself引数としてのみ使われる場合、
+// _tempNへの代入時に__cm_cloneをスキップして参照渡しにする
+void JSCodeGen::collectImplSelfSources(const mir::MirFunction& func) {
+    impl_self_sources_.clear();
+
+    // ステップ1: Call terminator → 第1引数がCopyの構造体ローカルを収集
+    std::unordered_set<mir::LocalId> self_arg_locals;
+    for (const auto& block : func.basic_blocks) {
+        if (!block)
+            continue;
+        if (!block->terminator)
+            continue;
+        if (block->terminator->kind != mir::MirTerminator::Call)
+            continue;
+
+        const auto& data = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+
+        // implメソッドかチェック（関数名に__を含む）
+        std::string funcName;
+        if (data.func->kind == mir::MirOperand::FunctionRef) {
+            funcName = std::get<std::string>(data.func->data);
+        }
+        if (funcName.find("__") == std::string::npos)
+            continue;
+
+        // 第1引数（self）のローカルIDを取得
+        if (data.args.empty() || !data.args[0])
+            continue;
+        if (data.args[0]->kind != mir::MirOperand::Copy &&
+            data.args[0]->kind != mir::MirOperand::Move)
+            continue;
+
+        const auto& place = std::get<mir::MirPlace>(data.args[0]->data);
+        if (!place.projections.empty())
+            continue;
+
+        mir::LocalId selfLocal = place.local;
+        if (selfLocal >= func.locals.size())
+            continue;
+
+        // 引数自体は除外（引数はクローン対象外なので不要）
+        bool isArg = std::find(func.arg_locals.begin(), func.arg_locals.end(), selfLocal) !=
+                     func.arg_locals.end();
+        if (isArg)
+            continue;
+
+        // 構造体型かチェック
+        const auto& local = func.locals[selfLocal];
+        if (!local.type || local.type->kind != ast::TypeKind::Struct)
+            continue;
+
+        self_arg_locals.insert(selfLocal);
+    }
+
+    // ステップ2: self_arg_localsのソース変数を追跡
+    // _tempN = Use(Copy(source)) の source をimpl_self_sources_に追加
+    for (const auto& block : func.basic_blocks) {
+        if (!block)
+            continue;
+        for (const auto& stmt : block->statements) {
+            if (!stmt || stmt->kind != mir::MirStatement::Assign)
+                continue;
+            const auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
+
+            // ターゲットがself_arg_localsに含まれるか
+            if (assign.place.projections.empty() && self_arg_locals.count(assign.place.local) > 0) {
+                // Rvalueが Use(Copy(source)) の場合、sourceをno-cloneに
+                if (assign.rvalue->kind == mir::MirRvalue::Use) {
+                    const auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                    if (useData.operand->kind == mir::MirOperand::Copy) {
+                        const auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
+                        if (srcPlace.projections.empty()) {
+                            // ソースローカルもself引数ローカルもno-cloneにマーク
+                            impl_self_sources_.insert(assign.place.local);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 void JSCodeGen::emitFunctionSignature(const mir::MirFunction& func) {
@@ -131,6 +220,7 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
     ControlFlowAnalyzer cfAnalyzer(func);
 
     collectDeclareOnAssign(func);
+    collectImplSelfSources(func);
 
     if (tryEmitObjectLiteralReturn(func)) {
         return;

@@ -233,10 +233,10 @@ GitHub Actionsで全バックエンドの自動テストを実行しています
 
 ### テスト内容
 - **単体テスト**: GoogleTestによるC++単体テスト（Lexer, HIR, MIR, 最適化）
-- **JIT テスト**: 347個のCmプログラムをJIT実行（343 PASS / 0 FAIL）
-- **LLVM Native テスト**: ネイティブバイナリにコンパイル・実行（343 PASS / 0 FAIL）
-- **LLVM WASM テスト**: WASMにコンパイル・Wasmtimeで実行（338 PASS / 0 FAIL）
-- **JS テスト**: JavaScriptにコンパイル・Node.jsで実行（298 PASS / 0 FAIL）
+- **JIT テスト**: 347個のCmプログラムをJIT実行（347 PASS / 0 FAIL）
+- **LLVM Native テスト**: ネイティブバイナリにコンパイル・実行（380 PASS / 0 FAIL）
+- **LLVM WASM テスト**: WASMにコンパイル・Wasmtimeで実行（346 PASS / 0 FAIL）
+- **JS テスト**: JavaScriptにコンパイル・Node.jsで実行（306 PASS / 0 FAIL）
 
 ### ローカルテスト実行
 
@@ -247,7 +247,7 @@ make test
 # バックエンド別（並列実行）
 make tip    # JITテスト（= test-jit-parallel）
 make tlp    # LLVMネイティブテスト
-make tlwp   # LLVM WASMテスト
+make twp   # LLVM WASMテスト
 make tjp    # JSテスト
 
 # 最適化レベル指定
@@ -289,4 +289,4 @@ make tjitp3   # JIT O3 parallel
 
 © 2025-2026 Cm言語プロジェクト
 
-**最終更新:** 2026-02-15
+**最終更新:** 2026-02-21

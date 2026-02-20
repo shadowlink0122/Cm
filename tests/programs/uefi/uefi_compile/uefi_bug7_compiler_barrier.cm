@@ -1,0 +1,54 @@
+//! platform: uefi
+// Bug#7修正テスト: mustブロック内のASMにコンパイラバリアが挿入されること
+//
+// 修正内容:
+// - is_must=true のASMの前後に空volatile ASM（memory clobber）を挿入
+// - LLVMがmustブロック内ASMを到達不能と判断してループ脱出するのを防止
+// - CreateFence(SequentiallyConsistent)はUEFIベアメタルでGPFを引き起こすため不採用
+
+// テスト1: must内のhltループ（制御フロー最適化の防止）
+export void halt_loop() {
+    while (true) {
+        must { __asm__("hlt"); }
+    }
+}
+
+// テスト2: mustなしのhltループ（バリアが挿入されないこと）
+export void halt_loop_no_must() {
+    while (true) {
+        __asm__("hlt");
+    }
+}
+
+// テスト3: must内のASM出力変数
+export ulong must_asm_output() {
+    ulong result = 0;
+    must {
+        __asm__("movq $$42, ${=r:result}");
+    }
+    return result;
+}
+
+// テスト4: mustとmust以外のASMが混在
+export ulong mixed_must_asm() {
+    ulong a = 0;
+    __asm__("movq $$10, ${=r:a}");
+
+    ulong b = 0;
+    must {
+        __asm__("movq $$20, ${=r:b}");
+    }
+
+    return a + b;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    ulong val = must_asm_output();
+    ulong mixed = mixed_must_asm();
+
+    halt_loop();
+    return val + mixed;
+}

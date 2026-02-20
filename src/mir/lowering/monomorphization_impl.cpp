@@ -2342,6 +2342,9 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
         // まず、全ブロックのCopy代入をスキャンしてコピー元マップを構築
         // copy_sources[dest_local] = source_local
         std::unordered_map<LocalId, LocalId> copy_sources;
+        // Bug#10修正: Deref経由のコピー元マップ
+        // deref_sources[dest_local] = ptr_local （_tmp = Use(Copy(Deref(ptr)))）
+        std::unordered_map<LocalId, LocalId> deref_sources;
 
         for (auto& block : func->basic_blocks) {
             if (!block)
@@ -2363,6 +2366,12 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
                 if (assign_data.place.projections.empty() && source_place.projections.empty()) {
                     // 単純なlocal-to-localコピー
                     copy_sources[assign_data.place.local] = source_place.local;
+                } else if (assign_data.place.projections.empty() &&
+                           source_place.projections.size() == 1 &&
+                           source_place.projections[0].kind == ProjectionKind::Deref) {
+                    // Bug#10: _tmp = Use(Copy(Deref(ptr))) パターン
+                    // ポインタ経由のimplメソッド呼出し（ptr->method()）で発生
+                    deref_sources[assign_data.place.local] = source_place.local;
                 }
             }
         }
@@ -2410,6 +2419,66 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
                 chain_depth++;
             }
 
+            // Bug#10修正: コピーチェーン末端がderef_sourcesにある場合
+            // ptr->method() パターン: original_localはDeref(ptr)で作られた一時変数
+            // Derefコピー先(original_local)への参照を作成して渡す
+            // メソッド呼び出し後にoriginal_localの内容をptr先に書き戻す
+            if (deref_sources.count(original_local) > 0) {
+                LocalId ptr_local = deref_sources[original_local];
+                if (ptr_local < func->locals.size()) {
+                    auto& ptr_type = func->locals[ptr_local].type;
+                    if (ptr_type && ptr_type->kind == hir::TypeKind::Pointer &&
+                        ptr_type->element_type &&
+                        (ptr_type->element_type->name == type_name ||
+                         ptr_type->element_type->name.find(type_name + "__") == 0)) {
+                        // original_local（Derefで作られた構造体コピー）への参照を作成
+                        auto& deref_local_type = func->locals[original_local].type;
+                        if (deref_local_type) {
+                            LocalId ref_id = static_cast<LocalId>(func->locals.size());
+                            std::string ref_name = "_self_ref_" + std::to_string(ref_id);
+                            auto ref_type = hir::make_pointer(deref_local_type);
+                            func->locals.emplace_back(ref_id, ref_name, ref_type, false, false);
+
+                            // Derefコピー先への参照を作成
+                            auto ref_stmt = MirStatement::assign(
+                                MirPlace{ref_id}, MirRvalue::ref(MirPlace{original_local}, false));
+                            block->statements.push_back(std::move(ref_stmt));
+
+                            // 呼び出しの第1引数を参照に変更
+                            call_data.args[0] = MirOperand::copy(MirPlace{ref_id});
+
+                            // メソッド呼び出し後にoriginal_localの内容をptr先に書き戻す
+                            // success blockにStore(Deref(ptr), Copy(original_local))を追加
+                            if (call_data.success != mir::INVALID_BLOCK) {
+                                for (auto& succ_block : func->basic_blocks) {
+                                    if (succ_block && succ_block->id == call_data.success) {
+                                        // Deref(ptr)への代入: *ptr = original_local
+                                        MirPlace deref_place{ptr_local};
+                                        deref_place.projections.push_back(PlaceProjection::deref());
+                                        auto writeback_stmt = MirStatement::assign(
+                                            deref_place, MirRvalue::use(MirOperand::copy(
+                                                             MirPlace{original_local})));
+                                        // 成功ブロックの先頭に挿入
+                                        succ_block->statements.insert(
+                                            succ_block->statements.begin(),
+                                            std::move(writeback_stmt));
+                                        break;
+                                    }
+                                }
+                            }
+
+                            debug_msg("MONO", "Bug#10: ptr->method() fixed for " + func_name_ref +
+                                                  " in " + func->name + " (deref_source: local " +
+                                                  std::to_string(original_local) +
+                                                  " -> ref local " + std::to_string(ref_id) +
+                                                  ", writeback to ptr local " +
+                                                  std::to_string(ptr_local) + ")");
+                        }
+                        continue;
+                    }
+                }
+            }
+
             if (original_local >= func->locals.size())
                 continue;
 
@@ -2417,9 +2486,16 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
             if (!local_type)
                 continue;
 
-            // 既にポインタ型ならスキップ
-            if (local_type->kind == hir::TypeKind::Pointer)
+            // Bug#10修正: ネスト呼出しでselfが既にポインタ型の場合
+            // Ref経由で作られたポインタ（expr_call.cppのDeref+Ref処理）は
+            // 正しく構築済みなのでそのまま維持する。
+            // 元のポインタ変数（Pointer型ローカル）が直接渡された場合のみ
+            // 引数を維持してスキップする。
+            if (local_type->kind == hir::TypeKind::Pointer) {
+                // Ref経由のポインタ、または既にptr->method修正済みの場合は変更不要
+                // そのままスキップ（引数を変更しない）
                 continue;
+            }
 
             // 構造体型であれば参照を取る
             if (local_type->kind == hir::TypeKind::Struct ||
