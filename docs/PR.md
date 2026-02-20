@@ -365,7 +365,7 @@ UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行�
 | `tests/programs/uefi/uefi_compile/*` | UEFIコンパイルテスト多数追加（Bug#1-17回帰テスト含む） |
 | `tests/programs/baremetal/allowed/*` | ベアメタルテスト3件追加（enum/配列/ポインタ） |
 | `tests/programs/common/types/ptr_to_int_cast.*` | ポインタ→整数キャストテスト追加 |
-| `tests/programs/common/types/typedef_arithmetic.*` | typedef算術演算テスト追加 |
+| `tests/programs/common/types/typedef_compound_assign.*` | typedef算術演算テスト追加 |
 
 ### サンプル
 
