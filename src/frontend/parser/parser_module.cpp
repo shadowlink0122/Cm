@@ -35,7 +35,28 @@ ast::DeclPtr Parser::parse_namespace() {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwNamespace);
 
-    std::string namespace_name = expect_ident();
+    // BUG修正(v0.14.2): namespace名に型キーワード（string, int等）も許可
+    // プリプロセッサがimportファイル名をnamespace名に使用するため、
+    // "string.cm" → "namespace string { ... }" が正しくパースできる必要がある
+    std::string namespace_name;
+    if (check(TokenKind::Ident)) {
+        namespace_name = expect_ident();
+    } else {
+        // 型キーワードをnamespace名として受け入れる
+        auto kind = current().kind;
+        if (kind == TokenKind::KwString || kind == TokenKind::KwInt || kind == TokenKind::KwUint ||
+            kind == TokenKind::KwLong || kind == TokenKind::KwUlong || kind == TokenKind::KwShort ||
+            kind == TokenKind::KwUshort || kind == TokenKind::KwTiny ||
+            kind == TokenKind::KwUtiny || kind == TokenKind::KwFloat ||
+            kind == TokenKind::KwDouble || kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
+            kind == TokenKind::KwVoid || kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
+            kind == TokenKind::KwCstring) {
+            namespace_name = std::string(current().get_string());
+            advance();
+        } else {
+            namespace_name = expect_ident();  // エラーメッセージ生成のフォールバック
+        }
+    }
 
     expect(TokenKind::LBrace);
 

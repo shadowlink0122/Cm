@@ -1,0 +1,41 @@
+// v0.14.2 BUG-2テスト: 型キーワードと同名のnamespace
+// "string" などの型キーワード名のnamespaceが正しくパースされることを確認
+
+import std::io::println;
+
+// namespace名に型キーワード "string" を使用
+// v0.14.2以前は KwString トークンが namespace名として認識されずパースエラー
+namespace string {
+    int length(int dummy) {
+        return 42;
+    }
+
+    int concat(int a, int b) {
+        return a + b;
+    }
+}
+
+// namespace名に型キーワード "int" を使用
+namespace int {
+    int double_val(int x) {
+        return x * 2;
+    }
+}
+
+int main() {
+    println("=== Type Keyword Namespace Test ===");
+
+    // string::関数呼び出し
+    int len = string::length(0);
+    println(len);
+
+    int cat = string::concat(10, 20);
+    println(cat);
+
+    // int::関数呼び出し
+    int doubled = int::double_val(5);
+    println(doubled);
+
+    println("=== Complete ===");
+    return 0;
+}

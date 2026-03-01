@@ -1065,6 +1065,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         locals.clear();
         blocks.clear();
         allocatedLocals.clear();
+        asmReferencedLocals.clear();
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
         // Bug#12修正: naked関数（ret/iret含むASM）の専用コード生成パス
@@ -1200,9 +1201,10 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             return;  // 通常のコード生成をスキップ
         }
 
-        // asm出力オペランドを持つ変数を事前スキャンしてallocatedLocalsに登録
+        // asm入出力オペランドを持つ変数を事前スキャンしてasmReferencedLocalsに登録
         // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
-        std::set<unsigned int> asmOutputLocals;
+        // BUG修正(v0.14.2): メンバ変数asmReferencedLocalsをクリアして再スキャン
+        asmReferencedLocals.clear();
         for (size_t bbIdx = 0; bbIdx < func.basic_blocks.size(); ++bbIdx) {
             const auto& bb = func.basic_blocks[bbIdx];
             // DCEで削除されたブロックはスキップ
@@ -1214,11 +1216,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 if (stmt->kind == mir::MirStatement::Asm) {
                     auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
                     for (const auto& operand : asmData.operands) {
-                        // 出力オペランド（=r, +r）を検出
-                        if (!operand.constraint.empty() &&
-                            (operand.constraint[0] == '=' || operand.constraint[0] == '+')) {
-                            asmOutputLocals.insert(operand.local_id);
-                        }
+                        // 全operand（入力/出力/tied）を登録
+                        asmReferencedLocals.insert(operand.local_id);
                     }
                 }
             }
@@ -1291,7 +1290,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     }
 
                     // asm出力オペランド変数はSSA形式ではなくalloca強制
-                    bool isAsmOutput = asmOutputLocals.count(static_cast<unsigned int>(i)) > 0;
+                    bool isAsmOutput = asmReferencedLocals.count(static_cast<unsigned int>(i)) > 0;
 
                     // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
                     // ただしasm出力変数は例外
@@ -2196,9 +2195,13 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                                       llvm::MaybeAlign(), payloadSize);
                             } else {
                                 // 通常のStore操作を実行
-                                // asm出力で変更される変数へのstoreはvolatileにして最適化を防止
+                                // BUG修正(v0.14.2): asm入出力で参照される変数のみvolatileにする
+                                // 以前は全allocated変数をvolatile化していたが、
+                                // キャスト中間変数等にも冗長なvolatile store/loadが生成され
+                                // コードサイズの爆発とbaremetal環境でのスタック圧迫を引き起こしていた
                                 auto* storeInst = builder->CreateStore(rvalue, addr);
-                                if (isAllocated) {
+                                if (isAllocated &&
+                                    asmReferencedLocals.count(assign.place.local) > 0) {
                                     storeInst->setVolatile(true);
                                 }
                             }
@@ -3957,10 +3960,10 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 }
 
                 // スカラー型の場合はロード
-                // asm出力で変更される可能性がある変数はvolatile loadで最適化を防止
+                // BUG修正(v0.14.2): asm入出力で参照される変数のみvolatile loadで最適化を防止
                 auto* loadInst = builder->CreateLoad(allocatedType, val, "load");
-                if (allocatedLocals.count(local) > 0) {
-                    // asm影響変数: volatile loadで最適化を抑制
+                if (allocatedLocals.count(local) > 0 && asmReferencedLocals.count(local) > 0) {
+                    // asm参照変数: volatile loadで最適化を抑制
                     if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
                         li->setVolatile(true);
                     }
