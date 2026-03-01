@@ -335,10 +335,29 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
 
             // バッククォート検出（行内で開始）
             if (!in_string && !in_char && !in_comment && c == '`') {
-                in_backtick = true;
-                backtick_base_depth = brace_depth + bracket_depth;
-                // バッククォート以降のブレースカウントは不要
-                break;
+                // 同一行内に閉じバッククォートがあるか先読み
+                // 例: __asm__(`sti`) → 1行完結なのでin_backtickにしない
+                bool found_close = false;
+                size_t close_pos = 0;
+                for (size_t j = i + 1; j < content.size(); ++j) {
+                    if (content[j] == '`') {
+                        found_close = true;
+                        close_pos = j;
+                        break;
+                    }
+                }
+
+                if (found_close) {
+                    // 1行バッククォート: バッククォート内をスキップし、
+                    // 閉じバッククォート以降のブレースカウントを継続
+                    i = close_pos;  // 閉じバッククォート位置までスキップ
+                    // ループのi++で次の文字に進む
+                } else {
+                    // 複数行バッククォート: 次の行以降に閉じバッククォートがある
+                    in_backtick = true;
+                    backtick_base_depth = brace_depth + bracket_depth;
+                    break;
+                }
             }
 
             // 文字列リテラル
