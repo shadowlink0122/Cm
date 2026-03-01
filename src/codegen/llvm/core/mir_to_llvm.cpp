@@ -1223,6 +1223,28 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             }
         }
 
+        // Hazard #45修正: パラメータlocalsの再代入を事前スキャン
+        // MIRで再代入されるパラメータはallocaが必要（cross-block domination回避）
+        std::unordered_set<unsigned int> reassignedArgLocals;
+        for (size_t bbIdx = 0; bbIdx < func.basic_blocks.size(); ++bbIdx) {
+            const auto& bb = func.basic_blocks[bbIdx];
+            if (!bb)
+                continue;
+            for (const auto& stmt : bb->statements) {
+                if (stmt->kind == mir::MirStatement::Assign) {
+                    auto& assignData = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    auto targetLocal = assignData.place.local;
+                    // プロジェクションなし（直接代入）の場合のみ再代入と判定
+                    // _1.*.0 = ... はフィールド書込みであり、_1自体の再代入ではない
+                    if (assignData.place.projections.empty() &&
+                        std::find(func.arg_locals.begin(), func.arg_locals.end(), targetLocal) !=
+                            func.arg_locals.end()) {
+                        reassignedArgLocals.insert(static_cast<unsigned int>(targetLocal));
+                    }
+                }
+            }
+        }
+
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
         builder->SetInsertPoint(entryBB);
@@ -1266,9 +1288,24 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         builder->CreateStore(loadedVal, alloca);
                         locals[localIdx] = alloca;
                         allocatedLocals.insert(localIdx);
+                    } else if (reassignedArgLocals.count(static_cast<unsigned int>(localIdx)) > 0) {
+                        // Hazard #45修正: 再代入されるポインタ引数のみallocaに格納
+                        auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                            "arg_" + std::to_string(argIdx));
+                        builder->CreateStore(&arg, alloca);
+                        locals[localIdx] = alloca;
+                        allocatedLocals.insert(localIdx);
                     } else {
                         locals[localIdx] = &arg;
                     }
+                } else if (reassignedArgLocals.count(static_cast<unsigned int>(localIdx)) > 0) {
+                    // Hazard #45修正: 再代入される引数のみallocaに格納
+                    // cross-block参照時のdomination error回避
+                    auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                        "arg_" + std::to_string(argIdx));
+                    builder->CreateStore(&arg, alloca);
+                    locals[localIdx] = alloca;
+                    allocatedLocals.insert(localIdx);
                 } else {
                     locals[localIdx] = &arg;
                 }
@@ -1292,26 +1329,17 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // asm出力オペランド変数はSSA形式ではなくalloca強制
                     bool isAsmOutput = asmReferencedLocals.count(static_cast<unsigned int>(i)) > 0;
 
-                    // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
-                    // ただしasm出力変数は例外
-                    if (!isAsmOutput &&
-                        (local.type->kind == hir::TypeKind::Function ||
-                         (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
-                          local.type->element_type->kind == hir::TypeKind::Function))) {
-                        continue;
-                    }
+                    // Hazard #45修正: 関数ポインタ型のallocaスキップを削除
+                    // 以前はSSA形式で扱っていたが、cross-block参照でdomination errorが発生
+                    // LLVM mem2regパスが自動的にSSA形式に最適化してくれる
                     // 配列へのポインタ型の一時変数もallocaを生成する（Bug#9修正）
                     // 以前はSSA形式で扱っていたが、Ref(array)の結果がSSA代入されると
                     // locals[ref_result] = locals[array] (配列alloca) となり、
                     // Copy時にCreateLoad(allocatedType=[N x T])が配列全体をloadしてしまう。
                     // これにより後続のstore先(ptr alloca=8B)にバッファオーバーフローが発生。
                     // allocaを生成してstore ptr → load ptrの正しいパスを通すことで修正。
-                    // 文字列型の一時変数はアロケーションしない（直接値を使用）
-                    // ただしasm出力変数は例外
-                    if (!isAsmOutput && local.type->kind == hir::TypeKind::String &&
-                        !local.is_user_variable) {
-                        continue;
-                    }
+                    // Hazard #45修正: 文字列一時変数のallocaスキップを削除
+                    // cross-block参照時のdomination error回避のため常にallocaを生成
 
                     // 動的配列（スライス）の場合
                     if (local.type->kind == hir::TypeKind::Array &&
