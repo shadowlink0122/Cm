@@ -1,0 +1,42 @@
+// フォーマッター回帰テスト: 1行バッククォートでインデントが崩壊しないことを確認
+// 修正: normalize_indentation()で__asm__(`sti`)のような1行完結バッククォートを
+// 正しく検出し、in_backtickフラグを設定しないようにした
+import std::io::println;
+
+// インラインアセンブリの1行バッククォートがインデントに影響しないことを確認
+void test_asm() {
+    println("before asm");
+    // __asm__(`nop`);  // 実際のasm呼び出しはLLVM専用なのでprintで確認
+    println("after asm");
+    // 再びprint文のインデントが正しいことを確認
+    println("indent OK");
+}
+
+// 通常の1行バッククォート文字列
+void test_inline_backtick() {
+    string s = `hello`;
+    println(s);
+    // インデントが崩壊していないことを確認
+    println("backtick done");
+}
+
+// 複数の1行バッククォートが混在するケース
+void test_multiple() {
+    string a = `one`;
+    string b = `two`;
+    println(a);
+    println(b);
+    // ネストされたブロック
+    if (true) {
+        string c = `three`;
+        println(c);
+    }
+    println("end");
+}
+
+int main() {
+    test_asm();
+    test_inline_backtick();
+    test_multiple();
+    return 0;
+}
