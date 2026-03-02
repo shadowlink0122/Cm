@@ -10,8 +10,11 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <queue>
 #include <set>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace cm::codegen::llvm_backend {
 
@@ -805,11 +808,111 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     // std::cerr << "[MIR2LLVM] Generating vtables...\n";
     generateVTables(program);
 
+    // === Dead Function Elimination (DFE) ===
+    // エントリポイントから到達可能な関数のみをLLVM IRに変換する
+    // これにより、未使用のimport関数のIR生成をスキップしてメモリ消費を削減
+    std::unordered_set<std::string> reachableFunctions;
+    {
+        // 関数名→インデックスのマップを構築
+        std::unordered_map<std::string, size_t> funcNameToIndex;
+        for (size_t i = 0; i < program.functions.size(); ++i) {
+            if (program.functions[i]) {
+                funcNameToIndex[program.functions[i]->name] = i;
+            }
+        }
+
+        // 各関数の呼び出し先を収集
+        auto collectCallees = [](const mir::MirFunction& func) -> std::vector<std::string> {
+            std::vector<std::string> callees;
+            for (const auto& block : func.basic_blocks) {
+                if (!block || !block->terminator)
+                    continue;
+                if (block->terminator->kind == mir::MirTerminator::Call) {
+                    auto& callData =
+                        std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                    if (callData.func && callData.func->kind == mir::MirOperand::FunctionRef) {
+                        auto& funcName = std::get<std::string>(callData.func->data);
+                        callees.push_back(funcName);
+                    }
+                }
+                // Statement内のFunctionRef（関数ポインタ）も収集
+                for (const auto& stmt : block->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Assign)
+                        continue;
+                    auto& assignData = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    if (!assignData.rvalue)
+                        continue;
+                    if (assignData.rvalue->kind == mir::MirRvalue::Use) {
+                        auto& useData = std::get<mir::MirRvalue::UseData>(assignData.rvalue->data);
+                        if (useData.operand &&
+                            useData.operand->kind == mir::MirOperand::FunctionRef) {
+                            auto& funcName = std::get<std::string>(useData.operand->data);
+                            callees.push_back(funcName);
+                        }
+                    }
+                }
+            }
+            return callees;
+        };
+
+        // BFS: エントリポイントから到達可能な関数を収集
+        std::queue<std::string> worklist;
+
+        // エントリポイント: export関数、main、extern関数
+        for (const auto& func : program.functions) {
+            if (!func)
+                continue;
+            if (func->is_export || func->is_extern || func->name == "main" ||
+                func->name == "_start" || func->name == "start_kernel") {
+                if (reachableFunctions.insert(func->name).second) {
+                    worklist.push(func->name);
+                }
+            }
+        }
+
+        // メソッド関数（TypeName__method パターン）のベース型がreachableなら追加
+        // vtableエントリからも到達可能関数を追加
+        for (const auto& vt : program.vtables) {
+            if (!vt)
+                continue;
+            for (const auto& entry : vt->entries) {
+                if (reachableFunctions.insert(entry.impl_function_name).second) {
+                    worklist.push(entry.impl_function_name);
+                }
+            }
+        }
+
+        // BFS実行
+        while (!worklist.empty()) {
+            std::string current = worklist.front();
+            worklist.pop();
+
+            auto it = funcNameToIndex.find(current);
+            if (it == funcNameToIndex.end())
+                continue;
+
+            auto callees = collectCallees(*program.functions[it->second]);
+            for (const auto& callee : callees) {
+                if (reachableFunctions.insert(callee).second) {
+                    worklist.push(callee);
+                }
+                // メソッド呼び出し: callee名からstruct型のメソッドも探索
+                // 例: SerialPort__putc → SerialPort関連のメソッドも到達可能
+            }
+        }
+
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
+                                "DFE: " + std::to_string(reachableFunctions.size()) + "/" +
+                                    std::to_string(program.functions.size()) +
+                                    " functions reachable");
+    }
+
     // 関数実装
     // 重複した関数はスキップ
     declaredFunctions.clear();
     // std::cerr << "[MIR2LLVM] Converting " << program.functions.size()
     //           << " function implementations...\n";
+    size_t skippedCount = 0;
     for (size_t i = 0; i < program.functions.size(); ++i) {
         const auto& func = program.functions[i];
         auto funcId = generateFunctionId(*func);
@@ -820,8 +923,21 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             continue;
         }
         declaredFunctions.insert(funcId);
+
+        // DFE: 到達不能な関数はスキップ（宣言は残すがbodyは生成しない）
+        if (!reachableFunctions.empty() && reachableFunctions.count(func->name) == 0) {
+            skippedCount++;
+            continue;
+        }
+
         convertFunction(*func);
         // std::cerr << "[MIR2LLVM]   -> Done converting " << funcId << "\n";
+    }
+
+    if (skippedCount > 0) {
+        cm::debug::codegen::log(
+            cm::debug::codegen::Id::LLVMConvertEnd,
+            "DFE: skipped " + std::to_string(skippedCount) + " unreachable functions");
     }
 
     // std::cerr << "[MIR2LLVM] Conversion complete!\n";
