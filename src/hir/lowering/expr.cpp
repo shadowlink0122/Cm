@@ -836,7 +836,7 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
         } else {
             auto zero = std::make_unique<HirLiteral>();
             zero->value = int64_t{0};
-            hir->args.push_back(std::make_unique<HirExpr>(std::move(zero), ast::make_int()));
+            hir->args.push_back(std::make_unique<HirExpr>(std::move(zero), ast::make_long()));
         }
 
         if (slice.end) {
@@ -844,7 +844,7 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
         } else {
             auto neg_one = std::make_unique<HirLiteral>();
             neg_one->value = int64_t{-1};
-            hir->args.push_back(std::make_unique<HirExpr>(std::move(neg_one), ast::make_int()));
+            hir->args.push_back(std::make_unique<HirExpr>(std::move(neg_one), ast::make_long()));
         }
 
         if (slice.step) {

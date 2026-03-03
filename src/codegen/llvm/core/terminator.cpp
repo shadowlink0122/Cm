@@ -712,8 +712,16 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 // Bug#45修正: functionsテーブルのcalleeが不正なシグネチャ(void())の場合がある
                 // convertFunctionSignatureがMIR内のarg_locals空の関数をvoid()で作成するため。
                 // 実引数の数とcalleeの引数数が一致しない場合はcalleeを無効化する。
-                if (callee && callee->getFunctionType()->getNumParams() != args.size()) {
-                    callee = nullptr;
+                // ただしvarargs関数は引数数 >= パラメータ数ならOK
+                if (callee) {
+                    auto calleeType = callee->getFunctionType();
+                    if (calleeType->isVarArg()) {
+                        if (args.size() < calleeType->getNumParams()) {
+                            callee = nullptr;
+                        }
+                    } else if (calleeType->getNumParams() != args.size()) {
+                        callee = nullptr;
+                    }
                 }
 
                 if (!callee) {
@@ -723,6 +731,38 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             fFunc->getFunctionType()->getNumParams() == args.size()) {
                             callee = fFunc;
                             break;
+                        }
+                    }
+                }
+                // declareExternalFunctionで事前宣言済みの関数を検索
+                // __builtin_/cm_プレフィックスの関数はランタイム関数なので
+                // declareExternalFunctionで正しいシグネチャを取得
+                if (!callee) {
+                    if (funcName.find("__builtin_") == 0 || funcName.find("cm_") == 0) {
+                        callee = declareExternalFunction(funcName);
+                        // calleeの引数数チェック（varargs考慮）
+                        if (callee) {
+                            auto calleeType = callee->getFunctionType();
+                            if (calleeType->isVarArg()) {
+                                if (args.size() < calleeType->getNumParams()) {
+                                    callee = nullptr;
+                                }
+                            } else if (calleeType->getNumParams() != args.size()) {
+                                callee = nullptr;
+                            }
+                        }
+                    } else {
+                        // その他の関数はmodule->getFunction()で検索
+                        auto existingFunc = module->getFunction(funcName);
+                        if (existingFunc) {
+                            auto funcType = existingFunc->getFunctionType();
+                            if (funcType->isVarArg()) {
+                                if (args.size() >= funcType->getNumParams()) {
+                                    callee = existingFunc;
+                                }
+                            } else if (funcType->getNumParams() == args.size()) {
+                                callee = existingFunc;
+                            }
                         }
                     }
                 }
@@ -747,7 +787,31 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         }
                     }
 
-                    auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+                    // MIR関数のis_variadicフラグを参照してvarargs対応
+                    bool isVarArg = false;
+                    if (currentProgram) {
+                        for (const auto& func : currentProgram->functions) {
+                            if (func && func->name == funcName) {
+                                isVarArg = func->is_variadic;
+                                break;
+                            }
+                        }
+                    }
+                    // varargs関数の場合、固定パラメータのみをparamTypesに含めるべき
+                    // （可変長引数はFunctionTypeのパラメータに含めない）
+                    if (isVarArg && currentProgram) {
+                        for (const auto& func : currentProgram->functions) {
+                            if (func && func->name == funcName) {
+                                // MIR関数の固定パラメータ数に合わせてparamTypesを切り詰める
+                                size_t fixedParams = func->arg_locals.size();
+                                if (fixedParams < paramTypes.size()) {
+                                    paramTypes.resize(fixedParams);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    auto funcType = llvm::FunctionType::get(returnType, paramTypes, isVarArg);
 
                     // 既存のvoid()宣言がある場合は削除してから再作成
                     if (auto existingFunc = module->getFunction(funcName)) {
@@ -964,6 +1028,19 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             } else if (expectedBits < actualBits) {
                                 args[i] = builder->CreateTrunc(args[i], expectedType, "trunc");
                             }
+                        }
+                    }
+                }
+
+                // varargs引数の型変換（C ABIのdefault argument promotionに準拠）
+                // varargs位置の引数（パラメータ数超過分）はCのintサイズ(i32)に合わせる
+                if (funcType->isVarArg()) {
+                    for (size_t i = funcType->getNumParams(); i < args.size(); ++i) {
+                        auto argType = args[i]->getType();
+                        // i64をi32にtrunc（Cの%dはi32を期待）
+                        if (argType->isIntegerTy(64)) {
+                            args[i] =
+                                builder->CreateTrunc(args[i], ctx.getI32Type(), "vararg_trunc");
                         }
                     }
                 }
