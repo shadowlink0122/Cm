@@ -899,16 +899,35 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             worklist.pop();
 
             auto it = funcNameToIndex.find(current);
-            if (it == funcNameToIndex.end())
-                continue;
-
-            auto callees = collectCallees(*program.functions[it->second]);
-            for (const auto& callee : callees) {
-                if (reachableFunctions.insert(callee).second) {
-                    worklist.push(callee);
+            if (it != funcNameToIndex.end()) {
+                auto callees = collectCallees(*program.functions[it->second]);
+                for (const auto& callee : callees) {
+                    if (reachableFunctions.insert(callee).second) {
+                        worklist.push(callee);
+                    }
                 }
-                // メソッド呼び出し: callee名からstruct型のメソッドも探索
-                // 例: SerialPort__putc → SerialPort関連のメソッドも到達可能
+            }
+
+            // interface dispatch関数（InterfaceName__method）の場合、
+            // 対応するvtableのimpl関数も到達可能に追加
+            // 例: Printable__print が呼ばれる場合、Point__print等を追加
+            size_t dunder = current.rfind("__");
+            if (dunder != std::string::npos && dunder > 0) {
+                std::string possibleInterface = current.substr(0, dunder);
+                if (interfaceNames.count(possibleInterface) > 0) {
+                    // このインターフェースのvtableからimpl関数を追加
+                    for (const auto& vt : program.vtables) {
+                        if (!vt)
+                            continue;
+                        if (vt->interface_name == possibleInterface) {
+                            for (const auto& entry : vt->entries) {
+                                if (reachableFunctions.insert(entry.impl_function_name).second) {
+                                    worklist.push(entry.impl_function_name);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

@@ -219,6 +219,18 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
             }
         }
     }
+
+    // vtableエントリのimpl関数を保護
+    // interface dispatch関数（InterfaceName__method）がusedの場合、
+    // 対応するvtableのimpl関数も保持する
+    for (const auto& vt : program.vtables) {
+        if (!vt)
+            continue;
+        for (const auto& entry : vt->entries) {
+            // vtableエントリのimpl関数名をusedに追加
+            used.insert(entry.impl_function_name);
+        }
+    }
 }
 
 bool ProgramDeadCodeElimination::remove_unused_functions(MirProgram& program,
