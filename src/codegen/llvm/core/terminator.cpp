@@ -708,8 +708,56 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 auto funcId = generateCallFunctionId(funcName, callData.args);
 
                 callee = functions[funcId];
+
+                // Bug#45修正: functionsテーブルのcalleeが不正なシグネチャ(void())の場合がある
+                // convertFunctionSignatureがMIR内のarg_locals空の関数をvoid()で作成するため。
+                // 実引数の数とcalleeの引数数が一致しない場合はcalleeを無効化する。
+                if (callee && callee->getFunctionType()->getNumParams() != args.size()) {
+                    callee = nullptr;
+                }
+
                 if (!callee) {
-                    callee = declareExternalFunction(funcName);
+                    // Bug#45修正: ベース名の前方一致でfunctionsマップを検索
+                    for (const auto& [fName, fFunc] : functions) {
+                        if (fFunc && fName.find(funcName + "_") == 0 &&
+                            fFunc->getFunctionType()->getNumParams() == args.size()) {
+                            callee = fFunc;
+                            break;
+                        }
+                    }
+                }
+                if (!callee) {
+                    // Bug#45修正: import先のexport関数がprogram.functionsに含まれない場合、
+                    // declareExternalFunctionのvoid()フォールバックに到達する。
+                    // 実引数のLLVM型とdestinationの戻り値型から正しいFunctionTypeを構築して宣言する。
+                    std::vector<llvm::Type*> paramTypes;
+                    for (const auto& arg : args) {
+                        paramTypes.push_back(arg->getType());
+                    }
+
+                    // 戻り値型: destinationがあればそのlocal型、なければvoid
+                    llvm::Type* returnType = ctx.getVoidType();
+                    if (callData.destination) {
+                        auto destLocal = callData.destination->local;
+                        if (currentMIRFunction && destLocal < currentMIRFunction->locals.size()) {
+                            auto& local = currentMIRFunction->locals[destLocal];
+                            if (local.type && local.type->kind != hir::TypeKind::Void) {
+                                returnType = convertType(local.type);
+                            }
+                        }
+                    }
+
+                    auto funcType = llvm::FunctionType::get(returnType, paramTypes, false);
+
+                    // 既存のvoid()宣言がある場合は削除してから再作成
+                    if (auto existingFunc = module->getFunction(funcName)) {
+                        if (existingFunc->getFunctionType() != funcType) {
+                            existingFunc->eraseFromParent();
+                        }
+                    }
+
+                    auto result = module->getOrInsertFunction(funcName, funcType);
+                    callee = llvm::cast<llvm::Function>(result.getCallee());
                 }
             }
 

@@ -9,6 +9,19 @@ namespace cm::codegen::llvm_backend {
 
 // 外部関数宣言
 llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
+    // Bug#45修正: functionsテーブルからベース名の前方一致で検索
+    // impl for内から外部関数を呼ぶ場合、マングリング名の不一致により
+    // functionsテーブルに登録済みの正しいシグネチャの関数が見つからない。
+    // ここでベース名 + "_" で始まるキーを検索して正しい関数を返す。
+    for (const auto& [fName, fFunc] : functions) {
+        if (fFunc && fName.find(name + "_") == 0) {
+            return fFunc;
+        }
+    }
+    // functionsテーブルにベース名そのままで登録されている場合も確認
+    if (auto it = functions.find(name); it != functions.end() && it->second) {
+        return it->second;
+    }
     if (name == "__print__" || name == "__println__") {
         auto printfType = llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType()}, true);
         auto func = module->getOrInsertFunction("printf", printfType);
@@ -1140,9 +1153,47 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         }
     }
 
+    // Bug#45修正: ベース名の前方一致検索（マングリング名の不一致を解決）
+    // impl for ブロック内から外部関数を呼ぶ場合、呼び出し側はベース名（例: heap_size_to_class）を
+    // 使用するが、currentProgram内の関数名はマングリング済み（例: heap_size_to_class_u64）。
+    // 完全一致で見つからなかった場合、name + "_" で始まる関数を検索して正しいシグネチャを取得する。
+    if (currentProgram) {
+        for (const auto& func : currentProgram->functions) {
+            if (!func)
+                continue;
+            // ベース名 + "_" で始まるマングリング済み関数を検索
+            if (func->name.find(name + "_") == 0) {
+                // 戻り値型
+                llvm::Type* returnType = ctx.getVoidType();
+                if (func->return_local < func->locals.size()) {
+                    auto& returnLocal = func->locals[func->return_local];
+                    if (returnLocal.type && returnLocal.type->kind != hir::TypeKind::Void) {
+                        returnType = convertType(returnLocal.type);
+                    }
+                }
+
+                // パラメータ型
+                std::vector<llvm::Type*> paramTypes;
+                for (const auto& arg_local : func->arg_locals) {
+                    if (arg_local < func->locals.size()) {
+                        auto& local = func->locals[arg_local];
+                        if (local.type) {
+                            paramTypes.push_back(convertType(local.type));
+                        }
+                    }
+                }
+
+                // 関数型
+                auto funcType = llvm::FunctionType::get(returnType, paramTypes, func->is_variadic);
+                auto result = module->getOrInsertFunction(name, funcType);
+                return llvm::cast<llvm::Function>(result.getCallee());
+            }
+        }
+    }
+
     // 最終フォールバック: void() として宣言（本来ここには到達しないはず）
     std::cerr << "[WARN] declareExternalFunction: unknown function '" << name
-              << "' - using void() signature\n";
+              << "' - using void() signature" << std::endl;
     auto funcType = llvm::FunctionType::get(ctx.getVoidType(), false);
     auto func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name, module);
     return func;

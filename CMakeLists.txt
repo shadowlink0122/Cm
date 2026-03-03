@@ -323,6 +323,12 @@ endif()
 add_executable(cm ${CM_SOURCES})
 target_link_libraries(cm PRIVATE cm_frontend)
 
+# macOS: パーサ/TypeCheckerの深い再帰に対応するためスタックサイズを256MBに増加
+# (デフォルト8MBでは大規模ソースのネスト構文でスタックオーバーフローが発生)
+if(APPLE)
+    set_target_properties(cm PROPERTIES LINK_FLAGS "-Wl,-stack_size,0x10000000")
+endif()
+
 # OpenSSL検出（HTTPS対応）
 # macOSではHomebrewのパスを優先的に検索
 if(APPLE)

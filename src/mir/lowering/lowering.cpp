@@ -63,6 +63,72 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
 
     if (cm::debug::g_debug_mode)
         std::cerr << "[MIR] All passes complete" << std::endl;
+
+    // Bug#45修正: モジュール修飾名の正規化
+    // import先の関数がモジュール修飾名（例: kmalloc::heap_size_to_class）で
+    // FunctionRefに登録されている場合、関数定義名（heap_size_to_class）と
+    // 一致しないためDCEで誤削除される。全FunctionRefを単純名に統一する。
+    {
+        // まず関数名のマッピングを構築（修飾名 → 単純名）
+        std::unordered_map<std::string, std::string> name_map;
+        for (const auto& func : mir_program.functions) {
+            if (!func)
+                continue;
+            // 関数名に :: が含まれていない場合はそのまま
+            // 関数定義自体の名前は lower_function で既に正規化済み
+            name_map[func->name] = func->name;
+        }
+
+        for (auto& func : mir_program.functions) {
+            if (!func)
+                continue;
+            for (auto& bb : func->basic_blocks) {
+                if (!bb || !bb->terminator)
+                    continue;
+                if (bb->terminator->kind == MirTerminator::Call) {
+                    auto& call_data = std::get<MirTerminator::CallData>(bb->terminator->data);
+                    if (call_data.func && call_data.func->kind == MirOperand::FunctionRef) {
+                        auto& ref_name = std::get<std::string>(call_data.func->data);
+                        // モジュール修飾を除去
+                        auto pos = ref_name.rfind("::");
+                        if (pos != std::string::npos) {
+                            std::string simple_name = ref_name.substr(pos + 2);
+                            // 単純名の関数が存在するか確認
+                            if (name_map.count(simple_name) > 0) {
+                                ref_name = simple_name;
+                            }
+                        }
+                    }
+                }
+            }
+            // ステートメント内のFunctionRefも正規化
+            for (auto& bb : func->basic_blocks) {
+                if (!bb)
+                    continue;
+                for (auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != MirStatement::Assign)
+                        continue;
+                    auto& assign = std::get<MirStatement::AssignData>(stmt->data);
+                    if (!assign.rvalue)
+                        continue;
+                    if (assign.rvalue->kind == MirRvalue::Use) {
+                        auto& use_data = std::get<MirRvalue::UseData>(assign.rvalue->data);
+                        if (use_data.operand && use_data.operand->kind == MirOperand::FunctionRef) {
+                            auto& ref_name = std::get<std::string>(use_data.operand->data);
+                            auto pos = ref_name.rfind("::");
+                            if (pos != std::string::npos) {
+                                std::string simple_name = ref_name.substr(pos + 2);
+                                if (name_map.count(simple_name) > 0) {
+                                    ref_name = simple_name;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // typedef定義をMirProgramにコピー（LLVM backendでTypeAlias解決に使用）
     mir_program.typedef_defs = typedef_defs;
 

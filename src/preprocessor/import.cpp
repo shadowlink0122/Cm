@@ -194,6 +194,10 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
             process_imports(source_code, source_file, imported_files, result.source_map,
                             result.module_ranges, source_file.string());
 
+        // デバッグ: 最終展開サイズ
+        std::cerr << "[IMPORT-FINAL] processed_source=" << result.processed_source.size()
+                  << " source_map=" << result.source_map.size() << "\n";
+
         // インポートされたモジュールリストを作成
         for (const auto& file : imported_files) {
             result.imported_modules.push_back(file);
@@ -655,6 +659,12 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 // キャッシュに保存
                 module_cache[canonical_path] = module_source;
                 raw_module_cache[canonical_path] = raw_module_source;
+
+                // デバッグ: 展開後のサイズを出力
+                std::cerr << "[IMPORT-DBG] " << module_file_str
+                          << " raw=" << raw_module_source.size()
+                          << " expanded=" << module_source.size()
+                          << " smap=" << dummy_source_map.size() << "\n";
             }
 
             // インポートスタックから削除
@@ -674,8 +684,16 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             // （export キーワードあり + Exported symbols セクションあり）
             std::string export_extraction_source = module_source;
 
-            // exportキーワードを削除
-            module_source = remove_export_keywords(module_source);
+            // exportキーワードを削除（キャッシュして重複処理を回避）
+            if (processed_module_cache.count(canonical_path) > 0 && import_info.items.empty()) {
+                // 選択的importでなければキャッシュを使用
+                module_source = processed_module_cache[canonical_path];
+            } else {
+                module_source = remove_export_keywords(module_source);
+                if (import_info.items.empty()) {
+                    processed_module_cache[canonical_path] = module_source;
+                }
+            }
 
             // エイリアスの処理
             if (!import_info.alias.empty()) {
