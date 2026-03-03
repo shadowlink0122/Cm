@@ -194,9 +194,10 @@ ImportPreprocessor::ProcessResult ImportPreprocessor::process(
             process_imports(source_code, source_file, imported_files, result.source_map,
                             result.module_ranges, source_file.string());
 
-        // デバッグ: 最終展開サイズ
-        std::cerr << "[IMPORT-FINAL] processed_source=" << result.processed_source.size()
-                  << " source_map=" << result.source_map.size() << "\n";
+        if (debug_mode) {
+            std::cerr << "[IMPORT-FINAL] processed_source=" << result.processed_source.size()
+                      << " source_map=" << result.source_map.size() << "\n";
+        }
 
         // インポートされたモジュールリストを作成
         for (const auto& file : imported_files) {
@@ -660,11 +661,12 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 module_cache[canonical_path] = module_source;
                 raw_module_cache[canonical_path] = raw_module_source;
 
-                // デバッグ: 展開後のサイズを出力
-                std::cerr << "[IMPORT-DBG] " << module_file_str
-                          << " raw=" << raw_module_source.size()
-                          << " expanded=" << module_source.size()
-                          << " smap=" << dummy_source_map.size() << "\n";
+                if (debug_mode) {
+                    std::cerr << "[IMPORT-DBG] " << module_file_str
+                              << " raw=" << raw_module_source.size()
+                              << " expanded=" << module_source.size()
+                              << " smap=" << dummy_source_map.size() << "\n";
+                }
             }
 
             // インポートスタックから削除
