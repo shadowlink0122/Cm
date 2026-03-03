@@ -406,6 +406,16 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     }
 
     // 関数作成
+    // Bug#45修正: 同名の既存関数がvoid()で先に作成されている場合がある
+    // （MIR内にarg_locals空のエントリと非空のエントリが重複して存在するため）
+    // シグネチャ不一致の既存関数を削除してから正しいシグネチャで再作成
+    if (auto existingFunc = module->getFunction(func.name)) {
+        if (existingFunc->getFunctionType() != funcType) {
+            existingFunc->eraseFromParent();
+        } else {
+            return existingFunc;  // 同じシグネチャなら既存関数を返す
+        }
+    }
     auto llvmFunc =
         llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
 
@@ -863,7 +873,8 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             if (!func)
                 continue;
             if (func->is_export || func->is_extern || func->name == "main" ||
-                func->name == "_start" || func->name == "start_kernel") {
+                func->name == "_start" || func->name == "start_kernel" ||
+                func->name.find("__lambda_") == 0) {
                 if (reachableFunctions.insert(func->name).second) {
                     worklist.push(func->name);
                 }
@@ -1127,7 +1138,17 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         declaredFunctions.insert(funcId);
         convertFunction(*func);
     }
-    // extern関数はボディなし（declare）なので変換しない
+    // Bug#45修正: extern_functionsにbody付きのimport先export関数が含まれる場合、
+    // bodyも生成する (declareだけだとリンカエラーになる)
+    for (const auto* func : module.extern_functions) {
+        if (!func->basic_blocks.empty() && !func->is_extern) {
+            auto funcId = generateFunctionId(*func);
+            if (declaredFunctions.count(funcId) > 0)
+                continue;
+            declaredFunctions.insert(funcId);
+            convertFunction(*func);
+        }
+    }
 
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
                             "Module conversion complete: " + module.module_name);

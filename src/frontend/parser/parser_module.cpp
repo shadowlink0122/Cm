@@ -1,5 +1,3 @@
-// モジュール関連のパーサー実装
-
 #include "../../common/debug/par.hpp"
 #include "../ast/module.hpp"
 #include "parser.hpp"

@@ -1272,11 +1272,39 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
             }
         }
     }
+
+    // LBrace不在チェック: 'match'がキーワードとして誤認識された場合の保護
+    // 例: ulong match = 1; → matchがKwMatchとしてレキシングされ、= がLBraceでないためエラー
+    if (!check(TokenKind::LBrace)) {
+        error(
+            "match式の後に '{' "
+            "が必要です。'match'はCm言語の予約語のため、変数名として使用できません");
+        // ダミーのmatch式を返して呼び出し元に安全に戻る
+        auto match_expr =
+            std::make_unique<ast::MatchExpr>(std::move(scrutinee), std::vector<ast::MatchArm>{});
+        return std::make_unique<ast::Expr>(std::move(match_expr), Span{start_pos, previous().end});
+    }
     expect(TokenKind::LBrace);
 
     std::vector<ast::MatchArm> arms;
 
-    while (!check(TokenKind::RBrace) && !is_at_end()) {
+    // 無限ループ防止: posが進まない場合はbreak
+    size_t last_pos = pos_;
+    int match_arm_iterations = 0;
+    const int MAX_MATCH_ARMS = 1000;
+
+    while (!check(TokenKind::RBrace) && !is_at_end() && match_arm_iterations < MAX_MATCH_ARMS) {
+        // stuck検出: posが前回と同じ→パーサが進めていない
+        if (match_arm_iterations > 0 && pos_ == last_pos) {
+            error("match式のパターン解析でパーサが停滞しました");
+            // 次のRBraceまでスキップ
+            while (!check(TokenKind::RBrace) && !is_at_end()) {
+                advance();
+            }
+            break;
+        }
+        last_pos = pos_;
+
         // パターンをパース
         auto pattern = parse_match_pattern();
 
@@ -1302,6 +1330,7 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
 
         // カンマ（式形式では必須、ブロック形式ではオプショナル）
         consume_if(TokenKind::Comma);
+        match_arm_iterations++;
     }
 
     expect(TokenKind::RBrace);

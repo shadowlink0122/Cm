@@ -1102,6 +1102,7 @@ int main(int argc, char* argv[]) {
         auto phase_parse_start = std::chrono::steady_clock::now();
         Lexer lexer(code);
         auto tokens = lexer.tokenize();
+
         if (opts.debug)
             std::cout << "トークン数: " << tokens.size() << "\n\n";
 
