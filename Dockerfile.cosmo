@@ -1,0 +1,61 @@
+# Cosmo Linux向け Cmコンパイラ x86_64 Linux ビルド
+# 
+# 使い方:
+#   cd Cm && docker build -f Dockerfile.cosmo --platform linux/amd64 -t cm-cosmo .
+#   docker run --rm cm-cosmo cat /workspace/cm > ../cosmo-linux/rootfs/packages/cm
+#   chmod +x ../cosmo-linux/rootfs/packages/cm
+
+FROM --platform=linux/amd64 ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ビルドツール + LLVM 17
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    ninja-build \
+    pkg-config \
+    gcc-13 \
+    g++-13 \
+    clang-17 \
+    llvm-17-dev \
+    lld-17 \
+    libssl-dev \
+    zlib1g-dev \
+    libzstd-dev \
+    libcurl4-openssl-dev \
+    file \
+    && rm -rf /var/lib/apt/lists/*
+
+# コンパイラ設定
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100 \
+    && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 100 \
+    && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-17 100 \
+    && update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-17 100
+
+WORKDIR /workspace
+
+# ソースコピー
+COPY . .
+
+# ビルド
+# CM_LLVM_STATIC=ON: LLVMを静的ライブラリでリンク
+# CM_TARGET_ARCH=x86_64: x86_64ターゲット
+# target.cppのARM初期化を無効化するため、ARMなしで再ビルド
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
+    -DCM_USE_LLVM=ON \
+    -DCM_LLVM_STATIC=ON \
+    -DCM_TARGET_ARCH=x86_64 \
+    -DCMAKE_C_COMPILER=/usr/bin/gcc-13 \
+    -DCMAKE_CXX_COMPILER=/usr/bin/g++-13 \
+    -DCMAKE_CXX_FLAGS="-DCM_NO_ARM_TARGET" \
+    && cmake --build build -j$(nproc) \
+    && cp build/cm /workspace/cm || cp cm /workspace/cm \
+    && strip /workspace/cm \
+    && echo "=== cm binary ===" \
+    && file /workspace/cm \
+    && ls -lh /workspace/cm \
+    && ldd /workspace/cm || true
+
+CMD ["./cm", "version"]

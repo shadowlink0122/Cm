@@ -84,12 +84,22 @@ if(CM_USE_LLVM)
         add_compile_definitions(${LLVM_DEFINITIONS})
         include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-        llvm_map_components_to_libnames(llvm_libs
+        # CM_NO_ARM_TARGETが定義されている場合はx86のみ
+        # (Docker x86_64ビルドなど)
+        set(_cm_llvm_components
             Core Support IRReader Passes CodeGen MC MCParser MCJIT OrcJIT ExecutionEngine Target
             X86CodeGen X86AsmParser X86Desc X86Info
-            AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
-            WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
         )
+        
+        # CMAKE_CXX_FLAGSにCM_NO_ARM_TARGETが含まれていなければ全ターゲット追加
+        if(NOT CMAKE_CXX_FLAGS MATCHES "CM_NO_ARM_TARGET")
+            list(APPEND _cm_llvm_components
+                AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+                WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
+            )
+        endif()
+
+        llvm_map_components_to_libnames(llvm_libs ${_cm_llvm_components})
 
         add_library(cm_llvm_backend INTERFACE)
         target_include_directories(cm_llvm_backend INTERFACE

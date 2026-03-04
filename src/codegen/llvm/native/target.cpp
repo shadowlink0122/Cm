@@ -41,12 +41,14 @@ void TargetManager::initialize() {
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
 
+#ifndef CM_NO_ARM_TARGET
     // WebAssemblyターゲットの初期化
     LLVMInitializeWebAssemblyTargetInfo();
     LLVMInitializeWebAssemblyTarget();
     LLVMInitializeWebAssemblyTargetMC();
     LLVMInitializeWebAssemblyAsmParser();
     LLVMInitializeWebAssemblyAsmPrinter();
+#endif
 
     // X86ターゲットの初期化
     LLVMInitializeX86TargetInfo();
@@ -55,12 +57,14 @@ void TargetManager::initialize() {
     LLVMInitializeX86AsmParser();
     LLVMInitializeX86AsmPrinter();
 
+#ifndef CM_NO_ARM_TARGET
     // ARMターゲットの初期化
     LLVMInitializeARMTargetInfo();
     LLVMInitializeARMTarget();
     LLVMInitializeARMTargetMC();
     LLVMInitializeARMAsmParser();
     LLVMInitializeARMAsmPrinter();
+#endif
 
     // ターゲットマシン作成
     std::string error;
