@@ -1,9 +1,9 @@
-# Cosmo Linux向け Cmコンパイラ x86_64 Linux ビルド
+# Cosmo Linux向け Cmコンパイラ ビルド
 # 
 # 使い方:
 #   cd Cm && docker build -f Dockerfile.cosmo --platform linux/amd64 -t cm-cosmo .
-#   docker run --rm cm-cosmo cat /workspace/cm > ../cosmo-linux/rootfs/packages/cm
-#   chmod +x ../cosmo-linux/rootfs/packages/cm
+#   # バイナリ+共有ライブラリ取り出し
+#   docker run --rm cm-cosmo tar cf - /opt/cm | tar xf - -C ../cosmo-linux/rootfs/packages/
 
 FROM --platform=linux/amd64 ubuntu:24.04
 
@@ -20,10 +20,9 @@ RUN apt-get update && apt-get install -y \
     clang-17 \
     llvm-17-dev \
     lld-17 \
-    libssl-dev \
     zlib1g-dev \
     libzstd-dev \
-    libcurl4-openssl-dev \
+    libtinfo-dev \
     file \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,23 +38,29 @@ WORKDIR /workspace
 # ソースコピー
 COPY . .
 
-# ビルド
-# CM_LLVM_STATIC=ON: LLVMを静的ライブラリでリンク
-# CM_TARGET_ARCH=x86_64: x86_64ターゲット
-# target.cppのARM初期化を無効化するため、ARMなしで再ビルド
+# ビルド (LLVM共有ライブラリ + C++/C標準ライブラリ静的)
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
     -DCM_USE_LLVM=ON \
-    -DCM_LLVM_STATIC=ON \
     -DCM_TARGET_ARCH=x86_64 \
     -DCMAKE_C_COMPILER=/usr/bin/gcc-13 \
     -DCMAKE_CXX_COMPILER=/usr/bin/g++-13 \
     -DCMAKE_CXX_FLAGS="-DCM_NO_ARM_TARGET" \
+    -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
     && cmake --build build -j$(nproc) \
-    && cp build/cm /workspace/cm || cp cm /workspace/cm \
-    && strip /workspace/cm \
+    && strip cm \
     && echo "=== cm binary ===" \
-    && file /workspace/cm \
-    && ls -lh /workspace/cm \
-    && ldd /workspace/cm || true
+    && file cm \
+    && ls -lh cm \
+    && ldd cm
+
+# パッケージング: cmバイナリ + 必要な共有ライブラリ
+RUN mkdir -p /opt/cm/lib \
+    && cp cm /opt/cm/cm \
+    && for lib in $(ldd cm | grep -oP '/\S+\.so[\.\d]*'); do \
+    cp "$lib" /opt/cm/lib/ 2>/dev/null || true; \
+    done \
+    && echo "=== パッケージ内容 ===" \
+    && ls -lh /opt/cm/ \
+    && ls -lh /opt/cm/lib/
 
 CMD ["./cm", "version"]
