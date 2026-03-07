@@ -419,9 +419,9 @@ jobs:
             echo ""
             echo "--- $bench ---"
 
-            if [ -f "tests/bench_marks/cm/${bench}.cm" ]; then
-              echo "Running tests/bench_marks/cm/${bench}.cm..."
-              if timeout 120 ./cm run tests/bench_marks/cm/${bench}.cm > /dev/null 2>&1; then
+            if [ -f "tests/benchmarks/cm/${bench}.cm" ]; then
+              echo "Running tests/benchmarks/cm/${bench}.cm..."
+              if timeout 120 ./cm run tests/benchmarks/cm/${bench}.cm > /dev/null 2>&1; then
                 echo "✅ $bench: PASS"
                 PASS=$((PASS + 1))
               else
