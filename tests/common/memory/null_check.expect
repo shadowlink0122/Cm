@@ -1,0 +1,14 @@
+=== Null Check Test ===
+
+Direct null check:
+  null_ptr is null (direct)
+
+Function null check:
+check_ptr called
+  ptr is null
+
+Malloc pointer check:
+check_ptr called
+  ptr is NOT null
+
+=== Done ===

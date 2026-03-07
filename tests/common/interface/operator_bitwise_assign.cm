@@ -1,0 +1,52 @@
+import std::io::println;
+
+// ビット複合代入演算子テスト
+struct Num {
+    int value;
+}
+
+impl Num {
+    operator Num &(Num other) {
+        return Num{value: self.value & other.value};
+    }
+
+    operator Num | (Num other) {
+        return Num{value: self.value | other.value};
+    }
+
+    operator Num ^(Num other) {
+        return Num{value: self.value ^ other.value};
+    }
+
+    operator Num <<(Num other) {
+        return Num{value: self.value << other.value};
+    }
+
+    operator Num >>(Num other) {
+        return Num{value: self.value >> other.value};
+    }
+}
+
+int main() {
+    Num d = Num{value: 0xFF};
+    d &= Num{value: 0x0F};
+    println("0xFF &= 0x0F -> {d.value}");
+
+    d = Num{value: 0xF0};
+    d |= Num{value: 0x0F};
+    println("0xF0 |= 0x0F -> {d.value}");
+
+    d = Num{value: 0xFF};
+    d ^= Num{value: 0x0F};
+    println("0xFF ^= 0x0F -> {d.value}");
+
+    Num e = Num{value: 1};
+    e <<= Num{value: 4};
+    println("1 <<= 4 -> {e.value}");
+
+    e = Num{value: 32};
+    e >>= Num{value: 2};
+    println("32 >>= 2 -> {e.value}");
+
+    return 0;
+}

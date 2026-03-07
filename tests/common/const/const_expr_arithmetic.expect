@@ -1,0 +1,8 @@
+port: 1017
+base + offset = 1017
+base * 2 = 2032
+addr: 1000500
+uaddr: 4352
+complex: 1018
+ports: 1016, 1017, 1018
+PASS

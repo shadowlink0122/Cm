@@ -1,0 +1,13 @@
+// ベアメタルエラーテスト: malloc使用禁止
+// malloc はOSヒープに依存するため、ベアメタルでは使用不可
+
+use libc {
+    int* malloc(int size);
+    void free(int* ptr);
+}
+
+int main() {
+    int* p = malloc(4);
+    free(p);
+    return 0;
+}

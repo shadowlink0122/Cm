@@ -1,0 +1,51 @@
+// テスト: null比較テスト（簡易版）
+
+import std::io::println;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+struct Node {
+    int value;
+}
+
+void check_ptr(Node* ptr) {
+    println("check_ptr called");
+    if (ptr == null) {
+        println("  ptr is null");
+    } else {
+        println("  ptr is NOT null");
+    }
+}
+
+int main() {
+    println("=== Null Check Test ===");
+
+    // nullポinterを作成
+    Node* null_ptr = null as Node*;
+
+    // 直接比較
+    println("\nDirect null check:");
+    if (null_ptr == null) {
+        println("  null_ptr is null (direct)");
+    } else {
+        println("  null_ptr is NOT null (direct) - BUG!");
+    }
+
+    // 関数に渡す
+    println("\nFunction null check:");
+    check_ptr(null_ptr);
+
+    // mallocで確保したポinter
+    println("\nMalloc pointer check:");
+    void* mem = malloc(sizeof(Node));
+    Node* valid_ptr = mem as Node*;
+    check_ptr(valid_ptr);
+
+    free(mem);
+
+    println("\n=== Done ===");
+    return 0;
+}

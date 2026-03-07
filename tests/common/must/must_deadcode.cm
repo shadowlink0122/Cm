@@ -1,0 +1,19 @@
+// must_test.cm - must{}がデッドコードを防止するかテスト
+
+int main() {
+    int x = 0;
+
+    // 通常の不要な代入（デッドコード削除される可能性あり）
+    int dead1 = 100;
+    dead1 = 200;
+    dead1 = 300;
+
+    // must{}で囲まれた不要な代入（削除されない）
+    int dead2 = 0;
+    must { dead2 = 999; }
+    must { dead2 = 888; }
+    must { dead2 = 777; }
+
+    // xだけ使用して終了
+    return x;
+}

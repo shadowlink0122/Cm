@@ -1,0 +1,6 @@
+ip->value = 42
+o.inner->value = 42
+ptr->id = 1
+ptr->inner->value = 42
+(*ptr).inner->value = 42
+v1 = 42, v2 = 42

@@ -1,0 +1,12 @@
+=== Channel Test ===
+channel created
+sent 3 values
+len: 3
+recv: 10, 20, 30
+PASS: FIFO order correct
+try_send: success
+try_recv: 100
+channel closed: true
+send after close: rejected
+channel destroyed
+=== Done ===

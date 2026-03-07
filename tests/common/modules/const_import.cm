@@ -1,0 +1,9 @@
+import std::io::println;
+// Test constant import
+import ./simple_math/math::{MAGIC_NUMBER, SIMPLE_PI};
+
+int main() {
+    println("MAGIC_NUMBER = {MAGIC_NUMBER}");
+    println("SIMPLE_PI = {SIMPLE_PI}");
+    return 0;
+}

@@ -1,0 +1,47 @@
+// long/ulong型のprintlnテスト
+// 64bit整数が正しく出力されることを確認
+import std::io::println;
+
+int main() {
+    // === long型 (符号付き64bit) ===
+    long l1 = 0;
+    println(l1);
+
+    long l2 = 100;
+    println(l2);
+
+    long l3 = -100;
+    println(l3);
+
+    long l4 = 2147483647;  // i32最大値
+    println(l4);
+
+    long l5 = 2147483648;  // i32最大値+1
+    println(l5);
+
+    long l6 = -2147483648;  // i32最小値
+    println(l6);
+
+    // === ulong型 (符号なし64bit) ===
+    ulong u1 = 0;
+    println(u1);
+
+    ulong u2 = 100;
+    println(u2);
+
+    ulong u3 = 4294967295;  // u32最大値
+    println(u3);
+
+    ulong u4 = 4294967296;  // u32最大値+1
+    println(u4);
+
+    // === 文字列補間でのlong/ulong ===
+    long interp_l = 2147483648;
+    println("long: {interp_l}");
+
+    ulong interp_u = 4294967296;
+    println("ulong: {interp_u}");
+
+    println("PASS");
+    return 0;
+}

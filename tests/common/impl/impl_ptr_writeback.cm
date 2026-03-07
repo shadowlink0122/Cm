@@ -1,0 +1,52 @@
+// テスト: ptr->method()の書き戻し検証 (Bug#10)
+// setterがポインタ先の構造体に正しく反映されることを確認
+// 修正前: ptr->set_a(777) で元のsに反映されない (self書き戻し不在)
+
+import std::io::println;
+
+struct Pair {
+    int x;
+    int y;
+}
+
+impl Pair {
+    int get_x() { return self.x; }
+    int get_y() { return self.y; }
+    void set_x(int v) { self.x = v; }
+    void set_y(int v) { self.y = v; }
+}
+
+int main() {
+    Pair p;
+    p.x = 10;
+    p.y = 20;
+
+    Pair* ptr = &p;
+
+    // getter: 修正前は不正な値(アドレスの一部)が返された
+    int gx = ptr->get_x();
+    int gy = ptr->get_y();
+    println("get x: {gx}");
+    println("get y: {gy}");
+
+    // setter + getter: 修正前はsetter後もgetterが不正値を返した
+    ptr->set_x(100);
+    ptr->set_y(200);
+    int gx2 = ptr->get_x();
+    int gy2 = ptr->get_y();
+    println("after set x: {gx2}");
+    println("after set y: {gy2}");
+
+    // 元の変数に反映されているか: 修正前は変更が消失していた
+    println("p.x: {p.x}");
+    println("p.y: {p.y}");
+
+    // 連鎖的な変更が正しく累積するか
+    ptr->set_x(1);
+    ptr->set_x(2);
+    ptr->set_x(3);
+    int final_x = ptr->get_x();
+    println("chain x: {final_x}");
+
+    return 0;
+}

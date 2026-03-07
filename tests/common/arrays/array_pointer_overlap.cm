@@ -1,0 +1,65 @@
+// Bug#9修正テスト: ローカル配列とポインタ変数のスタックオフセットが重複しないことを確認
+// 配列のアドレスをポインタに格納しても配列データが破壊されないことを検証
+import std::io::println;
+
+int main() {
+    // テスト1: 基本的な配列+ポインタ
+    int[5] arr;
+    arr[0] = 10;
+    arr[1] = 20;
+    arr[2] = 30;
+    arr[3] = 40;
+    arr[4] = 50;
+
+    int* ptr = &arr[0];
+
+    // ポインタ代入後も配列値が保持されること
+    println("arr[0]: {arr[0]}");
+    println("arr[1]: {arr[1]}");
+    println("arr[2]: {arr[2]}");
+    println("arr[3]: {arr[3]}");
+    println("arr[4]: {arr[4]}");
+
+    // ポインタ経由アクセス
+    int v0 = ptr[0];
+    int v1 = ptr[1];
+    println("ptr[0]: {v0}");
+    println("ptr[1]: {v1}");
+
+    // テスト2: ulong配列+void*（GDTパターン）
+    ulong[3] table;
+    table[0] = 0;
+    table[1] = 12345;
+    table[2] = 67890;
+
+    void* table_raw = &table as void*;
+
+    // void*代入後も配列値が保持されること
+    println("table[0]: {table[0]}");
+    println("table[1]: {table[1]}");
+    println("table[2]: {table[2]}");
+
+    // テスト3: 複数の配列+ポインタ変数が共存
+    int[3] a;
+    int[3] b;
+    a[0] = 100;
+    a[1] = 200;
+    a[2] = 300;
+    b[0] = 400;
+    b[1] = 500;
+    b[2] = 600;
+
+    int* pa = &a[0];
+    int* pb = &b[0];
+
+    // 互いに干渉しないこと
+    println("a[2]: {a[2]}");
+    println("b[0]: {b[0]}");
+    int pav = pa[0];
+    int pbv = pb[2];
+    println("pa[0]: {pav}");
+    println("pb[2]: {pbv}");
+
+    println("PASS");
+    return 0;
+}

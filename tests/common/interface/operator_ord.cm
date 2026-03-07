@@ -1,0 +1,58 @@
+import std::io::println;
+// Eq/Ord演算子の明示的実装テスト（全6演算子）
+struct Score {
+    int value;
+}
+
+impl Score for Eq {
+    operator bool ==(Score other) {
+        return self.value == other.value;
+    }
+}
+
+impl Score for Ord {
+    operator bool <(Score other) {
+        return self.value < other.value;
+    }
+}
+
+int main() {
+    Score a;
+    a.value = 10;
+    Score b;
+    b.value = 20;
+    Score c;
+    c.value = 10;
+
+    // ==
+    if (a == c) {
+        println("a == c: true");
+    }
+
+    // !=（自動導出）
+    if (a != b) {
+        println("a != b: true");
+    }
+
+    // <
+    if (a < b) {
+        println("a < b: true");
+    }
+
+    // >（自動導出）
+    if (b > a) {
+        println("b > a: true");
+    }
+
+    // <=（自動導出）
+    if (a <= c) {
+        println("a <= c: true");
+    }
+
+    // >=（自動導出）
+    if (b >= a) {
+        println("b >= a: true");
+    }
+
+    return 0;
+}

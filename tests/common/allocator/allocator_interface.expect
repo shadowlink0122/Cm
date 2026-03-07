@@ -1,0 +1,7 @@
+int allocation test:
+int value verified
+int freed
+multiple allocation test:
+multiple values verified
+multiple freed
+All memory tests passed!

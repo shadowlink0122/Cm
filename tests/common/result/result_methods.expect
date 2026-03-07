@@ -1,0 +1,8 @@
+=== CmResult Test ===
+r1 is_ok: true
+r2 is_ok: false
+r1 unwrap: 5
+r2 unwrap_or: -1
+r2 unwrap_err: Division by zero
+100 / 5 / 2 = 10
+=== Done ===

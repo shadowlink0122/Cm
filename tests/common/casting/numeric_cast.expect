@@ -1,0 +1,7 @@
+=== Numeric Cast Test ===
+  float -> int: PASS
+  int -> double: PASS
+  double -> float: PASS
+  int -> char -> int: PASS
+
+All numeric cast tests completed!

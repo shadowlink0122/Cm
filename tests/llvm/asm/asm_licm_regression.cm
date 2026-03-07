@@ -1,0 +1,86 @@
+// Bug#5回帰テスト: LICM がASM出力変数をループ不変と誤判定しないことを確認
+// LICMパスがASM出力制約(=r, +r)の変数をmodified_localsに追加し、
+// while条件のプレヘッダへの不正ホイストを防ぐことを検証
+
+import std::io::println;
+
+int main() {
+    println("=== LICM ASM Output Regression Test ===");
+
+    #ifdef __x86_64__
+    // ケース1: ASM出力変数をwhile条件で使用
+    // LICMが条件をプレヘッダにホイストすると無限ループになる
+    int counter = 0;
+    int asm_val = 0;
+    while (asm_val < 3) {
+        counter = counter + 1;
+        // ASMで asm_val を更新（=r制約 → modified_locals に含めるべき）
+        int new_val = counter;
+        __asm__("movl ${r:new_val}, ${=r:asm_val}");
+    }
+    println("case1 counter: {counter}");
+
+    // ケース2: +r制約（読み書き）のASM出力変数をwhile条件で使用
+    int inc_val = 0;
+    int steps = 0;
+    while (inc_val < 50) {
+        steps = steps + 1;
+        __asm__("addl $$10, ${+r:inc_val}");
+    }
+    println("case2 steps: {steps}");
+    println("case2 inc_val: {inc_val}");
+
+    // ケース3: ASM出力変数を比較条件で使用（!= 0パターン）
+    // Bug#5の元の症状を模倣
+    int iterations = 0;
+    int flag = 1;
+    while (flag != 0) {
+        iterations = iterations + 1;
+        int next_flag = 0;
+        if (iterations < 4) {
+            next_flag = 1;
+        }
+        __asm__("movl ${r:next_flag}, ${=r:flag}");
+    }
+    println("case3 iterations: {iterations}");
+
+    #else
+    // ARM64版
+    // ケース1: ASM出力変数をwhile条件で使用
+    int counter = 0;
+    int asm_val = 0;
+    while (asm_val < 3) {
+        counter = counter + 1;
+        int new_val = counter;
+        __asm__("mov ${=r:asm_val}, ${r:new_val}");
+    }
+    println("case1 counter: {counter}");
+
+    // ケース2: +r制約のASM出力変数をwhile条件で使用
+    int inc_val = 0;
+    int steps = 0;
+    while (inc_val < 50) {
+        steps = steps + 1;
+        __asm__("add ${+r:inc_val}, ${+r:inc_val}, #10");
+    }
+    println("case2 steps: {steps}");
+    println("case2 inc_val: {inc_val}");
+
+    // ケース3: ASM出力変数を比較条件で使用（!= 0パターン）
+    int iterations = 0;
+    int flag = 1;
+    while (flag != 0) {
+        iterations = iterations + 1;
+        int next_flag = 0;
+        if (iterations < 4) {
+            next_flag = 1;
+        }
+        __asm__("mov ${=r:flag}, ${r:next_flag}");
+    }
+    println("case3 iterations: {iterations}");
+
+    #end
+
+    println("=== All Tests Passed ===");
+    return 0;
+}

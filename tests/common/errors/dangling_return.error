@@ -1,0 +1,1 @@
+error: Cannot return reference to local variable 'x': variable will be dropped when function returns

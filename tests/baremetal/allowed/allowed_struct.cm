@@ -1,0 +1,22 @@
+// ベアメタル正常テスト: 構造体
+// OS依存機能を使わないデータ構造はコンパイル可能
+
+struct Point {
+    int x;
+    int y;
+}
+
+impl Point {
+    int distance_sq(Point other) {
+        int dx = self.x - other.x;
+        int dy = self.y - other.y;
+        return dx * dx + dy * dy;
+    }
+}
+
+int main() {
+    Point p1 = Point { x: 3, y: 4 };
+    Point p2 = Point { x: 0, y: 0 };
+    int dist = p1.distance_sq(p2);
+    return dist;
+}

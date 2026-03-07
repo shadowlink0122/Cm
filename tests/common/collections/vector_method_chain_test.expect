@@ -1,0 +1,17 @@
+=== Vector Method Chain Test ===
+1. Basic method calls:
+  len() = 3
+2. Push then len:
+  after push(40): len = 4
+3. Get/Set sequence:
+  v0 before=10, after=110
+4. Vector<Point> method calls:
+  vp.len() = 2
+  vp.get(0) = (1, 2)
+5. Pop/Push sequence:
+  popped = 40
+  after push(50), get(3) = 50
+6. Clear and reuse:
+  is_empty() = true
+  after push(999): len=1, get(0)=999
+=== All Vector Method Chain Tests PASSED ===

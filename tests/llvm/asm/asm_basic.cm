@@ -1,0 +1,43 @@
+// インラインアセンブリ基本テスト
+// __asm__ 直接使用で動作確認
+
+import std::io::println;
+
+int main() {
+    #ifdef __x86_64__
+    println("=== Inline Assembly Test ===");
+
+    // 基本命令（直接__asm__使用）
+    __asm__("nop");
+    println("nop: ok");
+
+    // コンパイラバリア（空asm）
+    __asm__("");
+    println("compiler_barrier: ok");
+
+    // 複数回実行
+    __asm__("nop");
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== Complete ===");
+    #else
+    // ARM64版
+    println("=== Inline Assembly Test ===");
+
+    __asm__("nop");
+    println("nop: ok");
+
+    __asm__("");
+    println("compiler_barrier: ok");
+
+    __asm__("nop");
+    __asm__("nop");
+    __asm__("nop");
+    println("multiple: ok");
+
+    println("=== Complete ===");
+    #end
+    return 0;
+}

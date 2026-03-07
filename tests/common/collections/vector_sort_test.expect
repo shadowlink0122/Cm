@@ -1,0 +1,15 @@
+=== Vector Sort Test ===
+1. Vector<int> sort:
+  sorted=true
+  [1, 2, 3, ..., 8]
+2. Empty sort:
+  ok (no crash)
+3. Single element sort:
+  [42]
+4. Already sorted:
+  [1, 2, 3]
+5. Reverse sorted:
+  [1, 2, ..., 5]
+6. Duplicates:
+  [1, 1, 2, 3, 3]
+=== PASS ===

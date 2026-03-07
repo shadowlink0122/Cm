@@ -1,0 +1,8 @@
+int via union: 42
+long via union: 1000000
+arr[0]: 10
+arr[1]: 20
+arr[2]: 3000000
+arr[3]: 4000000
+const long via union: 9999999
+PASS

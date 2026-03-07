@@ -1,0 +1,9 @@
+// 最小ベアメタル コンパイルテスト
+// --target=baremetal-x86 でコンパイルされる前提
+// コンパイラの noMain モードで main が適切に処理される
+
+int main() {
+    // 最小ブートロジック
+    int x = 42;
+    return x;
+}

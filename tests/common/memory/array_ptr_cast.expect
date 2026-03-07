@@ -1,0 +1,17 @@
+=== Array Pointer Cast Test (Bug#9) ===
+
+Test 1: ulong array as void*
+  tp1[0] = 4369
+  tp1[1] = 8738
+  tp1[2] = 13107
+
+Test 2: (&array) as void*
+  tp2[0] = 4369
+  tp2[1] = 8738
+
+Test 3: Value consistency check
+  tp1[0] == a[0]: PASS
+  tp1[2] == a[2]: PASS
+  tp2[0] == a[0]: PASS
+
+=== Done ===

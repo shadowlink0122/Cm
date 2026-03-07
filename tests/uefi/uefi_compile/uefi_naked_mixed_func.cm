@@ -1,0 +1,73 @@
+//! platform: uefi
+// Naked属性条件修正テスト: ASMとCmコード混在関数でnaked不適用を確認
+//
+// 修正内容:
+// - iretq/retを含むASM関数にnaked属性を付与する条件を
+//   「純ASM関数のみ」に限定（hasRetInAsm && !hasNonAsmStmt）
+// - ASMとCmコード（関数呼び出し、変数宣言等）が混在する関数は
+//   通常のコード生成パスを使用。naked化すると非ASM文が省略されGPFが発生
+
+// テスト1: 純ASM関数（ret含む） → Nakedが正しく適用される
+export void pure_asm_ret() {
+    __asm__(`
+        xorq %rax, %rax;
+        ret;
+    `);
+}
+
+// テスト2: ASM+Cmコード混在関数（iretq含む） → Naked不適用
+// syscall_entry相当のパターン: ASMブロック間にCm関数呼び出しがある
+export void interrupt_handler() {
+    // ASMブロック1: レジスタ保存
+    ulong saved_rax = 0;
+    __asm__("movq %rax, ${=r:saved_rax}");
+
+    // Cmコード: 通常の関数呼び出し（nakedだと省略される）
+    ulong result = dispatch_handler(saved_rax);
+
+    // ASMブロック2: 結果設定+iretq
+    __asm__(`
+        movq ${r:result}, %rax;
+        iretq;
+    `);
+}
+
+// ディスパッチ関数の代理
+export ulong dispatch_handler(ulong nr) {
+    if (nr == 1) {
+        return 100;
+    }
+    return 0;
+}
+
+// テスト3: operand付き+ret の純ASM関数 → Nakedが適用される
+export void context_switch_pure(ulong new_rsp) {
+    __asm__(`
+        movq ${r:new_rsp}, %rsp;
+        ret;
+    `);
+}
+
+// テスト4: operand付き+ret + Cm変数宣言混在 → Naked不適用
+export ulong asm_ret_with_locals() {
+    ulong temp = 42;
+    ulong result = temp + 1;
+    __asm__(`
+        movq ${r:result}, %rax;
+        ret;
+    `);
+    return result;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    pure_asm_ret();
+    context_switch_pure(0x80000);
+
+    ulong val = dispatch_handler(1);
+
+    while (true) { __asm__("hlt"); }
+    return val;
+}

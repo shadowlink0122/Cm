@@ -1,0 +1,45 @@
+// ベンチマーク4: 配列ソート（バブルソート）
+// 1,000要素の配列をソート
+
+import std::io;
+
+void bubble_sort(int* arr, int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                int temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+int main() {
+    int n = 1000;
+    int[1000] arr;
+
+    // 逆順で初期化（最悪ケース）
+    for (int i = 0; i < n; i++) {
+        arr[i] = n - i;
+    }
+
+    bubble_sort(arr, n);
+
+    // 検証：ソートされているか確認
+    bool sorted = true;
+    for (int i = 1; i < n; i++) {
+        if (arr[i - 1] > arr[i]) {
+            sorted = false;
+            break;
+        }
+    }
+
+    if (sorted) {
+        println("Successfully sorted {n} elements");
+    } else {
+        println("Sort failed!");
+    }
+
+    return 0;
+}

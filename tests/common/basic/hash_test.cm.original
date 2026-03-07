@@ -1,0 +1,8 @@
+// Test hash token
+#macro void TEST() {
+    return;
+}
+
+int main() {
+    return 0;
+}

@@ -1,0 +1,7 @@
+local fb_addr: 12345
+local cursor_x: 10
+ptr fb_addr: 67890
+ptr width: 1024
+ptr cursor_x: 30
+getter fb_addr: 99999
+getter cursor_x: 50

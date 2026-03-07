@@ -1,0 +1,11 @@
+// string_utils.cm - 文字列ユーティリティモジュール
+module string_utils;
+
+// 関数をエクスポート
+export int strlen(string s) {
+    return 0;
+}
+
+export string concat(string a, string b) {
+    return a;
+}

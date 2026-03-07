@@ -1,0 +1,5 @@
+Test 1 (getFirst): first = 10
+Test 2 (getSecond): second = 20
+Test 3 (getThird): third = 30
+Test 4 (sum): sum = 60
+All interface return tests passed!

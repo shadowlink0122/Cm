@@ -1,0 +1,15 @@
+// helper モジュール - export関数テスト用
+// module宣言なしでもimport可能
+
+export int double_val(int x) {
+    return x * 2;
+}
+
+export int negate(int x) {
+    return -x;
+}
+
+// exportなし - namespace修飾でのみアクセス可能
+int internal_func() {
+    return 42;
+}

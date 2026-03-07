@@ -1,0 +1,34 @@
+// ベンチマーク5: 動的配列（Vector）ソート
+// 1,000要素のVector<int>をバブルソート
+
+import std::io;
+import std::collections::vector::*;
+
+int main() {
+    int n = 1000;
+    Vector<int> vec();
+
+    // 逆順で初期化（最悪ケース）
+    for (int i = 0; i < n; i++) {
+        vec.push(n - i);
+    }
+
+    vec.sort();
+
+    // 検証：ソートされているか確認
+    bool sorted = true;
+    for (int i = 1; i < n; i++) {
+        if (*vec.get(i - 1) > *vec.get(i)) {
+            sorted = false;
+            break;
+        }
+    }
+
+    if (sorted) {
+        println("Successfully sorted {n} elements using Vector<int>");
+    } else {
+        println("Sort failed!");
+    }
+
+    return 0;
+}

@@ -1,0 +1,7 @@
+get x: 10
+get y: 20
+after set x: 100
+after set y: 200
+p.x: 100
+p.y: 200
+chain x: 3

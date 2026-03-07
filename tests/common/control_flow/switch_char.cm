@@ -1,0 +1,73 @@
+// char リテラルとOr/Rangeパターンのswitch文テスト
+
+void main() {
+    // charリテラル単一値
+    char c1 = '3';
+    switch(c1) {
+        case ('1') {
+            println("ONE");
+        }
+        case ('2') {
+            println("TWO");
+        }
+        case ('3') {
+            println("THREE");
+        }
+        else {
+            println("OTHER");
+        }
+    }
+
+    // Orパターン: case ('a' | 'A')
+    char c2 = 'A';
+    switch(c2) {
+        case ('a' | 'A') {
+            println("ALPHA");
+        }
+        case ('b' | 'B') {
+            println("BETA");
+        }
+        else {
+            println("UNKNOWN");
+        }
+    }
+
+    // Orパターン: 小文字も
+    char c3 = 'b';
+    switch(c3) {
+        case ('a' | 'A') {
+            println("ALPHA");
+        }
+        case ('b' | 'B') {
+            println("BETA");
+        }
+        else {
+            println("UNKNOWN");
+        }
+    }
+
+    // else分岐
+    char c4 = 'z';
+    switch(c4) {
+        case ('a' | 'A') {
+            println("ALPHA");
+        }
+        else {
+            println("DEFAULT");
+        }
+    }
+
+    // 整数switchも引き続き動作確認
+    int x = 42;
+    switch(x) {
+        case (42) {
+            println("FORTY_TWO");
+        }
+        case (0) {
+            println("ZERO");
+        }
+        else {
+            println("ELSE");
+        }
+    }
+}

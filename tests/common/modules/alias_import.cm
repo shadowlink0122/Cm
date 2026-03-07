@@ -1,0 +1,9 @@
+import std::io::println;
+// test_alias_import.cm - エイリアスインポートのテスト
+import ./alias_import/very_long_module_name as m;
+
+int main() {
+    int result = m::calculate(21);
+    println("Result: {result}");
+    return 0;
+}

@@ -1,0 +1,10 @@
+=== Struct Slice Test ===
+c.name = test
+c.values[0] = 10
+c.values[1] = 20
+c.values[2] = 30
+c.values.len() = 3
+After push: c.values.len() = 4
+c.values[3] = 40
+v.len() = 4
+=== All Tests Passed ===

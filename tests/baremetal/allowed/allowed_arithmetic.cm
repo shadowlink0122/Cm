@@ -1,0 +1,20 @@
+// ベアメタル正常テスト: 算術演算のみ
+// OS依存機能を使わないコードはコンパイル可能
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int main() {
+    int x = add(10, 20);
+    int y = factorial(5);
+    int z = x + y;
+    return z;
+}

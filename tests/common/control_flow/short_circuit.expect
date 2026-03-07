@@ -1,0 +1,8 @@
+After false && ..., x = 0
+AND: right side evaluated
+After true && ..., x = 1
+OR: left side was true
+After true || ..., x = 1
+OR: right side evaluated
+After false || ..., x = 2
+Complex: y = 2, result = true

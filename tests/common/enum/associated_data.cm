@@ -1,0 +1,63 @@
+// データ付きenum（Associated Data）のテスト
+// v0.13.0 新機能
+// 設計: 各バリアントは1つのフィールドのみ持つ
+import std::io::println;
+
+// 座標を表す構造体（複数値をまとめる）
+struct Point {
+    int x;
+    int y;
+}
+
+// RGB色を表す構造体
+struct RGB {
+    int r;
+    int g;
+    int b;
+}
+
+// データ付きenum定義（各バリアントは1つのフィールドのみ）
+enum Message {
+    Quit,             // データなし
+    Move(Point),      // Point構造体を1つ持つ
+    Write(string),    // 文字列を1つ持つ
+    ChangeColor(RGB)  // RGB構造体を1つ持つ
+}
+
+// enumを処理する関数
+void process_message(Message msg) {
+    // matchで値を抽出（ステートメント形式）
+    match (msg) {
+        Message::Quit => {
+            println("Quit message");
+        }
+        Message::Move(p) => {
+            println("Move to ({p.x}, {p.y})");
+        }
+        Message::Write(text) => {
+            println("Write: {text}");
+        }
+        Message::ChangeColor(c) => {
+            println("Color: RGB({c.r}, {c.g}, {c.b})");
+        }
+    }
+}
+
+int main() {
+    println("=== Enum Associated Data Test ===");
+
+    // 各バリアントの作成
+    Message m1 = Message::Quit;
+    Message m2 = Message::Move(Point { x: 100, y: 200 });
+    Message m3 = Message::Write("Hello, World!");
+    Message m4 = Message::ChangeColor(RGB { r: 255, g: 128, b: 0 });
+
+    // 処理
+    process_message(m1);
+    process_message(m2);
+    process_message(m3);
+    process_message(m4);
+
+    println("=== Complete ===");
+    return 0;
+}

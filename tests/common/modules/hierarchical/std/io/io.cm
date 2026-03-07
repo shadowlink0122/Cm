@@ -1,0 +1,5 @@
+// io.cm
+module io;
+
+import ./file;
+export { file };

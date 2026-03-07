@@ -1,0 +1,23 @@
+// 型推論デバッグテスト
+import std::io::println;
+
+// シンプルなenum
+enum MyStatus {
+    Active = 1,
+    Inactive = 0
+}
+
+int main() {
+    // enum型として宣言
+    MyStatus s = MyStatus::Active;
+
+    // matchで分岐
+    int r = match (s) {
+        MyStatus::Active => 10,
+        MyStatus::Inactive => 20,
+        _ => 0,
+    };
+
+    println("Result: {r}");
+    return 0;
+}

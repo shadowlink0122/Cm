@@ -1,0 +1,24 @@
+//! platform: uefi
+// Bug#7回帰テスト: must { __asm__() } が制御フローを破壊しないこと
+// mustブロック内のASM命令がhltループを不正に終了させないことを検証
+// 修正: mustブロックのno_optフラグがASM side effectを正しく保持
+
+ulong efi_main(void* image_handle, void* system_table) {
+    ulong result = 0;
+
+    // mustブロック内で通常の代入
+    must {
+        result = 42;
+    }
+
+    // mustブロック内でASM命令（nopは安全）
+    must {
+        __asm__("nop");
+        result = result + 1;
+    }
+
+    // mustブロック後に正しく制御が戻ること
+    result = result + 10;
+
+    return result;
+}

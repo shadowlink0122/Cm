@@ -1,0 +1,25 @@
+// enumのmatch文テスト（シンプルなenum、Associated Dataなし）
+import std::io::println;
+
+// シンプルなenum（Associated Dataなし)
+enum Status {
+    Ok = 0,
+    Error = 1,
+    Pending = 2
+}
+
+int main() {
+    // enum型として変数を宣言
+    int s = Status::Error;
+
+    // matchで式として値を返す
+    int result = match (s) {
+        Status::Ok => 0,
+        Status::Error => 100,
+        Status::Pending => 50,
+        _ => -1,
+    };
+
+    println("Result: {result}");
+    return 0;
+}

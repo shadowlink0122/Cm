@@ -1,0 +1,26 @@
+=== Simple BST Insert Test ===
+
+Inserting 50:
+  insert called with value=50
+    node is null, creating new node
+
+Inserting 30:
+  insert called with value=30
+    node exists, value=50
+    going left
+  insert called with value=30
+    node is null, creating new node
+
+Inserting 70:
+  insert called with value=70
+    node exists, value=50
+    going right
+  insert called with value=70
+    node is null, creating new node
+
+Tree structure:
+Root: 50
+Left: 30
+Right: 70
+
+=== Done ===

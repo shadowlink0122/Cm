@@ -856,13 +856,19 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
             // 負の数をサポート
             bool is_negative = consume_if(TokenKind::Minus);
 
-            if (!check(TokenKind::IntLiteral)) {
-                error("enum値には整数リテラルが必要です");
+            int64_t value = 0;
+            if (check(TokenKind::IntLiteral)) {
+                value = static_cast<int64_t>(current().get_int());
+                advance();
+            } else if (check(TokenKind::CharLiteral)) {
+                // 文字リテラル: 'a' → 97 (ASCII値)
+                std::string s(current().get_string());
+                value = static_cast<int64_t>(s.empty() ? 0 : static_cast<unsigned char>(s[0]));
+                advance();
+            } else {
+                error("enum値には整数リテラルまたは文字リテラルが必要です");
                 return nullptr;
             }
-
-            int64_t value = static_cast<int64_t>(current().get_int());
-            advance();
 
             if (is_negative) {
                 value = -value;

@@ -1,0 +1,46 @@
+// typedef union配列テスト
+// int, bool など異なるプリミティブ型をまとめて扱う
+
+import std::io::println;
+
+// 異なるプリミティブ型を格納するユニオン型
+typedef Value = int | bool;
+
+int main() {
+    println("=== Union Array Tuple Test ===");
+
+    // ユニオン型配列をローカルで使用
+    Value[3] data;
+    data[0] = 42 as Value;
+    data[1] = true as Value;
+    data[2] = false as Value;
+
+    int id = data[0] as int;
+    bool flag1 = data[1] as bool;
+    bool flag2 = data[2] as bool;
+    println("id: {id}");
+    println("flag1: {flag1}");
+    println("flag2: {flag2}");
+
+    // safe divide パターン
+    int a = 17;
+    int b = 5;
+    Value[2] result;
+    result[0] = (a / b) as Value;
+    result[1] = true as Value;
+
+    int quotient = result[0] as int;
+    bool ok = result[1] as bool;
+    println("17/5 = {quotient}, ok={ok}");
+
+    // ゼロ除算ガード
+    Value[2] result2;
+    result2[0] = 0 as Value;
+    result2[1] = false as Value;
+    int q2 = result2[0] as int;
+    bool ok2 = result2[1] as bool;
+    println("div0 = {q2}, ok={ok2}");
+
+    println("=== Done ===");
+    return 0;
+}

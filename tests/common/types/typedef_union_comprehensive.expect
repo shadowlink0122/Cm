@@ -1,0 +1,10 @@
+=== Union Array Comprehensive Test ===
+Test 1: Return value
+  x=42, y=true
+Test 2: Argument
+  arg: a=10, b=false, c=99
+Test 3: Arg to return
+  swapped: sy=true, sx=42
+Test 4: Local only
+  lv0=100, lv1=true
+=== PASS ===

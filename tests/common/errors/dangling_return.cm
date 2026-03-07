@@ -1,0 +1,11 @@
+// ダングリングポインタ：ローカル変数への参照を返す
+int* get_ptr() {
+    int x = 42;
+    return &x;
+}
+
+int main() {
+    const int* p = get_ptr();
+    println("*p = {*p}");
+    return 0;
+}

@@ -1,0 +1,4 @@
+math::add(10,20) = 30
+m::calculate(21) = 42
+double_value(5) = 10
+triple_value(5) = 15

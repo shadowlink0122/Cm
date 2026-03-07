@@ -1,0 +1,56 @@
+//! platform: js
+// CSS構造体テスト: with Css による自動実装
+
+struct ButtonStyle with Css {
+    string background_color;
+    string color;
+    string padding;
+    string border_radius;
+    string font_size;
+}
+
+struct CardStyle with Css {
+    string background_color;
+    string border;
+    string padding;
+}
+
+int main() {
+    ButtonStyle btn;
+    btn.background_color = "#4A90D9";
+    btn.color = "white";
+    btn.padding = "12px 24px";
+    btn.border_radius = "8px";
+    btn.font_size = "16px";
+
+    println("Button CSS:");
+    println(btn.css());
+
+    println("");
+
+    // to_css() エイリアステスト
+    println("Button to_css():");
+    println(btn.to_css());
+
+    println("");
+
+    CardStyle card;
+    card.background_color = "#ffffff";
+    card.border = "1px solid #e0e0e0";
+    card.padding = "24px";
+
+    println("Card CSS:");
+    println(card.css());
+
+    println("");
+
+    // isCss() テスト
+    if (btn.isCss()) {
+        println("ButtonStyle is CSS: true");
+    }
+    if (card.isCss()) {
+        println("CardStyle is CSS: true");
+    }
+
+    return 0;
+}

@@ -1,0 +1,23 @@
+// math_simple.cm - シンプルな数学モジュールテスト
+import std::io::println;
+
+// シンプルな計算関数
+double square(double x) {
+    return x * x;
+}
+
+int main() {
+    println("=== Simple Math Test ===");
+
+    double pi = 3.14159;
+    double e = 2.71828;
+    println("PI = {pi}");
+    println("E = {e}");
+
+    double r = 2.0;
+    double area = pi * square(r);
+    println("circle_area(2.0) = {area}");
+
+    println("=== PASS ===");
+    return 0;
+}

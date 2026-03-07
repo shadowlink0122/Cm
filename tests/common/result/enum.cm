@@ -1,0 +1,117 @@
+// enum版Result型のテスト
+// v0.13.0 新機能
+// 設計: Result<T, E> は Ok(T) と Err(E) で各々1つの型を持つ
+import std::io::println;
+
+// enum版Result型（各バリアントは1つのフィールドのみ）
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+// Result型のヘルパー
+impl<T, E> Result<T, E> {
+    bool is_ok() {
+        // matchで判定（ステートメント形式）
+        bool result = false;
+        match (self) {
+            Result::Ok(v) => {
+                result = true;
+            }
+            Result::Err(e) => {
+                result = false;
+            }
+        }
+        return result;
+    }
+
+    bool is_err() {
+        return !self.is_ok();
+    }
+
+    T unwrap() {
+        T value;
+        match (self) {
+            Result::Ok(v) => {
+                value = v;
+            }
+            Result::Err(e) => {
+                panic("unwrap called on Err");
+            }
+        }
+        return value;
+    }
+
+    T unwrap_or(T default_val) {
+        T value = default_val;
+        match (self) {
+            Result::Ok(v) => {
+                value = v;
+            }
+            Result::Err(e) => {
+                value = default_val;
+            }
+        }
+        return value;
+    }
+}
+
+// グローバルヘルパー関数
+Result<int, string> ok_int(int value) {
+    return Result::Ok(value);
+}
+
+Result<int, string> err_str(string error) {
+    return Result::Err(error);
+}
+
+// 安全な除算
+Result<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return err_str("Division by zero");
+    }
+    return ok_int(a / b);
+}
+
+int main() {
+    println("=== Result Enum Test ===");
+
+    // 成功ケース
+    Result<int, string> r1 = safe_divide(10, 2);
+    match (r1) {
+        Result::Ok(value) => {
+            println("10 / 2 = {value}");
+        }
+        Result::Err(msg) => {
+            println("Error: {msg}");
+        }
+    }
+
+    // 失敗ケース
+    Result<int, string> r2 = safe_divide(10, 0);
+    match (r2) {
+        Result::Ok(value) => {
+            println("10 / 0 = {value}");
+        }
+        Result::Err(msg) => {
+            println("Error: {msg}");
+        }
+    }
+
+    // is_ok / is_err
+    if (r1.is_ok()) {
+        println("r1 is Ok");
+    }
+    if (r2.is_err()) {
+        println("r2 is Err");
+    }
+
+    // unwrap_or
+    int v1 = r1.unwrap_or(-1);
+    int v2 = r2.unwrap_or(-1);
+    println("r1.unwrap_or(-1) = {v1}");
+    println("r2.unwrap_or(-1) = {v2}");
+
+    println("=== Complete ===");
+    return 0;
+}

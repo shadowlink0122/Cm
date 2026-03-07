@@ -1,0 +1,5 @@
+Point: p1 == p2
+Point: p1 != p3
+Color: c1 == c2
+Color: c1 != c3
+Size: s1 == s2

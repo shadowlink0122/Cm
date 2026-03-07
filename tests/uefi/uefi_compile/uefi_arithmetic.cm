@@ -1,0 +1,17 @@
+//! platform: uefi
+// UEFI算術演算テスト
+// OS依存なし: 基本的な演算のみ
+
+ulong add(ulong a, ulong b) {
+    return a + b;
+}
+
+ulong multiply(ulong a, ulong b) {
+    return a * b;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    ulong x = add(10, 20);
+    ulong y = multiply(x, 2);
+    return y - 60;  // 0 = EFI_SUCCESS
+}

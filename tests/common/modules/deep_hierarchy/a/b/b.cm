@@ -1,0 +1,9 @@
+// b.cm - 中間モジュール
+module b;
+
+import ./c;
+export { c };
+
+export int mid_value() {
+    return 100;
+}

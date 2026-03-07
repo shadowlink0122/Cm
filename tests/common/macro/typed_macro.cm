@@ -1,0 +1,43 @@
+// 型付きマクロのテスト - 全型サポート
+import std::io::println;
+
+// int型マクロ
+macro int VERSION = 13;
+macro int DEBUG_LEVEL = 1;
+
+// string型マクロ
+macro string APP_NAME = "CmApp";
+macro string VERSION_STR = "v0.13.0";
+
+// bool型マクロ
+macro bool DEBUG = true;
+macro bool RELEASE = false;
+
+int main() {
+    println("=== Typed Macro Test ===");
+
+    // int型マクロ
+    int v = VERSION;
+    println(v);
+    println(DEBUG_LEVEL);
+
+    // string型マクロ
+    println(APP_NAME);
+    println(VERSION_STR);
+
+    // bool型マクロ
+    if (DEBUG) {
+        println("Debug mode");
+    }
+
+    if (!RELEASE) {
+        println("Not release");
+    }
+
+    // マクロを式で使用
+    int next_version = VERSION + 1;
+    println(next_version);
+
+    println("=== Complete ===");
+    return 0;
+}

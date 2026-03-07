@@ -1,0 +1,59 @@
+// thread_parallel.cm - 複数スレッドの並列実行テスト
+// 結果の合計値で正しく動作を確認（出力順序は不定）
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
+
+// ワーカー関数（計算のみ、出力なし）
+void* calc10(void* arg) {
+    int ans = 0;
+    for (int i = 0; i < 5; i++) {
+        ans = ans + 2;
+        // println("calc10: {ans}");
+        sleep_ms(100);
+    }
+    return ans as int as void*;
+}
+
+void* calc20(void* arg) {
+    int ans = 0;
+    for (int i = 0; i < 5; i++) {
+        ans = ans + 4;
+        // println("calc20: {ans}");
+        sleep_ms(100);
+    }
+    return ans as int as void*;
+}
+
+void* calc30(void* arg) {
+    int ans = 0;
+    for (int i = 0; i < 5; i++) {
+        ans = ans + 6;
+        // println("calc30: {ans}");
+        sleep_ms(100);
+    }
+    return ans as int as void*;
+}
+
+int main() {
+    println("Starting parallel threads");
+
+    // 3つのスレッドを同時に起動
+    ulong t1 = spawn(calc10 as void*);
+    ulong t2 = spawn(calc20 as void*);
+    ulong t3 = spawn(calc30 as void*);
+
+    // 全てのスレッドを待機
+    int r1 = join(t1);
+    int r2 = join(t2);
+    int r3 = join(t3);
+
+    // 結果を合計（順序に依存しない）
+    int total = r1 + r2 + r3;
+    print("Total: ");
+    println(total);
+
+    println("Done");
+
+    return 0;
+}

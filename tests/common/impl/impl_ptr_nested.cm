@@ -1,0 +1,100 @@
+// Bug#10拡張テスト: ポインタ経由implメソッドのネスト呼出し+malloc+cast
+// ptr->method() で method が self.other_method() を呼ぶパターンの検証
+import std::io::println;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+struct Console {
+    ulong cursor_x;
+    ulong cursor_y;
+    ulong width;
+    ulong fb_addr;
+}
+
+impl Console {
+    void init(ulong addr, ulong w) {
+        self.fb_addr = addr;
+        self.width = w;
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+    }
+
+    // 最下層: selfフィールド変更
+    void advance_cursor() {
+        self.cursor_x = self.cursor_x + 1;
+        if (self.cursor_x >= self.width) {
+            self.cursor_x = 0;
+            self.cursor_y = self.cursor_y + 1;
+        }
+    }
+
+    // 中間層: ネスト呼出し（1段）
+    void write_chars(ulong count) {
+        ulong i = 0;
+        while (i < count) {
+            self.advance_cursor();
+            i = i + 1;
+        }
+    }
+
+    // 最上層: ネスト呼出し（2段）
+    void write_line(ulong len) {
+        self.write_chars(len);
+        self.cursor_x = 0;
+        self.cursor_y = self.cursor_y + 1;
+    }
+
+    ulong get_cursor_x() { return self.cursor_x; }
+    ulong get_cursor_y() { return self.cursor_y; }
+}
+
+int main() {
+    // ケース1: &ローカル変数 → ポインタ経由ネスト呼出し
+    Console c1;
+    Console* p1 = &c1;
+    p1->init(0xDEAD, 80);
+    p1->write_chars(5);
+    println("p1 cursor: {c1.cursor_x},{c1.cursor_y}");
+    println("p1 fb_addr: {c1.fb_addr}");
+
+    // ケース2: ポインタ経由2段ネスト（write_line → write_chars → advance_cursor）
+    Console c2;
+    Console* p2 = &c2;
+    p2->init(0xBEEF, 80);
+    p2->write_line(10);
+    println("p2 cursor: {c2.cursor_x},{c2.cursor_y}");
+
+    // ケース3: ポインタ経由getter呼出し
+    Console c3;
+    Console* p3 = &c3;
+    p3->init(12345, 40);
+    p3->write_chars(3);
+    ulong cx = p3->get_cursor_x();
+    ulong cy = p3->get_cursor_y();
+    println("p3 getter: {cx},{cy}");
+
+    // ケース4: malloc経由ポインタ + impl
+    void* mem = malloc(sizeof(Console));
+    Console* heap_con = mem as Console*;
+    heap_con->init(99999, 80);
+    heap_con->write_line(5);
+    heap_con->write_chars(2);
+    ulong hx = heap_con->get_cursor_x();
+    ulong hy = heap_con->get_cursor_y();
+    println("heap cursor: {hx},{hy}");
+    println("heap fb_addr: {heap_con->fb_addr}");
+    free(mem);
+
+    // ケース5: 折り返し（width超え）をポインタ経由で
+    Console c5;
+    Console* p5 = &c5;
+    p5->init(0, 10);
+    p5->write_chars(25);
+    println("p5 cursor: {c5.cursor_x},{c5.cursor_y}");
+
+    println("PASS");
+    return 0;
+}

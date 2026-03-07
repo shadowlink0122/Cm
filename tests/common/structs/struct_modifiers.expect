@@ -1,0 +1,3 @@
+Person: Alice
+Wrapper: value=100, x=100
+Config: name=app, timeout=30

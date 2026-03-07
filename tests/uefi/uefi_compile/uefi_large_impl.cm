@@ -1,0 +1,52 @@
+//! platform: uefi
+// Bug#10リグレッションテスト: ポインタ経由impl + 大構造体GEP
+
+struct Counter {
+    ulong value;
+}
+
+impl Counter {
+    void increment() {
+        self.value = self.value + 1;
+    }
+    ulong get() {
+        return self.value;
+    }
+}
+
+struct LargeStruct {
+    ulong f0;
+    ulong f1;
+    ulong f2;
+    ulong f3;
+    ulong f4;
+    ulong f5;
+    ulong f6;
+}
+
+impl LargeStruct {
+    void set_all() {
+        self.f0 = 10;
+        self.f1 = 20;
+        self.f2 = 30;
+        self.f3 = 40;
+        self.f4 = 50;
+        self.f5 = 60;
+        self.f6 = 70;
+    }
+    ulong sum() {
+        return self.f0 + self.f1 + self.f2 + self.f3 + self.f4 + self.f5 + self.f6;
+    }
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    Counter counter;
+    counter.value = 0;
+    counter.increment();
+
+    LargeStruct ls;
+    ls.set_all();
+    ulong total = ls.sum();
+
+    return counter.value + total;
+}
