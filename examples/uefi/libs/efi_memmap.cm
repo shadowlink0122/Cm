@@ -70,7 +70,7 @@ export ulong efi_free_pool(void* system_table, void* buffer) {
 /// GetMemoryMap (BootServices + 0x38)
 /// map_size [in/out], map, map_key [out], desc_size [out], desc_ver [out]
 export ulong efi_get_memory_map(void* system_table, ulong* map_size, void* map,
-                                 ulong* map_key, ulong* desc_size, ulong* desc_ver) {
+    ulong* map_key, ulong* desc_size, ulong* desc_ver) {
     ulong* st = system_table as ulong*;
     ulong bs_addr = *(st + 12);
     ulong* bs = bs_addr as ulong*;

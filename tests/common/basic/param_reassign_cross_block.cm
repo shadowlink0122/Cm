@@ -30,9 +30,9 @@ int apply(int value, int x) {
 
 int main() {
     // パラメータ再代入テスト
-    println(process(5));    // 5
-    println(process(-3));   // 3
-    println(process(0));    // 0
+    println(process(5));   // 5
+    println(process(-3));  // 3
+    println(process(0));   // 0
 
     // ポインタパラメータテスト
     int a = 10;

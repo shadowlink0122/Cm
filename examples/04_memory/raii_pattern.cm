@@ -12,7 +12,7 @@ impl Resource {
         self.id = i;
         println("Resource '{self.name}' (id={self.id}) acquired");
     }
-    
+
     ~self() {
         println("Resource '{self.name}' (id={self.id}) released");
     }
@@ -20,7 +20,7 @@ impl Resource {
 
 int main() {
     println("=== RAII Pattern ===");
-    
+
     // 1. 基本的なRAII
     println("--- Basic RAII ---");
     {
@@ -28,7 +28,7 @@ int main() {
         println("Using resource...");
     }
     println("After scope");
-    
+
     // 2. ネストしたスコープ
     println("");
     println("--- Nested scope ---");
@@ -40,7 +40,7 @@ int main() {
         }
         println("Inside outer scope");
     }
-    
+
     println("\n=== Done ===");
     return 0;
 }

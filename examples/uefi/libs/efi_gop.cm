@@ -38,21 +38,21 @@ export ulong gop_init(void* system_table, ulong* out_fb, ulong* out_width, ulong
     // qword[0] = 0x4A3823DC9042A9DE, qword[1] = 0x6A5180D0DE7AFB96
     must {
         __asm__(`
-        pushq ${r:locate_fn};
-        popq %r10;
-        subq $$64, %rsp;
-        movabsq $$0x4A3823DC9042A9DE, %rax;
-        movq %rax, 48(%rsp);
-        movabsq $$0x6A5180D0DE7AFB96, %rax;
-        movq %rax, 56(%rsp);
-        movq $$0, 32(%rsp);
-        leaq 48(%rsp), %rcx;
-        xorq %rdx, %rdx;
-        leaq 32(%rsp), %r8;
-        callq *%r10;
-        movq 32(%rsp), ${=r:gop_ptr};
-        addq $$64, %rsp;
-        movq %rax, ${=r:result}
+            pushq ${r:locate_fn};
+            popq %r10;
+            subq $$64, %rsp;
+            movabsq $$0x4A3823DC9042A9DE, %rax;
+            movq %rax, 48(%rsp);
+            movabsq $$0x6A5180D0DE7AFB96, %rax;
+            movq %rax, 56(%rsp);
+            movq $$0, 32(%rsp);
+            leaq 48(%rsp), %rcx;
+            xorq %rdx, %rdx;
+            leaq 32(%rsp), %r8;
+            callq *%r10;
+            movq 32(%rsp), ${=r:gop_ptr};
+            addq $$64, %rsp;
+            movq %rax, ${=r:result}
         `);
     }
 
