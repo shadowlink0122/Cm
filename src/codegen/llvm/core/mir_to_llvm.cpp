@@ -3869,13 +3869,53 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                 std::string lookupName = currentType->name;
 
                                 // Tagged Union構造体の特別処理
-                                // __TaggedUnion_* 構造体は {i32 tag, i32 payload} 形式
+                                // __TaggedUnion_* 構造体は {i32 tag, i8[N] payload} 形式
                                 if (lookupName.find("__TaggedUnion_") == 0) {
-                                    // field[0] = タグ (int), field[1] = ペイロード (int)
                                     if (proj.field_id == 0) {
+                                        // field[0] = タグ (常にi32)
                                         currentType = hir::make_int();
                                     } else if (proj.field_id == 1) {
-                                        currentType = hir::make_int();
+                                        // field[1] = ペイロード: 型引数から最大サイズの型を推論
+                                        // デフォルトはi64（ポインタサイズ）で安全側に倒す
+                                        currentType = hir::make_long();
+
+                                        // ベースローカルのtype_argsが利用可能なら正確な型を使用
+                                        if (currentMIRFunction &&
+                                            place.local < currentMIRFunction->locals.size()) {
+                                            auto& baseType =
+                                                currentMIRFunction->locals[place.local].type;
+                                            if (baseType && !baseType->type_args.empty()) {
+                                                // type_argsの中で最大サイズの型をペイロード型として使用
+                                                bool has64bit = false;
+                                                hir::TypePtr bestType = nullptr;
+                                                for (const auto& arg : baseType->type_args) {
+                                                    if (!arg)
+                                                        continue;
+                                                    auto k = arg->kind;
+                                                    if (k == hir::TypeKind::Long ||
+                                                        k == hir::TypeKind::ULong ||
+                                                        k == hir::TypeKind::Double ||
+                                                        k == hir::TypeKind::UDouble ||
+                                                        k == hir::TypeKind::Pointer ||
+                                                        k == hir::TypeKind::Reference ||
+                                                        k == hir::TypeKind::String ||
+                                                        k == hir::TypeKind::CString ||
+                                                        k == hir::TypeKind::ISize ||
+                                                        k == hir::TypeKind::USize) {
+                                                        has64bit = true;
+                                                        if (!bestType)
+                                                            bestType = arg;
+                                                    } else if (!has64bit && !bestType) {
+                                                        bestType = arg;
+                                                    }
+                                                }
+                                                if (has64bit) {
+                                                    currentType = hir::make_long();
+                                                } else if (bestType) {
+                                                    currentType = bestType;
+                                                }
+                                            }
+                                        }
                                     }
                                 } else {
                                     auto structIt = structDefs.find(lookupName);

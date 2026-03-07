@@ -127,9 +127,30 @@ void TypeChecker::check_let(ast::LetStmt& let) {
             resolved_type->element_type->qualifiers.is_const = true;
         }
         if (init_type && !types_compatible(resolved_type, init_type)) {
-            error(stmt_span, "Type mismatch in variable declaration '" + let.name +
-                                 "': expected '" + ast::type_to_string(*resolved_type) +
-                                 "', got '" + ast::type_to_string(*init_type) + "'");
+            // ジェネリクスenum variant型推論: Option<ulong> x = Option::None のようなケース
+            // init_typeがintだが、init式がenum variant識別子の場合、宣言型に強制する
+            bool is_enum_variant_coercion = false;
+            if (let.init) {
+                if (auto* ident = let.init->as<ast::IdentExpr>()) {
+                    // Option::None, Result::Err 等のenum variant名かチェック
+                    auto sep = ident->name.find("::");
+                    if (sep != std::string::npos) {
+                        std::string enum_name = ident->name.substr(0, sep);
+                        // 宣言型の名前がenum名と一致するか
+                        if (resolved_type->name == enum_name &&
+                            enum_values_.count(ident->name) > 0) {
+                            is_enum_variant_coercion = true;
+                            // init式の型を宣言型に強制
+                            let.init->type = resolved_type;
+                        }
+                    }
+                }
+            }
+            if (!is_enum_variant_coercion) {
+                error(stmt_span, "Type mismatch in variable declaration '" + let.name +
+                                     "': expected '" + ast::type_to_string(*resolved_type) +
+                                     "', got '" + ast::type_to_string(*init_type) + "'");
+            }
         }
         // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
         if (let.init) {
@@ -188,9 +209,24 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
     if (ret.value) {
         auto val_type = infer_type(*ret.value);
         if (!types_compatible(current_return_type_, val_type)) {
-            error(stmt_span, "Return type mismatch: expected '" +
-                                 ast::type_to_string(*current_return_type_) + "', got '" +
-                                 (val_type ? ast::type_to_string(*val_type) : "unknown") + "'");
+            // ジェネリクスenum variant型推論: return Option::None のようなケース
+            bool is_enum_variant_coercion = false;
+            if (auto* ident = ret.value->as<ast::IdentExpr>()) {
+                auto sep = ident->name.find("::");
+                if (sep != std::string::npos) {
+                    std::string enum_name = ident->name.substr(0, sep);
+                    if (current_return_type_ && current_return_type_->name == enum_name &&
+                        enum_values_.count(ident->name) > 0) {
+                        is_enum_variant_coercion = true;
+                        ret.value->type = current_return_type_;
+                    }
+                }
+            }
+            if (!is_enum_variant_coercion) {
+                error(stmt_span, "Return type mismatch: expected '" +
+                                     ast::type_to_string(*current_return_type_) + "', got '" +
+                                     (val_type ? ast::type_to_string(*val_type) : "unknown") + "'");
+            }
         }
 
         // ライフタイムチェック: ローカル変数への参照を返すことを禁止
