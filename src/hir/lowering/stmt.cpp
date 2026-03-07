@@ -591,7 +591,8 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
                                             debug::Level::Debug);
                                     }
                                 } else {
-                                    // 制約なし: そのまま出力
+                                    // 制約なし (const展開用): そのまま出力
+                                    // MIR段階で ${CONST} → $$0x<hex> に展開される
                                     processed_code += "${" + inner + "}";
                                 }
 

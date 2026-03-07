@@ -1507,6 +1507,53 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
     debug_msg("mir_asm", "[MIR] lower_asm: " + asm_stmt.code +
                              " operands=" + std::to_string(asm_stmt.operands.size()));
 
+    // asm code文字列中の ${CONST_NAME} をLLVM即値リテラルに展開
+    // 既存のオペランド記法 ${+r:var} は ':' を含むためスキップ
+    //
+    // cmソースでは ${CONST_NAME} と書くだけでよい。
+    // 展開時に $$ プレフィクス (LLVM即値エスケープ) を自動付与する。
+    //
+    // 例: ${MOUSE_PHASE_ADDR} → $$0x93310
+    //   LLVM: $$ → '$', 0x93310 はそのまま
+    //   GAS:  $0x93310 (即値)
+    std::string expanded_code = asm_stmt.code;
+    {
+        size_t pos = 0;
+        while ((pos = expanded_code.find("${", pos)) != std::string::npos) {
+            size_t end = expanded_code.find('}', pos);
+            if (end == std::string::npos)
+                break;
+            std::string name = expanded_code.substr(pos + 2, end - pos - 2);
+            // オペランド記法 (${+r:var} 等) はスキップ
+            if (name.find(':') != std::string::npos) {
+                pos = end + 1;
+                continue;
+            }
+            // const定数テーブルから検索
+            auto const_val_opt = ctx.get_const_value(name);
+            if (const_val_opt) {
+                int64_t val = 0;
+                if (std::holds_alternative<int64_t>(const_val_opt->value)) {
+                    val = std::get<int64_t>(const_val_opt->value);
+                } else if (std::holds_alternative<double>(const_val_opt->value)) {
+                    val = static_cast<int64_t>(std::get<double>(const_val_opt->value));
+                }
+                // LLVM即値リテラル ($$0x<hex>) に変換
+                char buf[32];
+                snprintf(buf, sizeof(buf), "$$0x%lx", static_cast<unsigned long>(val));
+                std::string hex_str(buf);
+
+                // ${CONST_NAME} を値に置換
+                expanded_code.replace(pos, end - pos + 1, hex_str);
+                pos += hex_str.size();
+                debug_msg("mir_asm", "[MIR] const expand: ${" + name + "} -> " + hex_str);
+            } else {
+                debug_msg("mir_asm", "[MIR] WARNING: const not found for ${" + name + "}");
+                pos = end + 1;
+            }
+        }
+    }
+
     // オペランドを変換: 変数名 → LocalId、またはmacro/const → 定数値
     std::vector<MirStatement::MirAsmOperand> mir_operands;
     for (const auto& operand : asm_stmt.operands) {
@@ -1573,7 +1620,7 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
         }
     }
 
-    ctx.push_statement(MirStatement::asm_stmt(asm_stmt.code, asm_stmt.is_must,
+    ctx.push_statement(MirStatement::asm_stmt(expanded_code, asm_stmt.is_must,
                                               std::move(mir_operands), asm_stmt.clobbers));
 }
 

@@ -1,0 +1,7 @@
+=== ASM Const Expand Test ===
+const expand (42): PASS
+const expand (0xFF): PASS
+const expand (macro 10): PASS
+const expand (local 99): PASS
+const expand vs i constraint: PASS
+=== All Tests Passed ===
