@@ -215,6 +215,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
     bool first = true;
     int brace_depth = 0;          // 現在のブレース深さ
     int bracket_depth = 0;        // 現在のブラケット深さ（配列[]）
+    int paren_depth = 0;          // 現在の丸括弧深さ（関数引数等）
     bool in_backtick = false;     // バッククォート文字列内かどうか
     int backtick_base_depth = 0;  // バッククォート開始時の深さ
 
@@ -283,6 +284,10 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                             bracket_depth++;
                         else if (c == ']' && bracket_depth > 0)
                             bracket_depth--;
+                        else if (c == '(')
+                            paren_depth++;
+                        else if (c == ')' && paren_depth > 0)
+                            paren_depth--;
                     }
                 }
             } else {
@@ -297,18 +302,22 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             continue;
         }
 
-        // 閉じブレース/ブラケットで始まる行は先にデクリメント
+        // 閉じブレース/ブラケット/丸括弧で始まる行は先にデクリメント
         bool starts_with_close = (!content.empty() && content[0] == '}');
         bool starts_with_bracket_close = (!content.empty() && content[0] == ']');
+        bool starts_with_paren_close = (!content.empty() && content[0] == ')');
         if (starts_with_close && brace_depth > 0) {
             brace_depth--;
         }
         if (starts_with_bracket_close && bracket_depth > 0) {
             bracket_depth--;
         }
+        if (starts_with_paren_close && paren_depth > 0) {
+            paren_depth--;
+        }
 
-        // インデントを計算（ブレース深さ + ブラケット深さ）
-        int total_depth = brace_depth + bracket_depth;
+        // インデントを計算（ブレース深さ + ブラケット深さ + 丸括弧深さ）
+        int total_depth = brace_depth + bracket_depth + paren_depth;
         size_t indent = static_cast<size_t>(total_depth) * indent_width_;
 
         // 正規化されたインデントで出力
@@ -355,6 +364,8 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                 } else {
                     // 複数行バッククォート: 次の行以降に閉じバッククォートがある
                     in_backtick = true;
+                    // paren_depthはステートメントの一部（__asm__(` の `(`等）なので
+                    // バッククォートのベース深さには含めない
                     backtick_base_depth = brace_depth + bracket_depth;
                     break;
                 }
@@ -369,7 +380,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                 in_char = !in_char;
             }
 
-            // ブレース・ブラケットカウント
+            // ブレース・ブラケット・丸括弧カウント
             if (!in_string && !in_char && !in_comment) {
                 if (c == '{') {
                     brace_depth++;
@@ -384,6 +395,13 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                     // 行頭の ] は既にデクリメント済み
                     if (bracket_depth > 0) {
                         bracket_depth--;
+                    }
+                } else if (c == '(') {
+                    paren_depth++;
+                } else if (c == ')' && !starts_with_paren_close) {
+                    // 行頭の ) は既にデクリメント済み
+                    if (paren_depth > 0) {
+                        paren_depth--;
                     }
                 }
             }
