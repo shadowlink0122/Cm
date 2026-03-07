@@ -1598,6 +1598,16 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         locals[i] = alloca;
                         allocatedLocals.insert(i);  // allocaされた変数を記録
 
+                        // Tagged Union型のallocaをゼロ初期化
+                        // ペイロードフィールド(i8[N])の未使用バイトにゴミが残るのを防止
+                        if (local.type && local.type->name.find("__TaggedUnion_") == 0) {
+                            auto dataLayout = module->getDataLayout();
+                            auto allocSize = dataLayout.getTypeAllocSize(llvmType);
+                            builder->CreateMemSet(alloca,
+                                                  llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                                  allocSize, llvm::MaybeAlign());
+                        }
+
                         // 構造体型の場合、スライスメンバーを初期化
                         if (local.type->kind == hir::TypeKind::Struct) {
                             auto structName = local.type->name;
@@ -1670,6 +1680,17 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 if (func.name == "main") {
                     builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), 0), alloca);
                 }
+
+                // struct型の戻り値をゼロ初期化（Tagged Union対応）
+                // Result<ulong, long>等のペイロードi8[N]で部分書き込みによる
+                // ゴミデータを防止。LLVM struct型全般に適用（安全で汎用的）
+                if (llvmType->isStructTy()) {
+                    auto dataLayout = module->getDataLayout();
+                    auto allocSize = dataLayout.getTypeAllocSize(llvmType);
+                    builder->CreateMemSet(alloca, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                          allocSize, llvm::MaybeAlign());
+                }
+
                 locals[func.return_local] = alloca;
                 allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
             }
@@ -2379,10 +2400,60 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                                       llvm::MaybeAlign(), payloadSize);
                             } else {
                                 // 通常のStore操作を実行
+
+                                // Tagged Unionペイロードへの書き込み:
+                                // ペイロードフィールドはi8[N]配列。プリミティブ値(i32等)の場合、
+                                // 配列全体がストアされず上位バイトにゴミが残る。
+                                // → ストア前にペイロード領域をゼロクリアして安全性を確保
+                                if (isTaggedUnionPayload && addr) {
+                                    // ペイロードi8配列のサイズを取得
+                                    // addrはGEPでfield[1]を指すポインタ
+                                    uint64_t payloadSize = 8;  // デフォルト8バイト
+                                    if (currentMIRFunction &&
+                                        assign.place.local < currentMIRFunction->locals.size()) {
+                                        auto& local =
+                                            currentMIRFunction->locals[assign.place.local];
+                                        if (local.type) {
+                                            auto llvmStructType = convertType(local.type);
+                                            if (llvmStructType->isStructTy()) {
+                                                auto structTy =
+                                                    llvm::cast<llvm::StructType>(llvmStructType);
+                                                if (structTy->getNumElements() >= 2) {
+                                                    auto payloadFieldType =
+                                                        structTy->getElementType(1);
+                                                    auto dataLayout = module->getDataLayout();
+                                                    payloadSize = dataLayout.getTypeAllocSize(
+                                                        payloadFieldType);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // ペイロード領域をゼロクリア
+                                    builder->CreateMemSet(
+                                        addr, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                        payloadSize, llvm::MaybeAlign());
+
+                                    // ペイロード値のビット幅がペイロード領域より小さい場合、
+                                    // ゼロ拡張して全バイトを定義済みにする
+                                    // 例: Result<ulong, long>::Ok(0) で i32(0) → i64(0) に拡張
+                                    // これによりLLVM最適化がmemset+storeをconstant phiに
+                                    // 畳み込む際にundefinedバイトが生成されない
+                                    if (rvalue->getType()->isIntegerTy() && payloadSize > 0) {
+                                        unsigned valueBits =
+                                            rvalue->getType()->getIntegerBitWidth();
+                                        unsigned payloadBits =
+                                            static_cast<unsigned>(payloadSize * 8);
+                                        if (valueBits < payloadBits) {
+                                            rvalue = builder->CreateZExt(
+                                                rvalue,
+                                                llvm::IntegerType::get(ctx.getContext(),
+                                                                       payloadBits),
+                                                "payload_zext");
+                                        }
+                                    }
+                                }
+
                                 // BUG修正(v0.14.2): asm入出力で参照される変数のみvolatileにする
-                                // 以前は全allocated変数をvolatile化していたが、
-                                // キャスト中間変数等にも冗長なvolatile store/loadが生成され
-                                // コードサイズの爆発とbaremetal環境でのスタック圧迫を引き起こしていた
                                 auto* storeInst = builder->CreateStore(rvalue, addr);
                                 if (isAllocated &&
                                     asmReferencedLocals.count(assign.place.local) > 0) {

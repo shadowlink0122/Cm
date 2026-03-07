@@ -62,11 +62,26 @@ hir::TypePtr MirLoweringBase::resolve_typedef(hir::TypePtr type) {
 
         // enum定義を確認
         auto enum_it = enum_defs.find(type->name);
+
+        // モノモーフ化された型名（例: Result__ulong__long）の場合、
+        // ベース名（Result）でenum_defsをフォールバック検索
+        if (enum_it == enum_defs.end()) {
+            size_t dunder_pos = type->name.find("__");
+            if (dunder_pos != std::string::npos && dunder_pos > 0) {
+                std::string base_name = type->name.substr(0, dunder_pos);
+                enum_it = enum_defs.find(base_name);
+            }
+        }
+
         if (enum_it != enum_defs.end()) {
             // Tagged Union enum（ペイロード付き）は__TaggedUnion_構造体として扱う
-            if (tagged_union_names.count(type->name)) {
+            // モノモーフ化された型名の場合はベース名でtagged_union_namesを確認
+            std::string base_enum_name = enum_it->first;
+            if (tagged_union_names.count(type->name) || tagged_union_names.count(base_enum_name)) {
                 auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                 tagged_union_type->name = "__TaggedUnion_" + type->name;
+                // 元の型引数を保持（ペイロード型推論に使用）
+                tagged_union_type->type_args = type->type_args;
                 return tagged_union_type;
             }
             // 通常のenum（値のみ）はintとして扱う
