@@ -1,0 +1,14 @@
+=== Pure LLVM Knapsack DP (2D Array) ===
+Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]
+Capacity: 7
+
+=== 2D DP Table (last row) ===
+dp[3][2]=3
+dp[3][3]=4
+dp[3][4]=5
+dp[3][5]=7
+dp[3][6]=8
+dp[3][7]=9
+
+=== Verification ===
+Knapsack DP: PASS (optimal = 9)

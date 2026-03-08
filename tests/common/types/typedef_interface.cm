@@ -1,0 +1,26 @@
+import std::io::println;
+// インターフェースを実装した構造体のtypedef
+interface Valuable {
+    int get_value();
+}
+
+struct Number {
+    int value;
+}
+
+impl Number for Valuable {
+    int get_value() {
+        return self.value;
+    }
+}
+
+typedef Num = Number;
+
+int main() {
+    Num n;
+    n.value = 100;
+    // メソッド呼び出しの文字列補間は現在未対応のため、一度変数に代入
+    int result = n.get_value();
+    println("{result}");
+    return 0;
+}

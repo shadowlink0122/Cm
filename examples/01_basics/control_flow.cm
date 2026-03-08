@@ -3,7 +3,7 @@
 
 int main() {
     println("=== Control Flow ===");
-    
+
     // 1. if/else
     const int x = 10;
     if (x > 5) {
@@ -11,14 +11,14 @@ int main() {
     } else {
         println("x is 5 or less");
     }
-    
+
     // 2. forループ
     println("for loop: ");
     for (int i = 0; i < 5; i++) {
         print("{i} ");
     }
     println("");
-    
+
     // 3. whileループ
     int count = 3;
     println("while loop: ");
@@ -27,7 +27,7 @@ int main() {
         count--;
     }
     println("");
-    
+
     // 4. switch (Cm言語構文)
     const int day = 3;
     switch (day) {
@@ -36,6 +36,6 @@ int main() {
         case(3) { println("Wednesday"); }
         else { println("Other"); }
     }
-    
+
     return 0;
 }

@@ -7,6 +7,20 @@ namespace cm {
 // 文の解析
 // ============================================================
 ast::StmtPtr Parser::parse_stmt() {
+    // RAIIガード: スコープ終了時にdepthを自動デクリメント
+    parse_depth_++;
+    if (parse_depth_ > max_parse_depth_)
+        max_parse_depth_ = parse_depth_;
+    struct DepthGuard {
+        int& d;
+        ~DepthGuard() { d--; }
+    } _dg{parse_depth_};
+
+    // 再帰深度制限
+    if (parse_depth_ > 500) {
+        error("再帰深度が制限(500)を超えました");
+        return nullptr;
+    }
     debug::par::log(debug::par::Id::Stmt, "", debug::Level::Trace);
     uint32_t start_pos = current().start;
 

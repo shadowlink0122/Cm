@@ -2524,7 +2524,7 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
     }
 }
 
-// プログラム全体のモノモーフィゼーション
+// プログラム全体のモノモーフィゼーション（1パス実行）
 void Monomorphization::monomorphize(
     MirProgram& program,
     const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
@@ -2532,7 +2532,7 @@ void Monomorphization::monomorphize(
     hir_funcs = &hir_functions;
     hir_struct_defs = &hir_structs;
 
-    // 構造体のモノモーフィゼーション（関数より先に実行）
+    // 構造体のモノモーフィゼーション（関数より先に実行、1回のみ）
     monomorphize_structs(program);
 
     // ジェネリック関数を特定
@@ -2551,6 +2551,7 @@ void Monomorphization::monomorphize(
 
     if (generic_funcs.empty()) {
         debug_msg("MONO", "No generic functions found");
+        fix_struct_method_self_args(program);
         return;
     }
 
@@ -2558,51 +2559,55 @@ void Monomorphization::monomorphize(
         debug_msg("MONO", "Generic func in set: " + gf);
     }
 
-    // 反復処理：新しい特殊化が生成されなくなるまで繰り返す
-    std::unordered_set<std::string> all_generated_specializations;
-    const int MAX_ITERATIONS = 10;
+    // 効率的なモノモーフィゼーション（最大2パス）
+    // 1パス目: 全関数をスキャン
+    // 2パス目: 1パス目で新規生成された特殊化関数のみスキャン（ネストジェネリクス対応）
+    std::unordered_set<std::string> all_generated;
+    const int MAX_PASSES = 2;
 
-    for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {
+    for (int pass = 0; pass < MAX_PASSES; ++pass) {
         std::map<std::pair<std::string, std::vector<std::string>>,
                  std::vector<std::tuple<std::string, size_t>>>
             needed;
 
         for (auto& func : program.functions) {
-            if (func) {
-                scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
-            }
+            if (!func)
+                continue;
+            // 2パス目: 新規生成された特殊化関数のみスキャン
+            if (pass > 0 && all_generated.count(func->name) == 0)
+                continue;
+            scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
         }
 
+        // 既に生成済みの特殊化を除外
         std::map<std::pair<std::string, std::vector<std::string>>,
                  std::vector<std::tuple<std::string, size_t>>>
             new_needed;
         for (const auto& [key, call_sites] : needed) {
             std::string specialized_name = make_specialized_name(key.first, key.second);
-            if (all_generated_specializations.count(specialized_name) == 0) {
+            if (all_generated.count(specialized_name) == 0) {
                 new_needed[key] = call_sites;
             }
         }
 
         if (new_needed.empty()) {
-            debug_msg("MONO",
-                      "Iteration " + std::to_string(iteration) + ": No new specializations needed");
+            debug_msg("MONO", "Pass " + std::to_string(pass) + ": No new specializations needed");
             break;
         }
 
-        debug_msg("MONO", "Iteration " + std::to_string(iteration) + ": Found " +
-                              std::to_string(new_needed.size()) + " new specializations needed");
+        debug_msg("MONO", "Pass " + std::to_string(pass) + ": " +
+                              std::to_string(new_needed.size()) + " specializations");
 
         generate_generic_specializations(program, hir_functions, new_needed);
 
         for (const auto& [key, _] : new_needed) {
             std::string specialized_name = make_specialized_name(key.first, key.second);
-            all_generated_specializations.insert(specialized_name);
+            all_generated.insert(specialized_name);
         }
 
         rewrite_generic_calls(program, new_needed);
     }
 
-    monomorphize_structs(program);
     fix_struct_method_self_args(program);
     cleanup_generic_functions(program, generic_funcs);
 }

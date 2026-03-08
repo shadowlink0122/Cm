@@ -1,0 +1,7 @@
+=== Self Field Mutation Test ===
+Initial count: 0
+After 1st increment: 1
+After 2nd increment: 2
+After 3rd increment: 3
+get_count() returns: 3
+=== Done ===

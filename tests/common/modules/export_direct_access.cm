@@ -1,0 +1,18 @@
+import std::io::println;
+// export直接アクセステスト
+// import ./module; でexport関数を名前空間修飾なしで呼び出し可能か確認
+import ./export_access/helper;
+
+int main() {
+    // export関数を直接呼び出し（namespace修飾なし）
+    int d = double_val(15);
+    int n = negate(7);
+
+    // namespace修飾でも呼び出し可能
+    int d2 = helper::double_val(20);
+
+    println("double: {d}");
+    println("negate: {n}");
+    println("ns_double: {d2}");
+    return 0;
+}

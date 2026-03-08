@@ -1,0 +1,55 @@
+//! platform: uefi
+// ABIリマップ不適用テスト: ${r:var}構文でスクラッチレジスタとして%rdiを使用
+//
+// Bug#11修正の回帰テスト:
+// - ${r:var}はLLVMのレジスタアロケータに割り当てを任せる構文
+// - %rdi等のSystem Vレジスタがスクラッチ用途で使われている場合、
+//   UEFIターゲットでも%rcxへの自動リマップを行わないことを検証
+// - リマップするとスクラッチレジスタの用途が壊れてカーネルがクラッシュする
+
+// スクラッチレジスタとして%rdiを使用（ABIパラメータではない）
+export ulong read_byte(ulong addr) {
+    ulong result = 0;
+    __asm__(`
+        movq ${r:addr}, %rdi;
+        xorq %rax, %rax;
+        movb (%rdi), %al;
+        movq %rax, ${=r:result}
+    `);
+    return result;
+}
+
+// %rsiもスクラッチレジスタとして使用
+export void memcpy_inline(ulong dst, ulong src, ulong len) {
+    __asm__(`
+        movq ${r:dst}, %rdi;
+        movq ${r:src}, %rsi;
+        movq ${r:len}, %rcx;
+        rep movsb
+    `);
+}
+
+// 複数のスクラッチレジスタを同時使用
+export ulong port_read(ulong port) {
+    ulong value = 0;
+    __asm__(`
+        movq ${r:port}, %rdx;
+        xorq %rax, %rax;
+        inb %dx, %al;
+        movq %rax, ${=r:value}
+    `);
+    return value;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    // スクラッチレジスタ用途のASM呼び出し
+    ulong val = read_byte(0x1000);
+    memcpy_inline(0x2000, 0x3000, 256);
+    ulong pval = port_read(0x3F8);
+
+    while (true) { __asm__("hlt"); }
+    return val + pval;
+}

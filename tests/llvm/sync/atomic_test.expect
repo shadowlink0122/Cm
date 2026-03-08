@@ -1,0 +1,8 @@
+=== Atomic Test ===
+i32 store/load: 42
+i32 fetch_add: old=42, new=52
+i32 fetch_sub: old=52, new=47
+i64 store/load: 100
+i64 fetch_add: old=100, new=150
+sequential fetch_add x100: 100
+=== Done ===

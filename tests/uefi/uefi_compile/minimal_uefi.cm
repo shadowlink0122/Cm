@@ -1,0 +1,7 @@
+//! platform: uefi
+// 最小UEFIコンパイルテスト
+// efi_mainエントリーポイントのみ
+
+ulong efi_main(void* image_handle, void* system_table) {
+    return 0;
+}

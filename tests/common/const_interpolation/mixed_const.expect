@@ -1,0 +1,4 @@
+msg1 = "Global: 10.42"
+msg2 = "Local: 99, Status: 1"
+msg3 = "Mixed: v10.42 (99 items)"
+PASS: Mixed const interpolation works

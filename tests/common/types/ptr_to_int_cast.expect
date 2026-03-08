@@ -1,0 +1,3 @@
+PASS: addresses match
+PASS: address is non-zero
+x = 42

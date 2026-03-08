@@ -1,0 +1,7 @@
+=== Line Reading Test ===
+File written
+Read content
+Line 1: 10 chars
+Line 2: 11 chars
+Line 3: 10 chars
+=== PASS: Found 3 lines ===

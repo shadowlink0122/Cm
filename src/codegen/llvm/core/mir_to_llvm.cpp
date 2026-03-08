@@ -10,8 +10,11 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <queue>
 #include <set>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace cm::codegen::llvm_backend {
 
@@ -403,6 +406,16 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     }
 
     // 関数作成
+    // Bug#45修正: 同名の既存関数がvoid()で先に作成されている場合がある
+    // （MIR内にarg_locals空のエントリと非空のエントリが重複して存在するため）
+    // シグネチャ不一致の既存関数を削除してから正しいシグネチャで再作成
+    if (auto existingFunc = module->getFunction(func.name)) {
+        if (existingFunc->getFunctionType() != funcType) {
+            existingFunc->eraseFromParent();
+        } else {
+            return existingFunc;  // 同じシグネチャなら既存関数を返す
+        }
+    }
     auto llvmFunc =
         llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
 
@@ -805,11 +818,131 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     // std::cerr << "[MIR2LLVM] Generating vtables...\n";
     generateVTables(program);
 
+    // === Dead Function Elimination (DFE) ===
+    // エントリポイントから到達可能な関数のみをLLVM IRに変換する
+    // これにより、未使用のimport関数のIR生成をスキップしてメモリ消費を削減
+    std::unordered_set<std::string> reachableFunctions;
+    {
+        // 関数名→インデックスのマップを構築
+        std::unordered_map<std::string, size_t> funcNameToIndex;
+        for (size_t i = 0; i < program.functions.size(); ++i) {
+            if (program.functions[i]) {
+                funcNameToIndex[program.functions[i]->name] = i;
+            }
+        }
+
+        // 各関数の呼び出し先を収集
+        auto collectCallees = [](const mir::MirFunction& func) -> std::vector<std::string> {
+            std::vector<std::string> callees;
+            for (const auto& block : func.basic_blocks) {
+                if (!block || !block->terminator)
+                    continue;
+                if (block->terminator->kind == mir::MirTerminator::Call) {
+                    auto& callData =
+                        std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                    if (callData.func && callData.func->kind == mir::MirOperand::FunctionRef) {
+                        auto& funcName = std::get<std::string>(callData.func->data);
+                        callees.push_back(funcName);
+                    }
+                }
+                // Statement内のFunctionRef（関数ポインタ）も収集
+                for (const auto& stmt : block->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Assign)
+                        continue;
+                    auto& assignData = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    if (!assignData.rvalue)
+                        continue;
+                    if (assignData.rvalue->kind == mir::MirRvalue::Use) {
+                        auto& useData = std::get<mir::MirRvalue::UseData>(assignData.rvalue->data);
+                        if (useData.operand &&
+                            useData.operand->kind == mir::MirOperand::FunctionRef) {
+                            auto& funcName = std::get<std::string>(useData.operand->data);
+                            callees.push_back(funcName);
+                        }
+                    }
+                }
+            }
+            return callees;
+        };
+
+        // BFS: エントリポイントから到達可能な関数を収集
+        std::queue<std::string> worklist;
+
+        // エントリポイント: export関数、main、extern関数
+        for (const auto& func : program.functions) {
+            if (!func)
+                continue;
+            if (func->is_export || func->is_extern || func->name == "main" ||
+                func->name == "_start" || func->name == "start_kernel" ||
+                func->name.find("__lambda_") == 0) {
+                if (reachableFunctions.insert(func->name).second) {
+                    worklist.push(func->name);
+                }
+            }
+        }
+
+        // メソッド関数（TypeName__method パターン）のベース型がreachableなら追加
+        // vtableエントリからも到達可能関数を追加
+        for (const auto& vt : program.vtables) {
+            if (!vt)
+                continue;
+            for (const auto& entry : vt->entries) {
+                if (reachableFunctions.insert(entry.impl_function_name).second) {
+                    worklist.push(entry.impl_function_name);
+                }
+            }
+        }
+
+        // BFS実行
+        while (!worklist.empty()) {
+            std::string current = worklist.front();
+            worklist.pop();
+
+            auto it = funcNameToIndex.find(current);
+            if (it != funcNameToIndex.end()) {
+                auto callees = collectCallees(*program.functions[it->second]);
+                for (const auto& callee : callees) {
+                    if (reachableFunctions.insert(callee).second) {
+                        worklist.push(callee);
+                    }
+                }
+            }
+
+            // interface dispatch関数（InterfaceName__method）の場合、
+            // 対応するvtableのimpl関数も到達可能に追加
+            // 例: Printable__print が呼ばれる場合、Point__print等を追加
+            size_t dunder = current.rfind("__");
+            if (dunder != std::string::npos && dunder > 0) {
+                std::string possibleInterface = current.substr(0, dunder);
+                if (interfaceNames.count(possibleInterface) > 0) {
+                    // このインターフェースのvtableからimpl関数を追加
+                    for (const auto& vt : program.vtables) {
+                        if (!vt)
+                            continue;
+                        if (vt->interface_name == possibleInterface) {
+                            for (const auto& entry : vt->entries) {
+                                if (reachableFunctions.insert(entry.impl_function_name).second) {
+                                    worklist.push(entry.impl_function_name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert,
+                                "DFE: " + std::to_string(reachableFunctions.size()) + "/" +
+                                    std::to_string(program.functions.size()) +
+                                    " functions reachable");
+    }
+
     // 関数実装
     // 重複した関数はスキップ
     declaredFunctions.clear();
     // std::cerr << "[MIR2LLVM] Converting " << program.functions.size()
     //           << " function implementations...\n";
+    size_t skippedCount = 0;
     for (size_t i = 0; i < program.functions.size(); ++i) {
         const auto& func = program.functions[i];
         auto funcId = generateFunctionId(*func);
@@ -820,8 +953,21 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             continue;
         }
         declaredFunctions.insert(funcId);
+
+        // DFE: 到達不能な関数はスキップ（宣言は残すがbodyは生成しない）
+        if (!reachableFunctions.empty() && reachableFunctions.count(func->name) == 0) {
+            skippedCount++;
+            continue;
+        }
+
         convertFunction(*func);
         // std::cerr << "[MIR2LLVM]   -> Done converting " << funcId << "\n";
+    }
+
+    if (skippedCount > 0) {
+        cm::debug::codegen::log(
+            cm::debug::codegen::Id::LLVMConvertEnd,
+            "DFE: skipped " + std::to_string(skippedCount) + " unreachable functions");
     }
 
     // std::cerr << "[MIR2LLVM] Conversion complete!\n";
@@ -1011,7 +1157,17 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         declaredFunctions.insert(funcId);
         convertFunction(*func);
     }
-    // extern関数はボディなし（declare）なので変換しない
+    // Bug#45修正: extern_functionsにbody付きのimport先export関数が含まれる場合、
+    // bodyも生成する (declareだけだとリンカエラーになる)
+    for (const auto* func : module.extern_functions) {
+        if (!func->basic_blocks.empty() && !func->is_extern) {
+            auto funcId = generateFunctionId(*func);
+            if (declaredFunctions.count(funcId) > 0)
+                continue;
+            declaredFunctions.insert(funcId);
+            convertFunction(*func);
+        }
+    }
 
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
                             "Module conversion complete: " + module.module_name);
@@ -1065,6 +1221,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         locals.clear();
         blocks.clear();
         allocatedLocals.clear();
+        asmReferencedLocals.clear();
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
         // Bug#12修正: naked関数（ret/iret含むASM）の専用コード生成パス
@@ -1200,9 +1357,10 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             return;  // 通常のコード生成をスキップ
         }
 
-        // asm出力オペランドを持つ変数を事前スキャンしてallocatedLocalsに登録
+        // asm入出力オペランドで参照される変数を事前スキャンしてasmReferencedLocalsに登録
         // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
-        std::set<unsigned int> asmOutputLocals;
+        // BUG修正(v0.14.2): メンバ変数asmReferencedLocalsをクリアして再スキャン
+        asmReferencedLocals.clear();
         for (size_t bbIdx = 0; bbIdx < func.basic_blocks.size(); ++bbIdx) {
             const auto& bb = func.basic_blocks[bbIdx];
             // DCEで削除されたブロックはスキップ
@@ -1214,11 +1372,35 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 if (stmt->kind == mir::MirStatement::Asm) {
                     auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
                     for (const auto& operand : asmData.operands) {
-                        // 出力オペランド（=r, +r）を検出
-                        if (!operand.constraint.empty() &&
-                            (operand.constraint[0] == '=' || operand.constraint[0] == '+')) {
-                            asmOutputLocals.insert(operand.local_id);
+                        // 定数オペランド（is_constant=true）はlocal_id=0が設定されているが
+                        // 変数を参照していないためスキップ
+                        if (operand.is_constant) {
+                            continue;
                         }
+                        // 変数を参照するオペランド（入力/出力/tied）を登録
+                        asmReferencedLocals.insert(operand.local_id);
+                    }
+                }
+            }
+        }
+
+        // Hazard #45修正: パラメータlocalsの再代入を事前スキャン
+        // MIRで再代入されるパラメータはallocaが必要（cross-block domination回避）
+        std::unordered_set<unsigned int> reassignedArgLocals;
+        for (size_t bbIdx = 0; bbIdx < func.basic_blocks.size(); ++bbIdx) {
+            const auto& bb = func.basic_blocks[bbIdx];
+            if (!bb)
+                continue;
+            for (const auto& stmt : bb->statements) {
+                if (stmt->kind == mir::MirStatement::Assign) {
+                    auto& assignData = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    auto targetLocal = assignData.place.local;
+                    // プロジェクションなし（直接代入）の場合のみ再代入と判定
+                    // _1.*.0 = ... はフィールド書込みであり、_1自体の再代入ではない
+                    if (assignData.place.projections.empty() &&
+                        std::find(func.arg_locals.begin(), func.arg_locals.end(), targetLocal) !=
+                            func.arg_locals.end()) {
+                        reassignedArgLocals.insert(static_cast<unsigned int>(targetLocal));
                     }
                 }
             }
@@ -1267,9 +1449,24 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         builder->CreateStore(loadedVal, alloca);
                         locals[localIdx] = alloca;
                         allocatedLocals.insert(localIdx);
+                    } else if (reassignedArgLocals.count(static_cast<unsigned int>(localIdx)) > 0) {
+                        // Hazard #45修正: 再代入されるポインタ引数のみallocaに格納
+                        auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                            "arg_" + std::to_string(argIdx));
+                        builder->CreateStore(&arg, alloca);
+                        locals[localIdx] = alloca;
+                        allocatedLocals.insert(localIdx);
                     } else {
                         locals[localIdx] = &arg;
                     }
+                } else if (reassignedArgLocals.count(static_cast<unsigned int>(localIdx)) > 0) {
+                    // Hazard #45修正: 再代入される引数のみallocaに格納
+                    // cross-block参照時のdomination error回避
+                    auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
+                                                        "arg_" + std::to_string(argIdx));
+                    builder->CreateStore(&arg, alloca);
+                    locals[localIdx] = alloca;
+                    allocatedLocals.insert(localIdx);
                 } else {
                     locals[localIdx] = &arg;
                 }
@@ -1290,29 +1487,21 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         continue;
                     }
 
-                    // asm出力オペランド変数はSSA形式ではなくalloca強制
-                    bool isAsmOutput = asmOutputLocals.count(static_cast<unsigned int>(i)) > 0;
+                    // asm参照変数（入力/出力/tied）はSSA形式ではなくalloca強制
+                    bool isAsmReferenced =
+                        asmReferencedLocals.count(static_cast<unsigned int>(i)) > 0;
 
-                    // 関数ポインタ型はアロケーションしない（SSA形式で扱う）
-                    // ただしasm出力変数は例外
-                    if (!isAsmOutput &&
-                        (local.type->kind == hir::TypeKind::Function ||
-                         (local.type->kind == hir::TypeKind::Pointer && local.type->element_type &&
-                          local.type->element_type->kind == hir::TypeKind::Function))) {
-                        continue;
-                    }
+                    // Hazard #45修正: 関数ポインタ型のallocaスキップを削除
+                    // 以前はSSA形式で扱っていたが、cross-block参照でdomination errorが発生
+                    // LLVM mem2regパスが自動的にSSA形式に最適化してくれる
                     // 配列へのポインタ型の一時変数もallocaを生成する（Bug#9修正）
                     // 以前はSSA形式で扱っていたが、Ref(array)の結果がSSA代入されると
                     // locals[ref_result] = locals[array] (配列alloca) となり、
                     // Copy時にCreateLoad(allocatedType=[N x T])が配列全体をloadしてしまう。
                     // これにより後続のstore先(ptr alloca=8B)にバッファオーバーフローが発生。
                     // allocaを生成してstore ptr → load ptrの正しいパスを通すことで修正。
-                    // 文字列型の一時変数はアロケーションしない（直接値を使用）
-                    // ただしasm出力変数は例外
-                    if (!isAsmOutput && local.type->kind == hir::TypeKind::String &&
-                        !local.is_user_variable) {
-                        continue;
-                    }
+                    // Hazard #45修正: 文字列一時変数のallocaスキップを削除
+                    // cross-block参照時のdomination error回避のため常にallocaを生成
 
                     // 動的配列（スライス）の場合
                     if (local.type->kind == hir::TypeKind::Array &&
@@ -1415,6 +1604,16 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         locals[i] = alloca;
                         allocatedLocals.insert(i);  // allocaされた変数を記録
 
+                        // Tagged Union型のallocaをゼロ初期化
+                        // ペイロードフィールド(i8[N])の未使用バイトにゴミが残るのを防止
+                        if (local.type && local.type->name.find("__TaggedUnion_") == 0) {
+                            auto dataLayout = module->getDataLayout();
+                            auto allocSize = dataLayout.getTypeAllocSize(llvmType);
+                            builder->CreateMemSet(alloca,
+                                                  llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                                  allocSize, llvm::MaybeAlign());
+                        }
+
                         // 構造体型の場合、スライスメンバーを初期化
                         if (local.type->kind == hir::TypeKind::Struct) {
                             auto structName = local.type->name;
@@ -1487,6 +1686,17 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 if (func.name == "main") {
                     builder->CreateStore(llvm::ConstantInt::get(ctx.getI32Type(), 0), alloca);
                 }
+
+                // struct型の戻り値をゼロ初期化（Tagged Union対応）
+                // Result<ulong, long>等のペイロードi8[N]で部分書き込みによる
+                // ゴミデータを防止。LLVM struct型全般に適用（安全で汎用的）
+                if (llvmType->isStructTy()) {
+                    auto dataLayout = module->getDataLayout();
+                    auto allocSize = dataLayout.getTypeAllocSize(llvmType);
+                    builder->CreateMemSet(alloca, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                          allocSize, llvm::MaybeAlign());
+                }
+
                 locals[func.return_local] = alloca;
                 allocatedLocals.insert(func.return_local);  // allocaされた変数を記録
             }
@@ -2196,9 +2406,63 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                                       llvm::MaybeAlign(), payloadSize);
                             } else {
                                 // 通常のStore操作を実行
-                                // asm出力で変更される変数へのstoreはvolatileにして最適化を防止
+
+                                // Tagged Unionペイロードへの書き込み:
+                                // ペイロードフィールドはi8[N]配列。プリミティブ値(i32等)の場合、
+                                // 配列全体がストアされず上位バイトにゴミが残る。
+                                // → ストア前にペイロード領域をゼロクリアして安全性を確保
+                                if (isTaggedUnionPayload && addr) {
+                                    // ペイロードi8配列のサイズを取得
+                                    // addrはGEPでfield[1]を指すポインタ
+                                    uint64_t payloadSize = 8;  // デフォルト8バイト
+                                    if (currentMIRFunction &&
+                                        assign.place.local < currentMIRFunction->locals.size()) {
+                                        auto& local =
+                                            currentMIRFunction->locals[assign.place.local];
+                                        if (local.type) {
+                                            auto llvmStructType = convertType(local.type);
+                                            if (llvmStructType->isStructTy()) {
+                                                auto structTy =
+                                                    llvm::cast<llvm::StructType>(llvmStructType);
+                                                if (structTy->getNumElements() >= 2) {
+                                                    auto payloadFieldType =
+                                                        structTy->getElementType(1);
+                                                    auto dataLayout = module->getDataLayout();
+                                                    payloadSize = dataLayout.getTypeAllocSize(
+                                                        payloadFieldType);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // ペイロード領域をゼロクリア
+                                    builder->CreateMemSet(
+                                        addr, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                        payloadSize, llvm::MaybeAlign());
+
+                                    // ペイロード値のビット幅がペイロード領域より小さい場合、
+                                    // ゼロ拡張して全バイトを定義済みにする
+                                    // 例: Result<ulong, long>::Ok(0) で i32(0) → i64(0) に拡張
+                                    // これによりLLVM最適化がmemset+storeをconstant phiに
+                                    // 畳み込む際にundefinedバイトが生成されない
+                                    if (rvalue->getType()->isIntegerTy() && payloadSize > 0) {
+                                        unsigned valueBits =
+                                            rvalue->getType()->getIntegerBitWidth();
+                                        unsigned payloadBits =
+                                            static_cast<unsigned>(payloadSize * 8);
+                                        if (valueBits < payloadBits) {
+                                            rvalue = builder->CreateZExt(
+                                                rvalue,
+                                                llvm::IntegerType::get(ctx.getContext(),
+                                                                       payloadBits),
+                                                "payload_zext");
+                                        }
+                                    }
+                                }
+
+                                // BUG修正(v0.14.2): asm入出力で参照される変数のみvolatileにする
                                 auto* storeInst = builder->CreateStore(rvalue, addr);
-                                if (isAllocated) {
+                                if (isAllocated &&
+                                    asmReferencedLocals.count(assign.place.local) > 0) {
                                     storeInst->setVolatile(true);
                                 }
                             }
@@ -3682,13 +3946,53 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                 std::string lookupName = currentType->name;
 
                                 // Tagged Union構造体の特別処理
-                                // __TaggedUnion_* 構造体は {i32 tag, i32 payload} 形式
+                                // __TaggedUnion_* 構造体は {i32 tag, i8[N] payload} 形式
                                 if (lookupName.find("__TaggedUnion_") == 0) {
-                                    // field[0] = タグ (int), field[1] = ペイロード (int)
                                     if (proj.field_id == 0) {
+                                        // field[0] = タグ (常にi32)
                                         currentType = hir::make_int();
                                     } else if (proj.field_id == 1) {
-                                        currentType = hir::make_int();
+                                        // field[1] = ペイロード: 型引数から最大サイズの型を推論
+                                        // デフォルトはi64（ポインタサイズ）で安全側に倒す
+                                        currentType = hir::make_long();
+
+                                        // ベースローカルのtype_argsが利用可能なら正確な型を使用
+                                        if (currentMIRFunction &&
+                                            place.local < currentMIRFunction->locals.size()) {
+                                            auto& baseType =
+                                                currentMIRFunction->locals[place.local].type;
+                                            if (baseType && !baseType->type_args.empty()) {
+                                                // type_argsの中で最大サイズの型をペイロード型として使用
+                                                bool has64bit = false;
+                                                hir::TypePtr bestType = nullptr;
+                                                for (const auto& arg : baseType->type_args) {
+                                                    if (!arg)
+                                                        continue;
+                                                    auto k = arg->kind;
+                                                    if (k == hir::TypeKind::Long ||
+                                                        k == hir::TypeKind::ULong ||
+                                                        k == hir::TypeKind::Double ||
+                                                        k == hir::TypeKind::UDouble ||
+                                                        k == hir::TypeKind::Pointer ||
+                                                        k == hir::TypeKind::Reference ||
+                                                        k == hir::TypeKind::String ||
+                                                        k == hir::TypeKind::CString ||
+                                                        k == hir::TypeKind::ISize ||
+                                                        k == hir::TypeKind::USize) {
+                                                        has64bit = true;
+                                                        if (!bestType)
+                                                            bestType = arg;
+                                                    } else if (!has64bit && !bestType) {
+                                                        bestType = arg;
+                                                    }
+                                                }
+                                                if (has64bit) {
+                                                    currentType = hir::make_long();
+                                                } else if (bestType) {
+                                                    currentType = bestType;
+                                                }
+                                            }
+                                        }
                                     }
                                 } else {
                                     auto structIt = structDefs.find(lookupName);
@@ -3957,10 +4261,10 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                 }
 
                 // スカラー型の場合はロード
-                // asm出力で変更される可能性がある変数はvolatile loadで最適化を防止
+                // BUG修正(v0.14.2): asm入出力で参照される変数のみvolatile loadで最適化を防止
                 auto* loadInst = builder->CreateLoad(allocatedType, val, "load");
-                if (allocatedLocals.count(local) > 0) {
-                    // asm影響変数: volatile loadで最適化を抑制
+                if (allocatedLocals.count(local) > 0 && asmReferencedLocals.count(local) > 0) {
+                    // asm参照変数: volatile loadで最適化を抑制
                     if (auto* li = llvm::dyn_cast<llvm::LoadInst>(loadInst)) {
                         li->setVolatile(true);
                     }

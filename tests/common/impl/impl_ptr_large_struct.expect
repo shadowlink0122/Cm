@@ -1,0 +1,9 @@
+fb_addr: 67890
+width: 1024
+height: 768
+pitch: 4096
+font_width: 8
+font_height: 16
+cursor_x: 5
+get_fb_addr: 67890
+get_font_height: 16

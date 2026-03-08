@@ -1,0 +1,51 @@
+// v0.14.2 BUG-1テスト: ASM関数内のvolatile最適化
+// ASM operandで参照される変数のみvolatile化されることを確認
+// キャスト中間変数のvolatileが除去され、正しいASM出力が得られることをテスト
+
+import std::io::println;
+
+int add_asm(int a, int b) {
+    int result = 0;
+    #ifdef __x86_64__
+    // x86_64: 加算
+    __asm__("movl ${r:a}, ${=r:result}");
+    __asm__("addl ${r:b}, ${+r:result}");
+    #else
+    // ARM64: 加算
+    __asm__("mov ${=r:result}, ${r:a}");
+    __asm__("add ${+r:result}, ${+r:result}, ${r:b}");
+    #end
+    return result;
+}
+
+// 非ASM参照変数はvolatile化されないことのテスト
+// v0.14.2以前は mid もvolatile化されてコードが肥大化していた
+int compute(int x, int y) {
+    int mid = x + y;  // これはASMで参照されない → volatile不要
+    int result = 0;
+    #ifdef __x86_64__
+    __asm__("movl ${r:mid}, ${=r:result}");
+    #else
+    __asm__("mov ${=r:result}, ${r:mid}");
+    #end
+    return result;
+}
+
+int main() {
+    println("=== ASM Volatile Optimization Test ===");
+
+    // 基本ASM演算テスト
+    int r1 = add_asm(10, 20);
+    println(r1);
+
+    // 非ASM参照変数テスト
+    int r2 = compute(30, 40);
+    println(r2);
+
+    // ネストした呼び出し
+    int r3 = add_asm(add_asm(1, 2), add_asm(3, 4));
+    println(r3);
+
+    println("=== Complete ===");
+    return 0;
+}

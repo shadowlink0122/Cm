@@ -1,0 +1,54 @@
+// テスト: 配列→ポインタキャスト（array-to-pointer decay）
+// Bug#9修正: &b as void* でスタック破壊が発生していた問題の回帰テスト
+//
+// 検証パターン:
+//   1. array as void* → array-to-pointer decay（暗黙的Ref）
+//   2. (&array) as void* → 明示的アドレス取得
+//   3. ポインタ経由の値と直接アクセスの一致確認
+
+import std::io::println;
+
+int main() {
+    println("=== Array Pointer Cast Test (Bug#9) ===");
+
+    // パターン1: ulong配列 → void* → ulong*
+    println("\nTest 1: ulong array as void*");
+    ulong[3] a;
+    a[0] = 0x1111;
+    a[1] = 0x2222;
+    a[2] = 0x3333;
+
+    void* a_ptr = a as void*;
+    ulong* tp1 = a_ptr as ulong*;
+    println("  tp1[0] = {tp1[0]}");
+    println("  tp1[1] = {tp1[1]}");
+    println("  tp1[2] = {tp1[2]}");
+
+    // パターン2: (&a) as void*（明示的アドレス取得）
+    println("\nTest 2: (&array) as void*");
+    void* a_ptr2 = (&a) as void*;
+    ulong* tp2 = a_ptr2 as ulong*;
+    println("  tp2[0] = {tp2[0]}");
+    println("  tp2[1] = {tp2[1]}");
+
+    // パターン3: ポインタ経由の値と直接アクセスの一致確認
+    println("\nTest 3: Value consistency check");
+    if (tp1[0] == a[0]) {
+        println("  tp1[0] == a[0]: PASS");
+    } else {
+        println("  tp1[0] == a[0]: FAIL");
+    }
+    if (tp1[2] == a[2]) {
+        println("  tp1[2] == a[2]: PASS");
+    } else {
+        println("  tp1[2] == a[2]: FAIL");
+    }
+    if (tp2[0] == a[0]) {
+        println("  tp2[0] == a[0]: PASS");
+    } else {
+        println("  tp2[0] == a[0]: FAIL");
+    }
+
+    println("\n=== Done ===");
+    return 0;
+}

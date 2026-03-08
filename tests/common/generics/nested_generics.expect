@@ -1,0 +1,8 @@
+Value: 42
+No value (as expected)
+Pair<int, string>: (100, hello)
+Pair<double, bool>: (3.14, true)
+Pair: (123, test)
+Pair: (3.14, true)
+first_of(1, 2, 3) = 1
+first_of(1.1, 2.2, 3.3) = 1.1

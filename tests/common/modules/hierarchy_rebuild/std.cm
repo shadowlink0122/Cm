@@ -1,0 +1,11 @@
+// std.cm - Phase 2: 階層再構築テスト
+// 中間ディレクトリ（io/io.cm）を省略して直接インポート
+module std;
+
+import ./io/file;
+import ./io/stream;
+
+// 現在の実装: ディレクトリ構造が名前空間に反映される
+// ./io/file → io::read
+// ./io/stream → io::open
+// 将来のPhase 2では export { file as io::file } などで階層を再構築可能

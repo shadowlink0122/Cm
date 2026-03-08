@@ -1,0 +1,47 @@
+=== LLVM Constraint Test ===
+
+--- Test 1: =r (output only) ---
+out1 (should be 42):
+42
+
+--- Test 2: +r (read-write) add ---
+rw (should be 15):
+15
+
+--- Test 3: =r with immediate ---
+imm (should be 999):
+999
+
+--- Test 4: +r subtraction ---
+sub (should be 70):
+70
+
+--- Test 5: +r bit shift ---
+shift (should be 16):
+16
+
+--- Test 6: +r negation ---
+neg (should be -50):
+-50
+
+--- Test 7: +r OR operation ---
+orv (should be 255):
+255
+
+--- Test 8: +r AND operation ---
+andv (should be 15):
+15
+
+--- Test 9: =r then +r sequence ---
+seq (should be 75):
+75
+
+--- Test 10: Independent multiple vars ---
+x (should be 11):
+11
+y (should be 22):
+22
+z (should be 33):
+33
+
+=== All tests completed! ===

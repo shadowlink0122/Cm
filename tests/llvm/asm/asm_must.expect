@@ -1,0 +1,4 @@
+=== must {} Block Test ===
+must block basic: PASS
+asm inside must: PASS
+=== All Tests Passed ===

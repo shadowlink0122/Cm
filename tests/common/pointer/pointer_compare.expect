@@ -1,0 +1,6 @@
+p1 == p2: true
+p1 != p2: false
+p1 == p3: false
+p1 != p3: true
+pa == pb: true
+pa != pc: true

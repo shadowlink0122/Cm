@@ -1,0 +1,20 @@
+// ベアメタル正常テスト: ポインタ演算
+// ベアメタル環境で頻繁に使用するパターン
+
+int read_register(void* base, int offset) {
+    int* reg = base as int*;
+    return *(reg + offset);
+}
+
+void write_register(void* base, int offset, int value) {
+    int* reg = base as int*;
+    *(reg + offset) = value;
+}
+
+int main() {
+    int[4] regs = [0, 0, 0, 0];
+    void* base = regs as void*;
+    write_register(base, 2, 42);
+    int val = read_register(base, 2);
+    return val;  // 42
+}

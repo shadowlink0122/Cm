@@ -84,12 +84,26 @@ if(CM_USE_LLVM)
         add_compile_definitions(${LLVM_DEFINITIONS})
         include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-        llvm_map_components_to_libnames(llvm_libs
+        # クロスターゲット設定 (ARM + WebAssembly)
+        # CM_NO_CROSS_TARGETSが有効な場合はx86のみ (Docker x86_64ビルドなど)
+        option(CM_NO_CROSS_TARGETS "Disable ARM and WebAssembly cross-compilation targets" OFF)
+        set(_cm_llvm_components
             Core Support IRReader Passes CodeGen MC MCParser MCJIT OrcJIT ExecutionEngine Target
             X86CodeGen X86AsmParser X86Desc X86Info
-            AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
-            WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
         )
+        
+        # CM_NO_CROSS_TARGETSが無効な場合は全ターゲット追加
+        if(NOT CM_NO_CROSS_TARGETS)
+            list(APPEND _cm_llvm_components
+                AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+                WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
+            )
+        else()
+            # コード側の #ifndef CM_NO_CROSS_TARGETS と同期
+            add_compile_definitions(CM_NO_CROSS_TARGETS)
+        endif()
+
+        llvm_map_components_to_libnames(llvm_libs ${_cm_llvm_components})
 
         add_library(cm_llvm_backend INTERFACE)
         target_include_directories(cm_llvm_backend INTERFACE
@@ -322,6 +336,12 @@ endif()
 
 add_executable(cm ${CM_SOURCES})
 target_link_libraries(cm PRIVATE cm_frontend)
+
+# macOS: パーサ/TypeCheckerの深い再帰に対応するためスタックサイズを256MBに増加
+# (デフォルト8MBでは大規模ソースのネスト構文でスタックオーバーフローが発生)
+if(APPLE)
+    set_target_properties(cm PROPERTIES LINK_FLAGS "-Wl,-stack_size,0x10000000")
+endif()
 
 # OpenSSL検出（HTTPS対応）
 # macOSではHomebrewのパスを優先的に検索

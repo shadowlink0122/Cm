@@ -692,6 +692,10 @@ llvm::Value* MIRToLLVM::convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand)
             }
             return builder->CreateNeg(operand, "neg");
         }
+        case mir::MirUnaryOp::BitNot: {
+            // ビット反転: ~operand → xor operand, -1
+            return builder->CreateNot(operand, "bitnot");
+        }
         default:
             return nullptr;
     }

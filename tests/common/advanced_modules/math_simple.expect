@@ -1,0 +1,5 @@
+=== Simple Math Test ===
+PI = 3.14159
+E = 2.71828
+circle_area(2.0) = 12.5664
+=== PASS ===

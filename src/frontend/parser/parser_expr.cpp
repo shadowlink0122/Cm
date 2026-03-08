@@ -1155,6 +1155,45 @@ ast::ExprPtr Parser::parse_primary() {
         return expr;
     }
 
+    // BUG修正(v0.14.2): 型キーワード + :: パターンをnamespace修飾子として処理
+    // "string::strlen(s)" のような呼び出しを正しくパースする
+    // 型キーワードが :: の前に来た場合、型ではなくnamespace名として扱う
+    {
+        auto kind = current().kind;
+        bool is_type_keyword =
+            (kind == TokenKind::KwString || kind == TokenKind::KwInt || kind == TokenKind::KwUint ||
+             kind == TokenKind::KwLong || kind == TokenKind::KwUlong ||
+             kind == TokenKind::KwShort || kind == TokenKind::KwUshort ||
+             kind == TokenKind::KwTiny || kind == TokenKind::KwUtiny ||
+             kind == TokenKind::KwFloat || kind == TokenKind::KwDouble ||
+             kind == TokenKind::KwUfloat || kind == TokenKind::KwUdouble ||
+             kind == TokenKind::KwBool || kind == TokenKind::KwChar || kind == TokenKind::KwVoid ||
+             kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
+             kind == TokenKind::KwCstring);
+
+        if (is_type_keyword && pos_ + 1 < tokens_.size() &&
+            tokens_[pos_ + 1].kind == TokenKind::ColonColon) {
+            // 型キーワードをnamespace名として取得
+            // BUG修正: キーワードトークンはget_string()が空文字を返すため
+            // token_kind_to_string()を使用してキーワード名を取得
+            std::string name(token_kind_to_string(kind));
+            advance();  // 型キーワードを消費
+
+            // :: で修飾されたパスを構築（Identと同じロジック）
+            if (consume_if(TokenKind::ColonColon)) {
+                std::string qualified_name = name;
+                do {
+                    std::string member = expect_ident();
+                    qualified_name += "::" + member;
+                } while (consume_if(TokenKind::ColonColon));
+
+                return ast::make_ident(std::move(qualified_name), Span{start_pos, previous().end});
+            }
+
+            return ast::make_ident(std::move(name), Span{start_pos, previous().end});
+        }
+    }
+
     std::string error_msg = "Expected expression but found: ";
     error_msg += token_kind_to_string(current().kind);
     debug::par::log(debug::par::Id::ExprError, error_msg, debug::Level::Error);
@@ -1236,11 +1275,39 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
             }
         }
     }
+
+    // LBrace不在チェック: 'match'がキーワードとして誤認識された場合の保護
+    // 例: ulong match = 1; → matchがKwMatchとしてレキシングされ、= がLBraceでないためエラー
+    if (!check(TokenKind::LBrace)) {
+        error(
+            "match式の後に '{' "
+            "が必要です。'match'はCm言語の予約語のため、変数名として使用できません");
+        // ダミーのmatch式を返して呼び出し元に安全に戻る
+        auto match_expr =
+            std::make_unique<ast::MatchExpr>(std::move(scrutinee), std::vector<ast::MatchArm>{});
+        return std::make_unique<ast::Expr>(std::move(match_expr), Span{start_pos, previous().end});
+    }
     expect(TokenKind::LBrace);
 
     std::vector<ast::MatchArm> arms;
 
-    while (!check(TokenKind::RBrace) && !is_at_end()) {
+    // 無限ループ防止: posが進まない場合はbreak
+    size_t last_pos = pos_;
+    int match_arm_iterations = 0;
+    const int MAX_MATCH_ARMS = 1000;
+
+    while (!check(TokenKind::RBrace) && !is_at_end() && match_arm_iterations < MAX_MATCH_ARMS) {
+        // stuck検出: posが前回と同じ→パーサが進めていない（初回含む）
+        if (pos_ == last_pos && match_arm_iterations > 0) {
+            error("match式のパターン解析でパーサが停滞しました");
+            // 次のRBraceまでスキップ
+            while (!check(TokenKind::RBrace) && !is_at_end()) {
+                advance();
+            }
+            break;
+        }
+        last_pos = pos_;
+
         // パターンをパース
         auto pattern = parse_match_pattern();
 
@@ -1266,6 +1333,7 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
 
         // カンマ（式形式では必須、ブロック形式ではオプショナル）
         consume_if(TokenKind::Comma);
+        match_arm_iterations++;
     }
 
     expect(TokenKind::RBrace);

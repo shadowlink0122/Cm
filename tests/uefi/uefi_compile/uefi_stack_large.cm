@@ -1,0 +1,18 @@
+//! platform: uefi
+// Bug#9/#17リグレッション: 大きなスタックフレーム + 配列ポインタ
+
+ulong efi_main(void* image_handle, void* system_table) {
+    // Bug#9: 配列+ポインタでスタックオフセット重複
+    ulong[3] b;
+    b[0] = 0x1111;
+    b[1] = 0x2222;
+    b[2] = 0x3333;
+    void* b_ptr = &b as void*;
+
+    // Bug#17: 大きなスタックフレームで___chkstk_ms
+    ulong[512] large;
+    large[0] = 0xAAAA;
+    large[511] = 0xBBBB;
+
+    return b[0] + large[0];
+}

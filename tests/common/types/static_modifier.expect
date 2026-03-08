@@ -1,0 +1,6 @@
+counter() = 1
+counter() = 2
+counter() = 3
+accumulator(10) = 10
+accumulator(20) = 30
+accumulator(15) = 45

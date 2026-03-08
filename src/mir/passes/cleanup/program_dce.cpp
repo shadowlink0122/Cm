@@ -24,10 +24,11 @@ bool ProgramDeadCodeElimination::run(MirProgram& program) {
 
 void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& program,
                                                         std::set<std::string>& used) {
-    // mainとエントリポイントは常に使用される
+    // エントリポイントは常に使用される
     used.insert("main");
     used.insert("_start");
-    used.insert("efi_main");  // UEFIエントリポイント
+    used.insert("start_kernel");
+    used.insert("efi_main");
 
     // 組み込み関数は常に使用される
     static const std::set<std::string> builtins = {"println",
@@ -70,22 +71,58 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
         used.insert(b);
     }
 
+    // export関数は常にusedとして扱う
+    // exportされた関数はクロスモジュールリンクで使用されるため削除してはならない
+    for (const auto& func : program.functions) {
+        if (func && func->is_export) {
+            used.insert(func->name);
+        }
+    }
+
+    // 関数名→MirFunction*の逆引きマップを構築
+    // モジュール修飾名（module::func）→単純名（func）の解決にも使用
+    std::unordered_map<std::string, const MirFunction*> func_map;
+    for (const auto& func : program.functions) {
+        if (func) {
+            func_map[func->name] = func.get();
+        }
+    }
+
     // 呼び出しグラフをたどって使用される関数を収集
     std::queue<std::string> worklist;
-    worklist.push("main");
-    worklist.push("efi_main");  // UEFIエントリポイントからの呼び出しも追跡
-
-    // インターフェースメソッド呼び出しを記録（Interface__method形式）
-    std::set<std::string> interface_methods;
+    for (const auto& name : used) {
+        worklist.push(name);
+    }
 
     while (!worklist.empty()) {
         std::string current = worklist.front();
         worklist.pop();
 
         // この関数から呼び出される関数を収集
-        const MirFunction* func = program.find_function(current);
+        const MirFunction* func = nullptr;
+        auto it = func_map.find(current);
+        if (it != func_map.end()) {
+            func = it->second;
+        }
         if (!func)
             continue;
+
+        // calleeを収集するヘルパー: FunctionRefからcallee名を取得
+        auto resolve_callee = [&](const std::string& callee) {
+            // 直接一致する関数を探す
+            if (func_map.count(callee) > 0) {
+                return callee;
+            }
+            // モジュール修飾名の場合、単純名で再検索
+            auto pos = callee.rfind("::");
+            if (pos != std::string::npos) {
+                std::string simple = callee.substr(pos + 2);
+                if (func_map.count(simple) > 0) {
+                    return simple;
+                }
+            }
+            return callee;  // そのまま返す
+        };
 
         for (const auto& block : func->basic_blocks) {
             if (!block)
@@ -104,9 +141,10 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
                     const auto& use_data = std::get<MirRvalue::UseData>(assign.rvalue->data);
                     if (use_data.operand && use_data.operand->kind == MirOperand::FunctionRef) {
                         if (const auto* name = std::get_if<std::string>(&use_data.operand->data)) {
-                            if (used.find(*name) == used.end()) {
-                                used.insert(*name);
-                                worklist.push(*name);
+                            std::string resolved = resolve_callee(*name);
+                            if (used.find(resolved) == used.end()) {
+                                used.insert(resolved);
+                                worklist.push(resolved);
                             }
                         }
                     }
@@ -122,25 +160,18 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
                 if (call_data.func) {
                     if (call_data.func->kind == MirOperand::FunctionRef) {
                         if (const auto* name = std::get_if<std::string>(&call_data.func->data)) {
-                            callee = *name;
+                            callee = resolve_callee(*name);
                         }
                     } else if (call_data.func->kind == MirOperand::Constant) {
                         if (const auto* c = std::get_if<MirConstant>(&call_data.func->data)) {
                             if (const auto* s = std::get_if<std::string>(&c->value)) {
-                                callee = *s;
+                                callee = resolve_callee(*s);
                             }
                         }
                     }
                 }
 
                 if (!callee.empty()) {
-                    // インターフェースメソッド呼び出しを記録
-                    size_t sep = callee.find("__");
-                    if (sep != std::string::npos) {
-                        std::string method_name = callee.substr(sep);
-                        interface_methods.insert(method_name);
-                    }
-
                     if (used.find(callee) == used.end()) {
                         used.insert(callee);
                         worklist.push(callee);
@@ -153,9 +184,10 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
                         continue;
                     if (arg->kind == MirOperand::FunctionRef) {
                         if (const auto* name = std::get_if<std::string>(&arg->data)) {
-                            if (used.find(*name) == used.end()) {
-                                used.insert(*name);
-                                worklist.push(*name);
+                            std::string resolved = resolve_callee(*name);
+                            if (used.find(resolved) == used.end()) {
+                                used.insert(resolved);
+                                worklist.push(resolved);
                             }
                         }
                     }
@@ -164,18 +196,39 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
         }
     }
 
-    // インターフェースメソッドの実装を保持
+    // implメソッドの保持: callerがusedなら、そこから呼ばれるimplメソッドも保持
+    // TypeName__method パターンの関数を、TypeNameの他メソッドがusedなら保持
+    std::set<std::string> used_types;
+    for (const auto& name : used) {
+        size_t sep = name.find("__");
+        if (sep != std::string::npos) {
+            used_types.insert(name.substr(0, sep));
+        }
+    }
+
+    // 使用されている型のメソッドも保持
     for (const auto& func : program.functions) {
         if (!func)
             continue;
-
         const std::string& name = func->name;
         size_t sep = name.find("__");
         if (sep != std::string::npos) {
-            std::string method_suffix = name.substr(sep);
-            if (interface_methods.find(method_suffix) != interface_methods.end()) {
+            std::string type_name = name.substr(0, sep);
+            if (used_types.count(type_name) > 0) {
                 used.insert(name);
             }
+        }
+    }
+
+    // vtableエントリのimpl関数を保護
+    // interface dispatch関数（InterfaceName__method）がusedの場合、
+    // 対応するvtableのimpl関数も保持する
+    for (const auto& vt : program.vtables) {
+        if (!vt)
+            continue;
+        for (const auto& entry : vt->entries) {
+            // vtableエントリのimpl関数名をusedに追加
+            used.insert(entry.impl_function_name);
         }
     }
 }

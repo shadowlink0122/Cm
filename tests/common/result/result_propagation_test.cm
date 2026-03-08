@@ -1,0 +1,153 @@
+// Result型のエラー伝播パターンテスト
+// 異なる型パラメータの組み合わせ + 具象型への代入検証
+import std::io::println;
+
+// Result型を明示的に定義
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+// --- int, int ペイロード ---
+Result<int, int> safe_mod(int a, int b) {
+    if (b == 0) {
+        return Result::Err(-1);
+    }
+    // a mod b = a - (a/b)*b
+    int q = a / b;
+    int rem = a - q * b;
+    return Result::Ok(rem);
+}
+
+// --- int, string ペイロード ---
+Result<int, string> validate_age(int age) {
+    if (age < 0) {
+        return Result::Err("age cannot be negative");
+    }
+    if (age > 150) {
+        return Result::Err("age too large");
+    }
+    return Result::Ok(age);
+}
+
+// --- 安全な除算 ---
+Result<int, string> safe_divide(int a, int b) {
+    if (b == 0) {
+        return Result::Err("division by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+int main() {
+    println("=== Result Propagation Test ===");
+
+    // --- Int/Int Result テスト ---
+    println("--- Int/Int Result ---");
+    Result<int, int> m1 = safe_mod(17, 5);
+    match (m1) {
+        Result::Ok(v) => {
+            int val = v;
+            println("17 mod 5 = {val}");
+        }
+        Result::Err(e) => {
+            int code = e;
+            println("mod err: {code}");
+        }
+    }
+    Result<int, int> m2 = safe_mod(10, 3);
+    match (m2) {
+        Result::Ok(v) => {
+            int val = v;
+            println("10 mod 3 = {val}");
+        }
+        Result::Err(e) => {
+            int code = e;
+            println("mod err: {code}");
+        }
+    }
+    Result<int, int> m3 = safe_mod(10, 0);
+    match (m3) {
+        Result::Ok(v) => {
+            int val = v;
+            println("10 mod 0 = {val}");
+        }
+        Result::Err(e) => {
+            int code = e;
+            println("mod err: {code}");
+        }
+    }
+
+    // --- Int/String Result テスト ---
+    println("--- Int/String Result ---");
+    Result<int, string> a1 = validate_age(25);
+    match (a1) {
+        Result::Ok(v) => {
+            int val = v;
+            println("age ok: {val}");
+        }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+    Result<int, string> a2 = validate_age(-5);
+    match (a2) {
+        Result::Ok(v) => {
+            int val = v;
+            println("age ok: {val}");
+        }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+    Result<int, string> a3 = validate_age(200);
+    match (a3) {
+        Result::Ok(v) => {
+            int val = v;
+            println("age ok: {val}");
+        }
+        Result::Err(e) => { println("age ng: {e}"); }
+    }
+
+    // --- 伝播テスト: 年齢 → 余り計算の2段階 ---
+    println("--- Propagation Test ---");
+    Result<int, string> age_result = validate_age(30);
+    match (age_result) {
+        Result::Ok(v) => {
+            int age = v;
+            Result<int, int> decade = safe_mod(age, 10);
+            match (decade) {
+                Result::Ok(v2) => {
+                    int rem = v2;
+                    int base = age - rem;
+                    println("age {age} is in {base}s");
+                }
+                Result::Err(e) => {
+                    int code = e;
+                    println("mod failed: {code}");
+                }
+            }
+        }
+        Result::Err(e) => { println("validation failed: {e}"); }
+    }
+
+    // --- 関数呼び出しテスト ---
+    println("--- Function Call Test ---");
+    Result<int, string> fc = safe_divide(100, 4);
+    match (fc) {
+        Result::Ok(v) => {
+            int val = v;
+            // バインディングから取得した値を別のResult関数に渡す
+            Result<int, int> fc2 = safe_mod(val, 3);
+            match (fc2) {
+                Result::Ok(v2) => {
+                    int val2 = v2;
+                    println("mod result: {val2}");
+                }
+                Result::Err(e) => {
+                    int code = e;
+                    println("mod failed: {code}");
+                }
+            }
+        }
+        Result::Err(e) => { println("divide failed: {e}"); }
+    }
+
+    println("=== PASS ===");
+    return 0;
+}

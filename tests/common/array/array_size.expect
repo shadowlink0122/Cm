@@ -1,0 +1,4 @@
+arr.size() = 5
+arr.len() = 5
+big_arr.size() = 10
+doubles.size() = 3

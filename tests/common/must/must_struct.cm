@@ -1,0 +1,40 @@
+// must_struct.cm - 構造体フィールド更新のmust保護テスト
+import std::io::println;
+
+struct Counter {
+    int value;
+    int updates;
+}
+
+int main() {
+    println("=== must struct field ===");
+
+    Counter c = Counter{ value: 0, updates: 0 };
+
+    // 通常の更新（最適化で削除される可能性あり）
+    c.value = 100;
+    c.updates = 1;
+
+    // must{}内の更新（削除されない）
+    must {
+        c.value = 200;
+        c.updates = 2;
+    }
+
+    println(c.value);    // 200
+    println(c.updates);  // 2
+
+    // ループ内でmustを使用
+    for (int i = 0; i < 5; i++) {
+        must {
+            c.value = c.value + 1;
+            c.updates = c.updates + 1;
+        }
+    }
+
+    println(c.value);    // 205
+    println(c.updates);  // 7
+
+    println("PASS");
+    return 0;
+}

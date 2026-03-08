@@ -1,0 +1,5 @@
+is_some(some_int) = true
+unwrap(some_int) = 42
+is_none(none_int) = true
+unwrap_or(none_int, 0) = 0
+unwrap(some_str) = Hello

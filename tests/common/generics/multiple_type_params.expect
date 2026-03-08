@@ -1,0 +1,6 @@
+p1.first = 42
+p1.second = hello
+p2.first = 3.14
+p2.second = true
+p3.first = hello
+p3.second = 42

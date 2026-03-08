@@ -1,0 +1,6 @@
+=== Thread Channel Test ===
+channel created
+received 5 values
+sum: 15
+PASS: producer-consumer correct
+=== Done ===

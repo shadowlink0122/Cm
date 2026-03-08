@@ -21,7 +21,12 @@ using DiagKind = Severity;
 // ============================================================
 class Parser {
    public:
-    Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)), pos_(0), last_error_line_(0) {}
+    Parser(std::vector<Token> tokens)
+        : tokens_(std::move(tokens)),
+          pos_(0),
+          last_error_line_(0),
+          parse_depth_(0),
+          max_parse_depth_(0) {}
 
     // プログラム全体を解析（parser_decl.cppで実装）
     ast::Program parse();
@@ -183,6 +188,8 @@ class Parser {
     int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
     bool in_operator_return_type_ =
         false;  // 演算子戻り値型パース中フラグ（*&の型サフィックス抑制）
+    int parse_depth_ = 0;      // 再帰深度カウンター
+    int max_parse_depth_ = 0;  // 最大再帰深度記録
 };
 
 }  // namespace cm

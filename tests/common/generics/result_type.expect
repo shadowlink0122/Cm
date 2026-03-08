@@ -1,0 +1,5 @@
+is_ok(10/2) = true
+unwrap(10/2) = 5
+is_err(10/0) = true
+unwrap_err(10/0) = Division by zero
+unwrap_or(10/0, -1) = -1

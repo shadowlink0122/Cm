@@ -1,0 +1,20 @@
+Hello, World!
+The answer is: 42
+10 + 20 = 30
+Name: Alice, Age: 25, Height: 175.5
+System ready: true
+Decimal: 255
+Hex: ff
+HEX: FF
+Binary: 11111111
+Octal: 377
+Default: 3.14159
+2 decimal places: 3.14
+4 decimal places: 3.1416
+Scientific: 3.141593e+00
+SCIENTIFIC: 3.141593E+00
+Left:   |test      |
+Right:  |      test|
+Center: |   test   |
+Zero padding: 00042
+Literal braces: { and }

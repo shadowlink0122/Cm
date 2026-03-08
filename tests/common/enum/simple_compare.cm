@@ -1,0 +1,23 @@
+// enumのmatch文でシンプルなバリアント比較（パターンバインディングなし）
+import std::io::println;
+
+// Option型
+enum Option {
+    None,
+    Some(int)
+}
+
+int main() {
+    Option s = Option::Some(42);
+    Option n = Option::None;
+
+    // タグ値の比較（パターンバインディングなし）
+    int v1 = 0;
+    // シンプルなenum比較
+    if (s == Option::Some) {
+        v1 = 1;
+    }
+
+    println("Test: {v1}");
+    return 0;
+}

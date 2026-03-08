@@ -1,0 +1,22 @@
+//! platform: js
+// JS-specific: async/await基本テスト
+// async関数とawait呼び出しのJSバックエンド出力確認
+
+async int fetch_value() {
+    return 42;
+}
+
+async int compute(int a, int b) {
+    int val = await fetch_value();
+    return a + b + val;
+}
+
+async int main() {
+    int result = await compute(10, 20);
+    println("Result: {result}");
+
+    int v = await fetch_value();
+    println("Value: {v}");
+
+    return 0;
+}

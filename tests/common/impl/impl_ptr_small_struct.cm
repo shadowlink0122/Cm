@@ -1,0 +1,49 @@
+// テスト: small struct(<=16バイト)のポインタ経由implメソッド呼び出し (Bug#10 Derefパス修正)
+// small structは値渡しになるため、ptr->method()で型不整合が発生していた
+
+import std::io::println;
+
+struct Small {
+    ulong a;
+    ulong b;
+}
+
+impl Small {
+    ulong get_a() { return self.a; }
+    ulong get_b() { return self.b; }
+    void set_a(ulong x) { self.a = x; }
+    void set_b(ulong x) { self.b = x; }
+}
+
+int main() {
+    Small s;
+    s.a = 42;
+    s.b = 99;
+
+    // ローカル変数経由（参照テスト）
+    ulong local_a = s.get_a();
+    ulong local_b = s.get_b();
+    println("local a: {local_a}");
+    println("local b: {local_b}");
+
+    // ポインタ経由のgetter
+    Small* ptr = &s;
+    ulong ptr_a = ptr->get_a();
+    ulong ptr_b = ptr->get_b();
+    println("ptr a: {ptr_a}");
+    println("ptr b: {ptr_b}");
+
+    // ポインタ経由のsetter + getter
+    ptr->set_a(777);
+    ptr->set_b(888);
+    ulong new_a = ptr->get_a();
+    ulong new_b = ptr->get_b();
+    println("after set a: {new_a}");
+    println("after set b: {new_b}");
+
+    // 元の変数に書き戻されたか確認
+    println("s.a: {s.a}");
+    println("s.b: {s.b}");
+
+    return 0;
+}

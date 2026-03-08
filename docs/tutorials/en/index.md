@@ -121,7 +121,7 @@ Estimated Time: 3 hours
 
 - [Language Specification](../../design/CANONICAL_SPEC.html) - Full language spec
 - [Design Documents](../../design/) - Architecture and design docs
-- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/programs/) - 380+ files
+- [Test Cases](https://github.com/shadowlink0122/Cm/tree/main/tests/common/) - 380+ files
 
 ---
 

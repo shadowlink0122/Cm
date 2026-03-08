@@ -45,20 +45,20 @@ export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
             subq $$512, %rsp;
             xorq %rcx, %rcx;
             0:
-                cmpq %r11, %rcx;
-                jge 1f;
-                movzbl (%r10, %rcx), %eax;
-                movw %ax, (%rsp, %rcx, 2);
-                incq %rcx;
-                jmp 0b;
+            cmpq %r11, %rcx;
+            jge 1f;
+            movzbl (%r10, %rcx), %eax;
+            movw %ax, (%rsp, %rcx, 2);
+            incq %rcx;
+            jmp 0b;
             1:
-                movw $$0, (%rsp, %rcx, 2);
-                movq 512(%rsp), %rcx;
-                movq 520(%rsp), %r10;
-                movq %rsp, %rdx;
-                subq $$32, %rsp;
-                callq *%r10;
-                addq $$560, %rsp
+            movw $$0, (%rsp, %rcx, 2);
+            movq 512(%rsp), %rcx;
+            movq 520(%rsp), %r10;
+            movq %rsp, %rdx;
+            subq $$32, %rsp;
+            callq *%r10;
+            addq $$560, %rsp
         `);
     }
 }
@@ -74,13 +74,13 @@ export ulong efi_strlen(void* data) {
             movq ${r:data_val}, %r10;
             xorq %rcx, %rcx;
             0:
-                movzbl (%r10, %rcx), %eax;
-                testb %al, %al;
-                jz 1f;
-                incq %rcx;
-                jmp 0b;
+            movzbl (%r10, %rcx), %eax;
+            testb %al, %al;
+            jz 1f;
+            incq %rcx;
+            jmp 0b;
             1:
-                movq %rcx, ${=r:result}
+            movq %rcx, ${=r:result}
         `);
     }
     return result;

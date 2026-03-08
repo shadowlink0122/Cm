@@ -1,0 +1,63 @@
+//! platform: uefi
+// Bug#11回帰テスト: UEFIターゲットでSystem V → Win64ccレジスタ自動リマップ
+// %rdi → %rcx, %rsi → %rdx の自動変換を検証
+
+// テスト1: operand付き + ret（module-level asm方式）
+// ${r:var} → $N → レジスタ名、さらにUEFIリマップが適用される
+export void switch_to(ulong new_rsp) {
+    __asm__(`
+        movq ${r:new_rsp}, %rsp;
+        ret;
+    `);
+}
+
+// テスト2: operandなし + System Vレジスタを含むASM + ret
+// Naked属性方式で生成、%rdi→%rcx, %rsi→%rdxにリマップ
+export void save_and_switch() {
+    __asm__(`
+        movq %rsp, (%rdi);
+        movq %rsi, %rsp;
+        ret;
+    `);
+}
+
+// テスト3: ${r:var}構文でCmにレジスタ割当を任せるASM（通常ASM）
+export void write_port(ulong port, ulong value) {
+    __asm__(`
+        movq ${r:port}, %rdx;
+        movq ${r:value}, %rax;
+        outb %al, %dx
+    `);
+}
+
+// テスト4: 出力operand付きASM（通常ASM）
+export ulong read_value(ulong addr) {
+    ulong result = 0;
+    __asm__(`
+        movq ${r:addr}, %r10;
+        xorq %rax, %rax;
+        movb (%r10), %al;
+        movq %rax, ${=r:result}
+    `);
+    return result;
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+
+    // テスト1: operand付き + ret のnaked関数呼出
+    switch_to(0x80000);
+
+    // テスト2: operandなし + ret のnaked関数呼出
+    save_and_switch();
+
+    // テスト3: 通常ASM関数の呼出
+    write_port(0x3F8, 0x48);
+
+    // テスト4: 出力operand付きASM関数の呼出
+    ulong val = read_value(0x1000);
+
+    while (true) { __asm__("hlt"); }
+    return val;
+}

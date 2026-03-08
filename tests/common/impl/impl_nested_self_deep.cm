@@ -1,0 +1,79 @@
+// Bug#10修正テスト（拡張版）: ulong型フィールド+2段ネスト+void*データ処理
+// implメソッドの多段ネスト呼出しでselfフィールド変更が正しく伝搬することを確認
+import std::io::println;
+
+struct Console {
+    ulong cursor_x;
+    ulong cursor_y;
+    ulong width;
+}
+
+impl Console {
+    void init() {
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.width = 80;
+    }
+
+    // 最下層: selfフィールドを1つ変更
+    void advance_cursor() {
+        self.cursor_x = self.cursor_x + 1;
+        if (self.cursor_x >= self.width) {
+            self.cursor_x = 0;
+            self.cursor_y = self.cursor_y + 1;
+        }
+    }
+
+    // 中間層: advance_cursorをループで呼ぶ（1段ネスト）
+    void write_chars(ulong count) {
+        ulong i = 0;
+        while (i < count) {
+            self.advance_cursor();
+            i = i + 1;
+        }
+    }
+
+    // 最上層: write_charsを呼ぶ（2段ネスト）
+    void write_line(ulong len) {
+        self.write_chars(len);
+        self.cursor_x = 0;
+        self.cursor_y = self.cursor_y + 1;
+    }
+}
+
+int main() {
+    // ケース1: 単一advance_cursor
+    Console c1;
+    c1.init();
+    c1.advance_cursor();
+    println("{c1.cursor_x},{c1.cursor_y}");
+
+    // ケース2: write_chars（ループ内ネスト）
+    Console c2;
+    c2.init();
+    c2.write_chars(5);
+    println("{c2.cursor_x},{c2.cursor_y}");
+
+    // ケース3: write_line（2段ネスト）
+    Console c3;
+    c3.init();
+    c3.write_line(10);
+    println("{c3.cursor_x},{c3.cursor_y}");
+
+    // ケース4: 複数行（状態蓄積）
+    Console c4;
+    c4.init();
+    c4.write_line(3);
+    c4.write_line(5);
+    c4.write_chars(2);
+    println("{c4.cursor_x},{c4.cursor_y}");
+
+    // ケース5: 折り返し（width=80超え）
+    Console c5;
+    c5.init();
+    c5.write_chars(85);
+    println("{c5.cursor_x},{c5.cursor_y}");
+
+    println("PASS");
+    return 0;
+}

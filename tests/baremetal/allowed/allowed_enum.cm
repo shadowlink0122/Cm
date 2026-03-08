@@ -1,0 +1,23 @@
+// ベアメタル正常テスト: enum型
+// OS依存機能を使わないenumはコンパイル可能
+
+enum State {
+    Idle,
+    Running,
+    Stopped
+}
+
+int get_priority(State s) {
+    match (s) {
+        State::Idle => { return 0; }
+        State::Running => { return 2; }
+        State::Stopped => { return 1; }
+    }
+    return -1;
+}
+
+int main() {
+    State s = State::Running;
+    int p = get_priority(s);
+    return p;
+}

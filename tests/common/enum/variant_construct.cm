@@ -1,0 +1,56 @@
+// enum バリアントコンストラクタテスト（v0.13.0）
+// 設計: 各バリアントは1つのフィールドのみ持つ
+import std::io::println;
+
+// RGB色構造体
+struct RGB {
+    int r;
+    int g;
+    int b;
+}
+
+// Associated Dataを持つenum（各バリアントは1つのフィールドのみ）
+enum Color {
+    RGB(RGB),        // 構造体を1つ持つ
+    Grayscale(int),  // 整数を1つ持つ
+    Named(string)    // 文字列を1つ持つ
+}
+
+// シンプルなenum
+enum Status {
+    Ok,
+    Error
+}
+
+int main() {
+    println("=== Enum Variant Constructor Test ===");
+
+    // Associated Dataを持つバリアントの作成
+    Color c1 = Color::RGB(RGB { r: 255, g: 128, b: 64 });
+    Color c2 = Color::Grayscale(128);
+    Color c3 = Color::Named("red");
+
+    // シンプルなバリアント
+    int s = Status::Ok;
+
+    println("Variant constructed successfully!");
+
+    // return match テスト: シンプルenum（関数パラメータとしてint型）
+    // Tagged Union型のパラメータ渡しは未サポートのため、直接main内でテスト
+    int ok_code = match s {
+        Status::Ok => 200,
+        Status::Error => 500
+    };
+    println("Status code: {ok_code}");
+
+    // Rustスタイル match（括弧なし）
+    int gray = match c2 {
+        Color::Grayscale(value) => value,
+        _ => 0
+    };
+    println("Grayscale value: {gray}");
+
+    println("Test passed!");
+
+    return 0;
+}

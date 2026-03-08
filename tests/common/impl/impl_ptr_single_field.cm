@@ -1,0 +1,40 @@
+// テスト: 8バイト最小struct (single field) のptr->method() (Bug#10)
+// 最もsmallな構造体でのポインタ経由メソッド呼び出しが正しく動作するか確認
+
+import std::io::println;
+
+struct Wrapper {
+    ulong value;
+}
+
+impl Wrapper {
+    ulong get() { return self.value; }
+    void set(ulong v) { self.value = v; }
+    void double_it() { self.value = self.value * 2; }
+}
+
+int main() {
+    Wrapper w;
+    w.value = 5;
+
+    Wrapper* ptr = &w;
+
+    // getter
+    ulong v1 = ptr->get();
+    println("get: {v1}");
+
+    // setter
+    ptr->set(42);
+    ulong v2 = ptr->get();
+    println("after set: {v2}");
+
+    // selfを読み書きする複合メソッド
+    ptr->double_it();
+    ulong v3 = ptr->get();
+    println("after double: {v3}");
+
+    // 元変数に反映されているか
+    println("w.value: {w.value}");
+
+    return 0;
+}

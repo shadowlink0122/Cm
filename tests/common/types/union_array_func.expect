@@ -1,0 +1,14 @@
+=== Union Array Function Test ===
+Test 1: Return union array
+  s=hello, n=42, b=true
+Test 2: Pass union array as argument
+  print_values: s=hello, n=42, b=true
+Test 3: Transform and return
+  ts=world, tn=84, tb=false
+Test 4: Mixed types in array
+  m0=alpha, m1=100, m2=true, m3=200
+Test 5: Extract from union array
+  first=alpha, second=100
+Test 6: Local build and pass
+  print_values: s=test, n=999, b=true
+=== PASS ===

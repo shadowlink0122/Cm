@@ -1,0 +1,54 @@
+// Bug#11/12修正テスト: ASMを含む関数がインライン展開されないことを確認
+// should_inlineがASM文を含む関数をスキップすることの回帰テスト
+// アーキテクチャ非依存テスト: nop を使用
+import std::io::println;
+
+// ASMを含む小さな関数（通常ならインライン展開されるサイズ）
+// nopは全アーキテクチャで安全
+void do_nothing_asm() {
+    __asm__("nop");
+}
+
+// ASMを含まない関数をテスト対照として使用
+int add_values(int a, int b) {
+    return a + b;
+}
+
+// ASMを含む関数を呼び出す関数
+// インライン展開されると問題が発生するケースのシミュレーション
+int caller_with_asm() {
+    int x = 10;
+    do_nothing_asm();
+    int y = 20;
+    do_nothing_asm();
+    return x + y;
+}
+
+// 複数回のASM呼出しを含む
+int multi_asm_caller() {
+    int sum = 0;
+    int i = 0;
+    while (i < 3) {
+        do_nothing_asm();
+        sum = sum + 10;
+        i = i + 1;
+    }
+    return sum;
+}
+
+int main() {
+    // テスト1: ASM含む関数の呼出し
+    int v1 = caller_with_asm();
+    println("caller_with_asm (expect 30): {v1}");
+
+    // テスト2: ループ内ASM呼出し
+    int v2 = multi_asm_caller();
+    println("multi_asm_caller (expect 30): {v2}");
+
+    // テスト3: ASMなし関数（インライン展開可能な対照）
+    int v3 = add_values(15, 25);
+    println("add_values (expect 40): {v3}");
+
+    println("PASS");
+    return 0;
+}

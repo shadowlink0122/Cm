@@ -1,0 +1,68 @@
+// typedef union配列の包括テスト
+// 戻り値、引数、struct/enum要素のテスト
+import std::io::println;
+
+// === 基本的なunion型定義 ===
+typedef Value = int | bool;
+
+// === union配列を戻り値として返す ===
+Value[2] make_pair() {
+    Value[2] result;
+    result[0] = 42 as Value;
+    result[1] = true as Value;
+    return result;
+}
+
+// === union配列を引数として受け取る ===
+void print_values(Value[3] vals) {
+    int a = vals[0] as int;
+    bool b = vals[1] as bool;
+    int c = vals[2] as int;
+    println("  arg: a={a}, b={b}, c={c}");
+}
+
+// === union配列を引数で受け取り、戻り値で返す ===
+Value[2] swap_pair(Value[2] pair) {
+    Value[2] swapped;
+    swapped[0] = pair[1];
+    swapped[1] = pair[0];
+    return swapped;
+}
+
+int main() {
+    println("=== Union Array Comprehensive Test ===");
+
+    // テスト1: 戻り値テスト
+    println("Test 1: Return value");
+    Value[2] pair = make_pair();
+    int x = pair[0] as int;
+    bool y = pair[1] as bool;
+    println("  x={x}, y={y}");
+
+    // テスト2: 引数テスト
+    println("Test 2: Argument");
+    Value[3] arr;
+    arr[0] = 10 as Value;
+    arr[1] = false as Value;
+    arr[2] = 99 as Value;
+    print_values(arr);
+
+    // テスト3: 引数→戻り値の組み合わせ
+    println("Test 3: Arg to return");
+    Value[2] swapped = swap_pair(pair);
+    bool sy = swapped[0] as bool;
+    int sx = swapped[1] as int;
+    println("  swapped: sy={sy}, sx={sx}");
+
+    // テスト4: ローカル変数のみ（回帰テスト）
+    println("Test 4: Local only");
+    Value[2] local_arr;
+    local_arr[0] = 100 as Value;
+    local_arr[1] = true as Value;
+    int lv0 = local_arr[0] as int;
+    bool lv1 = local_arr[1] as bool;
+    println("  lv0={lv0}, lv1={lv1}");
+
+    println("=== PASS ===");
+    return 0;
+}

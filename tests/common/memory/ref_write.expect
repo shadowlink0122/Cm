@@ -1,0 +1,6 @@
+=== Pointer to local test ===
+result before: 0
+set_value called
+  *ptr set to 42
+result after: 42
+=== Done ===

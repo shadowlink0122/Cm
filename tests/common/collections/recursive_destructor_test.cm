@@ -1,0 +1,40 @@
+// 再帰的デストラクタ検証テスト
+// Vector<TrackedObject>でデストラクタが呼ばれることを確認
+
+import std::io::println;
+import std::collections::vector::*;
+
+// デストラクタ呼び出しを追跡する構造体
+struct TrackedObject {
+    int id;
+}
+
+impl TrackedObject {
+    // デストラクタで追跡メッセージを出力
+    ~self() {
+        println("  ~TrackedObject({self.id}) called");
+    }
+}
+
+int main() {
+    println("=== Recursive Destructor Verification ===");
+
+    println("1. Creating Vector<TrackedObject>:");
+    {
+        Vector<TrackedObject> objects();
+        objects.push(TrackedObject { id: 100 });
+        objects.push(TrackedObject { id: 200 });
+        objects.push(TrackedObject { id: 300 });
+        int len = objects.len();
+        println("  objects.len() = {len}");
+        println("  Exiting scope - expect destructor calls:");
+    }
+
+    println("");
+    println("2. If you see TrackedObject destructor calls above, recursive destruction works!");
+    println("   If not, there's still a bug to fix.");
+
+    println("");
+    println("=== Test Complete ===");
+    return 0;
+}

@@ -981,53 +981,46 @@ run_tests_parallel() {
     log "Running $TOTAL tests in parallel..."
     log ""
     
-    # 並列ジョブ数（CPU数に基づく）
+    # 並列ジョブ数（CPU数×4: コンパイル+リンク+実行でI/Oバウンドのため高並列度が有効）
     # 環境変数CM_TEST_MAX_JOBSでオーバーライド可能
-    local max_jobs=${CM_TEST_MAX_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}
+    local ncpu=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    local max_jobs=${CM_TEST_MAX_JOBS:-$((ncpu * 4))}
     
-    # 各テストを並列実行
-    local pids=()
-    local job_count=0
-    
+    # テスト引数を事前計算（ループ内のfork-execオーバーヘッドを除去）
+    local result_files=()
     for test_file in "${test_files[@]}"; do
         local test_name="$(basename "${test_file%.cm}")"
         local category="$(dirname "$test_file" | sed "s|^$PROGRAMS_DIR/||")"
-        local result_file="$results_dir/${category//\//_}_${test_name}.result"
-        
-        # バックグラウンドでテスト実行
-        (
-            run_parallel_test "$test_file" "$result_file"
-        ) &
-        
-        pids+=($!)
-        CHILD_PIDS+=($!)
-        ((job_count++))
-        
-        # 最大ジョブ数に達したら、完了済みPIDを回収して空きスロットを作る
-        if [ $job_count -ge $max_jobs ]; then
-            # 完了済みPIDを全て回収
-            local new_pids=()
-            for pid in "${pids[@]}"; do
-                if kill -0 "$pid" 2>/dev/null; then
-                    new_pids+=("$pid")
-                else
-                    wait "$pid" 2>/dev/null
-                    ((job_count--))
-                fi
-            done
-            pids=("${new_pids[@]}")
-            
-            # まだスロットが空いていなければ、最古のPIDを待機
-            if [ $job_count -ge $max_jobs ]; then
-                wait "${pids[0]}"
-                pids=("${pids[@]:1}")
-                ((job_count--))
-            fi
-        fi
+        result_files+=("$results_dir/${category//\//_}_${test_name}.result")
     done
     
-    # 残りのジョブを待機
+    # FIFOセマフォ: ポーリングなしで効率的にスロットを管理
+    local sem_fifo="$TEMP_DIR/parallel_sem_$$"
+    mkfifo "$sem_fifo"
+    exec 9<>"$sem_fifo"
+    rm -f "$sem_fifo"
+    
+    # スロット数分のトークンを投入
+    for ((i=0; i<max_jobs; i++)); do
+        echo "x" >&9
+    done
+    
+    # 各テストを並列実行（FIFOセマフォでスロット制御、ループ内外部コマンドなし）
+    local idx=0
+    for test_file in "${test_files[@]}"; do
+        read -u 9 _token
+        
+        (
+            run_parallel_test "$test_file" "${result_files[$idx]}"
+            echo "x" >&9
+        ) &
+        CHILD_PIDS+=($!)
+        ((idx++))
+    done
+    
+    # 全ジョブの完了を待機
     wait
+    exec 9>&-
     
     # 結果を集計
     for test_file in "${test_files[@]}"; do

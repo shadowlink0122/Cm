@@ -1,0 +1,23 @@
+//! platform: uefi
+// Bug#9回帰テスト: 回避策なし — ローカル配列のアドレスをポインタ変数に格納
+// 回避策の「ポインタ変数なし」パターンではなく、元のバグパターンそのものをテスト
+
+ulong test_array_with_ptr() {
+    // 配列 + アドレス取得ポインタ変数（以前はスタックオフセット重複でバグ）
+    ulong[3] arr;
+    arr[0] = 0x1111;
+    arr[1] = 0x2222;
+    arr[2] = 0x3333;
+
+    // ❌ 以前はこのポインタ変数追加でarr[0]がarr[1]にシフトしていた
+    void* arr_ptr = &arr as void*;
+
+    // ✅ 修正後はarr[0] == 0x1111が正しく返される
+    return arr[0];
+}
+
+ulong efi_main(void* image_handle, void* system_table) {
+    void* ih = image_handle;
+    void* st = system_table;
+    return test_array_with_ptr();
+}

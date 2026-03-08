@@ -1,0 +1,40 @@
+// enumのmatch文で値を抽出するテスト（ステートメント形式）
+// 設計: matchは値抽出、分岐はステートメント
+import std::io::println;
+
+// Option型（各バリアントは1つのフィールドのみ）
+enum Option {
+    None,
+    Some(int)
+}
+
+int main() {
+    Option opt1 = Option::Some(42);
+    Option opt2 = Option::None;
+
+    // matchで値抽出（ステートメント形式）
+    int v1 = 0;
+    match (opt1) {
+        Option::None => {
+            v1 = 0;
+        }
+        Option::Some(value) => {
+            v1 = value;
+        }
+    }
+
+    int v2 = 0;
+    match (opt2) {
+        Option::None => {
+            v2 = 0;
+        }
+        Option::Some(value) => {
+            v2 = value;
+        }
+    }
+
+    println("Some(42) => {v1}");
+    println("None => {v2}");
+
+    return 0;
+}

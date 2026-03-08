@@ -1,0 +1,39 @@
+import std::io::println;
+
+// 比較演算子オーバーロードテスト
+struct Num {
+    int value;
+}
+
+impl Num for Eq {
+    operator bool ==(Num other) {
+        return self.value == other.value;
+    }
+}
+
+impl Num for Ord {
+    operator bool <(Num other) {
+        return self.value < other.value;
+    }
+}
+
+int main() {
+    Num x = Num{value: 5};
+    Num y = Num{value: 5};
+    Num z = Num{value: 8};
+
+    if (x == y) {
+        println("5 == 5: true");
+    }
+    if (x != z) {
+        println("5 != 8: true");
+    }
+    if (x < z) {
+        println("5 < 8: true");
+    }
+    if (z > x) {
+        println("8 > 5: true");
+    }
+
+    return 0;
+}

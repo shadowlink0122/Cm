@@ -1,0 +1,145 @@
+// gpu_xor_nn_test.cm - GPU(Metal)でXORニューラルネットワーク学習テスト
+// 2層NN: 入力2 → 隠れ層4 → 出力1
+// Metal Compute Shaderでネイティブfloat演算（sigmoid + 勾配降下）
+// 配列リテラルでデータ初期化
+import std::io::println;
+import native::gpu::device_create;
+import native::gpu::device_destroy;
+import native::gpu::buffer_create_floats;
+import native::gpu::buffer_destroy;
+import native::gpu::buffer_write_floats;
+import native::gpu::buffer_read_floats;
+import native::gpu::float_to_bits;
+import native::gpu::bits_to_float;
+import native::gpu::kernel_create;
+import native::gpu::kernel_destroy;
+import native::gpu::dispatch_1;
+
+int main() {
+    println("=== GPU XOR Neural Network Test ===");
+
+    // デバイス作成
+    long device = device_create();
+    if (device == 0) {
+        println("SKIP: Metal device not available");
+        return 0;
+    }
+    println("GPU device available");
+
+    // ============================================================
+    // Metal Shader: XOR学習 (ネイティブfloat、sigmoid + 逆伝播)
+    // ============================================================
+    // ネットワーク構成:
+    //   入力: 2ニューロン
+    //   隠れ層: 4ニューロン (sigmoid)
+    //   出力: 1ニューロン (sigmoid)
+    //
+    // バッファレイアウト (1つのfloatバッファに全パラメータ格納):
+    //   [0..3]: XOR入力 x0 (4パターン: 0,0 / 0,1 / 1,0 / 1,1)
+    //   [4..7]: XOR入力 x1
+    //   [8..11]: XOR正解 y
+    //   [12..19]: 重み w1 (2入力 × 4隠れ = 8)
+    //   [20..23]: バイアス b1 (4)
+    //   [24..27]: 重み w2 (4隠れ × 1出力 = 4)
+    //   [28]: バイアス b2 (1)
+    //   [29..32]: 隠れ層出力 h (4)
+    //   [33]: 出力 o
+    //   [34]: エポック数 (float cast)
+    //   [35]: 学習率
+    //   [36..39]: 最終予測結果 (4パターン分)
+    string shader = "#include <metal_stdlib>\nusing namespace metal;\n\nfloat sigmoid(float x) {\n    return 1.0f / (1.0f + exp(-x));\n}\n\nkernel void xor_train(\n    device float* data [[buffer(0)]],\n    uint id [[thread_position_in_grid]]\n) {\n    if (id != 0) return;\n\n    int OFF_X0 = 0;\n    int OFF_X1 = 4;\n    int OFF_Y  = 8;\n    int OFF_W1 = 12;\n    int OFF_B1 = 20;\n    int OFF_W2 = 24;\n    int OFF_B2 = 28;\n    int OFF_H  = 29;\n    int OFF_O  = 33;\n    int OFF_EPOCH = 34;\n    int OFF_LR = 35;\n    int OFF_PRED = 36;\n\n    float lr = data[OFF_LR];\n    int epochs = int(data[OFF_EPOCH]);\n\n    for (int e = 0; e < epochs; e++) {\n        for (int p = 0; p < 4; p++) {\n            float x0 = data[OFF_X0 + p];\n            float x1 = data[OFF_X1 + p];\n            float y  = data[OFF_Y + p];\n\n            // Forward: 隠れ層\n            for (int j = 0; j < 4; j++) {\n                float sum = data[OFF_B1 + j];\n                sum += x0 * data[OFF_W1 + j];\n                sum += x1 * data[OFF_W1 + 4 + j];\n                data[OFF_H + j] = sigmoid(sum);\n            }\n\n            // Forward: 出力層\n            float out_sum = data[OFF_B2];\n            for (int j = 0; j < 4; j++) {\n                out_sum += data[OFF_H + j] * data[OFF_W2 + j];\n            }\n            float o = sigmoid(out_sum);\n            data[OFF_O] = o;\n\n            if (e == epochs - 1) {\n                data[OFF_PRED + p] = o;\n            }\n\n            // Backward: 出力誤差 (δ_out = (o - y) * o * (1 - o))\n            float d_out = (o - y) * o * (1.0f - o);\n\n            for (int j = 0; j < 4; j++) {\n                float grad_w2 = data[OFF_H + j] * d_out;\n                data[OFF_W2 + j] -= lr * grad_w2;\n            }\n            data[OFF_B2] -= lr * d_out;\n\n            // Backward: 隠れ層誤差\n            for (int j = 0; j < 4; j++) {\n                float h_j = data[OFF_H + j];\n                float d_h = d_out * data[OFF_W2 + j] * h_j * (1.0f - h_j);\n                data[OFF_W1 + j]     -= lr * x0 * d_h;\n                data[OFF_W1 + 4 + j] -= lr * x1 * d_h;\n                data[OFF_B1 + j]     -= lr * d_h;\n            }\n        }\n    }\n}\n";
+
+    long kernel = kernel_create(device, shader, "xor_train");
+    if (kernel == 0) {
+        println("FAIL: kernel creation failed");
+        device_destroy(device);
+        return 1;
+    }
+    println("kernel created");
+
+    // ============================================================
+    // データ初期化 (配列リテラルでfloat bit patternを格納)
+    // ============================================================
+    // バッファレイアウト: 40 floats
+    long data_count = 40;
+
+    // 配列リテラルで全パラメータを定義
+    long[40] data = [
+        // [0..3] XOR入力 x0
+        float_to_bits(0.0), float_to_bits(0.0), float_to_bits(1.0), float_to_bits(1.0),
+        // [4..7] XOR入力 x1
+        float_to_bits(0.0), float_to_bits(1.0), float_to_bits(0.0), float_to_bits(1.0),
+        // [8..11] XOR正解 y
+        float_to_bits(0.0), float_to_bits(1.0), float_to_bits(1.0), float_to_bits(0.0),
+        // [12..19] 重み w1 (2x4) — XOR用対称初期値
+        float_to_bits(0.5), float_to_bits(1.0), float_to_bits(-1.0), float_to_bits(0.5),
+        float_to_bits(0.5), float_to_bits(-1.0), float_to_bits(1.0), float_to_bits(0.5),
+        // [20..23] バイアス b1 (4)
+        float_to_bits(0.0), float_to_bits(-0.5), float_to_bits(-0.5), float_to_bits(0.0),
+        // [24..27] 重み w2 (4)
+        float_to_bits(1.0), float_to_bits(1.0), float_to_bits(1.0), float_to_bits(-2.0),
+        // [28] バイアス b2
+        float_to_bits(-0.5),
+        // [29..32] 隠れ層出力 h
+        float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0),
+        // [33] 出力 o
+        float_to_bits(0.0),
+        // [34] エポック数
+        float_to_bits(5000.0),
+        // [35] 学習率
+        float_to_bits(2.0),
+        // [36..39] 予測結果
+        float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0), float_to_bits(0.0)
+    ];
+
+    // GPUバッファにコピー
+    long buf = buffer_create_floats(device, data_count);
+    buffer_write_floats(buf, &data[0], data_count);
+
+    // カーネル実行
+    println("training 5000 epochs...");
+    dispatch_1(kernel, buf, 1);
+    println("training done");
+
+    // 結果読み取り
+    buffer_read_floats(buf, &data[0], data_count);
+
+    // 予測結果を取得 (offset 36..39)
+    double pred_00 = bits_to_float(data[36]);
+    double pred_01 = bits_to_float(data[37]);
+    double pred_10 = bits_to_float(data[38]);
+    double pred_11 = bits_to_float(data[39]);
+
+    // 整数%表示 (0〜100%)
+    int p00 = (pred_00 * 100.0) as int;
+    int p01 = (pred_01 * 100.0) as int;
+    int p10 = (pred_10 * 100.0) as int;
+    int p11 = (pred_11 * 100.0) as int;
+
+    println("XOR predictions:");
+    println("  (0,0) -> {p00}% (expect <50%)");
+    println("  (0,1) -> {p01}% (expect >50%)");
+    println("  (1,0) -> {p10}% (expect >50%)");
+    println("  (1,1) -> {p11}% (expect <50%)");
+
+    // 検証: 閾値50%で2値化
+    int passed = 0;
+    if (pred_00 < 0.5) { passed = passed + 1; }
+    if (pred_01 > 0.5) { passed = passed + 1; }
+    if (pred_10 > 0.5) { passed = passed + 1; }
+    if (pred_11 < 0.5) { passed = passed + 1; }
+
+    if (passed == 4) {
+        println("PASS: XOR neural network learned correctly");
+    } else {
+        println("PARTIAL: {passed}/4 correct");
+    }
+
+    // クリーンアップ
+    kernel_destroy(kernel);
+    buffer_destroy(buf);
+    device_destroy(device);
+
+    println("=== Done ===");
+    return 0;
+}

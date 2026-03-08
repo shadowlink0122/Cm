@@ -1,0 +1,36 @@
+// ランタイムI/Oテスト
+import std::io::println;
+import native::io::file::{read_file, write_file};
+
+int main() {
+    println("=== Runtime I/O Test ===");
+
+    // テストフォルダ内のデータファイルを使用
+    // 注: テストランナーはテストディレクトリから実行するため、相対パスを使用
+    string data_path = "data/runtime_io_data.txt";
+    string content = "Cm I/O Test Data!";
+
+    // 1. 書き込み
+    bool ok = write_file(data_path, content);
+    if (ok) {
+        println("Write: PASS");
+    } else {
+        println("Write: FAIL");
+        return 1;
+    }
+
+    // 2. 読み込み
+    string read_content = read_file(data_path);
+    println("Read: PASS");
+
+    // 3. 内容確認
+    if (read_content == content) {
+        println("Content matches: PASS");
+    } else {
+        println("Content mismatch: FAIL");
+        return 1;
+    }
+
+    println("=== All Tests Passed ===");
+    return 0;
+}

@@ -1,0 +1,75 @@
+// std::collections::Queue<T>テスト
+// ジェネリックキュー（FIFO）のテスト
+import std::io::println;
+import std::collections::queue::*;
+
+int main() {
+    println("=== Queue<T> Test ===");
+
+    // 1. Queue<int> テスト
+    println("1. Queue<int>:");
+    Queue<int> qi();
+
+    qi.enqueue(10);
+    qi.enqueue(20);
+    qi.enqueue(30);
+
+    int len = qi.len();
+    println("  enqueue 10, 20, 30: len={len}");
+
+    int v1 = qi.dequeue();
+    int v2 = qi.dequeue();
+    int v3 = qi.dequeue();
+    println("  dequeue: {v1}, {v2}, {v3}");
+
+    bool empty = qi.is_empty();
+    println("  is_empty: {empty}");
+
+    // 再利用テスト
+    qi.enqueue(100);
+    qi.enqueue(200);
+    len = qi.len();
+    int r1 = qi.dequeue();
+    int r2 = qi.dequeue();
+    println("  reuse: len={len}, dequeue: {r1}, {r2}");
+
+    // デストラクタが自動的に呼ばれる
+    println("  destructor called");
+
+    // 2. Queue<long>テスト
+    println("2. Queue<long>:");
+    Queue<long> ql();
+
+    ql.enqueue(1000 as long);
+    ql.enqueue(2000 as long);
+    len = ql.len();
+    println("  enqueue 2 items: len={len}");
+
+    long lv1 = ql.dequeue();
+    long lv2 = ql.dequeue();
+    println("  dequeue: {lv1}, {lv2}");
+
+    // デストラクタが自動的に呼ばれる
+    println("  destructor called");
+
+    // 3. Queue<bool>テスト
+    println("3. Queue<bool>:");
+    Queue<bool> qb();
+
+    qb.enqueue(true);
+    qb.enqueue(false);
+    qb.enqueue(true);
+    len = qb.len();
+    println("  enqueue 3 items: len={len}");
+
+    bool b1 = qb.dequeue();
+    bool b2 = qb.dequeue();
+    bool b3 = qb.dequeue();
+    println("  dequeue: {b1}, {b2}, {b3}");
+
+    // デストラクタが自動的に呼ばれる
+    println("  destructor called");
+
+    println("=== PASS ===");
+    return 0;
+}

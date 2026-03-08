@@ -1,0 +1,5 @@
+=== Inline Assembly Test ===
+nop: ok
+compiler_barrier: ok
+multiple: ok
+=== Complete ===

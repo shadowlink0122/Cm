@@ -1,5 +1,3 @@
-// モジュール関連のパーサー実装
-
 #include "../../common/debug/par.hpp"
 #include "../ast/module.hpp"
 #include "parser.hpp"
@@ -35,7 +33,28 @@ ast::DeclPtr Parser::parse_namespace() {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwNamespace);
 
-    std::string namespace_name = expect_ident();
+    // BUG修正(v0.14.2): namespace名に型キーワード（string, int等）も許可
+    // プリプロセッサがimportファイル名をnamespace名に使用するため、
+    // "string.cm" → "namespace string { ... }" が正しくパースできる必要がある
+    std::string namespace_name;
+    if (check(TokenKind::Ident)) {
+        namespace_name = expect_ident();
+    } else {
+        // 型キーワードをnamespace名として受け入れる
+        auto kind = current().kind;
+        if (kind == TokenKind::KwString || kind == TokenKind::KwInt || kind == TokenKind::KwUint ||
+            kind == TokenKind::KwLong || kind == TokenKind::KwUlong || kind == TokenKind::KwShort ||
+            kind == TokenKind::KwUshort || kind == TokenKind::KwTiny ||
+            kind == TokenKind::KwUtiny || kind == TokenKind::KwFloat ||
+            kind == TokenKind::KwDouble || kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
+            kind == TokenKind::KwVoid || kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
+            kind == TokenKind::KwCstring) {
+            namespace_name = std::string(current().get_string());
+            advance();
+        } else {
+            namespace_name = expect_ident();  // エラーメッセージ生成のフォールバック
+        }
+    }
 
     expect(TokenKind::LBrace);
 
@@ -837,13 +856,19 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
             // 負の数をサポート
             bool is_negative = consume_if(TokenKind::Minus);
 
-            if (!check(TokenKind::IntLiteral)) {
-                error("enum値には整数リテラルが必要です");
+            int64_t value = 0;
+            if (check(TokenKind::IntLiteral)) {
+                value = static_cast<int64_t>(current().get_int());
+                advance();
+            } else if (check(TokenKind::CharLiteral)) {
+                // 文字リテラル: 'a' → 97 (ASCII値)
+                std::string s(current().get_string());
+                value = static_cast<int64_t>(s.empty() ? 0 : static_cast<unsigned char>(s[0]));
+                advance();
+            } else {
+                error("enum値には整数リテラルまたは文字リテラルが必要です");
                 return nullptr;
             }
-
-            int64_t value = static_cast<int64_t>(current().get_int());
-            advance();
 
             if (is_negative) {
                 value = -value;

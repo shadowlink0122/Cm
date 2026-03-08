@@ -1,0 +1,48 @@
+// 大きな16進リテラルのテスト (bugs1#3修正)
+// i32範囲を超える値がlong/ulongとして正しく処理されることを確認
+import std::io::println;
+
+int main() {
+    // === i32範囲を超える16進リテラル ===
+
+    // 0x80000000 = 2147483648 (i32の最大値+1)
+    long v1 = 0x80000000;
+    println(v1);
+
+    // 0xFFFFFFFF = 4294967295 (u32の最大値)
+    long v2 = 0xFFFFFFFF;
+    println(v2);
+
+    // 0x100000000 = 4294967296 (u32の最大値+1)
+    long v3 = 0x100000000;
+    println(v3);
+
+    // === 10進リテラルでのi32範囲超え ===
+
+    long v4 = 2147483648;
+    println(v4);
+
+    long v5 = 4294967295;
+    println(v5);
+
+    // === ulong型への16進代入 ===
+
+    ulong u1 = 0x80000000;
+    println(u1);
+
+    ulong u2 = 0xFFFFFFFF;
+    println(u2);
+
+    // === 変数経由のprintlnとリテラル直接println ===
+
+    // 変数経由
+    long hex_val = 0xABCDEF00;
+    println(hex_val);
+
+    // 文字列補間内での表示
+    long interp_val = 0x80000000;
+    println("hex value: {interp_val}");
+
+    println("PASS");
+    return 0;
+}

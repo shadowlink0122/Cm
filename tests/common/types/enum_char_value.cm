@@ -1,0 +1,54 @@
+import std::io::println;
+// enum値に文字リテラルを使用するテスト
+// 'a' = 97, 'A' = 65, '0' = 48 など
+
+enum Ascii {
+    LowerA = 'a',
+    LowerB = 'b',
+    LowerZ = 'z',
+    UpperA = 'A',
+    UpperZ = 'Z',
+    Digit0 = '0',
+    Digit9 = '9',
+    Space  = ' ',
+    Exclaim = '!',
+    At     = '@',
+    // 文字リテラルの後にオートインクリメントが機能することを確認
+    // '[' = 91 なので、次は 92, 93
+    BracketL = '[',
+    Backslash,
+    BracketR
+}
+
+int main() {
+    // 文字リテラルで指定したenum値がASCIIコードと一致することを検証
+    int v1 = Ascii::LowerA as int;
+    int v2 = Ascii::LowerB as int;
+    int v3 = Ascii::LowerZ as int;
+    int v4 = Ascii::UpperA as int;
+    int v5 = Ascii::UpperZ as int;
+    int v6 = Ascii::Digit0 as int;
+    int v7 = Ascii::Digit9 as int;
+    int v8 = Ascii::Space as int;
+    int v9 = Ascii::Exclaim as int;
+    int v10 = Ascii::At as int;
+    int v11 = Ascii::BracketL as int;
+    int v12 = Ascii::Backslash as int;
+    int v13 = Ascii::BracketR as int;
+
+    println("{v1}");   // 97
+    println("{v2}");   // 98
+    println("{v3}");   // 122
+    println("{v4}");   // 65
+    println("{v5}");   // 90
+    println("{v6}");   // 48
+    println("{v7}");   // 57
+    println("{v8}");   // 32
+    println("{v9}");   // 33
+    println("{v10}");  // 64
+    println("{v11}");  // 91
+    println("{v12}");  // 92
+    println("{v13}");  // 93
+
+    return 0;
+}

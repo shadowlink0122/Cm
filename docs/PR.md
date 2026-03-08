@@ -1,421 +1,198 @@
-[English](PR.en.html)
-
-# v0.14.1 Release - Cm言語コンパイラ
+# v0.14.2 Release - Cm言語コンパイラ
 
 ## 概要
 
-v0.14.1は**UEFIコンパイラバグ17件の修正**、**typedef算術演算サポート**、**GCC/Linux CIビルド修正**を含むパッチリリースです。CosmOS UEFI開発で発見されたコンパイラバグを全件修正し、回帰テストを多数追加。整数型出力の完全対応、naked関数コード生成の根本修正、MIR最適化パスのASM対応など広範な安定化を実施しています。
-
-v0.14.0の主な変更: **JavaScriptバックエンドの大規模改善**、**演算子オーバーロードの設計改善**、**ベアメタル/UEFIサポート**、**インラインユニオン型 (`int | null`)**、**プラットフォームディレクティブ**、**VSCode拡張機能の品質改善**。
+v0.14.2は**コンパイラバグの修正**と**言語機能拡張**、**パフォーマンス改善**を含むパッチリリースです。特に**Tagged Union（Result/Option/enum）のペイロード抽出に関する重大なバグ2件**を修正し、ベアメタル環境での型安全なエラーハンドリングを実現しました。
 
 ---
 
-## 🔥 v0.14.1 変更点
+## 🔥 v0.14.2 変更点
 
-### UEFIコンパイラバグ全件修正（Bug#1〜#17）
+### 重大バグ修正: Tagged Union ペイロード
 
-CosmOS UEFI開発中に発見されたコンパイラバグ17件を全て修正しました。
+#### BUG-CRITICAL-1: Tagged Unionペイロード型の64bitハードコード問題
 
-| Bug# | 問題 | 修正内容 |
-|------|------|----------|
-| #1 | char switchの符号拡張 | switch_intのchar型比較を修正 |
-| #5 | LICM最適化がASM出力変数を移動 | ASM出力変数をループ不変と誤判定しない修正 |
-| #6 | constant foldingのASM出力追跡 | ASM→変数代入チェーンの最適化を抑制 |
-| #7 | `utiny*`デリファレンスのi32切り詰め | ポインタデリファレンスの型幅修正 |
-| #8 | `int→utiny`キャストの符号拡張 | trunc命令の正しい適用 |
-| #9 | 構造体フィールドの定数畳み込み | フィールドアクセスの最適化を抑制 |
-| #10 | `ptr->method()`のself書き戻し | MIR loweringでポインタ経由の書き戻し実装 |
-| #11 | UEFIレジスタマッピング不正 | x86_64 UEFI ABIに合わせたレジスタリマップ |
-| #12 | naked関数のプロローグ/エピローグ干渉 | Naked+$N事前置換方式に統一 |
-| #13 | LLVM最適化によるcall/ret消滅 | UEFIターゲットの最適化レベル調整 |
-| #14 | 構造体配列の全体再代入でゴミ値 | memcpy/配列代入の型サイズ修正 |
-| #15 | 非export関数がexport関数から呼出不可 | シンボル解決の修正 |
-| #16 | `&local as ulong`キャスト不正 | ポインタ→整数キャストの修正 |
-| #17 | UEFIスタックプローブクラッシュ | スタックプローブの無効化 |
+`mir_to_llvm.cpp`の`convertPlaceToAddress`でTagged Union（enum/Result/Option）のペイロード型が`hir::make_int()`（i32）にハードコードされていた。64bit型（long/ulong/pointer等）のペイロードが4バイトで切り詰められ、残り4バイトがゴミデータとなる。
 
-### typedef算術演算サポート
-
-typedef型の値に対する算術演算と、typedef引数のstatic→static関数呼び出し時の型不整合を修正しました。
-
-```cm
-typedef EFI_STATUS = ulong;
-EFI_STATUS status = 0;
-if (status != 0) { /* 修正前: コンパイルエラー → 修正後: 正常動作 */ }
+```
+症状: Result::Ok(0)のペイロード抽出で188050848088064等の不正値
+原因: ペイロード型がi32固定 → 64bit値の上位4バイトが未読
+修正: type_argsから動的に型推論し、64bit型存在時はi64を使用
 ```
 
-### 整数型出力の完全対応
+#### BUG-CRITICAL-2: Tagged Unionペイロード部分書き込みによるundef bytes
 
-MIR loweringのprintln関数選択ロジックにlong/ulong/uint/isize/usize型のケースを追加。
+`Result::Ok(0)`等のenum construct時、ペイロード値（i32）が`i8[N]`に部分書き込みされ、LLVM最適化が`memset+store`を`constant phi`に畳み込む際にundef bytesが生成される。
 
-### GCC/Linux CIビルド修正
-
-`src/mir/nodes.hpp`に`<unordered_map>`ヘッダーを追加。AppleClangでは間接インクルードで解決されていたが、GCCでは明示的なインクルードが必要。
-
-### JS/WASMランタイム改善
-
-| ファイル | 変更内容 |
-|---------|----------|
-| `src/codegen/js/builtins.cpp` | `cm_println_long`/`ulong`/`uint`とformat/to_string版追加 |
-| `src/codegen/llvm/wasm/runtime_print.c` | `cm_println_long`/`ulong`出力関数追加 |
-| `src/codegen/llvm/core/operators.cpp` | ビット演算（BitAnd/BitOr/BitXor）の型幅統一ロジック追加 |
-| `src/mir/lowering/expr_call.cpp` | println型選択にlong/ulong/uint/isize/usizeケース追加 |
-| `src/mir/passes/interprocedural/inlining.cpp` | ASM含有関数のインライン展開禁止 |
-
----
-
-## 🎯 主要な変更
-
-### 1. JSバックエンド大規模リファクタリング
-
-JSコードジェネレータを大幅にリファクタリングし、1,600行以上の不要コードを削除しました。
-
-| 変更 | 詳細 |
-|------|------|
-| codegen.cpp | -1,618行（大規模整理） |
-| emit_expressions.cpp | +124行（式出力改善） |
-| emit_statements.cpp | +80行（文出力改善） |
-| builtins.hpp | +71行（ビルトイン拡充） |
-
-#### JSテスト通過率
-
-| バージョン | パス | 失敗 | スキップ | 通過率 |
-|-----------|------|------|---------|--------|
-| v0.13.1 | 206 | 119 | 47 | 55% |
-| **v0.14.0** | **298** | **0** | **49** | **87%** |
-
-#### JSコンパイルの使い方
-
-```bash
-./cm compile --target=js hello.cm -o output.js
-node output.js
+```
+症状: ベアメタル環境でResult<ulong, long>::Ok(0)の値抽出にゴミデータ混入
+原因: ペイロードストアが32bitのみ→残りバイトがundefined
+修正:
+  1. payload storeにZExt（Zero-Extension）を追加し正確なビット幅に拡張
+  2. retval allocaにstruct型ゼロ初期化を追加
+  3. resolve_typedefにモノモーフ化enum名フォールバック追加
 ```
 
-### 2. 演算子オーバーロード改善
+> **影響**: この修正により`Result<T, E>`でT==E（例: `Result<long, long>`）が正しく動作するようになり、ベアメタル環境を含む全レイヤーでResult型エラーハンドリングが使用可能に。
 
-#### `impl T { operator ... }` 構文
+### バグ修正
 
-演算子を`impl T for InterfaceName`ではなく、直接`impl T { operator ... }`で定義可能になりました。
+#### BUG-1: ASM含有関数の過剰volatile生成
+
+`__asm__`を含む関数で全ローカル変数に`volatile`属性が付与され、不要な`alloca → volatile store → volatile load`チェーンが生成される問題を修正。ASM operandで直接参照される変数のみvolatileにし、キャスト中間変数のvolatile属性を除去。
+
+```
+修正前: outb(ushort, utiny) → 13回のメモリ操作、0x43バイト
+修正後: outb(ushort, utiny) → 0回のメモリ操作、0x4バイト
+```
+
+#### BUG-2: 型キーワードのnamespace名衝突
+
+`import ../lib/string;` で展開される `namespace string { ... }` がCm組み込み型`string`と衝突する問題を修正。型キーワードをnamespace名・名前空間修飾子として受け入れるようパーサーを拡張。
+
+#### その他のバグ修正
+
+| 問題 | 修正内容 |
+|------|----------|
+| varargs関数のパラメータ数検証 | 可変長引数関数の引数数チェックを最小引数数でのガードに修正 |
+| callee関数のシンボル検索失敗 | impl内関数のルックアップロジックを修正 |
+| 文字列スライスの範囲外アクセス | スライス境界チェックを追加 |
+| プリプロセッサのデバッグログ | debug_modeガードで保護し、通常ビルドでの出力を抑制 |
+| パーサ無限再帰 | 安全ガードを追加し、進行しない再帰を防止 |
+| DFEラムダ関数誤削除 | ラムダ関数をDFEスキップ対象に追加 |
+| interface impl関数のDCE除去 | interface実装関数を未使用と誤判定しない修正 |
+| フォーマッター1行バッククォート | インデントが崩壊するバグを修正 |
+| フォーマッター括弧内継続行 | 括弧内の継続行インデントを正しく処理 |
+
+### 新機能
+
+#### Dead Function Elimination (DFE)
+
+MIR→LLVM変換時に未使用関数を除去する最適化パスを追加。ベアメタル環境でのバイナリサイズ削減に有効。
+
+#### enum値の文字リテラルサポート
+
+`parse_enum_decl`で`CharLiteral`を受け付けるよう拡張。文字リテラルを直接enum値として使用可能に。オートインクリメントも文字リテラル後に正常動作。
 
 ```cm
-struct Vec2 { int x; int y; }
-
-impl Vec2 {
-    operator Vec2 +(Vec2 other) {
-        return Vec2{x: self.x + other.x, y: self.y + other.y};
-    }
+export enum Ascii {
+    LowerA = 'a',
+    LowerB,        // 98 (オートインクリメント)
+    LowerC,        // 99
+    UpperA = 'A',
+    Digit0 = '0',
+    BracketL = '[',
+    Backslash,     // 92 (オートインクリメント)
+    BracketR       // 93
 }
 ```
 
-#### 複合代入演算子
+#### `__asm__`内の`${CONST_NAME}`定数展開
 
-二項演算子を定義すると、対応する複合代入演算子が自動的に使えます。
+`lower_asm`でasm文字列中の`${CONST_NAME}`パターンを検出し、`global_const_values`テーブルから定数値を取得して16進数リテラルに直接置換する機能を追加。colonを含む`${+r:var}`等のオペランド記法はスキップ。
 
-```cm
-Vec2 v = Vec2{x: 10, y: 20};
-v += Vec2{x: 5, y: 3};   // v = v + Vec2{5, 3} と同等
-v -= Vec2{x: 2, y: 1};   // v = v - Vec2{2, 1} と同等
-```
+#### x86_64 Dockerクロスビルド対応
 
-**サポートする複合代入演算子**: `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`
+x86_64ターゲット向けDockerビルド環境を追加。LLVM共有ライブラリ + C++静的リンクの最適な構成。
 
-#### ビット演算子オーバーロード
+### パフォーマンス改善
 
-`&`, `|`, `^`, `<<`, `>>` の全ビット演算子をオーバーロード可能になりました。
+#### モノモーフィゼーション反復ループ最適化
 
-#### interface存在チェック
+反復ループを最大10パス→2パスに削減。2パス目は新規生成関数のみスキャン。`monomorphize_structs()`の2回実行を1回に統合。ネストジェネリクス（Queue等）にも対応。
 
-`impl T for I` の `I` が宣言済みinterfaceでない場合、コンパイルエラーになります。
+#### テストランナーの並列化改善
 
-### 3. インラインユニオン型とnull型
-
-#### インラインユニオン構文 (`int | null`)
-
-typedefなしで直接ユニオン型を使用可能になりました。
-
-```cm
-int | null a = null;           // nullが代入可能
-int | null b = 42 as MaybeInt; // int値も代入可能
-int | string | null c = null;  // 3型以上のユニオンも可能
-```
-
-| 変更 | 詳細 |
-|------|------|
-| `null`型追加 | `TypeKind::Null`、`make_null()` |
-| `parse_type_with_union()` | 変数宣言・関数戻り値・構造体フィールドで使用 |
-| 型互換性 | Unionメンバー型とのnull代入・値代入に対応 |
-
-### 4. プラットフォームディレクティブ
-
-ファイル先頭に `//! platform:` で実行可能なプラットフォームを制約可能。
-
-```cm
-//! platform: native
-// このファイルはLLVM Native/JITでのみコンパイル可能
-```
-
-対応プラットフォーム: `native`, `js`, `wasm`, `uefi`, `baremetal`
-
-### 5. ベアメタル / UEFIサポート
-
-`--target=uefi` でUEFIアプリケーションをコンパイル可能。QEMUでHello World出力確認済み。
-
-```cm
-// UEFI Hello World
-import ./libs/efi_core;
-import ./libs/efi_text;
-
-ulong efi_main(void* image_handle, void* system_table) {
-    efi_clear_screen(system_table);
-    string msg = "Hello World from Cm!";
-    efi_println(system_table, msg as void*);
-    while (true) { __asm__("hlt"); }
-    return 0;
-}
-```
-
-- インラインASM自動クロバー検出を実装
-- UEFIライブラリ (`libs/uefi/`) を新規作成
-- ベアメタル向けno_std実行プロファイル対応
-
-### 6. VSCode拡張機能の追加と改善
-
-#### 拡張機能の新規追加
-
-Cm言語用VSCode拡張機能を新規作成しました。
-
-- **構文ハイライト**: TextMate文法定義 (`cm.tmLanguage.json`)
-- **ファイルアイコン**: `.cm`ファイルにCmアイコンを表示
-- **言語設定**: ブラケットマッチング、折りたたみ、インデント支援
-- **VSIXパッケージ**: `pnpm run package` でインストール可能なパッケージを生成
-
-#### TypeScript移行 + ESLint/Prettier導入
-
-スクリプト（`update-version`, `verify-version`）をJavaScript→TypeScriptに移行し、ESLint + Prettierで品質管理を自動化。
-
-| ツール | 設定 | コマンド |
-|--------|------|---------|
-| TypeScript | `tsconfig.json` (strict, ES2020) | `pnpm run compile` |
-| ESLint | `eslint.config.mjs` (Flat Config v9+) | `pnpm run lint` |
-| Prettier | `.prettierrc` | `pnpm run format:check` |
-
-#### CI統合
-
-`ci.yml` に `extension-lint` ジョブを追加。push/PRごとにcompile → lint → format:checkを自動チェック。
-
-### 7. サンプルプロジェクト
-
-#### Webアプリサンプル (`examples/web-app/`)
-
-Cm言語でロジックを記述し、JSバックエンドでコンパイルしてブラウザ上で動作するWebアプリのサンプルを追加。HTMLテンプレートをバッククォート複数行文字列で記述する構成。
-
-#### UEFIサンプル (`examples/uefi/`)
-
-UEFI Hello Worldプログラムを`examples/uefi/`に整理。QEMUでの実行手順を含む。
-
----
-
-## 🐛 バグ修正
-
-### v0.14.1 修正（UEFIコンパイラバグ + 言語機能）
-
-| 問題 | 原因 | 修正ファイル |
-|-----|------|------------|
-| **Bug#1** char switchの符号拡張 | switch_intがchar型を符号拡張 | `mir_to_llvm.cpp` |
-| **Bug#5** LICMがASM出力を移動 | ASM出力変数をループ不変と誤判定 | `licm.cpp` |
-| **Bug#6** constant foldingのASM追跡 | ASM→変数代入の最適化抑制漏れ | `folding.cpp` |
-| **Bug#7** `utiny*`デリファレンスi32切り詰め | ポインタデリファレンスの型幅不正 | `mir_to_llvm.cpp` |
-| **Bug#8** `int→utiny`キャスト不正 | trunc命令の適用ミス | `mir_to_llvm.cpp` |
-| **Bug#9** 構造体フィールドの定数畳み込み | フィールドアクセス最適化の抑制漏れ | `folding.cpp` |
-| **Bug#10** `ptr->method()`のself書き戻し | ポインタ経由の書き戻し未実装 | `stmt.cpp` (MIR) |
-| **Bug#11** UEFIレジスタマッピング不正 | UEFI ABIレジスタリマップ欠落 | `mir_to_llvm.cpp` |
-| **Bug#12** naked関数のプロローグ干渉 | module-asm方式の不具合 | `mir_to_llvm.cpp` |
-| **Bug#13** LLVM最適化でcall/ret消滅 | 最適化レベル調整 | `codegen.cpp` (native) |
-| **Bug#14** 構造体配列の再代入でゴミ値 | 配列代入のサイズ計算不正 | `mir_to_llvm.cpp` |
-| **Bug#15** 非export関数がexportから呼出不可 | シンボル解決の不備 | `import.cpp` |
-| **Bug#16** `&local as ulong`キャスト不正 | ポインタ→整数キャスト未対応 | `mir_to_llvm.cpp` |
-| **Bug#17** UEFIスタックプローブクラッシュ | スタックプローブの無効化 | `codegen.cpp` (native) |
-| typedef算術演算エラー | typedef型のis_numeric判定漏れ | `checking/expr.cpp` |
-| typedef引数の型不整合 | static→static呼び出し時の型解決 | `monomorphization_impl.cpp` |
-| GCC CIビルドエラー | `<unordered_map>`ヘッダー未インクルード | `nodes.hpp` |
-| 大きな16進リテラルのprintln | println関数選択にlong/ulong未対応 | `expr_call.cpp` |
-| ビット演算の型幅不一致 | BitAnd/BitOr/BitXorに型統一ロジック欠落 | `operators.cpp` |
-| ASM関数のインライン展開 | ASM含有関数がインライン展開 | `inlining.cpp` |
-| JS/WASMでlong/ulong未出力 | ランタイムにcm_println_long等未定義 | `builtins.cpp`, `runtime_print.c` |
-
-### v0.14.0 修正
-
-| 問題 | 原因 | 修正ファイル |
-|-----|------|------------|
-| println型判定の誤り | AST型チェッカーがmatch armのpayload変数の型を`int`に設定 | `expr_call.cpp` |
-| ペイロードロードエラー | Tagged Unionの非構造体ペイロード型が`i32`にハードコード | `mir_to_llvm.cpp` |
-| 構造体ペイロードサイズ計算 | `max_payload_size()`がStruct型をデフォルト8バイトで計算 | `types.cpp` |
-| プラットフォーム不一致セグフォ | プラットフォーム制約のないファイルでクラッシュ | プリプロセッサ修正 |
-| Boolean定数オペランドの型判定 | JSバックエンドでBoolean定数の型が不正 | JS codegen修正 |
-| 並列テストのレースコンディション | テストランナーのファイル名衝突 | テストランナー修正 |
-
----
-
-## 🔧 ビルド・テスト改善
-
-### JSスキップファイル整理
-
-| カテゴリ | 理由 |
-|---------|------|
-| `asm/` | インラインアセンブリはJS非対応 |
-| `io/` | ファイルI/OはJS非対応 |
-| `net/` | TCP/HTTPはJS非対応 |
-| `sync/` | Mutex/Channel/AtomicはJS非対応 |
-| `thread/` | スレッドはJS非対応 |
-
-### CI改善
-
-- JSバックエンドテストをCIに追加
-- VERSIONファイルとブランチ名の整合チェックCI追加
-- VSCode拡張機能lint CIジョブ追加
-- UEFIコンパイルテストCIジョブ追加
-- ベアメタルコンパイルテストCIジョブ追加
-- GPUテスト全バックエンドスキップ
-- タイムアウトテスト根本修正
-- 不安定なoperator_comprehensiveテストを5つの個別テストに分割
-
-### テスト構成再編成
-
-- `tests/test_programs` → `tests/programs` にリネーム
-- ライブラリを `libs/` 配下にプラットフォーム別で再構成
+PIDポーリングループ（`kill -0` + `sleep 0.05`）をFIFOセマフォ方式に置換。max_jobsをCPU数→CPU数×4に変更（I/Oバウンド考慮）。結果: **1:57 → 51.5s（55%短縮）**、CPU使用率 100% → 232%。
 
 ---
 
 ## 📁 変更ファイル一覧
 
-### JSバックエンド
+### コンパイラコア
 
 | ファイル | 変更内容 |
-|---------|---------| 
-| `src/codegen/js/codegen.cpp` | 大規模リファクタリング（-1,618行） |
-| `src/codegen/js/emit_expressions.cpp` | 式出力改善 |
-| `src/codegen/js/emit_statements.cpp` | 文出力改善 |
-| `src/codegen/js/builtins.hpp` | ビルトイン関数拡充 |
-| `src/codegen/js/runtime.hpp` | ランタイムヘルパー追加 |
-| `src/codegen/js/types.hpp` | 型マッピング改善 |
+|---------|----------|
+| `src/codegen/llvm/core/mir_to_llvm.cpp` | ASM volatile修正、DFE連携、**64bit payload型推論**、**ZExt付きペイロードストア**、**retvalゼロ初期化** |
+| `src/codegen/llvm/core/mir_to_llvm.hpp` | volatile追跡メソッド追加 |
+| `src/codegen/llvm/core/terminator.cpp` | switch文コード生成改善 |
+| `src/codegen/llvm/core/utils.cpp` | ユーティリティ拡張 |
+| `src/codegen/llvm/native/runtime_format.c` | ランタイムフォーマット関数リファクタリング |
+| `src/codegen/llvm/native/target.cpp` | ターゲット設定改善 |
 
-### LLVMバックエンド/MIR修正
+### MIR / 型解決
 
 | ファイル | 変更内容 |
-|---------|---------|
-| `src/codegen/llvm/core/types.cpp` | Tagged Unionペイロードサイズ計算修正 |
-| `src/codegen/llvm/core/mir_to_llvm.cpp` | ペイロードロード修正、自動クロバー検出、naked関数統一、Bug#1/7/8/11/14/16修正 |
-| `src/codegen/llvm/native/codegen.cpp` | Bug#13/17: UEFI最適化レベル調整、スタックプローブ無効化 |
-| `src/mir/lowering/expr_call.cpp` | println型判定修正 |
-| `src/mir/lowering/stmt.cpp` | Bug#10: ptr->method()のself書き戻し |
-| `src/mir/lowering/monomorphization_impl.cpp` | typedef引数の型解決修正 |
+|---------|----------|
+| `src/mir/lowering/lowering.cpp` | DFE統合 |
+| `src/mir/lowering/base.cpp` | **resolve_typedefモノモーフ化enum名フォールバック** |
+| `src/mir/lowering/context.cpp` | **resolve_typedef enum_defs検索フォールバック** |
+| `src/mir/lowering/stmt.cpp` | **`__asm__`内`${CONST_NAME}`定数展開** |
+| `src/mir/passes/cleanup/program_dce.cpp` | Dead Function Elimination実装 |
+| `src/mir/passes/monomorphization_impl.cpp` | **モノモーフ反復ループ2パス最適化** |
+
+### パーサー / フロントエンド
+
+| ファイル | 変更内容 |
+|---------|----------|
+| `src/frontend/parser/parser.hpp` | パーサ宣言拡張 |
+| `src/frontend/parser/parser_expr.cpp` | 型キーワード名前空間修飾子対応 |
+| `src/frontend/parser/parser_module.cpp` | enum値CharLiteralサポート、無限再帰ガード |
+| `src/frontend/parser/parser_stmt.cpp` | 文パーサ改善 |
+| `src/frontend/types/checking/stmt.cpp` | **Tagged Union 64bitペイロード型チェック** |
+| `src/preprocessor/import.cpp` | 型キーワードnamespace対応 |
+| `src/preprocessor/import.hpp` | プリプロセッサ宣言拡張 |
+
+### その他
+
+| ファイル | 変更内容 |
+|---------|----------|
+| `src/fmt/formatter.cpp` | バッククォートインデント修正、括弧継続行修正 |
+| `src/hir/lowering/expr.cpp` | HIR式lowering修正 |
 | `src/mir/lowering/impl.cpp` | impl lowering改善 |
-| `src/mir/passes/scalar/folding.cpp` | Bug#6/9: ASM出力・構造体フィールド最適化抑制 |
-| `src/mir/passes/loop/licm.cpp` | Bug#5: ASM出力変数のループ不変判定修正 |
-| `src/mir/nodes.hpp` | GCC CIビルド修正（unordered_mapヘッダー追加） |
-| `src/frontend/types/checking/expr.cpp` | typedef算術演算サポート |
-| `src/preprocessor/import.cpp` | Bug#15: 非export関数のシンボル解決修正 |
-
-### 型チェッカー/パーサー
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `src/frontend/parser/parser.hpp` | `impl T { operator ... }` 構文、インラインユニオン型 |
-| `src/frontend/types/checking/expr.cpp` | 複合代入演算子の構造体オーバーロード対応 |
-| `src/frontend/types/checking/decl.cpp` | interface存在チェック・operator自動登録 |
-
-### VSCode拡張機能
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `vscode-extension/` | 拡張機能全体を新規追加 |
-| `vscode-extension/syntaxes/cm.tmLanguage.json` | TextMate文法定義（710行） |
-| `vscode-extension/scripts/*.ts` | TypeScript版スクリプト |
-| `vscode-extension/eslint.config.mjs` | ESLint Flat Config |
-| `vscode-extension/.prettierrc` | Prettier設定 |
-| `vscode-extension/tsconfig.json` | TypeScript設定 |
-| `.github/workflows/ci.yml` | extension-lintジョブ、baremetal-testジョブ追加 |
-
-### チュートリアル・ドキュメント
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `docs/tutorials/ja/advanced/operators.md` | 演算子チュートリアル全面改訂 |
-| `docs/tutorials/en/advanced/operators.md` | 英語版演算子チュートリアル全面改訂 |
-| `docs/tutorials/ja/basics/operators.md` | ビット演算子チュートリアル追加 |
-| `docs/tutorials/ja/basics/setup.md` | エディタ設定セクション大幅拡充 |
-| `docs/tutorials/ja/compiler/uefi.md` | UEFIチュートリアル追加 |
-| `docs/tutorials/ja/compiler/js-compilation.md` | JSチュートリアル追加 |
-| `docs/releases/v0.14.0.md` | リリースノート更新 |
-| `docs/QUICKSTART.md` | VSCode拡張機能リンク追加 |
-| `vscode-extension/README.md` | 開発ガイド全面刷新 |
+| `src/main.cpp` | メインエントリ修正 |
+| `Dockerfile` | x86_64クロスビルド環境 (新規) |
+| `tests/unified_test_runner.sh` | **FIFOセマフォ並列化 (55%短縮)** |
 
 ### テスト
 
 | ファイル | 変更内容 |
-|---------|---------|
-| `tests/programs/interface/operator_arithmetic.*` | 算術演算子テスト（分割） |
-| `tests/programs/interface/operator_compare.*` | 比較演算子テスト（分割） |
-| `tests/programs/interface/operator_bitwise.*` | ビット演算子テスト（分割） |
-| `tests/programs/interface/operator_compound_assign.*` | 算術複合代入テスト（分割） |
-| `tests/programs/interface/operator_bitwise_assign.*` | ビット複合代入テスト（分割） |
-| `tests/programs/interface/operator_add.*` | impl T構文テスト |
-| `tests/programs/enum/associated_data.*` | .error → .expected |
-| `tests/programs/asm/.skip` 等 | JSスキップファイル追加 |
-| `tests/unified_test_runner.sh` | テストランナー改善 |
-| `tests/programs/uefi/uefi_compile/*` | UEFIコンパイルテスト多数追加（Bug#1-17回帰テスト含む） |
-| `tests/programs/baremetal/allowed/*` | ベアメタルテスト3件追加（enum/配列/ポインタ） |
-| `tests/programs/common/types/ptr_to_int_cast.*` | ポインタ→整数キャストテスト追加 |
-| `tests/programs/common/types/typedef_compound_assign.*` | typedef算術演算テスト追加 |
-
-### サンプル
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `examples/web-app/` | Webアプリサンプル追加 |
-| `examples/uefi/` | UEFIサンプル整理 |
+|---------|----------|
+| `tests/common/types/enum_char_value.cm` | enum値文字リテラルテスト (新規) |
+| `tests/baremetal-x86/asm/asm_const_expand.cm` | asm定数展開テスト (新規) |
 
 ---
 
 ## 🧪 テスト状況
 
-| バックエンド | 通過 | 失敗 | スキップ |
-|------------|-----|------|---------| 
-| JIT (O0) | 347 | 0 | 4 |
-| LLVM Native | 380 | 0 | 7 |
-| LLVM WASM | 346 | 0 | 5 |
-| JavaScript | 306 | 0 | 49 |
-| Baremetal | 11 | 0 | 0 |
-| UEFI | 5 | 0 | 0 |
+全バックエンドで0 FAILを維持。
 
----
-
-## 📊 統計
-
-- **テスト総数**: 351
-- **JIT通過**: 347（0失敗）
-- **LLVM通過**: 380（0失敗）
-- **WASM通過**: 346（0失敗）
-- **JS通過**: 306（0失敗、v0.13.1の206から+100改善）
+| バックエンド | 通過 | 失敗 |
+|------------|------|------|
+| JIT (O0) | 365 | 0 |
+| LLVM Native | 399 | 0 |
 
 ---
 
 ## ✅ チェックリスト
 
-- [x] `make tip` 全テスト通過（347 PASS / 0 FAIL）
-- [x] `make tlp` 全テスト通過（380 PASS / 0 FAIL）
-- [x] `make tw` 全テスト通過（346 PASS / 0 FAIL）
-- [x] `make tjp` 全テスト通過（306 PASS / 0 FAIL）
-- [x] VSCode拡張機能 lint通過（compile + ESLint + Prettier）
-- [x] ベアメタルテスト通過（11 PASS / 0 FAIL）
-- [x] UEFIテスト通過（5 PASS / 0 FAIL）
-- [x] GCC/Linux CIビルド通過
-- [x] リリースノート更新（`docs/releases/v0.14.0.md`）
-- [x] チュートリアル更新（演算子、UEFI、JS、環境構築）
-- [x] VSCode拡張機能README更新
-- [x] QUICKSTART.md更新
+- [x] **Tagged Union 64bitペイロード型推論修正**
+- [x] **Tagged Union ZExt+ゼロ初期化修正**
+- [x] **resolve_typedefモノモーフ化フォールバック**
+- [x] ASM過剰volatile修正
+- [x] 型キーワードnamespace名衝突修正
+- [x] Dead Function Elimination実装
+- [x] enum値文字リテラルサポート
+- [x] `__asm__`内`${CONST_NAME}`定数展開
+- [x] モノモーフィゼーション反復ループ2パス最適化
+- [x] テストランナーFIFOセマフォ並列化 (55%短縮)
+- [x] x86_64 Dockerビルド対応
+- [x] varargs/callee検索/文字列スライスバグ修正
+- [x] パーサ無限再帰防止
+- [x] フォーマッター修正 (バッククォート+括弧継続行)
+- [x] interface impl関数DCE除去防止
 - [x] ローカルパス情報なし
 
 ---
 
-**リリース日**: 2026年2月19日
-**バージョン**: v0.14.1
+**バージョン**: v0.14.2

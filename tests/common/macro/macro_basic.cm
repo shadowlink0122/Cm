@@ -1,0 +1,19 @@
+// マクロ展開テスト
+import std::io::println;
+
+// v0.13.0: 整数型マクロ
+macro int VERSION = 13;
+macro int MAJOR = 0;
+
+int main() {
+    println("=== macro test ===");
+
+    // オブジェクトマクロの展開
+    int v = VERSION;
+    int m = MAJOR;
+    println(v);
+    println(m);
+
+    println("=== complete ===");
+    return 0;
+}

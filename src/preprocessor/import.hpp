@@ -53,6 +53,8 @@ class ImportPreprocessor {
     std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ（展開済み）
     std::unordered_map<std::string, std::string>
         raw_module_cache;  // オリジナルソースキャッシュ（export抽出用）
+    std::unordered_map<std::string, std::string>
+        processed_module_cache;  // export処理済みキャッシュ（メモリ最適化）
 
     // モジュール名前空間の追跡（モジュール名 -> 名前空間）
     std::unordered_map<std::string, std::string> module_namespaces;

@@ -1,0 +1,4 @@
+caller_with_asm (expect 30): 30
+multi_asm_caller (expect 30): 30
+add_values (expect 40): 40
+PASS

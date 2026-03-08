@@ -1,0 +1,6 @@
+// unused モジュール - 選択的インポートで除外されるべき
+module unused;
+
+export int unused_func() {
+    return 999;
+}

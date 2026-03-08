@@ -1,0 +1,143 @@
+// 複数行LLVMインラインアセンブリテスト
+// バッククォート（`）を使用した複数行アセンブリ
+
+import std::io::println;
+
+int main() {
+    #ifdef __x86_64__
+    println("=== Multi-line LLVM ASM Test ===");
+
+    // テスト1: バッククォートでの複数行アセンブリ
+    println("\n--- Test 1: Multi-line with backtick ---");
+    int val1 = 10;
+    __asm__(`
+        addl $$5, ${+r:val1}
+        sall $$1, ${+r:val1}
+        addl $$3, ${+r:val1}
+    `);
+    println("val1 (should be 33):");  // (10+5)*2+3 = 33
+    println(val1);
+
+    // テスト2: より複雑な複数行計算
+    println("\n--- Test 2: Complex multi-line ---");
+    int val2 = 100;
+    __asm__(`
+        subl $$50, ${+r:val2}
+        sall $$2, ${+r:val2}
+        addl $$25, ${+r:val2}
+    `);
+    println("val2 (should be 225):");  // (100-50)*4+25 = 225
+    println(val2);
+
+    // テスト3: ビット操作の連鎖
+    println("\n--- Test 3: Bit operation chain ---");
+    int bits = 0x01;
+    __asm__(`
+        sall $$4, ${+r:bits}
+        orl $$0x0F, ${+r:bits}
+        sall $$4, ${+r:bits}
+    `);
+    println("bits (should be 496):");  // ((1<<4)|0xF)<<4 = 0x1F0 = 496
+    println(bits);
+
+    // テスト4: 符号操作
+    println("\n--- Test 4: Sign operations ---");
+    int sign = 50;
+    __asm__(`
+        negl ${+r:sign}
+        addl $$100, ${+r:sign}
+        negl ${+r:sign}
+    `);
+    println("sign (should be -50):");  // -(-50+100) = -50
+    println(sign);
+
+    // テスト5: セミコロン区切り（1行形式）
+    println("\n--- Test 5: Semicolon separated ---");
+    int seq = 5;
+    __asm__("addl $$10, ${+r:seq}; sall $$1, ${+r:seq}; subl $$5, ${+r:seq}");
+    println("seq (should be 25):");  // (5+10)*2-5 = 25
+    println(seq);
+
+    // テスト6: 連続した独立した__asm__呼び出し
+    println("\n--- Test 6: Sequential separate calls ---");
+    int multi = 8;
+    __asm__("addl $$2, ${+r:multi}");   // 10
+    __asm__("sall $$2, ${+r:multi}");   // 40
+    __asm__("subl $$10, ${+r:multi}");  // 30
+    println("multi (should be 30):");
+    println(multi);
+
+    println("\n=== All tests completed! ===");
+    #else
+    // ARM64版
+    println("=== Multi-line LLVM ASM Test ===");
+
+    // テスト1: バッククォートでの複数行アセンブリ
+    println("\n--- Test 1: Multi-line with backtick ---");
+    int val1 = 10;
+    __asm__(`
+        add ${+r:val1}, ${+r:val1}, #5
+        lsl ${+r:val1}, ${+r:val1}, #1
+        add ${+r:val1}, ${+r:val1}, #3
+    `);
+    println("val1 (should be 33):");  // (10+5)*2+3 = 33
+    println(val1);
+
+    // テスト2: より複雑な複数行計算
+    println("\n--- Test 2: Complex multi-line ---");
+    int val2 = 100;
+    __asm__(`
+        sub ${+r:val2}, ${+r:val2}, #50
+        lsl ${+r:val2}, ${+r:val2}, #2
+        add ${+r:val2}, ${+r:val2}, #25
+    `);
+    println("val2 (should be 225):");  // (100-50)*4+25 = 225
+    println(val2);
+
+    // テスト3: ビット操作の連鎖
+    println("\n--- Test 3: Bit operation chain ---");
+    int bits = 0x01;
+    __asm__(`
+        lsl ${+r:bits}, ${+r:bits}, #4
+        orr ${+r:bits}, ${+r:bits}, #0x0F
+        lsl ${+r:bits}, ${+r:bits}, #4
+    `);
+    println("bits (should be 496):");  // ((1<<4)|0xF)<<4 = 0x1F0 = 496
+    println(bits);
+
+    // テスト4: 符号操作
+    println("\n--- Test 4: Sign operations ---");
+    int sign = 50;
+    __asm__(`
+        neg ${+r:sign}, ${+r:sign}
+        add ${+r:sign}, ${+r:sign}, #100
+        neg ${+r:sign}, ${+r:sign}
+    `);
+    println("sign (should be -50):");  // -(-50+100) = -50
+    println(sign);
+
+    // テスト5: セミコロン区切り（1行形式）
+    println("\n--- Test 5: Semicolon separated ---");
+    int seq = 5;
+    // ARM64ではセミコロンがコメント文字のため、改行で区切る
+    __asm__(`
+        add ${+r:seq}, ${+r:seq}, #10
+        lsl ${+r:seq}, ${+r:seq}, #1
+        sub ${+r:seq}, ${+r:seq}, #5
+    `);
+    println("seq (should be 25):");  // (5+10)*2-5 = 25
+    println(seq);
+
+    // テスト6: 連続した独立した__asm__呼び出し
+    println("\n--- Test 6: Sequential separate calls ---");
+    int multi = 8;
+    __asm__("add ${+r:multi}, ${+r:multi}, #2");   // 10
+    __asm__("lsl ${+r:multi}, ${+r:multi}, #2");   // 40
+    __asm__("sub ${+r:multi}, ${+r:multi}, #10");  // 30
+    println("multi (should be 30):");
+    println(multi);
+
+    println("\n=== All tests completed! ===");
+    #end
+    return 0;
+}
