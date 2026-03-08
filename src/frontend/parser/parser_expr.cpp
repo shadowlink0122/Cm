@@ -1166,6 +1166,7 @@ ast::ExprPtr Parser::parse_primary() {
              kind == TokenKind::KwShort || kind == TokenKind::KwUshort ||
              kind == TokenKind::KwTiny || kind == TokenKind::KwUtiny ||
              kind == TokenKind::KwFloat || kind == TokenKind::KwDouble ||
+             kind == TokenKind::KwUfloat || kind == TokenKind::KwUdouble ||
              kind == TokenKind::KwBool || kind == TokenKind::KwChar || kind == TokenKind::KwVoid ||
              kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
              kind == TokenKind::KwCstring);
@@ -1173,7 +1174,9 @@ ast::ExprPtr Parser::parse_primary() {
         if (is_type_keyword && pos_ + 1 < tokens_.size() &&
             tokens_[pos_ + 1].kind == TokenKind::ColonColon) {
             // 型キーワードをnamespace名として取得
-            std::string name(current().get_string());
+            // BUG修正: キーワードトークンはget_string()が空文字を返すため
+            // token_kind_to_string()を使用してキーワード名を取得
+            std::string name(token_kind_to_string(kind));
             advance();  // 型キーワードを消費
 
             // :: で修飾されたパスを構築（Identと同じロジック）

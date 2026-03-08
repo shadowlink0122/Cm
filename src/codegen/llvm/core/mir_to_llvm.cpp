@@ -1357,7 +1357,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             return;  // 通常のコード生成をスキップ
         }
 
-        // asm入出力オペランドを持つ変数を事前スキャンしてasmReferencedLocalsに登録
+        // asm入出力オペランドで参照される変数を事前スキャンしてasmReferencedLocalsに登録
         // これによりSSA定数伝播を防ぎ、asm結果が正しく反映される
         // BUG修正(v0.14.2): メンバ変数asmReferencedLocalsをクリアして再スキャン
         asmReferencedLocals.clear();
@@ -1372,7 +1372,12 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 if (stmt->kind == mir::MirStatement::Asm) {
                     auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
                     for (const auto& operand : asmData.operands) {
-                        // 全operand（入力/出力/tied）を登録
+                        // 定数オペランド（is_constant=true）はlocal_id=0が設定されているが
+                        // 変数を参照していないためスキップ
+                        if (operand.is_constant) {
+                            continue;
+                        }
+                        // 変数を参照するオペランド（入力/出力/tied）を登録
                         asmReferencedLocals.insert(operand.local_id);
                     }
                 }
@@ -1482,8 +1487,9 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         continue;
                     }
 
-                    // asm出力オペランド変数はSSA形式ではなくalloca強制
-                    bool isAsmOutput = asmReferencedLocals.count(static_cast<unsigned int>(i)) > 0;
+                    // asm参照変数（入力/出力/tied）はSSA形式ではなくalloca強制
+                    bool isAsmReferenced =
+                        asmReferencedLocals.count(static_cast<unsigned int>(i)) > 0;
 
                     // Hazard #45修正: 関数ポインタ型のallocaスキップを削除
                     // 以前はSSA形式で扱っていたが、cross-block参照でdomination errorが発生
