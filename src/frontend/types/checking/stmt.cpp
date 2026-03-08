@@ -6,6 +6,16 @@
 
 namespace cm {
 
+// モノモーフ化されたenum型名からベース名を抽出
+// 例: "Option__ulong" → "Option", "Result__int__string" → "Result"
+static std::string get_enum_base_name(const std::string& name) {
+    auto pos = name.find("__");
+    if (pos != std::string::npos) {
+        return name.substr(0, pos);
+    }
+    return name;
+}
+
 void TypeChecker::check_statement(ast::Stmt& stmt) {
     debug::tc::log(debug::tc::Id::CheckStmt, "", debug::Level::Trace);
 
@@ -137,7 +147,9 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                     if (sep != std::string::npos) {
                         std::string enum_name = ident->name.substr(0, sep);
                         // 宣言型の名前がenum名と一致するか
-                        if (resolved_type->name == enum_name &&
+                        // モノモーフ化された型名（Option__ulong等）にも対応
+                        if ((resolved_type->name == enum_name ||
+                             get_enum_base_name(resolved_type->name) == enum_name) &&
                             enum_values_.count(ident->name) > 0) {
                             is_enum_variant_coercion = true;
                             // init式の型を宣言型に強制
@@ -215,7 +227,10 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
                 auto sep = ident->name.find("::");
                 if (sep != std::string::npos) {
                     std::string enum_name = ident->name.substr(0, sep);
-                    if (current_return_type_ && current_return_type_->name == enum_name &&
+                    // モノモーフ化された型名（Option__ulong等）にも対応
+                    if (current_return_type_ &&
+                        (current_return_type_->name == enum_name ||
+                         get_enum_base_name(current_return_type_->name) == enum_name) &&
                         enum_values_.count(ident->name) > 0) {
                         is_enum_variant_coercion = true;
                         ret.value->type = current_return_type_;

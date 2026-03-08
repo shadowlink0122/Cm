@@ -141,12 +141,14 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     auto mir_func = std::make_unique<MirFunction>();
     // Bug#45修正: モジュール修飾名 (e.g. "kmalloc::heap_size_to_class") を
     // 単純名 (e.g. "heap_size_to_class") に正規化する。
-    // import先のexport関数がモジュール修飾名のままLLVM IRに出力されると、
-    // 呼び出し側（単純名で参照）とリンカレベルで名前不一致になる。
+    // ただし、current_module_pathと一致するプレフィックスのみを剥がす。
+    // 他モジュールのnamespace修飾は保持し、シンボル衝突を防止する。
     std::string func_name = func.name;
-    auto pos = func_name.rfind("::");
-    if (pos != std::string::npos) {
-        func_name = func_name.substr(pos + 2);
+    if (!current_module_path.empty()) {
+        std::string module_prefix = current_module_path + "::";
+        if (func_name.find(module_prefix) == 0) {
+            func_name = func_name.substr(module_prefix.size());
+        }
     }
     mir_func->name = func_name;
     mir_func->module_path = current_module_path;  // モジュールパスを設定
