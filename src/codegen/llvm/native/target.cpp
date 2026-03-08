@@ -41,7 +41,7 @@ void TargetManager::initialize() {
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
 
-#ifndef CM_NO_ARM_TARGET
+#ifndef CM_NO_CROSS_TARGETS
     // WebAssemblyターゲットの初期化
     LLVMInitializeWebAssemblyTargetInfo();
     LLVMInitializeWebAssemblyTarget();
@@ -57,7 +57,7 @@ void TargetManager::initialize() {
     LLVMInitializeX86AsmParser();
     LLVMInitializeX86AsmPrinter();
 
-#ifndef CM_NO_ARM_TARGET
+#ifndef CM_NO_CROSS_TARGETS
     // ARMターゲットの初期化
     LLVMInitializeARMTargetInfo();
     LLVMInitializeARMTarget();

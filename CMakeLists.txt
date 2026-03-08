@@ -84,19 +84,23 @@ if(CM_USE_LLVM)
         add_compile_definitions(${LLVM_DEFINITIONS})
         include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-        # CM_NO_ARM_TARGETが定義されている場合はx86のみ
-        # (Docker x86_64ビルドなど)
+        # クロスターゲット設定 (ARM + WebAssembly)
+        # CM_NO_CROSS_TARGETSが有効な場合はx86のみ (Docker x86_64ビルドなど)
+        option(CM_NO_CROSS_TARGETS "Disable ARM and WebAssembly cross-compilation targets" OFF)
         set(_cm_llvm_components
             Core Support IRReader Passes CodeGen MC MCParser MCJIT OrcJIT ExecutionEngine Target
             X86CodeGen X86AsmParser X86Desc X86Info
         )
         
-        # CMAKE_CXX_FLAGSにCM_NO_ARM_TARGETが含まれていなければ全ターゲット追加
-        if(NOT CMAKE_CXX_FLAGS MATCHES "CM_NO_ARM_TARGET")
+        # CM_NO_CROSS_TARGETSが無効な場合は全ターゲット追加
+        if(NOT CM_NO_CROSS_TARGETS)
             list(APPEND _cm_llvm_components
                 AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
                 WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
             )
+        else()
+            # コード側の #ifndef CM_NO_CROSS_TARGETS と同期
+            add_compile_definitions(CM_NO_CROSS_TARGETS)
         endif()
 
         llvm_map_components_to_libnames(llvm_libs ${_cm_llvm_components})

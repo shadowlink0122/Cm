@@ -1297,8 +1297,8 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
     const int MAX_MATCH_ARMS = 1000;
 
     while (!check(TokenKind::RBrace) && !is_at_end() && match_arm_iterations < MAX_MATCH_ARMS) {
-        // stuck検出: posが前回と同じ→パーサが進めていない
-        if (match_arm_iterations > 0 && pos_ == last_pos) {
+        // stuck検出: posが前回と同じ→パーサが進めていない（初回含む）
+        if (pos_ == last_pos && match_arm_iterations > 0) {
             error("match式のパターン解析でパーサが停滞しました");
             // 次のRBraceまでスキップ
             while (!check(TokenKind::RBrace) && !is_at_end()) {

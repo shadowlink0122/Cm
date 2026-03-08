@@ -2,6 +2,7 @@
 
 #include "../../common/debug.hpp"
 
+#include <cinttypes>
 #include <functional>
 
 namespace cm::mir {
@@ -1540,7 +1541,7 @@ void StmtLowering::lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx) 
                 }
                 // LLVM即値リテラル ($$0x<hex>) に変換
                 char buf[32];
-                snprintf(buf, sizeof(buf), "$$0x%lx", static_cast<unsigned long>(val));
+                snprintf(buf, sizeof(buf), "$$0x%" PRIx64, static_cast<uint64_t>(val));
                 std::string hex_str(buf);
 
                 // ${CONST_NAME} を値に置換

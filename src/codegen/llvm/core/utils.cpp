@@ -9,18 +9,28 @@ namespace cm::codegen::llvm_backend {
 
 // 外部関数宣言
 llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
+    // functionsテーブルに完全一致で登録されている場合を優先
+    if (auto it = functions.find(name); it != functions.end() && it->second) {
+        return it->second;
+    }
     // Bug#45修正: functionsテーブルからベース名の前方一致で検索
     // impl for内から外部関数を呼ぶ場合、マングリング名の不一致により
     // functionsテーブルに登録済みの正しいシグネチャの関数が見つからない。
-    // ここでベース名 + "_" で始まるキーを検索して正しい関数を返す。
-    for (const auto& [fName, fFunc] : functions) {
-        if (fFunc && fName.find(name + "_") == 0) {
-            return fFunc;
+    // 前方一致候補が複数ある場合は不定動作防止のためスキップ
+    {
+        llvm::Function* candidate = nullptr;
+        int matchCount = 0;
+        for (const auto& [fName, fFunc] : functions) {
+            if (fFunc && fName.find(name + "_") == 0) {
+                candidate = fFunc;
+                matchCount++;
+                if (matchCount > 1)
+                    break;  // 複数候補は使用しない
+            }
         }
-    }
-    // functionsテーブルにベース名そのままで登録されている場合も確認
-    if (auto it = functions.find(name); it != functions.end() && it->second) {
-        return it->second;
+        if (matchCount == 1 && candidate) {
+            return candidate;
+        }
     }
     if (name == "__print__" || name == "__println__") {
         auto printfType = llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType()}, true);
