@@ -2,7 +2,7 @@
 
 ## 概要
 
-v0.14.2は**Cosmo Linux（Cm言語製カーネル）開発で発見されたコンパイラバグの修正**と**言語機能拡張**を含むパッチリリースです。特に**Tagged Union（Result/Option/enum）のペイロード抽出に関する重大なバグ2件**を修正し、ベアメタル環境での型安全なエラーハンドリングを実現しました。
+v0.14.2は**コンパイラバグの修正**と**言語機能拡張**、**パフォーマンス改善**を含むパッチリリースです。特に**Tagged Union（Result/Option/enum）のペイロード抽出に関する重大なバグ2件**を修正し、ベアメタル環境での型安全なエラーハンドリングを実現しました。
 
 ---
 
@@ -33,7 +33,7 @@ v0.14.2は**Cosmo Linux（Cm言語製カーネル）開発で発見されたコ�
   3. resolve_typedefにモノモーフ化enum名フォールバック追加
 ```
 
-> **影響**: この修正により`Result<T, E>`でT==E（例: `Result<long, long>`）が正しく動作するようになり、Cosmo Linuxの全FS/ネットワーク/ローダー層でResult型エラーハンドリングが使用可能に。
+> **影響**: この修正により`Result<T, E>`でT==E（例: `Result<long, long>`）が正しく動作するようになり、ベアメタル環境を含む全レイヤーでResult型エラーハンドリングが使用可能に。
 
 ### バグ修正
 
@@ -87,9 +87,23 @@ export enum Ascii {
 }
 ```
 
-#### Cosmo Linux向けDockerクロスビルド対応
+#### `__asm__`内の`${CONST_NAME}`定数展開
+
+`lower_asm`でasm文字列中の`${CONST_NAME}`パターンを検出し、`global_const_values`テーブルから定数値を取得して16進数リテラルに直接置換する機能を追加。colonを含む`${+r:var}`等のオペランド記法はスキップ。
+
+#### x86_64 Dockerクロスビルド対応
 
 x86_64ターゲット向けDockerビルド環境を追加。LLVM共有ライブラリ + C++静的リンクの最適な構成。
+
+### パフォーマンス改善
+
+#### モノモーフィゼーション反復ループ最適化
+
+反復ループを最大10パス→2パスに削減。2パス目は新規生成関数のみスキャン。`monomorphize_structs()`の2回実行を1回に統合。ネストジェネリクス（Queue等）にも対応。
+
+#### テストランナーの並列化改善
+
+PIDポーリングループ（`kill -0` + `sleep 0.05`）をFIFOセマフォ方式に置換。max_jobsをCPU数→CPU数×4に変更（I/Oバウンド考慮）。結果: **1:57 → 51.5s（55%短縮）**、CPU使用率 100% → 232%。
 
 ---
 
@@ -113,7 +127,9 @@ x86_64ターゲット向けDockerビルド環境を追加。LLVM共有ライブ�
 | `src/mir/lowering/lowering.cpp` | DFE統合 |
 | `src/mir/lowering/base.cpp` | **resolve_typedefモノモーフ化enum名フォールバック** |
 | `src/mir/lowering/context.cpp` | **resolve_typedef enum_defs検索フォールバック** |
+| `src/mir/lowering/stmt.cpp` | **`__asm__`内`${CONST_NAME}`定数展開** |
 | `src/mir/passes/cleanup/program_dce.cpp` | Dead Function Elimination実装 |
+| `src/mir/passes/monomorphization_impl.cpp` | **モノモーフ反復ループ2パス最適化** |
 
 ### パーサー / フロントエンド
 
@@ -136,12 +152,14 @@ x86_64ターゲット向けDockerビルド環境を追加。LLVM共有ライブ�
 | `src/mir/lowering/impl.cpp` | impl lowering改善 |
 | `src/main.cpp` | メインエントリ修正 |
 | `Dockerfile` | x86_64クロスビルド環境 (新規) |
+| `tests/unified_test_runner.sh` | **FIFOセマフォ並列化 (55%短縮)** |
 
 ### テスト
 
 | ファイル | 変更内容 |
 |---------|----------|
 | `tests/common/types/enum_char_value.cm` | enum値文字リテラルテスト (新規) |
+| `tests/baremetal-x86/asm/asm_const_expand.cm` | asm定数展開テスト (新規) |
 
 ---
 
@@ -165,7 +183,10 @@ x86_64ターゲット向けDockerビルド環境を追加。LLVM共有ライブ�
 - [x] 型キーワードnamespace名衝突修正
 - [x] Dead Function Elimination実装
 - [x] enum値文字リテラルサポート
-- [x] Cosmo Linux向けDockerビルド対応
+- [x] `__asm__`内`${CONST_NAME}`定数展開
+- [x] モノモーフィゼーション反復ループ2パス最適化
+- [x] テストランナーFIFOセマフォ並列化 (55%短縮)
+- [x] x86_64 Dockerビルド対応
 - [x] varargs/callee検索/文字列スライスバグ修正
 - [x] パーサ無限再帰防止
 - [x] フォーマッター修正 (バッククォート+括弧継続行)
