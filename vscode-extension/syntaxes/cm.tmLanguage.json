@@ -451,14 +451,7 @@
                 },
                 {
                     "name": "string.quoted.single.cm",
-                    "begin": "'",
-                    "end": "'",
-                    "patterns": [
-                        {
-                            "name": "constant.character.escape.cm",
-                            "match": "\\\\."
-                        }
-                    ]
+                    "match": "'(\\\\.|[^'\\\\])'"
                 }
             ]
         },
@@ -628,6 +621,11 @@
         },
         "numbers": {
             "patterns": [
+                {
+                    "comment": "SV幅付きリテラル: N'[dbhDBH]VALUE",
+                    "name": "constant.numeric.sv-literal.cm",
+                    "match": "\\b[0-9]+'[dDbBhH][0-9a-fA-F]+\\b"
+                },
                 {
                     "name": "constant.numeric.hex.cm",
                     "match": "\\b0[xX][0-9a-fA-F]+\\b"
