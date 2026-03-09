@@ -1,7 +1,8 @@
 //! platform: sv
 //! test: write_enable=1, addr=0, write_data=42, cycles=2 -> read_data=42
 
-// BRAM推論テスト
+// 順序回路のデータ転送テスト
+// NOTE: グローバル配列によるBRAM推論は将来対応予定
 
 #[input] bool clk = 0;
 #[input] utiny addr = 0;

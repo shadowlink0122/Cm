@@ -842,9 +842,9 @@ EOJS
                     echo -e "${YELLOW}[WARN]${NC} verilator/iverilog not found, skip build verification"
                 fi
 
-                if [ $exit_code -eq 0 ]; then
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
                     # Stage 3: シミュレーション実行 (iverilog + vvp)
-                    # テストベンチが生成されていて、expectファイルにSIM_OKがある場合はシミュレーション実行
+                    # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
                     local tb_file="${sv_file%.sv}_tb.sv"
                     if [ -f "$tb_file" ] && command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
                         local sim_binary="$TEMP_DIR/sim_${test_name}"
@@ -896,6 +896,11 @@ EOJS
                         if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                             echo "COMPILE_OK" > "$output_file"
                         fi
+                    fi
+                elif [ $exit_code -eq 0 ]; then
+                    # SIM_OK/TEST行なし: COMPILE_OKとして処理
+                    if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                        echo "COMPILE_OK" > "$output_file"
                     fi
                 fi
             fi
@@ -1398,8 +1403,9 @@ PY
                     exit_code=$?
                 fi
 
-                if [ $exit_code -eq 0 ]; then
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
                     # Stage 3: シミュレーション実行 (iverilog + vvp)
+                    # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
                     local tb_file="${sv_file%.sv}_tb.sv"
                     if [ -f "$tb_file" ] && command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
                         local sim_binary="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}"
@@ -1440,6 +1446,11 @@ PY
                         if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                             echo "COMPILE_OK" > "$output_file"
                         fi
+                    fi
+                elif [ $exit_code -eq 0 ]; then
+                    # SIM_OK/TEST行なし: COMPILE_OKとして処理
+                    if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                        echo "COMPILE_OK" > "$output_file"
                     fi
                 fi
             fi

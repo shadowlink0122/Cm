@@ -117,7 +117,7 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::string generateXDC(const mir::MirProgram& program);
 
     // === 非合成型チェック ===
-    void validateSynthesizableTypes(const mir::MirProgram& program);
+    bool validateSynthesizableTypes(const mir::MirProgram& program);
 
     // === ファイル出力 ===
     void writeToFile(const std::string& content, const std::string& path);

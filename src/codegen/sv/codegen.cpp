@@ -449,10 +449,9 @@ std::string SVCodeGen::emitBlock(const mir::BasicBlock& block, const mir::MirFun
         if (!stmt)
             continue;
         std::string line = emitStatement(*stmt, func);
-        if (options_.verbose)
-            if (!line.empty()) {
-                ss << indent() << line << "\n";
-            }
+        if (!line.empty()) {
+            ss << indent() << line << "\n";
+        }
     }
     return ss.str();
 }
@@ -1103,7 +1102,15 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                                  SVPort{SVPort::Input, "clk", "logic", 1});
     }
     if (has_async && !has_rst) {
-        default_mod.ports.insert(default_mod.ports.begin() + (has_clk ? 1 : 1),
+        // clkの実際の位置を検索して直後に挿入
+        size_t insert_pos = 0;
+        for (size_t i = 0; i < default_mod.ports.size(); ++i) {
+            if (default_mod.ports[i].name == "clk") {
+                insert_pos = i + 1;
+                break;
+            }
+        }
+        default_mod.ports.insert(default_mod.ports.begin() + static_cast<ptrdiff_t>(insert_pos),
                                  SVPort{SVPort::Input, "rst", "logic", 1});
     }
 
@@ -1120,6 +1127,11 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 // === メインコンパイル処理 ===
 
 void SVCodeGen::compile(const mir::MirProgram& program) {
+    // 非合成型チェック（エラーがあればコンパイル停止）
+    if (!validateSynthesizableTypes(program)) {
+        throw std::runtime_error("SVターゲットで非合成型が検出されました");
+    }
+
     begin_generation();
 
     // ファイルヘッダー
@@ -1462,7 +1474,8 @@ std::string SVCodeGen::generateXDC(const mir::MirProgram& program) {
 
 // === 非合成型チェック ===
 
-void SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
+bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
+    bool has_error = false;
     for (const auto& gv : program.global_vars) {
         if (!gv || !gv->type)
             continue;
@@ -1471,10 +1484,12 @@ void SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
             case hir::TypeKind::Pointer:
                 std::cerr << "error[SV002]: Pointer types are not supported in SV target: "
                           << gv->name << "\n";
+                has_error = true;
                 break;
             case hir::TypeKind::String:
                 std::cerr << "error[SV003]: String types are not synthesizable: " << gv->name
                           << "\n";
+                has_error = true;
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
@@ -1496,16 +1511,19 @@ void SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 case hir::TypeKind::Pointer:
                     std::cerr << "error[SV002]: Pointer types not supported in SV target: "
                               << func->name << "::" << local.name << "\n";
+                    has_error = true;
                     break;
                 case hir::TypeKind::String:
                     std::cerr << "error[SV003]: String types not synthesizable: " << func->name
                               << "::" << local.name << "\n";
+                    has_error = true;
                     break;
                 default:
                     break;
             }
         }
     }
+    return !has_error;
 }
 
 }  // namespace cm::codegen::sv

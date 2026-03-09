@@ -458,9 +458,16 @@ void Parser::consume_gt_in_type_context() {
     error("Expected '>'");
 }
 
-// 識別子を期待
+// 識別子を期待（SV固有キーワードも識別子として受理）
 std::string Parser::expect_ident() {
     if (check(TokenKind::Ident)) {
+        std::string name(current().get_string());
+        advance();
+        return name;
+    }
+    // SV固有キーワードも識別子として受理（既存コードの互換性）
+    if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge) || check(TokenKind::KwWire) ||
+        check(TokenKind::KwReg)) {
         std::string name(current().get_string());
         advance();
         return name;
@@ -473,6 +480,11 @@ std::string Parser::expect_ident() {
 // 現在のテキストを取得
 std::string Parser::current_text() const {
     if (check(TokenKind::Ident)) {
+        return std::string(current().get_string());
+    }
+    // SV固有キーワードも識別子として扱う
+    if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge) || check(TokenKind::KwWire) ||
+        check(TokenKind::KwReg)) {
         return std::string(current().get_string());
     }
     return "";
