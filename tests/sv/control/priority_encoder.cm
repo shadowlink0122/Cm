@@ -1,3 +1,5 @@
+//! platform: sv
+
 // Phase 2テスト: if-elseチェーン（優先エンコーダ）
 // sel値に応じて異なる出力を生成
 
@@ -8,7 +10,7 @@
 #[input] int c = 0;
 #[output] int out = 0;
 
-func select() {
+void select() {
     out = c;
     if (sel0) {
         out = a;

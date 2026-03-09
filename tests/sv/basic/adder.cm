@@ -7,10 +7,7 @@
 #[input]  int b = 0;
 #[output] int result = 0;
 
-func add() {
+void add() {
     result = a + b;
 }
 
-int main() {
-    return 0;
-}

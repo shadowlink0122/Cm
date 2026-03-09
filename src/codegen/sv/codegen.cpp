@@ -402,6 +402,8 @@ std::string SVCodeGen::emitBlock(const mir::BasicBlock& block, const mir::MirFun
         if (!stmt)
             continue;
         std::string line = emitStatement(*stmt, func);
+        if (options_.verbose)
+            std::cerr << "[SV DEBUG] stmt output: \"" << line << "\"\n";
         if (!line.empty()) {
             ss << indent() << line << "\n";
         }
@@ -415,6 +417,29 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // main関数はスキップ（ハードウェアにmainはない）
     if (func.name == "main")
         return;
+
+    // デバッグ出力（一時的）
+    if (options_.verbose) {
+        std::cerr << "[SV DEBUG] analyzeFunction: " << func.name << " is_async=" << func.is_async
+                  << " blocks=" << func.basic_blocks.size() << " locals=" << func.locals.size()
+                  << "\n";
+        for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
+            if (!func.basic_blocks[i])
+                continue;
+            auto& bb = *func.basic_blocks[i];
+            std::cerr << "  block[" << i << "]: stmts=" << bb.statements.size()
+                      << " has_term=" << (bb.terminator != nullptr) << "\n";
+            for (size_t j = 0; j < bb.statements.size(); ++j) {
+                if (bb.statements[j]) {
+                    std::cerr << "    stmt[" << j << "]: kind=" << (int)bb.statements[j]->kind
+                              << "\n";
+                }
+            }
+            if (bb.terminator) {
+                std::cerr << "    terminator: kind=" << (int)bb.terminator->kind << "\n";
+            }
+        }
+    }
 
     // ローカル変数を内部ワイヤ/レジスタとして宣言
     // （ポートと名前が衝突する変数は除外）

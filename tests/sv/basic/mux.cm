@@ -5,7 +5,7 @@
 #[input]  int b = 0;
 #[output] int out = 0;
 
-func select_val() {
+void select_val() {
     if (sel) {
         out = a;
     } else {
@@ -13,6 +13,3 @@ func select_val() {
     }
 }
 
-int main() {
-    return 0;
-}

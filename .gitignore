@@ -94,3 +94,4 @@ rust_results.txt
 python_results.txt
 output.sv
 output_tb.sv
+*.vcd

@@ -1335,9 +1335,15 @@ int main(int argc, char* argv[]) {
             printer.print(mir, std::cout);
         }
 
+        // SVターゲット判定（最適化とDCEのスキップ判定に使用）
+        bool is_sv =
+            (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+
         // ========== Optimization ==========
         auto phase_opt_start = std::chrono::steady_clock::now();
-        if (opts.optimization_level > 0 || opts.show_mir_opt) {
+        // SVターゲットではMIR最適化をスキップ（合成ツールが最適化を行う）
+        // DCE/CopyProp/ConstFoldが一時変数代入を除去しHWロジックが消失するため
+        if ((opts.optimization_level > 0 || opts.show_mir_opt) && !is_sv) {
             if (cm::debug::g_debug_mode)
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
                           << std::endl;
@@ -1360,8 +1366,6 @@ int main(int argc, char* argv[]) {
 
         // 関数レベルのDCE（コンパイル時のみ、SVターゲットではスキップ）
         // SVターゲットではハードウェアモジュールとして全関数を保持する
-        bool is_sv =
-            (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
         if (opts.command == Command::Compile && !is_sv) {
             mir::opt::DeadCodeElimination dce;
             for (auto& func : mir.functions) {

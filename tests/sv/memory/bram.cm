@@ -1,3 +1,5 @@
+//! platform: sv
+
 // Phase 3テスト: BRAM推論
 // メモリモジュール
 
