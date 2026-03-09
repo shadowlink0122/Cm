@@ -843,8 +843,37 @@ EOJS
                 fi
 
                 if [ $exit_code -eq 0 ]; then
-                    if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
-                        echo "COMPILE_OK" > "$output_file"
+                    # Stage 3: シミュレーション実行 (iverilog + vvp)
+                    # テストベンチが生成されていて、expectファイルにSIM_OKがある場合はシミュレーション実行
+                    local tb_file="${sv_file%.sv}_tb.sv"
+                    if [ -f "$tb_file" ] && command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
+                        local sim_binary="$TEMP_DIR/sim_${test_name}"
+                        local sim_output="$TEMP_DIR/sim_${test_name}.log"
+                        # iverilogでコンパイル
+                        iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
+                        if [ $? -eq 0 ]; then
+                            # vvpでシミュレーション実行
+                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            local sim_exit=$?
+                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                                # シミュレーション成功
+                                cat "$sim_output" >> "$output_file"
+                                if grep -q "SIM_OK" "$expect_file" 2>/dev/null; then
+                                    echo "SIM_OK" > "$output_file"
+                                elif grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                                    echo "COMPILE_OK" > "$output_file"
+                                fi
+                            else
+                                echo "SIM_FAIL" >> "$output_file"
+                                cat "$sim_output" >> "$output_file" 2>/dev/null
+                                exit_code=1
+                            fi
+                        fi
+                    else
+                        # シミュレーションツール未対応の場合はコンパイルOKとして処理
+                        if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                            echo "COMPILE_OK" > "$output_file"
+                        fi
                     fi
                 fi
             fi
