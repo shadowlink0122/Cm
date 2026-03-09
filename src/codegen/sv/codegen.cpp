@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -403,10 +404,9 @@ std::string SVCodeGen::emitBlock(const mir::BasicBlock& block, const mir::MirFun
             continue;
         std::string line = emitStatement(*stmt, func);
         if (options_.verbose)
-            std::cerr << "[SV DEBUG] stmt output: \"" << line << "\"\n";
-        if (!line.empty()) {
-            ss << indent() << line << "\n";
-        }
+            if (!line.empty()) {
+                ss << indent() << line << "\n";
+            }
     }
     return ss.str();
 }
@@ -417,29 +417,6 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // main関数はスキップ（ハードウェアにmainはない）
     if (func.name == "main")
         return;
-
-    // デバッグ出力（一時的）
-    if (options_.verbose) {
-        std::cerr << "[SV DEBUG] analyzeFunction: " << func.name << " is_async=" << func.is_async
-                  << " blocks=" << func.basic_blocks.size() << " locals=" << func.locals.size()
-                  << "\n";
-        for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
-            if (!func.basic_blocks[i])
-                continue;
-            auto& bb = *func.basic_blocks[i];
-            std::cerr << "  block[" << i << "]: stmts=" << bb.statements.size()
-                      << " has_term=" << (bb.terminator != nullptr) << "\n";
-            for (size_t j = 0; j < bb.statements.size(); ++j) {
-                if (bb.statements[j]) {
-                    std::cerr << "    stmt[" << j << "]: kind=" << (int)bb.statements[j]->kind
-                              << "\n";
-                }
-            }
-            if (bb.terminator) {
-                std::cerr << "    terminator: kind=" << (int)bb.terminator->kind << "\n";
-            }
-        }
-    }
 
     // ローカル変数を内部ワイヤ/レジスタとして宣言
     // （ポートと名前が衝突する変数は除外）
@@ -476,6 +453,9 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
     std::ostringstream block_ss;
 
+    // 関数名コメントを追加
+    block_ss << indent() << "// " << func.name << "\n";
+
     if (func.is_async) {
         // Phase 4: マルチクロックドメイン対応
         // 関数属性からsv::clock_domain(name)を検出
@@ -511,9 +491,159 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     increaseIndent();
 
     // CFG再帰走査でブロックを構造化出力
+    // まず一時変数のマッピングを構築（インライン展開用）
+    std::map<std::string, std::string> temp_values;
+    std::ostringstream raw_ss;
     if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
         std::set<size_t> visited;
-        emitBlockRecursive(func, 0, visited, block_ss);
+        emitBlockRecursive(func, 0, visited, raw_ss);
+    }
+
+    // 一時変数のインライン展開処理
+    // _tXXXX = expr; の形式を検出し、後続の使用箇所で直接式に置換
+    std::istringstream raw_stream(raw_ss.str());
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(raw_stream, line)) {
+        lines.push_back(line);
+    }
+
+    // Pass 1: 一時変数の値を収集
+    for (const auto& l : lines) {
+        // インデントを除去して解析
+        std::string trimmed = l;
+        size_t start = trimmed.find_first_not_of(' ');
+        if (start == std::string::npos)
+            continue;
+        trimmed = trimmed.substr(start);
+
+        // \"_tXXXX = expr;\" または \"_tXXXX <= expr;\" パターンを検出
+        if (trimmed.size() > 2 && trimmed[0] == '_' && trimmed[1] == 't' &&
+            std::isdigit(trimmed[2])) {
+            // ブロッキング代入 (=) を検出
+            auto eq_pos = trimmed.find(" = ");
+            // ノンブロッキング代入 (<=) を検出
+            auto nbeq_pos = trimmed.find(" <= ");
+            if (eq_pos != std::string::npos) {
+                std::string var_name = trimmed.substr(0, eq_pos);
+                std::string value = trimmed.substr(eq_pos + 3);
+                if (!value.empty() && value.back() == ';') {
+                    value.pop_back();
+                }
+                temp_values[var_name] = value;
+            } else if (nbeq_pos != std::string::npos) {
+                std::string var_name = trimmed.substr(0, nbeq_pos);
+                std::string value = trimmed.substr(nbeq_pos + 4);
+                if (!value.empty() && value.back() == ';') {
+                    value.pop_back();
+                }
+                temp_values[var_name] = value;
+            }
+        }
+    }
+
+    // 一時変数を再帰的に展開する関数
+    auto inline_temps = [&temp_values](const std::string& expr) -> std::string {
+        std::string result = expr;
+        // 最大10回の反復で再帰的に展開
+        for (int iter = 0; iter < 10; ++iter) {
+            bool changed = false;
+            for (const auto& [var, val] : temp_values) {
+                size_t pos = 0;
+                while ((pos = result.find(var, pos)) != std::string::npos) {
+                    // 変数名の境界チェック
+                    bool at_start =
+                        (pos == 0 || !std::isalnum(result[pos - 1]) && result[pos - 1] != '_');
+                    bool at_end = (pos + var.size() >= result.size() ||
+                                   (!std::isalnum(result[pos + var.size()]) &&
+                                    result[pos + var.size()] != '_'));
+                    if (at_start && at_end) {
+                        // 値に演算子が含まれる場合は括弧で囲む
+                        std::string replacement = val;
+                        if (val.find(' ') != std::string::npos &&
+                            (pos > 0 || pos + var.size() < result.size())) {
+                            // 単純代入の右辺値でなければ括弧付き
+                            // ただし代入文の右辺全体なら括弧不要
+                            bool is_full_rhs = (pos == 0 && pos + var.size() == result.size());
+                            if (!is_full_rhs) {
+                                replacement = "(" + val + ")";
+                            }
+                        }
+                        result.replace(pos, var.size(), replacement);
+                        changed = true;
+                        pos += replacement.size();
+                    } else {
+                        pos += var.size();
+                    }
+                }
+            }
+            if (!changed)
+                break;
+        }
+        return result;
+    };
+
+    // Pass 2: 一時変数代入を除外し、残りの文の一時変数をインライン展開
+    for (const auto& l : lines) {
+        std::string trimmed = l;
+        size_t start = trimmed.find_first_not_of(' ');
+        if (start == std::string::npos) {
+            block_ss << l << "\n";
+            continue;
+        }
+        std::string content = trimmed.substr(start);
+
+        // 一時変数への代入行はスキップ（= と <= の両方対応）
+        if (content.size() > 2 && content[0] == '_' && content[1] == 't' &&
+            std::isdigit(content[2]) &&
+            (content.find(" = ") != std::string::npos ||
+             content.find(" <= ") != std::string::npos)) {
+            continue;
+        }
+
+        // 非一時変数の代入文をインライン展開
+        auto eq_pos = content.find(" = ");
+        if (eq_pos != std::string::npos) {
+            std::string lhs = content.substr(0, eq_pos);
+            std::string rhs = content.substr(eq_pos + 3);
+            // 末尾セミコロン除去
+            if (!rhs.empty() && rhs.back() == ';') {
+                rhs.pop_back();
+            }
+            rhs = inline_temps(rhs);
+            block_ss << indent() << lhs << " = " << rhs << ";\n";
+        } else if (content.find(" <= ") != std::string::npos) {
+            // ノンブロッキング代入のインライン展開
+            auto nbeq_pos = content.find(" <= ");
+            std::string lhs = content.substr(0, nbeq_pos);
+            std::string rhs = content.substr(nbeq_pos + 4);
+            if (!rhs.empty() && rhs.back() == ';') {
+                rhs.pop_back();
+            }
+            rhs = inline_temps(rhs);
+            block_ss << indent() << lhs << " <= " << rhs << ";\n";
+        } else {
+            // if/else等の構造制御文でも一時変数をインライン展開
+            std::string expanded = l;
+            // 行内の一時変数を全て展開
+            for (const auto& [var, val] : temp_values) {
+                size_t pos = 0;
+                while ((pos = expanded.find(var, pos)) != std::string::npos) {
+                    bool at_start = (pos == 0 || (!std::isalnum(expanded[pos - 1]) &&
+                                                  expanded[pos - 1] != '_'));
+                    bool at_end = (pos + var.size() >= expanded.size() ||
+                                   (!std::isalnum(expanded[pos + var.size()]) &&
+                                    expanded[pos + var.size()] != '_'));
+                    if (at_start && at_end) {
+                        expanded.replace(pos, var.size(), val);
+                        pos += val.size();
+                    } else {
+                        pos += var.size();
+                    }
+                }
+            }
+            block_ss << expanded << "\n";
+        }
     }
 
     decreaseIndent();
