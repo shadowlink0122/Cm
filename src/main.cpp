@@ -585,7 +585,7 @@ int main(int argc, char* argv[]) {
                 code = conditional.process(code);
 
                 // パース
-                Lexer lexer(code);
+                Lexer lexer(code);  // lint/checkではディレクティブで自動検出
                 auto tokens = lexer.tokenize();
                 Parser parser(std::move(tokens));
                 auto program = parser.parse();
@@ -1103,7 +1103,12 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Lexer ===\n";
         auto phase_parse_start = std::chrono::steady_clock::now();
-        Lexer lexer(code);
+        // ターゲットに応じたレキサープラットフォーム設定
+        LexerPlatform lexer_platform = LexerPlatform::Default;
+        if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
+            lexer_platform = LexerPlatform::SV;
+        }
+        Lexer lexer(code, lexer_platform);
         auto tokens = lexer.tokenize();
 
         if (opts.debug)

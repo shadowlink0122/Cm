@@ -145,6 +145,58 @@ void Lexer::init_keywords() {
         {"string", TokenKind::KwString},
         {"cstring", TokenKind::KwCstring},
     };
+
+    // コンストラクタで指定されたプラットフォームがSVの場合、SVキーワードを追加
+    if (platform_ == LexerPlatform::SV) {
+        add_sv_keywords();
+    }
+}
+
+// SVキーワードをキーワードテーブルに追加
+void Lexer::add_sv_keywords() {
+    keywords_.insert({
+        {"posedge", TokenKind::KwPosedge},
+        {"negedge", TokenKind::KwNegedge},
+        {"wire", TokenKind::KwWire},
+        {"reg", TokenKind::KwReg},
+    });
+}
+
+// ソース先頭の //! platform: ディレクティブを検出
+// 例: //! platform: sv
+void Lexer::detect_platform_directive() {
+    // 既にSVモードなら不要
+    if (platform_ == LexerPlatform::SV)
+        return;
+
+    // ソース先頭の空白をスキップ
+    size_t i = 0;
+    while (i < source_.size() &&
+           (source_[i] == ' ' || source_[i] == '\t' || source_[i] == '\n' || source_[i] == '\r')) {
+        i++;
+    }
+
+    // "//! platform:" パターンを検出
+    const std::string_view prefix = "//! platform:";
+    if (i + prefix.size() <= source_.size() && source_.substr(i, prefix.size()) == prefix) {
+        i += prefix.size();
+        // 空白をスキップ
+        while (i < source_.size() && (source_[i] == ' ' || source_[i] == '\t')) {
+            i++;
+        }
+        // プラットフォーム名を取得
+        size_t name_start = i;
+        while (i < source_.size() && source_[i] != '\n' && source_[i] != '\r' &&
+               source_[i] != ' ' && source_[i] != '\t') {
+            i++;
+        }
+        std::string_view platform_name = source_.substr(name_start, i - name_start);
+        if (platform_name == "sv" || platform_name == "verilog" ||
+            platform_name == "systemverilog") {
+            platform_ = LexerPlatform::SV;
+            add_sv_keywords();
+        }
+    }
 }
 
 // 空白とコメントをスキップ

@@ -226,27 +226,30 @@ ast::TypePtr Parser::parse_type() {
             advance();
             base_type = ast::make_null();
             break;
+        // SV固有型（レキサーがSVモードの場合、キーワードトークンとして出力）
+        case TokenKind::KwPosedge:
+            advance();
+            base_type = ast::make_posedge();
+            break;
+        case TokenKind::KwNegedge:
+            advance();
+            base_type = ast::make_negedge();
+            break;
+        case TokenKind::KwWire:
+            advance();
+            base_type = ast::make_wire(parse_type());
+            break;
+        case TokenKind::KwReg:
+            advance();
+            base_type = ast::make_reg(parse_type());
+            break;
         default:
             break;
     }
 
-    // SV固有型（文脈キーワード: Identとしてトークン化される）
-    if (!base_type && check(TokenKind::Ident)) {
-        std::string ident_text(current().get_string());
-        if (ident_text == "posedge") {
-            advance();
-            base_type = ast::make_posedge();
-        } else if (ident_text == "negedge") {
-            advance();
-            base_type = ast::make_negedge();
-        } else if (ident_text == "wire") {
-            advance();
-            base_type = ast::make_wire(parse_type());
-        } else if (ident_text == "reg") {
-            advance();
-            base_type = ast::make_reg(parse_type());
-        }
-    }
+    // 注: SV固有型（posedge/negedge/wire/reg）は
+    // レキサーのLexerPlatform::SVモードでキーワードトークンとして生成され、
+    // 上記switch文のcaseで処理される。非SVモードではIdentとして扱われる。
 
     // 関数ポインタ型: int*(int, int) または ポインタ型: void*
     if (base_type && check(TokenKind::Star)) {
@@ -464,6 +467,13 @@ std::string Parser::expect_ident() {
         advance();
         return name;
     }
+    // SV固有キーワードも識別子として受理（SVモードでキーワードトークンの場合）
+    if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge) || check(TokenKind::KwWire) ||
+        check(TokenKind::KwReg)) {
+        std::string name(current().get_string());
+        advance();
+        return name;
+    }
     error("Expected identifier, got '" + std::string(current().get_string()) + "'");
     advance();
     return "<error>";
@@ -472,6 +482,11 @@ std::string Parser::expect_ident() {
 // 現在のテキストを取得
 std::string Parser::current_text() const {
     if (check(TokenKind::Ident)) {
+        return std::string(current().get_string());
+    }
+    // SV固有キーワードも識別子として扱う
+    if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge) || check(TokenKind::KwWire) ||
+        check(TokenKind::KwReg)) {
         return std::string(current().get_string());
     }
     return "";

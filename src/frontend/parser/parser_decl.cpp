@@ -237,19 +237,27 @@ bool Parser::is_global_var_start() {
 
     // posedge/negedge型は初期化子なしでもグローバル変数宣言
     // 例: posedge clk; / negedge rst;
+    // Identテキスト比較（非SVモード）またはKwPosedge/KwNegedge（SVモード）
+    bool is_posedge_negedge = false;
     if (check(TokenKind::Ident)) {
         std::string text(current().get_string());
-        if (text == "posedge" || text == "negedge") {
-            advance();  // posedge/negedge
-            if (!is_at_end() && check(TokenKind::Ident)) {
-                advance();  // 変数名
-                bool result = check(TokenKind::Semicolon) || check(TokenKind::Eq);
-                pos_ = saved_pos;
-                return result;
-            }
+        is_posedge_negedge = (text == "posedge" || text == "negedge");
+    } else if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge)) {
+        is_posedge_negedge = true;
+    }
+
+    if (is_posedge_negedge) {
+        advance();  // posedge/negedge
+        if (!is_at_end() &&
+            (check(TokenKind::Ident) || check(TokenKind::KwPosedge) ||
+             check(TokenKind::KwNegedge) || check(TokenKind::KwWire) || check(TokenKind::KwReg))) {
+            advance();  // 変数名
+            bool result = check(TokenKind::Semicolon) || check(TokenKind::Eq);
             pos_ = saved_pos;
-            return false;
+            return result;
         }
+        pos_ = saved_pos;
+        return false;
     }
 
     advance();
