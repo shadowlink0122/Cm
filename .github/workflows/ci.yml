@@ -245,6 +245,7 @@ jobs:
           - { id: wasm-o3, name: "WASMコンパイル+実行 O3", target: twp3,  backend: llvm-wasm, needs_node: false }
           - { id: js-o0,   name: "JSコード生成+実行 O0",  target: tjp0,   backend: js,        needs_node: true  }
           - { id: js-o3,   name: "JSコード生成+実行 O3",  target: tjp3,   backend: js,        needs_node: true  }
+          - { id: sv-o3,   name: "SV生成テスト O3",       target: tsvp3,  backend: sv,        needs_node: false }
     runs-on: ${{ matrix.os }}
 
     steps:
