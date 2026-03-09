@@ -224,12 +224,19 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
 
     if (std::holds_alternative<int64_t>(constant.value)) {
         int64_t val = std::get<int64_t>(constant.value);
+        // SV幅付きリテラルの場合、ユーザー指定幅を使用
+        int effective_width = (constant.bit_width > 0) ? constant.bit_width : width;
         // signed型かどうか判定
         bool is_signed =
             type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
                      type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long);
-        // SystemVerilog幅付きリテラル（signed/unsigned対応）
-        std::string prefix = std::to_string(width) + (is_signed ? "'sd" : "'d");
+        // SV幅付きリテラルの場合はsignedフラグを使わない（明示的幅指定時）
+        std::string prefix;
+        if (constant.bit_width > 0) {
+            prefix = std::to_string(effective_width) + "'d";
+        } else {
+            prefix = std::to_string(effective_width) + (is_signed ? "'sd" : "'d");
+        }
         if (val < 0) {
             return "-" + prefix + std::to_string(-val);
         }

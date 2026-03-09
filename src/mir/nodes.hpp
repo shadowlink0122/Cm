@@ -145,6 +145,7 @@ struct MirConstant {
                  bool, int64_t, double, char, std::string>
         value;
     hir::TypePtr type;
+    int bit_width = 0;  // SV幅付きリテラル（0 = 幅未指定、型から推論）
 };
 
 struct MirOperand {

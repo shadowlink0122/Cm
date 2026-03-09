@@ -308,6 +308,9 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypeP
         },
         lit.value);
 
+    // SV幅付きリテラル情報を伝搬
+    constant.bit_width = lit.bit_width;
+
     // 一時変数に代入
     LocalId temp = ctx.new_temp(constant.type);
     ctx.push_statement(

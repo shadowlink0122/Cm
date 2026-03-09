@@ -1,0 +1,19 @@
+//! platform: sv
+//! test: sel=0 -> out=170
+//! test: sel=1 -> out=255
+
+// SV幅付きリテラルテスト
+// N'd, N'b, N'h 形式をCmパーサーで直接サポート
+
+#[input]  bool sel = false;
+#[output] utiny out = 0;
+
+void width_literal_ops() {
+    if (sel) {
+        // 8bit 16進リテラル: 8'hFF = 255
+        out = 8'hFF;
+    } else {
+        // 8bit 10進リテラル: 8'd170 = 170
+        out = 8'd170;
+    }
+}

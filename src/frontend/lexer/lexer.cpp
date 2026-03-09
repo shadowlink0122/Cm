@@ -270,6 +270,63 @@ Token Lexer::scan_number(uint32_t start) {
         advance();
     }
 
+    // SV幅付きリテラルチェック: N'[dbhDBH]VALUE
+    // 例: 8'd170, 4'b1010, 16'hFFFF
+    if (!is_at_end() && peek() == '\'' && pos_ + 1 < source_.size()) {
+        char base_char = source_[pos_ + 1];
+        if (base_char == 'd' || base_char == 'D' || base_char == 'b' || base_char == 'B' ||
+            base_char == 'h' || base_char == 'H') {
+            // ビット幅を取得
+            std::string width_str(source_.substr(start, pos_ - start));
+            int bit_width = std::stoi(width_str);
+            advance();  // '\'' を消費
+            advance();  // base_char を消費
+
+            // 値部分をパース
+            std::string value_str;
+            if (base_char == 'd' || base_char == 'D') {
+                // 10進数
+                while (!is_at_end() && is_digit(peek())) {
+                    value_str += advance();
+                }
+                uint64_t uval = std::stoull(value_str);
+                int64_t val = static_cast<int64_t>(uval);
+                bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
+                if (::cm::debug::g_debug_mode)
+                    debug::lex::log(debug::lex::Id::Number,
+                                    width_str + "'d" + value_str + " = " + std::to_string(val),
+                                    debug::Level::Debug);
+                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width);
+            } else if (base_char == 'b' || base_char == 'B') {
+                // 2進数
+                while (!is_at_end() && (peek() == '0' || peek() == '1')) {
+                    value_str += advance();
+                }
+                uint64_t uval = std::stoull(value_str, nullptr, 2);
+                int64_t val = static_cast<int64_t>(uval);
+                bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
+                if (::cm::debug::g_debug_mode)
+                    debug::lex::log(debug::lex::Id::Number,
+                                    width_str + "'b" + value_str + " = " + std::to_string(val),
+                                    debug::Level::Debug);
+                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width);
+            } else {
+                // 16進数 (h/H)
+                while (!is_at_end() && is_hex_digit(peek())) {
+                    value_str += advance();
+                }
+                uint64_t uval = std::stoull(value_str, nullptr, 16);
+                int64_t val = static_cast<int64_t>(uval);
+                bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
+                if (::cm::debug::g_debug_mode)
+                    debug::lex::log(debug::lex::Id::Number,
+                                    width_str + "'h" + value_str + " = " + std::to_string(val),
+                                    debug::Level::Debug);
+                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width);
+            }
+        }
+    }
+
     // 小数点チェック
     if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
         is_float = true;

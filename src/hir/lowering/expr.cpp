@@ -290,6 +290,7 @@ HirExprPtr HirLowering::lower_literal(ast::LiteralExpr& lit, TypePtr type) {
 
     auto hir_lit = std::make_unique<HirLiteral>();
     hir_lit->value = lit.value;
+    hir_lit->bit_width = lit.bit_width;  // SV幅付きリテラル伝搬
     return std::make_unique<HirExpr>(std::move(hir_lit), type);
 }
 

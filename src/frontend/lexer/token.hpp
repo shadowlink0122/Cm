@@ -178,6 +178,7 @@ struct Token {
     uint32_t end;    // 終了位置
     TokenValue value;
     bool is_unsigned = false;  // hex/binary/octalリテラルで32bit超の場合true
+    int bit_width = 0;         // SV幅付きリテラル（0 = 幅未指定）
 
     Token(TokenKind k, uint32_t s, uint32_t e)
         : kind(k), start(s), end(e), value(std::monostate{}) {}
@@ -186,6 +187,10 @@ struct Token {
 
     Token(TokenKind k, uint32_t s, uint32_t e, int64_t v, bool unsigned_flag)
         : kind(k), start(s), end(e), value(v), is_unsigned(unsigned_flag) {}
+
+    // SV幅付きリテラル用コンストラクタ
+    Token(TokenKind k, uint32_t s, uint32_t e, int64_t v, bool unsigned_flag, int width)
+        : kind(k), start(s), end(e), value(v), is_unsigned(unsigned_flag), bit_width(width) {}
 
     Token(TokenKind k, uint32_t s, uint32_t e, double v) : kind(k), start(s), end(e), value(v) {}
 

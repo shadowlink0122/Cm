@@ -28,6 +28,7 @@ using HirDeclPtr = std::unique_ptr<HirDecl>;
 // リテラル
 struct HirLiteral {
     std::variant<std::monostate, bool, int64_t, double, char, std::string> value;
+    int bit_width = 0;  // SV幅付きリテラル（0 = 幅未指定）
 };
 
 // 変数参照
