@@ -205,8 +205,16 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
 
     if (std::holds_alternative<int64_t>(constant.value)) {
         int64_t val = std::get<int64_t>(constant.value);
-        // SystemVerilog幅付きリテラル
-        return std::to_string(width) + "'d" + std::to_string(val < 0 ? -val : val);
+        // signed型かどうか判定
+        bool is_signed =
+            type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
+                     type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long);
+        // SystemVerilog幅付きリテラル（signed/unsigned対応）
+        std::string prefix = std::to_string(width) + (is_signed ? "'sd" : "'d");
+        if (val < 0) {
+            return "-" + prefix + std::to_string(-val);
+        }
+        return prefix + std::to_string(val);
     }
 
     if (std::holds_alternative<std::monostate>(constant.value)) {
@@ -623,24 +631,30 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             rhs = inline_temps(rhs);
             block_ss << indent() << lhs << " <= " << rhs << ";\n";
         } else {
-            // if/else等の構造制御文でも一時変数をインライン展開
+            // if/else等の構造制御文でも一時変数を反復的にインライン展開
             std::string expanded = l;
-            // 行内の一時変数を全て展開
-            for (const auto& [var, val] : temp_values) {
-                size_t pos = 0;
-                while ((pos = expanded.find(var, pos)) != std::string::npos) {
-                    bool at_start = (pos == 0 || (!std::isalnum(expanded[pos - 1]) &&
-                                                  expanded[pos - 1] != '_'));
-                    bool at_end = (pos + var.size() >= expanded.size() ||
-                                   (!std::isalnum(expanded[pos + var.size()]) &&
-                                    expanded[pos + var.size()] != '_'));
-                    if (at_start && at_end) {
-                        expanded.replace(pos, var.size(), val);
-                        pos += val.size();
-                    } else {
-                        pos += var.size();
+            // 最大10回の反復で多段展開（_t1002 → _t1000 == _t1001 → a == b）
+            for (int iter = 0; iter < 10; ++iter) {
+                bool changed = false;
+                for (const auto& [var, val] : temp_values) {
+                    size_t pos = 0;
+                    while ((pos = expanded.find(var, pos)) != std::string::npos) {
+                        bool at_start = (pos == 0 || (!std::isalnum(expanded[pos - 1]) &&
+                                                      expanded[pos - 1] != '_'));
+                        bool at_end = (pos + var.size() >= expanded.size() ||
+                                       (!std::isalnum(expanded[pos + var.size()]) &&
+                                        expanded[pos + var.size()] != '_'));
+                        if (at_start && at_end) {
+                            expanded.replace(pos, var.size(), val);
+                            pos += val.size();
+                            changed = true;
+                        } else {
+                            pos += var.size();
+                        }
                     }
                 }
+                if (!changed)
+                    break;
             }
             block_ss << expanded << "\n";
         }

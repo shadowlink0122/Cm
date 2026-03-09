@@ -1,0 +1,5 @@
+SIM_OK
+TEST 1: out=5
+TEST 2: out=7
+TEST 3: out=10
+TEST 4: out=3

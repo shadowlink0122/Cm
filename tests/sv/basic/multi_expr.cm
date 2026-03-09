@@ -1,0 +1,16 @@
+//! platform: sv
+//! test: a=3, b=5 -> sum=8, double_a=6, expr=12
+
+// 複合式の網羅テスト: 複数出力、複合演算
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int sum = 0;
+#[output] int double_a = 0;
+#[output] int expr = 0;
+
+void multi_expr() {
+    sum = a + b;
+    double_a = a * 2;
+    expr = a + b * 2 - 1;
+}

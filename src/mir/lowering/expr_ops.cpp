@@ -1005,8 +1005,11 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
         case hir::HirUnaryOp::Not:
             mir_op = MirUnaryOp::Not;
             break;
+        case hir::HirUnaryOp::BitNot:
+            mir_op = MirUnaryOp::BitNot;
+            break;
         default:
-            mir_op = MirUnaryOp::Neg;  // プレースホルダー
+            mir_op = MirUnaryOp::Neg;  // フォールバック
     }
 
     // 結果用の一時変数（NOT の場合は bool、NEG の場合は元の型）

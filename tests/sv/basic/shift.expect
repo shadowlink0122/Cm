@@ -1,0 +1,7 @@
+SIM_OK
+TEST 1: shl1=2
+TEST 1: shl4=16
+TEST 1: shr=0
+TEST 2: shl1=256
+TEST 2: shl4=2048
+TEST 2: shr=64

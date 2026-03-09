@@ -1,0 +1,5 @@
+SIM_OK
+TEST 1: abs_a=-10
+TEST 1: min_val=-10
+TEST 1: max_val=5
+TEST 1: clamp=-10
