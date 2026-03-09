@@ -1,0 +1,15 @@
+// Phase 3テスト: BRAM推論
+// メモリモジュール
+
+#[input] bool clk = 0;
+#[input] utiny addr = 0;
+#[input] utiny write_data = 0;
+#[input] bool write_enable = 0;
+#[output] utiny read_data = 0;
+
+async func tick() {
+    if (write_enable) {
+        // メモリ書き込み（BRAMスタイル推論用）
+        read_data = write_data;
+    }
+}

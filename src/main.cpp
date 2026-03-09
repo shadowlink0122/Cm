@@ -44,6 +44,9 @@
 #include <set>
 #include <sstream>
 #include <string>
+
+// SVバックエンド（常に利用可能）
+#include "codegen/sv/codegen.hpp"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -1355,8 +1358,11 @@ int main(int argc, char* argv[]) {
                                 std::chrono::steady_clock::now() - phase_opt_start)
                                 .count();
 
-        // 関数レベルのDCE（コンパイル時のみ）
-        if (opts.command == Command::Compile) {
+        // 関数レベルのDCE（コンパイル時のみ、SVターゲットではスキップ）
+        // SVターゲットではハードウェアモジュールとして全関数を保持する
+        bool is_sv =
+            (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+        if (opts.command == Command::Compile && !is_sv) {
             mir::opt::DeadCodeElimination dce;
             for (auto& func : mir.functions) {
                 if (func) {
@@ -1369,7 +1375,8 @@ int main(int argc, char* argv[]) {
         // 未使用の自動生成関数を削除する
         // 注意: インタプリタではインターフェースメソッドの動的ディスパッチがあるため、
         // DCEはコンパイル時のみ実行する
-        if (opts.command == Command::Compile) {
+        // SVターゲットでは全関数をハードウェアモジュールとして保持
+        if (opts.command == Command::Compile && !is_sv) {
             mir::opt::ProgramDeadCodeElimination program_dce;
             program_dce.run(mir);
         }
@@ -1386,7 +1393,9 @@ int main(int argc, char* argv[]) {
         // 非JSターゲットでasync/awaitが使用されている場合はエラー
         {
             bool is_js_target = (opts.target == "js" || opts.target == "web" || opts.emit_js);
-            if (!is_js_target) {
+            bool is_sv_target =
+                (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+            if (!is_js_target && !is_sv_target) {
                 bool has_async = false;
                 std::string async_func_name;
                 bool has_await = false;
@@ -1497,8 +1506,44 @@ int main(int argc, char* argv[]) {
 
         // コンパイルコマンドの場合
         if (opts.command == Command::Compile) {
+            // SystemVerilog ターゲットの場合
+            if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
+                if (opts.verbose) {
+                    std::cout << "=== SystemVerilog Code Generation ===\n";
+                }
+
+                // SVバックエンドオプション設定
+                cm::codegen::sv::SVCodeGenOptions sv_opts;
+
+                // 出力ファイル設定
+                if (opts.output_file.empty()) {
+                    sv_opts.outputFile = "output.sv";
+                } else {
+                    sv_opts.outputFile = opts.output_file;
+                }
+
+                sv_opts.verbose = opts.verbose || opts.debug;
+
+                // SystemVerilog コード生成
+                try {
+                    cm::codegen::sv::SVCodeGen codegen(sv_opts);
+                    codegen.compile(mir);
+
+                    if (!opts.quiet) {
+                        auto compile_end = std::chrono::steady_clock::now();
+                        auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              compile_end - compile_start)
+                                              .count();
+                        std::cout << "✓ SystemVerilog 生成完了: " << sv_opts.outputFile << " ("
+                                  << compile_ms << "ms)\n";
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "SystemVerilog コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
+            }
             // JavaScript ターゲットの場合
-            if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+            else if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
                 if (opts.verbose) {
                     std::cout << "=== JavaScript Code Generation ===\n";
                 }

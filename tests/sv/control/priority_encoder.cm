@@ -1,0 +1,18 @@
+// Phase 2テスト: if-elseチェーン（優先エンコーダ）
+// sel値に応じて異なる出力を生成
+
+#[input] bool sel0 = 0;
+#[input] bool sel1 = 0;
+#[input] int a = 0;
+#[input] int b = 0;
+#[input] int c = 0;
+#[output] int out = 0;
+
+func select() {
+    out = c;
+    if (sel0) {
+        out = a;
+    } else if (sel1) {
+        out = b;
+    }
+}

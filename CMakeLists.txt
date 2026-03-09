@@ -290,6 +290,11 @@ list(APPEND CM_SOURCES
     src/codegen/js/runtime.cpp
 )
 
+# SystemVerilog backend (LLVMに依存しない)
+list(APPEND CM_SOURCES
+    src/codegen/sv/codegen.cpp
+)
+
 # Add LLVM sources if enabled
 if(CM_USE_LLVM)
     list(APPEND CM_SOURCES

@@ -1,0 +1,15 @@
+// Phase 2テスト: シフトレジスタ
+// 型を統一して幅不一致を解消
+
+#[input] bool clk = 0;
+#[input] bool rst = 0;
+#[input] utiny data_in = 0;
+#[output] utiny shift_reg = 0;
+
+async func tick() {
+    if (rst) {
+        shift_reg = 0;
+    } else {
+        shift_reg = (shift_reg << 1) | data_in;
+    }
+}

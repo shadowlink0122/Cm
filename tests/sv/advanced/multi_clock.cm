@@ -1,0 +1,25 @@
+// Phase 4テスト: マルチクロックドメイン
+// 2クロックドメインモジュール
+
+#[input] bool fast_clk = 0;
+#[input] bool slow_clk = 0;
+#[input] bool rst = 0;
+#[input] int data_in = 0;
+#[output] int fast_out = 0;
+#[output] int slow_out = 0;
+
+async func fast_process() {
+    if (rst) {
+        fast_out = 0;
+    } else {
+        fast_out = data_in + 1;
+    }
+}
+
+async func slow_process() {
+    if (rst) {
+        slow_out = 0;
+    } else {
+        slow_out = data_in * 2;
+    }
+}

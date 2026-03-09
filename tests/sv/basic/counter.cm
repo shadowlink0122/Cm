@@ -1,0 +1,16 @@
+//! platform: sv
+
+// カウンタモジュール - SVバックエンドテスト
+// async func が always_ff に変換されることを検証
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[output] uint count = 0;
+
+async func tick() {
+    count = count + 1;
+}
+
+int main() {
+    return 0;
+}

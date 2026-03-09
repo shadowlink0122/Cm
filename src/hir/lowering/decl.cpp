@@ -436,6 +436,11 @@ HirDeclPtr HirLowering::lower_global_var(ast::GlobalVarDecl& gv) {
     hir_global->is_const = gv.is_const;
     hir_global->is_export = (gv.visibility == ast::Visibility::Export);
 
+    // 属性を伝搬（#[input], #[output] 等、SV用）
+    for (const auto& attr : gv.attributes) {
+        hir_global->attributes.push_back(attr.name);
+    }
+
     if (gv.init_expr) {
         hir_global->init = lower_expr(*gv.init_expr);
     }

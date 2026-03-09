@@ -117,6 +117,9 @@ get_platform_dirs() {
         js)
             echo "common js"
             ;;
+        sv)
+            echo "sv"
+            ;;
         *)
             echo "common"
             ;;
@@ -161,7 +164,7 @@ expand_suite() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js (default: jit)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js|sv (default: jit)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
     echo "  -s, --suite <suite>        Test suite: core|syntax|stdlib|modules|platform|runtime|all (default: all)"
     echo "  -v, --verbose              Show detailed output"
@@ -230,9 +233,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js|sv)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js"
+    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js, sv"
     exit 1
 fi
 
@@ -261,7 +264,12 @@ if [ -z "$CATEGORIES" ]; then
     # バックエンドに応じたプラットフォームディレクトリからカテゴリを自動検出
     CATEGORIES=""
     for platform_dir in $PLATFORM_DIRS; do
-        base_dir="$PROGRAMS_DIR/$platform_dir"
+        # SVバックエンドはtests/sv/に配置（programs/外）
+        if [ "$platform_dir" = "sv" ]; then
+            base_dir="$PROJECT_ROOT/tests/sv"
+        else
+            base_dir="$PROGRAMS_DIR/$platform_dir"
+        fi
         if [ ! -d "$base_dir" ]; then
             continue
         fi
@@ -803,6 +811,45 @@ EOJS
             fi
             rm -f "$baremetal_obj"
             ;;
+
+        sv)
+            # SystemVerilog ターゲット: Cm→SV変換 + verilator lint検証
+            local sv_file="$TEMP_DIR/sv_${test_name}.sv"
+            rm -f "$sv_file"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # Stage 1: Cm → SV コンパイル
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile \
+                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
+                # Stage 2: SVビルド検証 (Verilator or iverilog)
+                if command -v verilator >/dev/null 2>&1; then
+                    verilator --lint-only --timing -Wno-fatal "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                    if [ $exit_code -ne 0 ]; then
+                        echo "VERILATOR_LINT_FAIL" >> "$output_file"
+                    fi
+                elif command -v iverilog >/dev/null 2>&1; then
+                    iverilog -g2012 -o /dev/null "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                    if [ $exit_code -ne 0 ]; then
+                        echo "IVERILOG_COMPILE_FAIL" >> "$output_file"
+                    fi
+                else
+                    echo -e "${YELLOW}[WARN]${NC} verilator/iverilog not found, skip build verification"
+                fi
+
+                if [ $exit_code -eq 0 ]; then
+                    if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                        echo "COMPILE_OK" > "$output_file"
+                    fi
+                fi
+            fi
+            rm -f "$sv_file"
+            ;;
     esac
 
     # タイムアウト処理
@@ -936,7 +983,12 @@ run_tests_sequential() {
         # platform:category フォーマットをパース
         local platform_dir="${entry%%:*}"
         local category="${entry##*:}"
-        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        local category_dir
+        if [ "$platform_dir" = "sv" ]; then
+            category_dir="$PROJECT_ROOT/tests/sv/$category"
+        else
+            category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        fi
 
         if [ ! -d "$category_dir" ]; then
             log "Warning: Category directory '$platform_dir/$category' not found, skipping"
@@ -967,7 +1019,12 @@ run_tests_parallel() {
     for entry in $CATEGORIES; do
         local platform_dir="${entry%%:*}"
         local category="${entry##*:}"
-        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        local category_dir
+        if [ "$platform_dir" = "sv" ]; then
+            category_dir="$PROJECT_ROOT/tests/sv/$category"
+        else
+            category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        fi
         if [ -d "$category_dir" ]; then
             for test_file in "$category_dir"/*.cm; do
                 if [ -f "$test_file" ]; then

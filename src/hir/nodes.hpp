@@ -521,6 +521,7 @@ struct HirGlobalVar {
     HirExprPtr init;
     bool is_const;
     bool is_export = false;
+    std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };
 
 // extern "C" ブロック

@@ -1,0 +1,18 @@
+//! platform: sv
+
+#[input]  bool sel = 0;
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int out = 0;
+
+func select_val() {
+    if (sel) {
+        out = a;
+    } else {
+        out = b;
+    }
+}
+
+int main() {
+    return 0;
+}
