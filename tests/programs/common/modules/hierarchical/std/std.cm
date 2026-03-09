@@ -1,5 +1,0 @@
-// std.cm
-module std;
-
-import ./io;
-export { io };

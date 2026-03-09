@@ -1,4 +1,0 @@
-module utils;
-
-import ./strutil;
-export { strutil };

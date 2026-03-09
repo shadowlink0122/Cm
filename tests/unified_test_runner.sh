@@ -18,7 +18,7 @@ else
     IS_WINDOWS=false
 fi
 
-PROGRAMS_DIR="$PROJECT_ROOT/tests/programs"
+PROGRAMS_DIR="$PROJECT_ROOT/tests"
 TEMP_DIR="$PROJECT_ROOT/.tmp/test_runner"
 
 # カラー出力
@@ -183,7 +183,7 @@ usage() {
     echo "  runtime  - OS依存ランタイムテスト（ファイルI/O・ネット・スレッド等）"
     echo "  all      - 全テスト（デフォルト）"
     echo ""
-    echo "Categories are auto-detected from directories in tests/programs/"
+    echo "Categories are auto-detected from directories in tests/"
     exit 0
 }
 

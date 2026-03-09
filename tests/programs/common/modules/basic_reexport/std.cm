@@ -1,5 +1,0 @@
-// std.cm - IO モジュールを再エクスポート
-module std;
-
-import ./io;
-export { io };

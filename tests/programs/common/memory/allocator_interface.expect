@@ -1,4 +1,0 @@
-malloc single int: ok
-alloc single int: ok
-reallocate: ok
-dealloc: ok

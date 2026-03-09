@@ -1,6 +1,0 @@
-// stream.cm
-module stream;
-
-export int open(int mode) {
-    return mode + 100;
-}

@@ -1,6 +1,0 @@
-Main thread starting worker
-Main thread waiting for worker
-Worker thread started
-Worker thread finished
-Worker returned: 42
-Main thread done

@@ -293,6 +293,15 @@ jobs:
         with:
           version: "latest"
 
+      - name: Install SV tools (for SV backend tests)
+        if: matrix.config.backend == 'sv'
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get install -y iverilog
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install icarus-verilog || true
+          fi
+
       - name: Run ${{ matrix.config.name }} Tests
         id: run_tests
         env:

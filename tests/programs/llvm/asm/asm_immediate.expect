@@ -1,5 +1,0 @@
-=== i,n Constraint Test ===
-i constraint with macro: PASS
-n constraint with macro: PASS
-i constraint with local const: PASS
-=== All Tests Passed ===
