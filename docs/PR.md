@@ -44,6 +44,21 @@ out = 8'd170;   // → 8'd170 (10進数)
 
 MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用されなくなった変数のlogic宣言を自動除去。クリーンなSV出力を実現。
 
+#### 三項演算子の自動最適化
+
+if/elseが同一変数への単一代入のみの場合、`cond ? a : b` に自動変換。合成ツールの効率向上と可読性改善。
+
+```sv
+// 最適化前
+if (sel) begin
+    result = a;
+end else begin
+    result = b;
+end
+// 最適化後
+result = sel ? a : b;
+```
+
 ### プラットフォームディレクティブ（新規）
 
 ソースファイル先頭の `//! platform: sv` ディレクティブまたは `--target=sv` CLIオプションにより、レキサーのキーワードテーブルをプラットフォームごとに切り替える仕組みを導入。
@@ -71,6 +86,7 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 | SV幅付きリテラル例外クラッシュ | `stoi`/`stoull`を`try-catch`で保護、値部空チェック・基数文字検証・フォールバック追加 |
 | グローバル変数初期化子省略範囲 | SVポート型/アトリビュートのみ省略可能に限定 |
 | Token/AST/HIR/MIR/codegenメモリ最適化 | SV幅付きリテラル情報を`std::optional<BitLiteralInfo>`に統一 |
+| parameter二重宣言 | `sv::param`変数がparameter/logicで二重定義されるバグを修正 |
 
 ### ビルド高速化
 
@@ -171,12 +187,12 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 | `docs/design/v0.15.0/type_identity_and_name_resolution.md` | 未着手 → v0.16.0検討 |
 | `docs/design/v0.15.0/module_separate_compilation.md` | v0.16.0先送り |
 
-### テスト（新規20件）
+### テスト（新規23件）
 
 | カテゴリ | テスト |
 |---------|--------|
-| sv/advanced | led_blinker, multi_clock, negedge_reset, posedge_counter |
-| sv/basic | adder, arithmetic, binary_bits, bitwise, counter, multi_expr, mux, shift, sv_width_literal, unary |
+| sv/advanced | fsm, led_blinker, multi_clock, negedge_reset, parameterized, posedge_counter |
+| sv/basic | adder, arithmetic, binary_bits, bitwise, counter, multi_expr, mux, shift, sv_width_literal, ternary, unary |
 | sv/control | compare, nested_if, priority_encoder, shift_register, signed_ops |
 | sv/memory | bram |
 
@@ -187,7 +203,7 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 | バックエンド | 通過 | 失敗 | スキップ |
 |------------|------|------|---------|
 | JIT (O0) | 368 | 0 | 5 |
-| SV | 20 | 0 | 0 |
+| SV | 23 | 0 | 0 |
 
 ---
 
@@ -219,6 +235,10 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 - [x] make cleanにSV/VCD/VVP削除追加
 - [x] SV出力先をルート→.tmp/に変更
 - [x] コンパイラ警告0件達成
+- [x] 三項演算子最適化 (if/else同一変数→cond?a:b)
+- [x] parameter二重宣言修正
+- [x] SVテスト追加 (ternary/fsm/parameterized, 20→23件)
+- [x] CIランナー最新化 (ubuntu-latest/macos-15)
 - [x] ローカルパス情報なし
 
 ---
