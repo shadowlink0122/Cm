@@ -41,6 +41,8 @@ ast::DeclPtr Parser::parse_namespace() {
         namespace_name = expect_ident();
     } else {
         // 型キーワードをnamespace名として受け入れる
+        // BUG修正: キーワードトークンはget_string()が空文字を返すため
+        // token_kind_to_string()を使用してキーワード名を取得
         auto kind = current().kind;
         if (kind == TokenKind::KwString || kind == TokenKind::KwInt || kind == TokenKind::KwUint ||
             kind == TokenKind::KwLong || kind == TokenKind::KwUlong || kind == TokenKind::KwShort ||
@@ -49,7 +51,7 @@ ast::DeclPtr Parser::parse_namespace() {
             kind == TokenKind::KwDouble || kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
             kind == TokenKind::KwVoid || kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
             kind == TokenKind::KwCstring) {
-            namespace_name = std::string(current().get_string());
+            namespace_name = std::string(token_kind_to_string(kind));
             advance();
         } else {
             namespace_name = expect_ident();  // エラーメッセージ生成のフォールバック
