@@ -726,10 +726,46 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     decreaseIndent();
     block_ss << indent() << "end\n";
 
+    // インライン展開後に使われなくなった一時変数宣言を除去
+    std::string block_content = block_ss.str();
+    auto it = mod.reg_declarations.begin();
+    while (it != mod.reg_declarations.end()) {
+        // _tXXXX パターンの変数名を抽出
+        auto space_pos = it->rfind(' ');
+        auto semi_pos = it->rfind(';');
+        if (space_pos != std::string::npos && semi_pos != std::string::npos) {
+            std::string var_name = it->substr(space_pos + 1, semi_pos - space_pos - 1);
+            if (var_name.size() > 2 && var_name[0] == '_' && var_name[1] == 't' &&
+                std::isdigit(var_name[2])) {
+                // alwaysブロック内で実際に使われているか確認
+                bool used = false;
+                size_t pos = 0;
+                while ((pos = block_content.find(var_name, pos)) != std::string::npos) {
+                    // 変数名の境界チェック
+                    bool at_start = (pos == 0 || (!std::isalnum(block_content[pos - 1]) &&
+                                                  block_content[pos - 1] != '_'));
+                    bool at_end = (pos + var_name.size() >= block_content.size() ||
+                                   (!std::isalnum(block_content[pos + var_name.size()]) &&
+                                    block_content[pos + var_name.size()] != '_'));
+                    if (at_start && at_end) {
+                        used = true;
+                        break;
+                    }
+                    pos += var_name.size();
+                }
+                if (!used) {
+                    it = mod.reg_declarations.erase(it);
+                    continue;
+                }
+            }
+        }
+        ++it;
+    }
+
     if (has_explicit_edge || func.is_async) {
-        mod.always_ff_blocks.push_back(block_ss.str());
+        mod.always_ff_blocks.push_back(block_content);
     } else {
-        mod.always_comb_blocks.push_back(block_ss.str());
+        mod.always_comb_blocks.push_back(block_content);
     }
 
     // インデントレベルをリセット
