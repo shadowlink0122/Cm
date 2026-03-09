@@ -1,6 +1,7 @@
 # SystemVerilog コード生成パイプライン — 実装設計
 
 > 対象: Cm v0.15.0 Phase 1
+> ステータス: **IMPLEMENTED** (Phase 1) — 2026-03-09更新
 > 前提: [systemverilog_backend.md](systemverilog_backend.md)
 
 ## 1. ディレクトリ構成
@@ -160,13 +161,15 @@ count <= count + 32'd1;  // async func
 ### 4.1 Target enum拡張
 
 ```cpp
-// src/common/target.hpp
+// src/common/target.hpp — 実装済み
 enum class Target {
     Native,
     Wasm,
     JS,
-    SV,         // ← 新規
+    Web,
     Baremetal,
+    UEFI,
+    SV,         // ✅ 実装済み
 };
 ```
 
@@ -221,25 +224,28 @@ TypeKind::BitVector {
 ### 6.1 テストケース
 
 ```
-tests/sv/
-├── basic/
-│   ├── counter.cm / counter.expect.sv      # カウンタ (async func)
-│   ├── adder.cm / adder.expect.sv          # 組み合わせ加算器 (func)
-│   ├── mux.cm / mux.expect.sv              # マルチプレクサ (if/else)
-│   ├── alu.cm / alu.expect.sv              # ALU (match→case) Phase 2
-│   └── bit_ops.cm / bit_ops.expect.sv      # bit<N> ビット操作
-├── pin/
-│   ├── nexys_top.cm / nexys_top.expect.xdc # ピン割当テスト
-└── run_sv_tests.sh
+tests/sv/                               # ✅ 実装済み
+├── basic/                              # 10件 (SIM_OK/COMPILE_OK混在)
+│   ├── counter.cm / counter.expect
+│   ├── adder.cm / adder.expect
+│   ├── mux.cm / mux.expect
+│   └── sv_width_literal.cm / sv_width_literal.expect
+├── control/                            # 5件
+│   ├── compare.cm / compare.expect
+│   └── nested_if.cm / nested_if.expect
+└── advanced/                           # 5件
+    ├── led_blinker.cm / led_blinker.expect
+    ├── posedge_counter.cm / posedge_counter.expect
+    └── negedge_reset.cm / negedge_reset.expect
 ```
 
 ### 6.2 テスト3段階
 
-| Stage | 内容 | CI要件 | ツール |
-|-------|------|--------|-------|
-| 1. 出力比較 | `.sv` と `.expect.sv` の diff | **必須** | diff |
-| 2. 構文検証 | SV lint | **推奨** | `verilator --lint-only` |
-| 3. シミュレーション | テストベンチ実行 | optional | `verilator` / `iverilog` |
+| Stage | 内容 | CI要件 | ツール | ステータス |
+|-------|------|--------|-------|--------|
+| 1. 出力生成 | Cm → SV コンパイル | **必須** | cm compile | ✅ |
+| 2. 構文検証 | SV lint / コンパイル | **必須** | verilator / iverilog | ✅ |
+| 3. シミュレーション | テストベンチ実行 | **CI必須** | iverilog + vvp | ✅ |
 
 ### 6.3 Makefile統合
 

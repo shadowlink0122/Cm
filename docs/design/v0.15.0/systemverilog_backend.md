@@ -1,7 +1,7 @@
 # SystemVerilog バックエンド設計書
 
 > 対象: Cm v0.15.0
-> ステータス: DRAFT (rev.2)
+> ステータス: **IMPLEMENTED** (Phase 1) — rev.3 (2026-03-09更新)
 
 ## 1. 概要
 
@@ -357,18 +357,20 @@ impl SpiMaster {
 
 ## 7. SystemVerilog機能カバレッジとロードマップ
 
-### Phase 1: 基盤 (v0.15.0)
+### Phase 1: 基盤 (v0.15.0) ✅ 実装済み
 
-| SV機能 | Cmからの生成方法 |
-|--------|---------------|
-| `module` / `endmodule` | `#[sv::module]` / `#[verilog::module]` struct |
-| `input` / `output` / `inout` | `#[input]` / `#[output]` / `#[inout]` |
-| `logic [N:0]` | 整数型 / `bit<N>` |
-| `always_ff` | `async func` |
-| `always_comb` | `func` (pure) |
-| `if` / `else` | `if` / `else` |
-| `assign` | `func` 内の代入 |
-| リテラル (`N'[hbd]val`) | `N'hXX` 記法 |
+| SV機能 | Cmからの生成方法 | ステータス |
+|--------|---------------|--------|
+| `module` / `endmodule` | `struct` + `async func` / `func` | ✅ 実装済み |
+| `input` / `output` | ポート宣言 | ✅ 実装済み |
+| `logic [N:0]` | 整数型 (`utiny`/`ushort`/`uint`/`ulong`) | ✅ 実装済み |
+| `always_ff` | `async func` | ✅ 実装済み |
+| `always_comb` | `func` (pure) | ✅ 実装済み |
+| `if` / `else` | `if` / `else` | ✅ 実装済み |
+| `assign` | `func` 内の代入 | ✅ 実装済み |
+| リテラル (`N'[hbd]val`) | `N'hXX` 記法 | ✅ 実装済み |
+| テストベンチ自動生成 | `_tb.sv` 自動出力 | ✅ 実装済み |
+| プラットフォームディレクティブ | `//! platform: sv` / `--target=sv` | ✅ 実装済み |
 
 ### Phase 2: 制御フロー・FSM (v0.15.x)
 
@@ -756,19 +758,24 @@ vvp sim              # 波形出力
 ### 9.5 テストファイル構成
 
 ```
-tests/programs/sv/
-├── basic/
-│   ├── counter.cm              # カウンタモジュール
-│   ├── counter.expect          # "COMPILE_OK"
-│   ├── adder.cm                # 組み合わせ加算器
-│   ├── adder.expect            # "COMPILE_OK"
-│   ├── mux.cm                  # マルチプレクサ
-│   └── mux.expect              # "COMPILE_OK"
-├── bit_ops/
-│   ├── bit_width.cm            # bit<N> テスト
-│   └── bit_width.expect        # "COMPILE_OK"
-└── .skip                       # verilator未インストール時はスキップ
+tests/sv/
+├── basic/                      # 基本回路テスト (20件)
+│   ├── counter.cm / counter.expect
+│   ├── adder.cm / adder.expect       # SIM_OK + TEST行
+│   ├── mux.cm / mux.expect           # SIM_OK + TEST行
+│   ├── sv_width_literal.cm           # N'hXX リテラル
+│   └── ...
+├── control/                    # 制御フロー
+│   ├── compare.cm / compare.expect
+│   ├── nested_if.cm / nested_if.expect
+│   └── ...
+└── advanced/                   # 高度なパターン
+    ├── led_blinker.cm / led_blinker.expect
+    ├── posedge_counter.cm / posedge_counter.expect
+    └── negedge_reset.cm / negedge_reset.expect
 ```
+
+> **注**: `tests/programs/sv/` は廃止。全テストは `tests/sv/` に統合済み。
 
 ### 9.6 Makefile統合
 

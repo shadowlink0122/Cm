@@ -1,6 +1,8 @@
 [English](method_chaining.en.html)
 
-# 真のメソッドチェーン機能設計書 v1.1
+# 真のメソッドチェーン機能設計書 v1.2
+
+> ステータス: **パーサー対応済み / 型チェッカー未実装** — 2026-03-09更新
 
 ## 概要
 
@@ -81,7 +83,7 @@ HIR/MIRでの動作検証。問題があれば修正。
 ## テストケース
 
 ```cm
-// tests/test_programs/chaining/true_method_chain.cm
+// tests/common/chaining/true_method_chain.cm (未作成)
 interface Movable {
     Point move(int dx, int dy);
 }
