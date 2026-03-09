@@ -2,7 +2,7 @@
 
 ## 概要
 
-v0.15.0は**SystemVerilog (SV) バックエンドの本格実装**を含むメジャーアップデートです。CmからFPGA向けのSystemVerilogコードを生成し、Tang Console等のFPGAボードで直接動作させることが可能になりました。
+v0.15.0は**SystemVerilog (SV) バックエンドの本格実装**と**プラットフォームディレクティブによるレキサーモード分離**を含むメジャーアップデートです。CmからFPGA向けのSystemVerilogコードを生成し、iverilogによるシミュレーション検証まで一貫して実行可能になりました。
 
 ---
 
@@ -23,7 +23,7 @@ cm compile --target=sv program.cm -o output.sv
 | ポート宣言 | `#[input]`/`#[output]`アトリビュートでI/Oポート宣言 |
 | 組み合わせ回路 | 通常関数 → `always_comb begin ... end` |
 | 順序回路 | `posedge`/`negedge`型引数 → `always_ff @(posedge clk)` |
-| SV固有型 | `posedge`, `negedge`, `wire`, `reg`型 |
+| SV固有型 | `posedge`, `negedge`, `wire`, `reg`型（文脈キーワード） |
 | 非ブロッキング代入 | 順序回路で`<=`を自動使用 |
 | BRAM推論 | 配列をBlock RAMとして推論 |
 | テストベンチ自動生成 | iverilog互換の`_tb.sv`を自動生成 |
@@ -44,19 +44,45 @@ out = 8'd170;   // → 8'd170 (10進数)
 
 MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用されなくなった変数のlogic宣言を自動除去。クリーンなSV出力を実現。
 
+### プラットフォームディレクティブ（新規）
+
+ソースファイル先頭の `//! platform: sv` ディレクティブまたは `--target=sv` CLIオプションにより、レキサーのキーワードテーブルをプラットフォームごとに切り替える仕組みを導入。
+
+```cm
+//! platform: sv
+// この行以降、posedge/negedge/wire/regがキーワードトークンとして認識される
+```
+
+| モード | キーワード追加 | 用途 |
+|--------|-------------|------|
+| `LexerPlatform::Default` | なし | 通常のCmコード |
+| `LexerPlatform::SV` | `posedge`, `negedge`, `wire`, `reg` | SVターゲット |
+
+> 非SVモードでは`posedge`等は通常のIdent（変数名として使用可能）
+
+### バグ修正
+
+| 問題 | 修正内容 |
+|------|----------|
+| 型キーワードnamespace関数呼び出し失敗 | `parse_namespace()`で`get_string()`→`token_kind_to_string()`に修正、namespace名が空になる問題を解決 |
+| posedge/negedge/wire/regが非SVコードで型消費 | `parse_type()`のIdentテキスト比較ブロック削除、レキサーKwトークンに完全移行 |
+| rstポート挿入位置の条件分岐 | `has_clk ? 1 : 1` → clk実位置を検索して挿入 |
+| 非合成型チェック未呼び出し | `compile()`から`validateSynthesizableTypes()`を呼び出し、エラー時にコンパイル中止 |
+
 ### VSCode拡張機能
 
 | 変更 | 説明 |
 |------|------|
 | SV幅付きリテラルハイライト | `N'[dbh]VALUE`パターンを`constant.numeric.sv-literal.cm`として認識 |
-| 文字リテラルパターン修正 | `'X'`(1文字のみ)にマッチするパターンに変更、`8'hFF`が文字として誤認識される問題を修正 |
+| 文字リテラルパターン修正 | `'X'`(1文字のみ)にマッチするパターンに変更 |
 
 ### テスト基盤
 
 | 変更 | 説明 |
 |------|------|
 | SV並列テスト | `unified_test_runner.sh`の`run_parallel_test`にSVバックエンド追加 (`make tsvp`) |
-| CI追加 | `ci.yml`のintegration-testに`sv-o3`を追加 |
+| CI iverilog追加 | `ci.yml`にiverilogインストール・SVシミュレーション検証を追加 |
+| tests/programs削除 | 全テストを`tests/`に統合、`tests/programs/`ディレクトリを廃止 |
 
 ### ドキュメント
 
@@ -64,6 +90,7 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 |------|------|
 | SVチュートリアル | `docs/tutorials/ja/compiler/sv.md` (ja/en) 新規作成 |
 | リリースノート | `docs/releases/v0.15.0.md` 新規作成 |
+| 設計書5件更新 | Phase 1 IMPLEMENTED反映、テストパス・ステータス更新 |
 
 ---
 
@@ -73,17 +100,22 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 
 | ファイル | 変更内容 |
 |---------|----------|
-| `src/codegen/sv/codegen.cpp` | SVコード生成エンジン（インデント修正、一時変数最適化含む） |
+| `src/codegen/sv/codegen.cpp` | SVコード生成エンジン（インデント修正、一時変数最適化、rst挿入修正、非合成型チェック含む） |
 | `src/codegen/sv/codegen.hpp` | SVCodeGenクラス定義 |
 
 ### パーサー / フロントエンド
 
 | ファイル | 変更内容 |
 |---------|----------|
-| `src/frontend/lexer/token.hpp` | Token構造体にbit_width/bit_base/bit_original追加 |
-| `src/frontend/lexer/lexer.cpp` | SV幅付きリテラル(`N'[dbh]VALUE`)のトークン化 |
+| `src/frontend/lexer/token.hpp` | `LexerPlatform` enum、Token構造体にbit_width/bit_base/bit_original追加 |
+| `src/frontend/lexer/lexer.hpp` | `LexerPlatform` enum定義、`add_sv_keywords()`/`detect_platform_directive()` |
+| `src/frontend/lexer/lexer.cpp` | SVキーワード動的追加、プラットフォームディレクティブ検出、SV幅付きリテラルのトークン化 |
 | `src/frontend/ast/expr.hpp` | AST LiteralExprにbit_width/bit_base/bit_original追加 |
-| `src/frontend/parser/parser_expr.cpp` | SV幅付きリテラルのパーサー対応 |
+| `src/frontend/parser/parser_expr.cpp` | SV幅付きリテラルのパーサー対応、型キーワード名前空間修飾 |
+| `src/frontend/parser/parser_type.cpp` | SV Identテキスト比較ブロック削除、KwPosedge等switch-case移行 |
+| `src/frontend/parser/parser_stmt.cpp` | `is_type_start()`にKwPosedge等追加 |
+| `src/frontend/parser/parser_decl.cpp` | `is_global_var_start()`にKwPosedge/KwNegedge対応 |
+| `src/frontend/parser/parser_module.cpp` | namespace名取得の`get_string()`→`token_kind_to_string()`修正 |
 
 ### HIR / MIR
 
@@ -100,9 +132,19 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 |---------|----------|
 | `vscode-extension/syntaxes/cm.tmLanguage.json` | SV幅付きリテラルハイライト、文字リテラル修正 |
 | `vscode-extension/package.json` | バージョン0.15.0更新 |
-| `.github/workflows/ci.yml` | SVテストをCIに追加 |
+| `.github/workflows/ci.yml` | SVテスト+iverilogインストールをCIに追加 |
 | `tests/unified_test_runner.sh` | SVテスト並列実行対応 |
 | `VERSION` | 0.15.0 |
+
+### 設計ドキュメント更新
+
+| ファイル | 変更内容 |
+|---------|----------|
+| `docs/design/v0.15.0/systemverilog_backend.md` | Phase 1 → IMPLEMENTED |
+| `docs/design/v0.15.0/systemverilog_codegen_pipeline.md` | Phase 1 → IMPLEMENTED |
+| `docs/design/v0.15.0/method_chaining.md` | パーサー対応済み/型チェッカー未実装を明記 |
+| `docs/design/v0.15.0/type_identity_and_name_resolution.md` | 未着手 → v0.16.0検討 |
+| `docs/design/v0.15.0/module_separate_compilation.md` | v0.16.0先送り |
 
 ### テスト（新規20件）
 
@@ -117,10 +159,10 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 
 ## 🧪 テスト状況
 
-| バックエンド | 通過 | 失敗 |
-|------------|------|------|
-| JIT (O0) | 399 | 1 (既存バグ) |
-| SV (O3) | 20 | 0 |
+| バックエンド | 通過 | 失敗 | スキップ |
+|------------|------|------|---------|
+| JIT (O0) | 368 | 0 | 5 |
+| SV | 20 | 0 | 0 |
 
 ---
 
@@ -132,12 +174,18 @@ MIR→SV変換時に一時変数(`_tXXXX`)をインライン展開し、使用�
 - [x] SV幅付きリテラルの元ベース形式保持
 - [x] 一時変数インライン展開・不要logic宣言除去
 - [x] SVコード生成インデント修正
+- [x] プラットフォームディレクティブ (`//! platform: sv`) 実装
+- [x] LexerPlatformモード (Default/SV) 導入
+- [x] 非SVモードでのSVキーワード衝突解消
+- [x] type_keyword_namespace バグ修正
+- [x] テストディレクトリ統合 (tests/programs/ → tests/)
+- [x] CI iverilog追加・SVシミュレーション検証
 - [x] VSCode拡張: SV幅付きリテラルハイライト
 - [x] VSCode拡張: 文字リテラルパターン修正
 - [x] SVテスト並列実行対応 (make tsvp)
-- [x] CIにSVテスト追加
 - [x] SVバックエンドチュートリアル (ja/en)
 - [x] v0.15.0リリースノート作成
+- [x] 設計ドキュメント5件のステータス更新
 - [x] ローカルパス情報なし
 
 ---
