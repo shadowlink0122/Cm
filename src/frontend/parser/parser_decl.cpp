@@ -237,16 +237,19 @@ bool Parser::is_global_var_start() {
 
     // posedge/negedge型は初期化子なしでもグローバル変数宣言
     // 例: posedge clk; / negedge rst;
-    if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge)) {
-        advance();  // posedge/negedge
-        if (!is_at_end() && check(TokenKind::Ident)) {
-            advance();  // 変数名
-            bool result = check(TokenKind::Semicolon) || check(TokenKind::Eq);
+    if (check(TokenKind::Ident)) {
+        std::string text(current().get_string());
+        if (text == "posedge" || text == "negedge") {
+            advance();  // posedge/negedge
+            if (!is_at_end() && check(TokenKind::Ident)) {
+                advance();  // 変数名
+                bool result = check(TokenKind::Semicolon) || check(TokenKind::Eq);
+                pos_ = saved_pos;
+                return result;
+            }
             pos_ = saved_pos;
-            return result;
+            return false;
         }
-        pos_ = saved_pos;
-        return false;
     }
 
     advance();
