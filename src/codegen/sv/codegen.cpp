@@ -312,12 +312,13 @@ std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
 
 // === 右辺値生成 ===
 
-std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func) {
+std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
+                                  int target_width) {
     switch (rvalue.kind) {
         case mir::MirRvalue::Use: {
             const auto& use_data = std::get<mir::MirRvalue::UseData>(rvalue.data);
             if (use_data.operand) {
-                return emitOperand(*use_data.operand, func);
+                return emitOperand(*use_data.operand, func, target_width);
             }
             return "0";
         }
@@ -437,7 +438,21 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
         case mir::MirStatement::Assign: {
             const auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
             std::string lhs = emitPlace(assign.place, func);
-            std::string rhs = assign.rvalue ? emitRvalue(*assign.rvalue, func) : "0";
+            // 代入先の型からビット幅を推論し、定数リテラルの幅を合わせる
+            int target_w = 0;
+            // Placeの型情報を優先使用
+            if (assign.place.type) {
+                target_w = getBitWidth(assign.place.type);
+            } else if (assign.place.local < func.locals.size()) {
+                const auto& local_type = func.locals[assign.place.local].type;
+                if (local_type) {
+                    target_w = getBitWidth(local_type);
+                }
+            }
+            // 32bit(intデフォルト)の場合は調整不要
+            if (target_w == 32)
+                target_w = 0;
+            std::string rhs = assign.rvalue ? emitRvalue(*assign.rvalue, func, target_w) : "0";
             // async func内またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
             bool use_nonblocking = func.is_async;
             if (!use_nonblocking) {

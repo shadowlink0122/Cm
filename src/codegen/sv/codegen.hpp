@@ -93,7 +93,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::string emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func,
                             int target_width = 0);
     // 右辺値を生成
-    std::string emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func);
+    std::string emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
+                           int target_width = 0);
     // Place（左辺値）を生成
     std::string emitPlace(const mir::MirPlace& place, const mir::MirFunction& func);
 
