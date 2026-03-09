@@ -17,7 +17,7 @@ jobs:
   # ========================================
   lint:
     name: Lint
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +34,7 @@ jobs:
   # ========================================
   extension-lint:
     name: Extension Lint
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: vscode-extension
@@ -68,9 +68,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             arch: x86_64
-          - os: macos-14
+          - os: macos-15
             arch: arm64
     runs-on: ${{ matrix.os }}
 
@@ -161,30 +161,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
+        os: [ubuntu-latest, macos-15]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             test_name: Lexer
             test_bin: lexer_test
-          - os: macos-14
+          - os: macos-15
             test_name: Lexer
             test_bin: lexer_test
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             test_name: HIR Lowering
             test_bin: hir_lowering_test
-          - os: macos-14
+          - os: macos-15
             test_name: HIR Lowering
             test_bin: hir_lowering_test
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             test_name: MIR Lowering
             test_bin: mir_lowering_test
-          - os: macos-14
+          - os: macos-15
             test_name: MIR Lowering
             test_bin: mir_lowering_test
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             test_name: MIR Optimization
             test_bin: mir_optimization_test
-          - os: macos-14
+          - os: macos-15
             test_name: MIR Optimization
             test_bin: mir_optimization_test
     runs-on: ${{ matrix.os }}
@@ -235,7 +235,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
+        os: [ubuntu-latest, macos-15]
         config:
           - { id: jit-o0,  name: "JIT実行 O0",            target: tjitp0, backend: jit,       needs_node: false }
           - { id: jit-o3,  name: "JIT実行 O3",            target: tjitp3, backend: jit,       needs_node: false }
@@ -361,13 +361,13 @@ jobs:
   baremetal-test:
     name: Baremetal / UEFI
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: cm-build-ubuntu-22.04
+          name: cm-build-ubuntu-latest
 
       - run: chmod +x cm 2>/dev/null || true
 
@@ -375,7 +375,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
-          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
 
       - name: Install LLVM
         run: |
@@ -398,14 +398,14 @@ jobs:
   benchmark:
     name: Benchmark
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: cm-build-ubuntu-22.04
+          name: cm-build-ubuntu-latest
 
       - run: chmod +x cm 2>/dev/null || true
 
@@ -413,7 +413,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
-          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-22.04
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
 
       - name: Install LLVM
         run: |
