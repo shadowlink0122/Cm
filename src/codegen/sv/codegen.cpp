@@ -499,6 +499,9 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
     std::ostringstream block_ss;
 
+    // モジュール内のインデントレベルを設定
+    indent_level_ = 1;
+
     // 関数名コメントを追加
     block_ss << indent() << "// " << func.name << "\n";
 
@@ -668,6 +671,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
 
         // 非一時変数の代入文をインライン展開
+        // 元の行のインデントを保持
+        std::string line_indent = l.substr(0, start);
         auto eq_pos = content.find(" = ");
         if (eq_pos != std::string::npos) {
             std::string lhs = content.substr(0, eq_pos);
@@ -677,7 +682,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 rhs.pop_back();
             }
             rhs = inline_temps(rhs);
-            block_ss << indent() << lhs << " = " << rhs << ";\n";
+            block_ss << line_indent << lhs << " = " << rhs << ";\n";
         } else if (content.find(" <= ") != std::string::npos) {
             // ノンブロッキング代入のインライン展開
             auto nbeq_pos = content.find(" <= ");
@@ -687,7 +692,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 rhs.pop_back();
             }
             rhs = inline_temps(rhs);
-            block_ss << indent() << lhs << " <= " << rhs << ";\n";
+            block_ss << line_indent << lhs << " <= " << rhs << ";\n";
         } else {
             // if/else等の構造制御文でも一時変数を反復的にインライン展開
             std::string expanded = l;
@@ -726,6 +731,9 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     } else {
         mod.always_comb_blocks.push_back(block_ss.str());
     }
+
+    // インデントレベルをリセット
+    indent_level_ = 0;
 }
 
 // === 合流ブロック探索 ===
