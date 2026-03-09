@@ -16,8 +16,9 @@ namespace cm::codegen::sv {
 // SystemVerilog コード生成オプション
 struct SVCodeGenOptions {
     std::string outputFile = "output.sv";
-    bool verbose = false;  // 詳細出力
-    int indentSpaces = 4;  // インデント幅
+    std::string sourceFile;  // 入力ソースファイル（テストベンチ生成用）
+    bool verbose = false;    // 詳細出力
+    int indentSpaces = 4;    // インデント幅
 };
 
 // モジュールポート情報

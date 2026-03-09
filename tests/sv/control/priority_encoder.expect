@@ -1,1 +1,4 @@
-COMPILE_OK
+SIM_OK
+TEST 1: out=10
+TEST 2: out=20
+TEST 3: out=30

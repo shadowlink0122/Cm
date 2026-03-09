@@ -1,7 +1,8 @@
 //! platform: sv
+//! test: cycles=5 -> count=5
+//! test: cycles=10 -> count=15
 
 // カウンタモジュール - SVバックエンドテスト
-// async func が always_ff に変換されることを検証
 
 #[input]  bool clk = 0;
 #[input]  bool rst = 0;
@@ -10,4 +11,3 @@
 async func tick() {
     count = count + 1;
 }
-

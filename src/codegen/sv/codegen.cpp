@@ -867,17 +867,40 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     SVModule default_mod;
     default_mod.name = "top";
 
-    // 出力ファイル名からモジュール名を推定
-    if (!options_.outputFile.empty()) {
-        std::string base = options_.outputFile;
+    // ソースファイル名からモジュール名を推定（SV予約語を回避）
+    auto extractBaseName = [](const std::string& path) -> std::string {
+        std::string base = path;
         auto slash = base.rfind('/');
         if (slash != std::string::npos)
             base = base.substr(slash + 1);
         auto dot = base.rfind('.');
         if (dot != std::string::npos)
             base = base.substr(0, dot);
-        if (!base.empty())
+        return base;
+    };
+
+    // SV予約語リスト（モジュール名として使用不可）
+    static const std::set<std::string> sv_reserved = {
+        "output",   "input",     "inout",   "module",  "wire",    "reg",     "logic",
+        "begin",    "end",       "if",      "else",    "for",     "while",   "case",
+        "default",  "assign",    "always",  "initial", "posedge", "negedge", "task",
+        "function", "parameter", "integer", "real",    "time",    "event"};
+
+    // ソースファイル名を優先してモジュール名を決定
+    if (!options_.sourceFile.empty()) {
+        std::string base = extractBaseName(options_.sourceFile);
+        if (!base.empty() && sv_reserved.find(base) == sv_reserved.end()) {
             default_mod.name = base;
+        } else if (!base.empty()) {
+            default_mod.name = base + "_mod";
+        }
+    } else if (!options_.outputFile.empty()) {
+        std::string base = extractBaseName(options_.outputFile);
+        if (!base.empty() && sv_reserved.find(base) == sv_reserved.end()) {
+            default_mod.name = base;
+        } else if (!base.empty()) {
+            default_mod.name = base + "_mod";
+        }
     }
 
     // グローバル変数からポートと内部シグナルを生成
@@ -1048,12 +1071,107 @@ void SVCodeGen::writeToFile(const std::string& content, const std::string& path)
 std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     std::ostringstream ss;
 
+    // ソースファイルから//! test:コメントをパース
+    struct TestCase {
+        std::vector<std::pair<std::string, std::string>> inputs;    // {name, value}
+        std::vector<std::pair<std::string, std::string>> expected;  // {name, value}
+        int cycles = 0;  // async用: クロックサイクル数
+    };
+    std::vector<TestCase> test_cases;
+
+    if (!options_.sourceFile.empty()) {
+        std::ifstream src(options_.sourceFile);
+        if (src.is_open()) {
+            std::string line;
+            while (std::getline(src, line)) {
+                // "//! test:" プレフィックスを検出
+                auto pos = line.find("//! test:");
+                if (pos == std::string::npos)
+                    continue;
+                std::string test_spec = line.substr(pos + 9);
+
+                TestCase tc;
+                // "->" で入力と期待出力を分割
+                auto arrow = test_spec.find("->");
+                std::string input_part, output_part;
+                if (arrow != std::string::npos) {
+                    input_part = test_spec.substr(0, arrow);
+                    output_part = test_spec.substr(arrow + 2);
+                } else {
+                    input_part = test_spec;
+                }
+
+                // 入力パース: "a=3, b=5" or "cycles=5"
+                std::istringstream iss(input_part);
+                std::string token;
+                while (std::getline(iss, token, ',')) {
+                    // 空白除去
+                    size_t s = token.find_first_not_of(' ');
+                    size_t e = token.find_last_not_of(' ');
+                    if (s == std::string::npos)
+                        continue;
+                    token = token.substr(s, e - s + 1);
+
+                    auto eq = token.find('=');
+                    if (eq != std::string::npos) {
+                        std::string name = token.substr(0, eq);
+                        std::string val = token.substr(eq + 1);
+                        // 名前と値の空白除去
+                        size_t ns = name.find_first_not_of(' ');
+                        size_t ne = name.find_last_not_of(' ');
+                        if (ns != std::string::npos)
+                            name = name.substr(ns, ne - ns + 1);
+                        size_t vs = val.find_first_not_of(' ');
+                        size_t ve = val.find_last_not_of(' ');
+                        if (vs != std::string::npos)
+                            val = val.substr(vs, ve - vs + 1);
+
+                        if (name == "cycles") {
+                            tc.cycles = std::stoi(val);
+                        } else {
+                            tc.inputs.push_back({name, val});
+                        }
+                    }
+                }
+
+                // 期待出力パース: "result=8, out=0"
+                if (!output_part.empty()) {
+                    std::istringstream oss(output_part);
+                    while (std::getline(oss, token, ',')) {
+                        size_t s = token.find_first_not_of(' ');
+                        size_t e = token.find_last_not_of(' ');
+                        if (s == std::string::npos)
+                            continue;
+                        token = token.substr(s, e - s + 1);
+
+                        auto eq = token.find('=');
+                        if (eq != std::string::npos) {
+                            std::string name = token.substr(0, eq);
+                            std::string val = token.substr(eq + 1);
+                            size_t ns = name.find_first_not_of(' ');
+                            size_t ne = name.find_last_not_of(' ');
+                            if (ns != std::string::npos)
+                                name = name.substr(ns, ne - ns + 1);
+                            size_t vs = val.find_first_not_of(' ');
+                            size_t ve = val.find_last_not_of(' ');
+                            if (vs != std::string::npos)
+                                val = val.substr(vs, ve - vs + 1);
+                            tc.expected.push_back({name, val});
+                        }
+                    }
+                }
+
+                test_cases.push_back(tc);
+            }
+        }
+    }
+
     ss << "// 自動生成テストベンチ - Cm compiler\n";
     ss << "`timescale 1ns / 1ps\n\n";
 
     ss << "module " << mod.name << "_tb;\n\n";
 
-    // ポートに対応する信号宣言（SV2012ではlogicで統一）
+    // ポートに対応する信号宣言
     for (const auto& port : mod.ports) {
         ss << "    " << port.sv_type << " " << port.name << ";\n";
     }
@@ -1086,7 +1204,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         ss << "    always #5 clk = ~clk;\n\n";
     }
 
-    // 初期化シーケンス
+    // テストシーケンス
     ss << "    // テストシーケンス\n";
     ss << "    initial begin\n";
     ss << "        $dumpfile(\"" << mod.name << "_tb.vcd\");\n";
@@ -1109,8 +1227,45 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         ss << "        #10;\n\n";
     }
 
-    ss << "        // テスト実行\n";
-    ss << "        #100;\n\n";
+    if (!test_cases.empty()) {
+        // テストシナリオベースの検証
+        int test_num = 1;
+        for (const auto& tc : test_cases) {
+            ss << "        // テスト " << test_num << "\n";
+
+            // 入力値設定
+            for (const auto& [name, val] : tc.inputs) {
+                ss << "        " << name << " = " << val << ";\n";
+            }
+
+            // 評価待ち
+            if (tc.cycles > 0) {
+                // async: 指定サイクル分クロックを待つ
+                ss << "        repeat(" << tc.cycles << ") @(posedge clk);\n";
+                ss << "        #1; // 安定化\n";
+            } else if (has_clk) {
+                // クロック付きだがcycles未指定: 1サイクル待ち
+                ss << "        @(posedge clk);\n";
+                ss << "        #1;\n";
+            } else {
+                // 組み合わせ回路: 伝搬遅延待ち
+                ss << "        #10;\n";
+            }
+
+            // 出力値の表示と検証
+            for (const auto& [name, val] : tc.expected) {
+                ss << "        $display(\"TEST " << test_num << ": " << name << "=%0d\", " << name
+                   << ");\n";
+            }
+            ss << "\n";
+            test_num++;
+        }
+    } else {
+        // テストシナリオなし: 基本的な動作確認
+        ss << "        // テスト実行\n";
+        ss << "        #100;\n\n";
+    }
+
     ss << "        $display(\"=== Test Complete ===\");\n";
     ss << "        $finish;\n";
     ss << "    end\n\n";

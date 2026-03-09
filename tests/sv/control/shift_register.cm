@@ -1,7 +1,7 @@
 //! platform: sv
+//! test: data_in=1, cycles=3 -> shift_reg=7
 
-// Phase 2テスト: シフトレジスタ
-// 型を統一して幅不一致を解消
+// シフトレジスタ
 
 #[input] bool clk = 0;
 #[input] bool rst = 0;

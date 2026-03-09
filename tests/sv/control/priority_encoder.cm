@@ -1,7 +1,9 @@
 //! platform: sv
+//! test: sel0=1, sel1=0, a=10, b=20, c=30 -> out=10
+//! test: sel0=0, sel1=1, a=10, b=20, c=30 -> out=20
+//! test: sel0=0, sel1=0, a=10, b=20, c=30 -> out=30
 
-// Phase 2テスト: if-elseチェーン（優先エンコーダ）
-// sel値に応じて異なる出力を生成
+// 優先エンコーダ - if-elseチェーン
 
 #[input] bool sel0 = 0;
 #[input] bool sel1 = 0;

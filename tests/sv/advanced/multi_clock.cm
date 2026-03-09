@@ -1,7 +1,7 @@
 //! platform: sv
+//! test: data_in=5, cycles=3 -> fast_out=6, slow_out=10
 
-// Phase 4テスト: マルチクロックドメイン
-// 2クロックドメインモジュール
+// マルチクロックドメインテスト
 
 #[input] bool fast_clk = 0;
 #[input] bool slow_clk = 0;

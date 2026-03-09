@@ -1,1 +1,4 @@
-COMPILE_OK
+SIM_OK
+TEST 1: result=8
+TEST 2: result=0
+TEST 3: result=300

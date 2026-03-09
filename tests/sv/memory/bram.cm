@@ -1,7 +1,7 @@
 //! platform: sv
+//! test: write_enable=1, addr=0, write_data=42, cycles=2 -> read_data=42
 
-// Phase 3テスト: BRAM推論
-// メモリモジュール
+// BRAM推論テスト
 
 #[input] bool clk = 0;
 #[input] utiny addr = 0;
@@ -11,7 +11,6 @@
 
 async func tick() {
     if (write_enable) {
-        // メモリ書き込み（BRAMスタイル推論用）
         read_data = write_data;
     }
 }

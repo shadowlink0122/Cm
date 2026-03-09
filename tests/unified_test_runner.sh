@@ -856,9 +856,31 @@ EOJS
                             vvp "$sim_binary" > "$sim_output" 2>&1
                             local sim_exit=$?
                             if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
-                                # シミュレーション成功
-                                cat "$sim_output" >> "$output_file"
-                                if grep -q "SIM_OK" "$expect_file" 2>/dev/null; then
+                                # シミュレーション成功: TEST行の検証
+                                local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
+                                local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
+
+                                if [ -n "$expect_test_lines" ]; then
+                                    # 期待値が.expectにある場合: 比較検証
+                                    local sim_test_file="$TEMP_DIR/sim_test_${test_name}.txt"
+                                    local exp_test_file="$TEMP_DIR/exp_test_${test_name}.txt"
+                                    grep "^TEST " "$sim_output" > "$sim_test_file" 2>/dev/null
+                                    grep "^TEST " "$expect_file" > "$exp_test_file" 2>/dev/null
+
+                                    if diff -q "$exp_test_file" "$sim_test_file" > /dev/null 2>&1; then
+                                        # TEST行が完全一致: SIM_OK + TEST行を出力
+                                        echo "SIM_OK" > "$output_file"
+                                        cat "$sim_test_file" >> "$output_file"
+                                    else
+                                        # 値不一致: SIM_FAIL
+                                        echo "SIM_FAIL" > "$output_file"
+                                        echo "--- 期待値 ---" >> "$output_file"
+                                        cat "$exp_test_file" >> "$output_file"
+                                        echo "--- 実際の値 ---" >> "$output_file"
+                                        cat "$sim_test_file" >> "$output_file"
+                                        exit_code=1
+                                    fi
+                                elif grep -q "SIM_OK" "$expect_file" 2>/dev/null; then
                                     echo "SIM_OK" > "$output_file"
                                 elif grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                                     echo "COMPILE_OK" > "$output_file"
