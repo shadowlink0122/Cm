@@ -1376,6 +1376,75 @@ PY
             fi
             rm -f "$baremetal_obj"
             ;;
+        sv)
+            # SystemVerilog ターゲット: Cm→SV変換 + verilator lint検証（並列版）
+            local sv_file="$TEMP_DIR/sv_${test_name}_${BASHPID}_${RANDOM}.sv"
+            rm -f "$sv_file"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # Stage 1: Cm → SV コンパイル
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile \
+                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
+                # Stage 2: SVビルド検証 (Verilator or iverilog)
+                if command -v verilator >/dev/null 2>&1; then
+                    verilator --lint-only --timing -Wno-fatal "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                elif command -v iverilog >/dev/null 2>&1; then
+                    iverilog -g2012 -o /dev/null "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                fi
+
+                if [ $exit_code -eq 0 ]; then
+                    # Stage 3: シミュレーション実行 (iverilog + vvp)
+                    local tb_file="${sv_file%.sv}_tb.sv"
+                    if [ -f "$tb_file" ] && command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
+                        local sim_binary="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}"
+                        local sim_output="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}.log"
+                        iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
+                        if [ $? -eq 0 ]; then
+                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            local sim_exit=$?
+                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                                local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
+                                local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
+                                if [ -n "$expect_test_lines" ]; then
+                                    local sim_test_file="$TEMP_DIR/sim_test_${test_name}_${BASHPID}.txt"
+                                    local exp_test_file="$TEMP_DIR/exp_test_${test_name}_${BASHPID}.txt"
+                                    grep "^TEST " "$sim_output" > "$sim_test_file" 2>/dev/null
+                                    grep "^TEST " "$expect_file" > "$exp_test_file" 2>/dev/null
+                                    if diff -q "$exp_test_file" "$sim_test_file" > /dev/null 2>&1; then
+                                        echo "SIM_OK" > "$output_file"
+                                        cat "$sim_test_file" >> "$output_file"
+                                    else
+                                        echo "SIM_FAIL" > "$output_file"
+                                        exit_code=1
+                                    fi
+                                    rm -f "$sim_test_file" "$exp_test_file"
+                                elif grep -q "SIM_OK" "$expect_file" 2>/dev/null; then
+                                    echo "SIM_OK" > "$output_file"
+                                elif grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                                    echo "COMPILE_OK" > "$output_file"
+                                fi
+                            else
+                                echo "SIM_FAIL" >> "$output_file"
+                                exit_code=1
+                            fi
+                        fi
+                        rm -f "$sim_binary" "$sim_output"
+                    else
+                        # シミュレーションツール未対応: コンパイルOKとして処理
+                        if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                            echo "COMPILE_OK" > "$output_file"
+                        fi
+                    fi
+                fi
+            fi
+            rm -f "$sv_file"
+            ;;
         *)
             echo "SKIP:Backend not supported for parallel" > "$result_file"
             return
