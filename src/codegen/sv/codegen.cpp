@@ -39,6 +39,16 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
             return "logic signed [63:0]";
         case hir::TypeKind::USize:
             return "logic [63:0]";
+        // SV固有型
+        case hir::TypeKind::Posedge:
+        case hir::TypeKind::Negedge:
+            return "logic";  // クロック/リセット信号は1bit
+        case hir::TypeKind::Wire:
+        case hir::TypeKind::Reg:
+            // element_typeがあればそれを使用
+            if (type->element_type)
+                return mapType(type->element_type);
+            return "logic [31:0]";
         default:
             return "logic [31:0]";  // デフォルトは32bit
     }
@@ -65,6 +75,15 @@ int SVCodeGen::getBitWidth(const hir::TypePtr& type) const {
         case hir::TypeKind::ISize:
         case hir::TypeKind::USize:
             return 64;
+        // SV固有型
+        case hir::TypeKind::Posedge:
+        case hir::TypeKind::Negedge:
+            return 1;  // クロック/リセット信号は1bit
+        case hir::TypeKind::Wire:
+        case hir::TypeKind::Reg:
+            if (type->element_type)
+                return getBitWidth(type->element_type);
+            return 32;
         default:
             return 32;
     }
@@ -387,8 +406,18 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
             const auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
             std::string lhs = emitPlace(assign.place, func);
             std::string rhs = assign.rvalue ? emitRvalue(*assign.rvalue, func) : "0";
-            // async func内はノンブロッキング代入
-            if (func.is_async) {
+            // async func内またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
+            bool use_nonblocking = func.is_async;
+            if (!use_nonblocking) {
+                for (const auto& local : func.locals) {
+                    if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                       local.type->kind == hir::TypeKind::Negedge)) {
+                        use_nonblocking = true;
+                        break;
+                    }
+                }
+            }
+            if (use_nonblocking) {
                 return lhs + " <= " + rhs + ";";
             } else {
                 return lhs + " = " + rhs + ";";
@@ -464,12 +493,33 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // 関数名コメントを追加
     block_ss << indent() << "// " << func.name << "\n";
 
-    if (func.is_async) {
-        // Phase 4: マルチクロックドメイン対応
-        // 関数属性からsv::clock_domain(name)を検出
+    // SV固有型: posedge/negedge型パラメータの検出
+    std::string edge_type;   // "posedge" or "negedge"
+    std::string edge_clock;  // クロック信号名
+    bool has_explicit_edge = false;
+
+    for (const auto& local : func.locals) {
+        if (local.type && local.type->kind == hir::TypeKind::Posedge) {
+            edge_type = "posedge";
+            edge_clock = local.name;
+            has_explicit_edge = true;
+            break;
+        }
+        if (local.type && local.type->kind == hir::TypeKind::Negedge) {
+            edge_type = "negedge";
+            edge_clock = local.name;
+            has_explicit_edge = true;
+            break;
+        }
+    }
+
+    if (has_explicit_edge) {
+        // 明示的なposedge/negedge型パラメータ → always_ff
+        block_ss << indent() << "always_ff @(" << edge_type << " " << edge_clock << ") begin\n";
+    } else if (func.is_async) {
+        // Phase 4: マルチクロックドメイン対応（後方互換: async func）
         std::string clock_name = "clk";
         for (const auto& attr : func.attributes) {
-            // "sv::clock_domain(xxx)" or "verilog::clock_domain(xxx)" 形式
             std::string prefix1 = "sv::clock_domain(";
             std::string prefix2 = "verilog::clock_domain(";
             if (attr.find(prefix1) == 0 && attr.back() == ')') {
@@ -479,7 +529,6 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
         }
 
-        // Phase 5: パイプライン属性のヒント出力
         for (const auto& attr : func.attributes) {
             if (attr.find("sv::pipeline") != std::string::npos ||
                 attr.find("verilog::pipeline") != std::string::npos) {
@@ -663,7 +712,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     decreaseIndent();
     block_ss << indent() << "end\n";
 
-    if (func.is_async) {
+    if (has_explicit_edge || func.is_async) {
         mod.always_ff_blocks.push_back(block_ss.str());
     } else {
         mod.always_comb_blocks.push_back(block_ss.str());
@@ -1204,13 +1253,22 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 
     // クロック生成（clkポートがある場合）
     bool has_clk = false;
-    bool has_rst = false;
+    std::string rst_name;         // リセット信号の実際のポート名
+    bool rst_active_low = false;  // アクティブLowリセットかどうか
     for (const auto& port : mod.ports) {
         if (port.name == "clk" && port.direction == SVPort::Input)
             has_clk = true;
-        if ((port.name == "rst" || port.name == "rst_n") && port.direction == SVPort::Input)
-            has_rst = true;
+        if (port.direction == SVPort::Input) {
+            if (port.name == "rst") {
+                rst_name = "rst";
+                rst_active_low = false;
+            } else if (port.name == "rst_n") {
+                rst_name = "rst_n";
+                rst_active_low = true;
+            }
+        }
     }
+    bool has_rst = !rst_name.empty();
 
     if (has_clk) {
         ss << "    // クロック生成 (10ns周期 = 100MHz)\n";
@@ -1232,12 +1290,20 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     }
     ss << "\n";
 
-    // リセットシーケンス
+    // リセットシーケンス（実際のポート名を使用）
     if (has_rst) {
         ss << "        // リセット\n";
-        ss << "        rst = 1;\n";
-        ss << "        #20;\n";
-        ss << "        rst = 0;\n";
+        if (rst_active_low) {
+            // アクティブLow: 0→1（リセット解除）
+            ss << "        " << rst_name << " = 0;\n";
+            ss << "        #20;\n";
+            ss << "        " << rst_name << " = 1;\n";
+        } else {
+            // アクティブHigh: 1→0（リセット解除）
+            ss << "        " << rst_name << " = 1;\n";
+            ss << "        #20;\n";
+            ss << "        " << rst_name << " = 0;\n";
+        }
         ss << "        #10;\n\n";
     }
 

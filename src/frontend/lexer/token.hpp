@@ -99,6 +99,12 @@ enum class TokenKind {
     KwString,
     KwCstring,  // NULL終端文字列 (FFI用)
 
+    // SV固有キーワード（SystemVerilogターゲットのみ）
+    KwPosedge,  // posedge信号型
+    KwNegedge,  // negedge信号型
+    KwWire,     // wire修飾型
+    KwReg,      // reg修飾型
+
     // 演算子
     Plus,
     Minus,

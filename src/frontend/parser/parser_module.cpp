@@ -626,8 +626,11 @@ ast::AttributeNode Parser::parse_attribute() {
     }
     expect(TokenKind::LBracket);
 
-    // アトリビュート名
+    // アトリビュート名(名前空間付き: sv::pin等)
     std::string attr_name = expect_ident();
+    while (consume_if(TokenKind::ColonColon)) {
+        attr_name += "::" + expect_ident();
+    }
     std::vector<std::string> args;
 
     // 引数がある場合
@@ -721,9 +724,11 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     // 変数名
     std::string name = expect_ident();
 
-    // 初期化子
-    expect(TokenKind::Eq);
-    auto init = parse_expr();
+    // 初期化子(posedge/negedge型は初期化子不要)
+    ast::ExprPtr init;
+    if (consume_if(TokenKind::Eq)) {
+        init = parse_expr();
+    }
 
     expect(TokenKind::Semicolon);
 

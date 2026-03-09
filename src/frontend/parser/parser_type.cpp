@@ -226,6 +226,25 @@ ast::TypePtr Parser::parse_type() {
             advance();
             base_type = ast::make_null();
             break;
+        // SV固有型
+        case TokenKind::KwPosedge:
+            advance();
+            base_type = ast::make_posedge();
+            break;
+        case TokenKind::KwNegedge:
+            advance();
+            base_type = ast::make_negedge();
+            break;
+        case TokenKind::KwWire:
+            advance();
+            // wire修飾子: 後続の型をelement_typeに格納
+            base_type = ast::make_wire(parse_type());
+            break;
+        case TokenKind::KwReg:
+            advance();
+            // reg修飾子: 後続の型をelement_typeに格納
+            base_type = ast::make_reg(parse_type());
+            break;
         default:
             break;
     }

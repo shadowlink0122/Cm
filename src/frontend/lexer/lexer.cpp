@@ -144,6 +144,11 @@ void Lexer::init_keywords() {
         {"char", TokenKind::KwChar},
         {"string", TokenKind::KwString},
         {"cstring", TokenKind::KwCstring},
+        // SV固有キーワード
+        {"posedge", TokenKind::KwPosedge},
+        {"negedge", TokenKind::KwNegedge},
+        {"wire", TokenKind::KwWire},
+        {"reg", TokenKind::KwReg},
     };
 }
 

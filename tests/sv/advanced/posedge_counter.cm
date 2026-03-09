@@ -1,0 +1,12 @@
+//! platform: sv
+//! test: cycles=5 -> count=5
+
+// posedge型を使った明示的カウンタ
+
+#[input]  posedge clk;
+#[input]  bool rst = 0;
+#[output] uint count = 0;
+
+void tick(posedge clk) {
+    count = count + 1;
+}
