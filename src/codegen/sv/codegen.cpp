@@ -224,19 +224,21 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
 
     if (std::holds_alternative<int64_t>(constant.value)) {
         int64_t val = std::get<int64_t>(constant.value);
-        // SV幅付きリテラルの場合、ユーザー指定幅を使用
+
+        // SV幅付きリテラルの場合、元のベース形式を保持して出力
+        if (constant.bit_width > 0 && !constant.bit_original.empty()) {
+            // 元の表記をそのまま使用: N'bXXX, N'hXXX, N'dXXX
+            return std::to_string(constant.bit_width) + "'" + constant.bit_base +
+                   constant.bit_original;
+        }
+
+        // SV幅付きリテラル（元表記がない場合）またはデフォルト
         int effective_width = (constant.bit_width > 0) ? constant.bit_width : width;
         // signed型かどうか判定
         bool is_signed =
             type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
                      type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long);
-        // SV幅付きリテラルの場合はsignedフラグを使わない（明示的幅指定時）
-        std::string prefix;
-        if (constant.bit_width > 0) {
-            prefix = std::to_string(effective_width) + "'d";
-        } else {
-            prefix = std::to_string(effective_width) + (is_signed ? "'sd" : "'d");
-        }
+        std::string prefix = std::to_string(effective_width) + (is_signed ? "'sd" : "'d");
         if (val < 0) {
             return "-" + prefix + std::to_string(-val);
         }

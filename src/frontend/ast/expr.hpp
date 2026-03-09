@@ -22,14 +22,20 @@ struct LiteralExpr {
     LiteralValue value;
     bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
     int bit_width = 0;                 // SV幅付きリテラル（0 = 幅未指定）
+    char bit_base = 'd';               // SV幅付きリテラルのベース文字（'d','b','h'）
+    std::string bit_original;          // 元のリテラル文字列
 
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}
     explicit LiteralExpr(int64_t v) : value(v) {}
     LiteralExpr(int64_t v, bool unsigned_flag) : value(v), is_unsigned_literal(unsigned_flag) {}
     // SV幅付きリテラル用コンストラクタ
-    LiteralExpr(int64_t v, bool unsigned_flag, int width)
-        : value(v), is_unsigned_literal(unsigned_flag), bit_width(width) {}
+    LiteralExpr(int64_t v, bool unsigned_flag, int width, char base, std::string original)
+        : value(v),
+          is_unsigned_literal(unsigned_flag),
+          bit_width(width),
+          bit_base(base),
+          bit_original(std::move(original)) {}
     explicit LiteralExpr(double v) : value(v) {}
     explicit LiteralExpr(char v) : value(v) {}
     explicit LiteralExpr(std::string v) : value(std::move(v)) {}
@@ -540,8 +546,11 @@ inline ExprPtr make_int_literal(int64_t v, bool is_unsigned, Span s = {}) {
 }
 
 // SV幅付きリテラル生成（N'd/N'b/N'hリテラル用）
-inline ExprPtr make_int_literal(int64_t v, bool is_unsigned, int bit_width, Span s = {}) {
-    return std::make_unique<Expr>(std::make_unique<LiteralExpr>(v, is_unsigned, bit_width), s);
+inline ExprPtr make_int_literal(int64_t v, bool is_unsigned, int bit_width, char bit_base,
+                                std::string bit_original, Span s = {}) {
+    return std::make_unique<Expr>(
+        std::make_unique<LiteralExpr>(v, is_unsigned, bit_width, bit_base, std::move(bit_original)),
+        s);
 }
 
 inline ExprPtr make_float_literal(double v, Span s = {}) {

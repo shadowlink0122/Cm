@@ -28,7 +28,9 @@ using HirDeclPtr = std::unique_ptr<HirDecl>;
 // リテラル
 struct HirLiteral {
     std::variant<std::monostate, bool, int64_t, double, char, std::string> value;
-    int bit_width = 0;  // SV幅付きリテラル（0 = 幅未指定）
+    int bit_width = 0;         // SV幅付きリテラル（0 = 幅未指定）
+    char bit_base = 'd';       // SV幅付きリテラルのベース文字（'d','b','h'）
+    std::string bit_original;  // 元のリテラル文字列
 };
 
 // 変数参照

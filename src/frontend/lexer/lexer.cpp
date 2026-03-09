@@ -284,6 +284,7 @@ Token Lexer::scan_number(uint32_t start) {
 
             // 値部分をパース
             std::string value_str;
+            char norm_base = std::tolower(base_char);
             if (base_char == 'd' || base_char == 'D') {
                 // 10進数
                 while (!is_at_end() && is_digit(peek())) {
@@ -296,7 +297,8 @@ Token Lexer::scan_number(uint32_t start) {
                     debug::lex::log(debug::lex::Id::Number,
                                     width_str + "'d" + value_str + " = " + std::to_string(val),
                                     debug::Level::Debug);
-                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width);
+                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width,
+                             norm_base, value_str);
             } else if (base_char == 'b' || base_char == 'B') {
                 // 2進数
                 while (!is_at_end() && (peek() == '0' || peek() == '1')) {
@@ -309,7 +311,8 @@ Token Lexer::scan_number(uint32_t start) {
                     debug::lex::log(debug::lex::Id::Number,
                                     width_str + "'b" + value_str + " = " + std::to_string(val),
                                     debug::Level::Debug);
-                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width);
+                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width,
+                             norm_base, value_str);
             } else {
                 // 16進数 (h/H)
                 while (!is_at_end() && is_hex_digit(peek())) {
@@ -322,7 +325,8 @@ Token Lexer::scan_number(uint32_t start) {
                     debug::lex::log(debug::lex::Id::Number,
                                     width_str + "'h" + value_str + " = " + std::to_string(val),
                                     debug::Level::Debug);
-                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width);
+                return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width,
+                             norm_base, value_str);
             }
         }
     }
