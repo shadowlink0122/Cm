@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common/span.hpp"
+#include "../frontend/lexer/token.hpp"
 #include "types.hpp"
 
 #include <memory>
@@ -28,6 +29,7 @@ using HirDeclPtr = std::unique_ptr<HirDecl>;
 // リテラル
 struct HirLiteral {
     std::variant<std::monostate, bool, int64_t, double, char, std::string> value;
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
 };
 
 // 変数参照
@@ -521,6 +523,7 @@ struct HirGlobalVar {
     HirExprPtr init;
     bool is_const;
     bool is_export = false;
+    std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };
 
 // extern "C" ブロック

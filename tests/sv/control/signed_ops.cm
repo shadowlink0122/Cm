@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: a=-10, b=5 -> abs_a=10, min_val=-10, max_val=5, clamp=0
+
+// 符号付き演算テスト
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int abs_a = 0;
+#[output] int min_val = 0;
+#[output] int max_val = 0;
+#[output] int clamp = 0;
+
+void signed_ops() {
+    if (a < 0) { abs_a = -a; } else { abs_a = a; }
+    if (a < b) { min_val = a; } else { min_val = b; }
+    if (a > b) { max_val = a; } else { max_val = b; }
+    if (a < 0) { clamp = 0; } else if (a > b) { clamp = b; } else { clamp = a; }
+}

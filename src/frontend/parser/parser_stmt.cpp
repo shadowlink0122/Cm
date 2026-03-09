@@ -419,6 +419,11 @@ bool Parser::is_type_start() {
         case TokenKind::KwChar:
         case TokenKind::KwString:
         case TokenKind::KwCstring:
+        // SV固有キーワード（SVモード時のキーワードトークン対応）
+        case TokenKind::KwPosedge:
+        case TokenKind::KwNegedge:
+        case TokenKind::KwWire:
+        case TokenKind::KwReg:
             return true;
         case TokenKind::Star:
             // *type name の形式かチェック（*p = x のような式と区別）

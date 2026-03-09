@@ -595,9 +595,15 @@ ast::ExprPtr Parser::parse_primary() {
     if (check(TokenKind::IntLiteral)) {
         int64_t val = current().get_int();
         bool is_unsigned = current().is_unsigned;
+        const auto& bit_info = current().bit_info;
         debug::par::log(debug::par::Id::IntLiteral, "Found integer literal: " + std::to_string(val),
                         debug::Level::Debug);
         advance();
+        if (bit_info) {
+            // SV幅付きリテラル
+            return ast::make_int_literal(val, is_unsigned, bit_info->width, bit_info->base,
+                                         bit_info->original, Span{start_pos, previous().end});
+        }
         return ast::make_int_literal(val, is_unsigned, Span{start_pos, previous().end});
     }
 

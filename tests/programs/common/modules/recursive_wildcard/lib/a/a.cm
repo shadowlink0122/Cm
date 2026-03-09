@@ -1,6 +1,0 @@
-// a.cm - テスト用モジュール
-module a;
-
-export int func_a(int x) {
-    return x + 100;
-}

@@ -1,0 +1,24 @@
+//! platform: sv
+//! test: a=5, b=5 -> eq=1, ne=0, lt=0, gt=0, le=1, ge=1
+//! test: a=3, b=7 -> eq=0, ne=1, lt=1, gt=0, le=1, ge=0
+//! test: a=10, b=2 -> eq=0, ne=1, lt=0, gt=1, le=0, ge=1
+
+// 比較演算の網羅テスト: ==, !=, <, >, <=, >=
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int eq = 0;
+#[output] int ne = 0;
+#[output] int lt = 0;
+#[output] int gt = 0;
+#[output] int le = 0;
+#[output] int ge = 0;
+
+void compare() {
+    if (a == b) { eq = 1; } else { eq = 0; }
+    if (a != b) { ne = 1; } else { ne = 0; }
+    if (a < b)  { lt = 1; } else { lt = 0; }
+    if (a > b)  { gt = 1; } else { gt = 0; }
+    if (a <= b) { le = 1; } else { le = 0; }
+    if (a >= b) { ge = 1; } else { ge = 0; }
+}

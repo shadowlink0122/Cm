@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: a=255, b=15 -> band=15, bor=255, bxor=240, bnot_a=-256
+
+// ビット演算の網羅テスト: &, |, ^, ~
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int band = 0;
+#[output] int bor = 0;
+#[output] int bxor = 0;
+#[output] int bnot_a = 0;
+
+void bitops() {
+    band = a & b;
+    bor = a | b;
+    bxor = a ^ b;
+    bnot_a = ~a;
+}

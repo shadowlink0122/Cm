@@ -41,6 +41,8 @@ ast::DeclPtr Parser::parse_namespace() {
         namespace_name = expect_ident();
     } else {
         // 型キーワードをnamespace名として受け入れる
+        // BUG修正: キーワードトークンはget_string()が空文字を返すため
+        // token_kind_to_string()を使用してキーワード名を取得
         auto kind = current().kind;
         if (kind == TokenKind::KwString || kind == TokenKind::KwInt || kind == TokenKind::KwUint ||
             kind == TokenKind::KwLong || kind == TokenKind::KwUlong || kind == TokenKind::KwShort ||
@@ -49,7 +51,7 @@ ast::DeclPtr Parser::parse_namespace() {
             kind == TokenKind::KwDouble || kind == TokenKind::KwBool || kind == TokenKind::KwChar ||
             kind == TokenKind::KwVoid || kind == TokenKind::KwIsize || kind == TokenKind::KwUsize ||
             kind == TokenKind::KwCstring) {
-            namespace_name = std::string(current().get_string());
+            namespace_name = std::string(token_kind_to_string(kind));
             advance();
         } else {
             namespace_name = expect_ident();  // エラーメッセージ生成のフォールバック
@@ -626,8 +628,11 @@ ast::AttributeNode Parser::parse_attribute() {
     }
     expect(TokenKind::LBracket);
 
-    // アトリビュート名
+    // アトリビュート名(名前空間付き: sv::pin等)
     std::string attr_name = expect_ident();
+    while (consume_if(TokenKind::ColonColon)) {
+        attr_name += "::" + expect_ident();
+    }
     std::vector<std::string> args;
 
     // 引数がある場合
@@ -721,9 +726,26 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     // 変数名
     std::string name = expect_ident();
 
-    // 初期化子
-    expect(TokenKind::Eq);
-    auto init = parse_expr();
+    // 初期化子省略をSVポート型/アトリビュートに限定
+    // posedge/negedge型、または#[input]/#[output]属性付きはport宣言のため初期化子不要
+    bool is_sv_port = false;
+    if (type && (type->name == "posedge" || type->name == "negedge")) {
+        is_sv_port = true;
+    }
+    for (const auto& attr : attributes) {
+        if (attr.name == "input" || attr.name == "output" || attr.name == "inout") {
+            is_sv_port = true;
+            break;
+        }
+    }
+
+    ast::ExprPtr init;
+    if (consume_if(TokenKind::Eq)) {
+        init = parse_expr();
+    } else if (!is_sv_port) {
+        // 非SVポートでは初期化子を必須とする
+        error("Expected '=' for global variable initializer");
+    }
 
     expect(TokenKind::Semicolon);
 

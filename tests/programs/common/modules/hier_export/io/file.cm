@@ -1,6 +1,0 @@
-// file.cm
-module file;
-
-export int read_file(int id) {
-    return id * 10;
-}

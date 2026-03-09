@@ -18,7 +18,7 @@ else
     IS_WINDOWS=false
 fi
 
-PROGRAMS_DIR="$PROJECT_ROOT/tests/programs"
+PROGRAMS_DIR="$PROJECT_ROOT/tests"
 TEMP_DIR="$PROJECT_ROOT/.tmp/test_runner"
 
 # カラー出力
@@ -117,6 +117,9 @@ get_platform_dirs() {
         js)
             echo "common js"
             ;;
+        sv)
+            echo "sv"
+            ;;
         *)
             echo "common"
             ;;
@@ -161,7 +164,7 @@ expand_suite() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js (default: jit)"
+    echo "  -b, --backend <backend>    Test backend: interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js|sv (default: jit)"
     echo "  -c, --category <category>  Test categories (comma-separated, default: auto-detect from directories)"
     echo "  -s, --suite <suite>        Test suite: core|syntax|stdlib|modules|platform|runtime|all (default: all)"
     echo "  -v, --verbose              Show detailed output"
@@ -180,7 +183,7 @@ usage() {
     echo "  runtime  - OS依存ランタイムテスト（ファイルI/O・ネット・スレッド等）"
     echo "  all      - 全テスト（デフォルト）"
     echo ""
-    echo "Categories are auto-detected from directories in tests/programs/"
+    echo "Categories are auto-detected from directories in tests/"
     exit 0
 }
 
@@ -230,9 +233,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # バックエンド検証
-if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js)$ ]]; then
+if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-uefi|llvm-baremetal|js|sv)$ ]]; then
     echo "Error: Invalid backend '$BACKEND'"
-    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js"
+    echo "Valid backends: interpreter, jit, typescript, rust, cpp, llvm, llvm-wasm, llvm-uefi, llvm-baremetal, js, sv"
     exit 1
 fi
 
@@ -261,7 +264,12 @@ if [ -z "$CATEGORIES" ]; then
     # バックエンドに応じたプラットフォームディレクトリからカテゴリを自動検出
     CATEGORIES=""
     for platform_dir in $PLATFORM_DIRS; do
-        base_dir="$PROGRAMS_DIR/$platform_dir"
+        # SVバックエンドはtests/sv/に配置（programs/外）
+        if [ "$platform_dir" = "sv" ]; then
+            base_dir="$PROJECT_ROOT/tests/sv"
+        else
+            base_dir="$PROGRAMS_DIR/$platform_dir"
+        fi
         if [ ! -d "$base_dir" ]; then
             continue
         fi
@@ -803,6 +811,101 @@ EOJS
             fi
             rm -f "$baremetal_obj"
             ;;
+
+        sv)
+            # SystemVerilog ターゲット: Cm→SV変換 + verilator lint検証
+            local sv_file="$TEMP_DIR/sv_${test_name}.sv"
+            rm -f "$sv_file"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # Stage 1: Cm → SV コンパイル
+            (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile \
+                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
+                # Stage 2: SVビルド検証 (Verilator or iverilog)
+                if command -v verilator >/dev/null 2>&1; then
+                    verilator --lint-only --timing -Wno-fatal "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                    if [ $exit_code -ne 0 ]; then
+                        echo "VERILATOR_LINT_FAIL" >> "$output_file"
+                    fi
+                elif command -v iverilog >/dev/null 2>&1; then
+                    iverilog -g2012 -o /dev/null "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                    if [ $exit_code -ne 0 ]; then
+                        echo "IVERILOG_COMPILE_FAIL" >> "$output_file"
+                    fi
+                else
+                    echo -e "${YELLOW}[WARN]${NC} verilator/iverilog not found, skip build verification"
+                fi
+
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
+                    # Stage 3: シミュレーション実行 (iverilog + vvp)
+                    # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
+                    local tb_file="${sv_file%.sv}_tb.sv"
+                    if [ -f "$tb_file" ] && command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
+                        local sim_binary="$TEMP_DIR/sim_${test_name}"
+                        local sim_output="$TEMP_DIR/sim_${test_name}.log"
+                        # iverilogでコンパイル
+                        iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
+                        if [ $? -eq 0 ]; then
+                            # vvpでシミュレーション実行
+                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            local sim_exit=$?
+                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                                # シミュレーション成功: TEST行の検証
+                                local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
+                                local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
+
+                                if [ -n "$expect_test_lines" ]; then
+                                    # 期待値が.expectにある場合: 比較検証
+                                    local sim_test_file="$TEMP_DIR/sim_test_${test_name}.txt"
+                                    local exp_test_file="$TEMP_DIR/exp_test_${test_name}.txt"
+                                    grep "^TEST " "$sim_output" > "$sim_test_file" 2>/dev/null
+                                    grep "^TEST " "$expect_file" > "$exp_test_file" 2>/dev/null
+
+                                    if diff -q "$exp_test_file" "$sim_test_file" > /dev/null 2>&1; then
+                                        # TEST行が完全一致: SIM_OK + TEST行を出力
+                                        echo "SIM_OK" > "$output_file"
+                                        cat "$sim_test_file" >> "$output_file"
+                                    else
+                                        # 値不一致: SIM_FAIL
+                                        echo "SIM_FAIL" > "$output_file"
+                                        echo "--- 期待値 ---" >> "$output_file"
+                                        cat "$exp_test_file" >> "$output_file"
+                                        echo "--- 実際の値 ---" >> "$output_file"
+                                        cat "$sim_test_file" >> "$output_file"
+                                        exit_code=1
+                                    fi
+                                elif grep -q "SIM_OK" "$expect_file" 2>/dev/null; then
+                                    echo "SIM_OK" > "$output_file"
+                                elif grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                                    echo "COMPILE_OK" > "$output_file"
+                                fi
+                            else
+                                echo "SIM_FAIL" >> "$output_file"
+                                cat "$sim_output" >> "$output_file" 2>/dev/null
+                                exit_code=1
+                            fi
+                        fi
+                    else
+                        # シミュレーションツール未対応の場合はコンパイルOKとして処理
+                        if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                            echo "COMPILE_OK" > "$output_file"
+                        fi
+                    fi
+                elif [ $exit_code -eq 0 ]; then
+                    # SIM_OK/TEST行なし: COMPILE_OKとして処理
+                    if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                        echo "COMPILE_OK" > "$output_file"
+                    fi
+                fi
+            fi
+            rm -f "$sv_file"
+            ;;
     esac
 
     # タイムアウト処理
@@ -936,7 +1039,12 @@ run_tests_sequential() {
         # platform:category フォーマットをパース
         local platform_dir="${entry%%:*}"
         local category="${entry##*:}"
-        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        local category_dir
+        if [ "$platform_dir" = "sv" ]; then
+            category_dir="$PROJECT_ROOT/tests/sv/$category"
+        else
+            category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        fi
 
         if [ ! -d "$category_dir" ]; then
             log "Warning: Category directory '$platform_dir/$category' not found, skipping"
@@ -967,7 +1075,12 @@ run_tests_parallel() {
     for entry in $CATEGORIES; do
         local platform_dir="${entry%%:*}"
         local category="${entry##*:}"
-        local category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        local category_dir
+        if [ "$platform_dir" = "sv" ]; then
+            category_dir="$PROJECT_ROOT/tests/sv/$category"
+        else
+            category_dir="$PROGRAMS_DIR/$platform_dir/$category"
+        fi
         if [ -d "$category_dir" ]; then
             for test_file in "$category_dir"/*.cm; do
                 if [ -f "$test_file" ]; then
@@ -1267,6 +1380,81 @@ PY
                 fi
             fi
             rm -f "$baremetal_obj"
+            ;;
+        sv)
+            # SystemVerilog ターゲット: Cm→SV変換 + verilator lint検証（並列版）
+            local sv_file="$TEMP_DIR/sv_${test_name}_${BASHPID}_${RANDOM}.sv"
+            rm -f "$sv_file"
+
+            local test_dir="$(dirname "$test_file")"
+            local test_basename="$(basename "$test_file")"
+
+            # Stage 1: Cm → SV コンパイル
+            (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile \
+                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+
+            if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
+                # Stage 2: SVビルド検証 (Verilator or iverilog)
+                if command -v verilator >/dev/null 2>&1; then
+                    verilator --lint-only --timing -Wno-fatal "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                elif command -v iverilog >/dev/null 2>&1; then
+                    iverilog -g2012 -o /dev/null "$sv_file" >> "$output_file" 2>&1
+                    exit_code=$?
+                fi
+
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
+                    # Stage 3: シミュレーション実行 (iverilog + vvp)
+                    # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
+                    local tb_file="${sv_file%.sv}_tb.sv"
+                    if [ -f "$tb_file" ] && command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
+                        local sim_binary="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}"
+                        local sim_output="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}.log"
+                        iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
+                        if [ $? -eq 0 ]; then
+                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            local sim_exit=$?
+                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                                local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
+                                local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
+                                if [ -n "$expect_test_lines" ]; then
+                                    local sim_test_file="$TEMP_DIR/sim_test_${test_name}_${BASHPID}.txt"
+                                    local exp_test_file="$TEMP_DIR/exp_test_${test_name}_${BASHPID}.txt"
+                                    grep "^TEST " "$sim_output" > "$sim_test_file" 2>/dev/null
+                                    grep "^TEST " "$expect_file" > "$exp_test_file" 2>/dev/null
+                                    if diff -q "$exp_test_file" "$sim_test_file" > /dev/null 2>&1; then
+                                        echo "SIM_OK" > "$output_file"
+                                        cat "$sim_test_file" >> "$output_file"
+                                    else
+                                        echo "SIM_FAIL" > "$output_file"
+                                        exit_code=1
+                                    fi
+                                    rm -f "$sim_test_file" "$exp_test_file"
+                                elif grep -q "SIM_OK" "$expect_file" 2>/dev/null; then
+                                    echo "SIM_OK" > "$output_file"
+                                elif grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                                    echo "COMPILE_OK" > "$output_file"
+                                fi
+                            else
+                                echo "SIM_FAIL" >> "$output_file"
+                                exit_code=1
+                            fi
+                        fi
+                        rm -f "$sim_binary" "$sim_output"
+                    else
+                        # シミュレーションツール未対応: コンパイルOKとして処理
+                        if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                            echo "COMPILE_OK" > "$output_file"
+                        fi
+                    fi
+                elif [ $exit_code -eq 0 ]; then
+                    # SIM_OK/TEST行なし: COMPILE_OKとして処理
+                    if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
+                        echo "COMPILE_OK" > "$output_file"
+                    fi
+                fi
+            fi
+            rm -f "$sv_file"
             ;;
         *)
             echo "SKIP:Backend not supported for parallel" > "$result_file"

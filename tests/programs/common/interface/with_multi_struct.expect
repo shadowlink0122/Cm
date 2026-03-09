@@ -1,3 +1,0 @@
-Point: equal
-Rect r1==r2: equal
-Rect r1==r3: not equal

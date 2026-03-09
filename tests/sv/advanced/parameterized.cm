@@ -1,0 +1,25 @@
+//! platform: sv
+//! test: a=10, b=20, c=30, sel=0 -> result=10
+//! test: a=10, b=20, c=30, sel=1 -> result=20
+//! test: a=10, b=20, c=30, sel=2 -> result=30
+
+// パラメータ化モジュールテスト
+// sv::param アトリビュートでパラメータ宣言
+
+#[sv::param] int WIDTH = 32;
+
+#[input] int a = 0;
+#[input] int b = 0;
+#[input] int c = 0;
+#[input] utiny sel = 0;
+#[output] int result = 0;
+
+void mux3() {
+    if (sel == 0) {
+        result = a;
+    } else if (sel == 1) {
+        result = b;
+    } else {
+        result = c;
+    }
+}

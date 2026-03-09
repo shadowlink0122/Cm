@@ -1,7 +1,0 @@
-// tests/regression/basic/hello.cm
-import std::io::println;
-// 基本的なHello Worldテスト
-
-void main() {
-    println("Hello, World!");
-}

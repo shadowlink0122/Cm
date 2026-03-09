@@ -1,0 +1,26 @@
+//! platform: sv
+
+// LED点滅回路
+// 100MHz クロック想定、約1Hz点滅（50Mカウントでトグル）
+
+#[input]  posedge clk;
+#[input]  bool rst = false;
+#[output] bool led = false;
+
+// 内部カウンタ（50,000,000 - 1 = 0x02FAF07F、32bitで十分）
+uint counter = 0;
+
+void blink(posedge clk) {
+    if (rst) {
+        counter = 0;
+        led = false;
+    } else {
+        if (counter == 49999999) {
+            counter = 0;
+            // LEDトグル: NOT演算で反転
+            led = !led;
+        } else {
+            counter = counter + 1;
+        }
+    }
+}

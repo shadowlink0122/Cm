@@ -1,0 +1,17 @@
+//! platform: sv
+//! test: write_enable=1, addr=0, write_data=42, cycles=2 -> read_data=42
+
+// 順序回路のデータ転送テスト
+// NOTE: グローバル配列によるBRAM推論は将来対応予定
+
+#[input] bool clk = 0;
+#[input] utiny addr = 0;
+#[input] utiny write_data = 0;
+#[input] bool write_enable = 0;
+#[output] utiny read_data = 0;
+
+async func tick() {
+    if (write_enable) {
+        read_data = write_data;
+    }
+}

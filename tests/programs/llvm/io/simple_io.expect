@@ -1,5 +1,0 @@
-=== Simple File I/O Test ===
-Write: PASS
-Read: Hello from std::io!
-Content matches: PASS
-=== All Tests Passed ===

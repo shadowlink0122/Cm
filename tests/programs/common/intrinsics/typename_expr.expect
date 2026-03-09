@@ -1,9 +1,0 @@
-int: int
-double: double
-bool: bool
-char: char
-struct: Point
-pointer: *int
-pointer to pointer: **int
-array: int[5]
-generic: Pair<int>

@@ -1,0 +1,5 @@
+SIM_OK
+TEST 1: neg=5
+TEST 1: bnot=4
+TEST 2: neg=0
+TEST 2: bnot=-1

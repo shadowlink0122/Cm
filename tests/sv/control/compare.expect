@@ -1,0 +1,19 @@
+SIM_OK
+TEST 1: eq=1
+TEST 1: ne=0
+TEST 1: lt=0
+TEST 1: gt=0
+TEST 1: le=1
+TEST 1: ge=1
+TEST 2: eq=0
+TEST 2: ne=1
+TEST 2: lt=1
+TEST 2: gt=0
+TEST 2: le=1
+TEST 2: ge=0
+TEST 3: eq=0
+TEST 3: ne=1
+TEST 3: lt=0
+TEST 3: gt=1
+TEST 3: le=0
+TEST 3: ge=1

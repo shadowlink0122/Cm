@@ -1,0 +1,33 @@
+//! platform: sv
+//! test: sel=0 -> out=170
+//! test: sel=1 -> out=255
+
+// SV幅付きリテラル網羅テスト
+// 全ベース形式 (d:10進, b:2進, h:16進) を検証
+
+#[input]  utiny sel = 0;
+#[output] utiny out = 0;
+#[output] utiny out_b = 0;
+#[output] utiny out_h = 0;
+
+void width_literal_ops() {
+    // 10進リテラル (N'd)
+    out = 8'd170;
+
+    // 2進リテラル (N'b)
+    out_b = 4'b1010;
+
+    // 16進リテラル (N'h)
+    out_h = 8'hAB;
+
+    // 幅混在テスト
+    if (sel == 1) {
+        out = 8'd255;
+        out_b = 3'b101;
+        out_h = 8'hFF;
+    } else if (sel == 2) {
+        out = 16'd1024;
+        out_b = 8'b11001100;
+        out_h = 16'hDEAD;
+    }
+}

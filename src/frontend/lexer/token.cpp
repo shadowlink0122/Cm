@@ -173,6 +173,16 @@ const char* token_kind_to_string(TokenKind kind) {
         case TokenKind::KwCstring:
             return "cstring";
 
+        // SV固有キーワード
+        case TokenKind::KwPosedge:
+            return "posedge";
+        case TokenKind::KwNegedge:
+            return "negedge";
+        case TokenKind::KwWire:
+            return "wire";
+        case TokenKind::KwReg:
+            return "reg";
+
         // 演算子
         case TokenKind::Plus:
             return "+";

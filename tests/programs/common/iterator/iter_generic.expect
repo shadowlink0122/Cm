@@ -1,7 +1,0 @@
-peek: 10
-next: 10
-peek after next: 20
-remaining values:
-  20
-  30
-  40

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common/span.hpp"
+#include "../frontend/lexer/token.hpp"
 #include "../hir/types.hpp"
 
 #include <iostream>
@@ -145,6 +146,7 @@ struct MirConstant {
                  bool, int64_t, double, char, std::string>
         value;
     hir::TypePtr type;
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常定数）
 };
 
 struct MirOperand {
@@ -627,15 +629,16 @@ struct LocalDecl {
 struct MirFunction {
     std::string name;
     std::string module_path;  // モジュールパス（例："std::io", ""は現在のモジュール）
-    std::string source_file;        // 元ソースファイルパス（モジュール分割用）
-    std::string package_name;       // パッケージ名 (FFI用)
-    bool is_export = false;         // エクスポートされているか
-    bool is_extern = false;         // extern "C" 関数か
-    bool is_variadic = false;       // 可変長引数（FFI用）
-    bool is_async = false;          // async関数（JSバックエンド用）
-    std::vector<LocalDecl> locals;  // ローカル変数（引数も含む）
-    std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
-    LocalId return_local;             // 戻り値用のローカル（_0）
+    std::string source_file;   // 元ソースファイルパス（モジュール分割用）
+    std::string package_name;  // パッケージ名 (FFI用)
+    bool is_export = false;    // エクスポートされているか
+    bool is_extern = false;    // extern "C" 関数か
+    bool is_variadic = false;  // 可変長引数（FFI用）
+    bool is_async = false;     // async関数（JSバックエンド用）
+    std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）
+    std::vector<LocalDecl> locals;        // ローカル変数（引数も含む）
+    std::vector<LocalId> arg_locals;      // 引数に対応するローカルID
+    LocalId return_local;                 // 戻り値用のローカル（_0）
     std::vector<BasicBlockPtr> basic_blocks;
     BlockId entry_block = ENTRY_BLOCK;
 
@@ -879,6 +882,7 @@ struct MirGlobalVar {
     std::unique_ptr<MirConstant> init_value;  // 初期値（nullptrならゼロ初期化）
     bool is_const = false;
     bool is_export = false;
+    std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };
 
 using MirGlobalVarPtr = std::unique_ptr<MirGlobalVar>;

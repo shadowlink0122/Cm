@@ -1,0 +1,20 @@
+//! platform: sv
+//! test: a=5, b=3, sel=1 -> result=5
+//! test: a=5, b=3, sel=0 -> result=3
+//! test: a=100, b=200, sel=1 -> result=100
+
+// 三項演算子最適化テスト
+// if/else同一変数代入 → cond ? a : b 変換
+
+#[input] int a = 0;
+#[input] int b = 0;
+#[input] bool sel = 0;
+#[output] int result = 0;
+
+void select() {
+    if (sel) {
+        result = a;
+    } else {
+        result = b;
+    }
+}

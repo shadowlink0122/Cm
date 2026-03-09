@@ -51,6 +51,12 @@ enum class TypeKind {
     Union,         // タグ付きユニオン型
     LiteralUnion,  // リテラルユニオン型（"a" | "b" | 100）
     TypeAlias,     // typedef による型エイリアス
+
+    // SV固有型（SystemVerilogターゲットのみで有効）
+    Posedge,  // 立ち上がりエッジクロック信号
+    Negedge,  // 立ち下がりエッジクロック信号
+    Wire,     // wire修飾（組み合わせ出力）
+    Reg,      // reg修飾（レジスタ/順序回路出力）
 };
 
 // ============================================================
@@ -92,6 +98,12 @@ inline TypeInfo get_primitive_info(TypeKind kind) {
         case TypeKind::String:
         case TypeKind::CString:
             return {8, 8};  // ポインタサイズ
+        case TypeKind::Posedge:
+        case TypeKind::Negedge:
+            return {1, 1};  // 信号型（1bit）
+        case TypeKind::Wire:
+        case TypeKind::Reg:
+            return {0, 1};  // 修飾子型（サイズは要素型依存）
         default:
             return {0, 1};
     }
@@ -272,6 +284,24 @@ inline TypePtr make_null() {
     return std::make_shared<Type>(TypeKind::Null);
 }
 
+// SV固有型ヘルパー
+inline TypePtr make_posedge() {
+    return std::make_shared<Type>(TypeKind::Posedge);
+}
+inline TypePtr make_negedge() {
+    return std::make_shared<Type>(TypeKind::Negedge);
+}
+inline TypePtr make_wire(TypePtr elem) {
+    auto t = std::make_shared<Type>(TypeKind::Wire);
+    t->element_type = std::move(elem);
+    return t;
+}
+inline TypePtr make_reg(TypePtr elem) {
+    auto t = std::make_shared<Type>(TypeKind::Reg);
+    t->element_type = std::move(elem);
+    return t;
+}
+
 inline TypePtr make_pointer(TypePtr elem) {
     auto t = std::make_shared<Type>(TypeKind::Pointer);
     t->element_type = std::move(elem);
@@ -413,6 +443,14 @@ inline std::string type_to_string(const Type& t) {
             return "<inferred>";
         case TypeKind::Null:
             return "null";
+        case TypeKind::Posedge:
+            return "posedge";
+        case TypeKind::Negedge:
+            return "negedge";
+        case TypeKind::Wire:
+            return "wire " + (t.element_type ? type_to_string(*t.element_type) : "?");
+        case TypeKind::Reg:
+            return "reg " + (t.element_type ? type_to_string(*t.element_type) : "?");
         case TypeKind::Union: {
             // 名前付きユニオン（typedef）はその名前を使用
             if (!t.name.empty()) {

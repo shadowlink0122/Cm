@@ -44,6 +44,9 @@
 #include <set>
 #include <sstream>
 #include <string>
+
+// SVバックエンド（常に利用可能）
+#include "codegen/sv/codegen.hpp"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -60,7 +63,7 @@ std::string get_version() {
 #ifdef CM_VERSION
     return CM_VERSION;
 #else
-    return "0.14.2";
+    return "0.15.0";
 #endif
 }
 
@@ -582,7 +585,7 @@ int main(int argc, char* argv[]) {
                 code = conditional.process(code);
 
                 // パース
-                Lexer lexer(code);
+                Lexer lexer(code);  // lint/checkではディレクティブで自動検出
                 auto tokens = lexer.tokenize();
                 Parser parser(std::move(tokens));
                 auto program = parser.parse();
@@ -1100,7 +1103,12 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Lexer ===\n";
         auto phase_parse_start = std::chrono::steady_clock::now();
-        Lexer lexer(code);
+        // ターゲットに応じたレキサープラットフォーム設定
+        LexerPlatform lexer_platform = LexerPlatform::Default;
+        if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
+            lexer_platform = LexerPlatform::SV;
+        }
+        Lexer lexer(code, lexer_platform);
         auto tokens = lexer.tokenize();
 
         if (opts.debug)
@@ -1332,9 +1340,15 @@ int main(int argc, char* argv[]) {
             printer.print(mir, std::cout);
         }
 
+        // SVターゲット判定（最適化とDCEのスキップ判定に使用）
+        bool is_sv =
+            (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+
         // ========== Optimization ==========
         auto phase_opt_start = std::chrono::steady_clock::now();
-        if (opts.optimization_level > 0 || opts.show_mir_opt) {
+        // SVターゲットではMIR最適化をスキップ（合成ツールが最適化を行う）
+        // DCE/CopyProp/ConstFoldが一時変数代入を除去しHWロジックが消失するため
+        if ((opts.optimization_level > 0 || opts.show_mir_opt) && !is_sv) {
             if (cm::debug::g_debug_mode)
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
                           << std::endl;
@@ -1355,8 +1369,9 @@ int main(int argc, char* argv[]) {
                                 std::chrono::steady_clock::now() - phase_opt_start)
                                 .count();
 
-        // 関数レベルのDCE（コンパイル時のみ）
-        if (opts.command == Command::Compile) {
+        // 関数レベルのDCE（コンパイル時のみ、SVターゲットではスキップ）
+        // SVターゲットではハードウェアモジュールとして全関数を保持する
+        if (opts.command == Command::Compile && !is_sv) {
             mir::opt::DeadCodeElimination dce;
             for (auto& func : mir.functions) {
                 if (func) {
@@ -1369,7 +1384,8 @@ int main(int argc, char* argv[]) {
         // 未使用の自動生成関数を削除する
         // 注意: インタプリタではインターフェースメソッドの動的ディスパッチがあるため、
         // DCEはコンパイル時のみ実行する
-        if (opts.command == Command::Compile) {
+        // SVターゲットでは全関数をハードウェアモジュールとして保持
+        if (opts.command == Command::Compile && !is_sv) {
             mir::opt::ProgramDeadCodeElimination program_dce;
             program_dce.run(mir);
         }
@@ -1386,7 +1402,9 @@ int main(int argc, char* argv[]) {
         // 非JSターゲットでasync/awaitが使用されている場合はエラー
         {
             bool is_js_target = (opts.target == "js" || opts.target == "web" || opts.emit_js);
-            if (!is_js_target) {
+            bool is_sv_target =
+                (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+            if (!is_js_target && !is_sv_target) {
                 bool has_async = false;
                 std::string async_func_name;
                 bool has_await = false;
@@ -1497,8 +1515,47 @@ int main(int argc, char* argv[]) {
 
         // コンパイルコマンドの場合
         if (opts.command == Command::Compile) {
+            // SystemVerilog ターゲットの場合
+            if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
+                if (opts.verbose) {
+                    std::cout << "=== SystemVerilog Code Generation ===\n";
+                }
+
+                // SVバックエンドオプション設定
+                cm::codegen::sv::SVCodeGenOptions sv_opts;
+
+                // 出力ファイル設定
+                if (opts.output_file.empty()) {
+                    // デフォルト出力先は.tmp/（ルートディレクトリを汚さない）
+                    std::filesystem::create_directories(".tmp");
+                    sv_opts.outputFile = ".tmp/output.sv";
+                } else {
+                    sv_opts.outputFile = opts.output_file;
+                }
+
+                sv_opts.verbose = opts.verbose || opts.debug;
+                sv_opts.sourceFile = opts.input_file;
+
+                // SystemVerilog コード生成
+                try {
+                    cm::codegen::sv::SVCodeGen codegen(sv_opts);
+                    codegen.compile(mir);
+
+                    if (!opts.quiet) {
+                        auto compile_end = std::chrono::steady_clock::now();
+                        auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              compile_end - compile_start)
+                                              .count();
+                        std::cout << "✓ SystemVerilog 生成完了: " << sv_opts.outputFile << " ("
+                                  << compile_ms << "ms)\n";
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "SystemVerilog コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
+            }
             // JavaScript ターゲットの場合
-            if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+            else if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
                 if (opts.verbose) {
                     std::cout << "=== JavaScript Code Generation ===\n";
                 }

@@ -1,0 +1,14 @@
+//! platform: sv
+//! test: a=3, b=5 -> result=8
+//! test: a=-1, b=1 -> result=0
+//! test: a=100, b=200 -> result=300
+
+// 組み合わせ加算器 - SVバックエンドテスト
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int result = 0;
+
+void add() {
+    result = a + b;
+}

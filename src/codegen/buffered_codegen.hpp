@@ -95,7 +95,7 @@ class BufferedCodeGenerator {
         char buffer_local[4096];
         int len = snprintf(buffer_local, sizeof(buffer_local), format, args...);
 
-        if (len > 0 && len < sizeof(buffer_local)) {
+        if (len > 0 && static_cast<size_t>(len) < sizeof(buffer_local)) {
             return append(std::string(buffer_local, len));
         }
 

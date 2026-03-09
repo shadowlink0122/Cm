@@ -1,0 +1,5 @@
+SIM_OK
+TEST 1: band=15
+TEST 1: bor=255
+TEST 1: bxor=240
+TEST 1: bnot_a=-256

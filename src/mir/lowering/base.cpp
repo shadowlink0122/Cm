@@ -182,6 +182,7 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
     mir_gv->type = gv.type;
     mir_gv->is_const = gv.is_const;
     mir_gv->is_export = gv.is_export;
+    mir_gv->attributes = gv.attributes;  // SV用属性を伝搬（input/output等）
 
     // 初期値を設定
     if (gv.init) {

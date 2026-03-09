@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: sel=0, a=10, b=20 -> out=20
+//! test: sel=1, a=10, b=20 -> out=10
+
+// マルチプレクサ - SVバックエンドテスト
+
+#[input]  bool sel = 0;
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int out = 0;
+
+void select_val() {
+    if (sel) {
+        out = a;
+    } else {
+        out = b;
+    }
+}

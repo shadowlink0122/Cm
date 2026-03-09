@@ -1,7 +1,0 @@
-// Simple lexer test
-import std::io::println;
-
-int main() {
-    println("Lexer test passed");
-    return 0;
-}

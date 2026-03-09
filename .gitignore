@@ -92,3 +92,9 @@ tests/bench_marks/python/*.pyc
 cpp_results.txt
 rust_results.txt
 python_results.txt
+
+# SV生成物（SystemVerilogバックエンド）
+output.sv
+output_tb.sv
+*.vcd
+*.vvp

@@ -310,6 +310,9 @@ clean:
 	@find . -name "*.o" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
 	@find . -name "*.EFI" -not -path "./.git/*" -delete 2>/dev/null || true
 	@find . -name "*.lib" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
+	@find . -maxdepth 1 -name "*.sv" -delete 2>/dev/null || true
+	@find . -maxdepth 1 -name "*.vcd" -delete 2>/dev/null || true
+	@find . -maxdepth 1 -name "*.vvp" -delete 2>/dev/null || true
 	@echo "✅ Clean complete!"
 
 .PHONY: rebuild
@@ -415,6 +418,11 @@ $(eval $(call BACKEND_ALL_OPTS_TARGET,llvm-wasm,LLVM WASM))
 $(eval $(call BACKEND_DEFAULT_TARGETS,js,JavaScript))
 $(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,js,JavaScript,$(o))))
 $(eval $(call BACKEND_ALL_OPTS_TARGET,js,JavaScript))
+
+# --- sv (SystemVerilog) ---
+$(eval $(call BACKEND_DEFAULT_TARGETS,sv,SystemVerilog))
+$(foreach o,0 1 2 3,$(eval $(call BACKEND_OPT_TARGETS,sv,SystemVerilog,$(o))))
+$(eval $(call BACKEND_ALL_OPTS_TARGET,sv,SystemVerilog))
 
 # ========================================
 # UEFI / Baremetal Test Commands
@@ -636,6 +644,7 @@ $(eval $(call SHORTCUT_TEMPLATE,tjit,jit))
 $(eval $(call SHORTCUT_TEMPLATE,tl,llvm))
 $(eval $(call SHORTCUT_TEMPLATE,tw,llvm-wasm))
 $(eval $(call SHORTCUT_TEMPLATE,tj,js))
+$(eval $(call SHORTCUT_TEMPLATE,tsv,sv))
 
 # LLVM集約ショートカット
 .PHONY: tla

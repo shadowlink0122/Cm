@@ -9,9 +9,17 @@
 
 namespace cm {
 
+// ターゲット情報（循環参照回避のためレキサー独自定義）
+enum class LexerPlatform { Default, SV };
+
 class Lexer {
    public:
-    Lexer(std::string_view source) : source_(source), pos_(0) { init_keywords(); }
+    Lexer(std::string_view source, LexerPlatform platform = LexerPlatform::Default)
+        : source_(source), pos_(0), platform_(platform) {
+        init_keywords();
+        // ソース先頭の //! platform: ディレクティブを解析
+        detect_platform_directive();
+    }
 
     // トークン化（メインエントリ）
     std::vector<Token> tokenize();
@@ -22,6 +30,12 @@ class Lexer {
 
     // キーワードテーブル初期化
     void init_keywords();
+
+    // プラットフォームディレクティブ検出
+    void detect_platform_directive();
+
+    // SVキーワードをキーワードテーブルに追加
+    void add_sv_keywords();
 
     // 空白とコメントをスキップ
     void skip_whitespace_and_comments();
@@ -77,6 +91,7 @@ class Lexer {
 
     std::string_view source_;
     uint32_t pos_;
+    LexerPlatform platform_;
     std::unordered_map<std::string, TokenKind> keywords_;
 };
 

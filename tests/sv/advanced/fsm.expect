@@ -1,0 +1,4 @@
+SIM_OK
+TEST 1: out=1
+TEST 2: out=0
+TEST 3: out=0

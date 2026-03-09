@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -99,6 +100,12 @@ enum class TokenKind {
     KwString,
     KwCstring,  // NULL終端文字列 (FFI用)
 
+    // SV固有キーワード（SystemVerilogターゲットのみ）
+    KwPosedge,  // posedge信号型
+    KwNegedge,  // negedge信号型
+    KwWire,     // wire修飾型
+    KwReg,      // reg修飾型
+
     // 演算子
     Plus,
     Minus,
@@ -165,13 +172,24 @@ using TokenValue = std::variant<std::monostate,  // 値なし
                                 std::string      // 文字列/識別子
                                 >;
 
+/// SV幅付きリテラル情報（幅付きリテラルにのみ存在）
+struct BitLiteralInfo {
+    int width;             // ビット幅 (例: 8)
+    char base;             // ベース文字 ('d','b','h')
+    std::string original;  // 元のリテラル文字列（2進/16進表記保持用）
+
+    BitLiteralInfo(int w, char b, std::string orig)
+        : width(w), base(b), original(std::move(orig)) {}
+};
+
 /// トークン
 struct Token {
     TokenKind kind;
     uint32_t start;  // 開始位置
     uint32_t end;    // 終了位置
     TokenValue value;
-    bool is_unsigned = false;  // hex/binary/octalリテラルで32bit超の場合true
+    bool is_unsigned = false;                // hex/binary/octalリテラルで32bit超の場合true
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常トークン）
 
     Token(TokenKind k, uint32_t s, uint32_t e)
         : kind(k), start(s), end(e), value(std::monostate{}) {}
@@ -180,6 +198,16 @@ struct Token {
 
     Token(TokenKind k, uint32_t s, uint32_t e, int64_t v, bool unsigned_flag)
         : kind(k), start(s), end(e), value(v), is_unsigned(unsigned_flag) {}
+
+    // SV幅付きリテラル用コンストラクタ
+    Token(TokenKind k, uint32_t s, uint32_t e, int64_t v, bool unsigned_flag, int width, char base,
+          std::string original)
+        : kind(k),
+          start(s),
+          end(e),
+          value(v),
+          is_unsigned(unsigned_flag),
+          bit_info(BitLiteralInfo(width, base, std::move(original))) {}
 
     Token(TokenKind k, uint32_t s, uint32_t e, double v) : kind(k), start(s), end(e), value(v) {}
 

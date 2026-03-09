@@ -1,0 +1,14 @@
+//! platform: sv
+//! test: a=-5 -> neg=5, bnot=4
+//! test: a=0 -> neg=0, bnot=-1
+
+// 単項演算の網羅テスト: -, ~
+
+#[input]  int a = 0;
+#[output] int neg = 0;
+#[output] int bnot = 0;
+
+void unary_ops() {
+    neg = -a;
+    bnot = ~a;
+}

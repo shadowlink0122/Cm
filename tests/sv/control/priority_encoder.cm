@@ -1,0 +1,22 @@
+//! platform: sv
+//! test: sel0=1, sel1=0, a=10, b=20, c=30 -> out=10
+//! test: sel0=0, sel1=1, a=10, b=20, c=30 -> out=20
+//! test: sel0=0, sel1=0, a=10, b=20, c=30 -> out=30
+
+// 優先エンコーダ - if-elseチェーン
+
+#[input] bool sel0 = 0;
+#[input] bool sel1 = 0;
+#[input] int a = 0;
+#[input] int b = 0;
+#[input] int c = 0;
+#[output] int out = 0;
+
+void select() {
+    out = c;
+    if (sel0) {
+        out = a;
+    } else if (sel1) {
+        out = b;
+    }
+}

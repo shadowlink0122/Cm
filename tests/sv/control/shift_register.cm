@@ -1,0 +1,17 @@
+//! platform: sv
+//! test: data_in=1, cycles=3 -> shift_reg=7
+
+// シフトレジスタ
+
+#[input] bool clk = 0;
+#[input] bool rst = 0;
+#[input] utiny data_in = 0;
+#[output] utiny shift_reg = 0;
+
+async func tick() {
+    if (rst) {
+        shift_reg = 0;
+    } else {
+        shift_reg = (shift_reg << 1) | data_in;
+    }
+}

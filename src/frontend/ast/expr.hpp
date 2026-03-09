@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../lexer/token.hpp"
 #include "nodes.hpp"
 
 #include <unordered_map>
@@ -21,11 +22,17 @@ using LiteralValue = std::variant<std::monostate,  // null
 struct LiteralExpr {
     LiteralValue value;
     bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
 
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}
     explicit LiteralExpr(int64_t v) : value(v) {}
     LiteralExpr(int64_t v, bool unsigned_flag) : value(v), is_unsigned_literal(unsigned_flag) {}
+    // SV幅付きリテラル用コンストラクタ
+    LiteralExpr(int64_t v, bool unsigned_flag, int width, char base, std::string original)
+        : value(v),
+          is_unsigned_literal(unsigned_flag),
+          bit_info(BitLiteralInfo(width, base, std::move(original))) {}
     explicit LiteralExpr(double v) : value(v) {}
     explicit LiteralExpr(char v) : value(v) {}
     explicit LiteralExpr(std::string v) : value(std::move(v)) {}
@@ -533,6 +540,14 @@ inline ExprPtr make_int_literal(int64_t v, Span s = {}) {
 // unsignedフラグ付き整数リテラル生成（hex/binary/octalリテラル用）
 inline ExprPtr make_int_literal(int64_t v, bool is_unsigned, Span s = {}) {
     return std::make_unique<Expr>(std::make_unique<LiteralExpr>(v, is_unsigned), s);
+}
+
+// SV幅付きリテラル生成（N'd/N'b/N'hリテラル用）
+inline ExprPtr make_int_literal(int64_t v, bool is_unsigned, int bit_width, char bit_base,
+                                std::string bit_original, Span s = {}) {
+    return std::make_unique<Expr>(
+        std::make_unique<LiteralExpr>(v, is_unsigned, bit_width, bit_base, std::move(bit_original)),
+        s);
 }
 
 inline ExprPtr make_float_literal(double v, Span s = {}) {
