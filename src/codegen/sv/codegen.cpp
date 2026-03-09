@@ -484,6 +484,17 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         // ポートと名前が衝突する場合はスキップ
         if (port_names.count(name))
             continue;
+        // parameter宣言と名前が衝突する場合はスキップ
+        bool is_param_var = false;
+        for (const auto& param : mod.parameters) {
+            if (param.find(" " + name + " ") != std::string::npos ||
+                param.find(" " + name + ";") != std::string::npos) {
+                is_param_var = true;
+                break;
+            }
+        }
+        if (is_param_var)
+            continue;
         // 既に登録済みの宣言もスキップ
         std::string decl = mapType(local.type) + " " + name + ";";
         bool already_declared = false;
@@ -761,6 +772,146 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
         }
         ++it;
+    }
+
+    // 三項演算子最適化: if/elseが同一変数への単一代入のみなら cond ? a : b に変換
+    {
+        std::istringstream opt_stream(block_content);
+        std::vector<std::string> opt_lines;
+        std::string opt_line;
+        while (std::getline(opt_stream, opt_line)) {
+            opt_lines.push_back(opt_line);
+        }
+
+        // パターン検出: 連続する行で以下の形式を探す
+        // [i]   if (COND) begin
+        // [i+1]     VAR = A;  (or VAR <= A;)
+        // [i+2] end else begin
+        // [i+3]     VAR = B;  (or VAR <= B;)
+        // [i+4] end
+        std::vector<std::string> optimized;
+        for (size_t i = 0; i < opt_lines.size(); ++i) {
+            std::string trimmed_if = opt_lines[i];
+            auto if_start = trimmed_if.find_first_not_of(' ');
+            if (if_start == std::string::npos || i + 4 >= opt_lines.size()) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+            std::string if_content = trimmed_if.substr(if_start);
+
+            // "if (...) begin" パターンチェック
+            if (if_content.substr(0, 4) != "if (" || if_content.back() != 'n' ||
+                if_content.find(") begin") == std::string::npos) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+
+            // 条件式を抽出
+            auto cond_start_pos = if_content.find('(');
+            auto cond_end_pos = if_content.rfind(") begin");
+            if (cond_start_pos == std::string::npos || cond_end_pos == std::string::npos) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+            std::string cond_expr =
+                if_content.substr(cond_start_pos + 1, cond_end_pos - cond_start_pos - 1);
+
+            // then代入行を解析
+            std::string then_line = opt_lines[i + 1];
+            auto then_start = then_line.find_first_not_of(' ');
+            if (then_start == std::string::npos) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+            std::string then_content = then_line.substr(then_start);
+
+            // "end else begin" チェック
+            std::string else_line = opt_lines[i + 2];
+            auto else_start = else_line.find_first_not_of(' ');
+            if (else_start == std::string::npos) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+            std::string else_content = else_line.substr(else_start);
+            if (else_content != "end else begin") {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+
+            // else代入行を解析
+            std::string else_assign_line = opt_lines[i + 3];
+            auto ea_start = else_assign_line.find_first_not_of(' ');
+            if (ea_start == std::string::npos) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+            std::string ea_content = else_assign_line.substr(ea_start);
+
+            // "end" チェック
+            std::string end_line = opt_lines[i + 4];
+            auto end_start = end_line.find_first_not_of(' ');
+            if (end_start == std::string::npos) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+            std::string end_content = end_line.substr(end_start);
+            if (end_content != "end") {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+
+            // 代入演算子を検出（= または <=）
+            std::string assign_op = " = ";
+            auto then_eq = then_content.find(" = ");
+            auto then_nbeq = then_content.find(" <= ");
+            auto ea_eq = ea_content.find(" = ");
+            auto ea_nbeq = ea_content.find(" <= ");
+
+            std::string then_lhs, then_rhs, else_lhs, else_rhs;
+
+            if (then_nbeq != std::string::npos && ea_nbeq != std::string::npos) {
+                assign_op = " <= ";
+                then_lhs = then_content.substr(0, then_nbeq);
+                then_rhs = then_content.substr(then_nbeq + 4);
+                else_lhs = ea_content.substr(0, ea_nbeq);
+                else_rhs = ea_content.substr(ea_nbeq + 4);
+            } else if (then_eq != std::string::npos && ea_eq != std::string::npos) {
+                then_lhs = then_content.substr(0, then_eq);
+                then_rhs = then_content.substr(then_eq + 3);
+                else_lhs = ea_content.substr(0, ea_eq);
+                else_rhs = ea_content.substr(ea_eq + 3);
+            } else {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+
+            // セミコロン除去
+            if (!then_rhs.empty() && then_rhs.back() == ';')
+                then_rhs.pop_back();
+            if (!else_rhs.empty() && else_rhs.back() == ';')
+                else_rhs.pop_back();
+
+            // 同一変数チェック
+            if (then_lhs != else_lhs || then_lhs.empty()) {
+                optimized.push_back(opt_lines[i]);
+                continue;
+            }
+
+            // 三項演算子に変換
+            std::string indent_str = trimmed_if.substr(0, if_start);
+            optimized.push_back(indent_str + then_lhs + assign_op + cond_expr + " ? " + then_rhs +
+                                " : " + else_rhs + ";");
+            i += 4;  // 5行消費
+        }
+
+        // 最適化結果を再構築
+        std::ostringstream opt_ss;
+        for (size_t i = 0; i < optimized.size(); ++i) {
+            opt_ss << optimized[i];
+            if (i + 1 < optimized.size())
+                opt_ss << "\n";
+        }
+        block_content = opt_ss.str();
     }
 
     if (has_explicit_edge || func.is_async) {

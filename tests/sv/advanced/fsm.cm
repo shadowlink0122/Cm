@@ -1,0 +1,31 @@
+//! platform: sv
+//! test: state=0, go=1, cycles=2 -> out=1
+//! test: state=0, go=0, cycles=2 -> out=0
+//! test: state=1, go=0, cycles=2 -> out=0
+
+// 有限状態マシン（FSM）テスト
+// 状態遷移をcase文で表現
+
+#[input] posedge clk;
+#[input] bool rst = false;
+#[input] utiny state = 0;
+#[input] bool go = false;
+#[output] utiny out = 0;
+
+async func tick() {
+    if (rst) {
+        out = 0;
+    } else {
+        if (state == 0) {
+            if (go) {
+                out = 1;
+            } else {
+                out = 0;
+            }
+        } else if (state == 1) {
+            out = 0;
+        } else {
+            out = 0;
+        }
+    }
+}
