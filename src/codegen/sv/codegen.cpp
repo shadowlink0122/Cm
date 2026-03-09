@@ -226,14 +226,16 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
         int64_t val = std::get<int64_t>(constant.value);
 
         // SV幅付きリテラルの場合、元のベース形式を保持して出力
-        if (constant.bit_width > 0 && !constant.bit_original.empty()) {
+        if (constant.bit_info && !constant.bit_info->original.empty()) {
             // 元の表記をそのまま使用: N'bXXX, N'hXXX, N'dXXX
-            return std::to_string(constant.bit_width) + "'" + constant.bit_base +
-                   constant.bit_original;
+            return std::to_string(constant.bit_info->width) + "'" + constant.bit_info->base +
+                   constant.bit_info->original;
         }
 
         // SV幅付きリテラル（元表記がない場合）またはデフォルト
-        int effective_width = (constant.bit_width > 0) ? constant.bit_width : width;
+        int effective_width = (constant.bit_info ? constant.bit_info->width : 0);
+        if (effective_width == 0)
+            effective_width = width;
         // signed型かどうか判定
         bool is_signed =
             type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
@@ -621,7 +623,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 while ((pos = result.find(var, pos)) != std::string::npos) {
                     // 変数名の境界チェック
                     bool at_start =
-                        (pos == 0 || !std::isalnum(result[pos - 1]) && result[pos - 1] != '_');
+                        (pos == 0 || (!std::isalnum(result[pos - 1]) && result[pos - 1] != '_'));
                     bool at_end = (pos + var.size() >= result.size() ||
                                    (!std::isalnum(result[pos + var.size()]) &&
                                     result[pos + var.size()] != '_'));
@@ -1342,9 +1344,15 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     }
 
     // テストシーケンス
+    // テストベンチ出力先と同じディレクトリにVCDを配置
+    std::string vcd_dir;
+    auto last_sep = options_.outputFile.rfind('/');
+    if (last_sep != std::string::npos) {
+        vcd_dir = options_.outputFile.substr(0, last_sep + 1);
+    }
     ss << "    // テストシーケンス\n";
     ss << "    initial begin\n";
-    ss << "        $dumpfile(\"" << mod.name << "_tb.vcd\");\n";
+    ss << "        $dumpfile(\"" << vcd_dir << mod.name << "_tb.vcd\");\n";
     ss << "        $dumpvars(0, " << mod.name << "_tb);\n\n";
 
     // 入力ポート初期化

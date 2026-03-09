@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../lexer/token.hpp"
 #include "nodes.hpp"
 
 #include <unordered_map>
@@ -21,9 +22,7 @@ using LiteralValue = std::variant<std::monostate,  // null
 struct LiteralExpr {
     LiteralValue value;
     bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
-    int bit_width = 0;                 // SV幅付きリテラル（0 = 幅未指定）
-    char bit_base = 'd';               // SV幅付きリテラルのベース文字（'d','b','h'）
-    std::string bit_original;          // 元のリテラル文字列
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
 
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}
@@ -33,9 +32,7 @@ struct LiteralExpr {
     LiteralExpr(int64_t v, bool unsigned_flag, int width, char base, std::string original)
         : value(v),
           is_unsigned_literal(unsigned_flag),
-          bit_width(width),
-          bit_base(base),
-          bit_original(std::move(original)) {}
+          bit_info(BitLiteralInfo(width, base, std::move(original))) {}
     explicit LiteralExpr(double v) : value(v) {}
     explicit LiteralExpr(char v) : value(v) {}
     explicit LiteralExpr(std::string v) : value(std::move(v)) {}

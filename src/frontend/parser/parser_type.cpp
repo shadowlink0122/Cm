@@ -485,9 +485,11 @@ std::string Parser::current_text() const {
         return std::string(current().get_string());
     }
     // SV固有キーワードも識別子として扱う
+    // BUG修正: キーワードトークンはget_string()が空文字を返すため
+    // token_kind_to_string()を使用してキーワード名を取得
     if (check(TokenKind::KwPosedge) || check(TokenKind::KwNegedge) || check(TokenKind::KwWire) ||
         check(TokenKind::KwReg)) {
-        return std::string(current().get_string());
+        return std::string(token_kind_to_string(current().kind));
     }
     return "";
 }

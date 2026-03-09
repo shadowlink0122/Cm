@@ -433,7 +433,6 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     {
         bool hasAsm = false;
         bool hasRetInAsm = false;
-        bool hasAsmOperands = false;
         bool hasNonAsmStmt = false;  // ASM以外のステートメントが存在するか
         for (const auto& bb : func.basic_blocks) {
             if (!bb)
@@ -444,9 +443,6 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
                 if (stmt->kind == mir::MirStatement::Asm) {
                     hasAsm = true;
                     const auto& asmData = std::get<mir::MirStatement::AsmData>(stmt->data);
-                    if (!asmData.operands.empty()) {
-                        hasAsmOperands = true;
-                    }
                     // Bug#12修正: ASMコード内にret/iret命令があるか検出
                     std::string code = asmData.code;
                     for (size_t p = 0; p < code.size(); ++p) {
@@ -1488,7 +1484,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     }
 
                     // asm参照変数（入力/出力/tied）はSSA形式ではなくalloca強制
-                    bool isAsmReferenced =
+                    [[maybe_unused]] bool isAsmReferenced =
                         asmReferencedLocals.count(static_cast<unsigned int>(i)) > 0;
 
                     // Hazard #45修正: 関数ポインタ型のallocaスキップを削除

@@ -310,6 +310,9 @@ clean:
 	@find . -name "*.o" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
 	@find . -name "*.EFI" -not -path "./.git/*" -delete 2>/dev/null || true
 	@find . -name "*.lib" -not -path "./build/*" -not -path "./.git/*" -delete 2>/dev/null || true
+	@find . -maxdepth 1 -name "*.sv" -delete 2>/dev/null || true
+	@find . -maxdepth 1 -name "*.vcd" -delete 2>/dev/null || true
+	@find . -maxdepth 1 -name "*.vvp" -delete 2>/dev/null || true
 	@echo "✅ Clean complete!"
 
 .PHONY: rebuild

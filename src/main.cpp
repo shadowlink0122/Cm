@@ -1526,7 +1526,9 @@ int main(int argc, char* argv[]) {
 
                 // 出力ファイル設定
                 if (opts.output_file.empty()) {
-                    sv_opts.outputFile = "output.sv";
+                    // デフォルト出力先は.tmp/（ルートディレクトリを汚さない）
+                    std::filesystem::create_directories(".tmp");
+                    sv_opts.outputFile = ".tmp/output.sv";
                 } else {
                     sv_opts.outputFile = opts.output_file;
                 }

@@ -10,6 +10,22 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ビルド高速化: ccache自動検出
+# ccacheがインストールされている場合、コンパイララッパーとして自動使用
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    message(STATUS "ccache found: ${CCACHE_PROGRAM} (ビルドキャッシュ有効)")
+else()
+    message(STATUS "ccache not found (インストール推奨: brew install ccache)")
+endif()
+
+# ビルド高速化: Unity build（ソース結合による翻訳単位削減）
+# ヘッダのパース回数を大幅削減し、ビルド時間を短縮
+set(CMAKE_UNITY_BUILD ON)
+set(CMAKE_UNITY_BUILD_BATCH_SIZE 16)
+
 # VERSIONファイルからバージョンを読み取り、コンパイル時定数として埋め込む
 file(READ "${CMAKE_SOURCE_DIR}/VERSION" CM_VERSION_RAW)
 string(STRIP "${CM_VERSION_RAW}" CM_VERSION)
@@ -332,9 +348,13 @@ if(CM_USE_LLVM)
     )
 
     # Apple環境: GPU(Metal)バッキング実装を追加
+    # Objective-C++はUnity buildから除外（C++と結合不可）
     if(APPLE)
         list(APPEND CM_SOURCES
             libs/native/gpu/gpu_runtime.mm
+        )
+        set_source_files_properties(libs/native/gpu/gpu_runtime.mm
+            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
         )
     endif()
 endif()

@@ -726,10 +726,25 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     // 変数名
     std::string name = expect_ident();
 
-    // 初期化子(posedge/negedge型は初期化子不要)
+    // 初期化子省略をSVポート型/アトリビュートに限定
+    // posedge/negedge型、または#[input]/#[output]属性付きはport宣言のため初期化子不要
+    bool is_sv_port = false;
+    if (type && (type->name == "posedge" || type->name == "negedge")) {
+        is_sv_port = true;
+    }
+    for (const auto& attr : attributes) {
+        if (attr.name == "input" || attr.name == "output" || attr.name == "inout") {
+            is_sv_port = true;
+            break;
+        }
+    }
+
     ast::ExprPtr init;
     if (consume_if(TokenKind::Eq)) {
         init = parse_expr();
+    } else if (!is_sv_port) {
+        // 非SVポートでは初期化子を必須とする
+        error("Expected '=' for global variable initializer");
     }
 
     expect(TokenKind::Semicolon);

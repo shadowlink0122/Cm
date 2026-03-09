@@ -171,16 +171,24 @@ using TokenValue = std::variant<std::monostate,  // 値なし
                                 std::string      // 文字列/識別子
                                 >;
 
+/// SV幅付きリテラル情報（幅付きリテラルにのみ存在）
+struct BitLiteralInfo {
+    int width;             // ビット幅 (例: 8)
+    char base;             // ベース文字 ('d','b','h')
+    std::string original;  // 元のリテラル文字列（2進/16進表記保持用）
+
+    BitLiteralInfo(int w, char b, std::string orig)
+        : width(w), base(b), original(std::move(orig)) {}
+};
+
 /// トークン
 struct Token {
     TokenKind kind;
     uint32_t start;  // 開始位置
     uint32_t end;    // 終了位置
     TokenValue value;
-    bool is_unsigned = false;  // hex/binary/octalリテラルで32bit超の場合true
-    int bit_width = 0;         // SV幅付きリテラル（0 = 幅未指定）
-    char bit_base = 'd';       // SV幅付きリテラルのベース文字（'d','b','h'）
-    std::string bit_original;  // 元のリテラル文字列（2進/16進表記保持用）
+    bool is_unsigned = false;                // hex/binary/octalリテラルで32bit超の場合true
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常トークン）
 
     Token(TokenKind k, uint32_t s, uint32_t e)
         : kind(k), start(s), end(e), value(std::monostate{}) {}
@@ -198,9 +206,7 @@ struct Token {
           end(e),
           value(v),
           is_unsigned(unsigned_flag),
-          bit_width(width),
-          bit_base(base),
-          bit_original(std::move(original)) {}
+          bit_info(BitLiteralInfo(width, base, std::move(original))) {}
 
     Token(TokenKind k, uint32_t s, uint32_t e, double v) : kind(k), start(s), end(e), value(v) {}
 

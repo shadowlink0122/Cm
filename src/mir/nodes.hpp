@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common/span.hpp"
+#include "../frontend/lexer/token.hpp"
 #include "../hir/types.hpp"
 
 #include <iostream>
@@ -145,9 +146,7 @@ struct MirConstant {
                  bool, int64_t, double, char, std::string>
         value;
     hir::TypePtr type;
-    int bit_width = 0;         // SV幅付きリテラル（0 = 幅未指定）
-    char bit_base = 'd';       // SV幅付きリテラルのベース文字（'d','b','h'）
-    std::string bit_original;  // 元のリテラル文字列
+    std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常定数）
 };
 
 struct MirOperand {
