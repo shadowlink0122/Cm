@@ -90,7 +90,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     // 文を生成
     std::string emitStatement(const mir::MirStatement& stmt, const mir::MirFunction& func);
     // 式（オペランド）を生成
-    std::string emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func);
+    std::string emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func,
+                            int target_width = 0);
     // 右辺値を生成
     std::string emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func);
     // Place（左辺値）を生成
@@ -108,7 +109,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     size_t findMergeBlock(const mir::MirFunction& func, size_t then_block, size_t else_block);
 
     // === 定数リテラル ===
-    std::string emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type);
+    std::string emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type,
+                             int target_width = 0);
 
     // === テストベンチ自動生成 ===
     std::string generateTestbench(const SVModule& mod);

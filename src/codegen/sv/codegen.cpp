@@ -215,7 +215,8 @@ void SVCodeGen::emitModule(const SVModule& mod) {
 
 // === 定数リテラル ===
 
-std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type) {
+std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type,
+                                    int target_width) {
     int width = getBitWidth(type);
 
     if (std::holds_alternative<bool>(constant.value)) {
@@ -232,14 +233,19 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
                    constant.bit_info->original;
         }
 
-        // SV幅付きリテラル（元表記がない場合）またはデフォルト
+        // ビット幅決定の優先順位:
+        // 1. SV幅付きリテラルの明示幅
+        // 2. target_width（相手オペランドの型から推論）
+        // 3. 定数自身の型の幅
         int effective_width = (constant.bit_info ? constant.bit_info->width : 0);
+        if (effective_width == 0 && target_width > 0)
+            effective_width = target_width;
         if (effective_width == 0)
             effective_width = width;
-        // signed型かどうか判定
-        bool is_signed =
-            type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
-                     type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long);
+        // signed型かどうか判定（target_widthが指定された場合はunsigned扱い）
+        bool is_signed = target_width <= 0 && type &&
+                         (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
+                          type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long);
         std::string prefix = std::to_string(effective_width) + (is_signed ? "'sd" : "'d");
         if (val < 0) {
             return "-" + prefix + std::to_string(-val);
@@ -248,7 +254,8 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
     }
 
     if (std::holds_alternative<std::monostate>(constant.value)) {
-        return std::to_string(width) + "'d0";
+        int ew = (target_width > 0 ? target_width : width);
+        return std::to_string(ew) + "'d0";
     }
 
     return "0";
@@ -285,7 +292,8 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
 
 // === オペランド生成 ===
 
-std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func) {
+std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func,
+                                   int target_width) {
     switch (operand.kind) {
         case mir::MirOperand::Move:
         case mir::MirOperand::Copy: {
@@ -295,7 +303,7 @@ std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
         }
         case mir::MirOperand::Constant: {
             const auto& constant = std::get<mir::MirConstant>(operand.data);
-            return emitConstant(constant, operand.type);
+            return emitConstant(constant, operand.type, target_width);
         }
         default:
             return "/* unknown operand */";
@@ -316,8 +324,21 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
 
         case mir::MirRvalue::BinaryOp: {
             const auto& bin = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
-            std::string lhs = bin.lhs ? emitOperand(*bin.lhs, func) : "0";
-            std::string rhs = bin.rhs ? emitOperand(*bin.rhs, func) : "0";
+            // 相手オペランドの型からターゲットビット幅を推論
+            // 定数側は相手の変数型に合わせたビット幅で出力
+            int lhs_tw = 0, rhs_tw = 0;
+            if (bin.lhs && bin.rhs) {
+                if (bin.lhs->kind == mir::MirOperand::Constant &&
+                    bin.rhs->kind != mir::MirOperand::Constant && bin.rhs->type) {
+                    lhs_tw = getBitWidth(bin.rhs->type);
+                }
+                if (bin.rhs->kind == mir::MirOperand::Constant &&
+                    bin.lhs->kind != mir::MirOperand::Constant && bin.lhs->type) {
+                    rhs_tw = getBitWidth(bin.lhs->type);
+                }
+            }
+            std::string lhs = bin.lhs ? emitOperand(*bin.lhs, func, lhs_tw) : "0";
+            std::string rhs = bin.rhs ? emitOperand(*bin.rhs, func, rhs_tw) : "0";
             std::string op;
             switch (bin.op) {
                 case mir::MirBinaryOp::Add:
@@ -388,7 +409,7 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 case mir::MirUnaryOp::Neg:
                     return "-" + operand_str;
                 case mir::MirUnaryOp::Not:
-                    return "!" + operand_str;
+                    return "~" + operand_str;
                 case mir::MirUnaryOp::BitNot:
                     return "~" + operand_str;
                 default:
@@ -914,6 +935,158 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         block_content = opt_ss.str();
     }
 
+    // else if 正規化: "end else begin\n    if (...) begin" → "end else if (...) begin"
+    // 余分な末尾endも同時に除去
+    {
+        std::istringstream elif_stream(block_content);
+        std::vector<std::string> elif_lines;
+        std::string elif_line;
+        while (std::getline(elif_stream, elif_line)) {
+            elif_lines.push_back(elif_line);
+        }
+
+        std::vector<std::string> elif_result;
+        std::vector<size_t> extra_end_positions;  // 除去すべきendのインデックス
+
+        for (size_t i = 0; i < elif_lines.size(); ++i) {
+            auto trim_start = elif_lines[i].find_first_not_of(' ');
+            if (trim_start == std::string::npos) {
+                elif_result.push_back(elif_lines[i]);
+                continue;
+            }
+            std::string trimmed = elif_lines[i].substr(trim_start);
+            std::string indent_str = elif_lines[i].substr(0, trim_start);
+
+            // "end else begin" パターン検出
+            if (trimmed == "end else begin" && i + 1 < elif_lines.size()) {
+                auto next_trim = elif_lines[i + 1].find_first_not_of(' ');
+                if (next_trim != std::string::npos &&
+                    elif_lines[i + 1].substr(next_trim, 4) == "if (") {
+                    // "end else begin\n    if (" → "end else if ("
+                    elif_result.push_back(indent_str + "end else " +
+                                          elif_lines[i + 1].substr(next_trim));
+                    ++i;  // if行をスキップ
+
+                    // 対応する余分なendを探す: begin/endの対応を追跡
+                    int depth = 0;
+                    for (size_t j = i + 1; j < elif_lines.size(); ++j) {
+                        auto jt = elif_lines[j].find_first_not_of(' ');
+                        if (jt == std::string::npos)
+                            continue;
+                        std::string jc = elif_lines[j].substr(jt);
+                        // beginを含む行でdepth++
+                        if (jc.find("begin") != std::string::npos &&
+                            jc.find("begin") == jc.size() - 5)
+                            depth++;
+                        // "end"で始まる行でdepth--
+                        if (jc == "end" || jc.substr(0, 4) == "end ") {
+                            if (depth > 0) {
+                                depth--;
+                            } else {
+                                // このendが余分：マーク
+                                extra_end_positions.push_back(j);
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            elif_result.push_back(elif_lines[i]);
+        }
+
+        // 余分なend行を除去して最終結果を構築
+        if (!extra_end_positions.empty()) {
+            std::set<size_t> skip_set(extra_end_positions.begin(), extra_end_positions.end());
+            // elif_resultは既に変換済みなので、元のelif_linesからの対応が必要
+            // 代わりに直接elif_linesベースで再構築
+            std::ostringstream elif_ss;
+            bool first = true;
+            for (size_t i = 0; i < elif_lines.size(); ++i) {
+                if (skip_set.count(i))
+                    continue;
+                auto trim_start = elif_lines[i].find_first_not_of(' ');
+                std::string trimmed =
+                    (trim_start != std::string::npos) ? elif_lines[i].substr(trim_start) : "";
+                std::string indent_str =
+                    (trim_start != std::string::npos) ? elif_lines[i].substr(0, trim_start) : "";
+
+                // else begin + 次行if の変換
+                if (trimmed == "end else begin" && i + 1 < elif_lines.size()) {
+                    auto next_trim = elif_lines[i + 1].find_first_not_of(' ');
+                    if (next_trim != std::string::npos &&
+                        elif_lines[i + 1].substr(next_trim, 4) == "if (") {
+                        if (!first)
+                            elif_ss << "\n";
+                        elif_ss << indent_str << "end else " << elif_lines[i + 1].substr(next_trim);
+                        first = false;
+                        ++i;
+                        continue;
+                    }
+                }
+                if (!first)
+                    elif_ss << "\n";
+                elif_ss << elif_lines[i];
+                first = false;
+            }
+            block_content = elif_ss.str();
+        } else if (!elif_result.empty()) {
+            // 変換があったがextra_endなし → elif_resultを使用
+            std::ostringstream elif_ss;
+            for (size_t i = 0; i < elif_result.size(); ++i) {
+                if (i > 0)
+                    elif_ss << "\n";
+                elif_ss << elif_result[i];
+            }
+            block_content = elif_ss.str();
+        }
+    }
+
+    // 冗長三項演算子除去: "cond ? X : X" → "X"
+    {
+        // 単純な文字列探索で "? X : X" パターンを検出（X が同一値）
+        std::istringstream tern_stream(block_content);
+        std::ostringstream tern_out;
+        std::string tern_line;
+        while (std::getline(tern_stream, tern_line)) {
+            // "expr ? val : val;" パターンを検出
+            auto q_pos = tern_line.find(" ? ");
+            auto c_pos =
+                (q_pos != std::string::npos) ? tern_line.find(" : ", q_pos + 3) : std::string::npos;
+            if (q_pos != std::string::npos && c_pos != std::string::npos) {
+                std::string then_val = tern_line.substr(q_pos + 3, c_pos - q_pos - 3);
+                std::string else_val = tern_line.substr(c_pos + 3);
+                // セミコロンを含む場合は除去して比較
+                std::string else_val_clean = else_val;
+                if (!else_val_clean.empty() && else_val_clean.back() == ';')
+                    else_val_clean.pop_back();
+                if (then_val == else_val_clean && !then_val.empty()) {
+                    // 三項演算子を除去して直接値を使用
+                    // "var = cond ? X : X;" → "var = X;"
+                    auto assign_pos = tern_line.rfind(" = ", q_pos);
+                    auto nb_assign_pos = tern_line.rfind(" <= ", q_pos);
+                    if (assign_pos != std::string::npos || nb_assign_pos != std::string::npos) {
+                        size_t a_pos =
+                            (nb_assign_pos != std::string::npos &&
+                             (assign_pos == std::string::npos || nb_assign_pos > assign_pos))
+                                ? nb_assign_pos
+                                : assign_pos;
+                        std::string a_op =
+                            (a_pos == nb_assign_pos && nb_assign_pos != std::string::npos) ? " <= "
+                                                                                           : " = ";
+                        tern_out << tern_line.substr(0, a_pos) << a_op << then_val << ";\n";
+                        continue;
+                    }
+                }
+            }
+            tern_out << tern_line << "\n";
+        }
+        // 末尾の余分な改行を除去
+        block_content = tern_out.str();
+        if (!block_content.empty() && block_content.back() == '\n')
+            block_content.pop_back();
+    }
+
     if (has_explicit_edge || func.is_async) {
         mod.always_ff_blocks.push_back(block_content);
     } else {
@@ -1194,9 +1367,9 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 is_param = true;
         }
 
-        // parameter宣言
+        // parameter宣言（SVでは型なしが推奨: parameter NAME = VALUE;）
         if (is_param) {
-            std::string param_decl = "parameter " + mapType(gv->type) + " " + gv->name;
+            std::string param_decl = "parameter " + gv->name;
             // 初期値がある場合は付加
             if (gv->init_value) {
                 param_decl += " = " + emitConstant(*gv->init_value, gv->type);
