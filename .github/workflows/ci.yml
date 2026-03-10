@@ -289,9 +289,11 @@ jobs:
 
       - name: Install wasmtime
         if: matrix.config.backend == 'llvm-wasm'
-        uses: bytecodealliance/actions/wasmtime/setup@v1
-        with:
-          version: "latest"
+        run: |
+          # bytecodealliance/actions/wasmtime/setup@v1 はGitHub APIレート制限で
+          # HTMLエラーを返すことがあるため、直接インストールスクリプトを使用
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
       - name: Install SV tools (for SV backend tests)
         if: matrix.config.backend == 'sv'
