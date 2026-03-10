@@ -443,6 +443,7 @@ HirDeclPtr HirLowering::lower_global_var(ast::GlobalVarDecl& gv) {
     hir_global->name = gv.name;
     hir_global->type = gv.type;
     hir_global->is_const = gv.is_const;
+    hir_global->is_assign = gv.is_assign;
     hir_global->is_export = (gv.visibility == ast::Visibility::Export);
 
     // 属性を伝搬（#[input], #[output] 等、SV用）

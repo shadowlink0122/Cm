@@ -183,6 +183,15 @@ ast::DeclPtr Parser::parse_top_level() {
         ak = ast::FunctionDecl::AlwaysKind::Latch;
     }
 
+    // SV assign文: assign type name = expr;
+    if (consume_if(TokenKind::KwAssign)) {
+        auto gv = parse_global_var_decl(false, std::move(attrs));
+        if (auto* g = gv->as<ast::GlobalVarDecl>()) {
+            g->is_assign = true;
+        }
+        return gv;
+    }
+
     // struct
     if (check(TokenKind::KwStruct)) {
         return parse_struct(false, std::move(attrs));
@@ -308,6 +317,18 @@ bool Parser::is_global_var_start() {
 
     advance();
 
+    // 配列サフィックス [N] をスキップ（bit[4], utiny[1024] 等）
+    while (!is_at_end() && check(TokenKind::LBracket)) {
+        advance();  // [
+        if (!is_at_end() && check(TokenKind::IntLiteral)) {
+            advance();  // N
+        }
+        if (!is_at_end() && check(TokenKind::RBracket)) {
+            advance();  // ]
+        }
+    }
+
+    // ポインタ修飾子 * をスキップ
     while (!is_at_end() && check(TokenKind::Star)) {
         advance();
     }
@@ -315,7 +336,8 @@ bool Parser::is_global_var_start() {
     bool result = false;
     if (!is_at_end() && check(TokenKind::Ident)) {
         advance();
-        if (!is_at_end() && check(TokenKind::Eq)) {
+        // 初期化子あり (=) または初期化子なし (;) の両方をサポート
+        if (!is_at_end() && (check(TokenKind::Eq) || check(TokenKind::Semicolon))) {
             result = true;
         }
     }

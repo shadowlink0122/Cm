@@ -524,6 +524,7 @@ struct HirGlobalVar {
     TypePtr type;
     HirExprPtr init;
     bool is_const;
+    bool is_assign = false;   // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };

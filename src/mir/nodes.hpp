@@ -884,6 +884,7 @@ struct MirGlobalVar {
     hir::TypePtr type;
     std::unique_ptr<MirConstant> init_value;  // 初期値（nullptrならゼロ初期化）
     bool is_const = false;
+    bool is_assign = false;   // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };

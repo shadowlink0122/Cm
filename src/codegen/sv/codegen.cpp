@@ -49,6 +49,21 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
             if (type->element_type)
                 return mapType(type->element_type);
             return "logic [31:0]";
+        case hir::TypeKind::Bit:
+            return "logic";  // bit単体は1bit、bit[N]はArray処理で幅変換
+        case hir::TypeKind::Array:
+            // bit[N] → logic [N-1:0] に変換
+            if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
+                if (type->array_size && *type->array_size > 1) {
+                    return "logic [" + std::to_string(*type->array_size - 1) + ":0]";
+                }
+                return "logic";
+            }
+            // 通常の配列: element_type name [0:N-1] → element_typeだけ返す
+            if (type->element_type) {
+                return mapType(type->element_type);
+            }
+            return "logic [31:0]";
         default:
             return "logic [31:0]";  // デフォルトは32bit
     }
@@ -84,6 +99,17 @@ int SVCodeGen::getBitWidth(const hir::TypePtr& type) const {
             if (type->element_type)
                 return getBitWidth(type->element_type);
             return 32;
+        case hir::TypeKind::Bit:
+            return 1;  // bit単体は1bit
+        case hir::TypeKind::Array:
+            // bit[N] → Nビット
+            if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
+                return type->array_size.value_or(1);
+            }
+            if (type->element_type)
+                return getBitWidth(type->element_type);
+            return 32;
+        // bit[N]配列型の場合はArray処理側でNを取得
         default:
             return 32;
     }
@@ -1510,6 +1536,20 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
             localparam_decl += ";";
             default_mod.parameters.push_back(localparam_decl);
+            continue;
+        }
+
+        // assign文 → wire宣言 + assign name = expr;
+        if (gv->is_assign) {
+            // wire宣言を追加
+            default_mod.reg_declarations.push_back(mapType(gv->type) + " " + gv->name + ";");
+            // assign文を追加
+            std::string assign_stmt = "assign " + gv->name;
+            if (gv->init_value) {
+                assign_stmt += " = " + emitConstant(*gv->init_value, gv->type);
+            }
+            assign_stmt += ";";
+            default_mod.assign_statements.push_back(assign_stmt);
             continue;
         }
 

@@ -57,6 +57,7 @@ enum class TypeKind {
     Negedge,  // 立ち下がりエッジクロック信号
     Wire,     // wire修飾（組み合わせ出力）
     Reg,      // reg修飾（レジスタ/順序回路出力）
+    Bit,      // bit[N] 任意ビット幅型（1-bit単位）
 };
 
 // ============================================================
@@ -300,6 +301,9 @@ inline TypePtr make_reg(TypePtr elem) {
     auto t = std::make_shared<Type>(TypeKind::Reg);
     t->element_type = std::move(elem);
     return t;
+}
+inline TypePtr make_bit() {
+    return std::make_shared<Type>(TypeKind::Bit);
 }
 
 inline TypePtr make_pointer(TypePtr elem) {
