@@ -49,6 +49,21 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
             if (type->element_type)
                 return mapType(type->element_type);
             return "logic [31:0]";
+        case hir::TypeKind::Bit:
+            return "logic";  // bit単体は1bit、bit[N]はArray処理で幅変換
+        case hir::TypeKind::Array:
+            // bit[N] → logic [N-1:0] に変換
+            if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
+                if (type->array_size && *type->array_size > 1) {
+                    return "logic [" + std::to_string(*type->array_size - 1) + ":0]";
+                }
+                return "logic";
+            }
+            // 通常の配列: element_type name [0:N-1] → element_typeだけ返す
+            if (type->element_type) {
+                return mapType(type->element_type);
+            }
+            return "logic [31:0]";
         default:
             return "logic [31:0]";  // デフォルトは32bit
     }
@@ -84,6 +99,17 @@ int SVCodeGen::getBitWidth(const hir::TypePtr& type) const {
             if (type->element_type)
                 return getBitWidth(type->element_type);
             return 32;
+        case hir::TypeKind::Bit:
+            return 1;  // bit単体は1bit
+        case hir::TypeKind::Array:
+            // bit[N] → Nビット
+            if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
+                return type->array_size.value_or(1);
+            }
+            if (type->element_type)
+                return getBitWidth(type->element_type);
+            return 32;
+        // bit[N]配列型の場合はArray処理側でNを取得
         default:
             return 32;
     }
@@ -177,6 +203,14 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         append_line("");
     }
 
+    // typedef enum / struct packed 宣言
+    for (const auto& td : mod.type_declarations) {
+        emitLine(td);
+    }
+    if (!mod.type_declarations.empty()) {
+        append_line("");
+    }
+
     // 内部ワイヤ宣言
     for (const auto& wire : mod.wire_declarations) {
         emitLine(wire);
@@ -203,9 +237,21 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         append_line("");
     }
 
+    // always_latch ブロック
+    for (const auto& block : mod.always_latch_blocks) {
+        emit(block);
+        append_line("");
+    }
+
     // assign 文
     for (const auto& stmt : mod.assign_statements) {
         emitLine(stmt);
+    }
+
+    // function/task ブロック
+    for (const auto& fn : mod.function_blocks) {
+        append_line("");
+        emit(fn);
     }
 
     decreaseIndent();
@@ -501,6 +547,102 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     if (func.name == "main")
         return;
 
+    // 非always/非async関数 → SV function automatic または task automatic
+    // ただし、posedge/negedge以外の引数を持つ関数のみ
+    // 引数なし/posedge/negedge引数のみの関数はalwaysブロックとして出力
+    if (!func.is_always && !func.is_async && func.always_kind == mir::MirFunction::AlwaysKind::None) {
+        // posedge/negedge以外の引数があるかチェック
+        bool has_sv_args = false;
+        for (auto arg_id : func.arg_locals) {
+            if (arg_id < func.locals.size()) {
+                auto& local = func.locals[arg_id];
+                if (local.type && local.type->kind != hir::TypeKind::Posedge &&
+                    local.type->kind != hir::TypeKind::Negedge) {
+                    has_sv_args = true;
+                    break;
+                }
+            }
+        }
+        if (has_sv_args) {
+        std::ostringstream fn_ss;
+        indent_level_ = 1;
+
+        // 戻り値型を取得
+        bool is_void = true;
+        std::string ret_type_str = "void";
+        if (func.return_local < func.locals.size()) {
+            auto& ret_local = func.locals[func.return_local];
+            if (ret_local.type && ret_local.type->kind != hir::TypeKind::Void) {
+                is_void = false;
+                ret_type_str = mapType(ret_local.type);
+            }
+        }
+
+        // 引数リスト構築（posedge/negedge型を除外）
+        std::vector<std::string> args;
+        for (auto arg_id : func.arg_locals) {
+            if (arg_id < func.locals.size()) {
+                auto& local = func.locals[arg_id];
+                if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                   local.type->kind == hir::TypeKind::Negedge))
+                    continue;
+                args.push_back("input " + mapType(local.type) + " " + local.name);
+            }
+        }
+
+        if (is_void) {
+            fn_ss << indent() << "task automatic " << func.name << "(";
+        } else {
+            fn_ss << indent() << "function automatic " << ret_type_str << " " << func.name << "(";
+        }
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (i > 0) fn_ss << ", ";
+            fn_ss << args[i];
+        }
+        fn_ss << ");\n";
+
+        // ローカル変数宣言（引数と戻り値を除く）
+        increaseIndent();
+        std::set<mir::LocalId> arg_set(func.arg_locals.begin(), func.arg_locals.end());
+        for (size_t i = 0; i < func.locals.size(); ++i) {
+            if (i == func.return_local) continue;  // 戻り値
+            if (arg_set.count(static_cast<mir::LocalId>(i))) continue;  // 引数
+            auto& local = func.locals[i];
+            if (local.name.empty() || local.name.find('@') != std::string::npos) continue;
+            // ポインタ型テンポラリはスキップ(__builtin_* Call引数用)
+            if (local.name.find("_t") == 0 && local.type &&
+                local.type->kind == hir::TypeKind::Pointer) continue;
+            fn_ss << indent() << mapType(local.type) << " " << local.name << ";\n";
+        }
+
+        // 関数本体
+        if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+            std::set<size_t> visited;
+            std::ostringstream body_ss;
+            emitBlockRecursive(func, 0, visited, body_ss);
+            // @return → return に置換
+            std::string body = body_ss.str();
+            size_t pos = 0;
+            while ((pos = body.find("@return", pos)) != std::string::npos) {
+                body.replace(pos, 7, func.name);
+                pos += func.name.size();
+            }
+            fn_ss << body;
+        }
+
+        decreaseIndent();
+
+        if (is_void) {
+            fn_ss << indent() << "endtask\n";
+        } else {
+            fn_ss << indent() << "endfunction\n";
+        }
+
+        mod.function_blocks.push_back(fn_ss.str());
+            return;
+        }  // if (has_sv_args)
+    }
+
     // ローカル変数を内部ワイヤ/レジスタとして宣言
     // （ポートと名前が衝突する変数は除外）
     std::set<std::string> port_names;
@@ -558,26 +700,84 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     std::string edge_clock;  // クロック信号名
     bool has_explicit_edge = false;
 
+    // 複数エッジ: 非同期リセット用 (always void f(posedge clk, negedge rst_n))
+    std::vector<std::pair<std::string, std::string>> all_edges;  // {edge_type, signal_name}
+
     for (const auto& local : func.locals) {
         if (local.type && local.type->kind == hir::TypeKind::Posedge) {
-            edge_type = "posedge";
-            edge_clock = local.name;
-            has_explicit_edge = true;
-            break;
+            // 重複排除: 同名信号が既にある場合はスキップ
+            bool dup = false;
+            for (const auto& e : all_edges) {
+                if (e.second == local.name) { dup = true; break; }
+            }
+            if (!dup) {
+                if (!has_explicit_edge) {
+                    edge_type = "posedge";
+                    edge_clock = local.name;
+                    has_explicit_edge = true;
+                }
+                all_edges.push_back({"posedge", local.name});
+            }
         }
         if (local.type && local.type->kind == hir::TypeKind::Negedge) {
-            edge_type = "negedge";
-            edge_clock = local.name;
-            has_explicit_edge = true;
-            break;
+            // 重複排除: 同名信号が既にある場合はスキップ
+            bool dup = false;
+            for (const auto& e : all_edges) {
+                if (e.second == local.name) { dup = true; break; }
+            }
+            if (!dup) {
+                if (!has_explicit_edge) {
+                    edge_type = "negedge";
+                    edge_clock = local.name;
+                    has_explicit_edge = true;
+                }
+                all_edges.push_back({"negedge", local.name});
+            }
         }
     }
 
     if (has_explicit_edge) {
         // 明示的なposedge/negedge型パラメータ → always_ff
-        block_ss << indent() << "always_ff @(" << edge_type << " " << edge_clock << ") begin\n";
-    } else if (func.is_async) {
-        // Phase 4: マルチクロックドメイン対応（後方互換: async func）
+        if (all_edges.size() > 1) {
+            // 複数エッジ: always_ff @(posedge clk or negedge rst_n)
+            block_ss << indent() << "always_ff @(";
+            for (size_t i = 0; i < all_edges.size(); ++i) {
+                if (i > 0) block_ss << " or ";
+                block_ss << all_edges[i].first << " " << all_edges[i].second;
+            }
+            block_ss << ") begin\n";
+        } else {
+            block_ss << indent() << "always_ff @(" << edge_type << " " << edge_clock << ") begin\n";
+        }
+    } else if (func.is_always && !has_explicit_edge) {
+        // always修飾子 + エッジパラメータなし
+        using AK = mir::MirFunction::AlwaysKind;
+        if (func.always_kind == AK::Comb) {
+            // always_comb 明示指定
+            block_ss << indent() << "always_comb begin\n";
+        } else if (func.always_kind == AK::Latch) {
+            // always_latch 明示指定
+            block_ss << indent() << "always_latch begin\n";
+        } else {
+            // AutoまたはNone: 後でCFG解析で判別（一旦always_combとして出力し後で置換）
+            block_ss << indent() << "always_comb begin\n";
+        }
+    } else if (func.always_kind == mir::MirFunction::AlwaysKind::FF) {
+        // always_ff 明示指定（エッジパラメータなし）→ デフォルト posedge clk
+        std::string clock_name = "clk";
+        for (const auto& attr : func.attributes) {
+            std::string prefix1 = "sv::clock_domain(";
+            std::string prefix2 = "verilog::clock_domain(";
+            if (attr.find(prefix1) == 0 && attr.back() == ')') {
+                clock_name = attr.substr(prefix1.size(), attr.size() - prefix1.size() - 1);
+            } else if (attr.find(prefix2) == 0 && attr.back() == ')') {
+                clock_name = attr.substr(prefix2.size(), attr.size() - prefix2.size() - 1);
+            }
+        }
+        block_ss << indent() << "always_ff @(posedge " << clock_name << ") begin\n";
+    } else if (func.is_always || func.is_async) {
+        // always修飾子+エッジあり、またはasync修飾子（後方互換）→ always_ff @(posedge clk)
+        // Phase 4: マルチクロックドメイン対応
         std::string clock_name = "clk";
         for (const auto& attr : func.attributes) {
             std::string prefix1 = "sv::clock_domain(";
@@ -1102,10 +1302,53 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             block_content.pop_back();
     }
 
-    if (has_explicit_edge || func.is_async) {
+    if (has_explicit_edge || func.is_async ||
+        func.always_kind == mir::MirFunction::AlwaysKind::FF) {
         mod.always_ff_blocks.push_back(block_content);
     } else {
-        mod.always_comb_blocks.push_back(block_content);
+        using AK = mir::MirFunction::AlwaysKind;
+        if (func.always_kind == AK::Latch) {
+            // always_latch 明示指定
+            mod.always_latch_blocks.push_back(block_content);
+        } else if (func.always_kind == AK::Comb) {
+            // always_comb 明示指定
+            mod.always_comb_blocks.push_back(block_content);
+        } else {
+            // Auto: CFG解析で判別
+            // 全制御パスで全出力が代入されていれば always_comb、
+            // 一部パスで未代入があれば always_latch
+            // 簡易判定: ifがあってelseがない場合はラッチ推論
+            bool has_incomplete_assign = false;
+            std::istringstream check_stream(block_content);
+            std::string check_line;
+            int if_count = 0;
+            int else_count = 0;
+            while (std::getline(check_stream, check_line)) {
+                // if begin の数と else begin の数をカウント
+                if (check_line.find("if (") != std::string::npos ||
+                    check_line.find("if(") != std::string::npos) {
+                    if_count++;
+                }
+                if (check_line.find("end else begin") != std::string::npos ||
+                    check_line.find("else begin") != std::string::npos) {
+                    else_count++;
+                }
+            }
+            // ifがあるのにelseが少ない → ラッチ推論
+            if (if_count > 0 && else_count < if_count) {
+                has_incomplete_assign = true;
+                // ブロックヘッダを always_latch に置換
+                size_t pos = block_content.find("always_comb begin");
+                if (pos != std::string::npos) {
+                    block_content.replace(pos, 17, "always_latch begin");
+                }
+            }
+            if (has_incomplete_assign) {
+                mod.always_latch_blocks.push_back(block_content);
+            } else {
+                mod.always_comb_blocks.push_back(block_content);
+            }
+        }
     }
 
     // インデントレベルをリセット
@@ -1311,9 +1554,117 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
         case mir::MirTerminator::Unreachable:
             // SVのalwaysブロック内ではreturnは不要
             break;
-        case mir::MirTerminator::Call:
-            // 関数呼び出し → Phase 2対応
+        case mir::MirTerminator::Call: {
+            // __builtin_concat / __builtin_replicate をSV構文に変換
+            const auto& cd = std::get<mir::MirTerminator::CallData>(term.data);
+            std::string func_name;
+            if (cd.func && cd.func->kind == mir::MirOperand::FunctionRef) {
+                func_name = std::get<std::string>(cd.func->data);
+            }
+
+            if (func_name == "__builtin_concat" || func_name == "__builtin_replicate") {
+                // Ref逆引きマップ構築: テンポラリ(_tXXX) → 元のPlace
+                // Use(Constant)逆引きマップ: テンポラリ → 定数値
+                // 先行Statement: Assign(_tXXX, Ref(original)) or Assign(_tXXX, Use(Constant)) を追跡
+                std::map<mir::LocalId, mir::MirPlace> ref_map;
+                std::map<mir::LocalId, std::pair<mir::MirConstant, hir::TypePtr>> const_map;
+                for (const auto& block : func.basic_blocks) {
+                    if (!block) continue;
+                    for (const auto& s : block->statements) {
+                        if (!s || s->kind != mir::MirStatement::Assign) continue;
+                        const auto& ad = std::get<mir::MirStatement::AssignData>(s->data);
+                        if (!ad.rvalue) continue;
+                        if (ad.rvalue->kind == mir::MirRvalue::Ref) {
+                            if (auto* ref_data = std::get_if<mir::MirRvalue::RefData>(&ad.rvalue->data)) {
+                                ref_map.insert_or_assign(ad.place.local, ref_data->place);
+                            }
+                        } else if (ad.rvalue->kind == mir::MirRvalue::Use) {
+                            // Use(Constant) パターン: _t = constant
+                            if (auto* use_data = std::get_if<mir::MirRvalue::UseData>(&ad.rvalue->data)) {
+                                if (use_data->operand && use_data->operand->kind == mir::MirOperand::Constant) {
+                                    const_map.insert_or_assign(ad.place.local,
+                                        std::make_pair(std::get<mir::MirConstant>(use_data->operand->data),
+                                                       use_data->operand->type));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Call args を解決: テンポラリ → 元のPlace名 or 定数値
+                auto resolveArg = [&](const mir::MirOperand& op) -> std::string {
+                    if (op.kind == mir::MirOperand::Move || op.kind == mir::MirOperand::Copy) {
+                        const auto& place = std::get<mir::MirPlace>(op.data);
+                        // Ref逆引き: _t → &original → original
+                        auto ref_it = ref_map.find(place.local);
+                        if (ref_it != ref_map.end()) {
+                            return emitPlace(ref_it->second, func);
+                        }
+                        // Const逆引き: _t → constant
+                        auto const_it = const_map.find(place.local);
+                        if (const_it != const_map.end()) {
+                            return emitConstant(const_it->second.first, const_it->second.second);
+                        }
+                        return emitPlace(place, func);
+                    } else if (op.kind == mir::MirOperand::Constant) {
+                        return emitConstant(std::get<mir::MirConstant>(op.data), op.type);
+                    }
+                    return "0";
+                };
+
+                // ノンブロッキング代入の判定
+                bool use_nb = func.is_async;
+                if (!use_nb) {
+                    for (const auto& local : func.locals) {
+                        if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                           local.type->kind == hir::TypeKind::Negedge)) {
+                            use_nb = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (func_name == "__builtin_concat") {
+                    // SV連接: {a, b, ...}
+                    std::string rhs = "{";
+                    for (size_t i = 0; i < cd.args.size(); ++i) {
+                        if (i > 0) rhs += ", ";
+                        rhs += cd.args[i] ? resolveArg(*cd.args[i]) : "0";
+                    }
+                    rhs += "}";
+                    if (cd.destination) {
+                        std::string lhs = emitPlace(*cd.destination, func);
+                        ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
+                    }
+                } else {
+                    // SV複製: {N{expr}}
+                    std::string count = cd.args.size() > 0 && cd.args[0]
+                        ? resolveArg(*cd.args[0]) : "1";
+                    std::string expr = cd.args.size() > 1 && cd.args[1]
+                        ? resolveArg(*cd.args[1]) : "0";
+                    // count は整数リテラルなので、SV幅指定(32'd3等)を除去して素の数字にする
+                    // "32'd3" → "3", "3" → "3"
+                    auto pos_tick = count.find("'d");
+                    if (pos_tick != std::string::npos) {
+                        count = count.substr(pos_tick + 2);
+                    } else {
+                        pos_tick = count.find("'h");
+                        if (pos_tick != std::string::npos) {
+                            count = count.substr(pos_tick + 2);
+                        }
+                    }
+                    std::string rhs = "{" + count + "{" + expr + "}}";
+                    if (cd.destination) {
+                        std::string lhs = emitPlace(*cd.destination, func);
+                        ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
+                    }
+                }
+                // 成功ブロックに続行
+                emitBlockRecursive(func, cd.success, visited, ss, merge_block);
+            }
+            // その他の関数呼び出しはスキップ
             break;
+        }
     }
 }
 
@@ -1394,6 +1745,32 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
         }
 
+        // const変数 → localparam宣言
+        if (gv->is_const) {
+            std::string localparam_decl = "localparam " + mapType(gv->type) + " " + gv->name;
+            // 初期値がある場合は付加
+            if (gv->init_value) {
+                localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
+            }
+            localparam_decl += ";";
+            default_mod.parameters.push_back(localparam_decl);
+            continue;
+        }
+
+        // assign文 → wire宣言 + assign name = expr;
+        if (gv->is_assign) {
+            // wire宣言を追加
+            default_mod.reg_declarations.push_back(mapType(gv->type) + " " + gv->name + ";");
+            // assign文を追加
+            std::string assign_stmt = "assign " + gv->name;
+            if (gv->init_value) {
+                assign_stmt += " = " + emitConstant(*gv->init_value, gv->type);
+            }
+            assign_stmt += ";";
+            default_mod.assign_statements.push_back(assign_stmt);
+            continue;
+        }
+
         // Phase 3: BRAM/LutRAM推論
         bool is_bram = false;
         bool is_lutram = false;
@@ -1460,6 +1837,49 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         if (!func)
             continue;
         analyzeFunction(*func, default_mod);
+    }
+
+    // enum → typedef enum logic 出力
+    for (const auto& e : program.enums) {
+        if (!e) continue;
+        // Tagged Union（ペイロード付きenum）はSVでは直接変換しない
+        if (e->is_tagged_union()) continue;
+
+        std::ostringstream ss;
+        // ビット幅計算: メンバー数から必要ビット数を算出
+        int member_count = static_cast<int>(e->members.size());
+        int bit_width = 1;
+        int val = member_count - 1;
+        while (val > 1) {
+            bit_width++;
+            val >>= 1;
+        }
+
+        ss << "typedef enum logic";
+        if (bit_width > 1) {
+            ss << " [" << (bit_width - 1) << ":0]";
+        }
+        ss << " {\n";
+        for (size_t i = 0; i < e->members.size(); ++i) {
+            ss << "    " << e->members[i].name << " = " << bit_width << "'d" << e->members[i].tag_value;
+            if (i + 1 < e->members.size()) ss << ",";
+            ss << "\n";
+        }
+        ss << "} " << e->name << ";";
+        default_mod.type_declarations.push_back(ss.str());
+    }
+
+    // struct → typedef struct packed 出力（#[sv::packed]属性付きのみ）
+    for (const auto& st : program.structs) {
+        if (!st) continue;
+        // TODO: sv::packed属性チェック（現状は全structをpacked出力）
+        std::ostringstream ss;
+        ss << "typedef struct packed {\n";
+        for (const auto& f : st->fields) {
+            ss << "    " << mapType(f.type) << " " << f.name << ";\n";
+        }
+        ss << "} " << st->name << ";";
+        default_mod.type_declarations.push_back(ss.str());
     }
 
     modules_.push_back(default_mod);
@@ -1856,6 +2276,12 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 continue;
             switch (local.type->kind) {
                 case hir::TypeKind::Pointer:
+                    // MIR生成テンポラリ変数（_tXXX）はスキップ
+                    // __builtin_concat等のCall引数用アドレステンポラリ
+                    if (local.name.size() > 2 && local.name[0] == '_' && local.name[1] == 't' &&
+                        std::isdigit(static_cast<unsigned char>(local.name[2]))) {
+                        break;
+                    }
                     std::cerr << "error[SV002]: Pointer types not supported in SV target: "
                               << func->name << "::" << local.name << "\n";
                     has_error = true;

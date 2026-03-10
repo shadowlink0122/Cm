@@ -1,0 +1,28 @@
+//! platform: sv
+
+// always_ff + always_comb 混在テスト
+// 1モジュール内に順序回路と組み合わせ回路を共存
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[input]  bool enable = 0;
+#[output] uint count = 0;
+#[output] bool overflow = false;
+
+always void counter(posedge clk) {
+    if (rst) {
+        count = 0;
+    } else {
+        if (enable) {
+            count = count + 1;
+        }
+    }
+}
+
+always void detect_overflow() {
+    if (count > 1000) {
+        overflow = true;
+    } else {
+        overflow = false;
+    }
+}

@@ -1,0 +1,14 @@
+//! platform: sv
+
+// 三項演算子 ネストテスト
+
+#[input]  utiny sel = 0;
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[input]  uint c = 0;
+#[input]  uint d = 0;
+#[output] uint result = 0;
+
+void mux4() {
+    result = (sel == 0) ? a : (sel == 1) ? b : (sel == 2) ? c : d;
+}

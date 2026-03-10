@@ -1,0 +1,23 @@
+//! platform: sv
+
+// 内部レジスタ宣言テスト: 属性なしのグローバル変数が内部reg/wireとして宣言される
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[output] uint result = 0;
+
+// 属性なし → 内部レジスタ
+uint stage1 = 0;
+uint stage2 = 0;
+
+always void pipeline(posedge clk) {
+    if (rst) {
+        stage1 = 0;
+        stage2 = 0;
+        result = 0;
+    } else {
+        result = stage2;
+        stage2 = stage1;
+        stage1 = stage1 + 1;
+    }
+}

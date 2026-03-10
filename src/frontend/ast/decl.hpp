@@ -127,6 +127,10 @@ struct FunctionDecl {
     bool is_overload = false;     // overload修飾子
     bool is_extern = false;       // extern "C" 関数
     bool is_async = false;        // async関数（JSバックエンド用）
+    bool is_always = false;       // always修飾子（SVバックエンド用）
+    // SVバックエンド: always ブロックの種別
+    // None=非always, Auto=自動判別, FF/Comb/Latch=明示指定
+    enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
 
     // ディレクティブ/アトリビュート（#test, #bench, #deprecated等）
     std::vector<AttributeNode> attributes;
@@ -361,6 +365,7 @@ struct GlobalVarDecl {
     TypePtr type;
     ExprPtr init_expr;
     bool is_const = false;
+    bool is_assign = false;   // SV assign文（連続代入）
     Visibility visibility = Visibility::Private;
     std::vector<AttributeNode> attributes;
 

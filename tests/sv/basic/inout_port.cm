@@ -1,0 +1,16 @@
+//! platform: sv
+
+// inout 双方向ポートテスト
+
+#[input]  bool dir = false;
+#[input]  uint data_in = 0;
+#[inout]  uint bus;
+#[output] uint data_out = 0;
+
+always_comb void bus_logic() {
+    if (dir) {
+        data_out = data_in;
+    } else {
+        data_out = data_in;
+    }
+}

@@ -1,0 +1,15 @@
+//! platform: sv
+
+// for ループテスト
+// 注意: SV generate for は未実装だがパーサーはfor文をサポート
+
+#[input]  posedge clk;
+#[output] uint sum = 0;
+
+always void accumulate(posedge clk) {
+    uint total = 0;
+    for (uint i = 0; i < 4; i = i + 1) {
+        total = total + i;
+    }
+    sum = total;
+}

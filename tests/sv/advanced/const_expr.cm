@@ -1,0 +1,21 @@
+//! platform: sv
+
+// const式演算テスト: 定数式の演算がlocalparamとして出力されるか確認
+
+const uint BASE_FREQ = 27000000;
+const uint HALF_FREQ = BASE_FREQ / 2;
+const uint BAUD_DIV = BASE_FREQ / 115200;
+const uint MASK_UPPER = 0xFF00;
+const uint MASK_LOWER = 0x00FF;
+const uint COMBINED = MASK_UPPER | MASK_LOWER;
+
+#[input]  bool clk = 0;
+#[output] uint divider = 0;
+
+always void tick(posedge clk) {
+    if (divider == BAUD_DIV) {
+        divider = 0;
+    } else {
+        divider = divider + 1;
+    }
+}

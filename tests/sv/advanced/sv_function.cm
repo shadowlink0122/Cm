@@ -1,0 +1,19 @@
+//! platform: sv
+
+// function テスト
+// 通常の非always関数は SV function に変換
+
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint result = 0;
+
+uint max_val(uint x, uint y) {
+    if (x > y) {
+        return x;
+    }
+    return y;
+}
+
+always_comb void compute() {
+    result = a;
+}

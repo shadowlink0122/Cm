@@ -383,7 +383,9 @@ struct HirFunction {
     bool is_destructor = false;
     bool is_static = false;    // staticメソッド（selfパラメータなし）
     bool is_async = false;     // async関数（JSバックエンド用）
-    bool is_overload = false;  // overloadキーワードの有無
+    bool is_always = false;    // always修飾子（SVバックエンド用）
+    enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
+    std::vector<std::string> attributes;  // SV属性（sv::latch, sv::clock_domain等）
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 
@@ -522,6 +524,7 @@ struct HirGlobalVar {
     TypePtr type;
     HirExprPtr init;
     bool is_const;
+    bool is_assign = false;   // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };

@@ -159,6 +159,13 @@ void Lexer::add_sv_keywords() {
         {"negedge", TokenKind::KwNegedge},
         {"wire", TokenKind::KwWire},
         {"reg", TokenKind::KwReg},
+        {"always", TokenKind::KwAlways},
+        {"always_ff", TokenKind::KwAlwaysFF},
+        {"always_comb", TokenKind::KwAlwaysComb},
+        {"always_latch", TokenKind::KwAlwaysLatch},
+        {"assign", TokenKind::KwAssign},
+        {"initial", TokenKind::KwInitial},
+        {"bit", TokenKind::KwBit},
     });
 }
 

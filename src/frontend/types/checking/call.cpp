@@ -106,6 +106,22 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_named(ident->name);
         }
 
+        // SVバックエンド用ビルトイン関数のバイパス
+        if (ident->name == "__builtin_concat" || ident->name == "__builtin_replicate") {
+            ast::TypePtr result_type = nullptr;
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                auto t = infer_type(*call.args[i]);
+                // __builtin_replicate: 2番目の引数(複製対象)の型を使用
+                // __builtin_concat: 最初の引数の型を使用
+                if (ident->name == "__builtin_replicate") {
+                    if (i == 1) result_type = t;  // 2番目の引数の型
+                } else {
+                    if (!result_type) result_type = t;
+                }
+            }
+            return result_type ? result_type : ast::make_void();
+        }
+
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
         if (!sym) {

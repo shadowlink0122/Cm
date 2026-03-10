@@ -172,7 +172,8 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
         if (const_val) {
             const_val->type = gv.type ? gv.type : const_val->type;
             global_const_values[gv.name] = *const_val;
-            return;
+            // SVバックエンドではlocalparam出力のため、global_varsにも登録する
+            // （returnせずフォールスルーで下のMirGlobalVar登録へ進む）
         }
     }
 
@@ -181,6 +182,7 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
     mir_gv->name = gv.name;
     mir_gv->type = gv.type;
     mir_gv->is_const = gv.is_const;
+    mir_gv->is_assign = gv.is_assign;
     mir_gv->is_export = gv.is_export;
     mir_gv->attributes = gv.attributes;  // SV用属性を伝搬（input/output等）
 

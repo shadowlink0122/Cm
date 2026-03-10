@@ -1,0 +1,9 @@
+//! platform: sv
+
+// assign 文テスト: 連続代入（定数式）
+
+#[input]  bool sel = false;
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+
+assign uint result = 42;

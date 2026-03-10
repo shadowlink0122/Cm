@@ -62,6 +62,15 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     hir_func->is_export = func.visibility == ast::Visibility::Export;
     hir_func->is_extern = func.is_extern;  // externフラグを伝播
     hir_func->is_async = func.is_async;    // asyncフラグを伝播
+    hir_func->is_always = func.is_always;  // alwaysフラグを伝播
+    // always_kind を伝搬（AST→HIR: enum値をintでキャスト）
+    hir_func->always_kind = static_cast<hir::HirFunction::AlwaysKind>(
+        static_cast<int>(func.always_kind));
+
+    // SV属性を伝播（sv::latch, sv::clock_domain等）
+    for (const auto& attr : func.attributes) {
+        hir_func->attributes.push_back(attr.name);
+    }
 
     // ジェネリックパラメータを処理
     for (const auto& param_name : func.generic_params) {
@@ -434,6 +443,7 @@ HirDeclPtr HirLowering::lower_global_var(ast::GlobalVarDecl& gv) {
     hir_global->name = gv.name;
     hir_global->type = gv.type;
     hir_global->is_const = gv.is_const;
+    hir_global->is_assign = gv.is_assign;
     hir_global->is_export = (gv.visibility == ast::Visibility::Export);
 
     // 属性を伝搬（#[input], #[output] 等、SV用）

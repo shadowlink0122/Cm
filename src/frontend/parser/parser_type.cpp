@@ -243,6 +243,10 @@ ast::TypePtr Parser::parse_type() {
             advance();
             base_type = ast::make_reg(parse_type());
             break;
+        case TokenKind::KwBit:
+            advance();
+            base_type = ast::make_bit();
+            break;
         default:
             break;
     }
