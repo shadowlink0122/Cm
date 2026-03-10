@@ -760,11 +760,24 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         // 初期値の決定
         llvm::Constant* initialValue = nullptr;
         if (gv->init_value) {
-            // 文字列型の場合
+            // 文字列型の場合: IRBuilderなしでグローバル文字列定数を作成
             if (std::holds_alternative<std::string>(gv->init_value->value)) {
                 auto& str = std::get<std::string>(gv->init_value->value);
-                auto strConst = builder->CreateGlobalStringPtr(str, gv->name + ".str");
-                initialValue = llvm::cast<llvm::Constant>(strConst);
+                // 文字列データをグローバル定数として配置
+                auto strConstant = llvm::ConstantDataArray::getString(ctx.getContext(), str, true);
+                auto strGlobal = new llvm::GlobalVariable(
+                    *module, strConstant->getType(), true,
+                    llvm::GlobalValue::PrivateLinkage, strConstant, gv->name + ".str");
+                strGlobal->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+                // i8* へのポインタを取得
+                initialValue = llvm::ConstantExpr::getBitCast(
+                    llvm::ConstantExpr::getInBoundsGetElementPtr(
+                        strConstant->getType(), strGlobal,
+                        llvm::ArrayRef<llvm::Constant*>{
+                            llvm::ConstantInt::get(ctx.getI64Type(), 0),
+                            llvm::ConstantInt::get(ctx.getI64Type(), 0)
+                        }),
+                    ctx.getPtrType());
             }
             // 整数型の場合
             else if (std::holds_alternative<int64_t>(gv->init_value->value)) {
@@ -1088,10 +1101,22 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
 
         llvm::Constant* initialValue = nullptr;
         if (gv->init_value) {
+            // 文字列型の場合: IRBuilderなしでグローバル文字列定数を作成
             if (std::holds_alternative<std::string>(gv->init_value->value)) {
                 auto& str = std::get<std::string>(gv->init_value->value);
-                auto strConst = builder->CreateGlobalStringPtr(str, gv->name + ".str");
-                initialValue = llvm::cast<llvm::Constant>(strConst);
+                auto strConstant = llvm::ConstantDataArray::getString(ctx.getContext(), str, true);
+                auto strGlobal = new llvm::GlobalVariable(
+                    *this->module, strConstant->getType(), true,
+                    llvm::GlobalValue::PrivateLinkage, strConstant, gv->name + ".str");
+                strGlobal->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+                initialValue = llvm::ConstantExpr::getBitCast(
+                    llvm::ConstantExpr::getInBoundsGetElementPtr(
+                        strConstant->getType(), strGlobal,
+                        llvm::ArrayRef<llvm::Constant*>{
+                            llvm::ConstantInt::get(ctx.getI64Type(), 0),
+                            llvm::ConstantInt::get(ctx.getI64Type(), 0)
+                        }),
+                    ctx.getPtrType());
             } else if (std::holds_alternative<int64_t>(gv->init_value->value)) {
                 initialValue =
                     llvm::ConstantInt::get(llvmType, std::get<int64_t>(gv->init_value->value));
