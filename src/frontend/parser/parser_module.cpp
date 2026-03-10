@@ -742,8 +742,9 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     ast::ExprPtr init;
     if (consume_if(TokenKind::Eq)) {
         init = parse_expr();
-    } else if (!is_sv_port) {
+    } else if (!is_sv_port && !(is_sv_platform_ && check(TokenKind::Semicolon))) {
         // 非SVポートでは初期化子を必須とする
+        // ただしSVプラットフォームでは初期値なし宣言を許可（extern struct インスタンス等）
         error("Expected '=' for global variable initializer");
     }
 
@@ -1058,6 +1059,15 @@ ast::DeclPtr Parser::parse_extern(std::vector<ast::AttributeNode> attributes) {
             // 単一の extern "C" 宣言
             return parse_extern_decl(std::move(attributes));
         }
+    }
+
+    // extern struct (外部ハードウェアモジュール / FFI構造体)
+    if (check(TokenKind::KwStruct)) {
+        auto struct_decl = parse_struct(false, std::move(attributes), true);
+        if (auto* s = struct_decl->as<ast::StructDecl>()) {
+            s->is_extern = true;
+        }
+        return struct_decl;
     }
 
     // extern だけの場合（C++スタイル）

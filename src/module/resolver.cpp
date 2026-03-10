@@ -249,7 +249,7 @@ std::unique_ptr<hir::HirProgram> ModuleResolver::parse_module_file(
     Lexer lex(source);
     auto tokens = lex.tokenize();
 
-    Parser parser(tokens);
+    Parser parser(tokens, lex.is_sv());
     auto ast = parser.parse();
 
     // HIRに変換

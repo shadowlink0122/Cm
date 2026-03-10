@@ -587,7 +587,7 @@ int main(int argc, char* argv[]) {
                 // パース
                 Lexer lexer(code);  // lint/checkではディレクティブで自動検出
                 auto tokens = lexer.tokenize();
-                Parser parser(std::move(tokens));
+                Parser parser(std::move(tokens), lexer.is_sv());
                 auto program = parser.parse();
 
                 if (parser.has_errors()) {
@@ -1117,7 +1117,7 @@ int main(int argc, char* argv[]) {
         // ========== Parser ==========
         if (opts.debug)
             std::cout << "=== Parser ===\n";
-        Parser parser(std::move(tokens));
+        Parser parser(std::move(tokens), lexer.is_sv());
         auto program = parser.parse();
 
         if (parser.has_errors()) {

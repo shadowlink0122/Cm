@@ -43,6 +43,7 @@ struct SVModule {
     std::vector<std::string> function_blocks;     // function automatic ブロック
     std::vector<std::string> wire_declarations;   // 内部ワイヤ宣言
     std::vector<std::string> reg_declarations;    // 内部レジスタ宣言
+    std::vector<std::string> instance_blocks;     // extern struct インスタンス化文
 };
 
 // SystemVerilog コードジェネレータ

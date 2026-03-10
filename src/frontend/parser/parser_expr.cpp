@@ -1012,12 +1012,12 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_array_literal(std::move(elements), Span{start_pos, previous().end});
     }
 
-    // {expr, ...} / {N{expr}} / {field: val, ...}
+    // {expr, ...} / {N{expr}} / {field: val, ...} (SVプラットフォーム限定)
     // 3パターンの判別:
     //   (1) {ident: expr, ...} → 構造体リテラル (colonあり)
     //   (2) {N{expr}} → 複製 (intリテラル + LBrace)
     //   (3) {expr, expr, ...} → 連接 (カンマ区切りの式)
-    if (check(TokenKind::LBrace)) {
+    if (is_sv_platform_ && check(TokenKind::LBrace)) {
         // 先読みで構造体リテラルかどうかを判別
         auto saved_pos = pos_;
         advance();  // { を消費

@@ -109,6 +109,7 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     auto hir_st = std::make_unique<HirStruct>();
     hir_st->name = st.name;
     hir_st->is_export = st.visibility == ast::Visibility::Export;
+    hir_st->is_extern = st.is_extern;
     hir_st->auto_impls = st.auto_impls;
     for (const auto& iface_name : st.auto_impls) {
         if (iface_name == "Css") {
@@ -125,7 +126,29 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     }
 
     for (const auto& field : st.fields) {
-        hir_st->fields.push_back({field.name, field.type});
+        HirField hir_field;
+        hir_field.name = field.name;
+        hir_field.type = field.type;
+        // フィールド属性を伝播（sv::param, output 等）
+        for (const auto& attr : field.attributes) {
+            hir_field.attributes.push_back(attr.name);
+        }
+        // フィールドデフォルト値を文字列表現に変換（SV用）
+        if (field.default_value) {
+            if (auto* lit = field.default_value->as<ast::LiteralExpr>()) {
+                if (auto* ival = std::get_if<int64_t>(&lit->value)) {
+                    hir_field.default_value_str = std::to_string(*ival);
+                } else if (auto* bval = std::get_if<bool>(&lit->value)) {
+                    hir_field.default_value_str = *bval ? "1" : "0";
+                } else if (auto* sval = std::get_if<std::string>(&lit->value)) {
+                    hir_field.default_value_str = *sval;
+                }
+            } else if (auto* ident = field.default_value->as<ast::IdentExpr>()) {
+                // 識別子（ポート接続信号名など）
+                hir_field.default_value_str = ident->name;
+            }
+        }
+        hir_st->fields.push_back(std::move(hir_field));
         debug::hir::log(debug::hir::Id::StructField,
                         field.name + " : " + (field.type ? type_to_string(*field.type) : "auto"),
                         debug::Level::Trace);

@@ -401,6 +401,8 @@ struct HirField {
     std::string name;
     TypePtr type;
     HirFieldAccess access = HirFieldAccess::Public;  // デフォルトはpublic
+    std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
+    std::string default_value_str;  // デフォルト値の文字列表現（SV用）
 };
 
 // 構造体
@@ -412,6 +414,7 @@ struct HirStruct {
     bool is_export = false;
     bool has_explicit_constructor = false;
     bool is_css = false;
+    bool is_extern = false;  // extern struct（外部HWモジュール）
 };
 
 // メソッドシグネチャ

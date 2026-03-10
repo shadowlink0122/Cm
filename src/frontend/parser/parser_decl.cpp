@@ -429,7 +429,7 @@ std::vector<ast::Param> Parser::parse_params() {
 }
 
 // 構造体
-ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes) {
+ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes, bool is_extern) {
     uint32_t start_pos = current().start;
     debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
 
@@ -488,6 +488,11 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         ast::Field field;
 
+        // フィールド属性（#[sv::param], #[input], #[output] 等）
+        while (check(TokenKind::Hash)) {
+            field.attributes.push_back(parse_attribute());
+        }
+
         field.visibility =
             consume_if(TokenKind::KwPrivate) ? ast::Visibility::Private : ast::Visibility::Export;
 
@@ -508,6 +513,12 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         field.type = parse_type_with_union();
 
         field.name = expect_ident();
+
+        // フィールドのデフォルト値（= expr）: extern struct のみ
+        if (is_extern && consume_if(TokenKind::Eq)) {
+            field.default_value = parse_expr();
+        }
+
         expect(TokenKind::Semicolon);
         fields.push_back(std::move(field));
     }

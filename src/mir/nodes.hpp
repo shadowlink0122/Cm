@@ -707,6 +707,8 @@ struct MirStructField {
     std::string name;
     hir::TypePtr type;
     uint32_t offset;  // バイトオフセット（将来の最適化用）
+    std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
+    std::string default_value_str;  // デフォルト値の文字列表現（SV用）
 };
 
 struct MirStruct {
@@ -718,6 +720,7 @@ struct MirStruct {
     uint32_t size;   // 構造体全体のサイズ
     uint32_t align;  // アライメント要求
     bool is_css = false;
+    bool is_extern = false;  // extern struct（外部HWモジュール）
 
     // インターフェース実装情報
     std::vector<std::string> implemented_interfaces;
@@ -887,6 +890,9 @@ struct MirGlobalVar {
     bool is_assign = false;   // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
+    // extern struct インスタンスのフィールド初期化値
+    // key: フィールド名, value: 初期化値の定数
+    std::vector<std::pair<std::string, MirConstant>> struct_field_inits;
 };
 
 using MirGlobalVarPtr = std::unique_ptr<MirGlobalVar>;

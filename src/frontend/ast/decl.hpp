@@ -165,6 +165,7 @@ struct StructDecl {
     std::vector<Field> fields;
     Visibility visibility = Visibility::Private;
     std::vector<AttributeNode> attributes;
+    bool is_extern = false;  // extern struct（外部ハードウェアモジュール等）
 
     // with キーワードで自動実装するinterface
     std::vector<std::string> auto_impls;

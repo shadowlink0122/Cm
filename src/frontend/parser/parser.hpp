@@ -21,12 +21,13 @@ using DiagKind = Severity;
 // ============================================================
 class Parser {
    public:
-    Parser(std::vector<Token> tokens)
+    Parser(std::vector<Token> tokens, bool is_sv_platform = false)
         : tokens_(std::move(tokens)),
           pos_(0),
           last_error_line_(0),
           parse_depth_(0),
-          max_parse_depth_(0) {}
+          max_parse_depth_(0),
+          is_sv_platform_(is_sv_platform) {}
 
     // プログラム全体を解析（parser_decl.cppで実装）
     ast::Program parse();
@@ -50,7 +51,7 @@ class Parser {
                                 std::vector<ast::AttributeNode> attributes = {},
                                 bool is_async = false);
     std::vector<ast::Param> parse_params();
-    ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {}, bool is_extern = false);
     std::optional<ast::OperatorKind> parse_operator_kind();
     ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {});
@@ -190,6 +191,7 @@ class Parser {
         false;  // 演算子戻り値型パース中フラグ（*&の型サフィックス抑制）
     int parse_depth_ = 0;      // 再帰深度カウンター
     int max_parse_depth_ = 0;  // 最大再帰深度記録
+    bool is_sv_platform_ = false;  // SVプラットフォームフラグ
 };
 
 }  // namespace cm

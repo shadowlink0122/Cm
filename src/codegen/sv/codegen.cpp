@@ -248,6 +248,17 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         emitLine(stmt);
     }
 
+    // extern struct インスタンス化文
+    for (const auto& inst : mod.instance_blocks) {
+        append_line("");
+        // 複数行のインスタンス化文を行ごとに出力
+        std::istringstream iss(inst);
+        std::string line;
+        while (std::getline(iss, line)) {
+            emitLine(line);
+        }
+    }
+
     // function/task ブロック
     for (const auto& fn : mod.function_blocks) {
         append_line("");
@@ -661,6 +672,17 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             name = name.substr(5);
         // ポートと名前が衝突する場合はスキップ
         if (port_names.count(name))
+            continue;
+        // extern struct インスタンスと同名の変数はスキップ
+        bool is_instance_var = false;
+        for (const auto& inst : mod.instance_blocks) {
+            if (inst.find(" " + name + " ") != std::string::npos ||
+                inst.find(" " + name + ";") != std::string::npos) {
+                is_instance_var = true;
+                break;
+            }
+        }
+        if (is_instance_var)
             continue;
         // parameter宣言と名前が衝突する場合はスキップ
         bool is_param_var = false;
@@ -1717,6 +1739,97 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         if (!gv)
             continue;
 
+        // extern struct インスタンスの検出（型名ベース）
+        if (gv->type) {
+            const mir::MirStruct* extern_st = nullptr;
+            for (const auto& st : program.structs) {
+                if (st && st->name == gv->type->name && st->is_extern) {
+                    extern_st = st.get();
+                    break;
+                }
+            }
+            if (extern_st) {
+                // インスタンス化文を生成
+                std::string inst;
+                inst += extern_st->name;
+
+                // パラメータ部（#[sv::param]属性）
+                std::vector<std::string> params;
+                std::vector<std::string> ports;
+
+                for (const auto& field : extern_st->fields) {
+                    bool is_sv_param = false;
+                    bool is_port = false;
+                    for (const auto& attr : field.attributes) {
+                        if (attr == "sv::param") is_sv_param = true;
+                        if (attr == "input" || attr == "output" || attr == "inout") is_port = true;
+                    }
+
+                    if (is_sv_param) {
+                        // デフォルト値: フィールドの default_value_str → struct_field_inits → "0"
+                        std::string val = "0";
+                        if (!field.default_value_str.empty()) {
+                            val = field.default_value_str;
+                        } else {
+                            for (const auto& [fname, fconst] : gv->struct_field_inits) {
+                                if (fname == field.name) {
+                                    if (auto* ival = std::get_if<int64_t>(&fconst.value)) {
+                                        val = std::to_string(*ival);
+                                    } else if (auto* bval = std::get_if<bool>(&fconst.value)) {
+                                        val = *bval ? "1" : "0";
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        params.push_back("." + field.name + "(" + val + ")");
+                    } else if (is_port) {
+                        // ポート接続: フィールドの default_value_str → struct_field_inits → フィールド名
+                        std::string sig = field.name;
+                        if (!field.default_value_str.empty()) {
+                            sig = field.default_value_str;
+                        } else {
+                            for (const auto& [fname, fconst] : gv->struct_field_inits) {
+                                if (fname == field.name) {
+                                    if (auto* sval = std::get_if<std::string>(&fconst.value)) {
+                                        sig = *sval;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        ports.push_back("." + field.name + "(" + sig + ")");
+                    }
+                }
+
+                if (!params.empty()) {
+                    inst += " #(\n";
+                    for (size_t i = 0; i < params.size(); ++i) {
+                        inst += "        " + params[i];
+                        if (i + 1 < params.size()) inst += ",";
+                        inst += "\n";
+                    }
+                    inst += "    )";
+                }
+
+                inst += " " + gv->name;
+
+                if (!ports.empty()) {
+                    inst += " (\n";
+                    for (size_t i = 0; i < ports.size(); ++i) {
+                        inst += "        " + ports[i];
+                        if (i + 1 < ports.size()) inst += ",";
+                        inst += "\n";
+                    }
+                    inst += "    )";
+                }
+
+                inst += ";";
+                default_mod.instance_blocks.push_back(inst);
+                continue;
+            }
+        }
+
         // 属性からポート方向を判定
         bool is_input = false;
         bool is_output = false;
@@ -1870,8 +1983,10 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     }
 
     // struct → typedef struct packed 出力（#[sv::packed]属性付きのみ）
+    // extern struct はモジュール定義なので除外
     for (const auto& st : program.structs) {
         if (!st) continue;
+        if (st->is_extern) continue;  // extern struct はtypedef出力しない
         // TODO: sv::packed属性チェック（現状は全structをpacked出力）
         std::ostringstream ss;
         ss << "typedef struct packed {\n";
