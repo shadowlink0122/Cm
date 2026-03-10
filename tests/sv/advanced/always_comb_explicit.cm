@@ -1,0 +1,13 @@
+//! platform: sv
+
+// always_comb 明示テスト: always_comb キーワード直接指定
+
+#[input]  bool a = false;
+#[input]  bool b = false;
+#[output] bool and_out = false;
+#[output] bool or_out = false;
+
+always_comb void logic_gates() {
+    and_out = a && b;
+    or_out = a || b;
+}

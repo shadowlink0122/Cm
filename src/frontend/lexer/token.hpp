@@ -105,6 +105,13 @@ enum class TokenKind {
     KwNegedge,  // negedge信号型
     KwWire,     // wire修飾型
     KwReg,      // reg修飾型
+    KwAlways,      // always ロジックブロック修飾子（自動判別）
+    KwAlwaysFF,    // always_ff 順序回路（明示指定）
+    KwAlwaysComb,  // always_comb 組み合わせ回路（明示指定）
+    KwAlwaysLatch, // always_latch ラッチ（明示指定）
+    KwAssign,   // assign 連続代入
+    KwInitial,  // initial シミュレーション初期化
+    KwBit,      // bit<N> 任意ビット幅型
 
     // 演算子
     Plus,

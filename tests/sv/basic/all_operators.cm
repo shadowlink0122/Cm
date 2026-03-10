@@ -1,0 +1,27 @@
+//! platform: sv
+
+// 複合演算テスト: 算術+ビット演算の組み合わせ
+
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint add_res = 0;
+#[output] uint sub_res = 0;
+#[output] uint mul_res = 0;
+#[output] uint and_res = 0;
+#[output] uint or_res = 0;
+#[output] uint xor_res = 0;
+#[output] uint shl_res = 0;
+#[output] uint shr_res = 0;
+#[output] uint not_res = 0;
+
+void compute() {
+    add_res = a + b;
+    sub_res = a - b;
+    mul_res = a * b;
+    and_res = a & b;
+    or_res  = a | b;
+    xor_res = a ^ b;
+    shl_res = a << 2;
+    shr_res = b >> 1;
+    not_res = ~a;
+}

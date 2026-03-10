@@ -1,0 +1,13 @@
+//! platform: sv
+
+// always 自動判別テスト: always (if without else) → always_latch に自動変換
+
+#[input]  bool wr_en = false;
+#[input]  uint data_in = 0;
+#[output] uint data_out = 0;
+
+always void auto_latch() {
+    if (wr_en) {
+        data_out = data_in;
+    }
+}

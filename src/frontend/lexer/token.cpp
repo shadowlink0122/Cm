@@ -182,6 +182,20 @@ const char* token_kind_to_string(TokenKind kind) {
             return "wire";
         case TokenKind::KwReg:
             return "reg";
+        case TokenKind::KwAlways:
+            return "always";
+        case TokenKind::KwAlwaysFF:
+            return "always_ff";
+        case TokenKind::KwAlwaysComb:
+            return "always_comb";
+        case TokenKind::KwAlwaysLatch:
+            return "always_latch";
+        case TokenKind::KwAssign:
+            return "assign";
+        case TokenKind::KwInitial:
+            return "initial";
+        case TokenKind::KwBit:
+            return "bit";
 
         // 演算子
         case TokenKind::Plus:

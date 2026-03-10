@@ -35,8 +35,9 @@ struct SVModule {
     std::string name;
     std::vector<SVPort> ports;
     std::vector<std::string> parameters;          // parameter宣言
-    std::vector<std::string> always_ff_blocks;    // always_ff ブロック
-    std::vector<std::string> always_comb_blocks;  // always_comb ブロック
+    std::vector<std::string> always_ff_blocks;     // always_ff ブロック
+    std::vector<std::string> always_comb_blocks;   // always_comb ブロック
+    std::vector<std::string> always_latch_blocks;  // always_latch ブロック
     std::vector<std::string> assign_statements;   // assign 文
     std::vector<std::string> wire_declarations;   // 内部ワイヤ宣言
     std::vector<std::string> reg_declarations;    // 内部レジスタ宣言

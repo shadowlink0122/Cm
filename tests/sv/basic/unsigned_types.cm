@@ -1,0 +1,19 @@
+//! platform: sv
+
+// unsigned 全幅テスト: utiny, ushort, uint, ulong のSV出力確認
+
+#[input]  utiny  a_utiny  = 0;
+#[input]  ushort a_ushort = 0;
+#[input]  uint   a_uint   = 0;
+#[input]  ulong  a_ulong  = 0;
+#[output] utiny  r_utiny  = 0;
+#[output] ushort r_ushort = 0;
+#[output] uint   r_uint   = 0;
+#[output] ulong  r_ulong  = 0;
+
+void compute() {
+    r_utiny  = a_utiny  + 1;
+    r_ushort = a_ushort + 1;
+    r_uint   = a_uint   + 1;
+    r_ulong  = a_ulong  + 1;
+}

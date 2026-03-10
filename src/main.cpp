@@ -63,7 +63,7 @@ std::string get_version() {
 #ifdef CM_VERSION
     return CM_VERSION;
 #else
-    return "0.15.0";
+    return "0.15.1";
 #endif
 }
 

@@ -110,20 +110,44 @@ ast::DeclPtr Parser::parse_top_level() {
         }
 
         // export function (型から始まる関数、または修飾子から始まる関数の場合)
-        // 修飾子: static, inline, async
+        // 修飾子: static, inline, async, always, always_ff, always_comb, always_latch
         if (is_type_start() || check(TokenKind::KwStatic) || check(TokenKind::KwInline) ||
-            check(TokenKind::KwAsync)) {
+            check(TokenKind::KwAsync) || check(TokenKind::KwAlways) ||
+            check(TokenKind::KwAlwaysFF) || check(TokenKind::KwAlwaysComb) ||
+            check(TokenKind::KwAlwaysLatch)) {
             // 修飾子を収集
             bool is_static = consume_if(TokenKind::KwStatic);
             bool is_inline = consume_if(TokenKind::KwInline);
             bool is_async = consume_if(TokenKind::KwAsync);
+            bool is_always = consume_if(TokenKind::KwAlways);
+            // always_ff/always_comb/always_latch の明示指定
+            auto ak = ast::FunctionDecl::AlwaysKind::None;
+            if (is_always) {
+                ak = ast::FunctionDecl::AlwaysKind::Auto;
+            } else if (consume_if(TokenKind::KwAlwaysFF)) {
+                is_always = true;
+                ak = ast::FunctionDecl::AlwaysKind::FF;
+            } else if (consume_if(TokenKind::KwAlwaysComb)) {
+                is_always = true;
+                ak = ast::FunctionDecl::AlwaysKind::Comb;
+            } else if (consume_if(TokenKind::KwAlwaysLatch)) {
+                is_always = true;
+                ak = ast::FunctionDecl::AlwaysKind::Latch;
+            }
 
             // グローバル変数判定（型 名前 = ... のパターン）
-            if (!is_static && !is_inline && !is_async && is_global_var_start()) {
+            if (!is_static && !is_inline && !is_async && !is_always && is_global_var_start()) {
                 return parse_global_var_decl(true, std::move(attrs));
             }
 
-            return parse_function(true, is_static, is_inline, std::move(attrs), is_async);
+            auto func_decl = parse_function(true, is_static, is_inline, std::move(attrs), is_async);
+            if (is_always) {
+                if (auto* f = func_decl->as<ast::FunctionDecl>()) {
+                    f->is_always = true;
+                    f->always_kind = ak;
+                }
+            }
+            return func_decl;
         }
 
         // それ以外は分離エクスポート (export NAME1, NAME2;)
@@ -143,6 +167,21 @@ ast::DeclPtr Parser::parse_top_level() {
     bool is_static = consume_if(TokenKind::KwStatic);
     bool is_inline = consume_if(TokenKind::KwInline);
     bool is_async = consume_if(TokenKind::KwAsync);
+    bool is_always = consume_if(TokenKind::KwAlways);
+    // always_ff/always_comb/always_latch の明示指定
+    auto ak = ast::FunctionDecl::AlwaysKind::None;
+    if (is_always) {
+        ak = ast::FunctionDecl::AlwaysKind::Auto;
+    } else if (consume_if(TokenKind::KwAlwaysFF)) {
+        is_always = true;
+        ak = ast::FunctionDecl::AlwaysKind::FF;
+    } else if (consume_if(TokenKind::KwAlwaysComb)) {
+        is_always = true;
+        ak = ast::FunctionDecl::AlwaysKind::Comb;
+    } else if (consume_if(TokenKind::KwAlwaysLatch)) {
+        is_always = true;
+        ak = ast::FunctionDecl::AlwaysKind::Latch;
+    }
 
     // struct
     if (check(TokenKind::KwStruct)) {
@@ -220,12 +259,19 @@ ast::DeclPtr Parser::parse_top_level() {
     }
 
     // グローバル変数判定（型 名前 = ... のパターン）
-    if (!is_static && !is_inline && !is_async && is_global_var_start()) {
+    if (!is_static && !is_inline && !is_async && !is_always && is_global_var_start()) {
         return parse_global_var_decl(false, std::move(attrs));
     }
 
     // 関数 (型 名前 ...)
-    return parse_function(false, is_static, is_inline, std::move(attrs), is_async);
+    auto func_decl = parse_function(false, is_static, is_inline, std::move(attrs), is_async);
+    if (is_always) {
+        if (auto* f = func_decl->as<ast::FunctionDecl>()) {
+            f->is_always = true;
+            f->always_kind = ak;
+        }
+    }
+    return func_decl;
 }
 
 // グローバル変数宣言かどうかを先読みで判定

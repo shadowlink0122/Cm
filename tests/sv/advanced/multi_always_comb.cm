@@ -1,0 +1,18 @@
+//! platform: sv
+
+// always_comb 複数ブロックテスト
+// 1つのモジュール内に複数のalways_combブロックを定義
+
+#[input]  bool sel = 0;
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint sum = 0;
+#[output] uint diff = 0;
+
+always void calc_sum() {
+    sum = a + b;
+}
+
+always void calc_diff() {
+    diff = a - b;
+}

@@ -1,0 +1,21 @@
+//! platform: sv
+
+// 比較演算子テスト: ==, !=, <, <=, >, >= の全組み合わせ
+
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] bool eq = 0;
+#[output] bool ne = 0;
+#[output] bool lt = 0;
+#[output] bool le = 0;
+#[output] bool gt = 0;
+#[output] bool ge = 0;
+
+void compare() {
+    eq = (a == b);
+    ne = (a != b);
+    lt = (a < b);
+    le = (a <= b);
+    gt = (a > b);
+    ge = (a >= b);
+}

@@ -203,6 +203,12 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         append_line("");
     }
 
+    // always_latch ブロック
+    for (const auto& block : mod.always_latch_blocks) {
+        emit(block);
+        append_line("");
+    }
+
     // assign 文
     for (const auto& stmt : mod.assign_statements) {
         emitLine(stmt);
@@ -558,26 +564,84 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     std::string edge_clock;  // クロック信号名
     bool has_explicit_edge = false;
 
+    // 複数エッジ: 非同期リセット用 (always void f(posedge clk, negedge rst_n))
+    std::vector<std::pair<std::string, std::string>> all_edges;  // {edge_type, signal_name}
+
     for (const auto& local : func.locals) {
         if (local.type && local.type->kind == hir::TypeKind::Posedge) {
-            edge_type = "posedge";
-            edge_clock = local.name;
-            has_explicit_edge = true;
-            break;
+            // 重複排除: 同名信号が既にある場合はスキップ
+            bool dup = false;
+            for (const auto& e : all_edges) {
+                if (e.second == local.name) { dup = true; break; }
+            }
+            if (!dup) {
+                if (!has_explicit_edge) {
+                    edge_type = "posedge";
+                    edge_clock = local.name;
+                    has_explicit_edge = true;
+                }
+                all_edges.push_back({"posedge", local.name});
+            }
         }
         if (local.type && local.type->kind == hir::TypeKind::Negedge) {
-            edge_type = "negedge";
-            edge_clock = local.name;
-            has_explicit_edge = true;
-            break;
+            // 重複排除: 同名信号が既にある場合はスキップ
+            bool dup = false;
+            for (const auto& e : all_edges) {
+                if (e.second == local.name) { dup = true; break; }
+            }
+            if (!dup) {
+                if (!has_explicit_edge) {
+                    edge_type = "negedge";
+                    edge_clock = local.name;
+                    has_explicit_edge = true;
+                }
+                all_edges.push_back({"negedge", local.name});
+            }
         }
     }
 
     if (has_explicit_edge) {
         // 明示的なposedge/negedge型パラメータ → always_ff
-        block_ss << indent() << "always_ff @(" << edge_type << " " << edge_clock << ") begin\n";
-    } else if (func.is_async) {
-        // Phase 4: マルチクロックドメイン対応（後方互換: async func）
+        if (all_edges.size() > 1) {
+            // 複数エッジ: always_ff @(posedge clk or negedge rst_n)
+            block_ss << indent() << "always_ff @(";
+            for (size_t i = 0; i < all_edges.size(); ++i) {
+                if (i > 0) block_ss << " or ";
+                block_ss << all_edges[i].first << " " << all_edges[i].second;
+            }
+            block_ss << ") begin\n";
+        } else {
+            block_ss << indent() << "always_ff @(" << edge_type << " " << edge_clock << ") begin\n";
+        }
+    } else if (func.is_always && !has_explicit_edge) {
+        // always修飾子 + エッジパラメータなし
+        using AK = mir::MirFunction::AlwaysKind;
+        if (func.always_kind == AK::Comb) {
+            // always_comb 明示指定
+            block_ss << indent() << "always_comb begin\n";
+        } else if (func.always_kind == AK::Latch) {
+            // always_latch 明示指定
+            block_ss << indent() << "always_latch begin\n";
+        } else {
+            // AutoまたはNone: 後でCFG解析で判別（一旦always_combとして出力し後で置換）
+            block_ss << indent() << "always_comb begin\n";
+        }
+    } else if (func.always_kind == mir::MirFunction::AlwaysKind::FF) {
+        // always_ff 明示指定（エッジパラメータなし）→ デフォルト posedge clk
+        std::string clock_name = "clk";
+        for (const auto& attr : func.attributes) {
+            std::string prefix1 = "sv::clock_domain(";
+            std::string prefix2 = "verilog::clock_domain(";
+            if (attr.find(prefix1) == 0 && attr.back() == ')') {
+                clock_name = attr.substr(prefix1.size(), attr.size() - prefix1.size() - 1);
+            } else if (attr.find(prefix2) == 0 && attr.back() == ')') {
+                clock_name = attr.substr(prefix2.size(), attr.size() - prefix2.size() - 1);
+            }
+        }
+        block_ss << indent() << "always_ff @(posedge " << clock_name << ") begin\n";
+    } else if (func.is_always || func.is_async) {
+        // always修飾子+エッジあり、またはasync修飾子（後方互換）→ always_ff @(posedge clk)
+        // Phase 4: マルチクロックドメイン対応
         std::string clock_name = "clk";
         for (const auto& attr : func.attributes) {
             std::string prefix1 = "sv::clock_domain(";
@@ -1102,10 +1166,53 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             block_content.pop_back();
     }
 
-    if (has_explicit_edge || func.is_async) {
+    if (has_explicit_edge || func.is_async ||
+        func.always_kind == mir::MirFunction::AlwaysKind::FF) {
         mod.always_ff_blocks.push_back(block_content);
     } else {
-        mod.always_comb_blocks.push_back(block_content);
+        using AK = mir::MirFunction::AlwaysKind;
+        if (func.always_kind == AK::Latch) {
+            // always_latch 明示指定
+            mod.always_latch_blocks.push_back(block_content);
+        } else if (func.always_kind == AK::Comb) {
+            // always_comb 明示指定
+            mod.always_comb_blocks.push_back(block_content);
+        } else {
+            // Auto: CFG解析で判別
+            // 全制御パスで全出力が代入されていれば always_comb、
+            // 一部パスで未代入があれば always_latch
+            // 簡易判定: ifがあってelseがない場合はラッチ推論
+            bool has_incomplete_assign = false;
+            std::istringstream check_stream(block_content);
+            std::string check_line;
+            int if_count = 0;
+            int else_count = 0;
+            while (std::getline(check_stream, check_line)) {
+                // if begin の数と else begin の数をカウント
+                if (check_line.find("if (") != std::string::npos ||
+                    check_line.find("if(") != std::string::npos) {
+                    if_count++;
+                }
+                if (check_line.find("end else begin") != std::string::npos ||
+                    check_line.find("else begin") != std::string::npos) {
+                    else_count++;
+                }
+            }
+            // ifがあるのにelseが少ない → ラッチ推論
+            if (if_count > 0 && else_count < if_count) {
+                has_incomplete_assign = true;
+                // ブロックヘッダを always_latch に置換
+                size_t pos = block_content.find("always_comb begin");
+                if (pos != std::string::npos) {
+                    block_content.replace(pos, 17, "always_latch begin");
+                }
+            }
+            if (has_incomplete_assign) {
+                mod.always_latch_blocks.push_back(block_content);
+            } else {
+                mod.always_comb_blocks.push_back(block_content);
+            }
+        }
     }
 
     // インデントレベルをリセット
@@ -1391,6 +1498,18 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
             param_decl += ";";
             default_mod.parameters.push_back(param_decl);
+            continue;
+        }
+
+        // const変数 → localparam宣言
+        if (gv->is_const) {
+            std::string localparam_decl = "localparam " + mapType(gv->type) + " " + gv->name;
+            // 初期値がある場合は付加
+            if (gv->init_value) {
+                localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
+            }
+            localparam_decl += ";";
+            default_mod.parameters.push_back(localparam_decl);
             continue;
         }
 

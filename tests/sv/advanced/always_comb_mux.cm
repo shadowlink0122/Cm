@@ -1,0 +1,16 @@
+//! platform: sv
+
+// always修飾子テスト: エッジなし → always_comb 生成確認
+
+#[input]  bool sel = 0;
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint out = 0;
+
+always void select() {
+    if (sel) {
+        out = a;
+    } else {
+        out = b;
+    }
+}

@@ -635,6 +635,9 @@ struct MirFunction {
     bool is_extern = false;    // extern "C" 関数か
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_async = false;     // async関数（JSバックエンド用）
+    bool is_always = false;    // always修飾子（SVバックエンド用: always_ff/always_comb）
+    // SVバックエンド: always ブロックの種別
+    enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
     std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）
     std::vector<LocalDecl> locals;        // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;      // 引数に対応するローカルID

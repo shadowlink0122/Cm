@@ -1,0 +1,19 @@
+//! platform: sv
+
+// signed 型の全幅テスト: tiny, short, int, long のSV出力確認
+
+#[input]  tiny   a_tiny  = 0;
+#[input]  short  a_short = 0;
+#[input]  int    a_int   = 0;
+#[input]  long   a_long  = 0;
+#[output] tiny   r_tiny  = 0;
+#[output] short  r_short = 0;
+#[output] int    r_int   = 0;
+#[output] long   r_long  = 0;
+
+void compute() {
+    r_tiny  = a_tiny  + 1;
+    r_short = a_short + 1;
+    r_int   = a_int   + 1;
+    r_long  = a_long  + 1;
+}
