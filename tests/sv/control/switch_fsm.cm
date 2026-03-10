@@ -1,0 +1,37 @@
+//! platform: sv
+
+// switch + 多段FSMテスト
+
+#[input]  bool clk = false;
+#[input]  bool rst_n = true;
+#[input]  bool start = false;
+#[output] utiny state = 0;
+#[output] bool done = false;
+
+always void fsm(posedge clk, negedge rst_n) {
+    if (rst_n == false) {
+        state = 0;
+        done = false;
+    } else {
+        switch (state) {
+            case(0) {
+                if (start) {
+                    state = 1;
+                }
+            }
+            case(1) {
+                state = 2;
+            }
+            case(2) {
+                state = 3;
+            }
+            case(3) {
+                done = true;
+                state = 0;
+            }
+            else {
+                state = 0;
+            }
+        }
+    }
+}
