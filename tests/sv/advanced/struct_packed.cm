@@ -1,0 +1,16 @@
+//! platform: sv
+
+// struct → typedef struct packed テスト
+
+struct Pixel {
+    utiny r;
+    utiny g;
+    utiny b;
+}
+
+#[input]  bool clk = false;
+#[output] uint brightness = 0;
+
+always void process(posedge clk) {
+    brightness = brightness + 1;
+}

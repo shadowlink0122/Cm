@@ -1,0 +1,23 @@
+//! platform: sv
+
+// enum → typedef enum logic テスト
+// CmのenumをSVのtypedef enumに変換
+
+enum State {
+    IDLE,
+    RUN,
+    DONE,
+    ERROR
+}
+
+#[input]  bool clk = false;
+#[input]  bool rst_n = true;
+#[output] uint count = 0;
+
+always void process(posedge clk, negedge rst_n) {
+    if (rst_n == false) {
+        count = 0;
+    } else {
+        count = count + 1;
+    }
+}

@@ -203,6 +203,14 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         append_line("");
     }
 
+    // typedef enum / struct packed 宣言
+    for (const auto& td : mod.type_declarations) {
+        emitLine(td);
+    }
+    if (!mod.type_declarations.empty()) {
+        append_line("");
+    }
+
     // 内部ワイヤ宣言
     for (const auto& wire : mod.wire_declarations) {
         emitLine(wire);
@@ -238,6 +246,12 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     // assign 文
     for (const auto& stmt : mod.assign_statements) {
         emitLine(stmt);
+    }
+
+    // function/task ブロック
+    for (const auto& fn : mod.function_blocks) {
+        append_line("");
+        emit(fn);
     }
 
     decreaseIndent();
@@ -532,6 +546,100 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // main関数はスキップ（ハードウェアにmainはない）
     if (func.name == "main")
         return;
+
+    // 非always/非async関数 → SV function automatic または task automatic
+    // ただし、posedge/negedge以外の引数を持つ関数のみ
+    // 引数なし/posedge/negedge引数のみの関数はalwaysブロックとして出力
+    if (!func.is_always && !func.is_async && func.always_kind == mir::MirFunction::AlwaysKind::None) {
+        // posedge/negedge以外の引数があるかチェック
+        bool has_sv_args = false;
+        for (auto arg_id : func.arg_locals) {
+            if (arg_id < func.locals.size()) {
+                auto& local = func.locals[arg_id];
+                if (local.type && local.type->kind != hir::TypeKind::Posedge &&
+                    local.type->kind != hir::TypeKind::Negedge) {
+                    has_sv_args = true;
+                    break;
+                }
+            }
+        }
+        if (has_sv_args) {
+        std::ostringstream fn_ss;
+        indent_level_ = 1;
+
+        // 戻り値型を取得
+        bool is_void = true;
+        std::string ret_type_str = "void";
+        if (func.return_local < func.locals.size()) {
+            auto& ret_local = func.locals[func.return_local];
+            if (ret_local.type && ret_local.type->kind != hir::TypeKind::Void) {
+                is_void = false;
+                ret_type_str = mapType(ret_local.type);
+            }
+        }
+
+        // 引数リスト構築（posedge/negedge型を除外）
+        std::vector<std::string> args;
+        for (auto arg_id : func.arg_locals) {
+            if (arg_id < func.locals.size()) {
+                auto& local = func.locals[arg_id];
+                if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                   local.type->kind == hir::TypeKind::Negedge))
+                    continue;
+                args.push_back("input " + mapType(local.type) + " " + local.name);
+            }
+        }
+
+        if (is_void) {
+            fn_ss << indent() << "task automatic " << func.name << "(";
+        } else {
+            fn_ss << indent() << "function automatic " << ret_type_str << " " << func.name << "(";
+        }
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (i > 0) fn_ss << ", ";
+            fn_ss << args[i];
+        }
+        fn_ss << ");\n";
+
+        // ローカル変数宣言（引数と戻り値を除く）
+        increaseIndent();
+        std::set<mir::LocalId> arg_set(func.arg_locals.begin(), func.arg_locals.end());
+        for (size_t i = 0; i < func.locals.size(); ++i) {
+            if (i == func.return_local) continue;  // 戻り値
+            if (arg_set.count(static_cast<mir::LocalId>(i))) continue;  // 引数
+            auto& local = func.locals[i];
+            if (local.name.empty() || local.name.find('@') != std::string::npos) continue;
+            if (local.name.find("_t") == 0) continue;  // 一時変数
+            fn_ss << indent() << mapType(local.type) << " " << local.name << ";\n";
+        }
+
+        // 関数本体
+        if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+            std::set<size_t> visited;
+            std::ostringstream body_ss;
+            emitBlockRecursive(func, 0, visited, body_ss);
+            // @return → return に置換
+            std::string body = body_ss.str();
+            size_t pos = 0;
+            while ((pos = body.find("@return", pos)) != std::string::npos) {
+                body.replace(pos, 7, func.name);
+                pos += func.name.size();
+            }
+            fn_ss << body;
+        }
+
+        decreaseIndent();
+
+        if (is_void) {
+            fn_ss << indent() << "endtask\n";
+        } else {
+            fn_ss << indent() << "endfunction\n";
+        }
+
+        mod.function_blocks.push_back(fn_ss.str());
+            return;
+        }  // if (has_sv_args)
+    }
 
     // ローカル変数を内部ワイヤ/レジスタとして宣言
     // （ポートと名前が衝突する変数は除外）
@@ -1619,6 +1727,49 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         if (!func)
             continue;
         analyzeFunction(*func, default_mod);
+    }
+
+    // enum → typedef enum logic 出力
+    for (const auto& e : program.enums) {
+        if (!e) continue;
+        // Tagged Union（ペイロード付きenum）はSVでは直接変換しない
+        if (e->is_tagged_union()) continue;
+
+        std::ostringstream ss;
+        // ビット幅計算: メンバー数から必要ビット数を算出
+        int member_count = static_cast<int>(e->members.size());
+        int bit_width = 1;
+        int val = member_count - 1;
+        while (val > 1) {
+            bit_width++;
+            val >>= 1;
+        }
+
+        ss << "typedef enum logic";
+        if (bit_width > 1) {
+            ss << " [" << (bit_width - 1) << ":0]";
+        }
+        ss << " {\n";
+        for (size_t i = 0; i < e->members.size(); ++i) {
+            ss << "    " << e->members[i].name << " = " << bit_width << "'d" << e->members[i].tag_value;
+            if (i + 1 < e->members.size()) ss << ",";
+            ss << "\n";
+        }
+        ss << "} " << e->name << ";";
+        default_mod.type_declarations.push_back(ss.str());
+    }
+
+    // struct → typedef struct packed 出力（#[sv::packed]属性付きのみ）
+    for (const auto& st : program.structs) {
+        if (!st) continue;
+        // TODO: sv::packed属性チェック（現状は全structをpacked出力）
+        std::ostringstream ss;
+        ss << "typedef struct packed {\n";
+        for (const auto& f : st->fields) {
+            ss << "    " << mapType(f.type) << " " << f.name << ";\n";
+        }
+        ss << "} " << st->name << ";";
+        default_mod.type_declarations.push_back(ss.str());
     }
 
     modules_.push_back(default_mod);
