@@ -1723,10 +1723,69 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             }
         }
 
-        // 基本ブロック作成
+        // 到達可能性分析: エントリブロックから到達可能なブロックのみを変換
+        // 到達不能ブロック（例: デフォルトの return 0）がLLVM O3で
+        // unreachable → ud2 (x86_64 SIGILL) に最適化される問題を防止
+        std::unordered_set<size_t> reachableBlocks;
+        {
+            std::queue<size_t> worklist;
+            size_t entry = func.entry_block;
+            if (entry < func.basic_blocks.size() && func.basic_blocks[entry]) {
+                worklist.push(entry);
+                reachableBlocks.insert(entry);
+            } else if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+                worklist.push(0);
+                reachableBlocks.insert(0);
+            }
+            while (!worklist.empty()) {
+                size_t current = worklist.front();
+                worklist.pop();
+                const auto& bb = func.basic_blocks[current];
+                if (!bb) continue;
+                // ターミネーターの遷移先を収集
+                if (bb->terminator) {
+                    auto addSuccessor = [&](size_t target) {
+                        if (target < func.basic_blocks.size() && func.basic_blocks[target] &&
+                            reachableBlocks.insert(target).second) {
+                            worklist.push(target);
+                        }
+                    };
+                    switch (bb->terminator->kind) {
+                        case mir::MirTerminator::Goto: {
+                            auto& data = std::get<mir::MirTerminator::GotoData>(bb->terminator->data);
+                            addSuccessor(data.target);
+                            break;
+                        }
+                        case mir::MirTerminator::SwitchInt: {
+                            auto& data = std::get<mir::MirTerminator::SwitchIntData>(bb->terminator->data);
+                            for (auto& [_, target] : data.targets) {
+                                addSuccessor(target);
+                            }
+                            addSuccessor(data.otherwise);
+                            break;
+                        }
+                        case mir::MirTerminator::Call: {
+                            auto& data = std::get<mir::MirTerminator::CallData>(bb->terminator->data);
+                            addSuccessor(data.success);
+                            break;
+                        }
+                        case mir::MirTerminator::Return:
+                            // 遷移先なし
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+
+        // 基本ブロック作成（到達可能なブロックのみ）
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロックはスキップ
             if (!func.basic_blocks[i])
+                continue;
+            // 到達不能ブロックはスキップ
+            if (reachableBlocks.count(i) == 0)
                 continue;
             auto bbName = "bb" + std::to_string(i);
             blocks[i] = llvm::BasicBlock::Create(ctx.getContext(), bbName, currentFunction);
@@ -1747,10 +1806,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // func.basic_blocks.size()
         //           << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
-            // DCEで削除されたブロックはスキップ
-            if (!func.basic_blocks[i]) {
-                // std::cerr << "[MIR2LLVM]   Block " << i << " is null (DCE removed),
-                // skipping\n";
+            // DCEで削除されたブロック / 到達不能ブロックはスキップ
+            if (!func.basic_blocks[i] || reachableBlocks.count(i) == 0) {
                 continue;
             }
 
