@@ -1105,6 +1105,56 @@ ast::ExprPtr Parser::parse_primary() {
         }
     }
 
+    // 非SVプラットフォーム: 暗黙的構造体リテラル {field: val, ...}
+    // SVプラットフォームでは上のブロックで処理済み
+    if (!is_sv_platform_ && check(TokenKind::LBrace)) {
+        // 先読みで構造体リテラルかどうかを判別
+        auto saved_pos = pos_;
+        advance();  // { を消費
+
+        // {ident: ...} パターン → 構造体リテラル
+        if (check(TokenKind::Ident)) {
+            auto ident_pos = pos_;
+            advance();  // ident を消費
+            if (check(TokenKind::Colon)) {
+                // 構造体リテラル確定
+                pos_ = saved_pos;
+                advance();  // { を再消費
+                debug::par::log(debug::par::Id::PrimaryExpr, "Found implicit struct literal",
+                                debug::Level::Debug);
+                std::vector<ast::StructLiteralField> fields;
+
+                if (!check(TokenKind::RBrace)) {
+                    do {
+                        if (!check(TokenKind::Ident)) {
+                            error("Expected field name in struct literal (named initialization required)");
+                        }
+
+                        std::string field_name(current().get_string());
+                        advance();
+
+                        if (!check(TokenKind::Colon)) {
+                            error("Expected ':' after field name '" + field_name + "' in struct literal");
+                        }
+                        advance();
+
+                        auto value = parse_expr();
+                        fields.emplace_back(std::move(field_name), std::move(value));
+                    } while (consume_if(TokenKind::Comma));
+                }
+
+                expect(TokenKind::RBrace);
+                return ast::make_struct_literal("", std::move(fields),
+                                                Span{start_pos, previous().end});
+            }
+            // ident の後に : がない → 構造体リテラルではない
+            pos_ = saved_pos;
+        } else {
+            // ident でもない → 構造体リテラルではない
+            pos_ = saved_pos;
+        }
+    }
+
     // 括弧式またはラムダ式
     if (consume_if(TokenKind::LParen)) {
         debug::par::log(debug::par::Id::ParenExpr, "Found parenthesized expression or lambda",
