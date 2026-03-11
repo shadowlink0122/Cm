@@ -4,9 +4,9 @@
 //! test: a=10, b=20, c=30, sel=2 -> result=30
 
 // パラメータ化モジュールテスト
-// sv::param アトリビュートでパラメータ宣言
+// const宣言はlocalparamとして出力される
 
-#[sv::param] int WIDTH = 32;
+const int WIDTH = 32;
 
 #[input] int a = 0;
 #[input] int b = 0;

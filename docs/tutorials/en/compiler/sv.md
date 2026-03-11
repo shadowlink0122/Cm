@@ -169,7 +169,7 @@ bit[26] counter;              // → logic [25:0] counter
 #[inout]  ushort bus;               // → inout logic [15:0] bus
 
 // Parameters (overridable)
-#[sv::param] uint WIDTH = 8;        // → parameter WIDTH = 32'd8;
+const uint WIDTH = 8;               // → localparam logic [31:0] WIDTH = 32'd8;
 ```
 
 ---
@@ -306,15 +306,8 @@ localparam CLK_FREQ = 32'd27000000;
 localparam CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
-### `#[sv::param]` + non-`const` → `parameter`
-
-```cm
-#[sv::param] uint WIDTH = 8;
-// → parameter WIDTH = 32'd8;
-```
-
-> **Note:** `const` always maps to `localparam` regardless of attributes.
-> To get an overridable `parameter`, use `#[sv::param]` **without** `const`.
+> **Note:** `const` always maps to `localparam`. There is no `parameter` generation.
+> All compile-time constants become `localparam` in the SV output.
 
 ---
 
@@ -359,7 +352,8 @@ endcase
 
 ### Functions and Tasks
 
-Functions with arguments (no edge params, no `always`/`async`) are automatically mapped based on return type:
+Functions with arguments (no edge params, no `always`/`async`) and a **non-void** return type
+are automatically mapped to SV `function`:
 
 ```cm
 // Non-void → SV function
@@ -368,18 +362,10 @@ uint max_val(uint x, uint y) {
     return y;
 }
 // → function automatic logic [31:0] max_val(...); ... endfunction
-
-// Void with args → SV task
-void send_byte(utiny data) {
-    tx_valid = true;
-    tx_data = data;
-}
-// → task automatic send_byte(...); ... endtask
 ```
 
-> **Note:** No `#[sv::function]` / `#[sv::task]` attributes needed — the compiler
-> determines the mapping from the return type. Argument-less `void f()` still maps
-> to `always_comb` for backward compatibility.
+> **Note:** `void` functions always map to `always_comb` blocks.
+> Only non-void functions with return values become SV `function`.
 
 ```cm
 result = {a, b};         // → {a, b}
@@ -417,7 +403,6 @@ typedef enum logic [1:0] {
 | `#[input]` | Input port | `#[input] posedge clk;` |
 | `#[output]` | Output port | `#[output] utiny led = 0xFF;` |
 | `#[inout]` | Bidirectional port | `#[inout] ushort bus;` |
-| `#[sv::param]` | `parameter` declaration | `#[sv::param] uint WIDTH = 8;` |
 | `#[sv::bram]` | `(* ram_style = "block" *)` | `#[sv::bram] utiny mem[1024];` |
 | `#[sv::lutram]` | `(* ram_style = "distributed" *)` | `#[sv::lutram] utiny lut[16];` |
 | `#[sv::clock_domain("name")]` | Clock for `async func` | `#[sv::clock_domain("fast")]` |

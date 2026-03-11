@@ -558,11 +558,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     if (func.name == "main")
         return;
 
-    // 非always/非async関数 → SV function automatic または task automatic
-    // 引数あり（posedge/negedge以外）の関数は戻り値の有無で function/task に振り分け
-    // 引数なし関数 → always_comb / always_ff にフォールスルー（後方互換）
+    // 非always/非async関数で、非void（戻り値あり）の場合 → SV function automatic
+    // void関数は always_comb / always_ff にフォールスルー
     if (!func.is_always && !func.is_async && func.always_kind == mir::MirFunction::AlwaysKind::None) {
-        // 引数の分類: edgeパラメータと通常パラメータを分離
+        // edgeパラメータの有無を確認
         bool has_edge_param = false;
         bool has_non_edge_args = false;
         for (auto arg_id : func.arg_locals) {
@@ -576,14 +575,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 }
             }
         }
-        // edgeパラメータなし、かつ通常引数がある → function/task
-        // edgeパラメータなし、引数なし → always_comb にフォールスルー（後方互換）
-        // edgeパラメータあり → always_ff にフォールスルー（後方互換）
-        if (!has_edge_param && (has_non_edge_args || !func.arg_locals.empty())) {
-        std::ostringstream fn_ss;
-        indent_level_ = 1;
 
-        // 戻り値型を取得
+        // 非void関数（戻り値あり）→ SV function automatic
         bool is_void = true;
         std::string ret_type_str = "void";
         if (func.return_local < func.locals.size()) {
@@ -593,6 +586,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 ret_type_str = mapType(ret_local.type);
             }
         }
+
+        if (!is_void && !has_edge_param) {
+        std::ostringstream fn_ss;
+        indent_level_ = 1;
 
         // 引数リスト構築（posedge/negedge型を除外）
         std::vector<std::string> args;
@@ -606,11 +603,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
         }
 
-        if (is_void) {
-            fn_ss << indent() << "task automatic " << func.name << "(";
-        } else {
-            fn_ss << indent() << "function automatic " << ret_type_str << " " << func.name << "(";
-        }
+        fn_ss << indent() << "function automatic " << ret_type_str << " " << func.name << "(";
         for (size_t i = 0; i < args.size(); ++i) {
             if (i > 0) fn_ss << ", ";
             fn_ss << args[i];
@@ -621,11 +614,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         increaseIndent();
         std::set<mir::LocalId> arg_set(func.arg_locals.begin(), func.arg_locals.end());
         for (size_t i = 0; i < func.locals.size(); ++i) {
-            if (i == func.return_local) continue;  // 戻り値
-            if (arg_set.count(static_cast<mir::LocalId>(i))) continue;  // 引数
+            if (i == func.return_local) continue;
+            if (arg_set.count(static_cast<mir::LocalId>(i))) continue;
             auto& local = func.locals[i];
             if (local.name.empty() || local.name.find('@') != std::string::npos) continue;
-            // ポインタ型テンポラリはスキップ(__builtin_* Call引数用)
+            // ポインタ型テンポラリはスキップ
             if (local.name.find("_t") == 0 && local.type &&
                 local.type->kind == hir::TypeKind::Pointer) continue;
             fn_ss << indent() << mapType(local.type) << " " << local.name << ";\n";
@@ -636,7 +629,6 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             std::set<size_t> visited;
             std::ostringstream body_ss;
             emitBlockRecursive(func, 0, visited, body_ss);
-            // @return → return に置換
             std::string body = body_ss.str();
             size_t pos = 0;
             while ((pos = body.find("@return", pos)) != std::string::npos) {
@@ -647,16 +639,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
 
         decreaseIndent();
-
-        if (is_void) {
-            fn_ss << indent() << "endtask\n";
-        } else {
-            fn_ss << indent() << "endfunction\n";
-        }
+        fn_ss << indent() << "endfunction\n";
 
         mod.function_blocks.push_back(fn_ss.str());
             return;
-        }  // if (has_sv_args)
+        }  // if (!is_void && !has_edge_param)
     }
 
     // ローカル変数を内部ワイヤ/レジスタとして宣言
@@ -1851,7 +1838,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 is_param = true;
         }
 
-        // const変数 → 常にlocalparam（#[sv::param]属性があってもconstなら変更不可）
+        // const変数 → 常にlocalparam
         if (gv->is_const) {
             std::string localparam_decl = "localparam " + mapType(gv->type) + " " + gv->name;
             if (gv->init_value) {
@@ -1859,17 +1846,6 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
             localparam_decl += ";";
             default_mod.parameters.push_back(localparam_decl);
-            continue;
-        }
-
-        // #[sv::param] + 非const → parameter（外部からオーバーライド可能）
-        if (is_param) {
-            std::string param_decl = "parameter " + gv->name;
-            if (gv->init_value) {
-                param_decl += " = " + emitConstant(*gv->init_value, gv->type);
-            }
-            param_decl += ";";
-            default_mod.parameters.push_back(param_decl);
             continue;
         }
 

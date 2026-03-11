@@ -168,8 +168,8 @@ bit[26] counter;              // → logic [25:0] counter
 // 双方向ポート
 #[inout]  ushort bus;               // → inout logic [15:0] bus
 
-// パラメータ（外部から上書き可能）
-#[sv::param] uint WIDTH = 8;        // → parameter WIDTH = 32'd8;
+// パラメータ（定数）
+const uint WIDTH = 8;               // → localparam logic [31:0] WIDTH = 32'd8;
 ```
 
 ---
@@ -306,15 +306,8 @@ localparam CLK_FREQ = 32'd27000000;
 localparam CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
-### `#[sv::param]` + 非`const` → `parameter`
-
-```cm
-#[sv::param] uint WIDTH = 8;
-// → parameter WIDTH = 32'd8;
-```
-
-> **注意:** `const` は属性に関わらず常に `localparam` にマッピングされます。
-> 外部からオーバーライド可能な `parameter` を得るには、`const` を付けずに `#[sv::param]` を使用してください。
+> **注意:** `const` は常に `localparam` にマッピングされます。
+> `parameter` は生成されません。コンパイル時定数は全て `localparam` になります。
 
 ---
 
@@ -359,7 +352,7 @@ endcase
 
 ### function と task
 
-引数あり（edgeパラメータなし）の関数は、戻り値の有無で自動的に振り分けられます:
+引数あり（edgeパラメータなし）かつ **非void（戻り値あり）** の関数は、自動的に SV `function` に変換されます:
 
 ```cm
 // 非void → SV function
@@ -368,18 +361,10 @@ uint max_val(uint x, uint y) {
     return y;
 }
 // → function automatic logic [31:0] max_val(...); ... endfunction
-
-// 引数ありvoid → SV task
-void send_byte(utiny data) {
-    tx_valid = true;
-    tx_data = data;
-}
-// → task automatic send_byte(...); ... endtask
 ```
 
-> **注意:** `#[sv::function]` / `#[sv::task]` 属性は不要です。
-> コンパイラが戻り値の型から自動判定します。
-> 引数なし `void f()` は後方互換のため `always_comb` のままです。
+> **注意:** `void` 関数は常に `always_comb` ブロックになります。
+> 戻り値がある非void関数のみが SV `function` になります。
 
 ---
 
@@ -421,7 +406,6 @@ typedef enum logic [1:0] {
 | `#[input]` | 入力ポート | `#[input] posedge clk;` |
 | `#[output]` | 出力ポート | `#[output] utiny led = 0xFF;` |
 | `#[inout]` | 双方向ポート | `#[inout] ushort bus;` |
-| `#[sv::param]` | `parameter`宣言 | `#[sv::param] uint WIDTH = 8;` |
 | `#[sv::bram]` | `(* ram_style = "block" *)` | `#[sv::bram] utiny mem[1024];` |
 | `#[sv::lutram]` | `(* ram_style = "distributed" *)` | `#[sv::lutram] utiny lut[16];` |
 | `#[sv::clock_domain("name")]` | `async func`のクロック指定 | `#[sv::clock_domain("fast")]` |
