@@ -285,10 +285,8 @@ utiny mask = 8'b10101010;     // → 8'b10101010
 ushort addr = 16'hFF00;       // → 16'hFF00
 ```
 
-### Numeric Separators
-
 ```cm
-const uint CLK_FREQ = 50_000_000;   // → localparam CLK_FREQ = 32'd50000000;
+const uint CLK_FREQ = 50000000;     // → localparam logic [31:0] CLK_FREQ = 32'd50000000;
 ```
 
 ---
@@ -298,12 +296,12 @@ const uint CLK_FREQ = 50_000_000;   // → localparam CLK_FREQ = 32'd50000000;
 ### `const` → `localparam`
 
 ```cm
-const uint CLK_FREQ = 27_000_000;
+const uint CLK_FREQ = 27000000;
 const uint CNT_MAX = CLK_FREQ / 2 - 1;
 ```
 ```systemverilog
-localparam CLK_FREQ = 32'd27000000;
-localparam CNT_MAX = CLK_FREQ / 2 - 32'd1;
+localparam logic [31:0] CLK_FREQ = 32'd27000000;
+localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
 > **Note:** `const` always maps to `localparam`. There is no `parameter` generation.
@@ -504,7 +502,7 @@ gw_sh gowin_build.tcl
 #[input]  negedge rst_n;
 #[output] bool led = false;
 
-const uint CLK_FREQ = 27_000_000;
+const uint CLK_FREQ = 27000000;
 const uint CNT_MAX = CLK_FREQ / 2 - 1;
 
 uint counter = 0;

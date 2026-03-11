@@ -610,9 +610,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
         fn_ss << ");\n";
 
-        // ローカル変数宣言（引数と戻り値を除く）
+        // ローカル変数宣言（引数と戻り値を除く、テンポラリ変数は後で除去）
         increaseIndent();
         std::set<mir::LocalId> arg_set(func.arg_locals.begin(), func.arg_locals.end());
+        // 一旦全ローカル変数を記録（テンポラリは後でスキップ判定）
+        std::vector<std::pair<size_t, std::string>> local_decls;
         for (size_t i = 0; i < func.locals.size(); ++i) {
             if (i == func.return_local) continue;
             if (arg_set.count(static_cast<mir::LocalId>(i))) continue;
@@ -621,22 +623,144 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             // ポインタ型テンポラリはスキップ
             if (local.name.find("_t") == 0 && local.type &&
                 local.type->kind == hir::TypeKind::Pointer) continue;
-            fn_ss << indent() << mapType(local.type) << " " << local.name << ";\n";
+            local_decls.push_back({i, mapType(local.type) + " " + local.name + ";"});
         }
 
-        // 関数本体
+        // 関数本体 — テンポラリ変数のインライン展開
+        std::string body_content;
         if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
             std::set<size_t> visited;
             std::ostringstream body_ss;
             emitBlockRecursive(func, 0, visited, body_ss);
-            std::string body = body_ss.str();
+            std::string raw_body = body_ss.str();
+
+            // @return → 関数名 に置換
             size_t pos = 0;
-            while ((pos = body.find("@return", pos)) != std::string::npos) {
-                body.replace(pos, 7, func.name);
+            while ((pos = raw_body.find("@return", pos)) != std::string::npos) {
+                raw_body.replace(pos, 7, func.name);
                 pos += func.name.size();
             }
-            fn_ss << body;
+
+            // テンポラリ変数のインライン展開（always ブロックと同じロジック）
+            std::istringstream raw_stream(raw_body);
+            std::string line;
+            std::vector<std::string> lines;
+            while (std::getline(raw_stream, line)) {
+                lines.push_back(line);
+            }
+
+            // Pass 1: テンポラリ変数の値を収集
+            std::map<std::string, std::string> fn_temp_values;
+            for (const auto& l : lines) {
+                std::string tr = l;
+                size_t start = tr.find_first_not_of(' ');
+                if (start == std::string::npos) continue;
+                tr = tr.substr(start);
+                if (tr.size() > 2 && tr[0] == '_' && tr[1] == 't' && std::isdigit(tr[2])) {
+                    auto eq_pos = tr.find(" = ");
+                    if (eq_pos != std::string::npos) {
+                        std::string var_name = tr.substr(0, eq_pos);
+                        std::string value = tr.substr(eq_pos + 3);
+                        if (!value.empty() && value.back() == ';') value.pop_back();
+                        fn_temp_values[var_name] = value;
+                    }
+                }
+            }
+
+            // テンポラリ変数を再帰的に展開するラムダ
+            auto fn_inline_temps = [&fn_temp_values](const std::string& expr) -> std::string {
+                std::string result = expr;
+                for (int iter = 0; iter < 10; ++iter) {
+                    bool changed = false;
+                    for (const auto& [var, val] : fn_temp_values) {
+                        size_t p = 0;
+                        while ((p = result.find(var, p)) != std::string::npos) {
+                            bool at_start = (p == 0 || (!std::isalnum(result[p - 1]) && result[p - 1] != '_'));
+                            bool at_end = (p + var.size() >= result.size() ||
+                                           (!std::isalnum(result[p + var.size()]) && result[p + var.size()] != '_'));
+                            if (at_start && at_end) {
+                                std::string replacement = val;
+                                if (val.find(' ') != std::string::npos) {
+                                    bool is_full_rhs = (p == 0 && p + var.size() == result.size());
+                                    if (!is_full_rhs) replacement = "(" + val + ")";
+                                }
+                                result.replace(p, var.size(), replacement);
+                                changed = true;
+                                p += replacement.size();
+                            } else { p += var.size(); }
+                        }
+                    }
+                    if (!changed) break;
+                }
+                return result;
+            };
+
+            // Pass 2: テンポラリ代入行をスキップし、残りの文をインライン展開
+            std::ostringstream expanded_ss;
+            for (const auto& l : lines) {
+                std::string tr = l;
+                size_t start = tr.find_first_not_of(' ');
+                if (start == std::string::npos) { expanded_ss << l << "\n"; continue; }
+                std::string content = tr.substr(start);
+                // テンポラリ代入行はスキップ
+                if (content.size() > 2 && content[0] == '_' && content[1] == 't' &&
+                    std::isdigit(content[2]) && content.find(" = ") != std::string::npos) {
+                    continue;
+                }
+                // 代入文のインライン展開
+                std::string line_indent = l.substr(0, start);
+                auto eq_pos = content.find(" = ");
+                if (eq_pos != std::string::npos) {
+                    std::string lhs = content.substr(0, eq_pos);
+                    std::string rhs = content.substr(eq_pos + 3);
+                    if (!rhs.empty() && rhs.back() == ';') rhs.pop_back();
+                    rhs = fn_inline_temps(rhs);
+                    expanded_ss << line_indent << lhs << " = " << rhs << ";\n";
+                } else {
+                    // if/else等の制御文でもテンポラリをインライン展開
+                    std::string expanded = l;
+                    for (int iter = 0; iter < 10; ++iter) {
+                        bool changed = false;
+                        for (const auto& [var, val] : fn_temp_values) {
+                            size_t p = 0;
+                            while ((p = expanded.find(var, p)) != std::string::npos) {
+                                bool at_start = (p == 0 || (!std::isalnum(expanded[p - 1]) && expanded[p - 1] != '_'));
+                                bool at_end = (p + var.size() >= expanded.size() ||
+                                               (!std::isalnum(expanded[p + var.size()]) && expanded[p + var.size()] != '_'));
+                                if (at_start && at_end) {
+                                    expanded.replace(p, var.size(), val);
+                                    p += val.size();
+                                    changed = true;
+                                } else { p += var.size(); }
+                            }
+                        }
+                        if (!changed) break;
+                    }
+                    expanded_ss << expanded << "\n";
+                }
+            }
+            body_content = expanded_ss.str();
+
+            // テンポラリ変数のローカル宣言をスキップ
+            auto decl_it = local_decls.begin();
+            while (decl_it != local_decls.end()) {
+                auto& local = func.locals[decl_it->first];
+                if (local.name.size() > 2 && local.name[0] == '_' && local.name[1] == 't' &&
+                    std::isdigit(local.name[2]) && fn_temp_values.count(local.name)) {
+                    decl_it = local_decls.erase(decl_it);
+                } else {
+                    ++decl_it;
+                }
+            }
         }
+
+        // ローカル変数宣言を出力
+        for (const auto& decl : local_decls) {
+            fn_ss << indent() << decl.second << "\n";
+        }
+
+        // 展開済みの関数本体を出力
+        fn_ss << body_content;
 
         decreaseIndent();
         fn_ss << indent() << "endfunction\n";
@@ -1165,7 +1289,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     }
 
     // else if 正規化: "end else begin\n    if (...) begin" → "end else if (...) begin"
-    // 余分な末尾endも同時に除去
+    // 結合時にブロック内容のインデントを1レベル浅く調整し、余分なendも除去
     {
         std::istringstream elif_stream(block_content);
         std::vector<std::string> elif_lines;
@@ -1174,101 +1298,70 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             elif_lines.push_back(elif_line);
         }
 
-        std::vector<std::string> elif_result;
-        std::vector<size_t> extra_end_positions;  // 除去すべきendのインデックス
+        std::ostringstream elif_ss;
+        bool first = true;
+        // インデント調整量のスタック: 結合されたelse ifの中で4スペース浅くする
+        int indent_adjust = 0;
+        std::vector<int> adjust_stack;  // begin/endの対応でadjustを追跡
 
         for (size_t i = 0; i < elif_lines.size(); ++i) {
             auto trim_start = elif_lines[i].find_first_not_of(' ');
             if (trim_start == std::string::npos) {
-                elif_result.push_back(elif_lines[i]);
+                if (!first) elif_ss << "\n";
+                elif_ss << elif_lines[i];
+                first = false;
                 continue;
             }
             std::string trimmed = elif_lines[i].substr(trim_start);
             std::string indent_str = elif_lines[i].substr(0, trim_start);
 
-            // "end else begin" パターン検出
+            // "end else begin" + 次行 "if (...)" パターン検出
             if (trimmed == "end else begin" && i + 1 < elif_lines.size()) {
                 auto next_trim = elif_lines[i + 1].find_first_not_of(' ');
                 if (next_trim != std::string::npos &&
                     elif_lines[i + 1].substr(next_trim, 4) == "if (") {
-                    // "end else begin\n    if (" → "end else if ("
-                    elif_result.push_back(indent_str + "end else " +
-                                          elif_lines[i + 1].substr(next_trim));
+                    // 結合: "end else if (...) begin"
+                    if (!first) elif_ss << "\n";
+                    elif_ss << indent_str << "end else " << elif_lines[i + 1].substr(next_trim);
+                    first = false;
                     ++i;  // if行をスキップ
-
-                    // 対応する余分なendを探す: begin/endの対応を追跡
-                    int depth = 0;
-                    for (size_t j = i + 1; j < elif_lines.size(); ++j) {
-                        auto jt = elif_lines[j].find_first_not_of(' ');
-                        if (jt == std::string::npos)
-                            continue;
-                        std::string jc = elif_lines[j].substr(jt);
-                        // beginを含む行でdepth++
-                        if (jc.find("begin") != std::string::npos &&
-                            jc.find("begin") == jc.size() - 5)
-                            depth++;
-                        // "end"で始まる行でdepth--
-                        if (jc == "end" || jc.substr(0, 4) == "end ") {
-                            if (depth > 0) {
-                                depth--;
-                            } else {
-                                // このendが余分：マーク
-                                extra_end_positions.push_back(j);
-                                break;
-                            }
-                        }
-                    }
+                    // 次行以降のインデントを4スペース浅く調整
+                    indent_adjust += 4;
+                    // 対応するendを見つけるためにdepthカウンタを初期化
+                    adjust_stack.push_back(0);
                     continue;
                 }
             }
-            elif_result.push_back(elif_lines[i]);
-        }
 
-        // 余分なend行を除去して最終結果を構築
-        if (!extra_end_positions.empty()) {
-            std::set<size_t> skip_set(extra_end_positions.begin(), extra_end_positions.end());
-            // elif_resultは既に変換済みなので、元のelif_linesからの対応が必要
-            // 代わりに直接elif_linesベースで再構築
-            std::ostringstream elif_ss;
-            bool first = true;
-            for (size_t i = 0; i < elif_lines.size(); ++i) {
-                if (skip_set.count(i))
-                    continue;
-                auto trim_start = elif_lines[i].find_first_not_of(' ');
-                std::string trimmed =
-                    (trim_start != std::string::npos) ? elif_lines[i].substr(trim_start) : "";
-                std::string indent_str =
-                    (trim_start != std::string::npos) ? elif_lines[i].substr(0, trim_start) : "";
-
-                // else begin + 次行if の変換
-                if (trimmed == "end else begin" && i + 1 < elif_lines.size()) {
-                    auto next_trim = elif_lines[i + 1].find_first_not_of(' ');
-                    if (next_trim != std::string::npos &&
-                        elif_lines[i + 1].substr(next_trim, 4) == "if (") {
-                        if (!first)
-                            elif_ss << "\n";
-                        elif_ss << indent_str << "end else " << elif_lines[i + 1].substr(next_trim);
-                        first = false;
-                        ++i;
+            // インデント調整中: begin/endの深さを追跡
+            if (indent_adjust > 0 && !adjust_stack.empty()) {
+                // beginを含む行でdepth++
+                if (trimmed.size() >= 5 && trimmed.substr(trimmed.size() - 5) == "begin") {
+                    adjust_stack.back()++;
+                }
+                // "end"で始まる行でdepth--
+                if (trimmed == "end" || (trimmed.size() >= 4 && trimmed.substr(0, 4) == "end ")) {
+                    if (adjust_stack.back() > 0) {
+                        adjust_stack.back()--;
+                    } else {
+                        // この"end"は余分（結合されたelse ifの対応end）→ スキップ
+                        indent_adjust -= 4;
+                        adjust_stack.pop_back();
                         continue;
                     }
                 }
-                if (!first)
-                    elif_ss << "\n";
+            }
+
+            // インデント調整を適用
+            if (!first) elif_ss << "\n";
+            if (indent_adjust > 0 && static_cast<int>(trim_start) > indent_adjust) {
+                elif_ss << indent_str.substr(indent_adjust) << trimmed;
+            } else {
                 elif_ss << elif_lines[i];
-                first = false;
             }
-            block_content = elif_ss.str();
-        } else if (!elif_result.empty()) {
-            // 変換があったがextra_endなし → elif_resultを使用
-            std::ostringstream elif_ss;
-            for (size_t i = 0; i < elif_result.size(); ++i) {
-                if (i > 0)
-                    elif_ss << "\n";
-                elif_ss << elif_result[i];
-            }
-            block_content = elif_ss.str();
+            first = false;
         }
+        block_content = elif_ss.str();
     }
 
     // 冗長三項演算子除去: "cond ? X : X" → "X"
@@ -1672,6 +1765,50 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                         std::string lhs = emitPlace(*cd.destination, func);
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
                     }
+                }
+                // 成功ブロックに続行
+                emitBlockRecursive(func, cd.success, visited, ss, merge_block);
+            } else {
+                // 一般的な関数呼び出し: result = func_name(arg1, arg2, ...);
+                // ノンブロッキング代入の判定
+                bool use_nb = func.is_async;
+                if (!use_nb) {
+                    for (const auto& local : func.locals) {
+                        if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                           local.type->kind == hir::TypeKind::Negedge)) {
+                            use_nb = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 引数リスト構築
+                std::string args_str;
+                for (size_t i = 0; i < cd.args.size(); ++i) {
+                    if (i > 0) args_str += ", ";
+                    if (cd.args[i]) {
+                        if (cd.args[i]->kind == mir::MirOperand::Move ||
+                            cd.args[i]->kind == mir::MirOperand::Copy) {
+                            const auto& place = std::get<mir::MirPlace>(cd.args[i]->data);
+                            args_str += emitPlace(place, func);
+                        } else if (cd.args[i]->kind == mir::MirOperand::Constant) {
+                            args_str += emitConstant(
+                                std::get<mir::MirConstant>(cd.args[i]->data),
+                                cd.args[i]->type);
+                        } else {
+                            args_str += "0";
+                        }
+                    }
+                }
+
+                // 戻り値がある場合は代入文として出力
+                if (cd.destination) {
+                    std::string lhs = emitPlace(*cd.destination, func);
+                    ss << indent() << lhs << (use_nb ? " <= " : " = ")
+                       << func_name << "(" << args_str << ");\n";
+                } else {
+                    // void関数呼び出し（taskの場合等）
+                    ss << indent() << func_name << "(" << args_str << ");\n";
                 }
                 // 成功ブロックに続行
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
