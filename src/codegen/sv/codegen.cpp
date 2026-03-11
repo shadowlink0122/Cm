@@ -559,22 +559,27 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         return;
 
     // 非always/非async関数 → SV function automatic または task automatic
-    // ただし、posedge/negedge以外の引数を持つ関数のみ
-    // 引数なし/posedge/negedge引数のみの関数はalwaysブロックとして出力
+    // 引数あり（posedge/negedge以外）の関数は戻り値の有無で function/task に振り分け
+    // 引数なし関数 → always_comb / always_ff にフォールスルー（後方互換）
     if (!func.is_always && !func.is_async && func.always_kind == mir::MirFunction::AlwaysKind::None) {
-        // posedge/negedge以外の引数があるかチェック
-        bool has_sv_args = false;
+        // 引数の分類: edgeパラメータと通常パラメータを分離
+        bool has_edge_param = false;
+        bool has_non_edge_args = false;
         for (auto arg_id : func.arg_locals) {
             if (arg_id < func.locals.size()) {
                 auto& local = func.locals[arg_id];
-                if (local.type && local.type->kind != hir::TypeKind::Posedge &&
-                    local.type->kind != hir::TypeKind::Negedge) {
-                    has_sv_args = true;
-                    break;
+                if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                    local.type->kind == hir::TypeKind::Negedge)) {
+                    has_edge_param = true;
+                } else if (local.type) {
+                    has_non_edge_args = true;
                 }
             }
         }
-        if (has_sv_args) {
+        // edgeパラメータなし、かつ通常引数がある → function/task
+        // edgeパラメータなし、引数なし → always_comb にフォールスルー（後方互換）
+        // edgeパラメータあり → always_ff にフォールスルー（後方互換）
+        if (!has_edge_param && (has_non_edge_args || !func.arg_locals.empty())) {
         std::ostringstream fn_ss;
         indent_level_ = 1;
 
@@ -1846,27 +1851,25 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 is_param = true;
         }
 
-        // parameter宣言（SVでは型なしが推奨: parameter NAME = VALUE;）
-        if (is_param) {
-            std::string param_decl = "parameter " + gv->name;
-            // 初期値がある場合は付加
-            if (gv->init_value) {
-                param_decl += " = " + emitConstant(*gv->init_value, gv->type);
-            }
-            param_decl += ";";
-            default_mod.parameters.push_back(param_decl);
-            continue;
-        }
-
-        // const変数 → localparam宣言
+        // const変数 → 常にlocalparam（#[sv::param]属性があってもconstなら変更不可）
         if (gv->is_const) {
             std::string localparam_decl = "localparam " + mapType(gv->type) + " " + gv->name;
-            // 初期値がある場合は付加
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             }
             localparam_decl += ";";
             default_mod.parameters.push_back(localparam_decl);
+            continue;
+        }
+
+        // #[sv::param] + 非const → parameter（外部からオーバーライド可能）
+        if (is_param) {
+            std::string param_decl = "parameter " + gv->name;
+            if (gv->init_value) {
+                param_decl += " = " + emitConstant(*gv->init_value, gv->type);
+            }
+            param_decl += ";";
+            default_mod.parameters.push_back(param_decl);
             continue;
         }
 

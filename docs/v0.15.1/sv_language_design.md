@@ -160,8 +160,8 @@ const uint CNT_MAX = CLK_FREQ / 2 - 1;
 // → localparam CLK_FREQ = 32'd50000000;
 // → localparam CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
-// #[sv::param] → parameter (外部から上書き可能)
-#[sv::param] const uint WIDTH = 8;
+// #[sv::param] + 非const → parameter (外部から上書き可能)
+#[sv::param] uint WIDTH = 8;
 // → parameter WIDTH = 32'd8;
 ```
 

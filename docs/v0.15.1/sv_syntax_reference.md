@@ -17,7 +17,7 @@
 | `input logic [N:0] <name>` | `#[input]` 属性 | `input logic clk` |
 | `output logic [N:0] <name>` | `#[output]` 属性 | `output logic [7:0] led` |
 | `inout logic [N:0] <name>` | `#[inout]` 属性 | `inout logic [15:0] data` |
-| `parameter <name> = <val>;` | `#[sv::param]` 属性 | `parameter WIDTH = 8;` |
+| `parameter <name> = <val>;` | `#[sv::param]` 属性 (非`const`) | `parameter WIDTH = 8;` |
 
 ---
 

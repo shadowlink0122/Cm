@@ -306,12 +306,15 @@ localparam CLK_FREQ = 32'd27000000;
 localparam CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
-### `#[sv::param]` → `parameter`
+### `#[sv::param]` + non-`const` → `parameter`
 
 ```cm
-#[sv::param] const uint WIDTH = 8;
+#[sv::param] uint WIDTH = 8;
 // → parameter WIDTH = 32'd8;
 ```
+
+> **Note:** `const` always maps to `localparam` regardless of attributes.
+> To get an overridable `parameter`, use `#[sv::param]` **without** `const`.
 
 ---
 
@@ -354,9 +357,29 @@ case (state)
 endcase
 ```
 
----
+### Functions and Tasks
 
-## Concatenation and Replication
+Functions with arguments (no edge params, no `always`/`async`) are automatically mapped based on return type:
+
+```cm
+// Non-void → SV function
+uint max_val(uint x, uint y) {
+    if (x > y) { return x; }
+    return y;
+}
+// → function automatic logic [31:0] max_val(...); ... endfunction
+
+// Void with args → SV task
+void send_byte(utiny data) {
+    tx_valid = true;
+    tx_data = data;
+}
+// → task automatic send_byte(...); ... endtask
+```
+
+> **Note:** No `#[sv::function]` / `#[sv::task]` attributes needed — the compiler
+> determines the mapping from the return type. Argument-less `void f()` still maps
+> to `always_comb` for backward compatibility.
 
 ```cm
 result = {a, b};         // → {a, b}

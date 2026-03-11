@@ -306,12 +306,15 @@ localparam CLK_FREQ = 32'd27000000;
 localparam CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
-### `#[sv::param]` → `parameter`
+### `#[sv::param]` + 非`const` → `parameter`
 
 ```cm
-#[sv::param] const uint WIDTH = 8;
+#[sv::param] uint WIDTH = 8;
 // → parameter WIDTH = 32'd8;
 ```
+
+> **注意:** `const` は属性に関わらず常に `localparam` にマッピングされます。
+> 外部からオーバーライド可能な `parameter` を得るには、`const` を付けずに `#[sv::param]` を使用してください。
 
 ---
 
@@ -353,6 +356,30 @@ case (state)
     default: begin next_state <= 32'd0; end
 endcase
 ```
+
+### function と task
+
+引数あり（edgeパラメータなし）の関数は、戻り値の有無で自動的に振り分けられます:
+
+```cm
+// 非void → SV function
+uint max_val(uint x, uint y) {
+    if (x > y) { return x; }
+    return y;
+}
+// → function automatic logic [31:0] max_val(...); ... endfunction
+
+// 引数ありvoid → SV task
+void send_byte(utiny data) {
+    tx_valid = true;
+    tx_data = data;
+}
+// → task automatic send_byte(...); ... endtask
+```
+
+> **注意:** `#[sv::function]` / `#[sv::task]` 属性は不要です。
+> コンパイラが戻り値の型から自動判定します。
+> 引数なし `void f()` は後方互換のため `always_comb` のままです。
 
 ---
 
