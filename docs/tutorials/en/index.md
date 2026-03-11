@@ -75,6 +75,7 @@ Estimated Time: 3 hours
    - [LLVM Backend](compiler/llvm.html) - Native compilation
    - [WASM Backend](compiler/wasm.html) - WebAssembly output
    - [JS Backend](compiler/js-compilation.html) - JavaScript output
+   - [SV Backend](compiler/sv.html) - SystemVerilog / FPGA output 🆕
    - [UEFI Baremetal](compiler/uefi.html) - UEFI application development (no_std)
    - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
    - [Linter](compiler/linter.html) - Static analysis (cm lint)
