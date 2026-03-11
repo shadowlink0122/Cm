@@ -335,9 +335,9 @@ end
 
 ```cm
 switch (state) {
-    case 0: { next_state = 1; }
-    case 1: { next_state = 2; }
-    default: { next_state = 0; }
+    case(0) { next_state = 1; }
+    case(1) { next_state = 2; }
+    else { next_state = 0; }
 }
 ```
 ```systemverilog
@@ -347,6 +347,9 @@ case (state)
     default: begin next_state <= 32'd0; end
 endcase
 ```
+
+> **Note:** Cm switch syntax is `case(pattern) { ... }` with parentheses.
+> Use `else { ... }` for the default case.
 
 ### Functions and Tasks
 
@@ -390,6 +393,22 @@ enum State { IDLE, RUN, DONE, ERROR }
 typedef enum logic [1:0] {
     IDLE = 2'd0, RUN = 2'd1, DONE = 2'd2, ERROR = 2'd3
 } State;
+```
+
+### enum + switch (FSM)
+
+Enum variants can be matched with `case(EnumType::Variant)`:
+
+```cm
+State current = State::IDLE;
+
+void fsm(posedge clk) {
+    switch (current) {
+        case(State::IDLE) { current = State::RUN; }
+        case(State::RUN) { current = State::DONE; }
+        else { current = State::IDLE; }
+    }
+}
 ```
 
 ---
