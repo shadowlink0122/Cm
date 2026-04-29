@@ -1,0 +1,18 @@
+//! platform: sv
+//! description: Large array (BRAM) edge case test
+
+#[input] bool clk = false;
+#[input] bool we = false;
+#[input] uint addr = 0;
+#[input] uint data_in = 0;
+#[output] uint data_out = 0;
+
+// 大規模配列（BRAM推論対象）
+#[sv::bram] uint[1024] memory;
+
+always void bram_access(posedge clk) {
+    if (we == true) {
+        memory[addr] = data_in;
+    }
+    data_out = memory[addr];
+}

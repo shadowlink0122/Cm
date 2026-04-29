@@ -1,0 +1,16 @@
+//! platform: sv
+//! description: Error test - Pointer types are not supported in SV
+//! expect_error: SV002
+
+#[input] bool clk = false;
+#[output] uint result = 0;
+
+// ポインタ型はSVで非サポート
+fn get_ptr() -> *uint {
+    return null;
+}
+
+always void invalid_pointer(posedge clk) {
+    let p = get_ptr();
+    result = 0;
+}

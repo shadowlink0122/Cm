@@ -324,10 +324,86 @@ std::vector<Token> MacroExpander::transcribe_repetition(const RepetitionNode& re
                                                         const SyntaxContext& context) {
     std::vector<Token> result;
 
-    // TODO: 繰り返しの展開実装
-    // この実装は複雑なため、簡略化
+    // 繰り返しパターン内のメタ変数を収集
+    std::vector<std::string> rep_metavars;
+    collect_metavars_in_pattern(repetition.pattern, rep_metavars);
+
+    if (rep_metavars.empty()) {
+        // メタ変数がない場合は1回だけ展開
+        for (const auto& tree : repetition.pattern) {
+            auto tokens = transcribe_tree(tree, bindings, context);
+            result.insert(result.end(), tokens.begin(), tokens.end());
+        }
+        return result;
+    }
+
+    // 最初のメタ変数から繰り返し回数を決定
+    size_t rep_count = 0;
+    for (const auto& metavar_name : rep_metavars) {
+        auto it = bindings.find(metavar_name);
+        if (it != bindings.end() && it->second.is_repetition()) {
+            if (auto* reps = it->second.get_repetition()) {
+                rep_count = reps->size();
+                break;
+            }
+        }
+    }
+
+    // 各イテレーションで展開
+    for (size_t i = 0; i < rep_count; ++i) {
+        // このイテレーション用のバインディングを作成
+        MatchBindings iter_bindings;
+        for (const auto& [name, fragment] : bindings) {
+            if (fragment.is_repetition()) {
+                if (auto* reps = fragment.get_repetition()) {
+                    if (i < reps->size()) {
+                        iter_bindings[name] = (*reps)[i];
+                    }
+                }
+            } else {
+                iter_bindings[name] = fragment;
+            }
+        }
+
+        // パターンを展開
+        for (const auto& tree : repetition.pattern) {
+            auto tokens = transcribe_tree(tree, iter_bindings, context);
+            result.insert(result.end(), tokens.begin(), tokens.end());
+        }
+
+        // セパレータを挿入（最後以外）
+        if (i + 1 < rep_count && repetition.separator) {
+            result.push_back(*repetition.separator);
+        }
+    }
 
     return result;
+}
+
+// パターン内のメタ変数を収集するヘルパー
+void MacroExpander::collect_metavars_in_pattern(const std::vector<TokenTree>& pattern,
+                                                 std::vector<std::string>& metavars) {
+    for (const auto& tree : pattern) {
+        switch (tree.kind) {
+            case TokenTree::Kind::METAVAR:
+                if (auto* mv = tree.get_metavar()) {
+                    metavars.push_back(mv->name);
+                }
+                break;
+            case TokenTree::Kind::DELIMITED:
+                if (auto* delim = tree.get_delimited()) {
+                    collect_metavars_in_pattern(delim->tokens, metavars);
+                }
+                break;
+            case TokenTree::Kind::REPETITION:
+                if (auto* rep = tree.get_repetition()) {
+                    collect_metavars_in_pattern(rep->pattern, metavars);
+                }
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 // トークンストリームからマクロ呼び出しを検出
