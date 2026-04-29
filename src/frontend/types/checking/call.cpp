@@ -124,10 +124,13 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     } else if (i == 1) {
                         // 2番目の引数が複製対象
                         if (t && t->kind == ast::TypeKind::Array && t->element_type &&
-                            t->element_type->kind == ast::TypeKind::Bool && t->array_size) {
+                            t->element_type->kind == ast::TypeKind::Bit && t->array_size) {
                             // bit[N] → bit[N * count]
                             uint32_t new_size = static_cast<uint32_t>(*t->array_size * count);
-                            result_type = ast::make_array(ast::make_bool(), new_size);
+                            result_type = ast::make_array(ast::make_bit(), new_size);
+                        } else if (t && t->kind == ast::TypeKind::Bit) {
+                            // 単一bit → bit[count]
+                            result_type = ast::make_array(ast::make_bit(), static_cast<uint32_t>(count));
                         } else {
                             result_type = t;
                         }
@@ -138,25 +141,20 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 // __builtin_concat: 全引数のビット幅を合算
                 std::vector<ast::TypePtr> arg_types;
                 uint32_t total_bits = 0;
-                bool all_bit_arrays = true;
-                ast::TypePtr elem_type = nullptr;
+                bool all_bit_types = true;
 
                 for (auto& arg : call.args) {
                     auto t = infer_type(*arg);
                     arg_types.push_back(t);
                     if (t && t->kind == ast::TypeKind::Array && t->element_type &&
-                        t->element_type->kind == ast::TypeKind::Bool && t->array_size) {
+                        t->element_type->kind == ast::TypeKind::Bit && t->array_size) {
                         // bit[N] 型
                         total_bits += *t->array_size;
-                        if (!elem_type)
-                            elem_type = t->element_type;
-                    } else if (t && t->kind == ast::TypeKind::Bool) {
-                        // 単一ビット
+                    } else if (t && t->kind == ast::TypeKind::Bit) {
+                        // 単一bit
                         total_bits += 1;
-                        if (!elem_type)
-                            elem_type = t;
                     } else {
-                        all_bit_arrays = false;
+                        all_bit_types = false;
                     }
                 }
 
@@ -165,9 +163,9 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     return ast::make_void();
                 }
 
-                if (all_bit_arrays && total_bits > 0) {
+                if (all_bit_types && total_bits > 0) {
                     // bit[N] 同士の連接 → bit[合計ビット幅]
-                    return ast::make_array(ast::make_bool(), total_bits);
+                    return ast::make_array(ast::make_bit(), total_bits);
                 }
 
                 // それ以外は最初の引数の型をフォールバック
