@@ -90,7 +90,8 @@ help:
 	@echo "  例: make build ARCH=x86_64"
 	@echo ""
 	@echo "Test Commands (Unit Tests):"
-	@echo "  make test           - すべてのC++ユニットテストを実行"
+	@echo "  make test           - 全テスト実行（unit + integration）"
+	@echo "  make test-unit      - C++ユニットテストのみ"
 	@echo "  make test-lexer     - Lexerテストのみ"
 	@echo "  make test-hir       - HIR Loweringテストのみ"
 	@echo "  make test-mir       - MIR Loweringテストのみ"
@@ -134,7 +135,8 @@ help:
 	@echo ""
 	@echo "Quick Shortcuts:"
 	@echo "  make b   - build"
-	@echo "  make t   - test"
+	@echo "  make t   - test (unit + integration)"
+	@echo "  make tu  - test-unit (C++ unit tests only)"
 	@echo "  make ta  - test-all"
 	@echo "  make tao - test-all-opts (全最適化レベルテスト)"
 	@echo "  make tl  - test-llvm"
@@ -323,12 +325,24 @@ rebuild: clean build-all
 # Unit Test Commands (C++ tests via ctest)
 # ========================================
 
-.PHONY: test
-test:
+.PHONY: test-unit
+test-unit:
 	@echo "Running all C++ unit tests..."
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
 	@echo ""
 	@echo "✅ All unit tests passed!"
+
+# 全テスト実行（unit + integration）
+.PHONY: test
+test: test-unit test-interpreter test-llvm-all
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All tests completed!"
+	@echo "  - Unit tests (C++)"
+	@echo "  - Interpreter tests"
+	@echo "  - LLVM Native tests"
+	@echo "  - LLVM WASM tests"
+	@echo "=========================================="
 
 .PHONY: test-lexer
 test-lexer:
@@ -513,13 +527,9 @@ test-all-parallel-nc: build  ## 全バックエンド（パラレル、キャッ
 	@echo "✅ All parallel tests (no cache) completed!"
 	@echo "=========================================="
 
-# すべてのテストを実行
+# すべてのテストを実行（testのエイリアス）
 .PHONY: test-all
-test-all: test test-interpreter test-llvm-all
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All tests completed!"
-	@echo "=========================================="
+test-all: test
 
 # ========================================
 # Run Commands
@@ -591,6 +601,9 @@ b: build
 
 .PHONY: t
 t: test
+
+.PHONY: tu
+tu: test-unit
 
 .PHONY: ta
 ta: test-all
