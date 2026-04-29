@@ -765,9 +765,9 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
                 auto& str = std::get<std::string>(gv->init_value->value);
                 // 文字列データをグローバル定数として配置
                 auto strConstant = llvm::ConstantDataArray::getString(ctx.getContext(), str, true);
-                auto strGlobal = new llvm::GlobalVariable(
-                    *module, strConstant->getType(), true,
-                    llvm::GlobalValue::PrivateLinkage, strConstant, gv->name + ".str");
+                auto strGlobal = new llvm::GlobalVariable(*module, strConstant->getType(), true,
+                                                          llvm::GlobalValue::PrivateLinkage,
+                                                          strConstant, gv->name + ".str");
                 strGlobal->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
                 // i8* へのポインタを取得
                 initialValue = llvm::ConstantExpr::getBitCast(
@@ -775,8 +775,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
                         strConstant->getType(), strGlobal,
                         llvm::ArrayRef<llvm::Constant*>{
                             llvm::ConstantInt::get(ctx.getI64Type(), 0),
-                            llvm::ConstantInt::get(ctx.getI64Type(), 0)
-                        }),
+                            llvm::ConstantInt::get(ctx.getI64Type(), 0)}),
                     ctx.getPtrType());
             }
             // 整数型の場合
@@ -1105,17 +1104,16 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
             if (std::holds_alternative<std::string>(gv->init_value->value)) {
                 auto& str = std::get<std::string>(gv->init_value->value);
                 auto strConstant = llvm::ConstantDataArray::getString(ctx.getContext(), str, true);
-                auto strGlobal = new llvm::GlobalVariable(
-                    *this->module, strConstant->getType(), true,
-                    llvm::GlobalValue::PrivateLinkage, strConstant, gv->name + ".str");
+                auto strGlobal = new llvm::GlobalVariable(*this->module, strConstant->getType(),
+                                                          true, llvm::GlobalValue::PrivateLinkage,
+                                                          strConstant, gv->name + ".str");
                 strGlobal->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
                 initialValue = llvm::ConstantExpr::getBitCast(
                     llvm::ConstantExpr::getInBoundsGetElementPtr(
                         strConstant->getType(), strGlobal,
                         llvm::ArrayRef<llvm::Constant*>{
                             llvm::ConstantInt::get(ctx.getI64Type(), 0),
-                            llvm::ConstantInt::get(ctx.getI64Type(), 0)
-                        }),
+                            llvm::ConstantInt::get(ctx.getI64Type(), 0)}),
                     ctx.getPtrType());
             } else if (std::holds_alternative<int64_t>(gv->init_value->value)) {
                 initialValue =
@@ -1741,7 +1739,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 size_t current = worklist.front();
                 worklist.pop();
                 const auto& bb = func.basic_blocks[current];
-                if (!bb) continue;
+                if (!bb)
+                    continue;
                 // ターミネーターの遷移先を収集
                 if (bb->terminator) {
                     auto addSuccessor = [&](size_t target) {
@@ -1752,12 +1751,14 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     };
                     switch (bb->terminator->kind) {
                         case mir::MirTerminator::Goto: {
-                            auto& data = std::get<mir::MirTerminator::GotoData>(bb->terminator->data);
+                            auto& data =
+                                std::get<mir::MirTerminator::GotoData>(bb->terminator->data);
                             addSuccessor(data.target);
                             break;
                         }
                         case mir::MirTerminator::SwitchInt: {
-                            auto& data = std::get<mir::MirTerminator::SwitchIntData>(bb->terminator->data);
+                            auto& data =
+                                std::get<mir::MirTerminator::SwitchIntData>(bb->terminator->data);
                             for (auto& [_, target] : data.targets) {
                                 addSuccessor(target);
                             }
@@ -1765,7 +1766,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                             break;
                         }
                         case mir::MirTerminator::Call: {
-                            auto& data = std::get<mir::MirTerminator::CallData>(bb->terminator->data);
+                            auto& data =
+                                std::get<mir::MirTerminator::CallData>(bb->terminator->data);
                             addSuccessor(data.success);
                             break;
                         }

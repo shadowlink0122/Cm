@@ -34,16 +34,16 @@ struct SVPort {
 struct SVModule {
     std::string name;
     std::vector<SVPort> ports;
-    std::vector<std::string> parameters;          // parameter宣言
-    std::vector<std::string> type_declarations;   // typedef enum/struct packed 宣言
+    std::vector<std::string> parameters;           // parameter宣言
+    std::vector<std::string> type_declarations;    // typedef enum/struct packed 宣言
     std::vector<std::string> always_ff_blocks;     // always_ff ブロック
     std::vector<std::string> always_comb_blocks;   // always_comb ブロック
     std::vector<std::string> always_latch_blocks;  // always_latch ブロック
-    std::vector<std::string> assign_statements;   // assign 文
-    std::vector<std::string> function_blocks;     // function automatic ブロック
-    std::vector<std::string> wire_declarations;   // 内部ワイヤ宣言
-    std::vector<std::string> reg_declarations;    // 内部レジスタ宣言
-    std::vector<std::string> instance_blocks;     // extern struct インスタンス化文
+    std::vector<std::string> assign_statements;    // assign 文
+    std::vector<std::string> function_blocks;      // function automatic ブロック
+    std::vector<std::string> wire_declarations;    // 内部ワイヤ宣言
+    std::vector<std::string> reg_declarations;     // 内部レジスタ宣言
+    std::vector<std::string> instance_blocks;      // extern struct インスタンス化文
 };
 
 // SystemVerilog コードジェネレータ

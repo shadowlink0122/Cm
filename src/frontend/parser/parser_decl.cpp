@@ -429,7 +429,8 @@ std::vector<ast::Param> Parser::parse_params() {
 }
 
 // 構造体
-ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes, bool is_extern) {
+ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes,
+                                  bool is_extern) {
     uint32_t start_pos = current().start;
     debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
 

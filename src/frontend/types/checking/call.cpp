@@ -148,11 +148,13 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                         t->element_type->kind == ast::TypeKind::Bool && t->array_size) {
                         // bit[N] 型
                         total_bits += *t->array_size;
-                        if (!elem_type) elem_type = t->element_type;
+                        if (!elem_type)
+                            elem_type = t->element_type;
                     } else if (t && t->kind == ast::TypeKind::Bool) {
                         // 単一ビット
                         total_bits += 1;
-                        if (!elem_type) elem_type = t;
+                        if (!elem_type)
+                            elem_type = t;
                     } else {
                         all_bit_arrays = false;
                     }

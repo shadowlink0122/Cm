@@ -64,8 +64,8 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     hir_func->is_async = func.is_async;    // asyncフラグを伝播
     hir_func->is_always = func.is_always;  // alwaysフラグを伝播
     // always_kind を伝搬（AST→HIR: enum値をintでキャスト）
-    hir_func->always_kind = static_cast<hir::HirFunction::AlwaysKind>(
-        static_cast<int>(func.always_kind));
+    hir_func->always_kind =
+        static_cast<hir::HirFunction::AlwaysKind>(static_cast<int>(func.always_kind));
 
     // SV属性を伝播（sv::latch, sv::clock_domain等）
     for (const auto& attr : func.attributes) {

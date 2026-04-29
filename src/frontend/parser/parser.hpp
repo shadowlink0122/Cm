@@ -51,7 +51,8 @@ class Parser {
                                 std::vector<ast::AttributeNode> attributes = {},
                                 bool is_async = false);
     std::vector<ast::Param> parse_params();
-    ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {}, bool is_extern = false);
+    ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {},
+                              bool is_extern = false);
     std::optional<ast::OperatorKind> parse_operator_kind();
     ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {});
@@ -189,8 +190,8 @@ class Parser {
     int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
     bool in_operator_return_type_ =
         false;  // 演算子戻り値型パース中フラグ（*&の型サフィックス抑制）
-    int parse_depth_ = 0;      // 再帰深度カウンター
-    int max_parse_depth_ = 0;  // 最大再帰深度記録
+    int parse_depth_ = 0;          // 再帰深度カウンター
+    int max_parse_depth_ = 0;      // 最大再帰深度記録
     bool is_sv_platform_ = false;  // SVプラットフォームフラグ
 };
 

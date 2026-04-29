@@ -366,7 +366,7 @@ struct GlobalVarDecl {
     TypePtr type;
     ExprPtr init_expr;
     bool is_const = false;
-    bool is_assign = false;   // SV assign文（連続代入）
+    bool is_assign = false;  // SV assign文（連続代入）
     Visibility visibility = Visibility::Private;
     std::vector<AttributeNode> attributes;
 

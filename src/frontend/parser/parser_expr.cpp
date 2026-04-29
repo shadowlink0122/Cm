@@ -1069,14 +1069,17 @@ ast::ExprPtr Parser::parse_primary() {
                 if (!check(TokenKind::RBrace)) {
                     do {
                         if (!check(TokenKind::Ident)) {
-                            error("Expected field name in struct literal (named initialization required)");
+                            error(
+                                "Expected field name in struct literal (named initialization "
+                                "required)");
                         }
 
                         std::string field_name(current().get_string());
                         advance();
 
                         if (!check(TokenKind::Colon)) {
-                            error("Expected ':' after field name '" + field_name + "' in struct literal");
+                            error("Expected ':' after field name '" + field_name +
+                                  "' in struct literal");
                         }
                         advance();
 
@@ -1131,14 +1134,17 @@ ast::ExprPtr Parser::parse_primary() {
                 if (!check(TokenKind::RBrace)) {
                     do {
                         if (!check(TokenKind::Ident)) {
-                            error("Expected field name in struct literal (named initialization required)");
+                            error(
+                                "Expected field name in struct literal (named initialization "
+                                "required)");
                         }
 
                         std::string field_name(current().get_string());
                         advance();
 
                         if (!check(TokenKind::Colon)) {
-                            error("Expected ':' after field name '" + field_name + "' in struct literal");
+                            error("Expected ':' after field name '" + field_name +
+                                  "' in struct literal");
                         }
                         advance();
 

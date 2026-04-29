@@ -635,7 +635,7 @@ struct MirFunction {
     bool is_extern = false;    // extern "C" 関数か
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_async = false;     // async関数（JSバックエンド用）
-    bool is_always = false;    // always修飾子（SVバックエンド用: always_ff/always_comb）
+    bool is_always = false;  // always修飾子（SVバックエンド用: always_ff/always_comb）
     // SVバックエンド: always ブロックの種別
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
     std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）
@@ -706,9 +706,9 @@ struct MirFunction {
 struct MirStructField {
     std::string name;
     hir::TypePtr type;
-    uint32_t offset;  // バイトオフセット（将来の最適化用）
+    uint32_t offset;                      // バイトオフセット（将来の最適化用）
     std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
-    std::string default_value_str;  // デフォルト値の文字列表現（SV用）
+    std::string default_value_str;        // デフォルト値の文字列表現（SV用）
 };
 
 struct MirStruct {
@@ -887,7 +887,7 @@ struct MirGlobalVar {
     hir::TypePtr type;
     std::unique_ptr<MirConstant> init_value;  // 初期値（nullptrならゼロ初期化）
     bool is_const = false;
-    bool is_assign = false;   // SV assign文（連続代入）
+    bool is_assign = false;  // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
     // extern struct インスタンスのフィールド初期化値
