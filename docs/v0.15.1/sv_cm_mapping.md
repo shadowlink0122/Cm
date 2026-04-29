@@ -44,11 +44,11 @@ Cmの構文要素がSVバックエンドでどのように変換されるかの�
 |--------|------|------|
 | `function ... endfunction` | 組み合わせロジック関数 | Cm `func` → `always_comb` に変換 |
 | `task ... endtask` | 手続き的タスク | 未サポート |
-| `initial begin ... end` | シミュレーション初期化 | テストベンチのみ |
+| `initial begin ... end` | シミュレーション初期化 | 未サポート (将来対応予定) |
 | `generate ... endgenerate` | パラメトリック生成 | 未サポート |
 | `always @(*)` | 旧来の組み合わせ | `always_comb` を使用 |
-| `always @(posedge ... or negedge ...)` | 非同期リセット | 未サポート |
-| `assign wire = expr;` | 連続代入 | 未サポート |
+| `always @(posedge ... or negedge ...)` | 非同期リセット | ✅ サポート済み |
+| `assign wire = expr;` | 連続代入 | ✅ `#[sv::assign]` 属性で対応 |
 
 ### 3.2 生成されないSVデータ型
 
@@ -60,20 +60,20 @@ Cmの構文要素がSVバックエンドでどのように変換されるかの�
 | `byte` | 8-bit符号付き | `logic signed [7:0]` を使用 |
 | `shortint` | 16-bit符号付き | `logic signed [15:0]` を使用 |
 | `longint` | 64-bit符号付き | `logic signed [63:0]` を使用 |
-| `struct packed {...}` | パックド構造体 | 未サポート |
-| `enum {...}` | 列挙型 | 未サポート |
-| `typedef` | 型エイリアス | 未サポート |
+| `struct packed {...}` | パックド構造体 | ✅ サポート済み (`#[sv::packed]`) |
+| `enum {...}` | 列挙型 | ✅ サポート済み (`typedef enum`) |
+| `typedef` | 型エイリアス | ✅ enum/structで自動生成 |
 
 ### 3.3 生成されないSV演算子/構文
 
 | SV構文 | 説明 | 現状 |
 |--------|------|------|
-| `{a, b}` | 連接 (concatenation) | 未サポート |
-| `{N{expr}}` | 複製 (replication) | 未サポート |
-| `a ? b : c` | 三項演算子 | MIRのSwitchIntで分岐化 |
+| `{a, b}` | 連接 (concatenation) | ✅ サポート済み (`{a, b}` 構文) |
+| `{N{expr}}` | 複製 (replication) | ✅ サポート済み (`{N{expr}}` 構文) |
+| `a ? b : c` | 三項演算子 | ✅ 最適化で生成 (if/else → 三項演算子) |
 | `$clog2(N)` | システム関数 | 未サポート |
 | `for (;;)` | forループ | 未サポート (静的展開のみ) |
-| `localparam` | ローカルパラメータ | `parameter` のみ |
+| `localparam` | ローカルパラメータ | ✅ `const` 変数で対応 |
 
 ---
 
@@ -86,10 +86,11 @@ Cmの構文要素がSVバックエンドでどのように変換されるかの�
 | `void` | 戻り値なし関数 | ブロック生成 (ff/comb) |
 | `=` | 変数代入 | ff内: `<=`, comb内: `=` |
 | `!` | 論理否定 | `~` (ビット反転に統合) |
-| `struct` | 構造体定義 | **未サポート** |
-| `enum` | 列挙型定義 | **未サポート** |
+| `struct` | 構造体定義 | ✅ `struct packed` に変換 |
+| `enum` | 列挙型定義 | ✅ `typedef enum` に変換 |
 | `for` | ループ | **未サポート** (将来: generate for?) |
 | `match` | パターンマッチ | `case` 文に変換 |
+| `const` | 定数宣言 | `localparam` に変換 |
 
 ---
 

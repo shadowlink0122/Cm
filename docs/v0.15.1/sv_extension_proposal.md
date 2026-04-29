@@ -77,17 +77,24 @@ sv function uint mux(uint a, uint b, bool sel) {
 ## 拡張3: `assign` (連続代入) のサポート
 
 ### 現状
-ワイヤへの連続代入 (`assign`) は未サポート。
+`#[sv::assign]` 属性を使用した連続代入がサポートされています。
 
-### 提案
 ```cm
-// 方法A: wire型 + 初期値で推論
-#[output] wire<bool> led = (counter > 25000000);
-// → assign led = (counter > 25000000);
-
-// 方法B: 属性で明示
+// 属性で明示
 #[sv::assign]
 bool led = (counter > 25000000);
+// → wire led;
+// → assign led = (counter > 25000000);
+```
+
+### 制約
+- 初期値は定数式のみ（実行時計算は未対応）
+- wire宣言と assign 文がセットで生成される
+
+### 将来の拡張候補
+```cm
+// 方法: wire型 + 初期値で推論（未実装）
+#[output] wire<bool> led = (counter > 25000000);
 // → assign led = (counter > 25000000);
 ```
 
@@ -116,14 +123,11 @@ for (uint i = 0; i < WIDTH; i++) {
 ## 拡張5: 連接 / ビットスライス演算子
 
 ### 現状
-SV の `{a, b}` (連接) や `a[3:0]` (ビットスライス) は未サポート。
+✅ **実装済み**: SV の `{a, b}` (連接) と `{N{expr}}` (複製) は対応済み。
+ビットスライス `a[3:0]` は未サポート。
 
-### 提案
+### 提案 (ビットスライスのみ)
 ```cm
-// 連接: 新演算子 or 関数
-uint result = {a, b};           // 方法A: SV構文リテラル
-uint result = concat(a, b);     // 方法B: ビルトイン関数
-
 // ビットスライス: 配列添字の拡張
 utiny low = data[7:0];          // 方法A: 範囲添字
 utiny low = data.bits(7, 0);    // 方法B: メソッド
@@ -134,9 +138,9 @@ utiny low = data.bits(7, 0);    // 方法B: メソッド
 ## 拡張6: 非同期リセット対応
 
 ### 現状
-`always_ff @(posedge clk or negedge rst_n)` は生成できない。
+✅ **実装済み**: `always_ff @(posedge clk or negedge rst_n)` は対応済み。
 
-### 提案
+### 使用例
 ```cm
 // 複数エッジの指定
 void process(posedge clk, negedge rst_n) {
@@ -160,13 +164,13 @@ void process(posedge clk, negedge rst_n) {
 ## 拡張7: `localparam` のサポート
 
 ### 現状
-`parameter` はポートレベル。ローカル定数は `localparam` にすべき。
+✅ **実装済み**: `const` 変数は `localparam` として出力される。
 
-### 提案
+### 使用例
 ```cm
-// const + 属性なし → localparam
+// const → localparam
 const uint CLK_FREQ = 50_000_000;
-// → localparam CLK_FREQ = 32'd50000000;
+// → localparam logic [31:0] CLK_FREQ = 32'd50000000;
 
 // #[sv::param] 付き → parameter (外部から変更可能)
 #[sv::param] const uint WIDTH = 8;
@@ -178,9 +182,9 @@ const uint CLK_FREQ = 50_000_000;
 ## 拡張8: `struct packed` / `enum` のサポート
 
 ### 現状
-Cm の `struct` / `enum` は SV バックエンドで未サポート。
+✅ **実装済み**: Cm の `struct` / `enum` は SV バックエンドで対応済み。
 
-### 提案
+### 使用例
 ```cm
 //! platform: sv
 
@@ -200,7 +204,6 @@ struct AXIAddr {
 //   } AXIAddr;
 
 // 列挙型 (FSM状態)
-#[sv::enum]
 enum State {
     IDLE,
     READ,
@@ -221,7 +224,7 @@ enum State {
 | **P0** | 拡張1: always_ff明示化 | 既存 `async` の意味衝突を解消 |
 | **P0** | 拡張6: 非同期リセット | 実用的なFPGA設計に必須 |
 | **P0** | 拡張7: localparam | `const` → `localparam` は自然 |
-| **P1** | 拡張3: assign | ワイヤの連続代入は頻出パターン |
+| ~~**P1**~~ | ~~拡張3: assign~~ | ✅ **実装済み** (`#[sv::assign]` 属性) |
 | **P1** | 拡張5: 連接/スライス | ビット操作はHDLの基本 |
 | **P2** | 拡張2: function/task | 再利用ロジックの定義 |
 | **P2** | 拡張8: struct/enum | FSM設計パターンに必要 |

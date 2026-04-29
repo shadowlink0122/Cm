@@ -108,18 +108,69 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 
         // SVバックエンド用ビルトイン関数のバイパス
         if (ident->name == "__builtin_concat" || ident->name == "__builtin_replicate") {
-            ast::TypePtr result_type = nullptr;
-            for (size_t i = 0; i < call.args.size(); ++i) {
-                auto t = infer_type(*call.args[i]);
-                // __builtin_replicate: 2番目の引数(複製対象)の型を使用
-                // __builtin_concat: 最初の引数の型を使用
-                if (ident->name == "__builtin_replicate") {
-                    if (i == 1) result_type = t;  // 2番目の引数の型
-                } else {
-                    if (!result_type) result_type = t;
+            if (ident->name == "__builtin_replicate") {
+                // __builtin_replicate(count, expr): count * expr のビット幅
+                ast::TypePtr result_type = nullptr;
+                int64_t count = 1;
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    auto t = infer_type(*call.args[i]);
+                    if (i == 0) {
+                        // 最初の引数は繰り返し回数
+                        if (auto* lit = call.args[i]->as<ast::LiteralExpr>()) {
+                            if (auto* ival = std::get_if<int64_t>(&lit->value)) {
+                                count = *ival;
+                            }
+                        }
+                    } else if (i == 1) {
+                        // 2番目の引数が複製対象
+                        if (t && t->kind == ast::TypeKind::Array && t->element_type &&
+                            t->element_type->kind == ast::TypeKind::Bool && t->array_size) {
+                            // bit[N] → bit[N * count]
+                            uint32_t new_size = static_cast<uint32_t>(*t->array_size * count);
+                            result_type = ast::make_array(ast::make_bool(), new_size);
+                        } else {
+                            result_type = t;
+                        }
+                    }
                 }
+                return result_type ? result_type : ast::make_void();
+            } else {
+                // __builtin_concat: 全引数のビット幅を合算
+                std::vector<ast::TypePtr> arg_types;
+                uint32_t total_bits = 0;
+                bool all_bit_arrays = true;
+                ast::TypePtr elem_type = nullptr;
+
+                for (auto& arg : call.args) {
+                    auto t = infer_type(*arg);
+                    arg_types.push_back(t);
+                    if (t && t->kind == ast::TypeKind::Array && t->element_type &&
+                        t->element_type->kind == ast::TypeKind::Bool && t->array_size) {
+                        // bit[N] 型
+                        total_bits += *t->array_size;
+                        if (!elem_type) elem_type = t->element_type;
+                    } else if (t && t->kind == ast::TypeKind::Bool) {
+                        // 単一ビット
+                        total_bits += 1;
+                        if (!elem_type) elem_type = t;
+                    } else {
+                        all_bit_arrays = false;
+                    }
+                }
+
+                if (call.args.empty()) {
+                    // 空の連接は void (または 0ビット)
+                    return ast::make_void();
+                }
+
+                if (all_bit_arrays && total_bits > 0) {
+                    // bit[N] 同士の連接 → bit[合計ビット幅]
+                    return ast::make_array(ast::make_bool(), total_bits);
+                }
+
+                // それ以外は最初の引数の型をフォールバック
+                return arg_types.empty() ? ast::make_void() : arg_types[0];
             }
-            return result_type ? result_type : ast::make_void();
         }
 
         // 通常の関数はシンボルテーブルから検索

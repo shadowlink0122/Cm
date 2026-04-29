@@ -23,7 +23,7 @@ cm compile --target=sv program.cm -o output.sv
 | ポート宣言 | `#[input]`/`#[output]`アトリビュートでI/Oポート宣言 |
 | 組み合わせ回路 | 通常関数 → `always_comb begin ... end` |
 | 順序回路 | `posedge`/`negedge`型引数 → `always_ff @(posedge clk)` |
-| SV固有型 | `posedge`, `negedge`, `wire`, `reg`型（文脈キーワード） |
+| SV固有キーワード | `posedge`, `negedge`, `wire`, `reg`, `always`, `assign`, `bit`等（文脈キーワード） |
 | 非ブロッキング代入 | 順序回路で`<=`を自動使用 |
 | BRAM推論 | 配列をBlock RAMとして推論 |
 | テストベンチ自動生成 | iverilog互換の`_tb.sv`を自動生成 |
@@ -65,13 +65,13 @@ result = sel ? a : b;
 
 ```cm
 //! platform: sv
-// この行以降、posedge/negedge/wire/regがキーワードトークンとして認識される
+// この行以降、SV固有キーワードがトークンとして認識される
 ```
 
 | モード | キーワード追加 | 用途 |
 |--------|-------------|------|
 | `LexerPlatform::Default` | なし | 通常のCmコード |
-| `LexerPlatform::SV` | `posedge`, `negedge`, `wire`, `reg` | SVターゲット |
+| `LexerPlatform::SV` | `posedge`, `negedge`, `wire`, `reg`, `always`, `always_ff`, `always_comb`, `always_latch`, `assign`, `initial`, `bit` | SVターゲット |
 
 > 非SVモードでは`posedge`等は通常のIdent（変数名として使用可能）
 

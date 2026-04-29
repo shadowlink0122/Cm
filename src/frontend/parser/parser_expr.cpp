@@ -1022,10 +1022,14 @@ ast::ExprPtr Parser::parse_primary() {
         auto saved_pos = pos_;
         advance();  // { を消費
 
-        // 空の {} はスキップ（ブロックとして扱う）
+        // 空の {} は空の連接として解釈
         if (check(TokenKind::RBrace)) {
-            pos_ = saved_pos;
-            // 通常のブロック式として処理をフォールスルー
+            advance();  // } を消費
+            // __builtin_concat() を引数なしで呼び出し（空の連接）
+            auto callee = ast::make_ident("__builtin_concat", Span{start_pos, start_pos});
+            std::vector<ast::ExprPtr> elements;
+            return ast::make_call(std::move(callee), std::move(elements),
+                                  Span{start_pos, previous().end});
         }
         // パターン2: {N{expr}} → 複製式
         else if (check(TokenKind::IntLiteral)) {

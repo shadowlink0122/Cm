@@ -10,8 +10,8 @@
 |---------|---------|------|
 | `KwAlways` | `always` | SV ロジックブロック修飾子 |
 | `KwAssign` | `assign` | 連続代入文 |
-| `KwInitial` | `initial` | シミュレーション初期化ブロック |
-| `KwBit` | `bit` | 任意ビット幅型 `bit<N>` |
+| `KwInitial` | `initial` | シミュレーション初期化ブロック (未実装) |
+| `KwBit` | `bit` | 任意ビット幅型 `bit[N]` |
 
 ※ 既存の `KwPosedge`, `KwNegedge`, `KwWire`, `KwReg` はそのまま維持。
 
@@ -195,15 +195,15 @@ const uint CNT_MAX = CLK_FREQ / 2 - 1;
 ### 6.3 カスタムビット幅 (新規)
 
 ```cm
-// 任意ビット幅: bit<N> 構文
-#[output] bit<4> nibble;      // → output logic [3:0] nibble
-#[output] bit<12> address;    // → output logic [11:0] address
+// 任意ビット幅: bit[N] 構文（配列サフィックス形式）
+#[output] bit[4] nibble;      // → output logic [3:0] nibble
+#[output] bit[12] address;    // → output logic [11:0] address
 
-bit<26> counter;              // → logic [25:0] counter
+bit[26] counter;              // → logic [25:0] counter
 ```
 
 > [!NOTE]
-> `bit<N>` は **新規型** として追加。SV の合成設計で頻出する任意ビット幅をサポート。
+> `bit[N]` は `bool[N]` のエイリアスとして実装。配列サフィックス形式でビット幅を指定する。
 
 ---
 
@@ -225,10 +225,11 @@ bit<26> counter;              // → logic [25:0] counter
 | `{N{expr}}` | `{N{expr}}` | 複製 (replication) |
 | `x[7:0]` | `x[7:0]` | ビットスライス |
 | `x[i]` | `x[i]` | ビット選択 |
-| `!x` | `!x` | 論理否定 (1-bit) |
+| `!x` | `~x` | 論理否定→ビット反転に統合 |
 | `~x` | `~x` | ビット反転 |
 
 > [!NOTE]
+> **`!` (論理否定)**: 多ビット信号の安全性のため、SVでは `~` (ビット反転) にマッピングされる。
 > **連接 `{a, b}`**: 式コンテキスト（代入RHS、関数引数等）では連接式、
 > 制御構文の直後ではブロック `{...}` として、パーサーが意味論的に区別する。
 > 代替として `concat(a, b)` ビルトイン関数も利用可能。
@@ -425,9 +426,14 @@ export;  // このモジュールを他のCmファイルからimport可能にす
 
 ---
 
-## 13. initial ブロック (シミュレーション専用)
+## 13. initial ブロック (シミュレーション専用) - 将来対応
+
+> [!WARNING]
+> **未実装**: `initial` キーワードはレキサーで認識されますが、パーサーでの構文解析は未実装です。
+> 将来バージョンで対応予定。
 
 ```cm
+// 将来の構文（未実装）
 initial {
     clk = false;
     rst = true;
@@ -593,8 +599,8 @@ endmodule
 |---------|---------|-----------|
 | `KwAlways` | `always` | ロジックブロック修飾子 |
 | `KwAssign` | `assign` | 連続代入文 |
-| `KwInitial` | `initial` | シミュレーション初期化 |
-| `KwBit` | `bit` | 任意ビット幅型 `bit<N>` |
+| `KwInitial` | `initial` | シミュレーション初期化 (未実装) |
+| `KwBit` | `bit` | 任意ビット幅型 `bit[N]` |
 
 ### ビルトイン関数 (SV モード)
 

@@ -34,10 +34,10 @@ Cmコンパイラに**SystemVerilog (SV) バックエンド**を追加し、Cm�
 任意ビット幅のハードウェアレジスタ/ワイヤを表現するための新しい型を導入する。
 
 ```cm
-// 任意ビット幅型
-bit<24> addr = 24'h0;     // 24ビットアドレス
-bit<3> rgb = 3'b101;      // 3ビットRGB
-bit<128> data = 128'h0;   // 128ビット幅データ
+// 任意ビット幅型（配列サフィックス形式）
+bit[24] addr = 24'h0;     // 24ビットアドレス
+bit[3] rgb = 3'b101;      // 3ビットRGB
+bit[128] data = 128'h0;   // 128ビット幅データ
 ```
 
 #### SV出力
@@ -400,7 +400,7 @@ impl SpiMaster {
 #[sv::module]
 struct VideoRAM {
     #[input]  clk: bool,
-    #[input]  addr: bit<15>,
+    #[input]  addr: bit[15],
     #[input]  write_data: utiny,
     #[input]  write_enable: bool,
     #[output] read_data: utiny,
@@ -449,13 +449,13 @@ impl SoC {
 // Phase 4: AXIバスインターフェース
 #[sv::interface]
 interface AXI4Lite {
-    awaddr:  bit<32>,
+    awaddr:  bit[32],
     awvalid: bool,
     awready: bool,
-    wdata:   bit<32>,
+    wdata:   bit[32],
     wvalid:  bool,
     wready:  bool,
-    bresp:   bit<2>,
+    bresp:   bit[2],
     bvalid:  bool,
     bready:  bool,
     // ... Read channels
@@ -546,7 +546,7 @@ export Core;  // 外部から参照可能にする
 struct Core {
     #[input]  clk: bool,
     #[input]  rst: bool,
-    #[output] mem_addr: bit<16>,
+    #[output] mem_addr: bit[16],
     #[output] mem_data: utiny,
 }
 ```

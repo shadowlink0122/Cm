@@ -556,10 +556,13 @@ always void blink(posedge clk, negedge rst_n) {
 | `KwNegedge` | `negedge` | 立ち下がりエッジ |
 | `KwWire` | `wire` | ワイヤ修飾型 |
 | `KwReg` | `reg` | レジスタ修飾型 |
-| `KwAlways` | `always` | ロジックブロック修飾子 |
+| `KwAlways` | `always` | ロジックブロック修飾子（自動判別） |
+| `KwAlwaysFF` | `always_ff` | 順序回路（明示指定） |
+| `KwAlwaysComb` | `always_comb` | 組み合わせ回路（明示指定） |
+| `KwAlwaysLatch` | `always_latch` | ラッチ（明示指定） |
 | `KwAssign` | `assign` | 連続代入文 |
-| `KwInitial` | `initial` | シミュレーション初期化 |
-| `KwBit` | `bit` | 任意ビット幅型 |
+| `KwInitial` | `initial` | シミュレーション初期化 (未実装) |
+| `KwBit` | `bit` | 任意ビット幅型 `bit[N]` |
 
 ### 既存トークンのSVでの意味
 

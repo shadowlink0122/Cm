@@ -1745,22 +1745,40 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     }
                 } else {
                     // SV複製: {N{expr}}
-                    std::string count = cd.args.size() > 0 && cd.args[0]
-                        ? resolveArg(*cd.args[0]) : "1";
-                    std::string expr = cd.args.size() > 1 && cd.args[1]
-                        ? resolveArg(*cd.args[1]) : "0";
-                    // count は整数リテラルなので、SV幅指定(32'd3等)を除去して素の数字にする
-                    // "32'd3" → "3", "3" → "3"
-                    auto pos_tick = count.find("'d");
-                    if (pos_tick != std::string::npos) {
-                        count = count.substr(pos_tick + 2);
-                    } else {
-                        pos_tick = count.find("'h");
-                        if (pos_tick != std::string::npos) {
-                            count = count.substr(pos_tick + 2);
+                    // count を直接整数値として取得（文字列パースに頼らない）
+                    std::string count_str = "1";
+                    if (cd.args.size() > 0 && cd.args[0]) {
+                        // 定数から直接整数値を取得
+                        if (cd.args[0]->kind == mir::MirOperand::Constant) {
+                            const auto& c = std::get<mir::MirConstant>(cd.args[0]->data);
+                            if (auto* ival = std::get_if<int64_t>(&c.value)) {
+                                count_str = std::to_string(*ival);
+                            } else {
+                                // 整数以外の場合はフォールバック
+                                count_str = resolveArg(*cd.args[0]);
+                            }
+                        } else if (cd.args[0]->kind == mir::MirOperand::Move ||
+                                   cd.args[0]->kind == mir::MirOperand::Copy) {
+                            // テンポラリ変数経由の定数を逆引き
+                            const auto& place = std::get<mir::MirPlace>(cd.args[0]->data);
+                            auto const_it = const_map.find(place.local);
+                            if (const_it != const_map.end()) {
+                                if (auto* ival = std::get_if<int64_t>(&const_it->second.first.value)) {
+                                    count_str = std::to_string(*ival);
+                                } else {
+                                    count_str = resolveArg(*cd.args[0]);
+                                }
+                            } else {
+                                // 定数でない場合はそのまま出力
+                                count_str = resolveArg(*cd.args[0]);
+                            }
+                        } else {
+                            count_str = resolveArg(*cd.args[0]);
                         }
                     }
-                    std::string rhs = "{" + count + "{" + expr + "}}";
+                    std::string expr = cd.args.size() > 1 && cd.args[1]
+                        ? resolveArg(*cd.args[1]) : "0";
+                    std::string rhs = "{" + count_str + "{" + expr + "}}";
                     if (cd.destination) {
                         std::string lhs = emitPlace(*cd.destination, func);
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
@@ -1988,8 +2006,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
         // assign文 → wire宣言 + assign name = expr;
         if (gv->is_assign) {
-            // wire宣言を追加
-            default_mod.reg_declarations.push_back(mapType(gv->type) + " " + gv->name + ";");
+            // wire宣言を追加（連続代入の左辺はnet型が必要）
+            default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " + gv->name + ";");
             // assign文を追加
             std::string assign_stmt = "assign " + gv->name;
             if (gv->init_value) {

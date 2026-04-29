@@ -553,10 +553,13 @@ always void blink(posedge clk, negedge rst_n) {
 | `KwNegedge` | `negedge` | Falling edge |
 | `KwWire` | `wire` | Wire qualifier |
 | `KwReg` | `reg` | Register qualifier |
-| `KwAlways` | `always` | Logic block modifier |
+| `KwAlways` | `always` | Logic block modifier (auto-detect) |
+| `KwAlwaysFF` | `always_ff` | Sequential circuit (explicit) |
+| `KwAlwaysComb` | `always_comb` | Combinational circuit (explicit) |
+| `KwAlwaysLatch` | `always_latch` | Latch (explicit) |
 | `KwAssign` | `assign` | Continuous assignment |
-| `KwInitial` | `initial` | Simulation initialization |
-| `KwBit` | `bit` | Custom bit-width type |
+| `KwInitial` | `initial` | Simulation initialization (not implemented) |
+| `KwBit` | `bit` | Custom bit-width type `bit[N]` |
 
 ### Existing Tokens with SV Meaning
 
