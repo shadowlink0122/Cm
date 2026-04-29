@@ -27,6 +27,8 @@ HirDeclPtr HirLowering::lower_decl(ast::Decl& decl) {
         return lower_module(*mod);
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         return lower_extern_block(*extern_block);
+    } else if (auto* initial_block = decl.as<ast::InitialBlockDecl>()) {
+        return lower_initial_block(*initial_block);
     } else if (auto* macro = decl.as<ast::MacroDecl>()) {
         // v0.13.0: 型付きマクロをconst変数として処理
         return lower_macro(*macro);
@@ -49,6 +51,20 @@ HirDeclPtr HirLowering::lower_extern_block(ast::ExternBlockDecl& extern_block) {
         hir_extern->functions.push_back(std::move(hir_func));
     }
     return std::make_unique<HirDecl>(std::move(hir_extern));
+}
+
+// SV initial ブロック
+HirDeclPtr HirLowering::lower_initial_block(ast::InitialBlockDecl& initial_block) {
+    auto hir_initial = std::make_unique<HirInitialBlock>();
+    for (const auto& stmt : initial_block.body) {
+        if (auto hir_stmt = lower_stmt(*stmt)) {
+            hir_initial->body.push_back(std::move(hir_stmt));
+        }
+    }
+    for (const auto& attr : initial_block.attributes) {
+        hir_initial->attributes.push_back(attr.name);
+    }
+    return std::make_unique<HirDecl>(std::move(hir_initial));
 }
 
 // 関数

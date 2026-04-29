@@ -539,11 +539,17 @@ struct HirExternBlock {
     std::vector<std::unique_ptr<HirFunction>> functions;
 };
 
-using HirDeclKind =
-    std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
-                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
-                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>, std::unique_ptr<HirTypedef>,
-                 std::unique_ptr<HirGlobalVar>, std::unique_ptr<HirExternBlock>>;
+// SV initial ブロック（シミュレーション初期化）
+struct HirInitialBlock {
+    std::vector<HirStmtPtr> body;
+    std::vector<std::string> attributes;
+};
+
+using HirDeclKind = std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
+                                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
+                                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>,
+                                 std::unique_ptr<HirTypedef>, std::unique_ptr<HirGlobalVar>,
+                                 std::unique_ptr<HirExternBlock>, std::unique_ptr<HirInitialBlock>>;
 
 struct HirDecl {
     HirDeclKind kind;

@@ -386,8 +386,7 @@ Token Lexer::scan_number(uint32_t start) {
             int base = (norm_base == 'b') ? 2 : (norm_base == 'h') ? 16 : 10;
             uval = std::stoull(value_str, nullptr, base);
         } catch (...) {
-            debug::lex::log(debug::lex::Id::Error,
-                            "SV幅付きリテラルの値が不正です: " + value_str,
+            debug::lex::log(debug::lex::Id::Error, "SV幅付きリテラルの値が不正です: " + value_str,
                             debug::Level::Error);
             return Token(TokenKind::Error, start, pos_);
         }
@@ -395,10 +394,9 @@ Token Lexer::scan_number(uint32_t start) {
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
         if (::cm::debug::g_debug_mode)
-            debug::lex::log(
-                debug::lex::Id::Number,
-                width_str + "'" + norm_base + value_str + " = " + std::to_string(val),
-                debug::Level::Debug);
+            debug::lex::log(debug::lex::Id::Number,
+                            width_str + "'" + norm_base + value_str + " = " + std::to_string(val),
+                            debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width, norm_base,
                      value_str);
     } while (false);

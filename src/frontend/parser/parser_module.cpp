@@ -1152,4 +1152,26 @@ ast::DeclPtr Parser::parse_extern_decl(std::vector<ast::AttributeNode> attribute
     return std::make_unique<ast::Decl>(std::move(func));
 }
 
+// ============================================================
+// SV initial ブロック
+// ============================================================
+ast::DeclPtr Parser::parse_initial_block(std::vector<ast::AttributeNode> attributes) {
+    uint32_t start_pos = current().start;
+    expect(TokenKind::KwInitial);
+    expect(TokenKind::LBrace);
+
+    std::vector<ast::StmtPtr> body;
+    while (!check(TokenKind::RBrace) && !is_at_end()) {
+        if (auto stmt = parse_stmt()) {
+            body.push_back(std::move(stmt));
+        }
+    }
+
+    expect(TokenKind::RBrace);
+
+    auto decl = std::make_unique<ast::InitialBlockDecl>(std::move(body));
+    decl->attributes = std::move(attributes);
+    return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
+}
+
 }  // namespace cm

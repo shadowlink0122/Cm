@@ -259,6 +259,12 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         }
     }
 
+    // initial ブロック（シミュレーション用）
+    for (const auto& init : mod.initial_blocks) {
+        append_line("");
+        emit(init);
+    }
+
     // function/task ブロック
     for (const auto& fn : mod.function_blocks) {
         append_line("");
@@ -2182,6 +2188,19 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
         ss << "} " << st->name << ";";
         default_mod.type_declarations.push_back(ss.str());
+    }
+
+    // initial ブロックを処理
+    for (const auto& init : program.initial_blocks) {
+        if (!init)
+            continue;
+        std::ostringstream ss;
+        ss << "initial begin\n";
+        // TODO: より複雑な文のサポートを追加
+        // 現在は空のinitialブロックを出力
+        ss << "    // Cm initial block\n";
+        ss << "end\n";
+        default_mod.initial_blocks.push_back(ss.str());
     }
 
     modules_.push_back(default_mod);

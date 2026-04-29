@@ -385,6 +385,17 @@ struct ExternBlockDecl {
     explicit ExternBlockDecl(std::string lang) : language(std::move(lang)) {}
 };
 
+// ============================================================
+// SV initial ブロック宣言（シミュレーション初期化）
+// ============================================================
+struct InitialBlockDecl {
+    std::vector<StmtPtr> body;
+    std::vector<AttributeNode> attributes;
+
+    InitialBlockDecl() = default;
+    explicit InitialBlockDecl(std::vector<StmtPtr> b) : body(std::move(b)) {}
+};
+
 // ImportDeclはmodule.hppに移動
 
 // ============================================================

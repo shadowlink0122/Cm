@@ -897,15 +897,26 @@ struct MirGlobalVar {
 
 using MirGlobalVarPtr = std::unique_ptr<MirGlobalVar>;
 
+// ============================================================
+// SV initial ブロック
+// ============================================================
+struct MirInitialBlock {
+    std::vector<BasicBlockPtr> blocks;
+    std::vector<std::string> attributes;
+};
+
+using MirInitialBlockPtr = std::unique_ptr<MirInitialBlock>;
+
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
-    std::vector<MirStructPtr> structs;         // 構造体定義
-    std::vector<MirEnumPtr> enums;             // enum定義（Tagged Union含む）
-    std::vector<MirInterfacePtr> interfaces;   // インターフェース定義
-    std::vector<VTablePtr> vtables;            // vtable（動的ディスパッチ用）
-    std::vector<MirModulePtr> modules;         // モジュール
-    std::vector<MirImportPtr> imports;         // インポート
-    std::vector<MirGlobalVarPtr> global_vars;  // グローバル変数
+    std::vector<MirStructPtr> structs;               // 構造体定義
+    std::vector<MirEnumPtr> enums;                   // enum定義（Tagged Union含む）
+    std::vector<MirInterfacePtr> interfaces;         // インターフェース定義
+    std::vector<VTablePtr> vtables;                  // vtable（動的ディスパッチ用）
+    std::vector<MirModulePtr> modules;               // モジュール
+    std::vector<MirImportPtr> imports;               // インポート
+    std::vector<MirGlobalVarPtr> global_vars;        // グローバル変数
+    std::vector<MirInitialBlockPtr> initial_blocks;  // SV initial ブロック
     std::string filename;
 
     // typedef定義マップ（名前→解決済み型）

@@ -52,6 +52,7 @@ class HirLowering {
     HirDeclPtr lower_global_var(ast::GlobalVarDecl& gv);
     HirDeclPtr lower_module(ast::ModuleDecl& mod);
     HirDeclPtr lower_extern_block(ast::ExternBlockDecl& extern_block);
+    HirDeclPtr lower_initial_block(ast::InitialBlockDecl& initial_block);
     HirDeclPtr lower_macro(ast::MacroDecl& macro);  // v0.13.0
 
     // 文のlowering

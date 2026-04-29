@@ -2844,6 +2844,13 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
                     mir_program.functions.push_back(std::move(mir_func));
                 }
             }
+        } else if (auto* initial_block =
+                       std::get_if<std::unique_ptr<hir::HirInitialBlock>>(&decl->kind)) {
+            // SV initial ブロックを処理
+            auto mir_initial = std::make_unique<MirInitialBlock>();
+            mir_initial->attributes = (*initial_block)->attributes;
+            // TODO: initial block内の文をMIR basic blockに変換
+            mir_program.initial_blocks.push_back(std::move(mir_initial));
         }
     }
 }

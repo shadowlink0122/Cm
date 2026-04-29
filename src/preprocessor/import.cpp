@@ -1665,7 +1665,8 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
                     info.is_wildcard = true;
                     size_t close = rest.find('}', wildcard_sel + 5);
                     if (close != std::string::npos) {
-                        std::string items_str = rest.substr(wildcard_sel + 5, close - wildcard_sel - 5);
+                        std::string items_str =
+                            rest.substr(wildcard_sel + 5, close - wildcard_sel - 5);
                         parse_import_items(items_str, info);
                     }
                     break;

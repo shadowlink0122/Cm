@@ -139,6 +139,7 @@ class Parser {
     ast::DeclPtr parse_typedef_decl(bool is_export = false,
                                     std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_impl_export(std::vector<ast::AttributeNode> attributes = {});
+    ast::DeclPtr parse_initial_block(std::vector<ast::AttributeNode> attributes = {});
 
     // ============================================================
     // インラインユーティリティ（小型のためヘッダに残す）

@@ -192,6 +192,11 @@ ast::DeclPtr Parser::parse_top_level() {
         return gv;
     }
 
+    // SV initial ブロック: initial { ... }
+    if (check(TokenKind::KwInitial)) {
+        return parse_initial_block(std::move(attrs));
+    }
+
     // struct
     if (check(TokenKind::KwStruct)) {
         return parse_struct(false, std::move(attrs));
