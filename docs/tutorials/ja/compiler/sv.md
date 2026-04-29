@@ -371,12 +371,47 @@ uint max_val(uint x, uint y) {
 
 ## 連接と複製
 
+### 基本構文
+
 ```cm
 result = {a, b};         // → {a, b}
 replicated = {3{a}};     // → {3{a}}
 ```
 
-ビルトイン関数（`{...}` がブロックと曖昧な場合）:
+### 型推論
+
+連接と複製は `bit[N]` 型に対してビット幅を自動計算します:
+
+```cm
+#[input]  bit[4] a = 0;
+#[input]  bit[4] b = 0;
+#[output] bit[8] result = 0;      // {a, b} → 4+4=8ビット
+#[output] bit[12] replicated = 0; // {3{a}} → 4*3=12ビット
+
+always_comb void compute() {
+    result = {a, b};
+    replicated = {3{a}};
+}
+```
+
+生成されるSV:
+```systemverilog
+module compute (
+    input logic [3:0] a,
+    input logic [3:0] b,
+    output logic [7:0] result,
+    output logic [11:0] replicated
+);
+    always_comb begin
+        result = {a, b};
+        replicated = {3{a}};
+    end
+endmodule
+```
+
+### ビルトイン関数
+
+`{...}` がブロックと曖昧な場合、明示的な関数を使用できます:
 
 ```cm
 result = concat(a, b);       // → {a, b}
@@ -504,6 +539,40 @@ vvp sim
 gw_sh gowin_build.tcl
 ```
 
+### テスト実行
+
+SVバックエンドのテストを実行するには:
+
+```bash
+# SVテストのみ実行
+make test-sv
+
+# SVテスト（並列実行）
+make test-sv-parallel
+
+# 全テスト実行（SVを含む）
+make test
+
+# ショートカット
+make tsv      # test-sv
+make tsvp     # test-sv-parallel
+```
+
+### x86_64デバッグ（macOS開発者向け）
+
+Apple Silicon Mac上でx86_64コードをデバッグする場合:
+
+```bash
+# x86_64用コンパイラをビルド
+make build-x86
+
+# x86_64でテスト実行（Rosetta経由）
+make test-x86
+
+# 特定のテストをデバッグ
+make debug-x86 FILE=tests/sv/basic/adder.cm
+```
+
 ### ターゲットFPGA
 
 | ボード | チップ | ツール |
@@ -584,4 +653,4 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**最終更新:** 2026-03-11
+**最終更新:** 2026-04-29

@@ -368,12 +368,49 @@ uint max_val(uint x, uint y) {
 > **Note:** `void` functions always map to `always_comb` blocks.
 > Only non-void functions with return values become SV `function`.
 
+## Concatenation and Replication
+
+### Basic Syntax
+
 ```cm
 result = {a, b};         // → {a, b}
 replicated = {3{a}};     // → {3{a}}
 ```
 
-Built-in functions (when `{...}` is ambiguous with blocks):
+### Type Inference
+
+Concatenation and replication automatically calculate bit widths for `bit[N]` types:
+
+```cm
+#[input]  bit[4] a = 0;
+#[input]  bit[4] b = 0;
+#[output] bit[8] result = 0;      // {a, b} → 4+4=8 bits
+#[output] bit[12] replicated = 0; // {3{a}} → 4*3=12 bits
+
+always_comb void compute() {
+    result = {a, b};
+    replicated = {3{a}};
+}
+```
+
+Generated SV:
+```systemverilog
+module compute (
+    input logic [3:0] a,
+    input logic [3:0] b,
+    output logic [7:0] result,
+    output logic [11:0] replicated
+);
+    always_comb begin
+        result = {a, b};
+        replicated = {3{a}};
+    end
+endmodule
+```
+
+### Built-in Functions
+
+When `{...}` is ambiguous with blocks, use explicit functions:
 
 ```cm
 result = concat(a, b);       // → {a, b}
@@ -501,6 +538,40 @@ vvp sim
 gw_sh gowin_build.tcl
 ```
 
+### Running Tests
+
+To run SV backend tests:
+
+```bash
+# Run SV tests only
+make test-sv
+
+# Run SV tests in parallel
+make test-sv-parallel
+
+# Run all tests (including SV)
+make test
+
+# Shortcuts
+make tsv      # test-sv
+make tsvp     # test-sv-parallel
+```
+
+### x86_64 Debugging (macOS developers)
+
+For debugging x86_64 code on Apple Silicon Mac:
+
+```bash
+# Build x86_64 compiler
+make build-x86
+
+# Run tests via Rosetta
+make test-x86
+
+# Debug specific test
+make debug-x86 FILE=tests/sv/basic/adder.cm
+```
+
 ### Target FPGAs
 
 | Board | Chip | Tool |
@@ -581,4 +652,4 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**Last updated:** 2026-03-11
+**Last updated:** 2026-04-29
