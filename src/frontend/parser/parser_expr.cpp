@@ -1022,6 +1022,19 @@ ast::ExprPtr Parser::parse_primary() {
         auto saved_pos = pos_;
         advance();  // { を消費
 
+        // 連接式をパースするヘルパー
+        auto parse_concat_expr = [&]() -> ast::ExprPtr {
+            std::vector<ast::ExprPtr> elements;
+            elements.push_back(parse_expr());
+            while (consume_if(TokenKind::Comma)) {
+                elements.push_back(parse_expr());
+            }
+            expect(TokenKind::RBrace);
+            auto callee = ast::make_ident("__builtin_concat", Span{start_pos, start_pos});
+            return ast::make_call(std::move(callee), std::move(elements),
+                                  Span{start_pos, previous().end});
+        };
+
         // 空の {} は空の連接として解釈
         if (check(TokenKind::RBrace)) {
             advance();  // } を消費
@@ -1051,8 +1064,7 @@ ast::ExprPtr Parser::parse_primary() {
             }
             // intリテラルの後にLBraceがない → 連接として解析
             pos_ = int_pos;
-            // フォールスルーして連接として解析
-            goto parse_concat;
+            return parse_concat_expr();
         }
         // パターン1: {ident: ...} → 構造体リテラル
         else if (check(TokenKind::Ident)) {
@@ -1094,21 +1106,11 @@ ast::ExprPtr Parser::parse_primary() {
             }
             // ident の後に : がない → 連接として解析
             pos_ = ident_pos;
-            goto parse_concat;
+            return parse_concat_expr();
         }
         // パターン3: {expr, expr, ...} → 連接式
         else {
-        parse_concat:
-            // 式をカンマ区切りでパースして __builtin_concat に変換
-            std::vector<ast::ExprPtr> elements;
-            elements.push_back(parse_expr());
-            while (consume_if(TokenKind::Comma)) {
-                elements.push_back(parse_expr());
-            }
-            expect(TokenKind::RBrace);
-            auto callee = ast::make_ident("__builtin_concat", Span{start_pos, start_pos});
-            return ast::make_call(std::move(callee), std::move(elements),
-                                  Span{start_pos, previous().end});
+            return parse_concat_expr();
         }
     }
 
@@ -1121,7 +1123,6 @@ ast::ExprPtr Parser::parse_primary() {
 
         // {ident: ...} パターン → 構造体リテラル
         if (check(TokenKind::Ident)) {
-            auto ident_pos = pos_;
             advance();  // ident を消費
             if (check(TokenKind::Colon)) {
                 // 構造体リテラル確定

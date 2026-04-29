@@ -4183,17 +4183,19 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
                     if (!fieldType) {
                         // フォールバック: i32として扱う
-                        std::cerr << "[DEBUG] fieldType fallback to i32 in "
-                                  << (currentMIRFunction ? currentMIRFunction->name : "?")
-                                  << " local=" << place.local
-                                  << " projections=" << place.projections.size();
-                        if (currentType) {
-                            std::cerr << " currentType=" << currentType->name
-                                      << " kind=" << static_cast<int>(currentType->kind);
-                        } else {
-                            std::cerr << " currentType=null";
+                        if (cm::debug::g_debug_mode) {
+                            std::cerr << "[DEBUG] fieldType fallback to i32 in "
+                                      << (currentMIRFunction ? currentMIRFunction->name : "?")
+                                      << " local=" << place.local
+                                      << " projections=" << place.projections.size();
+                            if (currentType) {
+                                std::cerr << " currentType=" << currentType->name
+                                          << " kind=" << static_cast<int>(currentType->kind);
+                            } else {
+                                std::cerr << " currentType=null";
+                            }
+                            std::cerr << "\n";
                         }
-                        std::cerr << "\n";
                         fieldType = ctx.getI32Type();
                     }
 

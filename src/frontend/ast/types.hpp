@@ -114,9 +114,11 @@ inline TypeInfo get_primitive_info(TypeKind kind) {
 // 型修飾子
 // ============================================================
 struct TypeQualifiers {
-    bool is_const : 1 = false;
-    bool is_volatile : 1 = false;
-    bool is_mutable : 1 = false;
+    bool is_const : 1;
+    bool is_volatile : 1;
+    bool is_mutable : 1;
+
+    TypeQualifiers() : is_const(false), is_volatile(false), is_mutable(false) {}
 };
 
 // ============================================================

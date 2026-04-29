@@ -564,15 +564,12 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         func.always_kind == mir::MirFunction::AlwaysKind::None) {
         // edgeパラメータの有無を確認
         bool has_edge_param = false;
-        bool has_non_edge_args = false;
         for (auto arg_id : func.arg_locals) {
             if (arg_id < func.locals.size()) {
                 auto& local = func.locals[arg_id];
                 if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
                                    local.type->kind == hir::TypeKind::Negedge)) {
                     has_edge_param = true;
-                } else if (local.type) {
-                    has_non_edge_args = true;
                 }
             }
         }
@@ -2030,7 +2027,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         bool is_input = false;
         bool is_output = false;
         bool is_inout = false;
-        bool is_param = false;
+        [[maybe_unused]] bool is_param = false;
         for (const auto& attr : gv->attributes) {
             if (attr == "input")
                 is_input = true;
@@ -2587,7 +2584,7 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                         std::isdigit(static_cast<unsigned char>(local.name[2]))) {
                         break;
                     }
-                    std::cerr << "error[SV002]: Pointer types not supported in SV target: "
+                    std::cerr << "error[SV002]: Pointer types are not supported in SV target: "
                               << func->name << "::" << local.name << "\n";
                     has_error = true;
                     break;

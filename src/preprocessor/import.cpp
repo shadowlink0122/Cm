@@ -1600,134 +1600,135 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
 
     std::string trimmed = trim(line);
 
-    // ========== from module import { items } ==========
-    if (trimmed.rfind("from ", 0) == 0) {
-        // from MODULE import { ITEMS }
-        std::string rest = trim(trimmed.substr(5));
-        size_t import_pos = rest.find(" import ");
-        if (import_pos != std::string::npos) {
-            info.module_name = trim(rest.substr(0, import_pos));
-            info.is_from_import = true;
-            std::string items_part = trim(rest.substr(import_pos + 8));
-            // { items } の中身を抽出
-            if (items_part.front() == '{' && items_part.back() == '}') {
-                std::string items_str = items_part.substr(1, items_part.size() - 2);
-                parse_import_items(items_str, info);
-            }
-        }
-        goto finalize;
-    }
-
-    // import で始まる場合
-    if (trimmed.rfind("import ", 0) == 0) {
-        std::string rest = trim(trimmed.substr(7));
-
-        // ========== import { items } from module ==========
-        if (!rest.empty() && rest.front() == '{') {
-            size_t close_brace = rest.find('}');
-            if (close_brace != std::string::npos) {
-                std::string items_str = rest.substr(1, close_brace - 1);
-                std::string after_brace = trim(rest.substr(close_brace + 1));
-                if (after_brace.rfind("from ", 0) == 0) {
-                    info.module_name = trim(after_brace.substr(5));
-                    info.is_from_import = true;
+    do {
+        // ========== from module import { items } ==========
+        if (trimmed.rfind("from ", 0) == 0) {
+            // from MODULE import { ITEMS }
+            std::string rest = trim(trimmed.substr(5));
+            size_t import_pos = rest.find(" import ");
+            if (import_pos != std::string::npos) {
+                info.module_name = trim(rest.substr(0, import_pos));
+                info.is_from_import = true;
+                std::string items_part = trim(rest.substr(import_pos + 8));
+                // { items } の中身を抽出
+                if (items_part.front() == '{' && items_part.back() == '}') {
+                    std::string items_str = items_part.substr(1, items_part.size() - 2);
                     parse_import_items(items_str, info);
-                    goto finalize;
                 }
             }
+            break;
         }
 
-        // ========== import * from module ==========
-        if (rest.rfind("* from ", 0) == 0) {
-            info.module_name = trim(rest.substr(7));
-            info.is_wildcard = true;
-            info.is_from_import = true;
-            goto finalize;
-        }
+        // import で始まる場合
+        if (trimmed.rfind("import ", 0) == 0) {
+            std::string rest = trim(trimmed.substr(7));
 
-        // ========== import module as alias ==========
-        {
-            size_t as_pos = rest.find(" as ");
-            if (as_pos != std::string::npos) {
-                info.module_name = trim(rest.substr(0, as_pos));
-                info.alias = trim(rest.substr(as_pos + 4));
-                goto finalize;
+            // ========== import { items } from module ==========
+            if (!rest.empty() && rest.front() == '{') {
+                size_t close_brace = rest.find('}');
+                if (close_brace != std::string::npos) {
+                    std::string items_str = rest.substr(1, close_brace - 1);
+                    std::string after_brace = trim(rest.substr(close_brace + 1));
+                    if (after_brace.rfind("from ", 0) == 0) {
+                        info.module_name = trim(after_brace.substr(5));
+                        info.is_from_import = true;
+                        parse_import_items(items_str, info);
+                        break;
+                    }
+                }
             }
-        }
 
-        // ========== import path/*::{items} ==========
-        {
-            size_t wildcard_sel = rest.find("/*::{");
-            if (wildcard_sel != std::string::npos) {
-                info.module_name = trim(rest.substr(0, wildcard_sel));
-                info.is_recursive_wildcard = true;
+            // ========== import * from module ==========
+            if (rest.rfind("* from ", 0) == 0) {
+                info.module_name = trim(rest.substr(7));
                 info.is_wildcard = true;
-                size_t close = rest.find('}', wildcard_sel + 5);
-                if (close != std::string::npos) {
-                    std::string items_str = rest.substr(wildcard_sel + 5, close - wildcard_sel - 5);
-                    parse_import_items(items_str, info);
-                }
-                goto finalize;
+                info.is_from_import = true;
+                break;
             }
-        }
 
-        // ========== import path/* ==========
-        if (rest.size() >= 2 && rest.substr(rest.size() - 2) == "/*") {
-            info.module_name = trim(rest.substr(0, rest.size() - 2));
-            info.is_recursive_wildcard = true;
-            info.is_wildcard = true;
-            goto finalize;
-        }
+            // ========== import module as alias ==========
+            {
+                size_t as_pos = rest.find(" as ");
+                if (as_pos != std::string::npos) {
+                    info.module_name = trim(rest.substr(0, as_pos));
+                    info.alias = trim(rest.substr(as_pos + 4));
+                    break;
+                }
+            }
 
-        // ========== import module::{items} ==========
-        {
-            size_t sel_pos = rest.find("::{");
-            if (sel_pos != std::string::npos) {
-                size_t close = rest.find('}', sel_pos + 3);
-                if (close != std::string::npos) {
-                    // module::* (ワイルドカード) チェック
-                    std::string items_str = rest.substr(sel_pos + 3, close - sel_pos - 3);
-                    if (trim(items_str) == "*") {
-                        info.module_name = trim(rest.substr(0, sel_pos));
-                        info.is_wildcard = true;
-                    } else {
-                        info.module_name = trim(rest.substr(0, sel_pos));
+            // ========== import path/*::{items} ==========
+            {
+                size_t wildcard_sel = rest.find("/*::{");
+                if (wildcard_sel != std::string::npos) {
+                    info.module_name = trim(rest.substr(0, wildcard_sel));
+                    info.is_recursive_wildcard = true;
+                    info.is_wildcard = true;
+                    size_t close = rest.find('}', wildcard_sel + 5);
+                    if (close != std::string::npos) {
+                        std::string items_str = rest.substr(wildcard_sel + 5, close - wildcard_sel - 5);
                         parse_import_items(items_str, info);
                     }
-                    goto finalize;
+                    break;
                 }
             }
-        }
 
-        // ========== import module::* ==========
-        if (rest.size() >= 3 && rest.substr(rest.size() - 3) == "::*") {
-            info.module_name = trim(rest.substr(0, rest.size() - 3));
-            info.is_wildcard = true;
-            goto finalize;
-        }
-
-        // ========== import module (シンプル) ==========
-        info.module_name = rest;
-
-        // ./path/module::submodule::item 形式をチェック
-        std::string& name = info.module_name;
-        size_t last_colon = name.rfind("::");
-        if (last_colon != std::string::npos && last_colon > 0) {
-            std::string last_part = name.substr(last_colon + 2);
-            if (last_part == "*") {
+            // ========== import path/* ==========
+            if (rest.size() >= 2 && rest.substr(rest.size() - 2) == "/*") {
+                info.module_name = trim(rest.substr(0, rest.size() - 2));
+                info.is_recursive_wildcard = true;
                 info.is_wildcard = true;
-                info.module_name = name.substr(0, last_colon);
-            } else if (!last_part.empty() && std::islower(last_part[0])) {
-                size_t first_colon = name.find("::");
-                if (!info.is_relative || first_colon != last_colon) {
-                    info.items.push_back(last_part);
+                break;
+            }
+
+            // ========== import module::{items} ==========
+            {
+                size_t sel_pos = rest.find("::{");
+                if (sel_pos != std::string::npos) {
+                    size_t close = rest.find('}', sel_pos + 3);
+                    if (close != std::string::npos) {
+                        // module::* (ワイルドカード) チェック
+                        std::string items_str = rest.substr(sel_pos + 3, close - sel_pos - 3);
+                        if (trim(items_str) == "*") {
+                            info.module_name = trim(rest.substr(0, sel_pos));
+                            info.is_wildcard = true;
+                        } else {
+                            info.module_name = trim(rest.substr(0, sel_pos));
+                            parse_import_items(items_str, info);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // ========== import module::* ==========
+            if (rest.size() >= 3 && rest.substr(rest.size() - 3) == "::*") {
+                info.module_name = trim(rest.substr(0, rest.size() - 3));
+                info.is_wildcard = true;
+                break;
+            }
+
+            // ========== import module (シンプル) ==========
+            info.module_name = rest;
+
+            // ./path/module::submodule::item 形式をチェック
+            std::string& name = info.module_name;
+            size_t last_colon = name.rfind("::");
+            if (last_colon != std::string::npos && last_colon > 0) {
+                std::string last_part = name.substr(last_colon + 2);
+                if (last_part == "*") {
+                    info.is_wildcard = true;
                     info.module_name = name.substr(0, last_colon);
+                } else if (!last_part.empty() && std::islower(last_part[0])) {
+                    size_t first_colon = name.find("::");
+                    if (!info.is_relative || first_colon != last_colon) {
+                        info.items.push_back(last_part);
+                        info.module_name = name.substr(0, last_colon);
+                    }
                 }
             }
         }
-    }
+    } while (false);
 
-finalize:
     // 引用符を除去
     if (info.module_name.size() >= 2) {
         if ((info.module_name.front() == '"' && info.module_name.back() == '"') ||

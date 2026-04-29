@@ -326,79 +326,82 @@ Token Lexer::scan_number(uint32_t start) {
 
     // SV幅付きリテラルチェック: N'[dbhDBH]VALUE
     // 例: 8'd170, 4'b1010, 16'hFFFF
-    if (!is_at_end() && peek() == '\'' && pos_ + 1 < source_.size()) {
-        char base_char = source_[pos_ + 1];
-        if (base_char == 'd' || base_char == 'D' || base_char == 'b' || base_char == 'B' ||
-            base_char == 'h' || base_char == 'H') {
-            // ビット幅を取得（例外防止: stoi失敗時は通常の数値として処理）
-            std::string width_str(source_.substr(start, pos_ - start));
-            int bit_width = 0;
-            try {
-                bit_width = std::stoi(width_str);
-                if (bit_width <= 0 || bit_width > 65535) {
-                    // 不正なビット幅は通常の数値リテラルとしてフォールバック
-                    goto normal_number;
-                }
-            } catch (...) {
-                // 数値変換失敗時は通常の数値リテラルとしてフォールバック
-                goto normal_number;
-            }
-
-            advance();  // '\'' を消費
-            advance();  // base_char を消費
-
-            // 値部分をパース（基数に応じた文字集合を検証）
-            std::string value_str;
-            char norm_base = std::tolower(base_char);
-            if (norm_base == 'd') {
-                // 10進数: 数字のみ許容
-                while (!is_at_end() && is_digit(peek())) {
-                    value_str += advance();
-                }
-            } else if (norm_base == 'b') {
-                // 2進数: 0/1のみ許容
-                while (!is_at_end() && (peek() == '0' || peek() == '1')) {
-                    value_str += advance();
-                }
-            } else {
-                // 16進数: hex_digitのみ許容
-                while (!is_at_end() && is_hex_digit(peek())) {
-                    value_str += advance();
-                }
-            }
-
-            // 値部が空の場合はエラー（例: 8'd, 8'h 等）
-            if (value_str.empty()) {
-                debug::lex::log(debug::lex::Id::Error,
-                                "SV幅付きリテラルの値部が空です: " + width_str + "'" + norm_base,
-                                debug::Level::Error);
-                return Token(TokenKind::Error, start, pos_);
-            }
-
-            // 値の変換（例外防止: stoull失敗時はエラー）
-            uint64_t uval = 0;
-            try {
-                int base = (norm_base == 'b') ? 2 : (norm_base == 'h') ? 16 : 10;
-                uval = std::stoull(value_str, nullptr, base);
-            } catch (...) {
-                debug::lex::log(debug::lex::Id::Error,
-                                "SV幅付きリテラルの値が不正です: " + value_str,
-                                debug::Level::Error);
-                return Token(TokenKind::Error, start, pos_);
-            }
-
-            int64_t val = static_cast<int64_t>(uval);
-            bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
-            if (::cm::debug::g_debug_mode)
-                debug::lex::log(
-                    debug::lex::Id::Number,
-                    width_str + "'" + norm_base + value_str + " = " + std::to_string(val),
-                    debug::Level::Debug);
-            return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width, norm_base,
-                         value_str);
+    do {
+        if (is_at_end() || peek() != '\'' || pos_ + 1 >= source_.size()) {
+            break;
         }
-    }
-normal_number:
+        char base_char = source_[pos_ + 1];
+        if (base_char != 'd' && base_char != 'D' && base_char != 'b' && base_char != 'B' &&
+            base_char != 'h' && base_char != 'H') {
+            break;
+        }
+        // ビット幅を取得（例外防止: stoi失敗時は通常の数値として処理）
+        std::string width_str(source_.substr(start, pos_ - start));
+        int bit_width = 0;
+        try {
+            bit_width = std::stoi(width_str);
+            if (bit_width <= 0 || bit_width > 65535) {
+                // 不正なビット幅は通常の数値リテラルとしてフォールバック
+                break;
+            }
+        } catch (...) {
+            // 数値変換失敗時は通常の数値リテラルとしてフォールバック
+            break;
+        }
+
+        advance();  // '\'' を消費
+        advance();  // base_char を消費
+
+        // 値部分をパース（基数に応じた文字集合を検証）
+        std::string value_str;
+        char norm_base = std::tolower(base_char);
+        if (norm_base == 'd') {
+            // 10進数: 数字のみ許容
+            while (!is_at_end() && is_digit(peek())) {
+                value_str += advance();
+            }
+        } else if (norm_base == 'b') {
+            // 2進数: 0/1のみ許容
+            while (!is_at_end() && (peek() == '0' || peek() == '1')) {
+                value_str += advance();
+            }
+        } else {
+            // 16進数: hex_digitのみ許容
+            while (!is_at_end() && is_hex_digit(peek())) {
+                value_str += advance();
+            }
+        }
+
+        // 値部が空の場合はエラー（例: 8'd, 8'h 等）
+        if (value_str.empty()) {
+            debug::lex::log(debug::lex::Id::Error,
+                            "SV幅付きリテラルの値部が空です: " + width_str + "'" + norm_base,
+                            debug::Level::Error);
+            return Token(TokenKind::Error, start, pos_);
+        }
+
+        // 値の変換（例外防止: stoull失敗時はエラー）
+        uint64_t uval = 0;
+        try {
+            int base = (norm_base == 'b') ? 2 : (norm_base == 'h') ? 16 : 10;
+            uval = std::stoull(value_str, nullptr, base);
+        } catch (...) {
+            debug::lex::log(debug::lex::Id::Error,
+                            "SV幅付きリテラルの値が不正です: " + value_str,
+                            debug::Level::Error);
+            return Token(TokenKind::Error, start, pos_);
+        }
+
+        int64_t val = static_cast<int64_t>(uval);
+        bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
+        if (::cm::debug::g_debug_mode)
+            debug::lex::log(
+                debug::lex::Id::Number,
+                width_str + "'" + norm_base + value_str + " = " + std::to_string(val),
+                debug::Level::Debug);
+        return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned, bit_width, norm_base,
+                     value_str);
+    } while (false);
 
     // 小数点チェック
     if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
