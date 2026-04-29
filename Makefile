@@ -138,6 +138,12 @@ help:
 	@echo "  make format-check - フォーマットをチェック"
 	@echo "  make lint         - C++コードを静的解析(clang-tidy)"
 	@echo ""
+	@echo "x86_64 Debug Commands (macOS Rosetta):"
+	@echo "  make build-x86    - x86_64用コンパイラをビルド"
+	@echo "  make test-x86     - x86_64でテスト実行（Rosetta経由）"
+	@echo "  make debug-x86 FILE=<file> - x86_64で特定テストをデバッグ"
+	@echo "  make clean-x86    - x86_64ビルドをクリーン"
+	@echo ""
 	@echo "Quick Shortcuts:"
 	@echo "  make b   - build"
 	@echo "  make t   - test (unit + integration)"
@@ -325,6 +331,92 @@ clean:
 
 .PHONY: rebuild
 rebuild: clean build-all
+
+
+# ========================================
+# x86_64 Debug Commands (macOS Rosetta)
+# ========================================
+
+# x86_64用ビルドディレクトリ
+BUILD_DIR_X86 := build-x86_64
+
+# x86_64用コンパイラをビルド（Rosettaでテスト実行用）
+.PHONY: build-x86
+build-x86:
+	@if [ "$$(uname -s)" != "Darwin" ]; then \
+		echo "❌ This target is only available on macOS"; \
+		exit 1; \
+	fi
+	@echo "Building x86_64 compiler (for Rosetta testing)..."
+	@rm -rf $(BUILD_DIR_X86)
+	@BREW_PREFIX=/usr/local && \
+	LLVM_PREFIX=$${BREW_PREFIX}/opt/llvm@17 && \
+	OPENSSL_PREFIX=$${BREW_PREFIX}/opt/openssl@3 && \
+	if [ ! -d "$${LLVM_PREFIX}" ]; then \
+		echo "❌ x86_64 LLVM not found. Install with:"; \
+		echo "   arch -x86_64 /usr/local/bin/brew install llvm@17 openssl@3"; \
+		exit 1; \
+	fi && \
+	arch -x86_64 cmake -B $(BUILD_DIR_X86) \
+		-DCMAKE_BUILD_TYPE=Debug \
+		-DCM_USE_LLVM=ON \
+		-DCM_TARGET_ARCH=x86_64 \
+		-DCMAKE_OSX_ARCHITECTURES=x86_64 \
+		-DLLVM_DIR=$${LLVM_PREFIX}/lib/cmake/llvm \
+		-DCMAKE_PREFIX_PATH="$${LLVM_PREFIX};$${OPENSSL_PREFIX}" \
+		-DOPENSSL_ROOT_DIR=$${OPENSSL_PREFIX} \
+		-DOPENSSL_SSL_LIBRARY=$${OPENSSL_PREFIX}/lib/libssl.dylib \
+		-DOPENSSL_CRYPTO_LIBRARY=$${OPENSSL_PREFIX}/lib/libcrypto.dylib \
+		-DOPENSSL_INCLUDE_DIR=$${OPENSSL_PREFIX}/include \
+		-DCMAKE_C_COMPILER=/usr/bin/clang \
+		-DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+		-DCMAKE_EXE_LINKER_FLAGS="-L$${LLVM_PREFIX}/lib" && \
+	arch -x86_64 cmake --build $(BUILD_DIR_X86) --target cm -j$$(sysctl -n hw.ncpu) && \
+	mv cm cm-x86 && \
+	install_name_tool -change /opt/homebrew/opt/llvm@17/lib/libLLVM.dylib /usr/local/opt/llvm@17/lib/libLLVM.dylib cm-x86 2>/dev/null || true && \
+	install_name_tool -change /opt/homebrew/opt/llvm@17/lib/libunwind.1.dylib /usr/local/opt/llvm@17/lib/libunwind.1.dylib cm-x86 2>/dev/null || true && \
+	install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib /usr/local/opt/openssl@3/lib/libssl.3.dylib cm-x86 2>/dev/null || true && \
+	install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib /usr/local/opt/openssl@3/lib/libcrypto.3.dylib cm-x86 2>/dev/null || true && \
+	echo "✅ x86_64 build complete! Binary: cm-x86"
+
+# x86_64用テスト実行（Rosettaで実行）
+.PHONY: test-x86
+test-x86: build-x86
+	@echo "Running x86_64 tests via Rosetta..."
+	@CM_EXECUTABLE=./cm-x86 OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
+	@echo "✅ x86_64 tests completed!"
+
+# x86_64で特定のテストをデバッグ実行
+# 使用例: make debug-x86 FILE=tests/common/functions/recursive_function.cm
+.PHONY: debug-x86
+debug-x86: build-x86
+	@if [ -z "$(FILE)" ]; then \
+		echo "Usage: make debug-x86 FILE=<test.cm>"; \
+		exit 1; \
+	fi
+	@echo "=== x86_64 Debug: $(FILE) ==="
+	@echo "--- Compiling ---"
+	@./cm-x86 compile -O3 -o /tmp/debug_x86_test $(FILE) 2>&1 || true
+	@echo ""
+	@echo "--- Running via Rosetta ---"
+	@if [ -f /tmp/debug_x86_test ]; then \
+		/tmp/debug_x86_test 2>&1; \
+		echo "Exit code: $$?"; \
+	else \
+		echo "Compilation failed"; \
+	fi
+
+# x86_64用クリーン
+.PHONY: clean-x86
+clean-x86:
+	@rm -rf $(BUILD_DIR_X86) cm-x86
+	@echo "✅ x86_64 build cleaned!"
+
+# ショートカット
+.PHONY: bx tx dx
+bx: build-x86
+tx: test-x86
+dx: debug-x86
 
 
 # ========================================
