@@ -122,6 +122,11 @@ help:
 	@echo "  make test-baremetal   - ベアメタルコンパイルテスト"
 	@echo "  make test-uefi        - UEFIコンパイルテスト"
 	@echo ""
+	@echo "Test Commands (SystemVerilog/Hardware):"
+	@echo "  make test-sv          - SystemVerilogテスト (Cm→SV変換 + Verilator lint)"
+	@echo "  make test-sv-parallel - SystemVerilogテスト（並列）"
+	@echo "  make test-sv-o0/o1/o2/o3 - SystemVerilog最適化レベル別テスト"
+	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
 	@echo ""
 	@echo "Run Commands:"
@@ -151,6 +156,7 @@ help:
 	@echo "  make tw0/tw1/tw2/tw3 - WASM O0-O3（シリアル）"
 	@echo "  make tj0/tj1/tj2/tj3 - JS O0-O3（シリアル）"
 	@echo "  make tjit0/tjit1/tjit2/tjit3 - JIT O0-O3（シリアル）"
+	@echo "  make tsv/tsvp - SystemVerilog（シリアル/パラレル）"
 	@echo "  make tip0/tip1/tip2/tip3 - インタプリタ O0-O3（パラレル）"
 	@echo "  make tlp0/tlp1/tlp2/tlp3 - LLVM O0-O3（パラレル）"
 	@echo "  make twp0/twp1/twp2/twp3 - WASM O0-O3（パラレル）"
@@ -332,16 +338,17 @@ test-unit:
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
-# 全テスト実行（unit + integration）
+# 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-interpreter test-llvm-all
+test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-sv-parallel
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
 	@echo "  - Unit tests (C++)"
-	@echo "  - Interpreter tests"
-	@echo "  - LLVM Native tests"
-	@echo "  - LLVM WASM tests"
+	@echo "  - Interpreter tests (parallel)"
+	@echo "  - LLVM Native tests (parallel)"
+	@echo "  - LLVM WASM tests (parallel)"
+	@echo "  - SystemVerilog tests (parallel)"
 	@echo "=========================================="
 
 .PHONY: test-lexer

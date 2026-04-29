@@ -114,6 +114,27 @@ impl Point for Printable {
 
 ---
 
+## リファクタリング項目
+
+### SystemVerilog バックエンドテスト
+
+| 項目 | 状態 | 説明 |
+|------|------|------|
+| テストスイート | ✅ | `tests/sv/` に65+テストケース |
+| Makeターゲット | ✅ | `make test-sv`, `make test-sv-parallel` |
+| Verilator lint検証 | ✅ | `verilator --lint-only` |
+| iverilog検証 | ✅ | `iverilog -g2012` フォールバック |
+| シミュレーション実行 | ✅ | `vvp` によるシミュレーション |
+
+**テスト実行方法**:
+```bash
+make test-sv          # SystemVerilogテスト（シリアル）
+make test-sv-parallel # SystemVerilogテスト（並列）
+make tsv              # ショートカット
+```
+
+---
+
 ## 廃止機能
 
 - Rust/TypeScript/C++トランスパイラ（2025年12月廃止）
