@@ -382,7 +382,7 @@ std::vector<Token> MacroExpander::transcribe_repetition(const RepetitionNode& re
 
 // パターン内のメタ変数を収集するヘルパー
 void MacroExpander::collect_metavars_in_pattern(const std::vector<TokenTree>& pattern,
-                                                 std::vector<std::string>& metavars) {
+                                                std::vector<std::string>& metavars) {
     for (const auto& tree : pattern) {
         switch (tree.kind) {
             case TokenTree::Kind::METAVAR:
