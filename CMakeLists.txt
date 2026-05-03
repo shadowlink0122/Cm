@@ -706,6 +706,15 @@ if(BUILD_TESTING)
         target_link_libraries(mir_optimization_test gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
 
+        # Unit tests - Error handling
+        add_executable(error_test
+            tests/unit/error_test.cpp
+        )
+        set_target_properties(error_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(error_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(error_test gtest_main)
+        gtest_discover_tests(error_test PROPERTIES LABELS "unit")
+
         # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
         # add_executable(mir_interpreter_test
         #     tests/unit/mir_interpreter_test.cpp

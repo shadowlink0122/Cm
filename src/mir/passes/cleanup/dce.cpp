@@ -335,9 +335,22 @@ bool DeadCodeElimination::has_side_effects(const MirRvalue* rvalue) const {
     if (!rvalue)
         return false;
 
-    // 現在の実装では、関数呼び出し以外は副作用なしと仮定
-    // TODO: より詳細な副作用解析
-    return false;
+    // 副作用を持つ可能性のある式を検出
+    switch (rvalue->kind) {
+        case MirRvalue::Use:
+        case MirRvalue::BinaryOp:
+        case MirRvalue::UnaryOp:
+        case MirRvalue::Ref:
+        case MirRvalue::Aggregate:
+        case MirRvalue::Cast:
+        case MirRvalue::FormatConvert: {
+            // これらの演算は通常副作用なし
+            return false;
+        }
+        default:
+            // 不明な式は保守的に副作用ありと仮定
+            return true;
+    }
 }
 
 }  // namespace cm::mir::opt

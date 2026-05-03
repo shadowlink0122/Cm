@@ -341,6 +341,7 @@ rebuild: clean build-all
 BUILD_DIR_X86 := build-x86_64
 
 # x86_64用コンパイラをビルド（Rosettaでテスト実行用）
+# ツールチェーンファイル: cmake/toolchains/x86_64-apple-darwin.cmake
 .PHONY: build-x86
 build-x86:
 	@if [ "$$(uname -s)" != "Darwin" ]; then \
@@ -358,10 +359,10 @@ build-x86:
 		exit 1; \
 	fi && \
 	arch -x86_64 cmake -B $(BUILD_DIR_X86) \
+		-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/x86_64-apple-darwin.cmake \
 		-DCMAKE_BUILD_TYPE=Debug \
 		-DCM_USE_LLVM=ON \
 		-DCM_TARGET_ARCH=x86_64 \
-		-DCMAKE_OSX_ARCHITECTURES=x86_64 \
 		-DLLVM_DIR=$${LLVM_PREFIX}/lib/cmake/llvm \
 		-DCMAKE_PREFIX_PATH="$${LLVM_PREFIX};$${OPENSSL_PREFIX}" \
 		-DOPENSSL_ROOT_DIR=$${OPENSSL_PREFIX} \

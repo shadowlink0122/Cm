@@ -1,0 +1,3 @@
+# Linux x86_64 LLVM O3 SIGILL issue
+# See: docs/refactor/P2/linux-x86-sigill.md
+llvm-o3:linux:x86_64

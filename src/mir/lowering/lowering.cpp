@@ -1619,34 +1619,51 @@ void MirLowering::generate_builtin_hash_method(const hir::HirStruct& st) {
     BlockId entry_block = mir_func->add_block();
     auto* block = mir_func->get_block(entry_block);
 
-    // 簡略化実装: 各フィールドの値を足し合わせてハッシュとする
-    // TODO: より良いハッシュ関数の実装（FNV-1a等）
+    // FNV-1a ハッシュ実装
+    // hash = FNV_OFFSET_BASIS
+    // for each byte:
+    //   hash ^= byte
+    //   hash *= FNV_PRIME
+    // 簡略化: フィールド値をintとして扱い、XORと乗算で混合
+    constexpr int64_t FNV_OFFSET_BASIS = 0x811c9dc5;  // 32-bit FNV-1a
+    constexpr int64_t FNV_PRIME = 0x01000193;
 
     if (st.fields.empty()) {
-        // フィールドがない場合は0
-        auto const_zero = std::make_unique<MirOperand>();
-        const_zero->kind = MirOperand::Constant;
+        // フィールドがない場合はFNV_OFFSET_BASIS
+        auto const_basis = std::make_unique<MirOperand>();
+        const_basis->kind = MirOperand::Constant;
         MirConstant c;
-        c.value = int64_t(0);
+        c.value = FNV_OFFSET_BASIS;
         c.type = hir::make_int();
-        const_zero->data = c;
+        const_basis->data = c;
 
         block->statements.push_back(MirStatement::assign(MirPlace(mir_func->return_local),
-                                                         MirRvalue::use(std::move(const_zero))));
+                                                         MirRvalue::use(std::move(const_basis))));
     } else {
-        // 各フィールドの値を加算
+        // FNV-1a: hash ^= field; hash *= prime
         LocalId acc = mir_func->add_local("_hash_acc", hir::make_int(), true, false);
 
-        // 初期値 = 0
-        auto const_zero = std::make_unique<MirOperand>();
-        const_zero->kind = MirOperand::Constant;
-        MirConstant c;
-        c.value = int64_t(0);
-        c.type = hir::make_int();
-        const_zero->data = c;
+        // 初期値 = FNV_OFFSET_BASIS
+        auto const_basis = std::make_unique<MirOperand>();
+        const_basis->kind = MirOperand::Constant;
+        MirConstant c_basis;
+        c_basis.value = FNV_OFFSET_BASIS;
+        c_basis.type = hir::make_int();
+        const_basis->data = c_basis;
 
         block->statements.push_back(
-            MirStatement::assign(MirPlace(acc), MirRvalue::use(std::move(const_zero))));
+            MirStatement::assign(MirPlace(acc), MirRvalue::use(std::move(const_basis))));
+
+        // FNV_PRIME定数
+        auto make_prime = [&]() {
+            auto const_prime = std::make_unique<MirOperand>();
+            const_prime->kind = MirOperand::Constant;
+            MirConstant c_prime;
+            c_prime.value = FNV_PRIME;
+            c_prime.type = hir::make_int();
+            const_prime->data = c_prime;
+            return const_prime;
+        };
 
         for (size_t i = 0; i < st.fields.size(); ++i) {
             const auto& field = st.fields[i];
@@ -1658,15 +1675,22 @@ void MirLowering::generate_builtin_hash_method(const hir::HirStruct& st) {
             block->statements.push_back(MirStatement::assign(
                 MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
 
-            // acc += field_val (簡略化: intにキャスト)
-            // TODO: 型に応じたハッシュ計算
-            LocalId new_acc =
-                mir_func->add_local("_acc" + std::to_string(i), hir::make_int(), true, false);
+            // hash ^= field_val (XOR)
+            LocalId xor_acc =
+                mir_func->add_local("_xor" + std::to_string(i), hir::make_int(), true, false);
             block->statements.push_back(MirStatement::assign(
-                MirPlace(new_acc),
-                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
+                MirPlace(xor_acc),
+                MirRvalue::binary(MirBinaryOp::BitXor, MirOperand::copy(MirPlace(acc)),
                                   MirOperand::copy(MirPlace(field_val)))));
-            acc = new_acc;
+
+            // hash *= FNV_PRIME
+            LocalId mul_acc =
+                mir_func->add_local("_mul" + std::to_string(i), hir::make_int(), true, false);
+            block->statements.push_back(MirStatement::assign(
+                MirPlace(mul_acc),
+                MirRvalue::binary(MirBinaryOp::Mul, MirOperand::copy(MirPlace(xor_acc)),
+                                  make_prime())));
+            acc = mul_acc;
         }
 
         block->statements.push_back(MirStatement::assign(

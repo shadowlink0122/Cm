@@ -97,6 +97,9 @@ struct Options {
     bool incremental = false;             // デフォルトで無効（--incrementalで有効化）
     std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
     std::string cache_subcommand;         // cache サブコマンド（clear/stats）
+    // エラー処理
+    bool has_error = false;               // パースエラーフラグ
+    std::string error_message;            // エラーメッセージ
 };
 
 // ヘルプメッセージを表示
@@ -198,9 +201,9 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Help;
         return opts;
     } else {
-        std::cerr << "不明なコマンド: " << cmd << "\n";
-        std::cerr << "'cm help' でヘルプを表示\n";
-        std::exit(1);
+        opts.has_error = true;
+        opts.error_message = "不明なコマンド: " + cmd + "\n'cm help' でヘルプを表示";
+        return opts;
     }
 
     // 残りの引数を処理
@@ -233,15 +236,17 @@ Options parse_options(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 opts.output_file = argv[++i];
             } else {
-                std::cerr << "-o オプションには出力ファイル名が必要です\n";
-                std::exit(1);
+                opts.has_error = true;
+                opts.error_message = "-o オプションには出力ファイル名が必要です";
+                return opts;
             }
         } else if (arg.substr(0, 2) == "-O") {
             if (arg.length() > 2) {
                 opts.optimization_level = arg[2] - '0';
                 if (opts.optimization_level < 0 || opts.optimization_level > 3) {
-                    std::cerr << "最適化レベルは0-3の範囲で指定してください\n";
-                    std::exit(1);
+                    opts.has_error = true;
+                    opts.error_message = "最適化レベルは0-3の範囲で指定してください";
+                    return opts;
                 }
             }
         } else if (arg == "--debug" || arg == "-d") {
@@ -252,12 +257,14 @@ Options parse_options(int argc, char* argv[]) {
                 try {
                     opts.max_output_size = std::stoul(arg.substr(18));
                     if (opts.max_output_size < 1 || opts.max_output_size > 1024) {
-                        std::cerr << "最大出力サイズは1-1024GBの範囲で指定してください\n";
-                        std::exit(1);
+                        opts.has_error = true;
+                        opts.error_message = "最大出力サイズは1-1024GBの範囲で指定してください";
+                        return opts;
                     }
                 } catch (...) {
-                    std::cerr << "無効な最大出力サイズ: " << arg.substr(18) << "\n";
-                    std::exit(1);
+                    opts.has_error = true;
+                    opts.error_message = "無効な最大出力サイズ: " + arg.substr(18);
+                    return opts;
                 }
             }
         } else if (arg.substr(0, 3) == "-d=") {
@@ -290,31 +297,43 @@ Options parse_options(int argc, char* argv[]) {
                 if (opts.input_file.empty()) {
                     opts.input_file = arg;
                 } else {
-                    std::cerr << "複数の入力ファイルは指定できません\n";
-                    std::exit(1);
+                    opts.has_error = true;
+                    opts.error_message = "複数の入力ファイルは指定できません";
+                    return opts;
                 }
             }
         } else {
-            std::cerr << "不明なオプション: " << arg << "\n";
-            std::cerr << "'cm help' でヘルプを表示\n";
-            std::exit(1);
+            opts.has_error = true;
+            opts.error_message = "不明なオプション: " + arg + "\n'cm help' でヘルプを表示";
+            return opts;
         }
     }
 
     return opts;
 }
 
+// ファイル読み込み結果
+struct ReadFileResult {
+    std::string content;
+    bool success = false;
+    std::string error_message;
+};
+
 // ファイルを読み込む
-std::string read_file(const std::string& filename) {
+ReadFileResult read_file(const std::string& filename) {
+    ReadFileResult result;
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "エラー: ファイルを開けません: " << filename << "\n";
-        std::exit(1);
+        result.success = false;
+        result.error_message = "エラー: ファイルを開けません: " + filename;
+        return result;
     }
 
     std::stringstream buffer;
     buffer << file.rdbuf();
-    return buffer.str();
+    result.content = buffer.str();
+    result.success = true;
+    return result;
 }
 
 // ソースコード先頭から //! platform: ディレクティブを解析
@@ -510,6 +529,12 @@ int main(int argc, char* argv[]) {
     // オプションをパース
     Options opts = parse_options(argc, argv);
 
+    // オプションパースでエラーがあった場合
+    if (opts.has_error) {
+        std::cerr << opts.error_message << "\n";
+        return 1;
+    }
+
     // コンパイラバイナリのパスを設定（インクリメンタルビルド用）
     cache::CacheManager::set_compiler_path(argv[0]);
 
@@ -557,7 +582,13 @@ int main(int argc, char* argv[]) {
 
         for (const auto& file : cm_files) {
             try {
-                std::string code = read_file(file);
+                auto file_result = read_file(file);
+                if (!file_result.success) {
+                    std::cerr << file_result.error_message << "\n";
+                    total_errors++;
+                    continue;
+                }
+                std::string code = std::move(file_result.content);
 
                 // //! platform: ディレクティブ検出
                 std::string platform_directive = parse_platform_directive(code);
@@ -757,7 +788,12 @@ int main(int argc, char* argv[]) {
 
         for (const auto& file : cm_files) {
             try {
-                std::string code = read_file(file);
+                auto file_result = read_file(file);
+                if (!file_result.success) {
+                    // エラーはスキップ
+                    continue;
+                }
+                std::string code = std::move(file_result.content);
 
                 // フォーマット実行
                 auto result = formatter.format(code);
@@ -848,7 +884,12 @@ int main(int argc, char* argv[]) {
     }
 
     // ファイルを読み込む
-    std::string code = read_file(opts.input_file);
+    auto file_result = read_file(opts.input_file);
+    if (!file_result.success) {
+        std::cerr << file_result.error_message << "\n";
+        return 1;
+    }
+    std::string code = std::move(file_result.content);
 
     // //! platform: ディレクティブチェック
     {
@@ -1132,7 +1173,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << loc_mgr.format_error_location(diag.span,
                                                            error_type + ": " + diag.message);
             }
-            std::exit(1);  // エラー時はexit(1)で終了
+            return 1;  // エラー時は1で終了
         }
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";

@@ -364,7 +364,52 @@ std::optional<MirConstant> ConstantFolding::eval_binary_op(MirBinaryOp op, const
         }
     }
 
-    // TODO: 浮動小数点演算
+    // 浮動小数点演算
+    if (auto* lhs_double = std::get_if<double>(&lhs.value)) {
+        if (auto* rhs_double = std::get_if<double>(&rhs.value)) {
+            MirConstant result;
+            result.type = lhs.type;
+
+            switch (op) {
+                case MirBinaryOp::Add:
+                    result.value = *lhs_double + *rhs_double;
+                    return result;
+                case MirBinaryOp::Sub:
+                    result.value = *lhs_double - *rhs_double;
+                    return result;
+                case MirBinaryOp::Mul:
+                    result.value = *lhs_double * *rhs_double;
+                    return result;
+                case MirBinaryOp::Div:
+                    if (*rhs_double != 0.0) {
+                        result.value = *lhs_double / *rhs_double;
+                        return result;
+                    }
+                    break;
+                // 比較演算
+                case MirBinaryOp::Eq:
+                    result.value = (*lhs_double == *rhs_double);
+                    return result;
+                case MirBinaryOp::Ne:
+                    result.value = (*lhs_double != *rhs_double);
+                    return result;
+                case MirBinaryOp::Lt:
+                    result.value = (*lhs_double < *rhs_double);
+                    return result;
+                case MirBinaryOp::Le:
+                    result.value = (*lhs_double <= *rhs_double);
+                    return result;
+                case MirBinaryOp::Gt:
+                    result.value = (*lhs_double > *rhs_double);
+                    return result;
+                case MirBinaryOp::Ge:
+                    result.value = (*lhs_double >= *rhs_double);
+                    return result;
+                default:
+                    break;
+            }
+        }
+    }
 
     return std::nullopt;
 }
@@ -390,6 +435,13 @@ std::optional<MirConstant> ConstantFolding::eval_unary_op(MirUnaryOp op,
     if (auto* bool_val = std::get_if<bool>(&operand.value)) {
         if (op == MirUnaryOp::Not) {
             result.value = !*bool_val;
+            return result;
+        }
+    }
+
+    if (auto* double_val = std::get_if<double>(&operand.value)) {
+        if (op == MirUnaryOp::Neg) {
+            result.value = -*double_val;
             return result;
         }
     }

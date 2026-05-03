@@ -1,0 +1,27 @@
+//! expect: 11.5
+//! expect: 2.5
+//! expect: 31.5
+//! expect: 2
+
+// Test constant folding for floating point operations
+import std::io::println;
+
+int main() {
+    // Addition - should be folded at compile time
+    double a = 4.5 + 7.0;
+    println(a);
+
+    // Subtraction  
+    double b = 10.0 - 7.5;
+    println(b);
+
+    // Multiplication
+    double c = 4.5 * 7.0;
+    println(c);
+
+    // Division
+    double d = 10.0 / 5.0;
+    println(d);
+
+    return 0;
+}
