@@ -907,6 +907,8 @@ using MirGlobalVarPtr = std::unique_ptr<MirGlobalVar>;
 struct MirInitialBlock {
     std::vector<BasicBlockPtr> blocks;
     std::vector<std::string> attributes;
+    // HIR文のリスト（SVコードジェネレータで使用）
+    std::vector<const hir::HirStmt*> hir_stmts;
 };
 
 using MirInitialBlockPtr = std::unique_ptr<MirInitialBlock>;

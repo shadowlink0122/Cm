@@ -2874,8 +2874,12 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
             auto mir_initial = std::make_unique<MirInitialBlock>();
             mir_initial->attributes = (*initial_block)->attributes;
 
-            // TODO: initial block内の文をMIR basic blockに変換
-            // 現在は属性のみ保持し、本体は別途SVコードジェネレータで処理
+            // HIR文への参照を保持（SVコードジェネレータで使用）
+            for (const auto& stmt : (*initial_block)->body) {
+                if (stmt) {
+                    mir_initial->hir_stmts.push_back(stmt.get());
+                }
+            }
 
             mir_program.initial_blocks.push_back(std::move(mir_initial));
         }

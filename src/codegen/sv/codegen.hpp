@@ -118,8 +118,9 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::string emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type,
                              int target_width = 0);
 
-    // === HIR式（assign文用） ===
+    // === HIR式/文（assign文、initial block用） ===
     std::string emitHirExpr(const hir::HirExpr& expr);
+    std::string emitHirStmt(const hir::HirStmt& stmt);
 
     // === テストベンチ自動生成 ===
     std::string generateTestbench(const SVModule& mod);

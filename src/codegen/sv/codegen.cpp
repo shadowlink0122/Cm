@@ -516,8 +516,10 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
             if (target_w == 32)
                 target_w = 0;
             std::string rhs = assign.rvalue ? emitRvalue(*assign.rvalue, func, target_w) : "0";
-            // async func内またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
-            bool use_nonblocking = func.is_async;
+            // always_ff、async
+            // func、またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
+            bool use_nonblocking =
+                func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
             if (!use_nonblocking) {
                 for (const auto& local : func.locals) {
                     if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
@@ -1765,7 +1767,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 };
 
                 // ノンブロッキング代入の判定
-                bool use_nb = func.is_async;
+                bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (!use_nb) {
                     for (const auto& local : func.locals) {
                         if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
@@ -1836,7 +1838,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             } else {
                 // 一般的な関数呼び出し: result = func_name(arg1, arg2, ...);
                 // ノンブロッキング代入の判定
-                bool use_nb = func.is_async;
+                bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (!use_nb) {
                     for (const auto& local : func.locals) {
                         if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
@@ -2202,9 +2204,17 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
         std::ostringstream ss;
         ss << "initial begin\n";
-        // TODO: より複雑な文のサポートを追加
-        // 現在は空のinitialブロックを出力
-        ss << "    // Cm initial block\n";
+
+        // HIR文をSVに変換
+        for (const auto* stmt : init->hir_stmts) {
+            if (stmt) {
+                std::string sv_stmt = emitHirStmt(*stmt);
+                if (!sv_stmt.empty()) {
+                    ss << "    " << sv_stmt << "\n";
+                }
+            }
+        }
+
         ss << "end\n";
         default_mod.initial_blocks.push_back(ss.str());
     }
@@ -2761,6 +2771,86 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
 
     // 未対応の式: 0を返す
     return "0 /* unsupported expr */";
+}
+
+// HIR文をSVに変換（initial block用）
+std::string SVCodeGen::emitHirStmt(const hir::HirStmt& stmt) {
+    // 代入文
+    if (auto* assign = std::get_if<std::unique_ptr<hir::HirAssign>>(&stmt.kind)) {
+        if (*assign && (*assign)->target && (*assign)->value) {
+            std::string lhs = emitHirExpr(*(*assign)->target);
+            std::string rhs = emitHirExpr(*(*assign)->value);
+            return lhs + " = " + rhs + ";";
+        }
+    }
+
+    // 変数宣言（let文）
+    if (auto* let = std::get_if<std::unique_ptr<hir::HirLet>>(&stmt.kind)) {
+        if (*let) {
+            std::string sv_type = mapType((*let)->type);
+            std::string init_val = (*let)->init ? emitHirExpr(*(*let)->init) : "0";
+            return sv_type + " " + (*let)->name + " = " + init_val + ";";
+        }
+    }
+
+    // 式文
+    if (auto* expr_stmt = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&stmt.kind)) {
+        if (*expr_stmt && (*expr_stmt)->expr) {
+            return emitHirExpr(*(*expr_stmt)->expr) + ";";
+        }
+    }
+
+    // ブロック文
+    if (auto* block = std::get_if<std::unique_ptr<hir::HirBlock>>(&stmt.kind)) {
+        if (*block) {
+            std::ostringstream ss;
+            ss << "begin\n";
+            for (const auto& s : (*block)->stmts) {
+                if (s) {
+                    std::string sv_stmt = emitHirStmt(*s);
+                    if (!sv_stmt.empty()) {
+                        ss << "    " << sv_stmt << "\n";
+                    }
+                }
+            }
+            ss << "end";
+            return ss.str();
+        }
+    }
+
+    // if文
+    if (auto* if_stmt = std::get_if<std::unique_ptr<hir::HirIf>>(&stmt.kind)) {
+        if (*if_stmt && (*if_stmt)->cond) {
+            std::ostringstream ss;
+            std::string cond = emitHirExpr(*(*if_stmt)->cond);
+            ss << "if (" << cond << ") begin\n";
+            for (const auto& s : (*if_stmt)->then_block) {
+                if (s) {
+                    std::string sv_stmt = emitHirStmt(*s);
+                    if (!sv_stmt.empty()) {
+                        ss << "    " << sv_stmt << "\n";
+                    }
+                }
+            }
+            ss << "end";
+            if (!(*if_stmt)->else_block.empty()) {
+                ss << " else begin\n";
+                for (const auto& s : (*if_stmt)->else_block) {
+                    if (s) {
+                        std::string sv_stmt = emitHirStmt(*s);
+                        if (!sv_stmt.empty()) {
+                            ss << "    " << sv_stmt << "\n";
+                        }
+                    }
+                }
+                ss << "end";
+            }
+            return ss.str();
+        }
+    }
+
+    // 未対応の文
+    return "/* unsupported stmt */";
 }
 
 }  // namespace cm::codegen::sv
