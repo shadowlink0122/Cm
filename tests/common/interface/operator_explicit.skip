@@ -1,3 +1,4 @@
 # Linux x86_64 LLVM O3 SIGILL issue
-# See: docs/refactor/P2/linux-x86-sigill.md
+# Root cause: LLVM O3 unreachable code optimization generates ud2 instruction
+# This is a known platform-specific issue that doesn't affect macOS or ARM64
 llvm-o3:linux:x86_64
