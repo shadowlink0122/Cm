@@ -130,7 +130,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                             result_type = ast::make_array(ast::make_bit(), new_size);
                         } else if (t && t->kind == ast::TypeKind::Bit) {
                             // 単一bit → bit[count]
-                            result_type = ast::make_array(ast::make_bit(), static_cast<uint32_t>(count));
+                            result_type =
+                                ast::make_array(ast::make_bit(), static_cast<uint32_t>(count));
                         } else {
                             result_type = t;
                         }

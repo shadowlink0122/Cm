@@ -6,10 +6,8 @@
 using namespace cm;
 
 class ErrorTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        collector_.clear();
-    }
+   protected:
+    void SetUp() override { collector_.clear(); }
 
     ErrorCollector collector_;
 };

@@ -10,7 +10,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Windows対応: 実行ファイルの拡張子
-if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+# 環境変数CM_EXECUTABLEが設定されている場合はそれを使用
+if [ -n "${CM_EXECUTABLE:-}" ]; then
+    # 環境変数から設定済み
+    :
+elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
     CM_EXECUTABLE="$PROJECT_ROOT/cm.exe"
     IS_WINDOWS=true
 else

@@ -166,6 +166,9 @@ struct Type {
                kind == TypeKind::USize;
     }
 
+    // 32ビット整数（int/uint）かどうか判定
+    bool is_int32() const { return kind == TypeKind::Int || kind == TypeKind::UInt; }
+
     bool is_signed() const {
         return (kind >= TypeKind::Tiny && kind <= TypeKind::Long) || kind == TypeKind::ISize;
     }

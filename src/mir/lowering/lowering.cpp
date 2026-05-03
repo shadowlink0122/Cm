@@ -1681,7 +1681,7 @@ void MirLowering::generate_builtin_hash_method(const hir::HirStruct& st) {
             block->statements.push_back(MirStatement::assign(
                 MirPlace(xor_acc),
                 MirRvalue::binary(MirBinaryOp::BitXor, MirOperand::copy(MirPlace(acc)),
-                                  MirOperand::copy(MirPlace(field_val)))));
+                                  MirOperand::copy(MirPlace(field_val)), hir::make_int())));
 
             // hash *= FNV_PRIME
             LocalId mul_acc =
@@ -1689,7 +1689,7 @@ void MirLowering::generate_builtin_hash_method(const hir::HirStruct& st) {
             block->statements.push_back(MirStatement::assign(
                 MirPlace(mul_acc),
                 MirRvalue::binary(MirBinaryOp::Mul, MirOperand::copy(MirPlace(xor_acc)),
-                                  make_prime())));
+                                  make_prime(), hir::make_int())));
             acc = mul_acc;
         }
 
@@ -2873,7 +2873,10 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
             // SV initial ブロックを処理
             auto mir_initial = std::make_unique<MirInitialBlock>();
             mir_initial->attributes = (*initial_block)->attributes;
+
             // TODO: initial block内の文をMIR basic blockに変換
+            // 現在は属性のみ保持し、本体は別途SVコードジェネレータで処理
+
             mir_program.initial_blocks.push_back(std::move(mir_initial));
         }
     }

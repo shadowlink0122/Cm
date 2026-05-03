@@ -433,7 +433,7 @@ test-unit:
 
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-sv-parallel
+test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
@@ -441,6 +441,7 @@ test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-para
 	@echo "  - Interpreter tests (parallel)"
 	@echo "  - LLVM Native tests (parallel)"
 	@echo "  - LLVM WASM tests (parallel)"
+	@echo "  - JavaScript tests (parallel)"
 	@echo "  - SystemVerilog tests (parallel)"
 	@echo "=========================================="
 

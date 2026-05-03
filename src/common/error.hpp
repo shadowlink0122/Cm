@@ -25,7 +25,7 @@ enum class ErrorKind {
 /// 統一エラー型
 struct Error {
     ErrorKind kind;
-    std::string code;     // "E001", "SV002" など
+    std::string code;  // "E001", "SV002" など
     std::string message;
     Span span;
 
@@ -57,28 +57,33 @@ struct Error {
     /// エラー種別の文字列表現
     std::string kind_string() const {
         switch (kind) {
-            case ErrorKind::Parse: return "parse";
-            case ErrorKind::Type: return "type";
-            case ErrorKind::Codegen: return "codegen";
-            case ErrorKind::IO: return "io";
-            case ErrorKind::Internal: return "internal";
+            case ErrorKind::Parse:
+                return "parse";
+            case ErrorKind::Type:
+                return "type";
+            case ErrorKind::Codegen:
+                return "codegen";
+            case ErrorKind::IO:
+                return "io";
+            case ErrorKind::Internal:
+                return "internal";
         }
         return "unknown";
     }
 };
 
 /// Result型 - 成功値またはエラーを保持
-template<typename T>
+template <typename T>
 using Result = std::variant<T, Error>;
 
 /// Resultがエラーかチェック
-template<typename T>
+template <typename T>
 bool is_error(const Result<T>& r) {
     return std::holds_alternative<Error>(r);
 }
 
 /// Resultから値を取得（エラーの場合はデフォルト値）
-template<typename T>
+template <typename T>
 T unwrap_or(Result<T>&& r, T default_value) {
     if (auto* val = std::get_if<T>(&r)) {
         return std::move(*val);
@@ -87,14 +92,14 @@ T unwrap_or(Result<T>&& r, T default_value) {
 }
 
 /// Resultからエラーを取得（成功の場合はnullopt）
-template<typename T>
+template <typename T>
 const Error* get_error(const Result<T>& r) {
     return std::get_if<Error>(&r);
 }
 
 /// エラー収集クラス
 class ErrorCollector {
-public:
+   public:
     /// エラーを追加
     void add(Error e) {
         if (e.kind == ErrorKind::Internal) {
@@ -106,9 +111,7 @@ public:
     }
 
     /// 警告を追加
-    void add_warning(Error e) {
-        warnings_.push_back(std::move(e));
-    }
+    void add_warning(Error e) { warnings_.push_back(std::move(e)); }
 
     /// エラーがあるか
     bool has_errors() const { return !errors_.empty(); }
@@ -149,7 +152,7 @@ public:
         warnings_.clear();
     }
 
-private:
+   private:
     std::vector<Error> errors_;
     std::vector<Error> warnings_;
 };

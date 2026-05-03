@@ -77,6 +77,19 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
 
+            // 32ビット整数演算のオーバーフロー処理
+            // JSは64ビット浮動小数点数のため、int/uint型の演算で32ビットラップアラウンドが必要
+            if (data.result_type && data.result_type->is_int32()) {
+                // 乗算: Math.imul を使用（32ビット整数乗算）
+                if (data.op == mir::MirBinaryOp::Mul) {
+                    return "Math.imul(" + lhs + ", " + rhs + ")";
+                }
+                // 加算/減算: |0 で32ビットに切り捨て
+                if (data.op == mir::MirBinaryOp::Add || data.op == mir::MirBinaryOp::Sub) {
+                    return "((" + lhs + " " + op + " " + rhs + ")|0)";
+                }
+            }
+
             return "(" + lhs + " " + op + " " + rhs + ")";
         }
 

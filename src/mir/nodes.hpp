@@ -2,6 +2,7 @@
 
 #include "../common/span.hpp"
 #include "../frontend/lexer/token.hpp"
+#include "../hir/nodes.hpp"
 #include "../hir/types.hpp"
 
 #include <iostream>
@@ -553,6 +554,7 @@ struct BasicBlock {
     std::vector<BlockId> predecessors;
     std::vector<BlockId> successors;
 
+    BasicBlock() : id(0) {}
     BasicBlock(BlockId i) : id(i) {}
 
     void add_statement(MirStatementPtr stmt) { statements.push_back(std::move(stmt)); }
@@ -886,6 +888,8 @@ struct MirGlobalVar {
     std::string name;
     hir::TypePtr type;
     std::unique_ptr<MirConstant> init_value;  // 初期値（nullptrならゼロ初期化）
+    const hir::HirExpr* init_expr =
+        nullptr;  // 非定数初期化式（assign文用、SVバックエンド等で使用）
     bool is_const = false;
     bool is_assign = false;  // SV assign文（連続代入）
     bool is_export = false;

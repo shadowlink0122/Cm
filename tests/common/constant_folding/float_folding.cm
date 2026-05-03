@@ -11,7 +11,7 @@ int main() {
     double a = 4.5 + 7.0;
     println(a);
 
-    // Subtraction  
+    // Subtraction
     double b = 10.0 - 7.5;
     println(b);
 

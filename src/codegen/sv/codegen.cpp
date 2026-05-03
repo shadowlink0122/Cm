@@ -2065,6 +2065,12 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             std::string assign_stmt = "assign " + gv->name;
             if (gv->init_value) {
                 assign_stmt += " = " + emitConstant(*gv->init_value, gv->type);
+            } else if (gv->init_expr) {
+                // 非定数式: HIR式をSVに変換
+                assign_stmt += " = " + emitHirExpr(*gv->init_expr);
+            } else {
+                // 初期化式なし: エラー回避のため 0 を使用
+                assign_stmt += " = 0";
             }
             assign_stmt += ";";
             default_mod.assign_statements.push_back(assign_stmt);
@@ -2618,6 +2624,143 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
         }
     }
     return !has_error;
+}
+
+// HIR式をSVに変換（assign文の非定数式用）
+std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
+    // リテラル
+    if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr.kind)) {
+        if (*lit) {
+            const auto& value = (*lit)->value;
+            if (std::holds_alternative<int64_t>(value)) {
+                return std::to_string(std::get<int64_t>(value));
+            } else if (std::holds_alternative<double>(value)) {
+                return std::to_string(std::get<double>(value));
+            } else if (std::holds_alternative<bool>(value)) {
+                return std::get<bool>(value) ? "1'b1" : "1'b0";
+            }
+        }
+    }
+
+    // 識別子（変数参照）
+    if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
+        if (*var) {
+            return (*var)->name;
+        }
+    }
+
+    // 二項演算
+    if (auto* binary = std::get_if<std::unique_ptr<hir::HirBinary>>(&expr.kind)) {
+        if (*binary && (*binary)->lhs && (*binary)->rhs) {
+            std::string lhs = emitHirExpr(*(*binary)->lhs);
+            std::string rhs = emitHirExpr(*(*binary)->rhs);
+            std::string op;
+            switch ((*binary)->op) {
+                case hir::HirBinaryOp::Add:
+                    op = "+";
+                    break;
+                case hir::HirBinaryOp::Sub:
+                    op = "-";
+                    break;
+                case hir::HirBinaryOp::Mul:
+                    op = "*";
+                    break;
+                case hir::HirBinaryOp::Div:
+                    op = "/";
+                    break;
+                case hir::HirBinaryOp::Mod:
+                    op = "%";
+                    break;
+                case hir::HirBinaryOp::BitAnd:
+                    op = "&";
+                    break;
+                case hir::HirBinaryOp::BitOr:
+                    op = "|";
+                    break;
+                case hir::HirBinaryOp::BitXor:
+                    op = "^";
+                    break;
+                case hir::HirBinaryOp::Shl:
+                    op = "<<";
+                    break;
+                case hir::HirBinaryOp::Shr:
+                    op = ">>";
+                    break;
+                case hir::HirBinaryOp::And:
+                    op = "&&";
+                    break;
+                case hir::HirBinaryOp::Or:
+                    op = "||";
+                    break;
+                case hir::HirBinaryOp::Eq:
+                    op = "==";
+                    break;
+                case hir::HirBinaryOp::Ne:
+                    op = "!=";
+                    break;
+                case hir::HirBinaryOp::Lt:
+                    op = "<";
+                    break;
+                case hir::HirBinaryOp::Le:
+                    op = "<=";
+                    break;
+                case hir::HirBinaryOp::Gt:
+                    op = ">";
+                    break;
+                case hir::HirBinaryOp::Ge:
+                    op = ">=";
+                    break;
+                default:
+                    op = "?";
+                    break;
+            }
+            return "(" + lhs + " " + op + " " + rhs + ")";
+        }
+    }
+
+    // 単項演算
+    if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&expr.kind)) {
+        if (*unary && (*unary)->operand) {
+            std::string operand = emitHirExpr(*(*unary)->operand);
+            std::string op;
+            switch ((*unary)->op) {
+                case hir::HirUnaryOp::Neg:
+                    op = "-";
+                    break;
+                case hir::HirUnaryOp::Not:
+                    op = "!";
+                    break;
+                case hir::HirUnaryOp::BitNot:
+                    op = "~";
+                    break;
+                default:
+                    op = "?";
+                    break;
+            }
+            return op + operand;
+        }
+    }
+
+    // メンバアクセス
+    if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&expr.kind)) {
+        if (*member && (*member)->object) {
+            std::string obj = emitHirExpr(*(*member)->object);
+            return obj + "." + (*member)->member;
+        }
+    }
+
+    // 三項演算子
+    if (auto* ternary = std::get_if<std::unique_ptr<hir::HirTernary>>(&expr.kind)) {
+        if (*ternary && (*ternary)->condition && (*ternary)->then_expr && (*ternary)->else_expr) {
+            std::string cond = emitHirExpr(*(*ternary)->condition);
+            std::string then_e = emitHirExpr(*(*ternary)->then_expr);
+            std::string else_e = emitHirExpr(*(*ternary)->else_expr);
+            return "(" + cond + " ? " + then_e + " : " + else_e + ")";
+        }
+    }
+
+    // 未対応の式: 0を返す
+    return "0 /* unsupported expr */";
 }
 
 }  // namespace cm::codegen::sv

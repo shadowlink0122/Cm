@@ -98,8 +98,8 @@ struct Options {
     std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
     std::string cache_subcommand;         // cache サブコマンド（clear/stats）
     // エラー処理
-    bool has_error = false;               // パースエラーフラグ
-    std::string error_message;            // エラーメッセージ
+    bool has_error = false;     // パースエラーフラグ
+    std::string error_message;  // エラーメッセージ
 };
 
 // ヘルプメッセージを表示
@@ -783,6 +783,7 @@ int main(int argc, char* argv[]) {
         // 各ファイルをフォーマット
         size_t total_changes = 0;
         size_t files_modified = 0;
+        size_t files_failed = 0;
 
         fmt::Formatter formatter;
 
@@ -790,7 +791,8 @@ int main(int argc, char* argv[]) {
             try {
                 auto file_result = read_file(file);
                 if (!file_result.success) {
-                    // エラーはスキップ
+                    std::cerr << file_result.error_message << "\n";
+                    files_failed++;
                     continue;
                 }
                 std::string code = std::move(file_result.content);
@@ -809,11 +811,15 @@ int main(int argc, char* argv[]) {
                         if (opts.verbose) {
                             std::cout << file << ": " << result.changes_applied << " 箇所の整形\n";
                         }
+                    } else {
+                        std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
+                        files_failed++;
                     }
                 }
 
             } catch (const std::exception& e) {
-                // エラーはスキップ
+                std::cerr << "エラー: " << file << ": " << e.what() << "\n";
+                files_failed++;
             }
         }
 
@@ -822,9 +828,12 @@ int main(int argc, char* argv[]) {
             std::cout << "\n=== フォーマット完了 ===\n";
             std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
             std::cout << "整形箇所: " << total_changes << " 箇所\n";
+            if (files_failed > 0) {
+                std::cout << "失敗: " << files_failed << " ファイル\n";
+            }
         }
 
-        return 0;
+        return files_failed > 0 ? 1 : 0;
     }
 
     // ========== cache コマンド ==========
