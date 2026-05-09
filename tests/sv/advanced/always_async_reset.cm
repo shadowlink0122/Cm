@@ -7,7 +7,7 @@
 #[input]  bool rst_n = 1;
 #[output] uint count = 0;
 
-always void process(posedge clk, negedge rst_n) {
+async void process(posedge clk, negedge rst_n) {
     if (rst_n == false) {
         count = 0;
     } else {

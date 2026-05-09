@@ -5,7 +5,7 @@
 #[input] uint sel = 0;
 #[output] uint result = 0;
 
-always void deep_nested(posedge clk) {
+async void deep_nested(posedge clk) {
     if (sel == 0) {
         if (result == 0) {
             if (clk == true) {

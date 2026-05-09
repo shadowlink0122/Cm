@@ -11,7 +11,7 @@
 #[input]  uint wdata = 0;
 #[output] uint rdata = 0;
 
-always void read_proc(posedge clk) {
+async void read_proc(posedge clk) {
     if (we) {
         rdata = wdata;
     }

@@ -15,7 +15,7 @@ const utiny BIT_COUNT = 8;
 #[output] utiny bit_index = 0;
 #[output] bool tx_busy = false;
 
-always void uart_tick(posedge clk) {
+async void uart_tick(posedge clk) {
     if (rst) {
         baud_counter = 0;
         bit_index = 0;

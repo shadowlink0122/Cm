@@ -10,7 +10,7 @@ initial {
     counter = 0;
 }
 
-always void update(posedge clk) {
+async void update(posedge clk) {
     if (rst == false) {
         counter = 0;
     } else {

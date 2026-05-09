@@ -10,7 +10,7 @@
 // 大規模配列（BRAM推論対象）
 #[sv::bram] uint[1024] memory;
 
-always void bram_access(posedge clk) {
+async void bram_access(posedge clk) {
     if (we == true) {
         memory[addr] = data_in;
     }

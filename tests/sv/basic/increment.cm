@@ -5,6 +5,6 @@
 #[input]  posedge clk;
 #[output] uint count = 0;
 
-always void ticker(posedge clk) {
+async void ticker(posedge clk) {
     count++;
 }

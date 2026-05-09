@@ -9,10 +9,10 @@
 #[output] uint sum = 0;
 #[output] uint diff = 0;
 
-always void calc_sum() {
+async void calc_sum() {
     sum = a + b;
 }
 
-always void calc_diff() {
+async void calc_diff() {
     diff = a - b;
 }

@@ -11,6 +11,6 @@ struct Pixel {
 #[input]  bool clk = false;
 #[output] uint brightness = 0;
 
-always void process(posedge clk) {
+async void process(posedge clk) {
     brightness = brightness + 1;
 }

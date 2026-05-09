@@ -8,7 +8,7 @@
 #[output] bool led = false;
 
 // 後方互換: async func → always_ff @(posedge clk)
-async func tick() {
+async void tick() {
     if (rst) {
         count = 0;
         led = false;

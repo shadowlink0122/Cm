@@ -12,7 +12,7 @@ const uint COMBINED = MASK_UPPER | MASK_LOWER;
 #[input]  bool clk = 0;
 #[output] uint divider = 0;
 
-always void tick(posedge clk) {
+async void tick(posedge clk) {
     if (divider == BAUD_DIV) {
         divider = 0;
     } else {

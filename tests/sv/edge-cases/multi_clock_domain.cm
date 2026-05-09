@@ -9,7 +9,7 @@
 #[output] uint out_b = 0;
 
 // クロックドメインA
-always void domain_a(posedge clk_a) {
+async void domain_a(posedge clk_a) {
     out_a = data_a + 1;
 }
 

@@ -7,7 +7,7 @@
 #[output] uint count = 0;
 
 #[sv::clock_domain("sys_clk")]
-always void tick() {
+async void tick() {
     if (rst) {
         count = 0;
     } else {

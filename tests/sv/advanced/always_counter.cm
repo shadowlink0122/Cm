@@ -6,7 +6,7 @@
 #[input]  bool rst = 0;
 #[output] uint count = 0;
 
-always void tick(posedge clk) {
+async void tick(posedge clk) {
     if (rst) {
         count = 0;
     } else {

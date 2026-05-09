@@ -10,7 +10,7 @@
 uint stage1 = 0;
 uint stage2 = 0;
 
-always void pipeline(posedge clk) {
+async void pipeline(posedge clk) {
     if (rst) {
         stage1 = 0;
         stage2 = 0;

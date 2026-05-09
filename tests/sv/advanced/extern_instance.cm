@@ -18,7 +18,7 @@ OSC osc_inst;
 // カウンタ
 int counter = 0;
 
-always void blink(posedge clk) {
+async void blink(posedge clk) {
     counter = counter + 1;
     if (counter == 100) {
         led = !led;

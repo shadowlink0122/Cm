@@ -7,7 +7,7 @@
 #[input]  uint sel = 0;
 #[output] uint out = 0;
 
-always void mux(posedge clk, negedge rst_n) {
+async void mux(posedge clk, negedge rst_n) {
     if (rst_n == false) {
         out = 0;
     } else {

@@ -9,7 +9,7 @@
 #[output] uint count = 0;
 #[output] bool overflow = false;
 
-always void counter(posedge clk) {
+async void counter(posedge clk) {
     if (rst) {
         count = 0;
     } else {

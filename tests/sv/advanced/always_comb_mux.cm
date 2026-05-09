@@ -7,7 +7,7 @@
 #[input]  uint b = 0;
 #[output] uint out = 0;
 
-always void select() {
+async void select() {
     if (sel) {
         out = a;
     } else {

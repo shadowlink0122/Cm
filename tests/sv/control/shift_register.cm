@@ -8,7 +8,7 @@
 #[input] utiny data_in = 0;
 #[output] utiny shift_reg = 0;
 
-async func tick() {
+async void tick() {
     if (rst) {
         shift_reg = 0;
     } else {
