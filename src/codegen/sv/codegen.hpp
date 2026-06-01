@@ -67,10 +67,13 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::vector<SVModule> modules_;
 
     // === 型マッピング ===
-    // Cm型 → SV型文字列
+    // Cm型 → SV型文字列（packed dimension のみ）
     std::string mapType(const hir::TypePtr& type) const;
     // ビット幅を取得
     int getBitWidth(const hir::TypePtr& type) const;
+    // 配列型のアンパックドディメンションサフィックスを生成
+    // 例: uint[1024] → " [0:1023]", bit[8] → "" (packedとして処理済み)
+    std::string getArraySuffix(const hir::TypePtr& type) const;
 
     // === コード出力ヘルパー ===
     void emit(const std::string& code);

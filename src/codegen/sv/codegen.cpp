@@ -115,6 +115,22 @@ int SVCodeGen::getBitWidth(const hir::TypePtr& type) const {
     }
 }
 
+// === 配列サフィックス生成 ===
+
+std::string SVCodeGen::getArraySuffix(const hir::TypePtr& type) const {
+    if (!type)
+        return "";
+    // 通常の配列型（非bit配列）の場合、アンパックドディメンションを生成
+    if (type->kind == hir::TypeKind::Array && type->array_size && *type->array_size > 0) {
+        // bit[N] は packed dimension として mapType で処理済みなのでスキップ
+        if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
+            return "";
+        }
+        return " [0:" + std::to_string(*type->array_size - 1) + "]";
+    }
+    return "";
+}
+
 // === コード出力ヘルパー ===
 
 void SVCodeGen::emit(const std::string& code) {
@@ -343,10 +359,19 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
         name = name.substr(5);
     }
 
-    // フィールドアクセスの投影を適用
+    // フィールド/インデックスアクセスの投影を適用
     for (const auto& proj : place.projections) {
         if (proj.kind == mir::ProjectionKind::Field) {
             name += "[" + std::to_string(proj.field_id) + "]";
+        } else if (proj.kind == mir::ProjectionKind::Index) {
+            // 配列インデックス: index_localの変数名で添字アクセス
+            if (proj.index_local < func.locals.size()) {
+                std::string idx_name = func.locals[proj.index_local].name;
+                // self. プレフィックスを除去
+                if (idx_name.find("self.") == 0)
+                    idx_name = idx_name.substr(5);
+                name += "[" + idx_name + "]";
+            }
         }
     }
 
@@ -840,11 +865,13 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
         if (is_param_var)
             continue;
-        // 既に登録済みの宣言もスキップ
-        std::string decl = mapType(local.type) + " " + name + ";";
+        // 既に登録済みの宣言もスキップ（変数名の部分一致で検出）
+        std::string decl = mapType(local.type) + " " + name + getArraySuffix(local.type) + ";";
         bool already_declared = false;
         for (const auto& existing : mod.reg_declarations) {
-            if (existing == decl) {
+            // 完全一致またはBRAM/LutRAM属性付き宣言で同名変数がある場合もスキップ
+            if (existing == decl || existing.find(" " + name + " ") != std::string::npos ||
+                existing.find(" " + name + ";") != std::string::npos) {
                 already_declared = true;
                 break;
             }
@@ -1103,6 +1130,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             if (!rhs.empty() && rhs.back() == ';') {
                 rhs.pop_back();
             }
+            // 左辺にも配列インデックス内のテンポラリ変数がある場合に展開
+            lhs = inline_temps(lhs);
             rhs = inline_temps(rhs);
             block_ss << line_indent << lhs << " = " << rhs << ";\n";
         } else if (content.find(" <= ") != std::string::npos) {
@@ -1113,6 +1142,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             if (!rhs.empty() && rhs.back() == ';') {
                 rhs.pop_back();
             }
+            // 左辺にも配列インデックス内のテンポラリ変数がある場合に展開
+            lhs = inline_temps(lhs);
             rhs = inline_temps(rhs);
             block_ss << line_indent << lhs << " <= " << rhs << ";\n";
         } else {
@@ -2091,7 +2122,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         if (is_bram || is_lutram) {
             std::string ram_attr =
                 is_bram ? "(* ram_style = \"block\" *) " : "(* ram_style = \"distributed\" *) ";
-            std::string ram_decl = ram_attr + mapType(gv->type) + " " + gv->name + ";";
+            std::string ram_decl =
+                ram_attr + mapType(gv->type) + " " + gv->name + getArraySuffix(gv->type) + ";";
             default_mod.reg_declarations.push_back(ram_decl);
             continue;
         }
@@ -2111,7 +2143,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 {SVPort::Output, gv->name, mapType(gv->type), getBitWidth(gv->type)});
         } else {
             // 属性なし → 内部レジスタ/ワイヤとして宣言
-            default_mod.reg_declarations.push_back(mapType(gv->type) + " " + gv->name + ";");
+            default_mod.reg_declarations.push_back(mapType(gv->type) + " " + gv->name +
+                                                   getArraySuffix(gv->type) + ";");
         }
     }
 
