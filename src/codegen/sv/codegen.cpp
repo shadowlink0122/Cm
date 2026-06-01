@@ -547,6 +547,8 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
                 func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
             if (!use_nonblocking) {
                 for (const auto& local : func.locals) {
+                    if (local.is_global)
+                        continue;
                     if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
                                        local.type->kind == hir::TypeKind::Negedge)) {
                         use_nonblocking = true;
@@ -898,6 +900,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     std::vector<std::pair<std::string, std::string>> all_edges;  // {edge_type, signal_name}
 
     for (const auto& local : func.locals) {
+        if (local.is_global)
+            continue;
         if (local.type && local.type->kind == hir::TypeKind::Posedge) {
             // 重複排除: 同名信号が既にある場合はスキップ
             bool dup = false;
@@ -1801,6 +1805,8 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (!use_nb) {
                     for (const auto& local : func.locals) {
+                        if (local.is_global)
+                            continue;
                         if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
                                            local.type->kind == hir::TypeKind::Negedge)) {
                             use_nb = true;
@@ -1872,6 +1878,8 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (!use_nb) {
                     for (const auto& local : func.locals) {
+                        if (local.is_global)
+                            continue;
                         if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
                                            local.type->kind == hir::TypeKind::Negedge)) {
                             use_nb = true;
