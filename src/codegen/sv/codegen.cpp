@@ -2036,9 +2036,18 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     bool has_rst = false;
     // import/export時のlocalparam重複排除用セット
     std::set<std::string> emitted_param_names;
+    // import/export時のグローバル変数/ポート重複排除用セット
+    std::set<std::string> emitted_var_names;
     for (const auto& gv : program.global_vars) {
         if (!gv)
             continue;
+
+        // 変数名のフラット化 (namespace:: を除去)
+        std::string var_name = gv->name;
+        auto ns_pos = var_name.rfind("::");
+        if (ns_pos != std::string::npos) {
+            var_name = var_name.substr(ns_pos + 2);
+        }
 
         // extern struct インスタンスの検出（型名ベース）
         if (gv->type) {
@@ -2050,88 +2059,91 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 }
             }
             if (extern_st) {
-                // インスタンス化文を生成
-                std::string inst;
-                inst += extern_st->name;
+                if (emitted_var_names.count(var_name) == 0) {
+                    // インスタンス化文を生成
+                    std::string inst;
+                    inst += extern_st->name;
 
-                // パラメータ部（#[sv::param]属性）
-                std::vector<std::string> params;
-                std::vector<std::string> ports;
+                    // パラメータ部（#[sv::param]属性）
+                    std::vector<std::string> params;
+                    std::vector<std::string> ports;
 
-                for (const auto& field : extern_st->fields) {
-                    bool is_sv_param = false;
-                    bool is_port = false;
-                    for (const auto& attr : field.attributes) {
-                        if (attr == "sv::param")
-                            is_sv_param = true;
-                        if (attr == "input" || attr == "output" || attr == "inout")
-                            is_port = true;
-                    }
+                    for (const auto& field : extern_st->fields) {
+                        bool is_sv_param = false;
+                        bool is_port = false;
+                        for (const auto& attr : field.attributes) {
+                            if (attr == "sv::param")
+                                is_sv_param = true;
+                            if (attr == "input" || attr == "output" || attr == "inout")
+                                is_port = true;
+                        }
 
-                    if (is_sv_param) {
-                        // デフォルト値: フィールドの default_value_str → struct_field_inits → "0"
-                        std::string val = "0";
-                        if (!field.default_value_str.empty()) {
-                            val = field.default_value_str;
-                        } else {
-                            for (const auto& [fname, fconst] : gv->struct_field_inits) {
-                                if (fname == field.name) {
-                                    if (auto* ival = std::get_if<int64_t>(&fconst.value)) {
-                                        val = std::to_string(*ival);
-                                    } else if (auto* bval = std::get_if<bool>(&fconst.value)) {
-                                        val = *bval ? "1" : "0";
+                        if (is_sv_param) {
+                            // デフォルト値: フィールドの default_value_str → struct_field_inits → "0"
+                            std::string val = "0";
+                            if (!field.default_value_str.empty()) {
+                                val = field.default_value_str;
+                            } else {
+                                for (const auto& [fname, fconst] : gv->struct_field_inits) {
+                                    if (fname == field.name) {
+                                        if (auto* ival = std::get_if<int64_t>(&fconst.value)) {
+                                            val = std::to_string(*ival);
+                                        } else if (auto* bval = std::get_if<bool>(&fconst.value)) {
+                                            val = *bval ? "1" : "0";
+                                        }
+                                        break;
                                     }
-                                    break;
                                 }
                             }
-                        }
-                        params.push_back("." + field.name + "(" + val + ")");
-                    } else if (is_port) {
-                        // ポート接続: フィールドの default_value_str → struct_field_inits →
-                        // フィールド名
-                        std::string sig = field.name;
-                        if (!field.default_value_str.empty()) {
-                            sig = field.default_value_str;
-                        } else {
-                            for (const auto& [fname, fconst] : gv->struct_field_inits) {
-                                if (fname == field.name) {
-                                    if (auto* sval = std::get_if<std::string>(&fconst.value)) {
-                                        sig = *sval;
+                            params.push_back("." + field.name + "(" + val + ")");
+                        } else if (is_port) {
+                            // ポート接続: フィールドの default_value_str → struct_field_inits →
+                            // フィールド名
+                            std::string sig = field.name;
+                            if (!field.default_value_str.empty()) {
+                                sig = field.default_value_str;
+                            } else {
+                                for (const auto& [fname, fconst] : gv->struct_field_inits) {
+                                    if (fname == field.name) {
+                                        if (auto* sval = std::get_if<std::string>(&fconst.value)) {
+                                            sig = *sval;
+                                        }
+                                        break;
                                     }
-                                    break;
                                 }
                             }
+                            ports.push_back("." + field.name + "(" + sig + ")");
                         }
-                        ports.push_back("." + field.name + "(" + sig + ")");
                     }
-                }
 
-                if (!params.empty()) {
-                    inst += " #(\n";
-                    for (size_t i = 0; i < params.size(); ++i) {
-                        inst += "        " + params[i];
-                        if (i + 1 < params.size())
-                            inst += ",";
-                        inst += "\n";
+                    if (!params.empty()) {
+                        inst += " #(\n";
+                        for (size_t i = 0; i < params.size(); ++i) {
+                            inst += "        " + params[i];
+                            if (i + 1 < params.size())
+                                inst += ",";
+                            inst += "\n";
+                        }
+                        inst += "    )";
                     }
-                    inst += "    )";
-                }
 
-                inst += " " + gv->name;
+                    inst += " " + var_name;
 
-                if (!ports.empty()) {
-                    inst += " (\n";
-                    for (size_t i = 0; i < ports.size(); ++i) {
-                        inst += "        " + ports[i];
-                        if (i + 1 < ports.size())
-                            inst += ",";
-                        inst += "\n";
+                    if (!ports.empty()) {
+                        inst += " (\n";
+                        for (size_t i = 0; i < ports.size(); ++i) {
+                            inst += "        " + ports[i];
+                            if (i + 1 < ports.size())
+                                inst += ",";
+                            inst += "\n";
+                        }
+                        inst += "    )";
                     }
-                    inst += "    )";
-                }
 
-                inst += ";";
-                default_mod.instance_blocks.push_back(inst);
+                    inst += ";";
+                    default_mod.instance_blocks.push_back(inst);
+                    emitted_var_names.insert(var_name);
+                }
                 continue;
             }
         }
@@ -2177,22 +2189,25 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
         // assign文 → wire宣言 + assign name = expr;
         if (gv->is_assign) {
-            // wire宣言を追加（連続代入の左辺はnet型が必要）
-            default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " + gv->name +
-                                                    ";");
-            // assign文を追加
-            std::string assign_stmt = "assign " + gv->name;
-            if (gv->init_value) {
-                assign_stmt += " = " + emitConstant(*gv->init_value, gv->type);
-            } else if (gv->init_expr) {
-                // 非定数式: HIR式をSVに変換
-                assign_stmt += " = " + emitHirExpr(*gv->init_expr);
-            } else {
-                // 初期化式なし: エラー回避のため 0 を使用
-                assign_stmt += " = 0";
+            if (emitted_var_names.count(var_name) == 0) {
+                // wire宣言を追加（連続代入の左辺はnet型が必要）
+                default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " + var_name +
+                                                        ";");
+                // assign文を追加
+                std::string assign_stmt = "assign " + var_name;
+                if (gv->init_value) {
+                    assign_stmt += " = " + emitConstant(*gv->init_value, gv->type);
+                } else if (gv->init_expr) {
+                    // 非定数式: HIR式をSVに変換
+                    assign_stmt += " = " + emitHirExpr(*gv->init_expr);
+                } else {
+                    // 初期化式なし: エラー回避のため 0 を使用
+                    assign_stmt += " = 0";
+                }
+                assign_stmt += ";";
+                default_mod.assign_statements.push_back(assign_stmt);
+                emitted_var_names.insert(var_name);
             }
-            assign_stmt += ";";
-            default_mod.assign_statements.push_back(assign_stmt);
             continue;
         }
 
@@ -2206,31 +2221,46 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 is_lutram = true;
         }
         if (is_bram || is_lutram) {
-            std::string ram_attr =
-                is_bram ? "(* ram_style = \"block\" *) " : "(* ram_style = \"distributed\" *) ";
-            std::string ram_decl =
-                ram_attr + mapType(gv->type) + " " + gv->name + getArraySuffix(gv->type) + ";";
-            default_mod.reg_declarations.push_back(ram_decl);
+            if (emitted_var_names.count(var_name) == 0) {
+                std::string ram_attr =
+                    is_bram ? "(* ram_style = \"block\" *) " : "(* ram_style = \"distributed\" *) ";
+                std::string ram_decl =
+                    ram_attr + mapType(gv->type) + " " + var_name + getArraySuffix(gv->type) + ";";
+                default_mod.reg_declarations.push_back(ram_decl);
+                emitted_var_names.insert(var_name);
+            }
             continue;
         }
 
         if (is_input) {
-            default_mod.ports.push_back(
-                {SVPort::Input, gv->name, mapType(gv->type), getBitWidth(gv->type)});
-            if (gv->name == "clk")
+            if (emitted_var_names.count(var_name) == 0) {
+                default_mod.ports.push_back(
+                    {SVPort::Input, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                emitted_var_names.insert(var_name);
+            }
+            if (var_name == "clk")
                 has_clk = true;
-            if (gv->name == "rst")
+            if (var_name == "rst")
                 has_rst = true;
         } else if (is_inout) {
-            default_mod.ports.push_back(
-                {SVPort::InOut, gv->name, mapType(gv->type), getBitWidth(gv->type)});
+            if (emitted_var_names.count(var_name) == 0) {
+                default_mod.ports.push_back(
+                    {SVPort::InOut, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                emitted_var_names.insert(var_name);
+            }
         } else if (is_output) {
-            default_mod.ports.push_back(
-                {SVPort::Output, gv->name, mapType(gv->type), getBitWidth(gv->type)});
+            if (emitted_var_names.count(var_name) == 0) {
+                default_mod.ports.push_back(
+                    {SVPort::Output, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                emitted_var_names.insert(var_name);
+            }
         } else {
             // 属性なし → 内部レジスタ/ワイヤとして宣言
-            default_mod.reg_declarations.push_back(mapType(gv->type) + " " + gv->name +
-                                                   getArraySuffix(gv->type) + ";");
+            if (emitted_var_names.count(var_name) == 0) {
+                default_mod.reg_declarations.push_back(mapType(gv->type) + " " + var_name +
+                                                       getArraySuffix(gv->type) + ";");
+                emitted_var_names.insert(var_name);
+            }
         }
     }
 
