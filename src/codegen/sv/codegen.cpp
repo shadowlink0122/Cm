@@ -307,8 +307,13 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
 
         // SV幅付きリテラルの場合、元のベース形式を保持して出力
         if (constant.bit_info && !constant.bit_info->original.empty()) {
+            // target_width が明示幅より大きい場合は拡張（混合幅演算の警告防止）
+            int lit_width = constant.bit_info->width;
+            if (target_width > 0 && target_width > lit_width) {
+                lit_width = target_width;
+            }
             // 元の表記をそのまま使用: N'bXXX, N'hXXX, N'dXXX
-            return std::to_string(constant.bit_info->width) + "'" + constant.bit_info->base +
+            return std::to_string(lit_width) + "'" + constant.bit_info->base +
                    constant.bit_info->original;
         }
 
@@ -387,7 +392,16 @@ std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
         case mir::MirOperand::Copy: {
             // data は variant<MirPlace, MirConstant, string>
             const auto& place = std::get<mir::MirPlace>(operand.data);
-            return emitPlace(place, func);
+            std::string result = emitPlace(place, func);
+            // target_width が指定されており、変数のビット幅が狭い場合はキャストを挿入
+            // (int(32bit) + ushort(16bit) の混合演算での WIDTHEXPAND 警告防止)
+            if (target_width > 0 && operand.type) {
+                int var_width = getBitWidth(operand.type);
+                if (var_width > 0 && var_width < target_width) {
+                    result = std::to_string(target_width) + "'(" + result + ")";
+                }
+            }
+            return result;
         }
         case mir::MirOperand::Constant: {
             const auto& constant = std::get<mir::MirConstant>(operand.data);
@@ -426,8 +440,32 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     rhs_tw = getBitWidth(bin.lhs->type);
                 }
             }
+            // target_width が設定されている場合（代入先の幅が分かっている場合）、
+            // 変数オペランドにのみ伝播させてキャストが挿入されるようにする
+            // 定数リテラルには伝播しない（相手オペランドの型幅を優先するため）
+            if (target_width > 0) {
+                if (lhs_tw == 0 && bin.lhs && bin.lhs->kind != mir::MirOperand::Constant)
+                    lhs_tw = target_width;
+                if (rhs_tw == 0 && bin.rhs && bin.rhs->kind != mir::MirOperand::Constant)
+                    rhs_tw = target_width;
+            }
             std::string lhs = bin.lhs ? emitOperand(*bin.lhs, func, lhs_tw) : "0";
             std::string rhs = bin.rhs ? emitOperand(*bin.rhs, func, rhs_tw) : "0";
+
+            // 混合ビット幅の検出と幅拡張キャスト挿入
+            // int(32bit) と ushort(16bit) の混合演算で Verilator WIDTHEXPAND 警告を防止
+            int lhs_w = 0, rhs_w = 0;
+            if (bin.lhs && bin.lhs->type) lhs_w = getBitWidth(bin.lhs->type);
+            if (bin.rhs && bin.rhs->type) rhs_w = getBitWidth(bin.rhs->type);
+            if (lhs_w > 0 && rhs_w > 0 && lhs_w != rhs_w) {
+                int wider = std::max(lhs_w, rhs_w);
+                if (lhs_w < rhs_w && bin.lhs->kind != mir::MirOperand::Constant) {
+                    lhs = std::to_string(wider) + "'(" + lhs + ")";
+                } else if (rhs_w < lhs_w && bin.rhs->kind != mir::MirOperand::Constant) {
+                    rhs = std::to_string(wider) + "'(" + rhs + ")";
+                }
+            }
+
             std::string op;
             switch (bin.op) {
                 case mir::MirBinaryOp::Add:
@@ -488,7 +526,9 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     op = " /* unknown op */ ";
                     break;
             }
-            return lhs + op + rhs;
+            // 二項演算を括弧で囲む (SVの演算子優先順位による意図しない結合を防止)
+            // 例: MIRでは (a & b) == c だが、括弧なしだと a & (b == c) になる
+            return "(" + lhs + op + rhs + ")";
         }
 
         case mir::MirRvalue::UnaryOp: {
@@ -537,7 +577,9 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
                     target_w = getBitWidth(local_type);
                 }
             }
-            // 32bit(intデフォルト)の場合は調整不要
+            // 32bit(intデフォルト)の場合は定数リテラル幅の調整不要
+            // (インライン展開後のコンテキストでは型情報が失われるため、
+            //  混合幅の解決はCmソース側で型を統一して行う)
             if (target_w == 32)
                 target_w = 0;
             std::string rhs = assign.rvalue ? emitRvalue(*assign.rvalue, func, target_w) : "0";
@@ -1342,10 +1384,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 continue;
             }
 
-            // 三項演算子に変換
+            // 三項演算子に変換 (条件式を括弧で囲み演算子優先順位の問題を回避)
             std::string indent_str = trimmed_if.substr(0, if_start);
-            optimized.push_back(indent_str + then_lhs + assign_op + cond_expr + " ? " + then_rhs +
-                                " : " + else_rhs + ";");
+            optimized.push_back(indent_str + then_lhs + assign_op + "(" + cond_expr + ")" +
+                                " ? " + then_rhs + " : " + else_rhs + ";");
             i += 4;  // 5行消費
         }
 
