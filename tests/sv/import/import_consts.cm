@@ -1,0 +1,16 @@
+//! platform: sv
+
+// 定数のみインポートテスト: 関数なし
+import vga_timing;
+
+#[input]  uint pixel_x = 0;
+#[output] uint h_sync_start = 0;
+#[output] uint h_sync_end = 0;
+#[output] uint total_pixels = 0;
+
+void timing_calc() {
+    // インポートした定数を組み合わせて使用
+    h_sync_start = VGA_H_ACTIVE + VGA_H_FP;
+    h_sync_end = VGA_H_ACTIVE + VGA_H_FP + VGA_H_SYNC;
+    total_pixels = VGA_H_TOTAL;
+}

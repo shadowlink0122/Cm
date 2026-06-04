@@ -668,8 +668,16 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             std::ostringstream fn_ss;
             indent_level_ = 1;
 
+            // 関数名のnamespace::フラット化（import時の alu_lib::add → add）
+            std::string flat_func_name = func.name;
+            auto fn_ns = flat_func_name.rfind("::");
+            if (fn_ns != std::string::npos) {
+                flat_func_name = flat_func_name.substr(fn_ns + 2);
+            }
+
             // 引数リスト構築（posedge/negedge型を除外）
             std::vector<std::string> args;
+            std::set<std::string> arg_names;  // 引数名の重複チェック用
             for (auto arg_id : func.arg_locals) {
                 if (arg_id < func.locals.size()) {
                     auto& local = func.locals[arg_id];
@@ -677,10 +685,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                                        local.type->kind == hir::TypeKind::Negedge))
                         continue;
                     args.push_back("input " + mapType(local.type) + " " + local.name);
+                    arg_names.insert(local.name);
                 }
             }
 
-            fn_ss << indent() << "function automatic " << ret_type_str << " " << func.name << "(";
+            fn_ss << indent() << "function automatic " << ret_type_str << " " << flat_func_name << "(";
             for (size_t i = 0; i < args.size(); ++i) {
                 if (i > 0)
                     fn_ss << ", ";
@@ -701,6 +710,12 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 auto& local = func.locals[i];
                 if (local.name.empty() || local.name.find('@') != std::string::npos)
                     continue;
+                // import/export時にグローバル定数がローカルとして混入するのを防止
+                if (local.is_global)
+                    continue;
+                // 引数と同名のローカル変数はスキップ（関数引数の重複宣言防止）
+                if (arg_names.count(local.name))
+                    continue;
                 // ポインタ型テンポラリはスキップ
                 if (local.name.find("_t") == 0 && local.type &&
                     local.type->kind == hir::TypeKind::Pointer)
@@ -716,11 +731,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 emitBlockRecursive(func, 0, visited, body_ss);
                 std::string raw_body = body_ss.str();
 
-                // @return → 関数名 に置換
+                // @return → 関数名 に置換（フラット化済み名前を使用）
                 size_t pos = 0;
                 while ((pos = raw_body.find("@return", pos)) != std::string::npos) {
-                    raw_body.replace(pos, 7, func.name);
-                    pos += func.name.size();
+                    raw_body.replace(pos, 7, flat_func_name);
+                    pos += flat_func_name.size();
                 }
 
                 // テンポラリ変数のインライン展開（always ブロックと同じロジック）
@@ -932,8 +947,13 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // モジュール内のインデントレベルを設定
     indent_level_ = 1;
 
-    // 関数名コメントを追加
-    block_ss << indent() << "// " << func.name << "\n";
+    // 関数名コメントを追加（namespace::プレフィックスをフラット化）
+    std::string display_name = func.name;
+    auto dn_ns = display_name.rfind("::");
+    if (dn_ns != std::string::npos) {
+        display_name = display_name.substr(dn_ns + 2);
+    }
+    block_ss << indent() << "// " << display_name << "\n";
 
     // SV固有型: posedge/negedge型パラメータの検出
     std::string edge_type;   // "posedge" or "negedge"
@@ -2014,6 +2034,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     // グローバル変数からポートと内部シグナルを生成
     bool has_clk = false;
     bool has_rst = false;
+    // import/export時のlocalparam重複排除用セット
+    std::set<std::string> emitted_param_names;
     for (const auto& gv : program.global_vars) {
         if (!gv)
             continue;
@@ -2132,7 +2154,19 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
         // const変数 → 常にlocalparam
         if (gv->is_const) {
-            std::string localparam_decl = "localparam " + mapType(gv->type) + " " + gv->name;
+            // import/export時の重複排除: namespace::付き名前はフラット化
+            std::string param_name = gv->name;
+            auto ns_pos = param_name.rfind("::");
+            if (ns_pos != std::string::npos) {
+                param_name = param_name.substr(ns_pos + 2);
+            }
+            // 同名のlocalparamが既に出力済みならスキップ
+            if (emitted_param_names.count(param_name)) {
+                continue;
+            }
+            emitted_param_names.insert(param_name);
+            std::string localparam_decl =
+                "localparam " + mapType(gv->type) + " " + param_name;
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             }
@@ -2225,10 +2259,22 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                                  SVPort{SVPort::Input, "rst", "logic", 1});
     }
 
-    // 各関数を解析
+    // 各関数を解析（import/export時の重複排除）
+    std::set<std::string> emitted_function_names;
     for (const auto& func : program.functions) {
         if (!func)
             continue;
+        // 関数名のnamespace::フラット化
+        std::string flat_name = func->name;
+        auto fn_ns_pos = flat_name.rfind("::");
+        if (fn_ns_pos != std::string::npos) {
+            flat_name = flat_name.substr(fn_ns_pos + 2);
+        }
+        // 同名関数が既に出力済みならスキップ
+        if (emitted_function_names.count(flat_name)) {
+            continue;
+        }
+        emitted_function_names.insert(flat_name);
         analyzeFunction(*func, default_mod);
     }
 

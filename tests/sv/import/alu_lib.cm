@@ -1,0 +1,17 @@
+// 共通 ALU 関数ライブラリ
+// sv ターゲット向け import/export テスト用
+
+// 加算関数（組み合わせ論理）
+export uint add(uint a, uint b) {
+    return a + b;
+}
+
+// 減算関数（組み合わせ論理）
+export uint sub(uint a, uint b) {
+    return a - b;
+}
+
+// ビット演算関数
+export uint bitwise_and(uint a, uint b) {
+    return a & b;
+}

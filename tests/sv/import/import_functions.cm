@@ -1,0 +1,15 @@
+//! platform: sv
+//! test: a=10, b=3 -> result=13, and_result=2
+
+// 関数のみインポートテスト
+import alu_lib::{add, bitwise_and};
+
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint result = 0;
+#[output] uint and_result = 0;
+
+void compute() {
+    result = add(a, b);
+    and_result = bitwise_and(a, b);
+}

@@ -1,0 +1,23 @@
+// VGA タイミング定数ライブラリ
+// sv ターゲット向け import/export テスト用
+
+// 640×480@60Hz タイミング定数
+export const uint VGA_H_ACTIVE = 640;
+export const uint VGA_H_FP     = 16;
+export const uint VGA_H_SYNC   = 96;
+export const uint VGA_H_BP     = 48;
+export const uint VGA_H_TOTAL  = 800;
+
+export const uint VGA_V_ACTIVE = 480;
+export const uint VGA_V_FP     = 10;
+export const uint VGA_V_SYNC   = 2;
+export const uint VGA_V_BP     = 33;
+export const uint VGA_V_TOTAL  = 525;
+
+// カラーバー定数
+export const utiny COLOR_WHITE_R = 255;
+export const utiny COLOR_WHITE_G = 255;
+export const utiny COLOR_WHITE_B = 255;
+export const utiny COLOR_BLACK_R = 0;
+export const utiny COLOR_BLACK_G = 0;
+export const utiny COLOR_BLACK_B = 0;

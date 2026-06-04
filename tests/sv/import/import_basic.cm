@@ -1,0 +1,28 @@
+//! platform: sv
+//! test: a=100, b=50 -> sum=150, diff=50, masked=32
+
+// 定数インポートテスト: vga_timing から定数をインポート
+import vga_timing;
+
+// 関数インポートテスト: alu_lib から関数をインポート
+import alu_lib;
+
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint sum = 0;
+#[output] uint diff = 0;
+#[output] uint masked = 0;
+
+// インポートした定数を使用するテスト
+// H_TOTAL は localparam として出力されるべき
+#[output] uint h_total = 0;
+
+void compute() {
+    // インポートした関数を使用
+    sum = add(a, b);
+    diff = sub(a, b);
+    masked = bitwise_and(a, b);
+
+    // インポートした定数を使用
+    h_total = VGA_H_TOTAL;
+}
