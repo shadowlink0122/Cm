@@ -5,7 +5,6 @@
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstdint>
-#include <sys/select.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -15,6 +14,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -247,7 +247,8 @@ static int tcp_connect_and_communicate(const std::string& host, int port,
 
             int socket_error = 0;
             socklen_t len = sizeof(socket_error);
-            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 || socket_error != 0) {
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 ||
+                socket_error != 0) {
                 close(fd);
                 freeaddrinfo(result);
                 return -3;
@@ -397,7 +398,8 @@ static int tls_connect_and_communicate(const std::string& host, int port,
 
             int socket_error = 0;
             socklen_t len = sizeof(socket_error);
-            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 || socket_error != 0) {
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 ||
+                socket_error != 0) {
                 close(fd);
                 freeaddrinfo(result);
                 return -3;
@@ -514,7 +516,7 @@ int64_t cm_http_request_create() {
     req->method = HTTP_GET;
     req->port = 80;
     req->path = "/";
-    req->timeout_ms = 10000;
+    req->timeout_ms = 3000;
     req->follow_redirects = true;
     req->max_redirects = 5;
     return reinterpret_cast<int64_t>(req);
@@ -583,12 +585,15 @@ int64_t cm_http_execute(int64_t req_handle) {
     int err;
 #ifdef CM_HAS_OPENSSL
     if (req->port == 443) {
-        err = tls_connect_and_communicate(req->host, req->port, request_str, raw_response, req->timeout_ms);
+        err = tls_connect_and_communicate(req->host, req->port, request_str, raw_response,
+                                          req->timeout_ms);
     } else {
-        err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response, req->timeout_ms);
+        err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response,
+                                          req->timeout_ms);
     }
 #else
-    err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response, req->timeout_ms);
+    err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response,
+                                      req->timeout_ms);
 #endif
     if (err != 0) {
         auto* resp = new CmHttpResponse();
