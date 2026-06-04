@@ -455,8 +455,10 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             // 混合ビット幅の検出と幅拡張キャスト挿入
             // int(32bit) と ushort(16bit) の混合演算で Verilator WIDTHEXPAND 警告を防止
             int lhs_w = 0, rhs_w = 0;
-            if (bin.lhs && bin.lhs->type) lhs_w = getBitWidth(bin.lhs->type);
-            if (bin.rhs && bin.rhs->type) rhs_w = getBitWidth(bin.rhs->type);
+            if (bin.lhs && bin.lhs->type)
+                lhs_w = getBitWidth(bin.lhs->type);
+            if (bin.rhs && bin.rhs->type)
+                rhs_w = getBitWidth(bin.rhs->type);
             if (lhs_w > 0 && rhs_w > 0 && lhs_w != rhs_w) {
                 int wider = std::max(lhs_w, rhs_w);
                 if (lhs_w < rhs_w && bin.lhs->kind != mir::MirOperand::Constant) {
@@ -1386,8 +1388,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
             // 三項演算子に変換 (条件式を括弧で囲み演算子優先順位の問題を回避)
             std::string indent_str = trimmed_if.substr(0, if_start);
-            optimized.push_back(indent_str + then_lhs + assign_op + "(" + cond_expr + ")" +
-                                " ? " + then_rhs + " : " + else_rhs + ";");
+            optimized.push_back(indent_str + then_lhs + assign_op + "(" + cond_expr + ")" + " ? " +
+                                then_rhs + " : " + else_rhs + ";");
             i += 4;  // 5行消費
         }
 
