@@ -21,6 +21,53 @@
 
 ---
 
+## 1.1 import/export (モジュール分割)
+
+Cm の `import`/`export` キーワードを使って、SV ターゲットでもモジュール間で定数・関数を共有できます。
+
+### 定数のエクスポート
+
+```cm
+// vga_timing.cm
+export const uint H_ACTIVE = 640;
+export const uint H_TOTAL  = 800;
+```
+
+### 関数のエクスポート
+
+```cm
+// alu_lib.cm
+export uint add(uint a, uint b) {
+    return a + b;
+}
+```
+
+### インポート (全シンボル)
+
+```cm
+//! platform: sv
+import vga_timing;
+import alu_lib;
+```
+
+### 選択的インポート
+
+```cm
+//! platform: sv
+import vga_timing::{H_ACTIVE, H_TOTAL};
+import alu_lib::{add};
+```
+
+### SV バックエンドの自動処理
+
+| 処理 | 内容 |
+|------|------|
+| localparam 重複排除 | namespace 内コピーと exported symbols コピーの重複を自動検出・除外 |
+| namespace:: フラット化 | `alu_lib::add` → `add` (SV の function 名に `::` は使えない) |
+| ローカル変数フィルタリング | function 内にインポートされたグローバル定数が混入するのを防止 |
+
+
+
 ## 2. 型マッピング
 
 | Cm型 | TypeKind | SV出力 | ビット幅 |
