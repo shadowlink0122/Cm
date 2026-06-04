@@ -1345,9 +1345,13 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
             }
         }
 
-        // 構造体定義を検出: [export] struct Name {
-        if (starts_with_keyword(cur_line, decl_pos, "struct")) {
-            size_t after_struct = skip_ws(cur_line, decl_pos + 6);
+        // 構造体定義を検出: [export] struct Name { または [export] extern struct Name {
+        size_t struct_pos = decl_pos;
+        if (starts_with_keyword(cur_line, struct_pos, "extern")) {
+            struct_pos = skip_ws(cur_line, struct_pos + 6);
+        }
+        if (starts_with_keyword(cur_line, struct_pos, "struct")) {
+            size_t after_struct = skip_ws(cur_line, struct_pos + 6);
             size_t sname_start = after_struct;
             while (after_struct < cur_line.size() &&
                    (std::isalnum(static_cast<unsigned char>(cur_line[after_struct])) ||

@@ -89,6 +89,18 @@ ast::DeclPtr Parser::parse_top_level() {
         if (check(TokenKind::KwStruct)) {
             return parse_struct(true, std::move(attrs));
         }
+        if (check(TokenKind::KwExtern)) {
+            advance(); // consume 'extern'
+            if (check(TokenKind::KwStruct)) {
+                auto struct_decl = parse_struct(true, std::move(attrs), true);
+                if (auto* s = struct_decl->as<ast::StructDecl>()) {
+                    s->is_extern = true;
+                }
+                return struct_decl;
+            }
+            pos_ = saved_pos;
+            return parse_export();
+        }
         if (check(TokenKind::KwInterface)) {
             return parse_interface(true, std::move(attrs));
         }
