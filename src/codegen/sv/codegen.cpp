@@ -949,6 +949,15 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
         }
         if (!already_declared) {
+            for (const auto& existing : mod.wire_declarations) {
+                if (existing.find(" " + name + " ") != std::string::npos ||
+                    existing.find(" " + name + ";") != std::string::npos) {
+                    already_declared = true;
+                    break;
+                }
+            }
+        }
+        if (!already_declared) {
             mod.reg_declarations.push_back(decl);
         }
     }
