@@ -589,8 +589,11 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
             // func、またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
             bool use_nonblocking =
                 func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
-            // Gowin EDA互換性: 全てのローカル変数に非ブロッキング代入を使用
-            // 非グローバルローカルはインライン展開で消去されるため問題ない
+            if (use_nonblocking && assign.place.local < func.locals.size()) {
+                if (!func.locals[assign.place.local].is_global) {
+                    use_nonblocking = false;
+                }
+            }
             if (!use_nonblocking) {
                 bool is_dest_global = true;
                 if (assign.place.local < func.locals.size()) {
@@ -607,38 +610,6 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
                         }
                     }
                 }
-            }
-            // alwaysブロック内のinteger宣言済みローカル変数への初期値代入（=0）をスキップ
-            // integer型は自動的にXに初期化されるが、直後のロジックで必ず上書きされるため不要
-            // ただしテンポラリ変数（_tXXXX）はインライン展開用なのでスキップしない
-            if (!use_nonblocking && assign.place.local < func.locals.size() &&
-                !func.locals[assign.place.local].is_global && assign.rvalue &&
-                assign.rvalue->kind == mir::MirRvalue::Use) {
-                const auto& var_name = func.locals[assign.place.local].name;
-                bool is_temp = (var_name.size() > 2 && var_name[0] == '_' &&
-                                var_name[1] == 't' && std::isdigit(var_name[2]));
-                if (!is_temp) {
-                const auto& use_data =
-                    std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
-                if (use_data.operand &&
-                    use_data.operand->kind == mir::MirOperand::Constant) {
-                    const auto& c =
-                        std::get<mir::MirConstant>(use_data.operand->data);
-                    bool is_zero = false;
-                    if (std::holds_alternative<int64_t>(c.value) &&
-                        std::get<int64_t>(c.value) == 0) {
-                        is_zero = true;
-                    } else if (std::holds_alternative<bool>(c.value) &&
-                               !std::get<bool>(c.value)) {
-                        is_zero = true;
-                    } else if (std::holds_alternative<std::monostate>(c.value)) {
-                        is_zero = true;
-                    }
-                    if (is_zero) {
-                        return "";  // integer型の初期値代入をスキップ
-                    }
-                }
-                }  // !is_temp
             }
             if (use_nonblocking) {
                 return lhs + " <= " + rhs + ";";
@@ -935,11 +906,6 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         std::string name = local.name;
         if (name.empty() || name == "_0")
             continue;  // 戻り値用
-        // 非グローバルローカル変数もモジュールスコープで宣言
-        // （インライン展開で消去されるため、宣言のみ残る場合は後で除去）
-        if (!local.is_global) {
-            // モジュールスコープで宣言する（not skipped）
-        }
         // 不正なSV識別子をスキップ（@return等）
         if (name.find('@') != std::string::npos)
             continue;
@@ -1049,24 +1015,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
     }
 
-    // 非グローバルローカル変数が存在するか判定（存在する場合always_ffではなくalwaysを使用）
-    bool has_local_vars = false;
-    for (const auto& local : func.locals) {
-        if (!local.is_global && !local.name.empty() && local.name != "_0" &&
-            local.name.find('@') == std::string::npos &&
-            !(local.type && (local.type->kind == hir::TypeKind::Posedge ||
-                             local.type->kind == hir::TypeKind::Negedge))) {
-            has_local_vars = true;
-            break;
-        }
-    }
-    // always_ff はブロッキング代入を許可しないため、ローカル変数がある場合は always を使用
-    std::string always_keyword = has_local_vars ? "always" : "always_ff";
-
     if (has_explicit_edge) {
-        // 明示的なposedge/negedge型パラメータ
+        // 明示的なposedge/negedge型パラメータ → always_ff
         if (all_edges.size() > 1) {
-            block_ss << indent() << always_keyword << " @(";
+            // 複数エッジ: always_ff @(posedge clk or negedge rst_n)
+            block_ss << indent() << "always_ff @(";
             for (size_t i = 0; i < all_edges.size(); ++i) {
                 if (i > 0)
                     block_ss << " or ";
@@ -1074,7 +1027,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
             block_ss << ") begin\n";
         } else {
-            block_ss << indent() << always_keyword << " @(" << edge_type << " " << edge_clock << ") begin\n";
+            block_ss << indent() << "always_ff @(" << edge_type << " " << edge_clock << ") begin\n";
         }
     } else if (func.is_always && !has_explicit_edge) {
         // always修飾子 + エッジパラメータなし
@@ -1101,7 +1054,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 clock_name = attr.substr(prefix2.size(), attr.size() - prefix2.size() - 1);
             }
         }
-        block_ss << indent() << always_keyword << " @(posedge " << clock_name << ") begin\n";
+        block_ss << indent() << "always_ff @(posedge " << clock_name << ") begin\n";
     } else if (func.is_always || func.is_async) {
         // always修飾子+エッジあり、またはasync修飾子（後方互換）→ always_ff @(posedge clk)
         // Phase 4: マルチクロックドメイン対応
@@ -1127,15 +1080,12 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
         }
 
-        block_ss << indent() << always_keyword << " @(posedge " << clock_name << ") begin\n";
+        block_ss << indent() << "always_ff @(posedge " << clock_name << ") begin\n";
     } else {
         block_ss << indent() << "always_comb begin\n";
     }
 
     increaseIndent();
-
-    // 非グローバルローカル変数はモジュールスコープのlogicとして宣言済み
-    // always内ではブロッキング代入で使用する
 
     // CFG再帰走査でブロックを構造化出力
     // まず一時変数のマッピングを構築（インライン展開用）
@@ -1148,24 +1098,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
     // 一時変数のインライン展開処理
     // _tXXXX = expr; の形式を検出し、後続の使用箇所で直接式に置換
-    // 非グローバルローカル変数も同様にインライン展開する（色ずれ防止）
     std::istringstream raw_stream(raw_ss.str());
     std::string line;
     std::vector<std::string> lines;
     while (std::getline(raw_stream, line)) {
         lines.push_back(line);
-    }
-
-    // 非グローバルローカル変数名セットを構築（インライン展開対象）
-    std::set<std::string> local_var_names;
-    for (const auto& local : func.locals) {
-        if (!local.is_global && !local.name.empty() && local.name != "_0" &&
-            local.name.find('@') == std::string::npos) {
-            std::string name = local.name;
-            if (name.find("self.") == 0)
-                name = name.substr(5);
-            local_var_names.insert(name);
-        }
     }
 
     // Pass 1: 一時変数の値を収集
@@ -1177,21 +1114,9 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             continue;
         trimmed = trimmed.substr(start);
 
-        // \"_tXXXX = expr;\" または非グローバルローカル変数への代入を検出
-        bool is_temp = (trimmed.size() > 2 && trimmed[0] == '_' && trimmed[1] == 't' &&
-            std::isdigit(trimmed[2]));
-        // 非グローバルローカル変数名への代入を検出
-        bool is_local_var = false;
-        if (!is_temp) {
-            auto sp = trimmed.find(' ');
-            if (sp != std::string::npos) {
-                std::string candidate = trimmed.substr(0, sp);
-                if (local_var_names.count(candidate)) {
-                    is_local_var = true;
-                }
-            }
-        }
-        if (is_temp || is_local_var) {
+        // \"_tXXXX = expr;\" または \"_tXXXX <= expr;\" パターンを検出
+        if (trimmed.size() > 2 && trimmed[0] == '_' && trimmed[1] == 't' &&
+            std::isdigit(trimmed[2])) {
             // ブロッキング代入 (=) を検出
             auto eq_pos = trimmed.find(" = ");
             // ノンブロッキング代入 (<=) を検出
@@ -1202,54 +1127,12 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 if (!value.empty() && value.back() == ';') {
                     value.pop_back();
                 }
-                // 既存のtemp_valuesで値を事前展開（深いチェーン対応）
-                for (int iter = 0; iter < 20; ++iter) {
-                    bool changed = false;
-                    for (const auto& [v, val] : temp_values) {
-                        size_t pos = 0;
-                        while ((pos = value.find(v, pos)) != std::string::npos) {
-                            bool at_s = (pos == 0 || (!std::isalnum(value[pos-1]) && value[pos-1] != '_'));
-                            bool at_e = (pos + v.size() >= value.size() ||
-                                        (!std::isalnum(value[pos + v.size()]) && value[pos + v.size()] != '_'));
-                            if (at_s && at_e) {
-                                std::string repl = (val.find(' ') != std::string::npos) ? "(" + val + ")" : val;
-                                value.replace(pos, v.size(), repl);
-                                pos += repl.size();
-                                changed = true;
-                            } else {
-                                pos += v.size();
-                            }
-                        }
-                    }
-                    if (!changed) break;
-                }
                 temp_values[var_name] = value;
             } else if (nbeq_pos != std::string::npos) {
                 std::string var_name = trimmed.substr(0, nbeq_pos);
                 std::string value = trimmed.substr(nbeq_pos + 4);
                 if (!value.empty() && value.back() == ';') {
                     value.pop_back();
-                }
-                // 既存のtemp_valuesで値を事前展開
-                for (int iter = 0; iter < 20; ++iter) {
-                    bool changed = false;
-                    for (const auto& [v, val] : temp_values) {
-                        size_t pos = 0;
-                        while ((pos = value.find(v, pos)) != std::string::npos) {
-                            bool at_s = (pos == 0 || (!std::isalnum(value[pos-1]) && value[pos-1] != '_'));
-                            bool at_e = (pos + v.size() >= value.size() ||
-                                        (!std::isalnum(value[pos + v.size()]) && value[pos + v.size()] != '_'));
-                            if (at_s && at_e) {
-                                std::string repl = (val.find(' ') != std::string::npos) ? "(" + val + ")" : val;
-                                value.replace(pos, v.size(), repl);
-                                pos += repl.size();
-                                changed = true;
-                            } else {
-                                pos += v.size();
-                            }
-                        }
-                    }
-                    if (!changed) break;
                 }
                 temp_values[var_name] = value;
             }
@@ -1307,27 +1190,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
         std::string content = trimmed.substr(start);
 
-        // 一時変数または非グローバルローカル変数への代入行はスキップ
-        bool skip_line = false;
+        // 一時変数への代入行はスキップ（= と <= の両方対応）
         if (content.size() > 2 && content[0] == '_' && content[1] == 't' &&
             std::isdigit(content[2]) &&
             (content.find(" = ") != std::string::npos ||
              content.find(" <= ") != std::string::npos)) {
-            skip_line = true;
-        }
-        // 非グローバルローカル変数への代入もスキップ（インライン展開済み）
-        if (!skip_line) {
-            auto sp = content.find(' ');
-            if (sp != std::string::npos) {
-                std::string var = content.substr(0, sp);
-                if (local_var_names.count(var) &&
-                    (content.find(" = ") != std::string::npos ||
-                     content.find(" <= ") != std::string::npos)) {
-                    skip_line = true;
-                }
-            }
-        }
-        if (skip_line) {
             continue;
         }
 
@@ -1691,42 +1558,6 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             block_content.pop_back();
     }
 
-    // 非グローバルローカル変数の初期値代入（var = 32'd0;）を位置ベースで削除
-    // always ブロック冒頭の連続する初期化行のみをスキップし、
-    // else分岐内の正当な代入（r_use_xnor = 32'd0; 等）は保持する
-    if (has_local_vars) {
-        std::istringstream init_stream(block_content);
-        std::ostringstream init_out;
-        std::string init_line;
-        bool at_block_start = true;  // alwaysブロック冒頭フラグ
-        while (std::getline(init_stream, init_line)) {
-            std::string trimmed = init_line;
-            size_t start = trimmed.find_first_not_of(' ');
-            if (start != std::string::npos)
-                trimmed = trimmed.substr(start);
-            // ブロック冒頭の連続する「var = 32'd0;」パターンをスキップ
-            if (at_block_start) {
-                // alwaysヘッダー行やコメント行はそのまま出力（冒頭フラグ維持）
-                if (trimmed.find("always ") == 0 || trimmed.find("always_") == 0 ||
-                    trimmed.find("//") == 0 || trimmed.empty()) {
-                    init_out << init_line << "\n";
-                    continue;
-                }
-                // 変数名 = 32'd0; のパターンをスキップ
-                auto eq_pos = trimmed.find(" = 32'd0;");
-                if (eq_pos != std::string::npos && trimmed.find(" ") == eq_pos) {
-                    continue;  // 初期化行をスキップ
-                }
-                // 初期化行でなければ冒頭フラグを解除
-                at_block_start = false;
-            }
-            init_out << init_line << "\n";
-        }
-        block_content = init_out.str();
-        if (!block_content.empty() && block_content.back() == '\n')
-            block_content.pop_back();
-    }
-
     if (has_explicit_edge || func.is_async ||
         func.always_kind == mir::MirFunction::AlwaysKind::FF) {
         mod.always_ff_blocks.push_back(block_content);
@@ -1827,17 +1658,6 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
             if (bb.terminator->kind == mir::MirTerminator::Goto) {
                 auto& gd = std::get<mir::MirTerminator::GotoData>(bb.terminator->data);
                 work.push_back(gd.target);
-            } else if (bb.terminator->kind == mir::MirTerminator::SwitchInt) {
-                // thenブランチ側と同様にSwitchIntの全分岐先を追跡
-                auto& sd = std::get<mir::MirTerminator::SwitchIntData>(bb.terminator->data);
-                for (const auto& [val, target] : sd.targets) {
-                    work.push_back(target);
-                }
-                work.push_back(sd.otherwise);
-            } else if (bb.terminator->kind == mir::MirTerminator::Call) {
-                // Call ターミネータの後続ブロックも追跡
-                auto& cd = std::get<mir::MirTerminator::CallData>(bb.terminator->data);
-                work.push_back(cd.success);
             }
         }
     }
