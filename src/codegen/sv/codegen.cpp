@@ -8,6 +8,18 @@
 
 namespace cm::codegen::sv {
 
+namespace {
+// 文字列内の特定の部分文字列をすべて別の文字列に置換する
+std::string replace_all(std::string str, const std::string& from, const std::string& to) {
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length();
+    }
+    return str;
+}
+}  // namespace
+
 SVCodeGen::SVCodeGen(const SVCodeGenOptions& options) : options_(options) {}
 
 // === 型マッピング ===
@@ -209,6 +221,13 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     emitPortList(mod.ports);
     append_line("");
 
+    // Verilator リント警告の一括無視メタコメントをモジュール内に挿入
+    emitLine("/* verilator lint_off UNUSED */");
+    emitLine("/* verilator lint_off WIDTHTRUNC */");
+    emitLine("/* verilator lint_off WIDTHEXPAND */");
+    emitLine("/* verilator lint_off UNDRIVEN */");
+    append_line("");
+
     increaseIndent();
 
     // parameter宣言
@@ -243,19 +262,25 @@ void SVCodeGen::emitModule(const SVModule& mod) {
 
     // always_ff ブロック
     for (const auto& block : mod.always_ff_blocks) {
-        emit(block);
+        // Gowin EDA 互換のため always_ff @ を always @ に置換
+        std::string modified = replace_all(block, "always_ff @", "always @");
+        emit(modified);
         append_line("");
     }
 
     // always_comb ブロック
     for (const auto& block : mod.always_comb_blocks) {
-        emit(block);
+        // Gowin EDA 互換のため always_comb を always @(*) に置換
+        std::string modified = replace_all(block, "always_comb begin", "always @(*) begin");
+        emit(modified);
         append_line("");
     }
 
     // always_latch ブロック
     for (const auto& block : mod.always_latch_blocks) {
-        emit(block);
+        // Gowin EDA 互換のため always_latch を always @(*) に置換
+        std::string modified = replace_all(block, "always_latch begin", "always @(*) begin");
+        emit(modified);
         append_line("");
     }
 
