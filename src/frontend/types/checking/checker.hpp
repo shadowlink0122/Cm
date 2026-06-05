@@ -133,6 +133,7 @@ class TypeChecker {
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
+    bool is_valid_type(ast::TypePtr type);
 
     // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
     // 代入先がLiteralUnion型の場合、代入する値が許容リテラルに含まれるかチェック

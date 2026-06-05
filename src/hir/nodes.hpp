@@ -215,7 +215,7 @@ struct HirLet {
 // 代入
 struct HirAssign {
     HirExprPtr target;  // 左辺値（変数参照、メンバーアクセス、配列アクセス等）
-    HirExprPtr value;  // 右辺値
+    HirExprPtr value;   // 右辺値
 };
 
 // return
@@ -385,15 +385,15 @@ struct HirFunction {
     bool is_async = false;   // async関数（JSバックエンド用）
     bool is_always = false;  // always修飾子（SVバックエンド用）
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
-    std::vector<std::string> attributes;  // SV属性（sv::latch, sv::clock_domain等）
+    std::vector<std::string> attributes;               // SV属性（sv::latch, sv::clock_domain等）
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 
 // フィールドのアクセス修飾子
 enum class HirFieldAccess {
-    Public,  // デフォルト（外部からアクセス可能）
+    Public,   // デフォルト（外部からアクセス可能）
     Private,  // コンストラクタ/デストラクタ内のthisポインタからのみアクセス可能
-    Default  // デフォルトメンバ（構造体に1つのみ）
+    Default   // デフォルトメンバ（構造体に1つのみ）
 };
 
 // 構造体フィールド
@@ -401,8 +401,8 @@ struct HirField {
     std::string name;
     TypePtr type;
     HirFieldAccess access = HirFieldAccess::Public;  // デフォルトはpublic
-    std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
-    std::string default_value_str;        // デフォルト値の文字列表現（SV用）
+    std::vector<std::string> attributes;             // フィールド属性（sv::param, output 等）
+    std::string default_value_str;                   // デフォルト値の文字列表現（SV用）
 };
 
 // 構造体
@@ -486,7 +486,7 @@ struct HirImpl {
     std::vector<std::unique_ptr<HirFunction>> methods;
     std::vector<std::unique_ptr<HirOperatorImpl>> operators;  // 演算子実装
     std::vector<HirWhereClause> where_clauses;                // where句
-    bool is_ctor_impl = false;  // コンストラクタ/デストラクタ専用impl
+    bool is_ctor_impl = false;                                // コンストラクタ/デストラクタ専用impl
 };
 
 // インポート

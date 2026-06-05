@@ -90,7 +90,7 @@ ast::DeclPtr Parser::parse_top_level() {
             return parse_struct(true, std::move(attrs));
         }
         if (check(TokenKind::KwExtern)) {
-            advance(); // consume 'extern'
+            advance();  // consume 'extern'
             if (check(TokenKind::KwStruct)) {
                 auto struct_decl = parse_struct(true, std::move(attrs), true);
                 if (auto* s = struct_decl->as<ast::StructDecl>()) {

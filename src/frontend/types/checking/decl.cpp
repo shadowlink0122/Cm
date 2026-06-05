@@ -255,6 +255,10 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         }
 
         // 型を決定
+        if (gv->type && !is_valid_type(gv->type)) {
+            error(decl.span, "Undefined type: '" + ast::type_to_string(*gv->type) +
+                                 "' for global variable '" + gv->name + "'");
+        }
         ast::TypePtr var_type = gv->type ? resolve_typedef(gv->type) : init_type;
         if (var_type) {
             scopes_.global().define(gv->name, var_type, gv->is_const, false, decl.span,
@@ -328,6 +332,10 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             }
 
             // 型を決定
+            if (macro->type && !is_valid_type(macro->type)) {
+                error(decl.span, "Undefined type: '" + ast::type_to_string(*macro->type) +
+                                     "' for macro '" + macro->name + "'");
+            }
             ast::TypePtr var_type = macro->type ? resolve_typedef(macro->type) : init_type;
             if (var_type) {
                 scopes_.global().define(macro->name, var_type, true /* is_const */, false,
@@ -787,11 +795,20 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
     }
 
     current_return_type_ = resolve_typedef(func.return_type);
+    if (!is_valid_type(func.return_type)) {
+        error(func.name_span, "Undefined return type: '" + ast::type_to_string(*func.return_type) +
+                                  "' in function '" + func.name + "'");
+    }
     if (generic_context_.has_type_param(ast::type_to_string(*func.return_type))) {
         current_return_type_ = func.return_type;
     }
 
     for (const auto& param : func.params) {
+        if (!is_valid_type(param.type)) {
+            error(func.name_span, "Undefined parameter type: '" + ast::type_to_string(*param.type) +
+                                      "' for parameter '" + param.name + "' in function '" +
+                                      func.name + "'");
+        }
         auto resolved_type = resolve_typedef(param.type);
         if (generic_context_.has_type_param(ast::type_to_string(*param.type))) {
             resolved_type = param.type;

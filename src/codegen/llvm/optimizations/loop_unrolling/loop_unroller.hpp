@@ -21,13 +21,13 @@ class LoopUnroller {
    public:
     /// ループ展開設定
     struct Config {
-        unsigned maxUnrollFactor;  // 最大展開係数
-        unsigned maxLoopSize;      // 展開対象の最大ループサイズ（命令数）
-        unsigned minTripCount;  // 最小トリップカウント（これ以下は展開しない）
-        bool enablePartialUnroll;   // 部分展開を有効化
-        bool enableCompleteUnroll;  // 完全展開を有効化
-        bool enablePeeling;         // ループピーリング（最初/最後の反復を分離）
-        bool enableRuntimeUnroll;  // 実行時展開（トリップカウントが不明な場合）
+        unsigned maxUnrollFactor;        // 最大展開係数
+        unsigned maxLoopSize;            // 展開対象の最大ループサイズ（命令数）
+        unsigned minTripCount;           // 最小トリップカウント（これ以下は展開しない）
+        bool enablePartialUnroll;        // 部分展開を有効化
+        bool enableCompleteUnroll;       // 完全展開を有効化
+        bool enablePeeling;              // ループピーリング（最初/最後の反復を分離）
+        bool enableRuntimeUnroll;        // 実行時展開（トリップカウントが不明な場合）
         unsigned preferredUnrollFactor;  // 0の場合は自動決定
 
         // デフォルトコンストラクタ

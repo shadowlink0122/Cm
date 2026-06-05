@@ -787,4 +787,38 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
     }
 }
 
+bool TypeChecker::is_valid_type(ast::TypePtr type) {
+    if (!type)
+        return true;
+
+    // プリミティブ型は有効
+    if (type->is_primitive())
+        return true;
+
+    switch (type->kind) {
+        case ast::TypeKind::Posedge:
+        case ast::TypeKind::Negedge:
+        case ast::TypeKind::Wire:
+        case ast::TypeKind::Reg:
+        case ast::TypeKind::Bit:
+        case ast::TypeKind::Null:
+            return true;
+        case ast::TypeKind::Pointer:
+        case ast::TypeKind::Array:
+            return is_valid_type(type->element_type);
+        case ast::TypeKind::Struct:
+        case ast::TypeKind::Interface:
+        case ast::TypeKind::Generic:
+            // 構造体名、インターフェース名、enum名、typedef名、またはジェネリック型引数として存在するかチェック
+            if (struct_defs_.count(type->name) > 0 || interface_names_.count(type->name) > 0 ||
+                enum_names_.count(type->name) > 0 || typedef_defs_.count(type->name) > 0 ||
+                generic_context_.has_type_param(type->name)) {
+                return true;
+            }
+            return false;
+        default:
+            return true;
+    }
+}
+
 }  // namespace cm

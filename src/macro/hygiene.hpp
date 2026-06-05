@@ -24,7 +24,7 @@ struct SyntaxContext {
     uint32_t id;                             // ユニークなコンテキストID
     ExpansionInfo expansion;                 // 展開情報
     std::set<std::string> introduced_names;  // このコンテキストで導入された名前
-    std::shared_ptr<SyntaxContext> parent;  // 親コンテキスト（ネストしたマクロ用）
+    std::shared_ptr<SyntaxContext> parent;   // 親コンテキスト（ネストしたマクロ用）
 
     // コンテキストが同じか判定
     bool is_same_context(const SyntaxContext& other) const { return id == other.id; }

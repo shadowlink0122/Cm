@@ -71,8 +71,8 @@ struct GenericParam {
     GenericParamKind kind = GenericParamKind::Type;  // パラメータの種類
     std::string name;                                // パラメータ名（T, N等）
     std::vector<std::string> constraints;            // 後方互換性用
-    TypeConstraint type_constraint;  // インターフェース境界（型パラメータ用）
-    TypePtr const_type;              // 定数パラメータの型（int, bool等）
+    TypeConstraint type_constraint;                  // インターフェース境界（型パラメータ用）
+    TypePtr const_type;                              // 定数パラメータの型（int, bool等）
 
     GenericParam() = default;
     explicit GenericParam(std::string n) : kind(GenericParamKind::Type), name(std::move(n)) {}
@@ -284,7 +284,7 @@ struct ImplDecl {
     std::vector<std::string> generic_params;      // 後方互換性のため維持
     std::vector<GenericParam> generic_params_v2;  // 型制約付き
     std::vector<TypePtr>
-        interface_type_args;  // インターフェースの型引数（例: ValueHolder<T> の T）
+        interface_type_args;                 // インターフェースの型引数（例: ValueHolder<T> の T）
     std::vector<WhereClause> where_clauses;  // where句
 
     // コンストラクタ/デストラクタ専用impl（forなし）

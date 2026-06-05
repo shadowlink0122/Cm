@@ -155,13 +155,28 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
                 if (auto* ival = std::get_if<int64_t>(&lit->value)) {
                     hir_field.default_value_str = std::to_string(*ival);
                 } else if (auto* bval = std::get_if<bool>(&lit->value)) {
-                    hir_field.default_value_str = *bval ? "1" : "0";
+                    hir_field.default_value_str = *bval ? "1'b1" : "1'b0";
                 } else if (auto* sval = std::get_if<std::string>(&lit->value)) {
                     hir_field.default_value_str = *sval;
                 }
             } else if (auto* ident = field.default_value->as<ast::IdentExpr>()) {
                 // 識別子（ポート接続信号名など）
                 hir_field.default_value_str = ident->name;
+            } else if (auto* idx = field.default_value->as<ast::IndexExpr>()) {
+                // 配列インデックスアクセス (例: tmds_r[0])
+                if (auto* obj_ident = idx->object->as<ast::IdentExpr>()) {
+                    std::string idx_str;
+                    if (auto* idx_lit = idx->index->as<ast::LiteralExpr>()) {
+                        if (auto* ival = std::get_if<int64_t>(&idx_lit->value)) {
+                            idx_str = std::to_string(*ival);
+                        }
+                    } else if (auto* idx_ident = idx->index->as<ast::IdentExpr>()) {
+                        idx_str = idx_ident->name;
+                    }
+                    if (!idx_str.empty()) {
+                        hir_field.default_value_str = obj_ident->name + "[" + idx_str + "]";
+                    }
+                }
             }
         }
         hir_st->fields.push_back(std::move(hir_field));

@@ -38,7 +38,7 @@ class ImportPreprocessor {
         std::vector<std::string> imported_modules;  // インポートされたモジュール
         SourceMap source_map;                       // ソースマップ
         std::vector<ModuleRange> module_ranges;     // モジュール範囲情報
-        std::vector<std::string> resolved_files;  // 全参照ファイルの絶対パス（キャッシュキー用）
+        std::vector<std::string> resolved_files;    // 全参照ファイルの絶対パス（キャッシュキー用）
         bool success;
         std::string error_message;
     };
@@ -48,7 +48,7 @@ class ImportPreprocessor {
     std::unordered_map<std::string, std::set<std::string>>
         imported_symbols;  // インポート済みシンボル（ファイルパス -> シンボルセット）
     std::unordered_set<std::string>
-        imported_modules;  // インポート済みモジュール（再インポート防止）
+        imported_modules;                   // インポート済みモジュール（再インポート防止）
     std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
     std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ（展開済み）
     std::unordered_map<std::string, std::string>
@@ -113,8 +113,8 @@ class ImportPreprocessor {
     // インポート文をパース
     struct ImportInfo {
         std::string module_name;
-        std::string alias;               // "as" エイリアス
-        std::vector<std::string> items;  // 選択的インポート項目
+        std::string alias;                                              // "as" エイリアス
+        std::vector<std::string> items;                                 // 選択的インポート項目
         std::vector<std::pair<std::string, std::string>> item_aliases;  // 項目ごとのエイリアス
         bool is_wildcard = false;
         bool is_recursive_wildcard = false;  // import ./path/* 形式

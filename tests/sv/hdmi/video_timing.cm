@@ -27,7 +27,7 @@ const uint V_TOTAL  = 525;
 uint hc = 0;
 uint vc = 0;
 
-async func process(posedge pixel_clk) {
+async void process(posedge pixel_clk) {
     // 水平カウンタ
     if (hc == H_TOTAL - 1) {
         hc = 0;

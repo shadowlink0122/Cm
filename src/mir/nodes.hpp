@@ -59,7 +59,7 @@ enum class ProjectionKind {
 struct PlaceProjection {
     ProjectionKind kind;
     union {
-        FieldId field_id;  // Field の場合
+        FieldId field_id;     // Field の場合
         LocalId index_local;  // Index の場合（インデックスを保持するローカル変数）
     };
     hir::TypePtr result_type;   // 投影後の型
@@ -495,8 +495,8 @@ struct MirTerminator {
 
         // インターフェースメソッド呼び出し用（オプション）
         std::string interface_name;  // インターフェース名（空なら通常の関数呼び出し）
-        std::string method_name;  // メソッド名
-        bool is_virtual = false;  // vtable経由の呼び出しか
+        std::string method_name;     // メソッド名
+        bool is_virtual = false;     // vtable経由の呼び出しか
 
         // 末尾呼び出し最適化（LLVM tail call attribute）
         bool is_tail_call = false;  // 末尾位置の自己呼び出し
@@ -605,7 +605,7 @@ struct LocalDecl {
     std::string name;  // デバッグ用の名前
     hir::TypePtr type;
     bool is_mutable;
-    bool is_user_variable;  // ユーザー定義の変数か、コンパイラ生成の一時変数か
+    bool is_user_variable;   // ユーザー定義の変数か、コンパイラ生成の一時変数か
     bool is_static = false;  // static変数（関数呼び出し間で値が保持される）
     bool is_global = false;  // グローバル変数（MirGlobalVarへの参照）
 
@@ -630,14 +630,14 @@ struct LocalDecl {
 // ============================================================
 struct MirFunction {
     std::string name;
-    std::string module_path;  // モジュールパス（例："std::io", ""は現在のモジュール）
+    std::string module_path;   // モジュールパス（例："std::io", ""は現在のモジュール）
     std::string source_file;   // 元ソースファイルパス（モジュール分割用）
     std::string package_name;  // パッケージ名 (FFI用)
     bool is_export = false;    // エクスポートされているか
     bool is_extern = false;    // extern "C" 関数か
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_async = false;     // async関数（JSバックエンド用）
-    bool is_always = false;  // always修飾子（SVバックエンド用: always_ff/always_comb）
+    bool is_always = false;    // always修飾子（SVバックエンド用: always_ff/always_comb）
     // SVバックエンド: always ブロックの種別
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
     std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）

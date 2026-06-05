@@ -10,7 +10,7 @@
 #[input] bool write_enable = 0;
 #[output] utiny read_data = 0;
 
-async func tick() {
+async void tick() {
     if (write_enable) {
         read_data = write_data;
     }

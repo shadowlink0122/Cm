@@ -700,7 +700,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 }
             }
 
-            fn_ss << indent() << "function automatic " << ret_type_str << " " << flat_func_name << "(";
+            fn_ss << indent() << "function automatic " << ret_type_str << " " << flat_func_name
+                  << "(";
             for (size_t i = 0; i < args.size(); ++i) {
                 if (i > 0)
                     fn_ss << ", ";
@@ -2115,7 +2116,23 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 if (emitted_var_names.count(var_name) == 0) {
                     // インスタンス化文を生成
                     std::string inst;
-                    inst += extern_st->name;
+                    std::string module_name = extern_st->name;
+                    // #[sv::module_name] アトリビュートを探索
+                    for (const auto& field : extern_st->fields) {
+                        for (const auto& attr : field.attributes) {
+                            if (attr == "sv::module_name") {
+                                if (!field.default_value_str.empty()) {
+                                    std::string val = field.default_value_str;
+                                    if (val.front() == '"' && val.back() == '"') {
+                                        val = val.substr(1, val.length() - 2);
+                                    }
+                                    module_name = val;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    inst += module_name;
 
                     // パラメータ部（#[sv::param]属性）
                     std::vector<std::string> params;
@@ -2132,7 +2149,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                         }
 
                         if (is_sv_param) {
-                            // デフォルト値: フィールドの default_value_str → struct_field_inits → "0"
+                            // デフォルト値: フィールドの default_value_str → struct_field_inits →
+                            // "0"
                             std::string val = "0";
                             if (!field.default_value_str.empty()) {
                                 val = field.default_value_str;
@@ -2230,8 +2248,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 continue;
             }
             emitted_param_names.insert(param_name);
-            std::string localparam_decl =
-                "localparam " + mapType(gv->type) + " " + param_name;
+            std::string localparam_decl = "localparam " + mapType(gv->type) + " " + param_name;
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             }
@@ -2244,8 +2261,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         if (gv->is_assign) {
             if (emitted_var_names.count(var_name) == 0) {
                 // wire宣言を追加（連続代入の左辺はnet型が必要）
-                default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " + var_name +
-                                                        ";");
+                default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " +
+                                                        var_name + ";");
                 // assign文を追加
                 std::string assign_stmt = "assign " + var_name;
                 if (gv->init_value) {
@@ -2324,6 +2341,32 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             has_async = true;
             break;
         }
+    }
+    // 明示的なエッジトリガー入力ポート（posedge/negedge）がある場合は自動追加しない
+    bool has_edge_trigger = false;
+    for (const auto& gv : program.global_vars) {
+        if (!gv)
+            continue;
+        bool is_input = false;
+        for (const auto& attr : gv->attributes) {
+            if (attr == "input") {
+                is_input = true;
+                break;
+            }
+        }
+        bool is_edge = false;
+        if (gv->type && (gv->type->kind == ast::TypeKind::Posedge ||
+                         gv->type->kind == ast::TypeKind::Negedge)) {
+            is_edge = true;
+        }
+        if (is_input && is_edge) {
+            has_edge_trigger = true;
+            break;
+        }
+    }
+    if (has_edge_trigger) {
+        has_clk = true;
+        has_rst = true;
     }
     if (has_async && !has_clk) {
         default_mod.ports.insert(default_mod.ports.begin(),
@@ -2515,7 +2558,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     struct TestCase {
         std::vector<std::pair<std::string, std::string>> inputs;    // {name, value}
         std::vector<std::pair<std::string, std::string>> expected;  // {name, value}
-        int cycles = 0;  // async用: クロックサイクル数
+        int cycles = 0;                                             // async用: クロックサイクル数
     };
     std::vector<TestCase> test_cases;
 
