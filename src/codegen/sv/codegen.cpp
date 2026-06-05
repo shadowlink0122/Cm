@@ -589,14 +589,25 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
             // func、またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
             bool use_nonblocking =
                 func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
+            if (use_nonblocking && assign.place.local < func.locals.size()) {
+                if (!func.locals[assign.place.local].is_global) {
+                    use_nonblocking = false;
+                }
+            }
             if (!use_nonblocking) {
-                for (const auto& local : func.locals) {
-                    if (local.is_global)
-                        continue;
-                    if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
-                                       local.type->kind == hir::TypeKind::Negedge)) {
-                        use_nonblocking = true;
-                        break;
+                bool is_dest_global = true;
+                if (assign.place.local < func.locals.size()) {
+                    is_dest_global = func.locals[assign.place.local].is_global;
+                }
+                if (is_dest_global) {
+                    for (const auto& local : func.locals) {
+                        if (local.is_global)
+                            continue;
+                        if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                           local.type->kind == hir::TypeKind::Negedge)) {
+                            use_nonblocking = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -1867,14 +1878,25 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
+                if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
+                    if (!func.locals[cd.destination->local].is_global) {
+                        use_nb = false;
+                    }
+                }
                 if (!use_nb) {
-                    for (const auto& local : func.locals) {
-                        if (local.is_global)
-                            continue;
-                        if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
-                                           local.type->kind == hir::TypeKind::Negedge)) {
-                            use_nb = true;
-                            break;
+                    bool is_dest_global = true;
+                    if (cd.destination && cd.destination->local < func.locals.size()) {
+                        is_dest_global = func.locals[cd.destination->local].is_global;
+                    }
+                    if (is_dest_global) {
+                        for (const auto& local : func.locals) {
+                            if (local.is_global)
+                                continue;
+                            if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                               local.type->kind == hir::TypeKind::Negedge)) {
+                                use_nb = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -1940,14 +1962,25 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 // 一般的な関数呼び出し: result = func_name(arg1, arg2, ...);
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
+                if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
+                    if (!func.locals[cd.destination->local].is_global) {
+                        use_nb = false;
+                    }
+                }
                 if (!use_nb) {
-                    for (const auto& local : func.locals) {
-                        if (local.is_global)
-                            continue;
-                        if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
-                                           local.type->kind == hir::TypeKind::Negedge)) {
-                            use_nb = true;
-                            break;
+                    bool is_dest_global = true;
+                    if (cd.destination && cd.destination->local < func.locals.size()) {
+                        is_dest_global = func.locals[cd.destination->local].is_global;
+                    }
+                    if (is_dest_global) {
+                        for (const auto& local : func.locals) {
+                            if (local.is_global)
+                                continue;
+                            if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                               local.type->kind == hir::TypeKind::Negedge)) {
+                                use_nb = true;
+                                break;
+                            }
                         }
                     }
                 }
