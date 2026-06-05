@@ -76,6 +76,8 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
                 return mapType(type->element_type);
             }
             return "logic [31:0]";
+        case hir::TypeKind::Struct:
+            return type->name;
         default:
             return "logic [31:0]";  // デフォルトは32bit
     }
