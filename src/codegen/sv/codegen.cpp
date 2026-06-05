@@ -1658,6 +1658,17 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
             if (bb.terminator->kind == mir::MirTerminator::Goto) {
                 auto& gd = std::get<mir::MirTerminator::GotoData>(bb.terminator->data);
                 work.push_back(gd.target);
+            } else if (bb.terminator->kind == mir::MirTerminator::SwitchInt) {
+                // thenブランチ側と同様にSwitchIntの全分岐先を追跡
+                auto& sd = std::get<mir::MirTerminator::SwitchIntData>(bb.terminator->data);
+                for (const auto& [val, target] : sd.targets) {
+                    work.push_back(target);
+                }
+                work.push_back(sd.otherwise);
+            } else if (bb.terminator->kind == mir::MirTerminator::Call) {
+                // Call ターミネータの後続ブロックも追跡
+                auto& cd = std::get<mir::MirTerminator::CallData>(bb.terminator->data);
+                work.push_back(cd.success);
             }
         }
     }
