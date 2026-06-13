@@ -1971,9 +1971,26 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 ss << indent() << "case (" << cond << ")\n";
                 increaseIndent();
 
-                // 各ターゲットのケース
+                // 各ターゲットのケース（同じ遷移先ブロックごとに値をカンマ区切りでグループ化）
+                std::map<size_t, std::vector<int64_t>> target_groups;
+                std::vector<size_t> target_order;
                 for (const auto& [val, target] : sd.targets) {
-                    ss << indent() << val << ": begin\n";
+                    if (target_groups.find(target) == target_groups.end()) {
+                        target_order.push_back(target);
+                    }
+                    target_groups[target].push_back(val);
+                }
+
+                for (size_t target : target_order) {
+                    const auto& vals = target_groups[target];
+                    ss << indent();
+                    for (size_t i = 0; i < vals.size(); ++i) {
+                        ss << vals[i];
+                        if (i + 1 < vals.size()) {
+                            ss << ", ";
+                        }
+                    }
+                    ss << ": begin\n";
                     increaseIndent();
                     std::set<size_t> case_visited = visited;
                     emitBlockRecursive(func, target, case_visited, ss, merge);

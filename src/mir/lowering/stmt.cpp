@@ -1345,9 +1345,19 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
         } else if (pat.kind == hir::HirSwitchPattern::Or) {
             // Orパターン: 各サブパターンの値を同じブロックに分岐
             for (const auto& sub_pat : pat.or_patterns) {
-                if (sub_pat && sub_pat->kind == hir::HirSwitchPattern::SingleValue) {
-                    int64_t sub_value = extract_case_value(sub_pat->value);
-                    cases.push_back({sub_value, case_block});
+                if (sub_pat) {
+                    if (sub_pat->kind == hir::HirSwitchPattern::SingleValue) {
+                        int64_t sub_value = extract_case_value(sub_pat->value);
+                        cases.push_back({sub_value, case_block});
+                    } else if (sub_pat->kind == hir::HirSwitchPattern::Range) {
+                        int64_t range_start = extract_case_value(sub_pat->range_start);
+                        int64_t range_end = extract_case_value(sub_pat->range_end);
+                        if (range_end - range_start <= 256) {
+                            for (int64_t v = range_start; v <= range_end; ++v) {
+                                cases.push_back({v, case_block});
+                            }
+                        }
+                    }
                 }
             }
 
