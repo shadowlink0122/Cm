@@ -1820,6 +1820,9 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
                     work.push_back(target);
                 }
                 work.push_back(sd.otherwise);
+            } else if (bb.terminator->kind == mir::MirTerminator::Call) {
+                auto& cd = std::get<mir::MirTerminator::CallData>(bb.terminator->data);
+                work.push_back(cd.success);
             }
         }
     }
@@ -2442,6 +2445,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             std::string localparam_decl = "localparam " + mapType(gv->type) + " " + param_name;
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
+            } else if (gv->init_expr) {
+                localparam_decl += " = " + emitHirExpr(*gv->init_expr);
             }
             localparam_decl += ";";
             default_mod.parameters.push_back(localparam_decl);
@@ -3096,6 +3101,8 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
                 return std::to_string(std::get<double>(value));
             } else if (std::holds_alternative<bool>(value)) {
                 return std::get<bool>(value) ? "1'b1" : "1'b0";
+            } else if (std::holds_alternative<char>(value)) {
+                return std::to_string(static_cast<int64_t>(std::get<char>(value)));
             }
         }
     }
@@ -3214,6 +3221,13 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
             std::string then_e = emitHirExpr(*(*ternary)->then_expr);
             std::string else_e = emitHirExpr(*(*ternary)->else_expr);
             return "(" + cond + " ? " + then_e + " : " + else_e + ")";
+        }
+    }
+
+    // キャスト
+    if (auto* cast = std::get_if<std::unique_ptr<hir::HirCast>>(&expr.kind)) {
+        if (*cast && (*cast)->operand) {
+            return emitHirExpr(*(*cast)->operand);
         }
     }
 

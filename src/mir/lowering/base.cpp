@@ -191,8 +191,8 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
         auto const_val = try_global_const_eval(*gv.init);
         if (const_val) {
             mir_gv->init_value = std::make_unique<MirConstant>(*const_val);
-        } else if (gv.is_assign) {
-            // assign文の非定数式: HIR式を保持してSVコードジェネレータで処理
+        } else if (gv.is_assign || gv.is_const) {
+            // assign文またはconst定数の非定数式: HIR式を保持してSVコードジェネレータで処理
             mir_gv->init_expr = gv.init.get();
         }
     }
