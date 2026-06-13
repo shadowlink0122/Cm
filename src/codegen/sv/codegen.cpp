@@ -881,6 +881,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
                 // Pass 1: テンポラリ変数の値を収集
                 std::map<std::string, std::string> fn_temp_values;
+                std::map<std::string, int> fn_temp_counts;
                 for (const auto& l : lines) {
                     std::string tr = l;
                     size_t start = tr.find_first_not_of(' ');
@@ -895,7 +896,15 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                             if (!value.empty() && value.back() == ';')
                                 value.pop_back();
                             fn_temp_values[var_name] = value;
+                            fn_temp_counts[var_name]++;
                         }
+                    }
+                }
+                for (auto it = fn_temp_values.begin(); it != fn_temp_values.end();) {
+                    if (fn_temp_counts[it->first] > 1) {
+                        it = fn_temp_values.erase(it);
+                    } else {
+                        ++it;
                     }
                 }
 
@@ -958,7 +967,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                     // テンポラリ代入行はスキップ
                     if (content.size() > 2 && content[0] == '_' && content[1] == 't' &&
                         std::isdigit(content[2]) && content.find(" = ") != std::string::npos) {
-                        continue;
+                        std::string var_name = content.substr(0, content.find(" = "));
+                        if (fn_temp_values.count(var_name)) {
+                            continue;
+                        }
                     }
                     // 代入文のインライン展開
                     std::string line_indent = l.substr(0, start);
@@ -1248,6 +1260,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     }
 
     // Pass 1: 一時変数の値を収集
+    std::map<std::string, int> temp_counts;
     for (const auto& l : lines) {
         // インデントを除去して解析
         std::string trimmed = l;
@@ -1256,7 +1269,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             continue;
         trimmed = trimmed.substr(start);
 
-        // \"_tXXXX = expr;\" または \"_tXXXX <= expr;\" パターンを検出
+        // "_tXXXX = expr;" または "_tXXXX <= expr;" パターンを検出
         if (trimmed.size() > 2 && trimmed[0] == '_' && trimmed[1] == 't' &&
             std::isdigit(trimmed[2])) {
             // ブロッキング代入 (=) を検出
@@ -1270,6 +1283,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                     value.pop_back();
                 }
                 temp_values[var_name] = value;
+                temp_counts[var_name]++;
             } else if (nbeq_pos != std::string::npos) {
                 std::string var_name = trimmed.substr(0, nbeq_pos);
                 std::string value = trimmed.substr(nbeq_pos + 4);
@@ -1277,7 +1291,15 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                     value.pop_back();
                 }
                 temp_values[var_name] = value;
+                temp_counts[var_name]++;
             }
+        }
+    }
+    for (auto it = temp_values.begin(); it != temp_values.end();) {
+        if (temp_counts[it->first] > 1) {
+            it = temp_values.erase(it);
+        } else {
+            ++it;
         }
     }
 
@@ -1347,7 +1369,17 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             std::isdigit(content[2]) &&
             (content.find(" = ") != std::string::npos ||
              content.find(" <= ") != std::string::npos)) {
-            continue;
+            std::string var_name;
+            auto eq_pos = content.find(" = ");
+            auto nbeq_pos = content.find(" <= ");
+            if (eq_pos != std::string::npos) {
+                var_name = content.substr(0, eq_pos);
+            } else {
+                var_name = content.substr(0, nbeq_pos);
+            }
+            if (temp_values.count(var_name)) {
+                continue;
+            }
         }
 
         // 非一時変数の代入文をインライン展開
