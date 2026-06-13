@@ -44,7 +44,7 @@ struct SVModule {
     std::vector<std::string> wire_declarations;    // 内部ワイヤ宣言
     std::vector<std::string> reg_declarations;     // 内部レジスタ宣言
     std::vector<std::string> instance_blocks;      // extern struct インスタンス化文
-    std::vector<std::string> initial_blocks;       // initial ブロック（シミュレーション用）
+    std::vector<std::string> initial_blocks;  // initial ブロック（シミュレーション用）
 };
 
 // SystemVerilog コードジェネレータ

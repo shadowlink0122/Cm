@@ -188,9 +188,9 @@ class Parser {
     size_t pos_;
     std::vector<Diagnostic> diagnostics_;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
-    int pending_gt_count_ = 0;      // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
+    int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
     bool in_operator_return_type_ =
-        false;                     // 演算子戻り値型パース中フラグ（*&の型サフィックス抑制）
+        false;  // 演算子戻り値型パース中フラグ（*&の型サフィックス抑制）
     int parse_depth_ = 0;          // 再帰深度カウンター
     int max_parse_depth_ = 0;      // 最大再帰深度記録
     bool is_sv_platform_ = false;  // SVプラットフォームフラグ

@@ -2608,8 +2608,8 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::vector<mir::LocalId> outputLocalIds;  // 出力ローカルIDも記録
                 std::string constraints;
                 int outputCount = 0;  // =r の数
-                int inputCount = 0;   // 入力オペランドの数（将来の拡張/デバッグ用）
-                (void)inputCount;     // 現時点では読み取り不要だが、インクリメントは維持
+                int inputCount = 0;  // 入力オペランドの数（将来の拡張/デバッグ用）
+                (void)inputCount;  // 現時点では読み取り不要だが、インクリメントは維持
 
                 // AArch64ターゲット判定とオペランド型記録
                 // LLVMのAArch64バックエンドがi32に対してxレジスタを割り当てる場合があるため、
@@ -2627,7 +2627,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 std::vector<std::string> memOutputConstraints;
 
                 // m入力制約用: ポインタを渡し、elementtype属性が必要
-                std::vector<size_t> memInputIndices;     // pureInputValues内でのm制約インデックス
+                std::vector<size_t> memInputIndices;  // pureInputValues内でのm制約インデックス
                 std::vector<llvm::Type*> memInputTypes;  // m入力の要素型（elementtype属性用）
                 // +m tied入力用: 同様にelementtype属性が必要
                 std::vector<size_t> memTiedInputIndices;  // tiedInputValues内での+m制約インデックス
@@ -2838,7 +2838,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 // オペランド番号の再マッピング表（元の番号→LLVM番号）
                 std::map<size_t, size_t> operandRemap;
                 size_t llvmOutputIdx = 0;  // 出力オペランドのLLVMインデックス
-                size_t llvmInputIdx = 0;   // 入力オペランドを数える（出力の後に来る）
+                size_t llvmInputIdx = 0;  // 入力オペランドを数える（出力の後に来る）
 
                 // まず出力オペランドを処理（=r のみ、=m は除外）
                 for (size_t i = 0; i < asmData.operands.size(); ++i) {

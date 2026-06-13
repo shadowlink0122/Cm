@@ -21,7 +21,7 @@ using LiteralValue = std::variant<std::monostate,  // null
 
 struct LiteralExpr {
     LiteralValue value;
-    bool is_unsigned_literal = false;        // hex/binary/octalリテラルで32bit超の場合true
+    bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
     std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
 
     LiteralExpr() = default;

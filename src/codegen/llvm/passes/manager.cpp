@@ -334,7 +334,7 @@ void OptimizationManager::measureOptimizationEffect(const llvm::Function& func) 
 
     // ベクトル化とループ展開は大きな効果
     unsigned majorOptimizations = stats.loopsVectorized * 200 +  // ベクトル化は2倍高速化と仮定
-                                  stats.loopsUnrolled * 30 +     // 部分展開は30%高速化
+                                  stats.loopsUnrolled * 30 +  // 部分展開は30%高速化
                                   stats.loopsCompletelyUnrolled * 50;  // 完全展開は50%高速化
 
     // 全体的な推定高速化率

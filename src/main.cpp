@@ -100,6 +100,7 @@ struct Options {
     // エラー処理
     bool has_error = false;     // パースエラーフラグ
     std::string error_message;  // エラーメッセージ
+    bool force_check = false;   // コンパイル時に厳格な型チェックを強制実行
 };
 
 // ヘルプメッセージを表示
@@ -123,6 +124,7 @@ void print_help(const char* program_name) {
     std::cout << "  --debug, -d           デバッグ出力を有効化\n";
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
     std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
+    std::cout << "  --force-check, --strict コンパイル時に厳格な型チェック/警告を強制実行\n";
 
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --target=<target>     コンパイルターゲット\n";
@@ -240,6 +242,8 @@ Options parse_options(int argc, char* argv[]) {
                 opts.error_message = "-o オプションには出力ファイル名が必要です";
                 return opts;
             }
+        } else if (arg == "--force-check" || arg == "--strict") {
+            opts.force_check = true;
         } else if (arg.substr(0, 2) == "-O") {
             if (arg.length() > 2) {
                 opts.optimization_level = arg[2] - '0';
@@ -1217,8 +1221,8 @@ int main(int argc, char* argv[]) {
                                   .count();
         auto phase_typecheck_start = std::chrono::steady_clock::now();
         TypeChecker checker;
-        // Check/Lintコマンドの場合のみLint警告を有効化
-        if (opts.command == Command::Check) {
+        // Check/Lintコマンド、または--force-check/--strict指定時にLint警告を有効化
+        if (opts.command == Command::Check || opts.force_check) {
             checker.set_enable_lint_warnings(true);
         }
         bool type_check_ok = checker.check(program);

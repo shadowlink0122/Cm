@@ -23,8 +23,8 @@ class HirLowering {
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
-    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;   // v0.13.0: Tagged Union
-    std::unordered_map<std::string, int64_t> macro_values_;             // v0.13.0: int型定数マクロ
+    std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;  // v0.13.0: Tagged Union
+    std::unordered_map<std::string, int64_t> macro_values_;  // v0.13.0: int型定数マクロ
     std::unordered_map<std::string, std::string> macro_string_values_;  // v0.13.0: string型マクロ
     std::unordered_map<std::string, bool> macro_bool_values_;           // v0.13.0: bool型マクロ
     std::unordered_set<std::string> types_with_default_ctor_;

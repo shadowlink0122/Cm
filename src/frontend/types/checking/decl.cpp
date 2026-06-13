@@ -386,6 +386,26 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
         check_function(*func);
     } else if (auto* st = decl.as<ast::StructDecl>()) {
         current_span_ = decl.span;
+
+        // ジェネリック型パラメータをコンテキストに登録
+        generic_context_.clear();
+        if (!st->generic_params.empty()) {
+            for (const auto& param : st->generic_params) {
+                generic_context_.add_type_param(param);
+            }
+        }
+
+        // 構造体の全フィールドの型が有効かチェック
+        for (const auto& field : st->fields) {
+            if (field.type && !is_valid_type(field.type)) {
+                error(decl.span, "Undefined type: '" + ast::type_to_string(*field.type) +
+                                     "' for field '" + field.name + "' in struct '" + st->name +
+                                     "'");
+            }
+        }
+
+        generic_context_.clear();
+
         bool is_css_struct =
             std::find(st->auto_impls.begin(), st->auto_impls.end(), "Css") != st->auto_impls.end();
         if (is_css_struct) {
@@ -408,6 +428,60 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
                 }
             }
         }
+    } else if (auto* en = decl.as<ast::EnumDecl>()) {
+        current_span_ = decl.span;
+
+        // ジェネリック型パラメータをコンテキストに登録
+        generic_context_.clear();
+        if (!en->generic_params.empty()) {
+            for (const auto& param : en->generic_params) {
+                generic_context_.add_type_param(param);
+            }
+        }
+
+        for (const auto& member : en->members) {
+            if (member.has_data()) {
+                for (const auto& [field_name, field_type] : member.fields) {
+                    if (field_type && !is_valid_type(field_type)) {
+                        error(decl.span, "Undefined type: '" + ast::type_to_string(*field_type) +
+                                             "' for field '" + field_name + "' in enum variant '" +
+                                             en->name + "::" + member.name + "'");
+                    }
+                }
+            }
+        }
+
+        generic_context_.clear();
+    } else if (auto* td = decl.as<ast::TypedefDecl>()) {
+        current_span_ = decl.span;
+        if (td->type && !is_valid_type(td->type)) {
+            error(decl.span, "Undefined type: '" + ast::type_to_string(*td->type) +
+                                 "' in typedef '" + td->name + "'");
+        }
+    } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
+        current_span_ = decl.span;
+        generic_context_.clear();
+        if (!iface->generic_params.empty()) {
+            for (const auto& param : iface->generic_params) {
+                generic_context_.add_type_param(param);
+            }
+        }
+        for (const auto& method : iface->methods) {
+            if (method.return_type && !is_valid_type(method.return_type)) {
+                error(decl.span,
+                      "Undefined return type: '" + ast::type_to_string(*method.return_type) +
+                          "' in interface method '" + iface->name + "::" + method.name + "'");
+            }
+            for (const auto& param : method.params) {
+                if (param.type && !is_valid_type(param.type)) {
+                    error(decl.span, "Undefined parameter type: '" +
+                                         ast::type_to_string(*param.type) + "' for parameter '" +
+                                         param.name + "' in interface method '" + iface->name +
+                                         "::" + method.name + "'");
+                }
+            }
+        }
+        generic_context_.clear();
     } else if (auto* import = decl.as<ast::ImportDecl>()) {
         check_import(*import);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
@@ -547,6 +621,13 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     if (!impl.target_type)
         return;
 
+    generic_context_.clear();
+    if (!impl.generic_params.empty()) {
+        for (const auto& param : impl.generic_params) {
+            generic_context_.add_type_param(param);
+        }
+    }
+
     std::string type_name = ast::type_to_string(*impl.target_type);
 
     if (!impl.interface_name.empty()) {
@@ -666,6 +747,7 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     }
     current_return_type_ = nullptr;
     current_impl_target_type_.clear();
+    generic_context_.clear();
 }
 
 void TypeChecker::register_enum(ast::EnumDecl& en) {

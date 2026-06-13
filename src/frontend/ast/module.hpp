@@ -16,8 +16,8 @@ struct Type;  // FFI関数宣言用
 // ============================================================
 // アトリビュート
 // ============================================================
-struct AttributeNode {              // Attributeという名前が衝突する可能性があるため変更
-    std::string name;               // アトリビュート名
+struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
+    std::string name;   // アトリビュート名
     std::vector<std::string> args;  // 引数
 
     AttributeNode(std::string n) : name(std::move(n)) {}
@@ -76,8 +76,8 @@ struct ImportDecl {
 // Export項目
 // ============================================================
 struct ExportItem {
-    std::string name;                          // エクスポート名
-    std::optional<ModulePath> from_module;     // 再エクスポート元
+    std::string name;                       // エクスポート名
+    std::optional<ModulePath> from_module;  // 再エクスポート元
     std::optional<ModulePath> namespace_path;  // 階層的再エクスポート用パス (e.g., io::file)
 
     ExportItem(std::string n, std::optional<ModulePath> from = std::nullopt)
@@ -208,10 +208,10 @@ struct UseDecl {
     };
 
     Kind kind = ModuleUse;
-    ModulePath path;                   // ライブラリ/モジュールパス
-    std::string package_name;          // 文字列ベースのパッケージ名 (e.g., "axios", "@scope/pkg")
-    std::optional<std::string> alias;  // エイリアス（as句）
-    bool is_pub = false;               // pub use
+    ModulePath path;           // ライブラリ/モジュールパス
+    std::string package_name;  // 文字列ベースのパッケージ名 (e.g., "axios", "@scope/pkg")
+    std::optional<std::string> alias;        // エイリアス（as句）
+    bool is_pub = false;                     // pub use
     std::vector<FFIFunctionDecl> ffi_funcs;  // FFI関数宣言（FFIUseの場合）
 
     // アトリビュート

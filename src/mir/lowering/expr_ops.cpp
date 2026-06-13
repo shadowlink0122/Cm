@@ -212,7 +212,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         // ブロックを作成
         BlockId eval_rhs = ctx.new_block();  // 右辺を評価するブロック
         BlockId skip_rhs = ctx.new_block();  // 右辺をスキップするブロック（結果はfalse）
-        BlockId merge = ctx.new_block();     // 結果を統合するブロック
+        BlockId merge = ctx.new_block();  // 結果を統合するブロック
 
         // 左辺がtrueなら右辺を評価、falseならスキップ
         ctx.set_terminator(

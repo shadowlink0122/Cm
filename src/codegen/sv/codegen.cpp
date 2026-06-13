@@ -18,6 +18,100 @@ std::string replace_all(std::string str, const std::string& from, const std::str
     }
     return str;
 }
+
+// 式文字列が全体として既に括弧で囲まれているかチェックする
+bool is_fully_parenthesized(const std::string& s) {
+    if (s.size() < 2 || s.front() != '(' || s.back() != ')') {
+        return false;
+    }
+    int depth = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '(') {
+            depth++;
+        } else if (s[i] == ')') {
+            depth--;
+            // 最後の文字に達する前に depth が 0 になったら、
+            // 全体が一対の括弧で囲まれているわけではない (例: (a) + (b))
+            if (depth == 0 && i < s.size() - 1) {
+                return false;
+            }
+        }
+    }
+    return depth == 0;
+}
+
+// 式文字列から最も優先度の低い最外の二項演算子を特定する
+std::string get_outermost_operator(const std::string& s) {
+    std::vector<std::string> ops_by_precedence = {"||", "&&", "|",  "^", "&", "==",
+                                                  "!=", "<=", ">=", "<", ">", "<<",
+                                                  ">>", "+",  "-",  "*", "/", "%"};
+
+    for (const auto& op : ops_by_precedence) {
+        int d = 0;
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == '(') {
+                d++;
+            } else if (s[i] == ')') {
+                d--;
+            } else if (d == 0) {
+                if (s.size() - i >= op.size() && s.substr(i, op.size()) == op) {
+                    return op;
+                }
+            }
+        }
+    }
+    return "";
+}
+
+// 変数の置換位置の直前または直後にある演算子を検索する
+std::string get_parent_operator(const std::string& expr, size_t pos, size_t var_len) {
+    // 直後を探索
+    size_t right = pos + var_len;
+    while (right < expr.size() && expr[right] == ' ') {
+        right++;
+    }
+    if (right < expr.size()) {
+        std::string op;
+        while (right < expr.size() && !std::isalnum(expr[right]) && expr[right] != '_' &&
+               expr[right] != '(' && expr[right] != ')') {
+            op += expr[right];
+            right++;
+        }
+        size_t first = op.find_first_not_of(' ');
+        if (first != std::string::npos) {
+            size_t last = op.find_last_not_of(' ');
+            return op.substr(first, (last - first + 1));
+        }
+    }
+
+    // 直前を探索
+    if (pos > 0) {
+        size_t left = pos - 1;
+        while (left > 0 && expr[left] == ' ') {
+            left--;
+        }
+        std::string op;
+        while (left > 0 && !std::isalnum(expr[left]) && expr[left] != '_' && expr[left] != '(' &&
+               expr[left] != ')') {
+            op = expr[left] + op;
+            if (left == 0)
+                break;
+            left--;
+        }
+        size_t first = op.find_first_not_of(' ');
+        if (first != std::string::npos) {
+            size_t last = op.find_last_not_of(' ');
+            return op.substr(first, (last - first + 1));
+        }
+    }
+    return "";
+}
+
+// 結合法則が成り立つ演算子であるか判定
+bool is_associative_op(const std::string& op) {
+    return op == "+" || op == "*" || op == "&" || op == "|" || op == "^" || op == "&&" ||
+           op == "||";
+}
 }  // namespace
 
 SVCodeGen::SVCodeGen(const SVCodeGenOptions& options) : options_(options) {}
@@ -555,9 +649,9 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     op = " /* unknown op */ ";
                     break;
             }
-            // 二項演算を括弧で囲む (SVの演算子優先順位による意図しない結合を防止)
-            // 例: MIRでは (a & b) == c だが、括弧なしだと a & (b == c) になる
-            return "(" + lhs + op + rhs + ")";
+            // 二項演算は、インライン展開時に優先順位と結合法則を考慮して必要に応じて括弧を付与するため、
+            // ここでは括弧で囲まずにそのまま出力する
+            return lhs + op + rhs;
         }
 
         case mir::MirRvalue::UnaryOp: {
@@ -823,8 +917,19 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                                     if (val.find(' ') != std::string::npos) {
                                         bool is_full_rhs =
                                             (p == 0 && p + var.size() == result.size());
-                                        if (!is_full_rhs)
-                                            replacement = "(" + val + ")";
+                                        if (!is_full_rhs && !is_fully_parenthesized(val)) {
+                                            std::string parent_op =
+                                                get_parent_operator(result, p, var.size());
+                                            std::string child_op = get_outermost_operator(val);
+                                            bool skip_paren = false;
+                                            if (!parent_op.empty() && parent_op == child_op &&
+                                                is_associative_op(parent_op)) {
+                                                skip_paren = true;
+                                            }
+                                            if (!skip_paren) {
+                                                replacement = "(" + val + ")";
+                                            }
+                                        }
                                     }
                                     result.replace(p, var.size(), replacement);
                                     changed = true;
@@ -1199,8 +1304,18 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                             // 単純代入の右辺値でなければ括弧付き
                             // ただし代入文の右辺全体なら括弧不要
                             bool is_full_rhs = (pos == 0 && pos + var.size() == result.size());
-                            if (!is_full_rhs) {
-                                replacement = "(" + val + ")";
+                            if (!is_full_rhs && !is_fully_parenthesized(val)) {
+                                std::string parent_op =
+                                    get_parent_operator(result, pos, var.size());
+                                std::string child_op = get_outermost_operator(val);
+                                bool skip_paren = false;
+                                if (!parent_op.empty() && parent_op == child_op &&
+                                    is_associative_op(parent_op)) {
+                                    skip_paren = true;
+                                }
+                                if (!skip_paren) {
+                                    replacement = "(" + val + ")";
+                                }
                             }
                         }
                         result.replace(pos, var.size(), replacement);
@@ -2217,12 +2332,12 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                     if (!params.empty()) {
                         inst += " #(\n";
                         for (size_t i = 0; i < params.size(); ++i) {
-                            inst += "        " + params[i];
+                            inst += "    " + params[i];
                             if (i + 1 < params.size())
                                 inst += ",";
                             inst += "\n";
                         }
-                        inst += "    )";
+                        inst += ")";
                     }
 
                     inst += " " + var_name;
@@ -2230,12 +2345,12 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                     if (!ports.empty()) {
                         inst += " (\n";
                         for (size_t i = 0; i < ports.size(); ++i) {
-                            inst += "        " + ports[i];
+                            inst += "    " + ports[i];
                             if (i + 1 < ports.size())
                                 inst += ",";
                             inst += "\n";
                         }
-                        inst += "    )";
+                        inst += ")";
                     }
 
                     inst += ";";
@@ -2585,7 +2700,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     struct TestCase {
         std::vector<std::pair<std::string, std::string>> inputs;    // {name, value}
         std::vector<std::pair<std::string, std::string>> expected;  // {name, value}
-        int cycles = 0;                                             // async用: クロックサイクル数
+        int cycles = 0;  // async用: クロックサイクル数
     };
     std::vector<TestCase> test_cases;
 
