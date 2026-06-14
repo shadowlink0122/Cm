@@ -237,7 +237,8 @@ std::string SVCodeGen::getArraySuffix(const hir::TypePtr& type) const {
         if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
             return "";
         }
-        return " [0:" + std::to_string(*type->array_size - 1) + "]";
+        return " [0:" + std::to_string(*type->array_size - 1) + "]" +
+               getArraySuffix(type->element_type);
     }
     return "";
 }
@@ -507,9 +508,17 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
 
                 if (current_type && current_type->kind == hir::TypeKind::String) {
                     int L = 0;
-                    auto it = global_string_lengths_.find(name);
+                    std::string base_name = name;
+                    auto bracket_pos = base_name.find('[');
+                    if (bracket_pos != std::string::npos) {
+                        base_name = base_name.substr(0, bracket_pos);
+                    }
+                    auto it = global_string_lengths_.find(base_name);
                     if (it != global_string_lengths_.end()) {
                         L = it->second;
+                    }
+                    if (L == 0) {
+                        L = getBitWidth(current_type) / 8;
                     }
                     if (L > 0) {
                         name =
@@ -520,6 +529,18 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                 } else {
                     name += "[" + idx_name + "]";
                 }
+            }
+        }
+        // 次のイテレーションのために型を更新
+        if (current_type) {
+            if (proj.kind == mir::ProjectionKind::Index) {
+                if (current_type->kind == hir::TypeKind::Array) {
+                    current_type = current_type->element_type;
+                } else if (current_type->kind == hir::TypeKind::String) {
+                    current_type = nullptr;
+                }
+            } else if (proj.kind == mir::ProjectionKind::Field) {
+                current_type = nullptr;
             }
         }
     }
@@ -2285,17 +2306,30 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 }
 
                 if (!orig_name.empty()) {
-                    auto it = global_string_lengths_.find(orig_name);
+                    std::string base_name = orig_name;
+                    auto bracket_pos = base_name.find('[');
+                    if (bracket_pos != std::string::npos) {
+                        base_name = base_name.substr(0, bracket_pos);
+                    }
+                    auto it = global_string_lengths_.find(base_name);
                     if (it != global_string_lengths_.end()) {
                         L = it->second;
                     }
                 }
                 if (L == 0 && cd.args.size() > 0 && cd.args[0]) {
                     std::string res_name = cleanName(resolveArg(*cd.args[0]));
-                    auto it = global_string_lengths_.find(res_name);
+                    std::string base_name = res_name;
+                    auto bracket_pos = base_name.find('[');
+                    if (bracket_pos != std::string::npos) {
+                        base_name = base_name.substr(0, bracket_pos);
+                    }
+                    auto it = global_string_lengths_.find(base_name);
                     if (it != global_string_lengths_.end()) {
                         L = it->second;
                     }
+                }
+                if (L == 0 && cd.args.size() > 0 && cd.args[0] && cd.args[0]->type) {
+                    L = getBitWidth(cd.args[0]->type) / 8;
                 }
 
                 std::string str_val =
@@ -2619,7 +2653,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             } else {
                 type_str = mapType(gv->type);
             }
-            std::string localparam_decl = "localparam " + type_str + " " + param_name;
+            std::string localparam_decl =
+                "localparam " + type_str + " " + param_name + getArraySuffix(gv->type);
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             } else if (gv->init_expr) {
@@ -3303,7 +3338,22 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
                 return std::get<bool>(value) ? "1'b1" : "1'b0";
             } else if (std::holds_alternative<char>(value)) {
                 return std::to_string(static_cast<int64_t>(std::get<char>(value)));
+            } else if (std::holds_alternative<std::string>(value)) {
+                return "\"" + std::get<std::string>(value) + "\"";
             }
+        }
+    }
+    // 配列リテラル
+    if (auto* arr = std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&expr.kind)) {
+        if (*arr) {
+            std::string res = "'{";
+            for (size_t i = 0; i < (*arr)->elements.size(); ++i) {
+                if (i > 0)
+                    res += ", ";
+                res += emitHirExpr(*(*arr)->elements[i]);
+            }
+            res += "}";
+            return res;
         }
     }
 

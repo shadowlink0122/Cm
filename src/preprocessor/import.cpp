@@ -1125,8 +1125,16 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                 found_opening_brace = true;
             }
 
-            // 括弧の深さを追跡
-            if (found_opening_brace) {
+            if (!found_opening_brace && line.find(';') != std::string::npos) {
+                if (in_wanted_block) {
+                    for (const auto& block_line : block_lines) {
+                        result << block_line << "\n";
+                    }
+                }
+                in_wanted_block = false;
+                in_unwanted_block = false;
+                block_lines.clear();
+            } else if (found_opening_brace) {
                 for (char c : line) {
                     if (c == '{')
                         brace_depth++;
@@ -2632,14 +2640,7 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 found_opening_brace = true;
             }
 
-            for (char c : line) {
-                if (c == '{')
-                    brace_depth++;
-                else if (c == '}')
-                    brace_depth--;
-            }
-
-            if (found_opening_brace && brace_depth == 0) {
+            if (!found_opening_brace && line.find(';') != std::string::npos) {
                 // exportキーワードを除去して出力
                 for (auto& bl : block_lines) {
                     std::regex rm_export(R"(\bexport\s+)");
@@ -2647,7 +2648,23 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 }
                 in_export_block = false;
                 block_lines.clear();
-                found_opening_brace = false;
+            } else if (found_opening_brace) {
+                for (char c : line) {
+                    if (c == '{')
+                        brace_depth++;
+                    else if (c == '}')
+                        brace_depth--;
+                }
+                if (brace_depth == 0) {
+                    // exportキーワードを除去して出力
+                    for (auto& bl : block_lines) {
+                        std::regex rm_export(R"(\bexport\s+)");
+                        result << std::regex_replace(bl, rm_export, "") << "\n";
+                    }
+                    in_export_block = false;
+                    block_lines.clear();
+                    found_opening_brace = false;
+                }
             }
             continue;
         }
@@ -2776,20 +2793,27 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 found_opening_brace = true;
             }
 
-            for (char c : line) {
-                if (c == '{')
-                    brace_depth++;
-                else if (c == '}')
-                    brace_depth--;
-            }
-
-            if (found_opening_brace && brace_depth == 0) {
+            if (!found_opening_brace && line.find(';') != std::string::npos) {
                 for (const auto& bl : block_lines) {
                     non_export_result << bl << "\n";
                 }
                 in_non_export_block = false;
                 block_lines.clear();
-                found_opening_brace = false;
+            } else if (found_opening_brace) {
+                for (char c : line) {
+                    if (c == '{')
+                        brace_depth++;
+                    else if (c == '}')
+                        brace_depth--;
+                }
+                if (brace_depth == 0) {
+                    for (const auto& bl : block_lines) {
+                        non_export_result << bl << "\n";
+                    }
+                    in_non_export_block = false;
+                    block_lines.clear();
+                    found_opening_brace = false;
+                }
             }
             continue;
         }

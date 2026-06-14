@@ -1006,6 +1006,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // デバッグ出力
+        {
+            std::ofstream out(".tmp/preprocessed.cm");
+            if (out) {
+                out << preprocess_result.processed_source;
+            }
+        }
+
         // ========== インクリメンタルビルド: キャッシュチェック ==========
         std::string cache_fingerprint;             // 後でキャッシュ保存に使用
         std::vector<std::string> changed_modules;  // 変更されたモジュール一覧
