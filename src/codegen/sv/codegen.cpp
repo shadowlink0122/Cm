@@ -2633,9 +2633,34 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         // assign文 → wire宣言 + assign name = expr;
         if (gv->is_assign) {
             if (emitted_var_names.count(var_name) == 0) {
-                // wire宣言を追加（連続代入の左辺はnet型が必要）
-                default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " +
-                                                        var_name + ";");
+                // 属性からポート方向を判定
+                bool is_input = false;
+                bool is_output = false;
+                bool is_inout = false;
+                for (const auto& attr : gv->attributes) {
+                    if (attr == "input")
+                        is_input = true;
+                    if (attr == "output")
+                        is_output = true;
+                    if (attr == "inout")
+                        is_inout = true;
+                }
+
+                if (is_input) {
+                    default_mod.ports.push_back(
+                        {SVPort::Input, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                } else if (is_inout) {
+                    default_mod.ports.push_back(
+                        {SVPort::InOut, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                } else if (is_output) {
+                    default_mod.ports.push_back(
+                        {SVPort::Output, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                } else {
+                    // wire宣言を追加（連続代入の左辺はnet型が必要）
+                    default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " +
+                                                            var_name + ";");
+                }
+
                 // assign文を追加
                 std::string assign_stmt = "assign " + var_name;
                 if (gv->init_value) {
