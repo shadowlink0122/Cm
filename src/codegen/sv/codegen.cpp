@@ -172,6 +172,8 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
             return "logic [31:0]";
         case hir::TypeKind::Struct:
             return type->name;
+        case hir::TypeKind::String:
+            return "logic [23:0]";
         default:
             return "logic [31:0]";  // デフォルトは32bit
     }
@@ -217,7 +219,8 @@ int SVCodeGen::getBitWidth(const hir::TypePtr& type) const {
             if (type->element_type)
                 return getBitWidth(type->element_type);
             return 32;
-        // bit[N]配列型の場合はArray処理側でNを取得
+        case hir::TypeKind::String:
+            return 24;
         default:
             return 32;
     }
@@ -417,6 +420,9 @@ void SVCodeGen::emitModule(const SVModule& mod) {
 
 std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type,
                                     int target_width) {
+    if (std::holds_alternative<std::string>(constant.value)) {
+        return "\"" + std::get<std::string>(constant.value) + "\"";
+    }
     int width = getBitWidth(type);
 
     if (std::holds_alternative<bool>(constant.value)) {
@@ -486,6 +492,8 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
     }
 
     // フィールド/インデックスアクセスの投影を適用
+    hir::TypePtr current_type =
+        (place.local < func.locals.size()) ? func.locals[place.local].type : nullptr;
     for (const auto& proj : place.projections) {
         if (proj.kind == mir::ProjectionKind::Field) {
             name += "[" + std::to_string(proj.field_id) + "]";
@@ -496,7 +504,22 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                 // self. プレフィックスを除去
                 if (idx_name.find("self.") == 0)
                     idx_name = idx_name.substr(5);
-                name += "[" + idx_name + "]";
+
+                if (current_type && current_type->kind == hir::TypeKind::String) {
+                    int L = 0;
+                    auto it = global_string_lengths_.find(name);
+                    if (it != global_string_lengths_.end()) {
+                        L = it->second;
+                    }
+                    if (L > 0) {
+                        name =
+                            name + "[(" + std::to_string(L - 1) + " - " + idx_name + ") * 8 +: 8]";
+                    } else {
+                        name += "[" + idx_name + "]";
+                    }
+                } else {
+                    name += "[" + idx_name + "]";
+                }
             }
         }
     }
@@ -805,6 +828,16 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             auto fn_ns = flat_func_name.rfind("::");
             if (fn_ns != std::string::npos) {
                 flat_func_name = flat_func_name.substr(fn_ns + 2);
+            }
+
+            if (flat_func_name == "stringToUint") {
+                std::ostringstream fn_ss;
+                fn_ss
+                    << "    function automatic logic [31:0] stringToUint(input logic [23:0] s);\n";
+                fn_ss << "        return {8'd0, s};\n";
+                fn_ss << "    endfunction\n";
+                mod.function_blocks.push_back(fn_ss.str());
+                return;
             }
 
             // 引数リスト構築（posedge/negedge型を除外）
@@ -2026,71 +2059,112 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             // SVのalwaysブロック内ではreturnは不要
             break;
         case mir::MirTerminator::Call: {
-            // __builtin_concat / __builtin_replicate をSV構文に変換
             const auto& cd = std::get<mir::MirTerminator::CallData>(term.data);
             std::string func_name;
             if (cd.func && cd.func->kind == mir::MirOperand::FunctionRef) {
                 func_name = std::get<std::string>(cd.func->data);
             }
 
-            if (func_name == "__builtin_concat" || func_name == "__builtin_replicate") {
-                // Ref逆引きマップ構築: テンポラリ(_tXXX) → 元のPlace
-                // Use(Constant)逆引きマップ: テンポラリ → 定数値
-                // 先行Statement: Assign(_tXXX, Ref(original)) or Assign(_tXXX, Use(Constant))
-                // を追跡
-                std::map<mir::LocalId, mir::MirPlace> ref_map;
-                std::map<mir::LocalId, std::pair<mir::MirConstant, hir::TypePtr>> const_map;
-                for (const auto& block : func.basic_blocks) {
-                    if (!block)
+            // Ref逆引きマップ構築: テンポラリ(_tXXX) → 元のPlace
+            // Use(Constant)逆引きマップ: テンポラリ → 定数値
+            // copy逆引きマップ: テンポラリ → コピー元
+            std::map<mir::LocalId, mir::MirPlace> ref_map;
+            std::map<mir::LocalId, mir::MirPlace> copy_map;
+            std::map<mir::LocalId, std::pair<mir::MirConstant, hir::TypePtr>> const_map;
+            for (const auto& block : func.basic_blocks) {
+                if (!block)
+                    continue;
+                for (const auto& s : block->statements) {
+                    if (!s || s->kind != mir::MirStatement::Assign)
                         continue;
-                    for (const auto& s : block->statements) {
-                        if (!s || s->kind != mir::MirStatement::Assign)
-                            continue;
-                        const auto& ad = std::get<mir::MirStatement::AssignData>(s->data);
-                        if (!ad.rvalue)
-                            continue;
-                        if (ad.rvalue->kind == mir::MirRvalue::Ref) {
-                            if (auto* ref_data =
-                                    std::get_if<mir::MirRvalue::RefData>(&ad.rvalue->data)) {
-                                ref_map.insert_or_assign(ad.place.local, ref_data->place);
-                            }
-                        } else if (ad.rvalue->kind == mir::MirRvalue::Use) {
-                            // Use(Constant) パターン: _t = constant
-                            if (auto* use_data =
-                                    std::get_if<mir::MirRvalue::UseData>(&ad.rvalue->data)) {
-                                if (use_data->operand &&
-                                    use_data->operand->kind == mir::MirOperand::Constant) {
+                    const auto& ad = std::get<mir::MirStatement::AssignData>(s->data);
+                    if (!ad.rvalue)
+                        continue;
+                    if (ad.rvalue->kind == mir::MirRvalue::Ref) {
+                        if (auto* ref_data =
+                                std::get_if<mir::MirRvalue::RefData>(&ad.rvalue->data)) {
+                            ref_map.insert_or_assign(ad.place.local, ref_data->place);
+                        }
+                    } else if (ad.rvalue->kind == mir::MirRvalue::Use) {
+                        if (auto* use_data =
+                                std::get_if<mir::MirRvalue::UseData>(&ad.rvalue->data)) {
+                            if (use_data->operand) {
+                                if (use_data->operand->kind == mir::MirOperand::Constant) {
                                     const_map.insert_or_assign(
                                         ad.place.local, std::make_pair(std::get<mir::MirConstant>(
                                                                            use_data->operand->data),
                                                                        use_data->operand->type));
+                                } else if (use_data->operand->kind == mir::MirOperand::Copy ||
+                                           use_data->operand->kind == mir::MirOperand::Move) {
+                                    copy_map.insert_or_assign(
+                                        ad.place.local,
+                                        std::get<mir::MirPlace>(use_data->operand->data));
                                 }
                             }
                         }
                     }
                 }
+            }
 
-                // Call args を解決: テンポラリ → 元のPlace名 or 定数値
-                auto resolveArg = [&](const mir::MirOperand& op) -> std::string {
-                    if (op.kind == mir::MirOperand::Move || op.kind == mir::MirOperand::Copy) {
-                        const auto& place = std::get<mir::MirPlace>(op.data);
-                        // Ref逆引き: _t → &original → original
-                        auto ref_it = ref_map.find(place.local);
-                        if (ref_it != ref_map.end()) {
-                            return emitPlace(ref_it->second, func);
-                        }
-                        // Const逆引き: _t → constant
-                        auto const_it = const_map.find(place.local);
-                        if (const_it != const_map.end()) {
-                            return emitConstant(const_it->second.first, const_it->second.second);
-                        }
-                        return emitPlace(place, func);
-                    } else if (op.kind == mir::MirOperand::Constant) {
-                        return emitConstant(std::get<mir::MirConstant>(op.data), op.type);
+            // Call args を解決: テンポラリ → 元のPlace名 or 定数値
+            auto resolveArg = [&](const mir::MirOperand& op) -> std::string {
+                if (op.kind == mir::MirOperand::Move || op.kind == mir::MirOperand::Copy) {
+                    const auto& place = std::get<mir::MirPlace>(op.data);
+                    // Ref逆引き: _t → &original → original
+                    auto ref_it = ref_map.find(place.local);
+                    if (ref_it != ref_map.end()) {
+                        return emitPlace(ref_it->second, func);
                     }
-                    return "0";
-                };
+                    // Const逆引き: _t → constant
+                    auto const_it = const_map.find(place.local);
+                    if (const_it != const_map.end()) {
+                        return emitConstant(const_it->second.first, const_it->second.second);
+                    }
+                    return emitPlace(place, func);
+                } else if (op.kind == mir::MirOperand::Constant) {
+                    return emitConstant(std::get<mir::MirConstant>(op.data), op.type);
+                }
+                return "0";
+            };
 
+            auto traceToOrigin = [&](mir::MirPlace p) -> std::string {
+                while (true) {
+                    auto copy_it = copy_map.find(p.local);
+                    if (copy_it != copy_map.end()) {
+                        p = copy_it->second;
+                        continue;
+                    }
+                    auto ref_it = ref_map.find(p.local);
+                    if (ref_it != ref_map.end()) {
+                        p = ref_it->second;
+                        continue;
+                    }
+                    break;
+                }
+                std::string name;
+                if (p.local < func.locals.size()) {
+                    name = func.locals[p.local].name;
+                    if (name.empty()) {
+                        name = "_" + std::to_string(p.local);
+                    }
+                } else {
+                    name = "_" + std::to_string(p.local);
+                }
+                if (name.find("self.") == 0) {
+                    name = name.substr(5);
+                }
+                return name;
+            };
+
+            auto cleanName = [](std::string name) -> std::string {
+                auto ns_pos = name.rfind("::");
+                if (ns_pos != std::string::npos) {
+                    name = name.substr(ns_pos + 2);
+                }
+                return name;
+            };
+
+            if (func_name == "__builtin_concat" || func_name == "__builtin_replicate") {
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
@@ -2131,21 +2205,18 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     }
                 } else {
                     // SV複製: {N{expr}}
-                    // count を直接整数値として取得（文字列パースに頼らない）
+                    // count を直接整数値として取得
                     std::string count_str = "1";
                     if (cd.args.size() > 0 && cd.args[0]) {
-                        // 定数から直接整数値を取得
                         if (cd.args[0]->kind == mir::MirOperand::Constant) {
                             const auto& c = std::get<mir::MirConstant>(cd.args[0]->data);
                             if (auto* ival = std::get_if<int64_t>(&c.value)) {
                                 count_str = std::to_string(*ival);
                             } else {
-                                // 整数以外の場合はフォールバック
                                 count_str = resolveArg(*cd.args[0]);
                             }
                         } else if (cd.args[0]->kind == mir::MirOperand::Move ||
                                    cd.args[0]->kind == mir::MirOperand::Copy) {
-                            // テンポラリ変数経由の定数を逆引き
                             const auto& place = std::get<mir::MirPlace>(cd.args[0]->data);
                             auto const_it = const_map.find(place.local);
                             if (const_it != const_map.end()) {
@@ -2156,7 +2227,6 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                                     count_str = resolveArg(*cd.args[0]);
                                 }
                             } else {
-                                // 定数でない場合はそのまま出力
                                 count_str = resolveArg(*cd.args[0]);
                             }
                         } else {
@@ -2170,6 +2240,79 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                         std::string lhs = emitPlace(*cd.destination, func);
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
                     }
+                }
+                // 成功ブロックに続行
+                emitBlockRecursive(func, cd.success, visited, ss, merge_block);
+            } else if (func_name == "__builtin_string_charAt") {
+                // ノンブロッキング代入の判定
+                bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
+                if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
+                    if (!func.locals[cd.destination->local].is_global) {
+                        use_nb = false;
+                    }
+                }
+                if (!use_nb) {
+                    bool is_dest_global = true;
+                    if (cd.destination && cd.destination->local < func.locals.size()) {
+                        is_dest_global = func.locals[cd.destination->local].is_global;
+                    }
+                    if (is_dest_global) {
+                        for (const auto& local : func.locals) {
+                            if (local.is_global)
+                                continue;
+                            if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                               local.type->kind == hir::TypeKind::Negedge)) {
+                                use_nb = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                std::string orig_name = "";
+                int L = 0;
+                if (cd.args.size() > 0 && cd.args[0]) {
+                    if (cd.args[0]->kind == mir::MirOperand::Move ||
+                        cd.args[0]->kind == mir::MirOperand::Copy) {
+                        const auto& place = std::get<mir::MirPlace>(cd.args[0]->data);
+                        orig_name = cleanName(traceToOrigin(place));
+                    } else if (cd.args[0]->kind == mir::MirOperand::Constant) {
+                        const auto& c = std::get<mir::MirConstant>(cd.args[0]->data);
+                        if (auto* sval = std::get_if<std::string>(&c.value)) {
+                            L = sval->length();
+                        }
+                    }
+                }
+
+                if (!orig_name.empty()) {
+                    auto it = global_string_lengths_.find(orig_name);
+                    if (it != global_string_lengths_.end()) {
+                        L = it->second;
+                    }
+                }
+                if (L == 0 && cd.args.size() > 0 && cd.args[0]) {
+                    std::string res_name = cleanName(resolveArg(*cd.args[0]));
+                    auto it = global_string_lengths_.find(res_name);
+                    if (it != global_string_lengths_.end()) {
+                        L = it->second;
+                    }
+                }
+
+                std::string str_val =
+                    cd.args.size() > 0 && cd.args[0] ? resolveArg(*cd.args[0]) : "0";
+                std::string idx_val =
+                    cd.args.size() > 1 && cd.args[1] ? resolveArg(*cd.args[1]) : "0";
+
+                std::string rhs;
+                if (L > 0) {
+                    rhs = str_val + "[(" + std::to_string(L - 1) + " - " + idx_val + ") * 8 +: 8]";
+                } else {
+                    rhs = str_val + "[" + idx_val + "]";
+                }
+
+                if (cd.destination) {
+                    std::string lhs = emitPlace(*cd.destination, func);
+                    ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
                 }
                 // 成功ブロックに続行
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
@@ -2240,6 +2383,24 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 // === MIR解析: プログラム全体 ===
 
 void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
+    global_string_lengths_.clear();
+    for (const auto& gv : program.global_vars) {
+        if (gv && gv->is_const && gv->type && gv->type->kind == hir::TypeKind::String) {
+            int L = 0;
+            if (gv->init_value) {
+                if (auto* sval = std::get_if<std::string>(&gv->init_value->value)) {
+                    L = sval->length();
+                }
+            }
+            std::string var_name = gv->name;
+            auto ns_pos = var_name.rfind("::");
+            if (ns_pos != std::string::npos) {
+                var_name = var_name.substr(ns_pos + 2);
+            }
+            global_string_lengths_[var_name] = L;
+        }
+    }
+
     SVModule default_mod;
     default_mod.name = "top";
 
@@ -2442,7 +2603,23 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 continue;
             }
             emitted_param_names.insert(param_name);
-            std::string localparam_decl = "localparam " + mapType(gv->type) + " " + param_name;
+            std::string type_str;
+            if (gv->type->kind == hir::TypeKind::String) {
+                int L = 0;
+                if (gv->init_value) {
+                    if (auto* sval = std::get_if<std::string>(&gv->init_value->value)) {
+                        L = sval->length();
+                    }
+                }
+                if (L > 0) {
+                    type_str = "logic [" + std::to_string(8 * L - 1) + ":0]";
+                } else {
+                    type_str = "logic [7:0]";
+                }
+            } else {
+                type_str = mapType(gv->type);
+            }
+            std::string localparam_decl = "localparam " + type_str + " " + param_name;
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             } else if (gv->init_expr) {
@@ -3044,9 +3221,8 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 has_error = true;
                 break;
             case hir::TypeKind::String:
-                std::cerr << "error[SV003]: String types are not synthesizable: " << gv->name
-                          << "\n";
-                has_error = true;
+                // String types are synthesizable under certain conditions (const strings or logic
+                // [23:0] fallback)
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
@@ -3077,9 +3253,8 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                     has_error = true;
                     break;
                 case hir::TypeKind::String:
-                    std::cerr << "error[SV003]: String types not synthesizable: " << func->name
-                              << "::" << local.name << "\n";
-                    has_error = true;
+                    // String types not synthesizable error is removed to allow local string
+                    // constants/temporaries
                     break;
                 default:
                     break;

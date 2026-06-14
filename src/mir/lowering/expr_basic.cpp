@@ -793,6 +793,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 } else {
                     break;
                 }
+            } else if (current_type->kind == hir::TypeKind::String) {
+                current_type = hir::make_char();
+                break;
             } else {
                 break;
             }

@@ -62,6 +62,7 @@ class SVCodeGen : public BufferedCodeGenerator {
     SVCodeGenOptions options_;
     std::string generated_code_;
     int indent_level_ = 0;
+    std::unordered_map<std::string, int> global_string_lengths_;
 
     // モジュール情報
     std::vector<SVModule> modules_;
