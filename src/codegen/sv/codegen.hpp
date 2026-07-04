@@ -68,6 +68,14 @@ class SVCodeGen : public BufferedCodeGenerator {
     // モジュール情報
     std::vector<SVModule> modules_;
 
+    // whileループ再構成中のexitブロックIDスタック
+    // （ループ本体内からexitへの分岐を break; として出力するために使用）
+    std::vector<size_t> loop_exit_stack_;
+
+    // 現在出力中の関数のループヘッダ→ラッチ一覧
+    // （DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）
+    std::unordered_map<size_t, std::vector<size_t>> current_loop_latches_;
+
     // === 型マッピング ===
     // Cm型 → SV型文字列（packed dimension のみ）
     std::string mapType(const hir::TypePtr& type) const;
@@ -114,8 +122,10 @@ class SVCodeGen : public BufferedCodeGenerator {
                             std::set<size_t>& visited, std::ostringstream& ss,
                             size_t merge_block = SIZE_MAX);
     // ターミネータをSVに変換
+    // current_block: このターミネータを持つブロックのID（ループヘッダ検出用）
     void emitTerminator(const mir::MirTerminator& term, const mir::MirFunction& func,
-                        std::set<size_t>& visited, std::ostringstream& ss, size_t merge_block);
+                        std::set<size_t>& visited, std::ostringstream& ss, size_t merge_block,
+                        size_t current_block = SIZE_MAX);
     // 2つの分岐先が合流するブロックを探す
     size_t findMergeBlock(const mir::MirFunction& func, size_t then_block, size_t else_block);
 

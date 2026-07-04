@@ -1,7 +1,10 @@
 //! platform: sv
+//! test: cycles=1 -> sum=6
 
 // for ループテスト
-// 注意: SV generate for は未実装だがパーサーはfor文をサポート
+// クロックプロセス内のforループはwhileループとして再構成される。
+// 以前はバックエッジが消えて本体最大1回・ループ後コード到達不能になる
+// 誤ったSVが生成されていた（sum = 0+1+2+3 = 6 を検証）
 
 #[input]  posedge clk;
 #[output] uint sum = 0;

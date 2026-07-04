@@ -1,5 +1,7 @@
 #include "codegen.hpp"
 
+#include "../../mir/analysis/dominators.hpp"
+
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -147,6 +149,82 @@ hir::TypePtr resolve_operand_type(const mir::MirOperand& op, const mir::MirFunct
         }
     }
     return nullptr;
+}
+
+// ブロックのターミネータが遷移しうる後続ブロックを列挙する
+std::vector<size_t> terminator_targets(const mir::BasicBlock& bb) {
+    std::vector<size_t> succs;
+    if (!bb.terminator)
+        return succs;
+    switch (bb.terminator->kind) {
+        case mir::MirTerminator::Goto:
+            succs.push_back(std::get<mir::MirTerminator::GotoData>(bb.terminator->data).target);
+            break;
+        case mir::MirTerminator::SwitchInt: {
+            const auto& sd = std::get<mir::MirTerminator::SwitchIntData>(bb.terminator->data);
+            for (const auto& [val, target] : sd.targets) {
+                succs.push_back(target);
+            }
+            succs.push_back(sd.otherwise);
+            break;
+        }
+        case mir::MirTerminator::Call: {
+            const auto& cd = std::get<mir::MirTerminator::CallData>(bb.terminator->data);
+            succs.push_back(cd.success);
+            break;
+        }
+        default:
+            break;
+    }
+    return succs;
+}
+
+// 関数内の全ループヘッダとそのラッチ（後方エッジの始点）を一括計算する。
+// 後方エッジ = ヘッダが支配するブロックからヘッダへ入るエッジ。
+// DominatorTreeの構築はO(ブロック数^2)級のため、関数ごとに1回だけ呼ぶこと
+std::unordered_map<size_t, std::vector<size_t>> compute_loop_latches(const mir::MirFunction& func) {
+    std::unordered_map<size_t, std::vector<size_t>> latches;
+    if (func.basic_blocks.empty()) {
+        return latches;
+    }
+    mir::DominatorTree domtree(func);
+    for (size_t p = 0; p < func.basic_blocks.size(); ++p) {
+        if (!func.basic_blocks[p])
+            continue;
+        for (size_t succ : terminator_targets(*func.basic_blocks[p])) {
+            if (domtree.dominates(succ, p)) {
+                latches[succ].push_back(p);
+            }
+        }
+    }
+    return latches;
+}
+
+// start が header の自然ループに属するか判定する。
+// 「header を通らずにいずれかのラッチへ到達できる」ことが条件。
+// （単純な到達可能性では、外側ループのバックエッジ経由で
+//   ループ外からもヘッダに戻れてしまい誤判定する）
+bool in_natural_loop(const mir::MirFunction& func, size_t start, size_t header,
+                     const std::vector<size_t>& latches) {
+    std::set<size_t> latch_set(latches.begin(), latches.end());
+    std::set<size_t> seen;
+    std::vector<size_t> work = {start};
+    while (!work.empty()) {
+        size_t bid = work.back();
+        work.pop_back();
+        if (bid == header)
+            continue;  // ヘッダは通過しない
+        if (latch_set.count(bid))
+            return true;
+        if (bid >= func.basic_blocks.size() || !func.basic_blocks[bid])
+            continue;
+        if (!seen.insert(bid).second)
+            continue;
+        for (size_t succ : terminator_targets(*func.basic_blocks[bid])) {
+            work.push_back(succ);
+        }
+    }
+    return false;
 }
 
 // 固定幅の整数型であるか判定（サイズキャスト出力の対象判定用）
@@ -511,10 +589,14 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
             effective_width = target_width;
         if (effective_width == 0)
             effective_width = width;
-        // signed型かどうか判定（target_widthが指定された場合はunsigned扱い）
-        bool is_signed = target_width <= 0 && type &&
-                         (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
-                          type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long);
+        // signed型かどうか判定（定数の型に従う）。
+        // 以前はtarget_width指定時にunsigned扱いにしていたが、SVでは片方が
+        // unsignedだと比較全体がunsignedになり、s < 32'd0 のような符号付き
+        // 比較が壊れるため、'sd を維持する
+        bool is_signed =
+            type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
+                     type->kind == hir::TypeKind::Tiny || type->kind == hir::TypeKind::Long ||
+                     type->kind == hir::TypeKind::ISize);
         std::string prefix = std::to_string(effective_width) + (is_signed ? "'sd" : "'d");
         if (val < 0) {
             return "-" + prefix + std::to_string(-val);
@@ -994,6 +1076,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             // 関数本体 — テンポラリ変数のインライン展開
             std::string body_content;
             if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+                // ループヘッダ情報を関数ごとに1回だけ計算する
+                current_loop_latches_ = compute_loop_latches(func);
                 std::set<size_t> visited;
                 std::ostringstream body_ss;
                 emitBlockRecursive(func, 0, visited, body_ss);
@@ -1359,6 +1443,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     std::map<std::string, std::string> temp_values;
     std::ostringstream raw_ss;
     if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
+        // ループヘッダ情報を関数ごとに1回だけ計算する
+        current_loop_latches_ = compute_loop_latches(func);
         std::set<size_t> visited;
         emitBlockRecursive(func, 0, visited, raw_ss);
     }
@@ -1958,6 +2044,12 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
 void SVCodeGen::emitBlockRecursive(const mir::MirFunction& func, size_t block_id,
                                    std::set<size_t>& visited, std::ostringstream& ss,
                                    size_t merge_block) {
+    // ループ本体の出力中にexitブロックへ到達した場合は break; を出力
+    // （ループからの脱出。exitブロック自体はループ終了後に出力される）
+    if (!loop_exit_stack_.empty() && block_id == loop_exit_stack_.back()) {
+        ss << indent() << "break;\n";
+        return;
+    }
     // 既に訪問済み、または合流ブロックに到達した場合は停止
     if (block_id >= func.basic_blocks.size() || !func.basic_blocks[block_id])
         return;
@@ -1981,14 +2073,14 @@ void SVCodeGen::emitBlockRecursive(const mir::MirFunction& func, size_t block_id
 
     // ターミネータを処理
     if (bb.terminator) {
-        emitTerminator(*bb.terminator, func, visited, ss, merge_block);
+        emitTerminator(*bb.terminator, func, visited, ss, merge_block, block_id);
     }
 }
 
 // === ターミネータのSV変換 ===
 void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFunction& func,
                                std::set<size_t>& visited, std::ostringstream& ss,
-                               size_t merge_block) {
+                               size_t merge_block, size_t current_block) {
     switch (term.kind) {
         case mir::MirTerminator::Goto: {
             // 無条件ジャンプ → 後続ブロックをインライン出力
@@ -2007,11 +2099,66 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 size_t then_block = sd.targets[0].second;
                 size_t else_block = sd.otherwise;
 
-                // 合流ブロックを探す
-                size_t merge = findMergeBlock(func, then_block, else_block);
-
                 // bool分岐の場合、val==0なら否定条件
                 bool is_negated = (sd.targets[0].first == 0);
+
+                // === ループヘッダ検出とwhileループ再構成 ===
+                // このブロックへの後方エッジがあり、かつ片方の分岐だけが
+                // 自然ループに属する場合、ループヘッダとみなす。
+                // if/elseとして出力するとバックエッジが消えて
+                // 「ループ本体が最大1回・ループ後コードが到達不能」という
+                // 誤ったSVになるため、whileループとして構造を復元する
+                auto latch_it = current_loop_latches_.find(current_block);
+                if (current_block != SIZE_MAX && latch_it != current_loop_latches_.end()) {
+                    const std::vector<size_t>& latches = latch_it->second;
+                    if (!latches.empty()) {
+                        // 真条件(cond != 0)で実行される分岐
+                        size_t true_block = is_negated ? else_block : then_block;
+                        size_t false_block = is_negated ? then_block : else_block;
+                        bool true_in_loop =
+                            in_natural_loop(func, true_block, current_block, latches);
+                        bool false_in_loop =
+                            in_natural_loop(func, false_block, current_block, latches);
+                        if (true_in_loop != false_in_loop) {
+                            size_t body = true_in_loop ? true_block : false_block;
+                            size_t exit = true_in_loop ? false_block : true_block;
+                            std::string loop_cond = true_in_loop ? cond : "!(" + cond + ")";
+
+                            ss << indent() << "while (" << loop_cond << ") begin\n";
+                            increaseIndent();
+                            // ループ本体を出力。break（exitへの分岐）を検出できるよう
+                            // exitブロックをスタックに積む。ヘッダへの後方エッジは
+                            // visited済みのため自然に停止する
+                            loop_exit_stack_.push_back(exit);
+                            emitBlockRecursive(func, body, visited, ss, exit);
+                            loop_exit_stack_.pop_back();
+                            // ヘッダブロックの文（ループ条件の再計算）を本体末尾で
+                            // 再実行する。条件のテンポラリが2箇所で代入されることに
+                            // なり、インライン展開の対象からも自動的に外れる
+                            if (current_block < func.basic_blocks.size() &&
+                                func.basic_blocks[current_block]) {
+                                for (const auto& stmt :
+                                     func.basic_blocks[current_block]->statements) {
+                                    if (!stmt)
+                                        continue;
+                                    std::string line = emitStatement(*stmt, func);
+                                    if (!line.empty()) {
+                                        ss << indent() << line << "\n";
+                                    }
+                                }
+                            }
+                            decreaseIndent();
+                            ss << indent() << "end\n";
+
+                            // ループ後（exit）ブロックを出力
+                            emitBlockRecursive(func, exit, visited, ss, merge_block);
+                            break;
+                        }
+                    }
+                }
+
+                // 合流ブロックを探す
+                size_t merge = findMergeBlock(func, then_block, else_block);
 
                 if (is_negated) {
                     // SwitchInt(cond, [(0, then_block)], otherwise=else_block)
@@ -2051,7 +2198,10 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 ss << indent() << "end\n";
 
                 // 合流ブロックを処理
-                if (merge != SIZE_MAX) {
+                // （合流先がループexitの場合はここでは出力しない。
+                //   break; は各分岐内で出力済みで、exit本体はループ終了後に出力される）
+                if (merge != SIZE_MAX &&
+                    (loop_exit_stack_.empty() || merge != loop_exit_stack_.back())) {
                     emitBlockRecursive(func, merge, visited, ss, merge_block);
                 }
             } else {
@@ -3478,6 +3628,10 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
                 case hir::HirBinaryOp::Ge:
                     op = ">=";
                     break;
+                case hir::HirBinaryOp::Assign:
+                    // 代入式: SVでは式として括弧に包めないため
+                    // 素の代入形式で返す（式文経由で "lhs = rhs;" になる）
+                    return lhs + " = " + rhs;
                 default:
                     op = "?";
                     break;

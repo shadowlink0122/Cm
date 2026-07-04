@@ -1,0 +1,7 @@
+SIM_OK
+TEST 1: neg=1
+TEST 1: lt5=1
+TEST 2: neg=0
+TEST 2: lt5=0
+TEST 3: neg=0
+TEST 3: lt5=1

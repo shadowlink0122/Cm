@@ -200,9 +200,10 @@ struct MirOperand {
     static MirOperandPtr constant(MirConstant c) {
         auto op = std::make_unique<MirOperand>();
         op->kind = Constant;
-        op->data = std::move(c);
-        // Constantの場合、MirConstant自体に型情報があるので、それを使用
+        // Constantの場合、MirConstant自体に型情報があるので、それを使用。
+        // move後の c.type は nullptr になるため、move前に取得する
         op->type = c.type;
+        op->data = std::move(c);
         return op;
     }
 
