@@ -1,0 +1,13 @@
+//! platform: sv
+//! description: エラーテスト - 非constの3文字超stringは切り詰めが起きるため非対応（SV005）
+
+#[input] bool clk = false;
+#[output] uint result = 0;
+
+// 非constのstringはlogic [23:0]（3文字）固定のため、
+// 3文字を超える初期値はエラーになる（error[SV005]）
+string message = "hello";
+
+async void update(posedge clk) {
+    result = 1;
+}

@@ -88,6 +88,16 @@ bool DeadCodeElimination::remove_dead_stores(MirFunction& func) {
         used_locals.insert(param);
     }
 
+    // グローバル変数・static変数への代入は関数外から観測可能なため、
+    // 関数内で読まれていなくても常に使用扱いにする
+    // （これがないと g = 999 のような単純代入がデッドストアとして
+    //   削除され、グローバルへの書き込みが消失する）
+    for (const auto& local : func.locals) {
+        if (local.is_global || local.is_static) {
+            used_locals.insert(local.id);
+        }
+    }
+
     bool changed = false;
 
     // 各ブロックを処理

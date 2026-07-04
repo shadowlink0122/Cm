@@ -66,6 +66,9 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
     // static変数をグローバルスコープで宣言
     emitStaticVars();
 
+    // グローバル変数をモジュールレベルで宣言（関数間で共有）
+    emitGlobalVars(program);
+
     // 構造体コンストラクタ
     for (const auto& st : program.structs) {
         if (st) {
@@ -342,6 +345,39 @@ void JSCodeGen::emitStaticVars() {
         emitter_.emitLine("let " + name + " = " + defaultVal + ";");
     }
     emitter_.emitLine();
+}
+
+void JSCodeGen::emitGlobalVars(const mir::MirProgram& program) {
+    bool emitted_any = false;
+    for (const auto& gv : program.global_vars) {
+        // SVの連続代入（assign文）はJSでは対象外
+        if (!gv || gv->is_assign)
+            continue;
+
+        std::string initVal;
+        if (gv->init_value) {
+            initVal = emitConstant(*gv->init_value);
+        } else if (gv->type) {
+            if (gv->type->kind == ast::TypeKind::Struct &&
+                interface_names_.count(gv->type->name) == 0 &&
+                struct_map_.count(gv->type->name) > 0) {
+                initVal = getStructDefaultValue(*gv->type);
+            } else {
+                initVal = jsDefaultValue(*gv->type);
+            }
+        } else {
+            initVal = "null";
+        }
+
+        if (!emitted_any) {
+            emitter_.emitLine("// Global variables");
+            emitted_any = true;
+        }
+        emitter_.emitLine("let __global_" + sanitizeIdentifier(gv->name) + " = " + initVal + ";");
+    }
+    if (emitted_any) {
+        emitter_.emitLine();
+    }
 }
 
 }  // namespace cm::codegen::js

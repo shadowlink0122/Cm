@@ -648,6 +648,21 @@ if(BUILD_TESTING)
         target_link_libraries(mir_optimization_test gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
 
+        # Unit tests - SV Codegen
+        add_executable(sv_codegen_test
+            tests/unit/sv_codegen_test.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
+            ${CM_MIR_SOURCES}
+            src/codegen/buffered_codegen.cpp
+            src/codegen/sv/codegen.cpp
+        )
+        set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(sv_codegen_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(sv_codegen_test gtest_main cm_frontend)
+        gtest_discover_tests(sv_codegen_test PROPERTIES LABELS "unit")
+
         # Unit tests - Error handling
         add_executable(error_test
             tests/unit/error_test.cpp

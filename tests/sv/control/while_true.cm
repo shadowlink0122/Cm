@@ -1,0 +1,22 @@
+//! platform: sv
+//! test: limit=3 -> count=3
+//! test: limit=7 -> count=7
+
+// while (true) + break のテスト:
+// 無条件ループもループ再構成の対象となり、breakでの脱出が
+// 正しく出力されること（フロントエンドが条件付きヘッダに降下する）
+
+#[input] posedge clk;
+#[input] uint limit;
+#[output] uint count = 0;
+
+async void run(posedge clk) {
+    uint c = 0;
+    while (true) {
+        if (c >= limit) {
+            break;
+        }
+        c = c + 1;
+    }
+    count = c;
+}

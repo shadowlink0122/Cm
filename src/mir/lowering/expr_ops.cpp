@@ -707,6 +707,92 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
     return result;
 }
 
+// 左辺値式からprojection付きMirPlaceを構築する（インクリメント/デクリメント用）
+// 対応: 変数 / メンバアクセス（ポインタ自動deref含む） / インデックス（多次元含む） /
+// デリファレンス
+static bool build_place_for_incdec(ExprLowering& lowering, const hir::HirExpr& e, MirPlace& place,
+                                   hir::TypePtr& out_type, LoweringContext& ctx) {
+    if (const auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&e.kind)) {
+        auto var_id = ctx.resolve_variable((*var_ref)->name);
+        if (!var_id) {
+            return false;
+        }
+        place.local = *var_id;
+        out_type = (*var_id < ctx.func->locals.size()) ? ctx.func->locals[*var_id].type : nullptr;
+        return true;
+    }
+    if (const auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&e.kind)) {
+        hir::TypePtr inner;
+        if (!(*member)->object ||
+            !build_place_for_incdec(lowering, *(*member)->object, place, inner, ctx)) {
+            return false;
+        }
+        // ポインタ型の場合は自動デリファレンス
+        if (inner && inner->kind == hir::TypeKind::Pointer) {
+            place.projections.push_back(PlaceProjection::deref());
+            inner = inner->element_type;
+        }
+        if (!inner || inner->kind != hir::TypeKind::Struct) {
+            return false;
+        }
+        auto field_idx = ctx.get_field_index(inner->name, (*member)->member);
+        if (!field_idx) {
+            return false;
+        }
+        place.projections.push_back(PlaceProjection::field(*field_idx));
+        out_type = nullptr;
+        if (ctx.struct_defs && ctx.struct_defs->count(inner->name)) {
+            const auto* struct_def = ctx.struct_defs->at(inner->name);
+            if (*field_idx < struct_def->fields.size()) {
+                out_type = struct_def->fields[*field_idx].type;
+            }
+        }
+        return true;
+    }
+    if (const auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&e.kind)) {
+        hir::TypePtr inner;
+        if (!(*index)->object ||
+            !build_place_for_incdec(lowering, *(*index)->object, place, inner, ctx)) {
+            return false;
+        }
+        auto push_index = [&](const hir::HirExpr& idx_expr) {
+            LocalId idx = lowering.lower_expression(idx_expr, ctx);
+            place.projections.push_back(PlaceProjection::index(idx));
+            if (inner && inner->element_type &&
+                (inner->kind == hir::TypeKind::Array || inner->kind == hir::TypeKind::Pointer)) {
+                inner = inner->element_type;
+            }
+        };
+        if (!(*index)->indices.empty()) {
+            // 多次元インデックス
+            for (const auto& idx_expr : (*index)->indices) {
+                if (idx_expr) {
+                    push_index(*idx_expr);
+                }
+            }
+        } else if ((*index)->index) {
+            push_index(*(*index)->index);
+        } else {
+            return false;
+        }
+        out_type = inner;
+        return true;
+    }
+    if (const auto* un = std::get_if<std::unique_ptr<hir::HirUnary>>(&e.kind)) {
+        // デリファレンス: (*p).v++ / (*p)++ 等
+        if ((*un)->op == hir::HirUnaryOp::Deref && (*un)->operand) {
+            hir::TypePtr inner;
+            if (!build_place_for_incdec(lowering, *(*un)->operand, place, inner, ctx)) {
+                return false;
+            }
+            place.projections.push_back(PlaceProjection::deref());
+            out_type = (inner && inner->element_type) ? inner->element_type : nullptr;
+            return true;
+        }
+    }
+    return false;
+}
+
 // 単項演算のlowering
 LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& ctx) {
     // インクリメント/デクリメント演算子の処理
@@ -763,7 +849,58 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
             }
         }
 
-        // 変数でない場合はエラー（一時的に0を返す）
+        // 変数以外の左辺値（配列要素・構造体フィールド・デリファレンス）:
+        // projection付きplaceを構築して read-modify-write を生成する。
+        // （以前はここに来ると黙って const 0 に置換され、
+        //   a[0]++ / s.v-- が no-op になるバグがあった）
+        {
+            MirPlace place{0};  // localはbuild_place_for_incdecで設定される
+            hir::TypePtr place_type;
+            if (unary.operand &&
+                build_place_for_incdec(*this, *unary.operand, place, place_type, ctx)) {
+                hir::TypePtr value_type = unary.operand->type ? unary.operand->type : place_type;
+
+                // 旧値をロード
+                LocalId old_val = ctx.new_temp(value_type);
+                MirPlace load_place = place;
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{old_val}, MirRvalue::use(MirOperand::copy(load_place, value_type))));
+
+                // 1を加算または減算
+                LocalId one = ctx.new_temp(hir::make_int());
+                MirConstant one_const;
+                one_const.type = hir::make_int();
+                one_const.value = int64_t(1);
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{one}, MirRvalue::use(MirOperand::constant(one_const))));
+
+                LocalId new_value = ctx.new_temp(value_type);
+                MirBinaryOp op =
+                    (unary.op == hir::HirUnaryOp::PreInc || unary.op == hir::HirUnaryOp::PostInc)
+                        ? MirBinaryOp::Add
+                        : MirBinaryOp::Sub;
+                auto bin_rvalue = std::make_unique<MirRvalue>();
+                bin_rvalue->kind = MirRvalue::BinaryOp;
+                bin_rvalue->data =
+                    MirRvalue::BinaryOpData{op, MirOperand::copy(MirPlace{old_val}, value_type),
+                                            MirOperand::copy(MirPlace{one}), value_type};
+                ctx.push_statement(
+                    MirStatement::assign(MirPlace{new_value}, std::move(bin_rvalue)));
+
+                // placeへ書き戻し
+                ctx.push_statement(MirStatement::assign(
+                    std::move(place),
+                    MirRvalue::use(MirOperand::copy(MirPlace{new_value}, value_type))));
+
+                // Pre系は新しい値、Post系は旧値を返す
+                if (unary.op == hir::HirUnaryOp::PreInc || unary.op == hir::HirUnaryOp::PreDec) {
+                    return new_value;
+                }
+                return old_val;
+            }
+        }
+
+        // 未対応の左辺値: 従来どおり0を返す（サイレント誤コンパイル防止のため要診断強化）
         LocalId temp = ctx.new_temp(unary.operand->type);
         MirConstant zero_const;
         zero_const.type = unary.operand->type;

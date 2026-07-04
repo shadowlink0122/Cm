@@ -334,7 +334,8 @@ void JSCodeGen::collectDeclareOnAssign(const mir::MirFunction& func) {
     for (const auto& local : func.locals) {
         bool isArg = std::find(func.arg_locals.begin(), func.arg_locals.end(), local.id) !=
                      func.arg_locals.end();
-        if (isArg || local.is_static) {
+        // グローバル変数はモジュールレベルで宣言済みのため対象外
+        if (isArg || local.is_static || local.is_global) {
             continue;
         }
         if (boxed_locals_.count(local.id) > 0) {
@@ -385,7 +386,8 @@ void JSCodeGen::collectInlineCandidates(const mir::MirFunction& func) {
                 bool isArg = std::find(func.arg_locals.begin(), func.arg_locals.end(), target) !=
                              func.arg_locals.end();
                 bool is_generated = !local.name.empty() && local.name[0] == '_';
-                if (isArg || local.is_static ||
+                // グローバル変数は関数呼び出しをまたいで変化しうるためインライン不可
+                if (isArg || local.is_static || local.is_global ||
                     ((local.is_user_variable && !is_generated) && target != func.return_local)) {
                     continue;
                 }

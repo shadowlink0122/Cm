@@ -75,6 +75,9 @@ class JSCodeGen {
     void collectStaticVars(const mir::MirProgram& program);
     void emitStaticVars();
 
+    // グローバル変数のモジュールレベル宣言（全関数から共有参照される）
+    void emitGlobalVars(const mir::MirProgram& program);
+
     // vtable生成（インターフェースディスパッチ用）
     void emitVTables(const mir::MirProgram& program);
 

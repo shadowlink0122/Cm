@@ -520,6 +520,11 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
     if (local >= func.locals.size()) {
         return false;
     }
+    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、
+    // 定数として束縛しない（callをまたいだ古い値の伝播を防ぐ）
+    if (func.locals[local].is_global || func.locals[local].is_static) {
+        return false;
+    }
     const auto& local_type = func.locals[local].type;
     const auto& const_type = constant.type;
     if (same_type(local_type, const_type)) {

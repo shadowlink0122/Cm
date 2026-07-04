@@ -129,6 +129,10 @@ class SVCodeGen : public BufferedCodeGenerator {
     // 2つの分岐先が合流するブロックを探す
     size_t findMergeBlock(const mir::MirFunction& func, size_t then_block, size_t else_block);
 
+    // === 配列初期値 ===
+    // 配列リテラル初期値をinitialブロックとして生成
+    std::string buildArrayInitial(const mir::MirGlobalVar& gv, const std::string& var_name);
+
     // === 定数リテラル ===
     std::string emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type,
                              int target_width = 0);

@@ -612,6 +612,32 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
     return "0";
 }
 
+// === 配列初期値のinitialブロック生成 ===
+
+// 配列リテラル初期値を initial ブロックとして生成する。
+// FPGA合成ツールはROM/RAMの初期内容として扱い、
+// シミュレーションでは時刻0に初期化される
+std::string SVCodeGen::buildArrayInitial(const mir::MirGlobalVar& gv, const std::string& var_name) {
+    if (!gv.init_expr) {
+        return "";
+    }
+    const auto* arr = std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&gv.init_expr->kind);
+    if (!arr || !*arr || (*arr)->elements.empty()) {
+        return "";
+    }
+    std::ostringstream ss;
+    ss << "initial begin\n";
+    for (size_t i = 0; i < (*arr)->elements.size(); ++i) {
+        const auto& elem = (*arr)->elements[i];
+        if (!elem) {
+            continue;
+        }
+        ss << "    " << var_name << "[" << i << "] = " << emitHirExpr(*elem) << ";\n";
+    }
+    ss << "end\n";
+    return ss.str();
+}
+
 // === Place（左辺値）生成 ===
 
 std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunction& func) {
@@ -2917,6 +2943,11 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 std::string ram_decl =
                     ram_attr + mapType(gv->type) + " " + var_name + getArraySuffix(gv->type) + ";";
                 default_mod.reg_declarations.push_back(ram_decl);
+                // 配列リテラル初期値をinitialブロックとして出力
+                std::string ram_init = buildArrayInitial(*gv, var_name);
+                if (!ram_init.empty()) {
+                    default_mod.initial_blocks.push_back(ram_init);
+                }
                 emitted_var_names.insert(var_name);
             }
             continue;
@@ -2958,6 +2989,13 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                         " = " + emitConstant(*gv->init_value, gv->type, getBitWidth(gv->type));
                 }
                 default_mod.reg_declarations.push_back(reg_decl + ";");
+                // 配列リテラル初期値はinitialブロックとして出力
+                if (!array_suffix.empty()) {
+                    std::string arr_init = buildArrayInitial(*gv, var_name);
+                    if (!arr_init.empty()) {
+                        default_mod.initial_blocks.push_back(arr_init);
+                    }
+                }
                 emitted_var_names.insert(var_name);
             }
         }
@@ -3484,8 +3522,20 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 has_error = true;
                 break;
             case hir::TypeKind::String:
-                // String types are synthesizable under certain conditions (const strings or logic
-                // [23:0] fallback)
+                // const文字列は実長のlocalparamとして合成可能。
+                // 非constのstringは logic [23:0]（3文字分）固定のため、
+                // 3文字を超える初期値はサイレントに切り詰められてしまう → エラーにする
+                if (!gv->is_const && gv->init_value) {
+                    if (const auto* sval = std::get_if<std::string>(&gv->init_value->value)) {
+                        if (sval->length() > 3) {
+                            std::cerr << "error[SV005]: Non-const string longer than 3 "
+                                         "characters is not synthesizable (would be truncated "
+                                         "to logic [23:0]): "
+                                      << gv->name << " = \"" << *sval << "\"\n";
+                            has_error = true;
+                        }
+                    }
+                }
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
