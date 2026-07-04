@@ -11,6 +11,7 @@
 #include "../../src/frontend/parser/parser.hpp"
 #include "../../src/hir/lowering/lowering.hpp"
 #include "../../src/mir/lowering/lowering.hpp"
+#include "../../src/mir/passes/loop/const_unroll.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -23,7 +24,8 @@ using namespace cm;
 class SVCodegenTest : public ::testing::Test {
    protected:
     // Cmソース → 生成SV文字列
-    std::string compile_to_sv(const std::string& code, bool emit_memfile = false) {
+    std::string compile_to_sv(const std::string& code, bool emit_memfile = false,
+                              bool unroll_loops = false) {
         Lexer lex(code);
         std::vector<Token> tokens = lex.tokenize();
         Parser p(tokens);
@@ -34,6 +36,11 @@ class SVCodegenTest : public ::testing::Test {
 
         mir::MirLowering mir_lowering;
         auto mir = mir_lowering.lower(hir);
+
+        // SVターゲットの本番パイプラインと同じ定数ループ展開（オプトイン）
+        if (unroll_loops) {
+            mir::opt::unroll_constant_loops(mir);
+        }
 
         codegen::sv::SVCodeGenOptions options;
         options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
@@ -208,6 +215,32 @@ TEST_F(SVCodegenTest, ArrayInitialBlock) {
     expect_contains(sv, "initial begin");
     expect_contains(sv, "rom[0] = 10;");
     expect_contains(sv, "rom[3] = 40;");
+}
+
+// 定数トリップカウントのループは静的展開され while が残らない
+// （generate/genvar相当。合成ツールは動的whileを展開できない）
+TEST_F(SVCodegenTest, ConstantLoopUnroll) {
+    const std::string code = R"(
+        #[input] bool clk = false;
+        #[input] uint din;
+        #[output] uint dout = 0;
+
+        void update(posedge clk) {
+            uint acc = 0;
+            for (uint i = 0; i < 4; i = i + 1) {
+                acc = acc ^ (din >> i);
+            }
+            dout = acc;
+        }
+    )";
+    std::string sv = compile_to_sv(code, /*emit_memfile=*/false, /*unroll_loops=*/true);
+    expect_not_contains(sv, "while (");
+    // 4回分の本体が直列に展開されている（XOR演算が4回出現）
+    size_t xor_count = 0;
+    for (size_t pos = sv.find(" ^ "); pos != std::string::npos; pos = sv.find(" ^ ", pos + 1)) {
+        ++xor_count;
+    }
+    EXPECT_EQ(xor_count, 4u) << "本体が4回展開されていません:\n" << sv;
 }
 
 // #[sv::memfile] 属性付き配列は $readmemh のinitial文として出力される

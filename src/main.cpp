@@ -29,6 +29,7 @@
 #include "mir/passes/cleanup/dce.hpp"
 #include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
+#include "mir/passes/loop/const_unroll.hpp"
 #include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
@@ -1430,6 +1431,12 @@ int main(int argc, char* argv[]) {
 
             if (opts.debug)
                 std::cout << "最適化完了\n\n";
+        }
+
+        // SVターゲット: 定数トリップカウントのループを静的展開する
+        // （generate/genvar相当。合成ツールは動的whileを展開できないため）
+        if (is_sv) {
+            mir::opt::unroll_constant_loops(mir);
         }
         auto phase_opt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::steady_clock::now() - phase_opt_start)

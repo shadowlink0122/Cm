@@ -257,6 +257,7 @@ set(CM_MIR_SOURCES
     src/mir/passes/interprocedural/inlining.cpp
     src/mir/passes/interprocedural/tail_call_elimination.cpp
     src/mir/passes/loop/licm.cpp
+    src/mir/passes/loop/const_unroll.cpp
     src/mir/passes/redundancy/gvn.cpp
     src/mir/passes/core/base.cpp
     src/mir/passes/core/manager.cpp
