@@ -236,6 +236,7 @@ set(CM_SOURCES
     src/hir/lowering/stmt.cpp
     src/hir/lowering/expr.cpp
     # MIR lowering (HIR -> MIR)
+    src/mir/nodes.cpp
     src/mir/optimizations/optimization_pipeline.cpp
     src/mir/printer.cpp
     src/mir/lowering/context.cpp
@@ -292,6 +293,7 @@ set(CM_SOURCES
 
 # JavaScript backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
+    src/codegen/buffered_codegen.cpp
     src/codegen/js/codegen.cpp
     src/codegen/js/utilities.cpp
     src/codegen/js/emit_function.cpp
