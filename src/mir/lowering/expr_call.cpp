@@ -179,6 +179,64 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
     return {var_names, converted_format};
 }
 
+// 補間内の関数呼び出し引数文字列をMIRオペランドへ変換するヘルパー
+// 整数リテラル・boolリテラル・ローカル変数名をサポートする
+// （それ以外の複雑な式は従来どおりダミーの0を返す）
+static MirOperandPtr lower_interp_call_arg(LoweringContext& ctx, const std::string& raw_arg) {
+    // 前後の空白を除去
+    std::string arg = raw_arg;
+    size_t first = arg.find_first_not_of(" \t");
+    if (first == std::string::npos) {
+        arg.clear();
+    } else {
+        size_t last = arg.find_last_not_of(" \t");
+        arg = arg.substr(first, last - first + 1);
+    }
+
+    // 整数リテラル（16進等はstoullのbase=0で解釈、負数はstollで解釈）
+    if (!arg.empty() &&
+        (std::isdigit(static_cast<unsigned char>(arg[0])) ||
+         (arg[0] == '-' && arg.size() > 1 && std::isdigit(static_cast<unsigned char>(arg[1]))))) {
+        try {
+            int64_t value;
+            if (arg[0] == '-') {
+                value = std::stoll(arg, nullptr, 0);
+            } else {
+                value = static_cast<int64_t>(std::stoull(arg, nullptr, 0));
+            }
+            MirConstant arg_const;
+            arg_const.type = hir::make_int();
+            arg_const.value = value;
+            return MirOperand::constant(arg_const);
+        } catch (...) {
+            // 数値として解釈できない場合は下の変数解決へフォールスルー
+        }
+    }
+
+    // boolリテラル
+    if (arg == "true" || arg == "false") {
+        MirConstant arg_const;
+        arg_const.type = hir::make_bool();
+        arg_const.value = (arg == "true");
+        return MirOperand::constant(arg_const);
+    }
+
+    // ローカル変数（従来は整数リテラル以外がすべてダミー0になっていた）
+    if (auto var_id = ctx.resolve_variable(arg)) {
+        hir::TypePtr var_type = nullptr;
+        if (*var_id < ctx.func->locals.size()) {
+            var_type = ctx.func->locals[*var_id].type;
+        }
+        return MirOperand::copy(MirPlace{*var_id}, var_type);
+    }
+
+    // 未対応の式はダミー値（従来挙動を維持）
+    MirConstant arg_const;
+    arg_const.type = hir::make_int();
+    arg_const.value = 0;
+    return MirOperand::constant(arg_const);
+}
+
 // 関数呼び出しのlowering
 LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
                                  LoweringContext& ctx) {
@@ -1887,11 +1945,27 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             is_function_call = true;
                                             func_name = var_name.substr(0, paren_pos);
 
-                                            // 引数を解析（簡易実装：現在は単一の整数のみサポート）
+                                            // 引数を解析（トップレベルのカンマで分割）
                                             std::string args_str = var_name.substr(
                                                 paren_pos + 1, var_name.length() - paren_pos - 2);
                                             if (!args_str.empty()) {
-                                                func_args.push_back(args_str);
+                                                int depth = 0;
+                                                std::string cur;
+                                                for (char ch : args_str) {
+                                                    if (ch == '(') {
+                                                        depth++;
+                                                        cur += ch;
+                                                    } else if (ch == ')') {
+                                                        depth--;
+                                                        cur += ch;
+                                                    } else if (ch == ',' && depth == 0) {
+                                                        func_args.push_back(cur);
+                                                        cur.clear();
+                                                    } else {
+                                                        cur += ch;
+                                                    }
+                                                }
+                                                func_args.push_back(cur);
                                             }
                                         }
 
@@ -1909,28 +1983,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 LocalId result = ctx.new_temp(return_type);
 
                                                 // 引数の準備
+                                                // （整数/boolリテラルとローカル変数をサポート）
                                                 std::vector<MirOperandPtr> call_args;
                                                 for (const auto& arg_str : func_args) {
-                                                    // 簡易実装：整数リテラルのみサポート
-                                                    try {
-                                                        // stoullで符号なし64bit全域をパース（Bug#6:
-                                                        // stoll out of range修正）
-                                                        uint64_t uval =
-                                                            std::stoull(arg_str, nullptr, 0);
-                                                        int64_t value = static_cast<int64_t>(uval);
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = value;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    } catch (...) {
-                                                        // 解析エラーの場合はダミー値
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = 0;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    }
+                                                    call_args.push_back(
+                                                        lower_interp_call_arg(ctx, arg_str));
                                                 }
 
                                                 // 関数ポインタ経由の呼び出し
@@ -1971,28 +2028,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 LocalId result = ctx.new_temp(return_type);
 
                                                 // 引数の準備
+                                                // （整数/boolリテラルとローカル変数をサポート）
                                                 std::vector<MirOperandPtr> call_args;
                                                 for (const auto& arg_str : func_args) {
-                                                    // 簡易実装：整数リテラルのみサポート
-                                                    try {
-                                                        // stoullで符号なし64bit全域をパース（Bug#6:
-                                                        // stoll out of range修正）
-                                                        uint64_t uval =
-                                                            std::stoull(arg_str, nullptr, 0);
-                                                        int64_t value = static_cast<int64_t>(uval);
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = value;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    } catch (...) {
-                                                        // 解析エラーの場合はダミー値
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = 0;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    }
+                                                    call_args.push_back(
+                                                        lower_interp_call_arg(ctx, arg_str));
                                                 }
 
                                                 // 関数呼び出しのターミネータを作成
