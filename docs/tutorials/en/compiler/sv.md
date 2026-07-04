@@ -2,6 +2,7 @@
 title: SystemVerilog Backend
 parent: Tutorials
 nav_order: 11
+has_children: false
 ---
 
 [日本語](../../ja/compiler/sv.html)
@@ -9,30 +10,24 @@ nav_order: 11
 # Compiler - SystemVerilog Backend
 
 **Difficulty:** 🟡 Intermediate  
-**Time:** 45 min
+**Time:** 45 minutes (about 2 hours to read all pages)
 
-Cm can generate synthesizable SystemVerilog (SV) code for FPGAs. Compatible with Tang Console (Gowin), Xilinx, Intel, and more.
+Cm can generate SystemVerilog (SV) and run as hardware on FPGAs. Tang Console (Gowin), Xilinx, Intel, and other FPGAs are supported.
 
 ---
 
-## Table of Contents
+## Detail Pages
 
-1. [Your First Circuit](#your-first-circuit)
-2. [Platform Directive](#platform-directive)
-3. [Type System](#type-system)
-4. [Port Declarations](#port-declarations)
-5. [Logic Blocks](#logic-blocks)
-6. [Operators](#operators)
-7. [Literals and Bit Widths](#literals-and-bit-widths)
-8. [Constants and localparam](#constants-and-localparam)
-9. [Control Flow](#control-flow)
-10. [Concatenation and Replication](#concatenation-and-replication)
-11. [Enums (FSM)](#enums-fsm)
-12. [SV Attributes](#sv-attributes)
-13. [Implicit Conversions](#implicit-conversions)
-14. [Compilation and Verification](#compilation-and-verification)
-15. [Complete Example](#complete-example)
-16. [Token Reference](#token-reference)
+The SV backend documentation is split into topic-specific pages:
+
+| Page | Contents |
+|------|----------|
+| [Types and Ports](sv-types.html) | Type mapping, port declarations, array ports, literals, localparam, SV attributes |
+| [Processes and Assignments](sv-processes.html) | always_ff/comb/latch, automatic assignment conversion, implicit conversions |
+| [Control Flow and Loops](sv-control-flow.html) | if/case, while-loop reconstruction, break, operators and precedence guarantees |
+| [Data Structures](sv-data.html) | Concatenation/replication, enum FSMs, arrays and BRAM, strings |
+| [State Initialization and Simulation](sv-state-sim.html) | Register initial values, initial blocks, automatic testbench generation, running tests |
+| [Semantic Guarantees](sv-semantics.html) | Summary of guaranteed Cm↔SV semantic correspondence (casts, signed arithmetic, etc.) |
 
 ---
 
@@ -76,9 +71,9 @@ module blink (
     input logic rst,
     output logic led
 );
-    logic [31:0] counter;
+    logic [31:0] counter = 32'd0;
 
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (rst) begin
             counter <= 32'd0;
             led <= 1'b0;
@@ -94,440 +89,34 @@ module blink (
 endmodule
 ```
 
-> **Key Points:** Cm's `=` is automatically converted to SV's `<=` (non-blocking assignment),
-> and `!led` is converted to `~led` (bitwise inversion).
+> **Key points:** Cm's `=` is automatically converted to SV's `<=` (non-blocking assignment).
+> `!led` is also converted to SV's `~led` (bitwise negation).
+> A variable's declared initial value (`uint counter = 0;`) is emitted as its power-on initial value.
 
 ---
 
 ## Platform Directive
 
-Every Cm file targeting SV **must** start with:
+To use the SV backend, this directive is **required** at the top of the file:
 
 ```cm
 //! platform: sv
 ```
 
-This enables:
+It enables:
 - SV-specific keywords (`posedge`, `negedge`, `wire`, `reg`, `always`, `assign`)
-- Non-synthesizable type validation (`float`, `string`, pointers → compile error)
-- Implicit SV transformations (assignment style, literal bit widths, etc.)
-
----
-
-## Type System
-
-### Basic Types
-
-| Cm Type | SV Output | Bits | Usage |
-|---------|-----------|------|-------|
-| `bool` | `logic` | 1 | Flags, control signals |
-| `utiny` | `logic [7:0]` | 8 | Small counters, state |
-| `ushort` | `logic [15:0]` | 16 | Addresses |
-| `uint` | `logic [31:0]` | 32 | Counters, data |
-| `ulong` | `logic [63:0]` | 64 | Timestamps |
-| `tiny` | `logic signed [7:0]` | 8 | Signed small values |
-| `short` | `logic signed [15:0]` | 16 | Signed medium values |
-| `int` | `logic signed [31:0]` | 32 | Signed data |
-| `long` | `logic signed [63:0]` | 64 | Signed large values |
-
-### SV-Specific Types
-
-| Cm Type | Purpose | SV Output |
-|---------|---------|-----------|
-| `posedge` | Rising edge signal | `logic` (1-bit) |
-| `negedge` | Falling edge signal | `logic` (1-bit) |
-| `wire<T>` | Wire qualifier | `T` mapping |
-| `reg<T>` | Register qualifier | `T` mapping |
-
-### Custom Bit Widths
-
-```cm
-#[output] bit[4] nibble;      // → output logic [3:0] nibble
-#[output] bit[12] address;    // → output logic [11:0] address
-bit[26] counter;              // → logic [25:0] counter
-```
-
-### Non-Synthesizable Types (Compile Error)
-
-`float`, `double`, `string`, `cstring`, `*T` (pointers), `&T` (references) are **rejected** by the SV backend.
-
----
-
-## Port Declarations
-
-```cm
-// Input ports
-#[input]  posedge clk;              // → input logic clk
-#[input]  bool rst = false;         // → input logic rst
-#[input]  utiny data_in;            // → input logic [7:0] data_in
-
-// Output ports
-#[output] bool led = false;         // → output logic led
-#[output] utiny led_array = 0xFF;   // → output logic [7:0] led_array
-
-// Bidirectional ports
-#[inout]  ushort bus;               // → inout logic [15:0] bus
-
-// Parameters (overridable)
-const uint WIDTH = 8;               // → localparam logic [31:0] WIDTH = 32'd8;
-```
-
----
-
-## Logic Blocks
-
-### Sequential Logic (always_ff)
-
-#### Pattern A: `always` + Edge Parameter (Recommended)
-
-```cm
-always void counter_tick(posedge clk) {
-    count = count + 1;
-}
-// → always_ff @(posedge clk) begin
-//        count <= count + 32'd1;
-//    end
-```
-
-#### Pattern B: Async Reset (Multiple Edges)
-
-```cm
-always void process(posedge clk, negedge rst_n) {
-    if (rst_n == false) {
-        count = 0;
-    } else {
-        count = count + 1;
-    }
-}
-// → always_ff @(posedge clk or negedge rst_n) begin ...
-```
-
-#### Pattern C: `void f(posedge clk)` (Legacy)
-
-```cm
-void blink(posedge clk) {
-    led = !led;
-}
-// → always_ff @(posedge clk) begin led <= ~led; end
-```
-
-#### Pattern D: `async func` (Legacy)
-
-```cm
-async func tick() {
-    counter = counter + 1;
-}
-// → always_ff @(posedge clk) begin counter <= counter + 32'd1; end
-```
-
-> **Note:** `async func` implicitly references the `clk` variable.
-> If `clk` is undeclared, `input logic clk` is automatically added.
-
-### Combinational Logic (always_comb)
-
-Functions without edge parameters:
-
-```cm
-always void decode() {
-    out = 0;
-    if (sel) { out = a; }
-    else { out = b; }
-}
-// → always_comb begin ... end
-```
-
-Legacy: `void f()` / `func f()` also map to `always_comb`.
-
-### Assignment Rules
-
-| Block Type | Cm Source | SV Output |
-|-----------|----------|-----------|
-| `always_ff` (sequential) | `x = expr;` | `x <= expr;` (non-blocking) |
-| `always_comb` (combinational) | `x = expr;` | `x = expr;` (blocking) |
-
-Always write `=` in Cm — the compiler chooses the correct assignment style.
-
----
-
-## Operators
-
-### Arithmetic & Bitwise
-
-| Cm | SV | Notes |
-|----|----|-------|
-| `+` `-` `*` `/` `%` | Same | Arithmetic |
-| `&` `\|` `^` `~` | Same | Bitwise |
-| `<<` `>>` | Same | Shift |
-| `==` `!=` `<` `<=` `>` `>=` | Same | Comparison |
-| `&&` `\|\|` | Same | Logical |
-| `!x` | `~x` | **Implicit conversion**: logical NOT → bitwise NOT |
-
-> **Important:** Cm's `!` (logical NOT) maps to SV's `~` (bitwise NOT) for multi-bit safety.
-
----
-
-## Literals and Bit Widths
-
-Literals are **automatically given bit widths** based on context:
-
-| Cm Literal | Context Type | SV Output |
-|-----------|-------------|-----------|
-| `true` | `bool` | `1'b1` |
-| `false` | `bool` | `1'b0` |
-| `42` | `uint` (32-bit) | `32'd42` |
-| `42` | `utiny` (8-bit) | `8'd42` |
-| `-5` | `int` (signed 32-bit) | `-32'sd5` |
-
-### SV-Style Literals
-
-```cm
-utiny mask = 8'b10101010;     // → 8'b10101010
-ushort addr = 16'hFF00;       // → 16'hFF00
-```
-
-```cm
-const uint CLK_FREQ = 50000000;     // → localparam logic [31:0] CLK_FREQ = 32'd50000000;
-```
-
----
-
-## Constants and localparam
-
-### `const` → `localparam`
-
-```cm
-const uint CLK_FREQ = 27000000;
-const uint CNT_MAX = CLK_FREQ / 2 - 1;
-```
-```systemverilog
-localparam logic [31:0] CLK_FREQ = 32'd27000000;
-localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
-```
-
-> **Note:** `const` always maps to `localparam`. There is no `parameter` generation.
-> All compile-time constants become `localparam` in the SV output.
-
----
-
-## Control Flow
-
-### if / else if / else
-
-```cm
-if (rst) {
-    counter = 0;
-} else if (enable) {
-    counter = counter + 1;
-} else {
-    // idle
-}
-```
-```systemverilog
-if (rst) begin
-    counter <= 32'd0;
-end else if (enable) begin
-    counter <= counter + 32'd1;
-end else begin
-end
-```
-
-### switch → case
-
-```cm
-switch (state) {
-    case(0) { next_state = 1; }
-    case(1) { next_state = 2; }
-    else { next_state = 0; }
-}
-```
-```systemverilog
-case (state)
-    32'd0: begin next_state <= 32'd1; end
-    32'd1: begin next_state <= 32'd2; end
-    default: begin next_state <= 32'd0; end
-endcase
-```
-
-> **Note:** Cm switch syntax is `case(pattern) { ... }` with parentheses.
-> Use `else { ... }` for the default case.
-
-### Functions and Tasks
-
-Functions with arguments (no edge params, no `always`/`async`) and a **non-void** return type
-are automatically mapped to SV `function`:
-
-```cm
-// Non-void → SV function
-uint max_val(uint x, uint y) {
-    if (x > y) { return x; }
-    return y;
-}
-// → function automatic logic [31:0] max_val(...); ... endfunction
-```
-
-> **Note:** `void` functions always map to `always_comb` blocks.
-> Only non-void functions with return values become SV `function`.
-
-## Concatenation and Replication
-
-### Basic Syntax
-
-```cm
-result = {a, b};         // → {a, b}
-replicated = {3{a}};     // → {3{a}}
-```
-
-### Type Inference
-
-Concatenation and replication automatically calculate bit widths for `bit[N]` types:
-
-```cm
-#[input]  bit[4] a = 0;
-#[input]  bit[4] b = 0;
-#[output] bit[8] result = 0;      // {a, b} → 4+4=8 bits
-#[output] bit[12] replicated = 0; // {3{a}} → 4*3=12 bits
-
-always_comb void compute() {
-    result = {a, b};
-    replicated = {3{a}};
-}
-```
-
-Generated SV:
-```systemverilog
-module compute (
-    input logic [3:0] a,
-    input logic [3:0] b,
-    output logic [7:0] result,
-    output logic [11:0] replicated
-);
-    always_comb begin
-        result = {a, b};
-        replicated = {3{a}};
-    end
-endmodule
-```
-
-### Built-in Functions
-
-When `{...}` is ambiguous with blocks, use explicit functions:
-
-```cm
-result = concat(a, b);       // → {a, b}
-wide = replicate(nibble, 3); // → {3{nibble}}
-```
-
----
-
-## Enums (FSM)
-
-Cm `enum` maps to SV `typedef enum logic`. Bit width is auto-calculated:
-
-```cm
-enum State { IDLE, RUN, DONE, ERROR }
-```
-```systemverilog
-typedef enum logic [1:0] {
-    IDLE = 2'd0, RUN = 2'd1, DONE = 2'd2, ERROR = 2'd3
-} State;
-```
-
-### enum + switch (FSM)
-
-Enum variants can be matched with `case(EnumType::Variant)`:
-
-```cm
-State current = State::IDLE;
-
-void fsm(posedge clk) {
-    switch (current) {
-        case(State::IDLE) { current = State::RUN; }
-        case(State::RUN) { current = State::DONE; }
-        else { current = State::IDLE; }
-    }
-}
-```
-
----
-
-## SV Attributes
-
-| Attribute | Effect | Example |
-|-----------|--------|---------|
-| `#[input]` | Input port | `#[input] posedge clk;` |
-| `#[output]` | Output port | `#[output] utiny led = 0xFF;` |
-| `#[inout]` | Bidirectional port | `#[inout] ushort bus;` |
-| `#[sv::bram]` | `(* ram_style = "block" *)` | `#[sv::bram] utiny mem[1024];` |
-| `#[sv::lutram]` | `(* ram_style = "distributed" *)` | `#[sv::lutram] utiny lut[16];` |
-| `#[sv::clock_domain("name")]` | Clock for `async func` | `#[sv::clock_domain("fast")]` |
-| `#[sv::pipeline]` | Pipeline hint | |
-| `#[sv::share]` | Resource sharing hint | |
-| `#[sv::pin("XX")]` | Pin assignment (XDC/CST) | `#[sv::pin("H11")]` |
-| `#[sv::iostandard("YY")]` | IO standard | `#[sv::iostandard("LVCMOS33")]` |
-
----
-
-## Implicit Conversions
-
-The SV backend performs many automatic conversions so you can write natural Cm code:
-
-### Assignment Style
-
-| Context | Cm | SV |
-|---------|----|----|
-| `always_ff` | `x = expr;` | `x <= expr;` |
-| `always_comb` | `x = expr;` | `x = expr;` |
-
-### Logical NOT → Bitwise NOT
-
-| Cm | SV | Reason |
-|----|----|----|
-| `!flag` | `~flag` | Unified to `~` for multi-bit safety |
-
-### Literal Bit Width Inference
-
-| Cm | Target Type | SV |
-|----|------------|-----|
-| `counter = 0;` | `uint` | `counter <= 32'd0;` |
-| `flag = true;` | `bool` | `flag <= 1'b1;` |
-
-### Auto Port Addition
-
-| Condition | Action |
-|-----------|--------|
-| `async func` exists & `clk` undeclared | `input logic clk` auto-added |
-| `async func` exists & `rst` undeclared | `input logic rst` auto-added |
-
-### MIR Temporary Inlining
-
-MIR temporaries (`_tXXXX`) are inlined back into expressions:
-
-```
-MIR:  _t1000 = counter + 1; result = _t1000;
-SV:   result <= counter + 32'd1;
-```
-
-### `self.` Prefix Removal
-
-`self.counter` → `counter` (SV has no `self`)
-
-### `else if` Normalization
-
-Nested `else { if ... }` patterns are flattened to `else if`.
-
-### Redundant Ternary Pruning
-
-`cond ? x : x` is simplified to `x`.
+- Validation of non-synthesizable types (pointers → compile error)
+- Implicit SV conversions (assignment style, literal bit-width annotation, etc.)
 
 ---
 
 ## Compilation and Verification
 
 ```bash
-# Generate SV
+# Generate SV code
 cm compile --target=sv blink.cm -o blink.sv
 
-# Lint-only check with Verilator
+# Syntax check with Verilator
 verilator --sv --lint-only blink.sv
 
 # Simulate with Icarus Verilog
@@ -536,40 +125,6 @@ vvp sim
 
 # FPGA build (Gowin EDA)
 gw_sh gowin_build.tcl
-```
-
-### Running Tests
-
-To run SV backend tests:
-
-```bash
-# Run SV tests only
-make test-sv
-
-# Run SV tests in parallel
-make test-sv-parallel
-
-# Run all tests (including SV)
-make test
-
-# Shortcuts
-make tsv      # test-sv
-make tsvp     # test-sv-parallel
-```
-
-### x86_64 Debugging (macOS developers)
-
-For debugging x86_64 code on Apple Silicon Mac:
-
-```bash
-# Build x86_64 compiler
-make build-x86
-
-# Run tests via Rosetta
-make test-x86
-
-# Debug specific test
-make debug-x86 FILE=tests/sv/basic/adder.cm
 ```
 
 ### Target FPGAs
@@ -622,34 +177,34 @@ always void blink(posedge clk, negedge rst_n) {
 |-------|---------|---------|
 | `KwPosedge` | `posedge` | Rising edge |
 | `KwNegedge` | `negedge` | Falling edge |
-| `KwWire` | `wire` | Wire qualifier |
-| `KwReg` | `reg` | Register qualifier |
-| `KwAlways` | `always` | Logic block modifier (auto-detect) |
-| `KwAlwaysFF` | `always_ff` | Sequential circuit (explicit) |
-| `KwAlwaysComb` | `always_comb` | Combinational circuit (explicit) |
+| `KwWire` | `wire` | Wire-qualified type |
+| `KwReg` | `reg` | Register-qualified type |
+| `KwAlways` | `always` | Logic block modifier (auto-detected) |
+| `KwAlwaysFF` | `always_ff` | Sequential logic (explicit) |
+| `KwAlwaysComb` | `always_comb` | Combinational logic (explicit) |
 | `KwAlwaysLatch` | `always_latch` | Latch (explicit) |
 | `KwAssign` | `assign` | Continuous assignment |
-| `KwInitial` | `initial` | Simulation initialization (not implemented) |
-| `KwBit` | `bit` | Custom bit-width type `bit[N]` |
+| `KwInitial` | `initial` | Simulation initialization block |
+| `KwBit` | `bit` | Arbitrary-width type `bit[N]` |
 
-### Existing Tokens with SV Meaning
+### SV Meaning of Existing Tokens
 
-| Token | Normal (LLVM) | SV Meaning |
-|-------|--------------|------------|
-| `async` | JS async function | `always_ff` (legacy) |
+| Token | Normal (LLVM) meaning | SV meaning |
+|-------|----------------------|------------|
+| `async` | JS async function | `always_ff` (backward compat) |
 | `func` | Function declaration | `always_comb` |
-| `void` | No return value | Block generation |
+| `void` | Function with no return value | Block generation |
 | `=` | Variable assignment | ff: `<=`, comb: `=` |
-| `!` | Logical NOT | `~` (bitwise NOT) |
-| `const` | Constant | `localparam` |
-| `switch/case` | Pattern match | `case/endcase` |
+| `!` | Logical negation | `~` (unified with bitwise negation) |
+| `const` | Constant declaration | `localparam` |
+| `switch/case` | Pattern matching | `case/endcase` |
 | `enum` | Enumeration | `typedef enum logic` |
 
 ---
 
 **Previous:** [WASM Backend](wasm.html)  
-**Next:** [Formatter](formatter.html)
+**Next:** [Types and Ports](sv-types.html)
 
 ---
 
-**Last updated:** 2026-04-29
+**Last Updated:** 2026-07-04

@@ -2,6 +2,7 @@
 title: SystemVerilogバックエンド
 parent: Tutorials
 nav_order: 11
+has_children: false
 ---
 
 [English](../../en/compiler/sv.html)
@@ -9,30 +10,24 @@ nav_order: 11
 # コンパイラ編 - SystemVerilogバックエンド
 
 **難易度:** 🟡 中級  
-**所要時間:** 45分
+**所要時間:** 45分（全ページ通読の場合 2時間）
 
 CmからSystemVerilog (SV) を生成し、FPGA上でハードウェアとして動作させることができます。Tang Console（Gowin）、Xilinx、Intel等のFPGAに対応しています。
 
 ---
 
-## 目次
+## 詳細ページ一覧
 
-1. [最初の回路](#最初の回路)
-2. [プラットフォームディレクティブ](#プラットフォームディレクティブ)
-3. [型システム](#型システム)
-4. [ポート宣言](#ポート宣言)
-5. [ロジックブロック](#ロジックブロック)
-6. [演算子](#演算子)
-7. [定数リテラルとビット幅](#定数リテラルとビット幅)
-8. [定数とlocalparam](#定数とlocalparam)
-9. [制御構文](#制御構文)
-10. [連接と複製](#連接と複製)
-11. [列挙型 (FSM)](#列挙型-fsm)
-12. [SV属性](#sv属性)
-13. [暗黙的変換](#暗黙的変換)
-14. [コンパイルと検証](#コンパイルと検証)
-15. [全体例](#全体例)
-16. [トークンリファレンス](#トークンリファレンス)
+SVバックエンドの詳細はトピック別のページに分かれています:
+
+| ページ | 内容 |
+|--------|------|
+| [型とポート](sv-types.html) | 型マッピング、ポート宣言、配列ポート、リテラル、localparam、SV属性 |
+| [プロセスと代入](sv-processes.html) | always_ff/comb/latch、代入の自動変換、暗黙的変換 |
+| [制御構文とループ](sv-control-flow.html) | if/case、whileループ再構成、break、演算子と優先順位保証 |
+| [データ構造](sv-data.html) | 連接・複製、enum FSM、配列とBRAM、文字列 |
+| [状態初期化とシミュレーション](sv-state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、テスト実行 |
+| [意味論保証](sv-semantics.html) | Cm↔SVの意味論対応の保証事項まとめ（キャスト・符号付き演算等） |
 
 ---
 
@@ -76,9 +71,9 @@ module blink (
     input logic rst,
     output logic led
 );
-    logic [31:0] counter;
+    logic [31:0] counter = 32'd0;
 
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (rst) begin
             counter <= 32'd0;
             led <= 1'b0;
@@ -96,6 +91,7 @@ endmodule
 
 > **ポイント:** Cmの `=` は自動的にSVの `<=` (ノンブロッキング代入) に変換されます。
 > `!led` もSVの `~led` (ビット反転) に変換されます。
+> 変数の宣言初期値（`uint counter = 0;`）は電源投入時初期値として出力されます。
 
 ---
 
@@ -109,416 +105,8 @@ SVバックエンドを使用するには、ファイル先頭に **必ず** 記
 
 有効になる機能:
 - SV固有キーワード (`posedge`, `negedge`, `wire`, `reg`, `always`, `assign`)
-- 非合成型のバリデーション (`float`, `string`, ポインタ → コンパイルエラー)
+- 非合成型のバリデーション (ポインタ → コンパイルエラー)
 - 暗黙的SV変換 (代入方式、リテラルビット幅付与 等)
-
----
-
-## 型システム
-
-### 基本型
-
-| Cm型 | SV出力 | ビット幅 | 用途 |
-|------|--------|---------|------|
-| `bool` | `logic` | 1 | フラグ、制御信号 |
-| `utiny` | `logic [7:0]` | 8 | 小さなカウンタ、状態 |
-| `ushort` | `logic [15:0]` | 16 | アドレス |
-| `uint` | `logic [31:0]` | 32 | カウンタ、データ |
-| `ulong` | `logic [63:0]` | 64 | タイムスタンプ |
-| `tiny` | `logic signed [7:0]` | 8 | 符号付き小数値 |
-| `short` | `logic signed [15:0]` | 16 | 符号付き中間値 |
-| `int` | `logic signed [31:0]` | 32 | 符号付きデータ |
-| `long` | `logic signed [63:0]` | 64 | 符号付き大規模データ |
-
-### SV固有型
-
-| Cm型 | 用途 | SV出力 |
-|------|------|--------|
-| `posedge` | クロック立ち上がりエッジ信号 | `logic` (1-bit) |
-| `negedge` | クロック/リセット立ち下がりエッジ信号 | `logic` (1-bit) |
-| `wire<T>` | ワイヤ修飾（組み合わせ出力） | `T`のマッピングに準拠 |
-| `reg<T>` | レジスタ修飾（順序回路出力） | `T`のマッピングに準拠 |
-
-### カスタムビット幅
-
-```cm
-#[output] bit[4] nibble;      // → output logic [3:0] nibble
-#[output] bit[12] address;    // → output logic [11:0] address
-bit[26] counter;              // → logic [25:0] counter
-```
-
-### 非合成型 (コンパイルエラー)
-
-`float`, `double`, `string`, `cstring`, `*T` (ポインタ), `&T` (参照) はSVバックエンドで **コンパイルエラー** になります。
-
----
-
-## ポート宣言
-
-```cm
-// 入力ポート
-#[input]  posedge clk;              // → input logic clk
-#[input]  bool rst = false;         // → input logic rst
-#[input]  utiny data_in;            // → input logic [7:0] data_in
-
-// 出力ポート
-#[output] bool led = false;         // → output logic led
-#[output] utiny led_array = 0xFF;   // → output logic [7:0] led_array
-
-// 双方向ポート
-#[inout]  ushort bus;               // → inout logic [15:0] bus
-
-// パラメータ（定数）
-const uint WIDTH = 8;               // → localparam logic [31:0] WIDTH = 32'd8;
-```
-
----
-
-## ロジックブロック
-
-### 順序回路 (always_ff)
-
-#### パターンA: `always` + エッジパラメータ （推奨）
-
-```cm
-always void counter_tick(posedge clk) {
-    count = count + 1;
-}
-// → always_ff @(posedge clk) begin
-//        count <= count + 32'd1;
-//    end
-```
-
-#### パターンB: 非同期リセット（複数エッジ）
-
-```cm
-always void process(posedge clk, negedge rst_n) {
-    if (rst_n == false) {
-        count = 0;
-    } else {
-        count = count + 1;
-    }
-}
-// → always_ff @(posedge clk or negedge rst_n) begin ...
-```
-
-#### パターンC: `void f(posedge clk)` （後方互換）
-
-```cm
-void blink(posedge clk) {
-    led = !led;
-}
-// → always_ff @(posedge clk) begin led <= ~led; end
-```
-
-#### パターンD: `async func` （後方互換）
-
-```cm
-async func tick() {
-    counter = counter + 1;
-}
-// → always_ff @(posedge clk) begin counter <= counter + 32'd1; end
-```
-
-> **注意:** `async func` は暗黙的に `clk` 変数を参照します。
-> `clk` が未宣言の場合、自動的に `input logic clk` が追加されます。
-
-### 組み合わせ回路 (always_comb)
-
-エッジパラメータなしの関数:
-
-```cm
-always void decode() {
-    out = 0;
-    if (sel) { out = a; }
-    else { out = b; }
-}
-// → always_comb begin ... end
-```
-
-後方互換: `void f()` / `func f()` も `always_comb` に変換されます。
-
-### 代入の自動変換ルール
-
-| ブロック種別 | Cmでの記述 | SV出力 |
-|------------|----------|--------|
-| `always_ff` (順序回路) | `x = expr;` | `x <= expr;` (ノンブロッキング) |
-| `always_comb` (組み合わせ) | `x = expr;` | `x = expr;` (ブロッキング) |
-
-Cmでは常に `=` で記述し、コンパイラが文脈に応じて適切な代入方式を選択します。
-
----
-
-## 演算子
-
-### 算術・ビット演算
-
-| Cm | SV | 備考 |
-|----|----|------|
-| `+` `-` `*` `/` `%` | 同じ | 算術 |
-| `&` `\|` `^` `~` | 同じ | ビット演算 |
-| `<<` `>>` | 同じ | シフト |
-| `==` `!=` `<` `<=` `>` `>=` | 同じ | 比較 |
-| `&&` `\|\|` | 同じ | 論理演算 |
-| `!x` | `~x` | **暗黙変換**: 論理否定→ビット反転に統合 |
-
-> **重要:** Cmの `!` (論理否定) はSVでは `~` (ビット反転) にマッピングされます。多ビット信号に対して安全な `~` に統一しています。
-
----
-
-## 定数リテラルとビット幅
-
-リテラルは文脈の型に基づき **自動的にビット幅付き** に変換されます:
-
-| Cmリテラル | 文脈の型 | SV出力 |
-|-----------|---------|--------|
-| `true` | `bool` | `1'b1` |
-| `false` | `bool` | `1'b0` |
-| `42` | `uint` (32-bit) | `32'd42` |
-| `42` | `utiny` (8-bit) | `8'd42` |
-| `-5` | `int` (符号付き32-bit) | `-32'sd5` |
-
-### SVスタイルリテラル
-
-```cm
-utiny mask = 8'b10101010;     // → 8'b10101010
-ushort addr = 16'hFF00;       // → 16'hFF00
-```
-
-```cm
-const uint CLK_FREQ = 50000000;     // → localparam logic [31:0] CLK_FREQ = 32'd50000000;
-```
-
----
-
-## 定数とlocalparam
-
-### `const` → `localparam`
-
-```cm
-const uint CLK_FREQ = 27_000_000;
-const uint CNT_MAX = CLK_FREQ / 2 - 1;
-```
-```systemverilog
-localparam logic [31:0] CLK_FREQ = 32'd27000000;
-localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
-```
-
-> **注意:** `const` は常に `localparam` にマッピングされます。
-> `parameter` は生成されません。コンパイル時定数は全て `localparam` になります。
-
----
-
-## 制御構文
-
-### if / else if / else
-
-```cm
-if (rst) {
-    counter = 0;
-} else if (enable) {
-    counter = counter + 1;
-} else {
-    // idle
-}
-```
-```systemverilog
-if (rst) begin
-    counter <= 32'd0;
-end else if (enable) begin
-    counter <= counter + 32'd1;
-end else begin
-end
-```
-
-### switch → case
-
-```cm
-switch (state) {
-    case(0) { next_state = 1; }
-    case(1) { next_state = 2; }
-    else { next_state = 0; }
-}
-```
-```systemverilog
-case (state)
-    32'd0: begin next_state <= 32'd1; end
-    32'd1: begin next_state <= 32'd2; end
-    default: begin next_state <= 32'd0; end
-endcase
-```
-
-> **注意:** Cmの switch 構文は `case(パターン) { ... }` 形式です。
-> デフォルトは `else { ... }` で記述します。
-
-### function と task
-
-引数あり（edgeパラメータなし）かつ **非void（戻り値あり）** の関数は、自動的に SV `function` に変換されます:
-
-```cm
-// 非void → SV function
-uint max_val(uint x, uint y) {
-    if (x > y) { return x; }
-    return y;
-}
-// → function automatic logic [31:0] max_val(...); ... endfunction
-```
-
-> **注意:** `void` 関数は常に `always_comb` ブロックになります。
-> 戻り値がある非void関数のみが SV `function` になります。
-
----
-
-## 連接と複製
-
-### 基本構文
-
-```cm
-result = {a, b};         // → {a, b}
-replicated = {3{a}};     // → {3{a}}
-```
-
-### 型推論
-
-連接と複製は `bit[N]` 型に対してビット幅を自動計算します:
-
-```cm
-#[input]  bit[4] a = 0;
-#[input]  bit[4] b = 0;
-#[output] bit[8] result = 0;      // {a, b} → 4+4=8ビット
-#[output] bit[12] replicated = 0; // {3{a}} → 4*3=12ビット
-
-always_comb void compute() {
-    result = {a, b};
-    replicated = {3{a}};
-}
-```
-
-生成されるSV:
-```systemverilog
-module compute (
-    input logic [3:0] a,
-    input logic [3:0] b,
-    output logic [7:0] result,
-    output logic [11:0] replicated
-);
-    always_comb begin
-        result = {a, b};
-        replicated = {3{a}};
-    end
-endmodule
-```
-
-### ビルトイン関数
-
-`{...}` がブロックと曖昧な場合、明示的な関数を使用できます:
-
-```cm
-result = concat(a, b);       // → {a, b}
-wide = replicate(nibble, 3); // → {3{nibble}}
-```
-
----
-
-## 列挙型 (FSM)
-
-Cmの `enum` はSVの `typedef enum logic` に変換されます。ビット幅はバリアント数から自動計算:
-
-```cm
-enum State { IDLE, RUN, DONE, ERROR }
-```
-```systemverilog
-typedef enum logic [1:0] {
-    IDLE = 2'd0, RUN = 2'd1, DONE = 2'd2, ERROR = 2'd3
-} State;
-```
-
-### enum + switch (FSM)
-
-enum バリアントは `case(EnumType::Variant)` でマッチできます:
-
-```cm
-State current = State::IDLE;
-
-void fsm(posedge clk) {
-    switch (current) {
-        case(State::IDLE) { current = State::RUN; }
-        case(State::RUN) { current = State::DONE; }
-        else { current = State::IDLE; }
-    }
-}
-```
-
----
-
-## SV属性
-
-| 属性 | 効果 | 例 |
-|------|------|----|
-| `#[input]` | 入力ポート | `#[input] posedge clk;` |
-| `#[output]` | 出力ポート | `#[output] utiny led = 0xFF;` |
-| `#[inout]` | 双方向ポート | `#[inout] ushort bus;` |
-| `#[sv::bram]` | `(* ram_style = "block" *)` | `#[sv::bram] utiny mem[1024];` |
-| `#[sv::lutram]` | `(* ram_style = "distributed" *)` | `#[sv::lutram] utiny lut[16];` |
-| `#[sv::clock_domain("name")]` | `async func`のクロック指定 | `#[sv::clock_domain("fast")]` |
-| `#[sv::pipeline]` | パイプラインヒント | |
-| `#[sv::share]` | リソース共有ヒント | |
-| `#[sv::pin("XX")]` | ピン割り当て (XDC/CST) | `#[sv::pin("H11")]` |
-| `#[sv::iostandard("YY")]` | IO電圧規格 | `#[sv::iostandard("LVCMOS33")]` |
-
----
-
-## 暗黙的変換
-
-SVバックエンドは、正しいSVコードを自動生成するために多数の暗黙的変換を行います。
-
-### 代入方式の自動決定
-
-| 文脈 | Cm | SV |
-|------|----|----|
-| `always_ff` | `x = expr;` | `x <= expr;` |
-| `always_comb` | `x = expr;` | `x = expr;` |
-
-### 論理否定の変換
-
-| Cm | SV | 理由 |
-|----|----|----|
-| `!flag` | `~flag` | 多ビット信号に安全な `~` に統一 |
-
-### リテラルのビット幅付与
-
-| Cm | 代入先の型 | SV |
-|----|-----------|-----|
-| `counter = 0;` | `uint` | `counter <= 32'd0;` |
-| `flag = true;` | `bool` | `flag <= 1'b1;` |
-
-### クロック/リセットの自動追加
-
-| 条件 | 動作 |
-|------|------|
-| `async func` 存在 & `clk` 未宣言 | `input logic clk` を自動追加 |
-| `async func` 存在 & `rst` 未宣言 | `input logic rst` を自動追加 |
-
-### MIR一時変数のインライン展開
-
-MIRの `_tXXXX` 一時変数は元の式にインライン展開されます:
-
-```
-MIR:  _t1000 = counter + 1; result = _t1000;
-SV:   result <= counter + 32'd1;
-```
-
-### `self.` プレフィックスの除去
-
-`self.counter` → `counter` (SVに `self` は不要)
-
-### `else if` の正規化
-
-ネストした `else { if ... }` パターンを `else if` にフラット化。
-
-### 冗長な三項演算子の除去
-
-`cond ? x : x` を単純な `x` に最適化。
 
 ---
 
@@ -537,40 +125,6 @@ vvp sim
 
 # FPGA ビルド (Gowin EDA)
 gw_sh gowin_build.tcl
-```
-
-### テスト実行
-
-SVバックエンドのテストを実行するには:
-
-```bash
-# SVテストのみ実行
-make test-sv
-
-# SVテスト（並列実行）
-make test-sv-parallel
-
-# 全テスト実行（SVを含む）
-make test
-
-# ショートカット
-make tsv      # test-sv
-make tsvp     # test-sv-parallel
-```
-
-### x86_64デバッグ（macOS開発者向け）
-
-Apple Silicon Mac上でx86_64コードをデバッグする場合:
-
-```bash
-# x86_64用コンパイラをビルド
-make build-x86
-
-# x86_64でテスト実行（Rosetta経由）
-make test-x86
-
-# 特定のテストをデバッグ
-make debug-x86 FILE=tests/sv/basic/adder.cm
 ```
 
 ### ターゲットFPGA
@@ -630,7 +184,7 @@ always void blink(posedge clk, negedge rst_n) {
 | `KwAlwaysComb` | `always_comb` | 組み合わせ回路（明示指定） |
 | `KwAlwaysLatch` | `always_latch` | ラッチ（明示指定） |
 | `KwAssign` | `assign` | 連続代入文 |
-| `KwInitial` | `initial` | シミュレーション初期化 (未実装) |
+| `KwInitial` | `initial` | シミュレーション初期化ブロック |
 | `KwBit` | `bit` | 任意ビット幅型 `bit[N]` |
 
 ### 既存トークンのSVでの意味
@@ -649,8 +203,8 @@ always void blink(posedge clk, negedge rst_n) {
 ---
 
 **前の章:** [WASMバックエンド](wasm.html)  
-**次の章:** [フォーマッタ](formatter.html)
+**次の章:** [型とポート](sv-types.html)
 
 ---
 
-**最終更新:** 2026-04-29
+**最終更新:** 2026-07-04

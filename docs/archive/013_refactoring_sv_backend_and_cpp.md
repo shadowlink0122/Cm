@@ -1,5 +1,16 @@
 # svバックエンド・コンパイラ実装 リファクタリング調査と改善提案
 
+> **アーカイブ済み（2026-07-04）**: 本ドキュメントの提案は大部分が実装完了した。
+>
+> - §2の全コード生成欠陥: **修正済み**（v0.15.1リリースノート参照）
+> - §3のテスト: **追加済み**
+> - §4.3-2 monitoringクラスタのhpp/cpp分離: **実装済み**（未使用の guard.hpp / buffered.hpp / buffered_block.hpp は削除）
+> - §4.3-3 naming.hpp の重複・死蔵コード: **削除済み**
+> - §4.3-5 グローバル可変状態: compilation_guard の inline thread_local を関数ローカルへ移動済み（g_module_resolver / debug.hpp は未対応）
+> - CMakeテストターゲットのソース共有化: **実装済み**（コンポーネント別ソースリスト方式）
+> - 追加で発見・修正: MirOperand::constant のmove後参照による定数型消失、符号付き定数比較の unsigned 化（D8）
+> - **未実装の提案**は docs/design/sv_backend_missing_features.md へ引き継ぎ
+
 作成日: 2026-07-04
 対象: Cmコンパイラ svバックエンド / CmCPU HDMIデザイン / コンパイラC++実装
 

@@ -27,6 +27,7 @@ Cm言語の基礎を学ぶチュートリアル集です。推定学習時間: 3
 | 8 | [配列](arrays.html) | 🟢 初級 | 宣言・メソッド・for-in |
 | 9 | [ポインタ](pointers.html) | 🟡 中級 | アドレス・デリファレンス・Array Decay |
 | 10 | [モジュール](modules.html) | 🟢 初級 | import/export |
+| 11 | [文字列補間](string-interpolation.html) | 🟢 初級 | {}補間・関数呼び出し・フォーマット指定子 |
 
 ---
 
