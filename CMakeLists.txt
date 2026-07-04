@@ -621,6 +621,7 @@ if(BUILD_TESTING)
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
+            src/mir/nodes.cpp
             src/mir/lowering/context.cpp
             src/mir/lowering/base.cpp
             src/mir/lowering/lowering.cpp
@@ -671,6 +672,7 @@ if(BUILD_TESTING)
             src/hir/lowering/stmt.cpp
             src/hir/lowering/expr.cpp
             src/hir/lowering/decl.cpp
+            src/mir/nodes.cpp
             src/mir/lowering/context.cpp
             src/mir/lowering/base.cpp
             src/mir/lowering/lowering.cpp
