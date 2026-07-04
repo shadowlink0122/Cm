@@ -25,6 +25,25 @@ CmCPU（Tang Console 138K向けCPU開発）での実運用と2026-07-04の調査
 
 **難易度**: 高（analyzeMIRの単一 `default_mod` 前提の解消が必要）
 
+**段階的実装計画（2026-07-05調査で具体化）**:
+importのフラット化は**テキストベースのpreprocessor**（`src/preprocessor/import.cpp`）で
+行われるため、階層化はパース前の段階から手を入れる必要がある。以下の段階に分割する:
+
+- **Stage 1（暫定運用・実装不要）**: サブモジュールを個別に
+  `cm compile --target=sv sub.cm -o sub.sv` でコンパイルし、トップ側では
+  `extern struct Sub { ... }` としてポートを宣言してインスタンス化する。
+  named port connection の生成経路は実装済みのため今日から運用可能
+  （欠点: ポート宣言の二重管理）。
+- **Stage 2（extern struct自動生成）**: `//! sv: hierarchy` 指定時、
+  `import ./alu;` をフラット化せず、alu.cm の `#[input]/#[output]` 宣言から
+  extern struct 相当の宣言を自動合成してトップのASTに注入する。
+  同時に alu.cm を再帰的にSVコンパイルし、生成モジュールを同一.svファイルに
+  連結出力する（`modules_` ベクタは複数モジュール対応済み）。
+- **Stage 3（真の複数モジュールMIR）**: `MirProgram::modules` を実際に使い、
+  analyzeMIRの単一 `default_mod` 前提を解消してモジュールごとに
+  ポート解決・always分類を行う。項目2のパラメータオーバーライド
+  `#(.WIDTH(8))` もこの段階で実装する。
+
 ## 2. モジュールパラメータ（`module #(parameter ...)`）
 
 **現状**: `const` は `localparam` のみ。生成モジュール自体をパラメータ化できない。`#[sv::param]` はv0.15.1で廃止宣言されたがコードとテストに残存しており、仕様と実装が食い違っている。
