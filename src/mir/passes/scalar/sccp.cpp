@@ -1,6 +1,27 @@
 #include "sccp.hpp"
 
+#include "const_eval.hpp"
+
 namespace cm::mir::opt {
+
+namespace {
+// 代入先ローカルの整数型に定数を正規化する。
+// 幅の狭い型への代入で値をラップし、型情報も代入先に合わせる
+// （例: tiny への代入で int定数128 → tiny -128）
+void normalize_constant_to_local(const MirFunction& func, LocalId local, MirConstant& constant) {
+    if (local >= func.locals.size()) {
+        return;
+    }
+    const auto& local_type = func.locals[local].type;
+    if (const_eval::integer_bit_width(local_type) == 0) {
+        return;
+    }
+    if (auto* int_val = std::get_if<int64_t>(&constant.value)) {
+        constant.value = const_eval::normalize_int(*int_val, local_type);
+        constant.type = local_type;
+    }
+}
+}  // namespace
 
 // ============================================================
 // SparseConditionalConstantPropagation 実装
@@ -354,6 +375,8 @@ SparseConditionalConstantPropagation::transfer_block(const MirFunction& func,
 
         LatticeValue value = eval_rvalue(func, *assign_data.rvalue, state);
         if (value.kind == LatticeKind::Constant) {
+            // 代入先の型幅に正規化（狭い型への代入はラップ）
+            normalize_constant_to_local(func, assign_data.place.local, value.constant);
             if (!can_bind_constant(func, assign_data.place.local, value.constant)) {
                 value.kind = LatticeKind::Overdefined;
             }
@@ -487,7 +510,8 @@ SparseConditionalConstantPropagation::eval_rvalue(const MirFunction& func, const
             if (lhs.kind == LatticeKind::Undefined || rhs.kind == LatticeKind::Undefined) {
                 return {LatticeKind::Undefined, {}};
             }
-            auto folded = eval_binary_op(bin_data.op, lhs.constant, rhs.constant);
+            auto folded =
+                eval_binary_op(bin_data.op, lhs.constant, rhs.constant, bin_data.result_type);
             if (folded) {
                 return {LatticeKind::Constant, *folded};
             }
@@ -560,65 +584,82 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
 }
 
 std::optional<MirConstant> SparseConditionalConstantPropagation::eval_binary_op(
-    MirBinaryOp op, const MirConstant& lhs, const MirConstant& rhs) {
+    MirBinaryOp op, const MirConstant& lhs, const MirConstant& rhs,
+    const hir::TypePtr& result_type) {
     if (auto* lhs_int = std::get_if<int64_t>(&lhs.value)) {
         if (auto* rhs_int = std::get_if<int64_t>(&rhs.value)) {
             MirConstant result;
-            result.type = lhs.type;
+            // 結果型: MIRのresult_typeを優先し、無ければ幅の広い方へ昇格
+            result.type = (result_type && const_eval::integer_bit_width(result_type) > 0)
+                              ? result_type
+                              : const_eval::promote_types(lhs.type, rhs.type);
+            // 型幅に正規化した値で演算する（オーバーフローは2の補数でラップ）
+            const int64_t lv = const_eval::normalize_int(*lhs_int, lhs.type);
+            const int64_t rv = const_eval::normalize_int(*rhs_int, rhs.type);
+            // どちらかが符号なし型なら比較・除算・剰余・右シフトは符号なしで行う
+            const bool uns = const_eval::use_unsigned_op(lhs.type, rhs.type);
+            const uint64_t ulv = static_cast<uint64_t>(lv);
+            const uint64_t urv = static_cast<uint64_t>(rv);
             switch (op) {
                 case MirBinaryOp::Add:
-                    result.value = *lhs_int + *rhs_int;
+                    result.value = const_eval::normalize_int(lv + rv, result.type);
                     return result;
                 case MirBinaryOp::Sub:
-                    result.value = *lhs_int - *rhs_int;
+                    result.value = const_eval::normalize_int(lv - rv, result.type);
                     return result;
                 case MirBinaryOp::Mul:
-                    result.value = *lhs_int * *rhs_int;
+                    result.value = const_eval::normalize_int(lv * rv, result.type);
                     return result;
                 case MirBinaryOp::Div:
-                    if (*rhs_int != 0) {
-                        result.value = *lhs_int / *rhs_int;
+                    if (rv != 0) {
+                        result.value = const_eval::normalize_int(
+                            uns ? static_cast<int64_t>(ulv / urv) : lv / rv, result.type);
                         return result;
                     }
                     break;
                 case MirBinaryOp::Mod:
-                    if (*rhs_int != 0) {
-                        result.value = *lhs_int % *rhs_int;
+                    if (rv != 0) {
+                        result.value = const_eval::normalize_int(
+                            uns ? static_cast<int64_t>(ulv % urv) : lv % rv, result.type);
                         return result;
                     }
                     break;
                 case MirBinaryOp::BitAnd:
-                    result.value = *lhs_int & *rhs_int;
+                    result.value = const_eval::normalize_int(lv & rv, result.type);
                     return result;
                 case MirBinaryOp::BitOr:
-                    result.value = *lhs_int | *rhs_int;
+                    result.value = const_eval::normalize_int(lv | rv, result.type);
                     return result;
                 case MirBinaryOp::BitXor:
-                    result.value = *lhs_int ^ *rhs_int;
+                    result.value = const_eval::normalize_int(lv ^ rv, result.type);
                     return result;
                 case MirBinaryOp::Shl:
-                    result.value = *lhs_int << *rhs_int;
+                    result.value = const_eval::normalize_int(
+                        static_cast<int64_t>(ulv << (urv & 63)), result.type);
                     return result;
                 case MirBinaryOp::Shr:
-                    result.value = *lhs_int >> *rhs_int;
+                    // 符号なし型は論理シフト、符号付き型は算術シフト
+                    result.value = const_eval::normalize_int(
+                        uns ? static_cast<int64_t>(ulv >> (urv & 63)) : lv >> (rv & 63),
+                        result.type);
                     return result;
                 case MirBinaryOp::Eq:
-                    result.value = (*lhs_int == *rhs_int);
+                    result.value = (lv == rv);
                     return result;
                 case MirBinaryOp::Ne:
-                    result.value = (*lhs_int != *rhs_int);
+                    result.value = (lv != rv);
                     return result;
                 case MirBinaryOp::Lt:
-                    result.value = (*lhs_int < *rhs_int);
+                    result.value = uns ? (ulv < urv) : (lv < rv);
                     return result;
                 case MirBinaryOp::Le:
-                    result.value = (*lhs_int <= *rhs_int);
+                    result.value = uns ? (ulv <= urv) : (lv <= rv);
                     return result;
                 case MirBinaryOp::Gt:
-                    result.value = (*lhs_int > *rhs_int);
+                    result.value = uns ? (ulv > urv) : (lv > rv);
                     return result;
                 case MirBinaryOp::Ge:
-                    result.value = (*lhs_int >= *rhs_int);
+                    result.value = uns ? (ulv >= urv) : (lv >= rv);
                     return result;
                 default:
                     break;
@@ -654,10 +695,10 @@ std::optional<MirConstant> SparseConditionalConstantPropagation::eval_unary_op(
     if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
         switch (op) {
             case MirUnaryOp::Neg:
-                result.value = -*int_val;
+                result.value = const_eval::normalize_int(-*int_val, result.type);
                 return result;
             case MirUnaryOp::BitNot:
-                result.value = ~*int_val;
+                result.value = const_eval::normalize_int(~*int_val, result.type);
                 return result;
             default:
                 break;
@@ -750,9 +791,12 @@ bool SparseConditionalConstantPropagation::apply_constants(
             }
 
             LatticeValue value = eval_rvalue(func, *assign_data.rvalue, state);
-            if (value.kind == LatticeKind::Constant &&
-                !can_bind_constant(func, assign_data.place.local, value.constant)) {
-                value.kind = LatticeKind::Overdefined;
+            if (value.kind == LatticeKind::Constant) {
+                // 代入先の型幅に正規化（狭い型への代入はラップ）
+                normalize_constant_to_local(func, assign_data.place.local, value.constant);
+                if (!can_bind_constant(func, assign_data.place.local, value.constant)) {
+                    value.kind = LatticeKind::Overdefined;
+                }
             }
 
             if (value.kind == LatticeKind::Constant) {

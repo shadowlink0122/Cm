@@ -77,16 +77,41 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
 
+            // 符号なし型の判定（シフト・ラップアラウンドのセマンティクス切り替え用）
+            auto is_unsigned_int = [](const hir::TypePtr& t) {
+                if (!t)
+                    return false;
+                return t->kind == TypeKind::UTiny || t->kind == TypeKind::UShort ||
+                       t->kind == TypeKind::UInt || t->kind == TypeKind::ULong;
+            };
+            const bool uns = is_unsigned_int(data.result_type) || is_unsigned_int(lhsType) ||
+                             is_unsigned_int(rhsType);
+
+            // 右シフト: JSの >> はint32の算術シフトのため、符号なし型は >>> を使う
+            if (data.op == mir::MirBinaryOp::Shr && uns) {
+                return "(" + lhs + " >>> " + rhs + ")";
+            }
+
             // 32ビット整数演算のオーバーフロー処理
             // JSは64ビット浮動小数点数のため、int/uint型の演算で32ビットラップアラウンドが必要
             if (data.result_type && data.result_type->is_int32()) {
+                const bool result_unsigned = is_unsigned_int(data.result_type);
                 // 乗算: Math.imul を使用（32ビット整数乗算）
                 if (data.op == mir::MirBinaryOp::Mul) {
-                    return "Math.imul(" + lhs + ", " + rhs + ")";
+                    std::string mul = "Math.imul(" + lhs + ", " + rhs + ")";
+                    // uintは符号なし32ビットへ再解釈
+                    return result_unsigned ? "(" + mul + " >>> 0)" : mul;
                 }
-                // 加算/減算: |0 で32ビットに切り捨て
+                // 加算/減算: 32ビットに切り捨て（uintは >>> 0 で符号なし化）
                 if (data.op == mir::MirBinaryOp::Add || data.op == mir::MirBinaryOp::Sub) {
+                    if (result_unsigned) {
+                        return "((" + lhs + " " + op + " " + rhs + ") >>> 0)";
+                    }
                     return "((" + lhs + " " + op + " " + rhs + ")|0)";
+                }
+                // 左シフト: uintは符号なし32ビットへ再解釈
+                if (data.op == mir::MirBinaryOp::Shl && result_unsigned) {
+                    return "((" + lhs + " << " + rhs + ") >>> 0)";
                 }
             }
 

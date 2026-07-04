@@ -20,6 +20,7 @@ int main() {
     println(big1);
 
     // ビットパターン確認
+    // ulongの右シフトは論理シフト（符号なし）なので最上位ビットのみ残り 1 になる
     ulong top_bit = 0x8000000000000000;
     ulong shifted = top_bit >> 63;
     println("top bit shift: {shifted}");

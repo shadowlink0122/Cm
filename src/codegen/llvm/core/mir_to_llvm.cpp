@@ -3281,7 +3281,8 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return nullptr;
             }
 
-            auto result = convertBinaryOp(binop.op, lhs, rhs, binop.result_type);
+            auto result = convertBinaryOp(binop.op, lhs, rhs, binop.result_type,
+                                          getOperandType(*binop.lhs), getOperandType(*binop.rhs));
             return result;
         }
         case mir::MirRvalue::UnaryOp: {
@@ -3552,14 +3553,23 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateFPToSI(value, targetType, "fptosi");
             }
 
-            // int サイズ変換（target_typeのsignednessに応じてsext/zext切り替え）
+            // int サイズ変換
+            // 拡張の符号はソース型のsignednessに従う（C言語と同じ規則）:
+            // utiny 255 as int は 255（ゼロ拡張）であり -1（符号拡張）ではない
             if (sourceType->isIntegerTy() && targetType->isIntegerTy()) {
                 auto srcBits = sourceType->getIntegerBitWidth();
                 auto dstBits = targetType->getIntegerBitWidth();
                 if (srcBits < dstBits) {
-                    // unsigned型（UTiny,UShort,UInt,ULong）へのキャストはゼロ拡張
                     bool use_zext = false;
-                    if (castData.target_type) {
+                    auto src_hir_type = getOperandType(*castData.operand);
+                    if (src_hir_type) {
+                        auto kind = src_hir_type->kind;
+                        use_zext = (kind == hir::TypeKind::UTiny || kind == hir::TypeKind::UShort ||
+                                    kind == hir::TypeKind::UInt || kind == hir::TypeKind::ULong ||
+                                    kind == hir::TypeKind::USize || kind == hir::TypeKind::Bool ||
+                                    kind == hir::TypeKind::Char);
+                    } else if (castData.target_type) {
+                        // ソース型が不明な場合はターゲット型で判定（従来動作）
                         auto kind = castData.target_type->kind;
                         use_zext = (kind == hir::TypeKind::UTiny || kind == hir::TypeKind::UShort ||
                                     kind == hir::TypeKind::UInt || kind == hir::TypeKind::ULong);

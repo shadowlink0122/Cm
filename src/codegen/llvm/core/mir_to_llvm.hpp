@@ -124,8 +124,12 @@ class MIRToLLVM {
     llvm::Constant* convertConstant(const mir::MirConstant& value);
 
     /// 二項演算変換
+    /// lhs_type/rhs_type: オペランドのHIR型（符号なしセマンティクス判定用。
+    /// 比較演算のresult_typeはboolになるためオペランド型が必要）
     llvm::Value* convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs,
-                                 const hir::TypePtr& result_type = nullptr);
+                                 const hir::TypePtr& result_type = nullptr,
+                                 const hir::TypePtr& lhs_type = nullptr,
+                                 const hir::TypePtr& rhs_type = nullptr);
 
     /// 単項演算変換
     llvm::Value* convertUnaryOp(mir::MirUnaryOp op, llvm::Value* operand);
