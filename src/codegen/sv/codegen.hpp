@@ -28,6 +28,7 @@ struct SVPort {
     std::string name;
     std::string sv_type;  // "logic", "logic [7:0]" 等
     int bit_width = 1;
+    std::string array_suffix;  // アンパックド次元 " [0:N-1]"（配列型ポート用）
 };
 
 // SVモジュール情報

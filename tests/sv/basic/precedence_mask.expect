@@ -1,0 +1,7 @@
+SIM_OK
+TEST 1: bit_clear=0
+TEST 1: bit_set=1
+TEST 1: fn_clear=0
+TEST 2: bit_clear=1
+TEST 2: bit_set=0
+TEST 2: fn_clear=1

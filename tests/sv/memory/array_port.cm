@@ -1,0 +1,15 @@
+//! platform: sv
+
+// 配列型ポートの回帰テスト:
+// uint[4] のような配列型ポートはアンパックド次元 [0:3] を保持して
+// 出力される必要がある（次元が落ちるとビット選択として解釈され意味が壊れる）。
+// 本テストはコンパイル/リント通過のみを検証する。
+
+#[input] uint idx;
+#[output] uint[4] data;
+
+async void update(posedge clk) {
+    if (idx < 4) {
+        data[idx] = idx;
+    }
+}

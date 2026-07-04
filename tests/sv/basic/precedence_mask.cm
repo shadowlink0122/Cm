@@ -1,0 +1,33 @@
+//! platform: sv
+//! test: a=256 -> bit_clear=0, bit_set=1, fn_clear=0
+//! test: a=255 -> bit_clear=1, bit_set=0, fn_clear=1
+
+// 演算子優先順位の回帰テスト:
+// (a & 256) == 0 が括弧なしの a & 256 == 0 として出力されると、
+// SVでは == が & より優先されるため a & (256 == 0) = 0 となり常に偽になる。
+// alwaysブロック内のif文と関数内のif文の両方の経路を検証する。
+
+#[input] uint a = 0;
+#[output] uint bit_clear = 0;
+#[output] uint bit_set = 0;
+#[output] uint fn_clear = 0;
+
+// 関数経路: function automatic 内のif文でのインライン展開を検証
+uint classify(uint x) {
+    if ((x & 256) == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+void check() {
+    // alwaysブロック経路: ビットマスクと比較の組み合わせ
+    if ((a & 256) == 0) {
+        bit_clear = 1;
+        bit_set = 0;
+    } else {
+        bit_clear = 0;
+        bit_set = 1;
+    }
+    fn_clear = classify(a);
+}

@@ -49,9 +49,11 @@ std::string get_outermost_operator(const std::string& s) {
     for (const auto& op : ops_by_precedence) {
         int d = 0;
         for (size_t i = 0; i < s.size(); ++i) {
-            if (s[i] == '(') {
+            // 括弧に加えてビット選択/配列インデックスの [] 内も深さとして扱い、
+            // インデックス式内の演算子を最外演算子と誤認しないようにする
+            if (s[i] == '(' || s[i] == '[') {
                 d++;
-            } else if (s[i] == ')') {
+            } else if (s[i] == ')' || s[i] == ']') {
                 d--;
             } else if (d == 0) {
                 if (s.size() - i >= op.size() && s.substr(i, op.size()) == op) {
@@ -111,6 +113,61 @@ std::string get_parent_operator(const std::string& expr, size_t pos, size_t var_
 bool is_associative_op(const std::string& op) {
     return op == "+" || op == "*" || op == "&" || op == "|" || op == "^" || op == "&&" ||
            op == "||";
+}
+
+// 符号付き整数型であるか判定
+bool is_signed_type(const hir::TypePtr& type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case hir::TypeKind::Tiny:
+        case hir::TypeKind::Short:
+        case hir::TypeKind::Int:
+        case hir::TypeKind::Long:
+        case hir::TypeKind::ISize:
+            return true;
+        case hir::TypeKind::Wire:
+        case hir::TypeKind::Reg:
+            return type->element_type && is_signed_type(type->element_type);
+        default:
+            return false;
+    }
+}
+
+// オペランドの型を解決する
+// （operand.typeが未設定の場合はローカル変数宣言の型を参照する）
+hir::TypePtr resolve_operand_type(const mir::MirOperand& op, const mir::MirFunction& func) {
+    if (op.type)
+        return op.type;
+    if (op.kind == mir::MirOperand::Copy || op.kind == mir::MirOperand::Move) {
+        if (const auto* place = std::get_if<mir::MirPlace>(&op.data)) {
+            if (place->projections.empty() && place->local < func.locals.size()) {
+                return func.locals[place->local].type;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// 固定幅の整数型であるか判定（サイズキャスト出力の対象判定用）
+bool is_integer_type(const hir::TypePtr& type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case hir::TypeKind::Tiny:
+        case hir::TypeKind::UTiny:
+        case hir::TypeKind::Short:
+        case hir::TypeKind::UShort:
+        case hir::TypeKind::Int:
+        case hir::TypeKind::UInt:
+        case hir::TypeKind::Long:
+        case hir::TypeKind::ULong:
+        case hir::TypeKind::ISize:
+        case hir::TypeKind::USize:
+            return true;
+        default:
+            return false;
+    }
 }
 }  // namespace
 
@@ -303,7 +360,7 @@ void SVCodeGen::emitPortList(const std::vector<SVPort>& ports) {
                 dir = "inout ";
                 break;
         }
-        std::string line = dir + port.sv_type + " " + port.name;
+        std::string line = dir + port.sv_type + " " + port.name + port.array_suffix;
         if (i < ports.size() - 1) {
             line += ",";
         }
@@ -663,7 +720,10 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     op = " << ";
                     break;
                 case mir::MirBinaryOp::Shr:
-                    op = " >> ";
+                    // Cmの>>は符号付き型では算術シフト（LLVMバックエンドのAShrと同一意味論）。
+                    // SVの>>は常に論理シフトのため、符号付きオペランドには>>>を出力する
+                    op = (bin.lhs && is_signed_type(resolve_operand_type(*bin.lhs, func))) ? " >>> "
+                                                                                           : " >> ";
                     break;
                 case mir::MirBinaryOp::Eq:
                     op = " == ";
@@ -715,10 +775,31 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
 
         case mir::MirRvalue::Cast: {
             const auto& cast = std::get<mir::MirRvalue::CastData>(rvalue.data);
-            if (cast.operand) {
-                return emitOperand(*cast.operand, func);
+            if (!cast.operand) {
+                return "0";
             }
-            return "0";
+            std::string operand_str = emitOperand(*cast.operand, func);
+            // 整数型への幅変更キャストはSVのサイズキャストとして明示的に出力する。
+            // 出力しないと式の途中の縮小キャスト（例: (a + 300) as utiny）の
+            // 切り捨てが失われ、計算結果そのものが変わってしまう
+            int target_w = is_integer_type(cast.target_type) ? getBitWidth(cast.target_type) : 0;
+            if (target_w > 0) {
+                hir::TypePtr source_type = resolve_operand_type(*cast.operand, func);
+                int source_w = is_integer_type(source_type) ? getBitWidth(source_type) : 0;
+                std::string result = operand_str;
+                // 幅が異なる（または不明な）場合はサイズキャストを出力
+                if (source_w != target_w) {
+                    result = std::to_string(target_w) + "'(" + result + ")";
+                }
+                // 符号性が変わる場合は$signed/$unsignedで明示する
+                if (source_type &&
+                    is_signed_type(source_type) != is_signed_type(cast.target_type)) {
+                    result = (is_signed_type(cast.target_type) ? "$signed(" : "$unsigned(") +
+                             result + ")";
+                }
+                return result;
+            }
+            return operand_str;
         }
 
         default:
@@ -1038,30 +1119,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                         expanded_ss << line_indent << lhs << " = " << rhs << ";\n";
                     } else {
                         // if/else等の制御文でもテンポラリをインライン展開
-                        std::string expanded = l;
-                        for (int iter = 0; iter < 10; ++iter) {
-                            bool changed = false;
-                            for (const auto& [var, val] : fn_temp_values) {
-                                size_t p = 0;
-                                while ((p = expanded.find(var, p)) != std::string::npos) {
-                                    bool at_start = (p == 0 || (!std::isalnum(expanded[p - 1]) &&
-                                                                expanded[p - 1] != '_'));
-                                    bool at_end = (p + var.size() >= expanded.size() ||
-                                                   (!std::isalnum(expanded[p + var.size()]) &&
-                                                    expanded[p + var.size()] != '_'));
-                                    if (at_start && at_end) {
-                                        expanded.replace(p, var.size(), val);
-                                        p += val.size();
-                                        changed = true;
-                                    } else {
-                                        p += var.size();
-                                    }
-                                }
-                            }
-                            if (!changed)
-                                break;
-                        }
-                        expanded_ss << expanded << "\n";
+                        // （代入文と同じ優先順位対応の括弧付与を行う）
+                        expanded_ss << fn_inline_temps(l) << "\n";
                     }
                 }
                 body_content = expanded_ss.str();
@@ -1464,32 +1523,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             rhs = inline_temps(rhs);
             block_ss << line_indent << lhs << " <= " << rhs << ";\n";
         } else {
-            // if/else等の構造制御文でも一時変数を反復的にインライン展開
-            std::string expanded = l;
-            // 最大10回の反復で多段展開（_t1002 → _t1000 == _t1001 → a == b）
-            for (int iter = 0; iter < 10; ++iter) {
-                bool changed = false;
-                for (const auto& [var, val] : temp_values) {
-                    size_t pos = 0;
-                    while ((pos = expanded.find(var, pos)) != std::string::npos) {
-                        bool at_start = (pos == 0 || (!std::isalnum(expanded[pos - 1]) &&
-                                                      expanded[pos - 1] != '_'));
-                        bool at_end = (pos + var.size() >= expanded.size() ||
-                                       (!std::isalnum(expanded[pos + var.size()]) &&
-                                        expanded[pos + var.size()] != '_'));
-                        if (at_start && at_end) {
-                            expanded.replace(pos, var.size(), val);
-                            pos += val.size();
-                            changed = true;
-                        } else {
-                            pos += var.size();
-                        }
-                    }
-                }
-                if (!changed)
-                    break;
-            }
-            block_ss << expanded << "\n";
+            // if/else等の構造制御文でも一時変数をインライン展開
+            // 代入文と同じ括弧付与ロジックを通し、展開後に演算子優先順位で
+            // 意味が変わらないようにする（例: if ((a & 256) == 0)）
+            block_ss << inline_temps(l) << "\n";
         }
     }
 
@@ -2682,14 +2719,14 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 }
 
                 if (is_input) {
-                    default_mod.ports.push_back(
-                        {SVPort::Input, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                    default_mod.ports.push_back({SVPort::Input, var_name, mapType(gv->type),
+                                                 getBitWidth(gv->type), getArraySuffix(gv->type)});
                 } else if (is_inout) {
-                    default_mod.ports.push_back(
-                        {SVPort::InOut, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                    default_mod.ports.push_back({SVPort::InOut, var_name, mapType(gv->type),
+                                                 getBitWidth(gv->type), getArraySuffix(gv->type)});
                 } else if (is_output) {
-                    default_mod.ports.push_back(
-                        {SVPort::Output, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                    default_mod.ports.push_back({SVPort::Output, var_name, mapType(gv->type),
+                                                 getBitWidth(gv->type), getArraySuffix(gv->type)});
                 } else {
                     // wire宣言を追加（連続代入の左辺はnet型が必要）
                     default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " +
@@ -2737,8 +2774,9 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
         if (is_input) {
             if (emitted_var_names.count(var_name) == 0) {
-                default_mod.ports.push_back(
-                    {SVPort::Input, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                // 配列型ポートはアンパックド次元も保持する
+                default_mod.ports.push_back({SVPort::Input, var_name, mapType(gv->type),
+                                             getBitWidth(gv->type), getArraySuffix(gv->type)});
                 emitted_var_names.insert(var_name);
             }
             if (var_name == "clk")
@@ -2747,21 +2785,29 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 has_rst = true;
         } else if (is_inout) {
             if (emitted_var_names.count(var_name) == 0) {
-                default_mod.ports.push_back(
-                    {SVPort::InOut, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                default_mod.ports.push_back({SVPort::InOut, var_name, mapType(gv->type),
+                                             getBitWidth(gv->type), getArraySuffix(gv->type)});
                 emitted_var_names.insert(var_name);
             }
         } else if (is_output) {
             if (emitted_var_names.count(var_name) == 0) {
-                default_mod.ports.push_back(
-                    {SVPort::Output, var_name, mapType(gv->type), getBitWidth(gv->type)});
+                default_mod.ports.push_back({SVPort::Output, var_name, mapType(gv->type),
+                                             getBitWidth(gv->type), getArraySuffix(gv->type)});
                 emitted_var_names.insert(var_name);
             }
         } else {
             // 属性なし → 内部レジスタ/ワイヤとして宣言
             if (emitted_var_names.count(var_name) == 0) {
-                default_mod.reg_declarations.push_back(mapType(gv->type) + " " + var_name +
-                                                       getArraySuffix(gv->type) + ";");
+                std::string array_suffix = getArraySuffix(gv->type);
+                std::string reg_decl = mapType(gv->type) + " " + var_name + array_suffix;
+                // 宣言初期値を電源投入時初期値として出力する。
+                // 出力しないとシミュレーションでXのままFSMが進まない
+                // （FPGA合成でもレジスタの初期値として扱われる）
+                if (gv->init_value && array_suffix.empty()) {
+                    reg_decl +=
+                        " = " + emitConstant(*gv->init_value, gv->type, getBitWidth(gv->type));
+                }
+                default_mod.reg_declarations.push_back(reg_decl + ";");
                 emitted_var_names.insert(var_name);
             }
         }
@@ -2803,7 +2849,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     }
     if (has_async && !has_clk) {
         default_mod.ports.insert(default_mod.ports.begin(),
-                                 SVPort{SVPort::Input, "clk", "logic", 1});
+                                 SVPort{SVPort::Input, "clk", "logic", 1, ""});
     }
     if (has_async && !has_rst) {
         // clkの実際の位置を検索して直後に挿入
@@ -2815,7 +2861,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
         }
         default_mod.ports.insert(default_mod.ports.begin() + static_cast<ptrdiff_t>(insert_pos),
-                                 SVPort{SVPort::Input, "rst", "logic", 1});
+                                 SVPort{SVPort::Input, "rst", "logic", 1, ""});
     }
 
     // 各関数を解析（import/export時の重複排除）
@@ -2846,10 +2892,17 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
 
         std::ostringstream ss;
-        // ビット幅計算: メンバー数から必要ビット数を算出
-        int member_count = static_cast<int>(e->members.size());
+        // ビット幅計算: 最大タグ値を表現できるビット数を算出
+        // （明示的なタグ値はメンバー数-1 より大きい場合があるため、
+        //   メンバー数ではなく実際の値の最大から求める）
+        int64_t max_tag = static_cast<int64_t>(e->members.size()) - 1;
+        for (const auto& m : e->members) {
+            if (m.tag_value > max_tag) {
+                max_tag = m.tag_value;
+            }
+        }
         int bit_width = 1;
-        int val = member_count - 1;
+        int64_t val = max_tag;
         while (val > 1) {
             bit_width++;
             val >>= 1;
@@ -3089,7 +3142,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 
     // ポートに対応する信号宣言
     for (const auto& port : mod.ports) {
-        ss << "    " << port.sv_type << " " << port.name << ";\n";
+        ss << "    " << port.sv_type << " " << port.name << port.array_suffix << ";\n";
     }
     ss << "\n";
 
