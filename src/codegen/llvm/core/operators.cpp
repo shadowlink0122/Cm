@@ -3,6 +3,8 @@
 
 #include "mir_to_llvm.hpp"
 
+#include <functional>
+
 namespace cm::codegen::llvm_backend {
 
 // 符号なし型かどうかを判定するヘルパー
@@ -20,6 +22,32 @@ static bool isUnsignedType(const hir::TypePtr& type) {
         default:
             return false;
     }
+}
+
+// 整数ゼロ除算の実行時チェックを挿入する。
+// 除数が定数0なら無条件で、非定数なら分岐でトラップする
+// （従来はLLVMのsdiv/udivの未定義動作でゴミ値が返っていた）
+static void emitDivByZeroCheck(llvm::IRBuilder<>* builder, llvm::LLVMContext& llvm_ctx,
+                               llvm::Value* rhs,
+                               const std::function<void(const std::string&)>& panic) {
+    if (!rhs->getType()->isIntegerTy()) {
+        return;
+    }
+    // 非ゼロ定数はチェック不要
+    if (auto* c = llvm::dyn_cast<llvm::ConstantInt>(rhs)) {
+        if (!c->isZero()) {
+            return;
+        }
+    }
+    auto func = builder->GetInsertBlock()->getParent();
+    auto zero = llvm::ConstantInt::get(rhs->getType(), 0);
+    auto is_zero = builder->CreateICmpEQ(rhs, zero, "divzero.check");
+    auto failBB = llvm::BasicBlock::Create(llvm_ctx, "divzero.fail", func);
+    auto contBB = llvm::BasicBlock::Create(llvm_ctx, "divzero.cont", func);
+    builder->CreateCondBr(is_zero, failBB, contBB);
+    builder->SetInsertPoint(failBB);
+    panic("integer division by zero");
+    builder->SetInsertPoint(contBB);
 }
 
 // 浮動小数点型の型昇格（float/doubleの統一）
@@ -377,6 +405,9 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                                       : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
+            // ゼロ除算の実行時トラップ
+            emitDivByZeroCheck(builder, ctx.getContext(), rhs,
+                               [this](const std::string& msg) { generatePanic(msg); });
             // 符号なし型は符号なし除算
             if (operands_unsigned) {
                 return builder->CreateUDiv(lhs, rhs, "udiv");
@@ -401,6 +432,9 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                                       : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
+            // ゼロ除算の実行時トラップ
+            emitDivByZeroCheck(builder, ctx.getContext(), rhs,
+                               [this](const std::string& msg) { generatePanic(msg); });
             // 符号なし型は符号なし剰余
             if (operands_unsigned) {
                 return builder->CreateURem(lhs, rhs, "umod");

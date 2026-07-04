@@ -167,11 +167,21 @@ svバックエンド以外で、同日の調査により以下の重大バグが
    既存テスト `ulong_large_hex` の期待値はバグを焼き込んでいたため修正
    （`ulong >> 63` は論理シフトで 1 が正しい）。
    回帰テスト: `tests/common/basic/unsigned_semantics`
-4. **文字列補間内の式 `{a + b}` 等がゴミ値を出力**（JITとネイティブで値も相違）
+4. ~~**文字列補間内の式 `{a + b}` 等がゴミ値を出力**~~ → **✅ 2026-07-05 修正済み**。
+   MIR loweringの補間プレースホルダ解析が変数名パターン専用で、
+   演算子を含む式は未初期化テンポラリのまま渡されていた。
+   演算子を含む内容は本物のフロントエンド（Lexer→Parser→HirLowering）で
+   式としてパースし、通常の式loweringに掛けるフォールバックを追加した。
+   回帰テスト: `tests/common/basic/interp_expression`
 5. ~~**配列要素・構造体フィールドへの `++`/`--` が無効**~~ → **✅ 2026-07-04 修正済み**。
    `lower_unary` のinc/decが `HirVarRef` 以外を黙って `const 0` に置換していた。
    Index/Member/Deref（多次元・ポインタ自動deref含む）のprojection付きplaceを構築して
    read-modify-write を生成するようにした（後置の旧値返却も対応）。
    回帰テスト: `tests/common/basic/incdec_place`
-6. **整数ゼロ除算がトラップせずゴミ値**（JITとネイティブで相違）
+6. ~~**整数ゼロ除算がトラップせずゴミ値**~~ → **✅ 2026-07-05 修正済み**。
+   LLVM codegenの整数div/remにゼロチェック分岐を挿入し、除数0で
+   `integer division by zero` を出力して exit(1) するようにした
+   （非ゼロ定数除数はチェックを省略）。JSバックエンドも同名エラーをthrow。
+   WASMランタイムに `exit`（proc_exit委譲）を追加。
+   回帰テスト: `tests/common/errors/div_by_zero`
 7. 構造体は関数へ参照渡し・配列は値渡しという**引数渡し規約の不整合**（設計判断の明文化が必要）

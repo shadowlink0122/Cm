@@ -70,11 +70,16 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
 
-            // 整数除算の場合はMath.truncを使用
-            if (data.op == mir::MirBinaryOp::Div && data.result_type) {
-                if (data.result_type->is_integer()) {
-                    return "Math.trunc(" + lhs + " " + op + " " + rhs + ")";
+            // 整数除算・剰余: ゼロ除算は実行時エラー、除算はMath.truncで整数化
+            if ((data.op == mir::MirBinaryOp::Div || data.op == mir::MirBinaryOp::Mod) &&
+                data.result_type && data.result_type->is_integer()) {
+                std::string safe_rhs =
+                    "((" + rhs +
+                    ") || (() => { throw new Error(\"integer division by zero\"); })())";
+                if (data.op == mir::MirBinaryOp::Div) {
+                    return "Math.trunc(" + lhs + " / " + safe_rhs + ")";
                 }
+                return "(" + lhs + " % " + safe_rhs + ")";
             }
 
             // 符号なし型の判定（シフト・ラップアラウンドのセマンティクス切り替え用）

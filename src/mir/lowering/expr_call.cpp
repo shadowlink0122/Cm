@@ -2,9 +2,97 @@
 // extract_named_placeholders, lower_call
 
 #include "../../common/debug.hpp"
+#include "../../frontend/lexer/lexer.hpp"
+#include "../../frontend/parser/parser.hpp"
+#include "../../hir/lowering/fwd.hpp"
 #include "expr.hpp"
 
 namespace cm::mir {
+
+// 補間内容が「単純な変数参照・メンバ・添字・関数呼び出し」ではなく
+// 演算子を含む一般式かどうかを判定する（トップレベルの演算子のみ検出）。
+// 該当する場合は式パーサへのフォールバックを試みる
+static bool interp_content_is_expression(const std::string& s) {
+    int paren = 0;
+    int bracket = 0;
+    bool in_string = false;
+    char quote = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        if (in_string) {
+            if (c == quote && (i == 0 || s[i - 1] != '\\')) {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            in_string = true;
+            quote = c;
+            continue;
+        }
+        if (c == '(') {
+            paren++;
+            continue;
+        }
+        if (c == ')') {
+            paren--;
+            continue;
+        }
+        if (c == '[') {
+            bracket++;
+            continue;
+        }
+        if (c == ']') {
+            bracket--;
+            continue;
+        }
+        if (paren != 0 || bracket != 0) {
+            continue;
+        }
+        switch (c) {
+            case '+':
+            case '/':
+            case '%':
+            case '^':
+            case '~':
+            case '?':
+            case '<':
+            case '>':
+            case '=':
+                return true;
+            case '-':
+                // "->" はポインタメンバアクセスなので除外
+                if (i + 1 < s.size() && s[i + 1] == '>') {
+                    ++i;
+                    break;
+                }
+                return true;
+            case '*':
+                // 先頭の * はデリファレンス（既存パターンで処理）
+                if (i > 0) {
+                    return true;
+                }
+                break;
+            case '&':
+                // 先頭の & はアドレス取得（既存パターンで処理）
+                if (i > 0) {
+                    return true;
+                }
+                break;
+            case '!':
+                // 先頭の ! は論理否定（既存パターンで処理）
+                if (i > 0) {
+                    return true;
+                }
+                break;
+            case '|':
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
+}
 
 std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_placeholders(
     const std::string& format_str, [[maybe_unused]] LoweringContext& ctx) {
@@ -237,6 +325,49 @@ static MirOperandPtr lower_interp_call_arg(LoweringContext& ctx, const std::stri
     return MirOperand::constant(arg_const);
 }
 
+// 補間プレースホルダの内容を式としてパースしMIRへ降下する。
+// 内容を返り値とするダミー関数を本物のフロントエンド
+// （Lexer→Parser→HirLowering）でHIRに変換し、そのreturn式を
+// 現在の関数コンテキストで通常の式loweringに掛ける
+std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& content,
+                                                             LoweringContext& ctx) {
+    try {
+        std::string src = "int __interp_expr__() { return (" + content + "); }";
+        Lexer lex(src);
+        auto tokens = lex.tokenize();
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+        if (parser.has_errors()) {
+            return std::nullopt;
+        }
+
+        hir::HirLowering hir_lowering;
+        auto hir_program = hir_lowering.lower(program);
+
+        for (auto& decl : hir_program.declarations) {
+            if (!decl) {
+                continue;
+            }
+            auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind);
+            if (!func || !*func || (*func)->name != "__interp_expr__") {
+                continue;
+            }
+            for (auto& stmt : (*func)->body) {
+                if (!stmt) {
+                    continue;
+                }
+                auto* ret = std::get_if<std::unique_ptr<hir::HirReturn>>(&stmt->kind);
+                if (ret && *ret && (*ret)->value) {
+                    return lower_expression(*(*ret)->value, ctx);
+                }
+            }
+        }
+    } catch (...) {
+        // パース不能な内容は従来のパターン処理へフォールバック
+    }
+    return std::nullopt;
+}
+
 // 関数呼び出しのlowering
 LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
                                  LoweringContext& ctx) {
@@ -335,6 +466,15 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
                     // 名前付き変数を解決して追加（プレースホルダの順番通り）
                     for (const auto& var_name : var_names) {
+                        // 演算子を含む一般式（{a + b} 等）は本物の式パーサで降下する。
+                        // 従来は未対応パターンとして未初期化テンポラリが渡され
+                        // ゴミ値が表示されていた
+                        if (interp_content_is_expression(var_name)) {
+                            if (auto expr_local = lower_interp_expression(var_name, ctx)) {
+                                arg_locals.push_back(*expr_local);
+                                continue;
+                            }
+                        }
                         if (!var_name.empty() && var_name[0] == '!') {
                             // 論理否定演算子の処理
                             std::string inner_expr = var_name.substr(1);
