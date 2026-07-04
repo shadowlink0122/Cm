@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: value=50, cycles=2 -> out=50
+
+// std::debug::assert の即時アサーションテスト:
+// assert(expr, "msg") は SV の即時アサーション
+// assert (expr) else $error("assertion failed: msg"); として出力される。
+// シミュレーションで検証され、合成ツールでは無視される。
+
+import std::debug::assert;
+
+#[input] posedge clk;
+#[input] uint value;
+#[output] uint out = 0;
+
+async void check(posedge clk) {
+    assert(value < 100, "value out of range");
+    out = value;
+}

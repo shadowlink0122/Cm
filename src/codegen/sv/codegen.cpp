@@ -2,7 +2,9 @@
 
 #include "../../mir/analysis/dominators.hpp"
 
+#include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <set>
@@ -638,6 +640,87 @@ std::string SVCodeGen::buildArrayInitial(const mir::MirGlobalVar& gv, const std:
     return ss.str();
 }
 
+// #[sv::memfile("path.hex")] / #[verilog::memfile("path.hex")] 属性からパスを抽出する
+std::string SVCodeGen::getMemfilePath(const mir::MirGlobalVar& gv) {
+    for (const auto& attr : gv.attributes) {
+        for (const char* prefix : {"sv::memfile(\"", "verilog::memfile(\""}) {
+            if (attr.rfind(prefix, 0) == 0 && attr.size() >= 2 && attr.back() == ')') {
+                // name("path") の path 部分を取り出す
+                size_t start = std::string(prefix).size();
+                size_t end = attr.find('"', start);
+                if (end != std::string::npos) {
+                    return attr.substr(start, end - start);
+                }
+            }
+        }
+    }
+    return "";
+}
+
+// memfile属性があれば $readmemh を、無ければ要素代入のinitialブロックを生成する
+std::string SVCodeGen::buildArrayInitialOrReadmem(const mir::MirGlobalVar& gv,
+                                                  const std::string& var_name) {
+    std::string memfile = getMemfilePath(gv);
+    if (memfile.empty()) {
+        return buildArrayInitial(gv, var_name);
+    }
+    emitMemfileIfRequested(gv, memfile);
+    return "initial $readmemh(\"" + memfile + "\", " + var_name + ");\n";
+}
+
+// --emit-memfile 指定時、配列リテラル初期値を.hexファイルとして書き出す。
+// 出力先は生成SVファイルと同じディレクトリ（$readmemhの相対パス解決に合わせる）
+void SVCodeGen::emitMemfileIfRequested(const mir::MirGlobalVar& gv,
+                                       const std::string& memfile_path) {
+    if (!options_.emitMemfile || !gv.init_expr) {
+        return;
+    }
+    const auto* arr = std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&gv.init_expr->kind);
+    if (!arr || !*arr || (*arr)->elements.empty()) {
+        return;
+    }
+
+    std::filesystem::path out_path(memfile_path);
+    if (out_path.is_relative()) {
+        std::filesystem::path sv_dir = std::filesystem::path(options_.outputFile).parent_path();
+        if (!sv_dir.empty()) {
+            out_path = sv_dir / out_path;
+        }
+    }
+
+    std::ofstream file(out_path);
+    if (!file.is_open()) {
+        std::cerr << "警告: memfileを書き出せません: " << out_path.string() << "\n";
+        return;
+    }
+    for (const auto& elem : (*arr)->elements) {
+        uint64_t value = 0;
+        if (elem) {
+            if (const auto* lit_ptr = std::get_if<std::unique_ptr<hir::HirLiteral>>(&elem->kind)) {
+                const auto& lit = **lit_ptr;
+                if (const auto* ival = std::get_if<int64_t>(&lit.value)) {
+                    value = static_cast<uint64_t>(*ival);
+                } else if (const auto* bval = std::get_if<bool>(&lit.value)) {
+                    value = *bval ? 1 : 0;
+                } else if (const auto* cval = std::get_if<char>(&lit.value)) {
+                    value = static_cast<uint64_t>(static_cast<unsigned char>(*cval));
+                }
+            }
+        }
+        // 要素幅に合わせた16進値を1行1要素で出力（$readmemh形式）
+        int width = getBitWidth(gv.type ? gv.type->element_type : nullptr);
+        int hex_digits = (width + 3) / 4;
+        if (hex_digits <= 0) {
+            hex_digits = 1;
+        }
+        uint64_t mask = (width >= 64) ? ~0ULL : ((1ULL << width) - 1);
+        file << std::hex << std::setw(hex_digits) << std::setfill('0') << (value & mask) << "\n";
+    }
+    if (options_.verbose) {
+        std::cout << "Generated memfile: " << out_path.string() << "\n";
+    }
+}
+
 // === Place（左辺値）生成 ===
 
 std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunction& func) {
@@ -1000,6 +1083,11 @@ std::string SVCodeGen::emitBlock(const mir::BasicBlock& block, const mir::MirFun
 void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // main関数はスキップ（ハードウェアにmainはない）
     if (func.name == "main")
+        return;
+
+    // std::debug::assert はイントリンシック（呼び出し箇所で即時アサーションに展開）。
+    // 定義本体は出力しない（assertはSVの予約語でもある）
+    if (func.name == "assert")
         return;
 
     // 非always/非async関数で、非void（戻り値あり）の場合 → SV function automatic
@@ -2398,7 +2486,33 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 return name;
             };
 
-            if (func_name == "__builtin_concat" || func_name == "__builtin_replicate") {
+            if (func_name == "assert") {
+                // 即時アサーション: assert (条件) else $error(...);
+                // シミュレーションで検証され、合成ツールでは無視される
+                std::string cond =
+                    (!cd.args.empty() && cd.args[0]) ? resolveArg(*cd.args[0]) : "1'b1";
+                std::string message = "assertion failed";
+                if (cd.args.size() >= 2 && cd.args[1]) {
+                    const mir::MirConstant* msg_const = nullptr;
+                    if (cd.args[1]->kind == mir::MirOperand::Constant) {
+                        msg_const = &std::get<mir::MirConstant>(cd.args[1]->data);
+                    } else if (cd.args[1]->kind == mir::MirOperand::Move ||
+                               cd.args[1]->kind == mir::MirOperand::Copy) {
+                        const auto& place = std::get<mir::MirPlace>(cd.args[1]->data);
+                        auto const_it = const_map.find(place.local);
+                        if (const_it != const_map.end()) {
+                            msg_const = &const_it->second.first;
+                        }
+                    }
+                    if (msg_const) {
+                        if (const auto* s = std::get_if<std::string>(&msg_const->value)) {
+                            message += ": " + *s;
+                        }
+                    }
+                }
+                ss << indent() << "assert (" << cond << ") else $error(\"" << message << "\");\n";
+                emitBlockRecursive(func, cd.success, visited, ss, merge_block);
+            } else if (func_name == "__builtin_concat" || func_name == "__builtin_replicate") {
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
@@ -2943,8 +3057,8 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 std::string ram_decl =
                     ram_attr + mapType(gv->type) + " " + var_name + getArraySuffix(gv->type) + ";";
                 default_mod.reg_declarations.push_back(ram_decl);
-                // 配列リテラル初期値をinitialブロックとして出力
-                std::string ram_init = buildArrayInitial(*gv, var_name);
+                // 配列初期値をinitialブロックとして出力（memfile属性なら$readmemh）
+                std::string ram_init = buildArrayInitialOrReadmem(*gv, var_name);
                 if (!ram_init.empty()) {
                     default_mod.initial_blocks.push_back(ram_init);
                 }
@@ -2989,9 +3103,9 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                         " = " + emitConstant(*gv->init_value, gv->type, getBitWidth(gv->type));
                 }
                 default_mod.reg_declarations.push_back(reg_decl + ";");
-                // 配列リテラル初期値はinitialブロックとして出力
+                // 配列初期値はinitialブロックとして出力（memfile属性なら$readmemh）
                 if (!array_suffix.empty()) {
-                    std::string arr_init = buildArrayInitial(*gv, var_name);
+                    std::string arr_init = buildArrayInitialOrReadmem(*gv, var_name);
                     if (!arr_init.empty()) {
                         default_mod.initial_blocks.push_back(arr_init);
                     }

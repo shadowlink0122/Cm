@@ -35,10 +35,16 @@ CmCPU（Tang Console 138K向けCPU開発）での実運用と2026-07-04の調査
 
 ## 3. メモリ初期化（`$readmemh` / 配列初期値）
 
-> **✅ 2026-07-04 一部実装済み**: 配列リテラル初期値の `initial` ブロック出力（案1）を実装。
-> `utiny[4] rom = [10, 20, 30, 40];` が `initial begin rom[0] = 10; ... end` として出力される
-> （BRAM/LutRAM属性付き配列にも対応）。回帰テスト: `tests/sv/memory/array_init`。
-> `$readmemh`（案2）と `--emit-memfile`（案3）は未実装。
+> **✅ 2026-07-05 全実装済み**:
+> - 案1（2026-07-04）: 配列リテラル初期値の `initial` ブロック出力。
+>   `utiny[4] rom = [10, 20, 30, 40];` が `initial begin rom[0] = 10; ... end` として出力される
+>   （BRAM/LutRAM属性付き配列にも対応）。回帰テスト: `tests/sv/memory/array_init`
+> - 案2（2026-07-05）: `#[sv::memfile("font.hex")]` 属性で
+>   `initial $readmemh("font.hex", mem);` を出力（初期値なし配列にも使用可）。
+>   回帰テスト: `tests/sv/memory/readmemh`、ユニットテスト `MemfileReadmemh` 他
+> - 案3（2026-07-05）: `--emit-memfile` オプションで配列リテラル初期値を
+>   `.hex` ファイル（生成SVと同じディレクトリ）として書き出す。
+>   ユニットテスト `MemfileEmitHexFile`
 
 **現状**: 配列（BRAM/LutRAM）の初期値は出力されない。命令ROM・フォントROMは巨大なlookup関数（case文）として記述するしかなく、CmCPUの `font_rom.cm` は2,174行のcase文になっている。
 
@@ -82,11 +88,21 @@ CmCPU（Tang Console 138K向けCPU開発）での実運用と2026-07-04の調査
 
 ## 7. アサーション（SVA）
 
-**現状**: なし。CPU検証にはプロパティ検証が有効。
+> **✅ 2026-07-05 即時アサーション実装済み**: 標準ライブラリに `std::debug::assert` を追加。
+> `import std::debug::assert;` して `assert(cond, "msg")`（2引数）で使用する。
+> - SV: 即時アサーション `assert (cond) else $error("assertion failed: msg");` を出力
+>   （シミュレーションで検証され、合成では無視される）
+> - 実行系 (JIT/LLVM/WASM): 失敗時 `assertion failed: msg` を出力して exit(1)
+> - JS: `Error` を throw
+> 回帰テスト: `tests/sv/simulation/assert_immediate`、`tests/common/basic/assert_pass`、
+> `tests/common/errors/assert_fail`、ユニットテスト `ImmediateAssertion`。
+> `assert property`（時相プロパティ検証）は未実装。
 
-**実装案**: `assert(expr);` を `assert property (@(posedge clk) expr);` または即時アサーション `assert (expr) else $error(...);` として出力する。`//! test:` によるシミュレーション検証と組み合わせる。
+**現状**: 即時アサーションのみ。プロパティ検証（SVA）は未対応。
 
-**難易度**: 低（即時アサーションのみなら）
+**実装案（残り）**: `assert property (@(posedge clk) expr);` 形式の時相アサーション対応。
+
+**難易度**: 中（時相式の構文設計が必要）
 
 ## 8. トライステート（`'z`）とCDC同期化プリミティブ
 

@@ -82,7 +82,8 @@ struct Options {
     bool show_mir_opt = false;
     bool show_lir_opt = false;  // 最適化後のLLVM IRを表示
     bool emit_llvm = false;
-    bool emit_js = false;         // JavaScript生成
+    bool emit_js = false;  // JavaScript生成
+    bool emit_memfile = false;  // SV: 配列リテラル初期値を.hexファイルとして書き出す
     std::string target = "";      // ターゲット (native, wasm, js, web)
     bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 3;   // デフォルト最適化レベル3
@@ -138,6 +139,7 @@ void print_help(const char* program_name) {
     std::cout << "                        bm:            baremetal-arm の短縮形\n";
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --emit-js             JavaScriptを生成\n";
+    std::cout << "  --emit-memfile        SV: 配列リテラル初期値を.hexファイルとして書き出す\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -230,6 +232,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_llvm = true;
         } else if (arg == "--emit-js") {
             opts.emit_js = true;
+        } else if (arg == "--emit-memfile") {
+            opts.emit_memfile = true;
         } else if (arg.substr(0, 9) == "--target=") {
             opts.target = arg.substr(9);
         } else if (arg == "--run") {
@@ -1597,6 +1601,7 @@ int main(int argc, char* argv[]) {
 
                 sv_opts.verbose = opts.verbose || opts.debug;
                 sv_opts.sourceFile = opts.input_file;
+                sv_opts.emitMemfile = opts.emit_memfile;
 
                 // SystemVerilog コード生成
                 try {

@@ -16,9 +16,10 @@ namespace cm::codegen::sv {
 // SystemVerilog コード生成オプション
 struct SVCodeGenOptions {
     std::string outputFile = "output.sv";
-    std::string sourceFile;  // 入力ソースファイル（テストベンチ生成用）
-    bool verbose = false;    // 詳細出力
-    int indentSpaces = 4;    // インデント幅
+    std::string sourceFile;    // 入力ソースファイル（テストベンチ生成用）
+    bool verbose = false;      // 詳細出力
+    int indentSpaces = 4;      // インデント幅
+    bool emitMemfile = false;  // 配列リテラル初期値を.hexファイルとして書き出す
 };
 
 // モジュールポート情報
@@ -132,6 +133,16 @@ class SVCodeGen : public BufferedCodeGenerator {
     // === 配列初期値 ===
     // 配列リテラル初期値をinitialブロックとして生成
     std::string buildArrayInitial(const mir::MirGlobalVar& gv, const std::string& var_name);
+
+    // #[sv::memfile("path.hex")] 属性からパスを取り出す（無ければ空文字列）
+    static std::string getMemfilePath(const mir::MirGlobalVar& gv);
+
+    // 配列初期値のinitial出力（memfile属性があれば $readmemh、無ければ要素代入）
+    std::string buildArrayInitialOrReadmem(const mir::MirGlobalVar& gv,
+                                           const std::string& var_name);
+
+    // --emit-memfile: 配列リテラル初期値を.hexファイルとして書き出す
+    void emitMemfileIfRequested(const mir::MirGlobalVar& gv, const std::string& memfile_path);
 
     // === 定数リテラル ===
     std::string emitConstant(const mir::MirConstant& constant, const hir::TypePtr& type,

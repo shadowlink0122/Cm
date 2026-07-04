@@ -1,0 +1,11 @@
+// std::debug::assert のテスト（失敗パス）:
+// 条件が偽なら "assertion failed: <メッセージ>" を出力して異常終了する
+import std::io::println;
+import std::debug::assert;
+
+int main() {
+    int x = 5;
+    assert(x == 99, "x should be 99");
+    println("unreachable");
+    return 0;
+}

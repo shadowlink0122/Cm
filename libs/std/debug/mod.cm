@@ -1,0 +1,23 @@
+// std::debug - デバッグ支援（アサーション等）
+//
+// 使用例:
+//   import std::debug::assert;
+//
+//   int main() {
+//       int x = 5;
+//       assert(x == 5, "x must be 5");
+//       return 0;
+//   }
+module std.debug;
+
+/// アサーション: 条件が偽ならメッセージを出力して異常終了する。
+///
+/// 実装はコンパイラ組み込み（バックエンドごとのイントリンシック）:
+///   - 実行系 (JIT / LLVM native / WASM): "assertion failed: msg" を出力して exit(1)
+///   - JS: Error("assertion failed: msg") を throw
+///   - SV: 即時アサーション assert (cond) else $error("assertion failed: msg");
+///     （シミュレーションで検証され、合成ツールでは無視される）
+export void assert(bool cond, string msg) {
+    // 呼び出し箇所はコンパイラがイントリンシックとして展開するため、
+    // この本体が実行されることはない
+}

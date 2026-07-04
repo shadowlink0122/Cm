@@ -12,16 +12,18 @@
 #include "../../src/hir/lowering/lowering.hpp"
 #include "../../src/mir/lowering/lowering.hpp"
 
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace cm;
 
 class SVCodegenTest : public ::testing::Test {
    protected:
     // Cmソース → 生成SV文字列
-    std::string compile_to_sv(const std::string& code) {
+    std::string compile_to_sv(const std::string& code, bool emit_memfile = false) {
         Lexer lex(code);
         std::vector<Token> tokens = lex.tokenize();
         Parser p(tokens);
@@ -35,6 +37,7 @@ class SVCodegenTest : public ::testing::Test {
 
         codegen::sv::SVCodeGenOptions options;
         options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
+        options.emitMemfile = emit_memfile;
         codegen::sv::SVCodeGen gen(options);
         gen.compile(mir);
         return gen.getGeneratedCode();
@@ -205,6 +208,101 @@ TEST_F(SVCodegenTest, ArrayInitialBlock) {
     expect_contains(sv, "initial begin");
     expect_contains(sv, "rom[0] = 10;");
     expect_contains(sv, "rom[3] = 40;");
+}
+
+// #[sv::memfile] 属性付き配列は $readmemh のinitial文として出力される
+TEST_F(SVCodegenTest, MemfileReadmemh) {
+    const std::string code = R"(
+        #[input] bool clk = false;
+        #[input] uint idx;
+        #[output] utiny out = 0;
+
+        #[sv::memfile("font.hex")]
+        utiny[4] rom = [10, 20, 30, 40];
+
+        void read(posedge clk) {
+            if (idx < 4) {
+                out = rom[idx];
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "initial $readmemh(\"font.hex\", rom);");
+    // memfile指定時は要素代入のinitialブロックは出力されない
+    expect_not_contains(sv, "rom[0] = 10;");
+}
+
+// 初期値なしの #[sv::memfile] 配列（外部hex提供）でも $readmemh が出力される
+TEST_F(SVCodegenTest, MemfileWithoutInitializer) {
+    const std::string code = R"(
+        #[input] bool clk = false;
+        #[input] uint idx;
+        #[output] utiny out = 0;
+
+        #[sv::bram]
+        #[sv::memfile("data.hex")]
+        utiny[8] ram;
+
+        void read(posedge clk) {
+            if (idx < 8) {
+                out = ram[idx];
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "initial $readmemh(\"data.hex\", ram);");
+    expect_contains(sv, "ram_style");
+}
+
+// --emit-memfile: 配列リテラル初期値が.hexファイルとして書き出される
+TEST_F(SVCodegenTest, MemfileEmitHexFile) {
+    const std::string code = R"(
+        #[input] bool clk = false;
+        #[input] uint idx;
+        #[output] utiny out = 0;
+
+        #[sv::memfile("emit_test.hex")]
+        utiny[4] rom = [16, 32, 255, 0];
+
+        void read(posedge clk) {
+            if (idx < 4) {
+                out = rom[idx];
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code, /*emit_memfile=*/true);
+    expect_contains(sv, "initial $readmemh(\"emit_test.hex\", rom);");
+
+    // 出力SVと同じディレクトリに.hexが書き出される
+    std::ifstream hex(::testing::TempDir() + "emit_test.hex");
+    ASSERT_TRUE(hex.is_open()) << "emit_test.hex が生成されていません";
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(hex, line)) {
+        lines.push_back(line);
+    }
+    ASSERT_EQ(lines.size(), 4u);
+    EXPECT_EQ(lines[0], "10");  // 16 → 0x10
+    EXPECT_EQ(lines[1], "20");  // 32 → 0x20
+    EXPECT_EQ(lines[2], "ff");  // 255 → 0xff
+    EXPECT_EQ(lines[3], "00");  // 0 → 0x00
+}
+
+// assert() は即時アサーション assert (...) else $error(...); として出力される
+TEST_F(SVCodegenTest, ImmediateAssertion) {
+    const std::string code = R"(
+        #[input] bool clk = false;
+        #[input] uint value;
+        #[output] uint out = 0;
+
+        void check(posedge clk) {
+            assert(value < 100, "value out of range");
+            out = value;
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "assert (");
+    expect_contains(sv, "else $error(\"assertion failed: value out of range\");");
 }
 
 // 配列型ポートはアンパックド次元を保持する

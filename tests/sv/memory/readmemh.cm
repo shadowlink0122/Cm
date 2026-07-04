@@ -1,0 +1,21 @@
+//! platform: sv
+
+// #[sv::memfile] 属性のテスト:
+// 属性付き配列は要素代入のinitialブロックではなく
+// initial $readmemh("<path>", <var>); として出力される。
+// hexファイル自体は合成/シミュレーション環境で用意する
+// （--emit-memfile を使えばコンパイル時に生成できる）。
+
+#[input] posedge clk;
+#[input] uint idx;
+#[output] utiny out = 0;
+
+#[sv::bram]
+#[sv::memfile("font.hex")]
+utiny[16] font_rom;
+
+async void read(posedge clk) {
+    if (idx < 16) {
+        out = font_rom[idx];
+    }
+}

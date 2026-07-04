@@ -501,8 +501,21 @@ HirDeclPtr HirLowering::lower_global_var(ast::GlobalVarDecl& gv) {
     hir_global->is_export = (gv.visibility == ast::Visibility::Export);
 
     // 属性を伝搬（#[input], #[output] 等、SV用）
+    // 引数付き属性（#[sv::memfile("font.hex")] 等）は name("arg") 形式で保持する
     for (const auto& attr : gv.attributes) {
-        hir_global->attributes.push_back(attr.name);
+        if (attr.args.empty()) {
+            hir_global->attributes.push_back(attr.name);
+        } else {
+            std::string attr_str = attr.name + "(";
+            for (size_t i = 0; i < attr.args.size(); ++i) {
+                if (i > 0) {
+                    attr_str += ", ";
+                }
+                attr_str += "\"" + attr.args[i] + "\"";
+            }
+            attr_str += ")";
+            hir_global->attributes.push_back(attr_str);
+        }
     }
 
     if (gv.init_expr) {

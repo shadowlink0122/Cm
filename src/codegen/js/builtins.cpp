@@ -164,6 +164,8 @@ bool isBuiltinFunction(const std::string& name) {
         "memset",
         // 低レベルI/O
         "__print__",
+        // アサーション
+        "assert",
     };
     return builtins.count(name) > 0;
 }
@@ -177,6 +179,16 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     // __cm_str_slice: (str, start, end)
     if (name == "__cm_str_slice" && argStrs.size() >= 3) {
         return "__cm_str_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";
+    }
+
+    // assert(条件[, メッセージ]): 偽なら例外を投げる（式として埋め込める形で出力）
+    if (name == "assert") {
+        std::string cond = argStrs.empty() ? "true" : argStrs[0];
+        std::string msg = "\"assertion failed\"";
+        if (argStrs.size() >= 2) {
+            msg = "\"assertion failed: \" + " + argStrs[1];
+        }
+        return "((" + cond + ") || (() => { throw new Error(" + msg + "); })())";
     }
 
     // println系
