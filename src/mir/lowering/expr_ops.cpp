@@ -969,13 +969,38 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
             return lower_expression(*unary.operand, ctx);
         }
 
-        // インデックスアクセスの場合（&arr[i]）
+        // 一般化パス: 左辺値式（ネストしたメンバ・インデックス・デリファレンス）から
+        // プロジェクション付きPlaceを構築し、実体を直接参照する。
+        // 旧実装はオブジェクト部分を一時変数へコピーしてそのアドレスを取っていたため、
+        // &h.pos.x や &h.vals[i] のような2段以上のアクセスで書き込みが実体に
+        // 反映されなかった。&ptr[i]（ポインタ算術になるケース）のみ後続の特別処理に委ねる
+        {
+            bool is_ptr_index = false;
+            if (auto idx0 = std::get_if<std::unique_ptr<hir::HirIndex>>(&unary.operand->kind)) {
+                const hir::TypePtr& ot = (*idx0)->object ? (*idx0)->object->type : nullptr;
+                is_ptr_index = ot && ot->kind == hir::TypeKind::Pointer;
+            }
+            MirPlace place{0};
+            hir::TypePtr place_type;
+            if (!is_ptr_index &&
+                build_place_for_incdec(*this, *unary.operand, place, place_type, ctx)) {
+                hir::TypePtr target_type = unary.operand->type ? unary.operand->type : place_type;
+                hir::TypePtr ptr_type = hir::make_pointer(target_type);
+                LocalId result = ctx.new_temp(ptr_type);
+                auto ref_rvalue = std::make_unique<MirRvalue>();
+                ref_rvalue->kind = MirRvalue::Ref;
+                ref_rvalue->data = MirRvalue::RefData{BorrowKind::Mutable, place};
+                ctx.push_statement(MirStatement::assign(MirPlace{result}, std::move(ref_rvalue)));
+                return result;
+            }
+        }
+
+        // ポインタ型へのインデックスアクセスの場合（&ptr[i] → ptr + i）
+        // これは this.data[idx] のようなケースで、dataがポインタ型の場合
         if (auto index = std::get_if<std::unique_ptr<hir::HirIndex>>(&unary.operand->kind)) {
             // オブジェクトの型を確認
             hir::TypePtr obj_type = (*index)->object ? (*index)->object->type : nullptr;
 
-            // ポインタ型へのインデックスアクセスの場合（&ptr[i] → ptr + i）
-            // これは this.data[idx] のようなケースで、dataがポインタ型の場合
             if (obj_type && obj_type->kind == hir::TypeKind::Pointer) {
                 // ポインタ値を取得
                 LocalId ptr_val = lower_expression(*(*index)->object, ctx);
@@ -1126,6 +1151,13 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
         if (unary.operand->type && unary.operand->type->kind == hir::TypeKind::Pointer &&
             unary.operand->type->element_type) {
             elem_type = unary.operand->type->element_type;
+        } else if (ptr < ctx.func->locals.size() && ctx.func->locals[ptr].type &&
+                   ctx.func->locals[ptr].type->kind == hir::TypeKind::Pointer &&
+                   ctx.func->locals[ptr].type->element_type) {
+            // HIRの型が無い場合（文字列補間式のパース経由等）はMIRローカルの型から導出。
+            // int** の deref を int と誤推定するとLLVMでポインタが32bit幅に切り詰められ
+            // クラッシュするため、要素型（ここでは int*）を正しく引き継ぐ
+            elem_type = ctx.func->locals[ptr].type->element_type;
         }
 
         LocalId result = ctx.new_temp(elem_type);

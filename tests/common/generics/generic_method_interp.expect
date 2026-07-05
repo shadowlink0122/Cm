@@ -1,0 +1,4 @@
+get: 42
+pick: 42
+size: 1
+ptr write: 100 100

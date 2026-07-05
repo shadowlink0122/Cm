@@ -18,6 +18,17 @@ class HirLowering {
     // メインエントリポイント
     HirProgram lower(ast::Program& program);
 
+    // 外部で解決済みのenum定義を引き継ぐ（文字列補間式のミニパイプライン用）。
+    // "Enum::Variant" → タグ値 の形式で enum_values_ に登録する
+    void seed_enum_values(
+        const std::unordered_map<std::string, std::unordered_map<std::string, int64_t>>& defs) {
+        for (const auto& [enum_name, variants] : defs) {
+            for (const auto& [variant_name, value] : variants) {
+                enum_values_[enum_name + "::" + variant_name] = value;
+            }
+        }
+    }
+
    private:
     // キャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;

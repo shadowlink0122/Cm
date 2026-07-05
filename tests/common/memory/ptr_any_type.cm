@@ -1,0 +1,31 @@
+// 任意の型へのポインタ回帰テスト:
+// double/bool/long/enum。enumは *pc = Color::Blue の書き込みと
+// その後の == 比較（旧: 単純enumの__tag抽出が未初期化テンポラリになり
+// 比較が常に偽、補間内はバリアントが0に解決される二重の欠陥）
+import std::io::println;
+
+enum Color { Red, Green, Blue }
+
+int main() {
+    double d = 3.5;
+    double* pd = &d;
+    *pd = 7.25;
+    println("double: {d}");
+
+    bool b = false;
+    bool* pb = &b;
+    *pb = true;
+    println("bool: {b}");
+
+    long l = 1000000000000;
+    long* pl = &l;
+    *pl = *pl + 1;
+    println("long: {l}");
+
+    Color c = Color::Red;
+    Color* pc = &c;
+    println("enum before: {(*pc) as int}");
+    *pc = Color::Blue;
+    println("enum after: {c as int} {c == Color::Blue} {c == Color::Red}");
+    return 0;
+}

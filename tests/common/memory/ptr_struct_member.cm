@@ -1,0 +1,43 @@
+// 構造体メンバへのポインタ回帰テスト:
+// 旧実装は &h.pos.x（2段以上のアクセス）でオブジェクトを一時変数へ
+// コピーしてそのアドレスを取っていたため、書き込みが実体に反映されなかった。
+// また &h.vals[i] はLLVMバックエンドのRef処理がFieldプロジェクション後の
+// 型追跡を誤り、不正なGEPで範囲外アドレスに書き込んでいた
+import std::io::println;
+
+struct Point { int x; int y; }
+struct Holder { int id; Point pos; int[3] vals; }
+struct Rect { Point tl; Point br; }
+
+int main() {
+    Holder h = Holder { id: 7, pos: Point { x: 1, y: 2 }, vals: [10, 20, 30] };
+
+    // 単層メンバ
+    int* pid = &h.id;
+    *pid = 70;
+    println("single: {h.id}");
+
+    // ネストしたメンバ（2段）
+    int* px = &h.pos.x;
+    *px = 111;
+    int* py = &h.pos.y;
+    *py = 222;
+    println("nested: {h.pos.x} {h.pos.y}");
+
+    // 構造体メンバ全体へのポインタ
+    Point* pp = &h.pos;
+    (*pp).y = 333;
+    println("member struct: {h.pos.y}");
+
+    // 配列メンバの要素へのポインタ
+    int* pv = &h.vals[1];
+    *pv = 999;
+    println("member array: {h.vals[0]} {h.vals[1]} {h.vals[2]}");
+
+    // ネスト構造体（レイアウト非対称でのFieldチェーン検証）
+    Rect r = Rect { tl: Point { x: 1, y: 2 }, br: Point { x: 3, y: 4 } };
+    int* pby = &r.br.y;
+    *pby = 44;
+    println("rect: {r.tl.x} {r.br.y}");
+    return 0;
+}
