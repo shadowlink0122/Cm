@@ -7,6 +7,7 @@
 // コード生成器のレベルで検証する。
 
 #include "../../src/codegen/sv/codegen.hpp"
+#include "../../src/codegen/sv/expr_tree.hpp"
 #include "../../src/frontend/lexer/lexer.hpp"
 #include "../../src/frontend/parser/parser.hpp"
 #include "../../src/hir/lowering/lowering.hpp"
@@ -63,6 +64,51 @@ class SVCodegenTest : public ::testing::Test {
             << sv;
     }
 };
+
+// ============================================================
+// SV式ツリー（expr_tree）の優先順位プリンタ検証
+// ============================================================
+using codegen::sv::SVExpr;
+
+// & は == より優先順位が低いため、左辺の & 式には括弧が必要
+TEST(SVExprTreeTest, MaskCompareParens) {
+    auto e = SVExpr::binary("==", SVExpr::binary("&", SVExpr::atom("a"), SVExpr::atom("32'd256")),
+                            SVExpr::atom("32'd0"));
+    EXPECT_EQ(e->to_string(), "(a & 32'd256) == 32'd0");
+}
+
+// 結合法則を満たす演算子は同順位の連鎖で括弧を省略できる
+TEST(SVExprTreeTest, AssociativeChainNoParens) {
+    auto left = SVExpr::binary("+", SVExpr::binary("+", SVExpr::atom("a"), SVExpr::atom("b")),
+                               SVExpr::atom("c"));
+    EXPECT_EQ(left->to_string(), "a + b + c");
+    auto right = SVExpr::binary("+", SVExpr::atom("a"),
+                                SVExpr::binary("+", SVExpr::atom("b"), SVExpr::atom("c")));
+    EXPECT_EQ(right->to_string(), "a + b + c");
+}
+
+// 非結合演算子の右オペランドには括弧が必要（a - (b - c)）
+TEST(SVExprTreeTest, NonAssociativeRightParens) {
+    auto e = SVExpr::binary("-", SVExpr::atom("a"),
+                            SVExpr::binary("-", SVExpr::atom("b"), SVExpr::atom("c")));
+    EXPECT_EQ(e->to_string(), "a - (b - c)");
+}
+
+// 弱い演算子の上に強い演算子: 括弧が必要（(a + b) * c）
+TEST(SVExprTreeTest, MulOverAddParens) {
+    auto e = SVExpr::binary("*", SVExpr::binary("+", SVExpr::atom("a"), SVExpr::atom("b")),
+                            SVExpr::atom("c"));
+    EXPECT_EQ(e->to_string(), "(a + b) * c");
+}
+
+// 単項演算子の下の二項演算には括弧が必要（~(a | b)）
+TEST(SVExprTreeTest, UnaryOverBinaryParens) {
+    auto e = SVExpr::unary("~", SVExpr::binary("|", SVExpr::atom("a"), SVExpr::atom("b")));
+    EXPECT_EQ(e->to_string(), "~(a | b)");
+    // 原子への単項演算は括弧不要
+    auto neg = SVExpr::unary("-u", SVExpr::atom("32'sd1"));
+    EXPECT_EQ(neg->to_string(), "-32'sd1");
+}
 
 // 符号付き変数と整数定数の比較: 定数は 'sd（符号付き）で出力される。
 // 32'd0 だと SV では unsigned 比較になり s < 0 が常に偽になる

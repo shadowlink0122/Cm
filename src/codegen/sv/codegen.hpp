@@ -2,6 +2,7 @@
 
 #include "../../mir/nodes.hpp"
 #include "../buffered_codegen.hpp"
+#include "expr_tree.hpp"
 
 #include <fstream>
 #include <set>
@@ -80,6 +81,10 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::vector<std::string> loop_name_stack_;
     int loop_name_counter_ = 0;
 
+    // 式ツリー化 Phase 1: 単一定義テンポラリの式ツリー（関数ごとにリセット）
+    std::unordered_map<mir::LocalId, SVExprPtr> temp_trees_;
+    std::unordered_set<mir::LocalId> single_def_temps_;
+
     // 現在出力中の関数のループヘッダ→ラッチ一覧
     // （DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）
     std::unordered_map<size_t, std::vector<size_t>> current_loop_latches_;
@@ -119,6 +124,18 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::string emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func,
                             int target_width = 0);
     // 右辺値を生成
+    // === 式ツリー（式ツリー化 Phase 1）===
+    // rvalueを式ツリーとして構築する。単一定義テンポラリの参照は
+    // 記録済みのツリーを構造的にスプライスし、優先順位括弧は
+    // プリンタが構造から決定する（テキスト置換の括弧補正を不要にする）
+    SVExprPtr buildRvalueTree(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
+                              int target_width = 0);
+    SVExprPtr buildOperandTree(const mir::MirOperand& op, const mir::MirFunction& func,
+                               int target_width = 0);
+
+    // 関数内で1回だけ代入されるコンパイラ生成テンポラリ（_tNNN）を収集する
+    void collectSingleDefTemps(const mir::MirFunction& func);
+
     std::string emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
                            int target_width = 0);
     // Place（左辺値）を生成

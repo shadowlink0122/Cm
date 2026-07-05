@@ -827,6 +827,73 @@ std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
 
 // === 右辺値生成 ===
 
+// === 式ツリー構築（式ツリー化 Phase 1）===
+
+// コンパイラ生成テンポラリの命名規約（_tNNN）に一致するか
+static bool is_compiler_temp_name(const std::string& name) {
+    return name.size() > 2 && name[0] == '_' && name[1] == 't' &&
+           std::isdigit(static_cast<unsigned char>(name[2]));
+}
+
+// 関数内で1回だけ代入されるコンパイラ生成テンポラリを収集する。
+// これらは定義時に式ツリーを記録し、使用箇所で構造的にインライン展開できる
+void SVCodeGen::collectSingleDefTemps(const mir::MirFunction& func) {
+    single_def_temps_.clear();
+    temp_trees_.clear();
+
+    std::unordered_map<mir::LocalId, int> def_counts;
+    for (const auto& block : func.basic_blocks) {
+        if (!block) {
+            continue;
+        }
+        for (const auto& stmt : block->statements) {
+            if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                continue;
+            }
+            const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+            if (ad.place.projections.empty()) {
+                def_counts[ad.place.local]++;
+            }
+        }
+        // Callの戻り先も定義としてカウント（ツリー化対象からは自然に外れる）
+        if (block->terminator &&
+            std::holds_alternative<mir::MirTerminator::CallData>(block->terminator->data)) {
+            const auto& cd = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+            if (cd.destination && cd.destination->projections.empty()) {
+                def_counts[cd.destination->local]++;
+            }
+        }
+    }
+
+    for (const auto& [local, count] : def_counts) {
+        if (count != 1 || local >= func.locals.size()) {
+            continue;
+        }
+        if (is_compiler_temp_name(func.locals[local].name)) {
+            single_def_temps_.insert(local);
+        }
+    }
+}
+
+// オペランドを式ツリーに変換する。
+// 単一定義テンポラリへの参照は記録済みツリーをスプライスする
+SVExprPtr SVCodeGen::buildOperandTree(const mir::MirOperand& op, const mir::MirFunction& func,
+                                      int target_width) {
+    if (op.kind == mir::MirOperand::Copy || op.kind == mir::MirOperand::Move) {
+        if (const auto* place = std::get_if<mir::MirPlace>(&op.data)) {
+            if (place->projections.empty()) {
+                auto it = temp_trees_.find(place->local);
+                if (it != temp_trees_.end()) {
+                    return it->second;
+                }
+            }
+        }
+    }
+    // それ以外は既存のテキスト生成を原子として利用する
+    // （信号名・リテラル・投影付きplace等の出力ロジックを共有）
+    return SVExpr::atom(emitOperand(op, func, target_width));
+}
+
 std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
                                   int target_width) {
     switch (rvalue.kind) {
@@ -998,6 +1065,141 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
     }
 }
 
+// rvalueを式ツリーに変換する。二項・単項演算はノードとして構築し、
+// オペランド位置の単一定義テンポラリは構造的にインライン展開される。
+// その他のrvalue（キャスト・Use等）は既存のテキスト生成を原子として扱う
+SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
+                                     int target_width) {
+    switch (rvalue.kind) {
+        case mir::MirRvalue::BinaryOp: {
+            const auto& bin = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
+            // ビット幅推論はemitRvalueのテキスト経路と同一ロジック
+            int lhs_tw = 0, rhs_tw = 0;
+            if (bin.lhs && bin.rhs) {
+                if (bin.lhs->kind == mir::MirOperand::Constant &&
+                    bin.rhs->kind != mir::MirOperand::Constant && bin.rhs->type) {
+                    lhs_tw = getBitWidth(bin.rhs->type);
+                }
+                if (bin.rhs->kind == mir::MirOperand::Constant &&
+                    bin.lhs->kind != mir::MirOperand::Constant && bin.lhs->type) {
+                    rhs_tw = getBitWidth(bin.lhs->type);
+                }
+            }
+            if (target_width > 0) {
+                if (lhs_tw == 0 && bin.lhs && bin.lhs->kind != mir::MirOperand::Constant)
+                    lhs_tw = target_width;
+                if (rhs_tw == 0 && bin.rhs && bin.rhs->kind != mir::MirOperand::Constant)
+                    rhs_tw = target_width;
+            }
+            SVExprPtr lhs = bin.lhs ? buildOperandTree(*bin.lhs, func, lhs_tw) : SVExpr::atom("0");
+            SVExprPtr rhs = bin.rhs ? buildOperandTree(*bin.rhs, func, rhs_tw) : SVExpr::atom("0");
+
+            // 混合ビット幅の拡張キャスト（キャスト構文は自己完結のため原子化）
+            int lhs_w = 0, rhs_w = 0;
+            if (bin.lhs && bin.lhs->type)
+                lhs_w = getBitWidth(bin.lhs->type);
+            if (bin.rhs && bin.rhs->type)
+                rhs_w = getBitWidth(bin.rhs->type);
+            if (lhs_w > 0 && rhs_w > 0 && lhs_w != rhs_w) {
+                int wider = std::max(lhs_w, rhs_w);
+                if (lhs_w < rhs_w && bin.lhs->kind != mir::MirOperand::Constant) {
+                    lhs = SVExpr::atom(std::to_string(wider) + "'(" + lhs->to_string() + ")");
+                } else if (rhs_w < lhs_w && bin.rhs->kind != mir::MirOperand::Constant) {
+                    rhs = SVExpr::atom(std::to_string(wider) + "'(" + rhs->to_string() + ")");
+                }
+            }
+
+            std::string op;
+            switch (bin.op) {
+                case mir::MirBinaryOp::Add:
+                    op = "+";
+                    break;
+                case mir::MirBinaryOp::Sub:
+                    op = "-";
+                    break;
+                case mir::MirBinaryOp::Mul:
+                    op = "*";
+                    break;
+                case mir::MirBinaryOp::Div:
+                    op = "/";
+                    break;
+                case mir::MirBinaryOp::Mod:
+                    op = "%";
+                    break;
+                case mir::MirBinaryOp::BitAnd:
+                    op = "&";
+                    break;
+                case mir::MirBinaryOp::BitOr:
+                    op = "|";
+                    break;
+                case mir::MirBinaryOp::BitXor:
+                    op = "^";
+                    break;
+                case mir::MirBinaryOp::Shl:
+                    op = "<<";
+                    break;
+                case mir::MirBinaryOp::Shr:
+                    op = (bin.lhs && is_signed_type(resolve_operand_type(*bin.lhs, func))) ? ">>>"
+                                                                                           : ">>";
+                    break;
+                case mir::MirBinaryOp::Eq:
+                    op = "==";
+                    break;
+                case mir::MirBinaryOp::Ne:
+                    op = "!=";
+                    break;
+                case mir::MirBinaryOp::Lt:
+                    op = "<";
+                    break;
+                case mir::MirBinaryOp::Le:
+                    op = "<=";
+                    break;
+                case mir::MirBinaryOp::Gt:
+                    op = ">";
+                    break;
+                case mir::MirBinaryOp::Ge:
+                    op = ">=";
+                    break;
+                case mir::MirBinaryOp::And:
+                    op = "&&";
+                    break;
+                case mir::MirBinaryOp::Or:
+                    op = "||";
+                    break;
+                default:
+                    return SVExpr::atom(emitRvalue(rvalue, func, target_width));
+            }
+            return SVExpr::binary(op, std::move(lhs), std::move(rhs));
+        }
+
+        case mir::MirRvalue::UnaryOp: {
+            const auto& unary = std::get<mir::MirRvalue::UnaryOpData>(rvalue.data);
+            SVExprPtr operand =
+                unary.operand ? buildOperandTree(*unary.operand, func) : SVExpr::atom("0");
+            switch (unary.op) {
+                case mir::MirUnaryOp::Neg:
+                    return SVExpr::unary("-u", std::move(operand));
+                case mir::MirUnaryOp::Not:
+                case mir::MirUnaryOp::BitNot:
+                    return SVExpr::unary("~", std::move(operand));
+                default:
+                    return operand;
+            }
+        }
+
+        default:
+            // Use/Cast等は既存のテキスト生成に委譲する。
+            // Useオペランドがツリー化済みテンポラリの場合はスプライスする
+            if (rvalue.kind == mir::MirRvalue::Use) {
+                const auto& use_data = std::get<mir::MirRvalue::UseData>(rvalue.data);
+                if (use_data.operand) {
+                    return buildOperandTree(*use_data.operand, func, target_width);
+                }
+            }
+            return SVExpr::atom(emitRvalue(rvalue, func, target_width));
+    }
+}
+
 // === 文の生成 ===
 
 std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunction& func) {
@@ -1021,7 +1223,18 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
             //  混合幅の解決はCmソース側で型を統一して行う)
             if (target_w == 32)
                 target_w = 0;
-            std::string rhs = assign.rvalue ? emitRvalue(*assign.rvalue, func, target_w) : "0";
+            // 式ツリーとして構築（単一定義テンポラリは構造的にインライン展開され、
+            // 優先順位括弧はプリンタが構造から決定する）
+            SVExprPtr rhs_tree =
+                assign.rvalue ? buildRvalueTree(*assign.rvalue, func, target_w) : SVExpr::atom("0");
+            // 単一定義テンポラリへの代入はツリーを記録し、
+            // 以後の使用箇所でスプライスできるようにする
+            // （行自体も出力し、未使用箇所の置換は従来のテキストパスに委ねる）
+            if (assign.place.projections.empty() &&
+                single_def_temps_.count(assign.place.local) > 0) {
+                temp_trees_[assign.place.local] = rhs_tree;
+            }
+            std::string rhs = rhs_tree->to_string();
             // always_ff、async
             // func、またはposedge/negedge型パラメータを持つ関数はノンブロッキング代入
             bool use_nonblocking =
@@ -1190,7 +1403,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             // 関数本体 — テンポラリ変数のインライン展開
             std::string body_content;
             if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
-                // ループヘッダ情報を関数ごとに1回だけ計算する
+                // ループヘッダ情報とテンポラリ情報を関数ごとに1回だけ計算する
+                collectSingleDefTemps(func);
                 current_loop_latches_ = compute_loop_latches(func);
                 std::set<size_t> visited;
                 std::ostringstream body_ss;
@@ -1557,7 +1771,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     std::map<std::string, std::string> temp_values;
     std::ostringstream raw_ss;
     if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
-        // ループヘッダ情報を関数ごとに1回だけ計算する
+        // ループヘッダ情報とテンポラリ情報を関数ごとに1回だけ計算する
+        collectSingleDefTemps(func);
         current_loop_latches_ = compute_loop_latches(func);
         std::set<size_t> visited;
         emitBlockRecursive(func, 0, visited, raw_ss);
