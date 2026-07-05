@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 12
 ---
 
-[English](../../en/compiler/sv-types.html)
+[English](../../../en/compiler/sv/types.html)
 
 # SVバックエンド - 型とポート
 
-[SystemVerilogバックエンド](sv.html) の詳細ページです。型マッピング、ポート宣言、リテラル、定数、SV属性を解説します。
+[SystemVerilogバックエンド](index.html) の詳細ページです。型マッピング、ポート宣言、リテラル、定数、SV属性を解説します。
 
 ---
 
@@ -49,7 +49,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 ポインタ型 (`*T`) はSVバックエンドで **コンパイルエラー** (`error[SV002]`) になります。
 `float`/`double` は警告 (`warning[SV004]`、IPコアが必要) が出力されます。
-`string` は const 定数としてのみ実用的です（[データ構造](sv-data.html#文字列) 参照）。
+`string` は const 定数としてのみ実用的です（[データ構造](data.html#文字列) 参照）。
 
 ---
 
@@ -127,7 +127,7 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 > **注意:** `const` は常に `localparam` にマッピングされます。
 > `parameter` は生成されません（モジュール自体のパラメータ化は未対応。
-> [実装提案](../../../design/sv_backend_missing_features.html) 参照）。
+> [実装提案](../../../../design/sv_backend_missing_features.html) 参照）。
 
 ---
 
@@ -148,4 +148,4 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 ---
 
-← [概要](sv.html) | [プロセスと代入](sv-processes.html) →
+← [概要](index.html) | [プロセスと代入](processes.html) →

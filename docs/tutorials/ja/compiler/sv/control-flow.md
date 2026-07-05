@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 14
 ---
 
-[English](../../en/compiler/sv-control-flow.html)
+[English](../../../en/compiler/sv/control-flow.html)
 
 # SVバックエンド - 制御構文とループ
 
-[SystemVerilogバックエンド](sv.html) の詳細ページです。分岐・ループの変換規則と演算子の意味論を解説します。
+[SystemVerilogバックエンド](index.html) の詳細ページです。分岐・ループの変換規則と演算子の意味論を解説します。
 
 ---
 
@@ -152,7 +152,7 @@ acc = acc ^ (din >> 1);  // i=1相当（実際はテンポラリ経由）
 
 - ループ回数が**静的に決まる**場合、合成ツール（Gowin/Vivado等）はループを展開して合成します
 - ループ回数が入力に依存する場合、多くの合成ツールでエラーになります（シミュレーションは可能）。1クロックで完了させる必要がない処理は、クロックごとに1ステップ進むFSMとして書くことを推奨します
-- `while (true)` + `break` のような**無条件ヘッダのループは未対応**です（[実装提案](../../../design/sv_backend_missing_features.html)参照）
+- `while (true)` + `break` のような**無条件ヘッダのループは未対応**です（[実装提案](../../../../design/sv_backend_missing_features.html)参照）
 
 ---
 
@@ -182,4 +182,4 @@ if ((r_qm & 256) == 0) { ... }
 
 ---
 
-← [プロセスと代入](sv-processes.html) | [データ構造](sv-data.html) →
+← [プロセスと代入](processes.html) | [データ構造](data.html) →

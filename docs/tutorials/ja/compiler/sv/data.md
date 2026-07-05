@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 15
 ---
 
-[English](../../en/compiler/sv-data.html)
+[English](../../../en/compiler/sv/data.html)
 
 # SVバックエンド - データ構造
 
-[SystemVerilogバックエンド](sv.html) の詳細ページです。連接・複製、enum、配列、文字列の扱いを解説します。
+[SystemVerilogバックエンド](index.html) の詳細ページです。連接・複製、enum、配列、文字列の扱いを解説します。
 
 ---
 
@@ -98,7 +98,7 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 
 > 配列の**初期値**（`$readmemh` 等）は未対応です。フォントROM等は
 > const 関数（lookupテーブル）として記述してください
-> （[実装提案](../../../design/sv_backend_missing_features.html)参照）。
+> （[実装提案](../../../../design/sv_backend_missing_features.html)参照）。
 
 ---
 
@@ -121,8 +121,8 @@ utiny ch = TITLE[i] as utiny;
 
 - **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。
   3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください
-  （[実装提案](../../../design/sv_backend_missing_features.html)で拡張を検討中）。
+  （[実装提案](../../../../design/sv_backend_missing_features.html)で拡張を検討中）。
 
 ---
 
-← [制御構文とループ](sv-control-flow.html) | [状態初期化とシミュレーション](sv-state-sim.html) →
+← [制御構文とループ](control-flow.html) | [状態初期化とシミュレーション](state-sim.html) →

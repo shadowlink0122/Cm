@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 14
 ---
 
-[日本語](../../ja/compiler/sv-control-flow.html)
+[日本語](../../../ja/compiler/sv/control-flow.html)
 
 # SV Backend - Control Flow and Loops
 
-This is a detail page of the [SystemVerilog Backend](sv.html). It covers the conversion rules for branches and loops, and operator semantics.
+This is a detail page of the [SystemVerilog Backend](index.html). It covers the conversion rules for branches and loops, and operator semantics.
 
 ---
 
@@ -131,7 +131,7 @@ Nested loops are also reconstructed correctly (an inner loop is identified by it
 
 - If the loop count is **statically known**, synthesis tools (Gowin/Vivado, etc.) unroll the loop during synthesis
 - If the loop count depends on inputs, most synthesis tools report an error (simulation still works). For work that does not have to complete within one clock cycle, we recommend writing an FSM that advances one step per clock
-- Loops with an **unconditional header**, such as `while (true)` + `break`, are not yet supported (see the [implementation proposals](../../../design/sv_backend_missing_features_en.html))
+- Loops with an **unconditional header**, such as `while (true)` + `break`, are not yet supported (see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html))
 
 ---
 
@@ -161,4 +161,4 @@ if ((r_qm & 256) == 0) { ... }
 
 ---
 
-← [Processes and Assignments](sv-processes.html) | [Data Structures](sv-data.html) →
+← [Processes and Assignments](processes.html) | [Data Structures](data.html) →

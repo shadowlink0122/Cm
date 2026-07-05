@@ -70,17 +70,17 @@ Estimated Time: 5-6 hours
 
 Estimated Time: 3 hours
 
-4. **[Compiler](compiler/usage.html)** - Build and backends
-   - [Usage](compiler/usage.html) - Commands and options
-   - [LLVM Backend](compiler/llvm.html) - Native compilation
-   - [WASM Backend](compiler/wasm.html) - WebAssembly output
-   - [JS Backend](compiler/js-compilation.html) - JavaScript output
-   - [SV Backend](compiler/sv.html) - SystemVerilog / FPGA output 🆕
-   - [UEFI Baremetal](compiler/uefi.html) - UEFI application development (no_std)
-   - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
-   - [Linter](compiler/linter.html) - Static analysis (cm lint)
-   - [Formatter](compiler/formatter.html) - Code formatting (cm fmt)
-   - [Optimization](compiler/optimization.html) - O0-O3, tail call optimization
+4. **[Compiler](compiler/common/usage.html)** - Build and backends
+   - [Usage](compiler/common/usage.html) - Commands and options
+   - [LLVM Backend](compiler/native/llvm.html) - Native compilation
+   - [WASM Backend](compiler/wasm/wasm.html) - WebAssembly output
+   - [JS Backend](compiler/js/js-compilation.html) - JavaScript output
+   - [SV Backend](compiler/sv/index.html) - SystemVerilog / FPGA output 🆕
+   - [UEFI Baremetal](compiler/native/uefi.html) - UEFI application development (no_std)
+   - [Preprocessor](compiler/common/preprocessor.html) - Conditional compilation
+   - [Linter](compiler/common/linter.html) - Static analysis (cm lint)
+   - [Formatter](compiler/common/formatter.html) - Code formatting (cm fmt)
+   - [Optimization](compiler/common/optimization.html) - O0-O3, tail call optimization
 
 ### Path 5: Learning Internals (For Developers)
 

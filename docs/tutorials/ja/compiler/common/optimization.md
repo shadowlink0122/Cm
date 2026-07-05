@@ -3,7 +3,7 @@ title: 最適化
 parent: Compiler
 ---
 
-[English](../../en/compiler/optimization.html)
+[English](../../../en/compiler/common/optimization.html)
 
 # MIR最適化パス
 
@@ -210,8 +210,8 @@ cm build --dump-mir main.cm
 
 ## 次のステップ
 
-- [LLVMバックエンド](llvm.html) - LLVMによる追加最適化
-- [WASMバックエンド](wasm.html) - WebAssembly向け最適化
+- [LLVMバックエンド](../native/llvm.html) - LLVMによる追加最適化
+- [WASMバックエンド](../wasm/wasm.html) - WebAssembly向け最適化
 ---
 
 **最終更新:** 2026-02-08

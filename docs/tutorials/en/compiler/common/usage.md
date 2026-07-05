@@ -3,7 +3,7 @@ title: Compiler Usage
 parent: Tutorials
 ---
 
-[日本語](../../ja/compiler/usage.html)
+[日本語](../../../ja/compiler/common/usage.html)
 
 # Compiler - Usage
 
@@ -162,19 +162,19 @@ gdb ./program_debug
 ✅ Learned debugging methods  
 ✅ Learned optimization options  
 ✅ Understood targets (Native/WASM/JS)  
-⏭️ Next, learn about [LLVM Backend](llvm.html)
+⏭️ Next, learn about [LLVM Backend](../native/llvm.html)
 
 ## Related Links
 
-- [Environment Setup](../basics/setup.html) - Make command reference
+- [Environment Setup](../../basics/setup.html) - Make command reference
 - [Linter](linter.html) - Static analysis
 - [Formatter](formatter.html) - Code formatting
-- [JS Backend](js-compilation.html) - JavaScript output
+- [JS Backend](../js/js-compilation.html) - JavaScript output
 
 ---
 
-**Previous:** [String Operations](../advanced/strings.html)  
-**Next:** [LLVM Backend](llvm.html)
+**Previous:** [String Operations](../../advanced/strings.html)  
+**Next:** [LLVM Backend](../native/llvm.html)
 
 ---
 

@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 16
 ---
 
-[English](../../en/compiler/sv-state-sim.html)
+[English](../../../en/compiler/sv/state-sim.html)
 
 # SVバックエンド - 状態初期化とシミュレーション
 
-[SystemVerilogバックエンド](sv.html) の詳細ページです。レジスタ初期値、initialブロック、テストベンチ自動生成、テストの実行方法を解説します。
+[SystemVerilogバックエンド](index.html) の詳細ページです。レジスタ初期値、initialブロック、テストベンチ自動生成、テストの実行方法を解説します。
 
 ---
 
@@ -127,7 +127,7 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 
 ---
 
-← [データ構造](sv-data.html) | [意味論保証](sv-semantics.html) →
+← [データ構造](data.html) | [意味論保証](semantics.html) →
 
 ## アサーション（std::debug::assert）
 

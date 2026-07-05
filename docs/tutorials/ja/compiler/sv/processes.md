@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 13
 ---
 
-[English](../../en/compiler/sv-processes.html)
+[English](../../../en/compiler/sv/processes.html)
 
 # SVバックエンド - プロセスと代入
 
-[SystemVerilogバックエンド](sv.html) の詳細ページです。alwaysブロックの生成規則と、代入・暗黙的変換のルールを解説します。
+[SystemVerilogバックエンド](index.html) の詳細ページです。alwaysブロックの生成規則と、代入・暗黙的変換のルールを解説します。
 
 ---
 
@@ -136,7 +136,7 @@ SV:   if (((a & 32'd256) == 32'd0))   // 括弧が保持される
 ```
 
 > whileループの条件のように複数回代入される一時変数は展開されず、
-> レジスタとして残ります（[制御構文とループ](sv-control-flow.html)参照）。
+> レジスタとして残ります（[制御構文とループ](control-flow.html)参照）。
 
 ### その他
 
@@ -146,4 +146,4 @@ SV:   if (((a & 32'd256) == 32'd0))   // 括弧が保持される
 
 ---
 
-← [型とポート](sv-types.html) | [制御構文とループ](sv-control-flow.html) →
+← [型とポート](types.html) | [制御構文とループ](control-flow.html) →

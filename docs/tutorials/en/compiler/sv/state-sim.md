@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 16
 ---
 
-[日本語](../../ja/compiler/sv-state-sim.html)
+[日本語](../../../ja/compiler/sv/state-sim.html)
 
 # SV Backend - State Initialization and Simulation
 
-This is a detail page of the [SystemVerilog Backend](sv.html). It covers register initial values, initial blocks, automatic testbench generation, and how to run the tests.
+This is a detail page of the [SystemVerilog Backend](index.html). It covers register initial values, initial blocks, automatic testbench generation, and how to run the tests.
 
 ---
 
@@ -127,7 +127,7 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 
 ---
 
-← [Data Structures](sv-data.html) | [Semantic Guarantees](sv-semantics.html) →
+← [Data Structures](data.html) | [Semantic Guarantees](semantics.html) →
 
 ## Assertions (std::debug::assert)
 

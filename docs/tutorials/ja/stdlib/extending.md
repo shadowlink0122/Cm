@@ -211,4 +211,4 @@ C++:  delete (Resource*)handle;
 
 ---
 
-**関連:** [FFI](../../advanced/ffi.html) · [LLVMバックエンド](../../compiler/llvm.html)
+**関連:** [FFI](../advanced/ffi.html) · [LLVMバックエンド](../compiler/native/llvm.html)

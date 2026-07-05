@@ -4,13 +4,13 @@ parent: Tutorials
 nav_order: 17
 ---
 
-[English](../../en/compiler/sv-semantics.html)
+[English](../../../en/compiler/sv/semantics.html)
 
 # SVバックエンド - 意味論保証
 
 Cm の SV バックエンドは「Cm で書いたロジックが、生成された SystemVerilog でも同じ意味で動く」ことを保証するように設計されています。このページでは、v0.15.1（2026-07-04 更新）で強化された意味論の対応関係と、押さえておくべき変換規則を解説します。
 
-基本的な使い方は [SystemVerilogバックエンド](sv.html) を参照してください。
+基本的な使い方は [SystemVerilogバックエンド](index.html) を参照してください。
 
 ---
 
@@ -146,4 +146,4 @@ output logic [31:0] data [0:3]  // 次元が保持される
 
 ---
 
-← [状態初期化とシミュレーション](sv-state-sim.html) | [概要に戻る](sv.html) →
+← [状態初期化とシミュレーション](state-sim.html) | [概要に戻る](index.html) →

@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 15
 ---
 
-[日本語](../../ja/compiler/sv-data.html)
+[日本語](../../../ja/compiler/sv/data.html)
 
 # SV Backend - Data Structures
 
-This is a detail page of the [SystemVerilog Backend](sv.html). It covers concatenation/replication, enums, arrays, and strings.
+This is a detail page of the [SystemVerilog Backend](index.html). It covers concatenation/replication, enums, arrays, and strings.
 
 ---
 
@@ -98,7 +98,7 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 
 > Array **initial values** (e.g. `$readmemh`) are not yet supported. Write font ROMs and
 > similar as const functions (lookup tables)
-> (see the [implementation proposals](../../../design/sv_backend_missing_features_en.html)).
+> (see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
 
 ---
 
@@ -121,8 +121,8 @@ utiny ch = TITLE[i] as utiny;
 
 - **Non-const string variables, function arguments, and return values are fixed at `logic [23:0]` (3 characters)**.
   Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants
-  (an extension is being considered in the [implementation proposals](../../../design/sv_backend_missing_features_en.html)).
+  (an extension is being considered in the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
 
 ---
 
-← [Control Flow and Loops](sv-control-flow.html) | [State Initialization and Simulation](sv-state-sim.html) →
+← [Control Flow and Loops](control-flow.html) | [State Initialization and Simulation](state-sim.html) →

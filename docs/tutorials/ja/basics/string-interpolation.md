@@ -101,7 +101,7 @@ println("JSON: {{\"key\": {value}}}");
 
 SystemVerilog ターゲットでは、文字列は packed ベクトル定数として扱われるため、
 `println` 系の補間はシミュレーション用 `initial` ブロック等の限定された文脈でのみ使用できます。
-詳細は [SVバックエンドの意味論保証](../compiler/sv-semantics.html) を参照してください。
+詳細は [SVバックエンドの意味論保証](../compiler/sv/semantics.html) を参照してください。
 
 ---
 

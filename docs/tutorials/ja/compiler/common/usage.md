@@ -3,7 +3,7 @@ title: コンパイラ使い方
 parent: Tutorials
 ---
 
-[English](../../en/compiler/usage.html)
+[English](../../../en/compiler/common/usage.html)
 
 # コンパイラ編 - コンパイラの使い方
 
@@ -162,19 +162,19 @@ gdb ./program_debug
 ✅ デバッグ方法がわかった  
 ✅ 最適化オプションを知った  
 ✅ ターゲット（Native/WASM/JS）を理解した  
-⏭️ 次は [LLVMバックエンド](llvm.html) を学びましょう
+⏭️ 次は [LLVMバックエンド](../native/llvm.html) を学びましょう
 
 ## 関連リンク
 
-- [環境構築](../basics/setup.html) - makeコマンド一覧
+- [環境構築](../../basics/setup.html) - makeコマンド一覧
 - [Linter](linter.html) - 静的解析
 - [Formatter](formatter.html) - コードフォーマット
-- [JSバックエンド](js-compilation.html) - JavaScript出力
+- [JSバックエンド](../js/js-compilation.html) - JavaScript出力
 
 ---
 
-**前の章:** [文字列操作](../advanced/strings.html)  
-**次の章:** [LLVMバックエンド](llvm.html)
+**前の章:** [文字列操作](../../advanced/strings.html)  
+**次の章:** [LLVMバックエンド](../native/llvm.html)
 
 ---
 

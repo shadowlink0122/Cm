@@ -4,7 +4,7 @@ parent: Compiler
 nav_order: 7
 ---
 
-[English](../../en/compiler/preprocessor.html)
+[English](../../../en/compiler/common/preprocessor.html)
 
 # コンパイラ編 - プリプロセッサ（条件付きコンパイル）
 
@@ -223,13 +223,13 @@ void process_data(int value) {
 
 ---
 
-**前の章:** [Wasm](wasm.html)  
+**前の章:** [Wasm](../wasm/wasm.html)  
 **次の章:** [最適化](optimization.html)
 
 ## 関連項目
 
-- [mustキーワード](../advanced/must.html) - デッドコード削除の防止
-- [マクロ](../advanced/macros.html) - コンパイル時定数
+- [mustキーワード](../../advanced/must.html) - デッドコード削除の防止
+- [マクロ](../../advanced/macros.html) - コンパイル時定数
 
 ---
 

@@ -3,7 +3,7 @@ title: WASM Backend
 parent: Tutorials
 ---
 
-[日本語](../../ja/compiler/wasm.html)
+[日本語](../../../ja/compiler/wasm/wasm.html)
 
 # Compiler - WASM Backend
 
@@ -87,7 +87,7 @@ wasmtime program.wasm
 
 ---
 
-**Previous:** [LLVM Backend](llvm.html)  
+**Previous:** [LLVM Backend](../native/llvm.html)  
 **Completion:** Tutorial Completed!
 
 ---

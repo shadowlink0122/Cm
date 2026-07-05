@@ -76,5 +76,5 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 ## 関連
 
 - [FFI (C言語連携)](../advanced/ffi.html)
-- [LLVMバックエンド](../compiler/llvm.html)
+- [LLVMバックエンド](../compiler/native/llvm.html)
 - [インラインアセンブリ](../advanced/ffi.html)

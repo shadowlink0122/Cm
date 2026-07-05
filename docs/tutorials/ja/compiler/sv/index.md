@@ -5,7 +5,7 @@ nav_order: 11
 has_children: false
 ---
 
-[English](../../en/compiler/sv.html)
+[English](../../../en/compiler/sv/index.html)
 
 # コンパイラ編 - SystemVerilogバックエンド
 
@@ -22,14 +22,14 @@ SVバックエンドの詳細はトピック別のページに分かれていま
 
 | ページ | 内容 |
 |--------|------|
-| [型とポート](sv-types.html) | 型マッピング、ポート宣言、配列ポート、リテラル、localparam、SV属性 |
-| [プロセスと代入](sv-processes.html) | always_ff/comb/latch、代入の自動変換、暗黙的変換 |
-| [制御構文とループ](sv-control-flow.html) | if/case、whileループ再構成、break、演算子と優先順位保証 |
-| [データ構造](sv-data.html) | 連接・複製、enum FSM、配列とBRAM、文字列 |
-| [状態初期化とシミュレーション](sv-state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、アサーション、テスト実行 |
-| [メモリ初期化](sv-memory.html) | 配列初期値、#[sv::memfile]/$readmemh、--emit-memfile |
-| [モジュール階層](sv-hierarchy.html) | //! sv: hierarchy によるサブモジュールのインスタンス化 |
-| [意味論保証](sv-semantics.html) | Cm↔SVの意味論対応の保証事項まとめ（キャスト・符号付き演算等） |
+| [型とポート](types.html) | 型マッピング、ポート宣言、配列ポート、リテラル、localparam、SV属性 |
+| [プロセスと代入](processes.html) | always_ff/comb/latch、代入の自動変換、暗黙的変換 |
+| [制御構文とループ](control-flow.html) | if/case、whileループ再構成、break、演算子と優先順位保証 |
+| [データ構造](data.html) | 連接・複製、enum FSM、配列とBRAM、文字列 |
+| [状態初期化とシミュレーション](state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、アサーション、テスト実行 |
+| [メモリ初期化](memory.html) | 配列初期値、#[sv::memfile]/$readmemh、--emit-memfile |
+| [モジュール階層](hierarchy.html) | //! sv: hierarchy によるサブモジュールのインスタンス化 |
+| [意味論保証](semantics.html) | Cm↔SVの意味論対応の保証事項まとめ（キャスト・符号付き演算等） |
 
 ---
 
@@ -211,8 +211,8 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**前の章:** [WASMバックエンド](wasm.html)  
-**次の章:** [型とポート](sv-types.html)
+**前の章:** [WASMバックエンド](../wasm/wasm.html)  
+**次の章:** [型とポート](types.html)
 
 ---
 

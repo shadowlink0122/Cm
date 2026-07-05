@@ -4,7 +4,7 @@ parent: Compiler
 nav_order: 7
 ---
 
-[日本語](../../ja/compiler/preprocessor.html)
+[日本語](../../../ja/compiler/common/preprocessor.html)
 
 # Compiler - Preprocessor (Conditional Compilation)
 
@@ -223,13 +223,13 @@ Source Code → ImportPreprocessor → ConditionalPreprocessor → Lexer → Par
 
 ---
 
-**Previous:** [Wasm](wasm.html)  
+**Previous:** [Wasm](../wasm/wasm.html)  
 **Next:** [Optimization](optimization.html)
 
 ## Related Topics
 
-- [must keyword](../advanced/must.html) - Preventing dead code elimination
-- [Macros](../advanced/macros.html) - Compile-time constants
+- [must keyword](../../advanced/must.html) - Preventing dead code elimination
+- [Macros](../../advanced/macros.html) - Compile-time constants
 
 ---
 

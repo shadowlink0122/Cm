@@ -3,7 +3,7 @@ title: LLVMバックエンド
 parent: Tutorials
 ---
 
-[English](../../en/compiler/llvm.html)
+[English](../../../en/compiler/native/llvm.html)
 
 # コンパイラ編 - LLVMバックエンド
 
@@ -57,8 +57,8 @@ cm compile program.cm -g -o program
 
 ---
 
-**前の章:** [コンパイラの使い方](usage.html)  
-**次の章:** [WASMバックエンド](wasm.html)
+**前の章:** [コンパイラの使い方](../common/usage.html)  
+**次の章:** [WASMバックエンド](../wasm/wasm.html)
 ---
 
 **最終更新:** 2026-02-08

@@ -3,7 +3,7 @@ title: LLVM Backend
 parent: Tutorials
 ---
 
-[日本語](../../ja/compiler/llvm.html)
+[日本語](../../../ja/compiler/native/llvm.html)
 
 # Compiler - LLVM Backend
 
@@ -57,8 +57,8 @@ cm compile program.cm -g -o program
 
 ---
 
-**Previous:** [Compiler Usage](usage.html)  
-**Next:** [WASM Backend](wasm.html)
+**Previous:** [Compiler Usage](../common/usage.html)  
+**Next:** [WASM Backend](../wasm/wasm.html)
 ---
 
 **Last Updated:** 2026-02-08

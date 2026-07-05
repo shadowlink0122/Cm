@@ -4,13 +4,13 @@ parent: Tutorials
 nav_order: 17
 ---
 
-[日本語](../../ja/compiler/sv-semantics.html)
+[日本語](../../../ja/compiler/sv/semantics.html)
 
 # SV Backend - Semantic Guarantees
 
 Cm's SV backend is designed to guarantee that "logic written in Cm behaves with the same meaning in the generated SystemVerilog". This page explains the semantic correspondences strengthened in v0.15.1 (updated 2026-07-04) and the conversion rules you should know.
 
-For basic usage, see the [SystemVerilog Backend](sv.html).
+For basic usage, see the [SystemVerilog Backend](index.html).
 
 ---
 
@@ -146,4 +146,4 @@ These semantics are continuously verified by simulation-backed regression tests 
 
 ---
 
-← [State Initialization and Simulation](sv-state-sim.html) | [Back to Overview](sv.html) →
+← [State Initialization and Simulation](state-sim.html) | [Back to Overview](index.html) →

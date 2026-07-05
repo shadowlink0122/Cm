@@ -150,7 +150,7 @@ int bits = 0xF0;
 
 - [extern宣言](extern.html) — C/C++関数の呼び出し
 - [FFI](ffi.html) — use libc / 構造体の受け渡し
-- [プリプロセッサ](../compiler/preprocessor.html) — `#ifdef`/`#ifndef`/`#end`
+- [プリプロセッサ](../compiler/common/preprocessor.html) — `#ifdef`/`#ifndef`/`#end`
 
 ---
 

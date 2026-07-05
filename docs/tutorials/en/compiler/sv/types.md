@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 12
 ---
 
-[日本語](../../ja/compiler/sv-types.html)
+[日本語](../../../ja/compiler/sv/types.html)
 
 # SV Backend - Types and Ports
 
-This is a detail page of the [SystemVerilog Backend](sv.html). It covers type mapping, port declarations, literals, constants, and SV attributes.
+This is a detail page of the [SystemVerilog Backend](index.html). It covers type mapping, port declarations, literals, constants, and SV attributes.
 
 ---
 
@@ -49,7 +49,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend.
 `float`/`double` emit a warning (`warning[SV004]`, an IP core is required).
-`string` is only practical as a const constant (see [Data Structures](sv-data.html#strings)).
+`string` is only practical as a const constant (see [Data Structures](data.html#strings)).
 
 ---
 
@@ -127,7 +127,7 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 > **Note:** `const` always maps to `localparam`.
 > `parameter` is never generated (parameterizing the module itself is not yet supported;
-> see the [implementation proposals](../../../design/sv_backend_missing_features_en.html)).
+> see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
 
 ---
 
@@ -148,4 +148,4 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 ---
 
-← [Overview](sv.html) | [Processes and Assignments](sv-processes.html) →
+← [Overview](index.html) | [Processes and Assignments](processes.html) →

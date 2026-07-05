@@ -4,11 +4,11 @@ parent: Tutorials
 nav_order: 13
 ---
 
-[日本語](../../ja/compiler/sv-processes.html)
+[日本語](../../../ja/compiler/sv/processes.html)
 
 # SV Backend - Processes and Assignments
 
-This is a detail page of the [SystemVerilog Backend](sv.html). It covers the rules for generating always blocks, and the rules for assignments and implicit conversions.
+This is a detail page of the [SystemVerilog Backend](index.html). It covers the rules for generating always blocks, and the rules for assignments and implicit conversions.
 
 ---
 
@@ -136,7 +136,7 @@ SV:   if (((a & 32'd256) == 32'd0))   // parentheses are preserved
 ```
 
 > Temporaries that are assigned multiple times, such as a while-loop condition,
-> are not expanded and remain as registers (see [Control Flow and Loops](sv-control-flow.html)).
+> are not expanded and remain as registers (see [Control Flow and Loops](control-flow.html)).
 
 ### Others
 
@@ -146,4 +146,4 @@ SV:   if (((a & 32'd256) == 32'd0))   // parentheses are preserved
 
 ---
 
-← [Types and Ports](sv-types.html) | [Control Flow and Loops](sv-control-flow.html) →
+← [Types and Ports](types.html) | [Control Flow and Loops](control-flow.html) →

@@ -101,7 +101,7 @@ println("JSON: {{\"key\": {value}}}");
 
 On the SystemVerilog target, strings are treated as packed vector constants, so
 `println`-style interpolation is only usable in limited contexts such as simulation `initial` blocks.
-See the [SV Backend Semantic Guarantees](../compiler/sv-semantics.html) for details.
+See the [SV Backend Semantic Guarantees](../compiler/sv/semantics.html) for details.
 
 ---
 

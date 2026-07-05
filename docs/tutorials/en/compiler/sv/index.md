@@ -5,7 +5,7 @@ nav_order: 11
 has_children: false
 ---
 
-[日本語](../../ja/compiler/sv.html)
+[日本語](../../../ja/compiler/sv/index.html)
 
 # Compiler - SystemVerilog Backend
 
@@ -22,14 +22,14 @@ The SV backend documentation is split into topic-specific pages:
 
 | Page | Contents |
 |------|----------|
-| [Types and Ports](sv-types.html) | Type mapping, port declarations, array ports, literals, localparam, SV attributes |
-| [Processes and Assignments](sv-processes.html) | always_ff/comb/latch, automatic assignment conversion, implicit conversions |
-| [Control Flow and Loops](sv-control-flow.html) | if/case, while-loop reconstruction, break, operators and precedence guarantees |
-| [Data Structures](sv-data.html) | Concatenation/replication, enum FSMs, arrays and BRAM, strings |
-| [State Initialization and Simulation](sv-state-sim.html) | Register initial values, initial blocks, automatic testbench generation, running tests |
-| [Memory initialization](sv-memory.html) | Array initializers, #[sv::memfile]/$readmemh, --emit-memfile |
-| [Module hierarchy](sv-hierarchy.html) | Submodule instantiation via //! sv: hierarchy |
-| [Semantic Guarantees](sv-semantics.html) | Summary of guaranteed Cm↔SV semantic correspondence (casts, signed arithmetic, etc.) |
+| [Types and Ports](types.html) | Type mapping, port declarations, array ports, literals, localparam, SV attributes |
+| [Processes and Assignments](processes.html) | always_ff/comb/latch, automatic assignment conversion, implicit conversions |
+| [Control Flow and Loops](control-flow.html) | if/case, while-loop reconstruction, break, operators and precedence guarantees |
+| [Data Structures](data.html) | Concatenation/replication, enum FSMs, arrays and BRAM, strings |
+| [State Initialization and Simulation](state-sim.html) | Register initial values, initial blocks, automatic testbench generation, running tests |
+| [Memory initialization](memory.html) | Array initializers, #[sv::memfile]/$readmemh, --emit-memfile |
+| [Module hierarchy](hierarchy.html) | Submodule instantiation via //! sv: hierarchy |
+| [Semantic Guarantees](semantics.html) | Summary of guaranteed Cm↔SV semantic correspondence (casts, signed arithmetic, etc.) |
 
 ---
 
@@ -211,8 +211,8 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**Previous:** [WASM Backend](wasm.html)  
-**Next:** [Types and Ports](sv-types.html)
+**Previous:** [WASM Backend](../wasm/wasm.html)  
+**Next:** [Types and Ports](types.html)
 
 ---
 

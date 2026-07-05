@@ -3,7 +3,7 @@ title: WASMバックエンド
 parent: Tutorials
 ---
 
-[English](../../en/compiler/wasm.html)
+[English](../../../en/compiler/wasm/wasm.html)
 
 # コンパイラ編 - WASMバックエンド
 
@@ -87,7 +87,7 @@ wasmtime program.wasm
 
 ---
 
-**前の章:** [LLVMバックエンド](llvm.html)  
+**前の章:** [LLVMバックエンド](../native/llvm.html)  
 **完了:** チュートリアル修了！
 
 ---

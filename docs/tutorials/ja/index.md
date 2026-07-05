@@ -89,17 +89,17 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 推定時間: 3時間
 
-4. **[コンパイラ編](compiler/usage.html)** - ビルドとバックエンド
-   - [コンパイラの使い方](compiler/usage.html) - コマンド・オプション
-   - [LLVMバックエンド](compiler/llvm.html) - ネイティブコンパイル
-   - [WASMバックエンド](compiler/wasm.html) - WebAssembly出力
-   - [JSバックエンド](compiler/js-compilation.html) - JavaScript出力
-   - [SVバックエンド](compiler/sv.html) - SystemVerilog / FPGA出力 🆕
-   - [UEFIベアメタル](compiler/uefi.html) - UEFIアプリケーション開発（no_std）
-   - [プリプロセッサ](compiler/preprocessor.html) - 条件付きコンパイル
-   - [Linter](compiler/linter.html) - 静的解析（cm lint）
-   - [Formatter](compiler/formatter.html) - コードフォーマット（cm fmt）
-   - [最適化](compiler/optimization.html) - O0-O3、末尾呼び出し最適化
+4. **[コンパイラ編](compiler/common/usage.html)** - ビルドとバックエンド
+   - [コンパイラの使い方](compiler/common/usage.html) - コマンド・オプション
+   - [LLVMバックエンド](compiler/native/llvm.html) - ネイティブコンパイル
+   - [WASMバックエンド](compiler/wasm/wasm.html) - WebAssembly出力
+   - [JSバックエンド](compiler/js/js-compilation.html) - JavaScript出力
+   - [SVバックエンド](compiler/sv/index.html) - SystemVerilog / FPGA出力 🆕
+   - [UEFIベアメタル](compiler/native/uefi.html) - UEFIアプリケーション開発（no_std）
+   - [プリプロセッサ](compiler/common/preprocessor.html) - 条件付きコンパイル
+   - [Linter](compiler/common/linter.html) - 静的解析（cm lint）
+   - [Formatter](compiler/common/formatter.html) - コードフォーマット（cm fmt）
+   - [最適化](compiler/common/optimization.html) - O0-O3、末尾呼び出し最適化
 
 ### パス6: 内部構造を学ぶ（開発者向け）
 
@@ -166,12 +166,12 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | | Channel | ✅ | ❌ | ❌ | ✅ [channel](stdlib/concurrency/channel.html) |
 | | Atomic | ✅ | ❌ | ❌ | ✅ [atomic](stdlib/concurrency/atomic.html) |
 | | GPU (Metal) | ✅ | ❌ | ❌ | ✅ [gpu](stdlib/gpu.html) |
-| **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/linter.html) |
-| | Formatter | ✅ | - | - | ✅ [formatter](compiler/formatter.html) |
-| | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/preprocessor.html) |
-| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js-compilation.html) |
-| | SVバックエンド | ✅ | ❌ | ❌ | ✅ [sv](compiler/sv.html) |
-| | UEFIベアメタル | ✅ | ❌ | ❌ | ✅ [uefi](compiler/uefi.html) |
+| **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/common/linter.html) |
+| | Formatter | ✅ | - | - | ✅ [formatter](compiler/common/formatter.html) |
+| | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/common/preprocessor.html) |
+| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js/js-compilation.html) |
+| | SVバックエンド | ✅ | ❌ | ❌ | ✅ [sv](compiler/sv/index.html) |
+| | UEFIベアメタル | ✅ | ❌ | ❌ | ✅ [uefi](compiler/native/uefi.html) |
 
 凡例: ✅ 完全対応 | ⚠️ 部分対応 | ❌ 未対応
 

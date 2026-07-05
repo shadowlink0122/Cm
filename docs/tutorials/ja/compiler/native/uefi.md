@@ -241,6 +241,6 @@ v0.14.0以降、コンパイラはインラインASM内のハードコードレ�
 
 ## 関連リンク
 
-- [インラインアセンブリ](../advanced/inline-asm.html) - `__asm__` の詳細
-- [リリースノート v0.14.0](../../releases/v0.14.0.html) - UEFI対応の変更内容
+- [インラインアセンブリ](../../advanced/inline-asm.html) - `__asm__` の詳細
+- [リリースノート v0.14.0](../../../../releases/v0.14.0.html) - UEFI対応の変更内容
 - [UEFI仕様書](https://uefi.org/specs/UEFI/2.10/) - UEFI公式仕様

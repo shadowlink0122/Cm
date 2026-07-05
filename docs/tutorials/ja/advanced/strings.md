@@ -51,7 +51,7 @@ int main() {
 ---
 
 **前の章:** [関数ポインタ](function-pointers.html)  
-**次の章:** [コンパイラの使い方](../compiler/usage.html)
+**次の章:** [コンパイラの使い方](../compiler/common/usage.html)
 
 ---
 

@@ -51,7 +51,7 @@ int main() {
 ---
 
 **Previous:** [Function Pointers](function-pointers.html)  
-**Next:** [Compiler Usage](../compiler/usage.html)
+**Next:** [Compiler Usage](../compiler/common/usage.html)
 
 ---
 
