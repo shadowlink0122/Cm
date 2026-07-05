@@ -35,10 +35,8 @@ class BlockMonitor {
     std::unordered_map<size_t, size_t> consecutive_instruction_count;
 
     // 命令パターンの検出
-    void detect_instruction_pattern(const BlockInfo& block);
 
     // 周期的パターンの検出
-    static bool is_periodic_pattern(const std::vector<size_t>& history, size_t period);
 
    public:
     // ブロック処理の開始

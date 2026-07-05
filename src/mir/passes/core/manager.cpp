@@ -7,6 +7,7 @@
 #include "../convergence/manager.hpp"
 #include "../interprocedural/inlining.hpp"
 #include "../interprocedural/tail_call_elimination.hpp"
+#include "../loop/const_unroll.hpp"
 #include "../loop/licm.hpp"
 #include "../redundancy/gvn.hpp"
 #include "../scalar/folding.hpp"
@@ -15,10 +16,18 @@
 
 namespace cm::mir::opt {
 
-std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(int optimization_level) {
+std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
+    int optimization_level, const MirOptimizationOptions& user_opts) {
     std::vector<std::unique_ptr<OptimizationPass>> passes;
 
-    // 最適化レベル0: デバッグ用（最適化なし）
+    // ユーザ指定の定数ループ展開（--funroll-loops）。
+    // SCCP/ConstantFoldingより前に実行し、展開後の定数連鎖を後段で畳み込む。
+    // -O0でも明示指定されていれば有効
+    if (user_opts.unroll_loops) {
+        passes.push_back(std::make_unique<ConstantLoopUnroll>(user_opts.unroll_max_trips));
+    }
+
+    // 最適化レベル0: デバッグ用（最適化なし。ユーザ指定パスのみ）
     if (optimization_level == 0) {
         return passes;
     }
@@ -56,12 +65,13 @@ std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(int optimi
     return passes;
 }
 
-void run_optimization_passes(MirProgram& program, int optimization_level, bool debug) {
+void run_optimization_passes(MirProgram& program, int optimization_level, bool debug,
+                             const MirOptimizationOptions& user_opts) {
     // パイプラインを使用（収束管理付き）
     OptimizationPipeline pass_mgr;
     pass_mgr.enable_debug_output(debug);
 
-    auto passes = create_standard_passes(optimization_level);
+    auto passes = create_standard_passes(optimization_level, user_opts);
     for (auto& pass : passes) {
         pass_mgr.add_pass(std::move(pass));
     }

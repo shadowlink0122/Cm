@@ -14,10 +14,6 @@ namespace cm::mir::opt {
 
 namespace {
 
-// 展開の上限（暴走防止）
-constexpr int64_t kMaxTripCount = 1024;
-constexpr size_t kMaxTotalStatements = 50000;
-
 // ============================================================
 // MIRノードの複製ヘルパー
 // ============================================================
@@ -666,7 +662,7 @@ bool ConstantLoopUnroll::try_unroll_one(MirFunction& func) {
         {
             int64_t v = init_value;
             bool terminated = false;
-            for (int64_t n = 0; n <= kMaxTripCount; ++n) {
+            for (int64_t n = 0; n <= max_trips_; ++n) {
                 if (!eval_loop_cond(cmp_op, v, bound)) {
                     trip_count = n;
                     terminated = true;
@@ -684,7 +680,7 @@ bool ConstantLoopUnroll::try_unroll_one(MirFunction& func) {
         for (BlockId b : loop_set) {
             loop_stmts += func.basic_blocks[b]->statements.size();
         }
-        if (loop_stmts * static_cast<size_t>(trip_count + 1) > kMaxTotalStatements) {
+        if (loop_stmts * static_cast<size_t>(trip_count + 1) > max_total_statements_) {
             continue;
         }
 

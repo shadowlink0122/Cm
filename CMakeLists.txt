@@ -275,6 +275,7 @@ set(CM_SOURCES
     ${CM_LEXER_SOURCES}
     ${CM_PARSER_SOURCES}
     # Type checking (分割済み)
+    src/cli/options.cpp
     src/frontend/types/scope.cpp
     src/frontend/types/generic_context.cpp
     src/frontend/types/checking/decl.cpp

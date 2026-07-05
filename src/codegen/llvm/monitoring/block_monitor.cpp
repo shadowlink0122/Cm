@@ -68,44 +68,10 @@ void BlockMonitor::add_instruction(const std::string& instruction_text) {
         block.hash_history.erase(block.hash_history.begin());
     }
 
-    // パターン検出
-    detect_instruction_pattern(block);
-}
-
-void BlockMonitor::detect_instruction_pattern(const BlockInfo& block) {
-    // インラインアセンブリの複数オペランド処理では、load/storeが繰り返し生成されるため
-    // 誤検出を防ぐために十分な履歴サイズを要求
-    if (block.hash_history.size() < 60)
-        return;
-
-    // 周期的パターンを検出（周期2〜10）
-    // ただし、短い周期は5回以上の繰り返しが必要（誤検出防止）
-    for (size_t period = 2; period <= 10 && period * 5 <= block.hash_history.size(); ++period) {
-        if (is_periodic_pattern(block.hash_history, period)) {
-            throw std::runtime_error("無限ループ検出: ブロック '" + current_block + "' で周期" +
-                                     std::to_string(period) + "の命令パターンが検出されました");
-        }
-    }
-}
-
-bool BlockMonitor::is_periodic_pattern(const std::vector<size_t>& history, size_t period) {
-    size_t size = history.size();
-    // 5周期分の一致を要求（誤検出防止を強化）
-    if (size < period * 5)
-        return false;
-
-    // 最後の5周期分をチェック
-    size_t start = size - period * 5;
-    for (size_t i = 0; i < period; ++i) {
-        // 5周期すべてが一致する必要がある
-        if (history[start + i] != history[start + i + period] ||
-            history[start + i] != history[start + i + period * 2] ||
-            history[start + i] != history[start + i + period * 3] ||
-            history[start + i] != history[start + i + period * 4]) {
-            return false;
-        }
-    }
-    return true;
+    // 注意: かつてここで周期的な命令パターンを無限ループとして検出していたが、
+    // ループ展開（--funroll-loops）や手書きの反復コードなど正当な繰り返しを
+    // 誤検出するため撤去した。暴走対策は命令数上限
+    // （max_instructions_per_block / max_duplicate_instructions）が担う
 }
 
 std::string BlockMonitor::get_statistics() const {
