@@ -1383,6 +1383,7 @@ int main(int argc, char* argv[]) {
                 sv_opts.verbose = opts.verbose || opts.debug;
                 sv_opts.sourceFile = opts.input_file;
                 sv_opts.emitMemfile = opts.emit_memfile;
+                sv_opts.strictLint = opts.sv_strict_lint;
 
                 // SystemVerilog コード生成
                 try {

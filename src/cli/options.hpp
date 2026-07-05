@@ -40,6 +40,8 @@ struct Options {
     bool incremental = false;             // デフォルトで無効（--incrementalで有効化）
     std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
     std::string cache_subcommand;         // cache サブコマンド（clear/stats）
+    // SVターゲットオプション
+    bool sv_strict_lint = false;  // --sv-strict-lint: lint_off抑止を出力しない
     // ユーザ指定のMIR最適化オプション
     bool unroll_loops = false;  // --funroll-loops: 定数ループの静的展開
     int unroll_max_trips = 64;  // --funroll-loops=N: 展開する最大イテレーション数

@@ -26,7 +26,7 @@ class SVCodegenTest : public ::testing::Test {
    protected:
     // Cmソース → 生成SV文字列
     std::string compile_to_sv(const std::string& code, bool emit_memfile = false,
-                              bool unroll_loops = false) {
+                              bool unroll_loops = false, bool strict_lint = false) {
         Lexer lex(code);
         std::vector<Token> tokens = lex.tokenize();
         Parser p(tokens);
@@ -46,6 +46,7 @@ class SVCodegenTest : public ::testing::Test {
         codegen::sv::SVCodeGenOptions options;
         options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
         options.emitMemfile = emit_memfile;
+        options.strictLint = strict_lint;
         codegen::sv::SVCodeGen gen(options);
         gen.compile(mir);
         return gen.getGeneratedCode();
@@ -469,6 +470,27 @@ TEST_F(SVCodegenTest, MultiStatementBranchStaysIfElse) {
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "if (sel == 32'sd1) begin");
     expect_contains(sv, "end else begin");
+}
+
+// lint_off抑止（項目9）: UNUSED/UNDRIVENは出力されず、WIDTH系のみ既定で抑止。
+// --sv-strict-lint 相当では一切出力されない
+TEST_F(SVCodegenTest, LintOffReduction) {
+    const std::string code = R"(
+        #[input] uint a;
+        #[output] uint y = 0;
+
+        void f() {
+            y = a + 1;
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_not_contains(sv, "lint_off UNUSED");
+    expect_not_contains(sv, "lint_off UNDRIVEN");
+    expect_contains(sv, "lint_off WIDTHTRUNC");
+    expect_contains(sv, "lint_off WIDTHEXPAND");
+
+    std::string strict = compile_to_sv(code, false, false, /*strict_lint=*/true);
+    expect_not_contains(strict, "lint_off");
 }
 
 // 配列型ポートはアンパックド次元を保持する

@@ -21,6 +21,7 @@ struct SVCodeGenOptions {
     bool verbose = false;      // 詳細出力
     int indentSpaces = 4;      // インデント幅
     bool emitMemfile = false;  // 配列リテラル初期値を.hexファイルとして書き出す
+    bool strictLint = false;   // lint_off抑止を一切出力しない（--sv-strict-lint）
 };
 
 // モジュールポート情報

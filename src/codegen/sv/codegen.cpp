@@ -363,12 +363,16 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     emitPortList(mod.ports);
     append_line("");
 
-    // Verilator リント警告の一括無視メタコメントをモジュール内に挿入
-    emitLine("/* verilator lint_off UNUSED */");
-    emitLine("/* verilator lint_off WIDTHTRUNC */");
-    emitLine("/* verilator lint_off WIDTHEXPAND */");
-    emitLine("/* verilator lint_off UNDRIVEN */");
-    append_line("");
+    // Verilatorリント警告の抑止メタコメント。
+    // UNUSED/UNDRIVEN は式ツリー化・未使用テンポラリ宣言除去（2026-07-05）で
+    // 全テスト・実デザインとも警告ゼロを確認したため出力しない。
+    // WIDTH系は混合幅演算で依然発生するため既定で抑止する
+    // （--sv-strict-lint 指定時はすべて省略し、警告を可視化する）
+    if (!options_.strictLint) {
+        emitLine("/* verilator lint_off WIDTHTRUNC */");
+        emitLine("/* verilator lint_off WIDTHEXPAND */");
+        append_line("");
+    }
 
     increaseIndent();
 

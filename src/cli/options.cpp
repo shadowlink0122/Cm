@@ -50,6 +50,7 @@ void print_help(const char* program_name) {
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --emit-js             JavaScriptを生成\n";
     std::cout << "  --emit-memfile        SV: 配列リテラル初期値を.hexファイルとして書き出す\n";
+    std::cout << "  --sv-strict-lint      SV: lint_off抑止を出力しない（幅警告を可視化）\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -148,6 +149,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_js = true;
         } else if (arg == "--emit-memfile") {
             opts.emit_memfile = true;
+        } else if (arg == "--sv-strict-lint") {
+            opts.sv_strict_lint = true;
         } else if (arg == "--funroll-loops") {
             opts.unroll_loops = true;
         } else if (arg.substr(0, 16) == "--funroll-loops=") {
