@@ -268,3 +268,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Hello, World!](hello-world.html) | [Contents](index.html) | Next: [Basics - Operators](operators.html) →

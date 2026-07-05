@@ -585,3 +585,8 @@ bool is_prime(int n) {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [基本編 - 演算子](operators.html) ｜ [目次](index.html) ｜ 次: [基本編 - 関数](functions.html) →

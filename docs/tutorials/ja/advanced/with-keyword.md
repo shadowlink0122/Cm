@@ -389,3 +389,8 @@ impl Person for Eq {
 ---
 
 **最終更新:** 2026-02-10
+
+---
+
+<!-- nav -->
+← 前: [高度な機能編 - match式](match.html) ｜ [目次](index.html) ｜ 次: [高度な機能編 - 演算子オーバーロード](operators.html) →

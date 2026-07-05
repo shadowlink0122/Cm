@@ -191,3 +191,8 @@ bb2:
 - [`src/mir/optimization/`](https://github.com/shadowlink0122/Cm/tree/main/src/mir/optimization) - すべての最適化パスの実装
 - [`src/mir/optimization/sccp.cpp`](https://github.com/shadowlink0122/Cm/blob/main/src/mir/optimization/sccp.cpp) - SCCP実装
 - [`src/mir/optimization/licm.cpp`](https://github.com/shadowlink0122/Cm/blob/main/src/mir/optimization/licm.cpp) - LICM実装
+
+---
+
+<!-- nav -->
+← 前: [コンパイラ内部アルゴリズム](algorithms.html) ｜ [目次](index.html)

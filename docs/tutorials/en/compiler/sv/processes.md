@@ -146,4 +146,5 @@ SV:   if (((a & 32'd256) == 32'd0))   // parentheses are preserved
 
 ---
 
-← [Types and Ports](types.html) | [Control Flow and Loops](control-flow.html) →
+<!-- nav -->
+← Prev: [SV Backend - Types and Ports](types.html) | [Contents](index.html) | Next: [SV Backend - Control Flow and Loops](control-flow.html) →

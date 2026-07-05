@@ -113,3 +113,8 @@ front → [10|→] → [20|→] → [30|null] ← rear
 ---
 
 **関連:** [Vector](vector.html) · [HashMap](hashmap.html)
+
+---
+
+<!-- nav -->
+← 前: [std::collections::vector - 動的配列](vector.html) ｜ [目次](../index.html) ｜ 次: [std::collections::hashmap - 連想配列](hashmap.html) →

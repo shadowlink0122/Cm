@@ -244,3 +244,8 @@ v0.14.0以降、コンパイラはインラインASM内のハードコードレ�
 - [インラインアセンブリ](../../advanced/inline-asm.html) - `__asm__` の詳細
 - [リリースノート v0.14.0](../../../../releases/v0.14.0.html) - UEFI対応の変更内容
 - [UEFI仕様書](https://uefi.org/specs/UEFI/2.10/) - UEFI公式仕様
+
+---
+
+<!-- nav -->
+← 前: [コンパイラ編 - LLVMバックエンド](index.html) ｜ [目次](index.html) ｜ 次: [コンパイラ編 - WASMバックエンド](../wasm/index.html) →

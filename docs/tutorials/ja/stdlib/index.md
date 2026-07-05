@@ -36,6 +36,8 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 
 ## 並行処理
 
+[並行処理の概要と使い分け](concurrency/index.html)
+
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
 | `std::thread` | スレッド生成・join・sleep | [スレッド](concurrency/thread.html) |
@@ -43,7 +45,6 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 | `std::sync::channel` | Go風バウンデッドチャネル | [Channel](concurrency/channel.html) |
 | `std::sync::atomic` | アトミック操作 | [Atomic](concurrency/atomic.html) |
 
-→ [並行処理の概要と使い分け](concurrency/)
 
 ---
 
@@ -76,5 +77,10 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 ## 関連
 
 - [FFI (C言語連携)](../advanced/ffi.html)
-- [LLVMバックエンド](../compiler/native/llvm.html)
+- [LLVMバックエンド](../compiler/native/index.html)
 - [インラインアセンブリ](../advanced/ffi.html)
+
+---
+
+<!-- nav -->
+← 前: [スレッド (std::thread)](../advanced/thread.html) ｜ [目次](../index.html) ｜ 次: [std::io — 入出力](io.html) →

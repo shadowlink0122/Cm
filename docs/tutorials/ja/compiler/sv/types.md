@@ -148,4 +148,5 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 ---
 
-← [概要](index.html) | [プロセスと代入](processes.html) →
+<!-- nav -->
+← 前: [コンパイラ編 - SystemVerilogバックエンド](index.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - プロセスと代入](processes.html) →

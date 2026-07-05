@@ -3,7 +3,7 @@ title: WASM Backend
 parent: Tutorials
 ---
 
-[日本語](../../../ja/compiler/wasm/wasm.html)
+[日本語](../../../ja/compiler/wasm/index.html)
 
 # Compiler - WASM Backend
 
@@ -87,9 +87,14 @@ wasmtime program.wasm
 
 ---
 
-**Previous:** [LLVM Backend](../native/llvm.html)  
+**Previous:** [LLVM Backend](../native/index.html)  
 **Completion:** Tutorial Completed!
 
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [UEFI Bare-Metal Development Tutorial](../native/uefi.html) | [Contents](../index.html) | Next: [Compiling Cm to JavaScript](../js/index.html) →

@@ -194,3 +194,8 @@ Structs are converted to JavaScript objects, and enums to tagged objects.
 - For browser execution, an environment with `console.log` is required
 - Performance is lower than native compilation, but portability is improved
 - All numeric types are converted to JavaScript's Number type (64-bit float precision limitations)
+
+---
+
+<!-- nav -->
+← Prev: [Compiler - WASM Backend](../wasm/index.html) | [Contents](../index.html) | Next: [Compiler - SystemVerilog Backend](../sv/index.html) →

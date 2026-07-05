@@ -156,3 +156,8 @@ end
   （標準ライブラリの関数定義自体はSV出力されません）
 
 回帰テスト: `tests/sv/simulation/assert_immediate`
+
+---
+
+<!-- nav -->
+← 前: [SVバックエンド - モジュール階層の保持](hierarchy.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 意味論保証](semantics.html) →

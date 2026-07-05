@@ -146,4 +146,5 @@ output logic [31:0] data [0:3]  // 次元が保持される
 
 ---
 
-← [状態初期化とシミュレーション](state-sim.html) | [概要に戻る](index.html) →
+<!-- nav -->
+← 前: [SVバックエンド - 状態初期化とシミュレーション](state-sim.html) ｜ [目次](index.html) ｜ 次: [内部構造編](../../internals/index.html) →

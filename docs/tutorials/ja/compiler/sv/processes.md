@@ -146,4 +146,5 @@ SV:   if (((a & 32'd256) == 32'd0))   // 括弧が保持される
 
 ---
 
-← [型とポート](types.html) | [制御構文とループ](control-flow.html) →
+<!-- nav -->
+← 前: [SVバックエンド - 型とポート](types.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 制御構文とループ](control-flow.html) →

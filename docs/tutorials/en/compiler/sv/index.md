@@ -211,9 +211,14 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**Previous:** [WASM Backend](../wasm/wasm.html)  
+**Previous:** [WASM Backend](../wasm/index.html)  
 **Next:** [Types and Ports](types.html)
 
 ---
 
 **Last Updated:** 2026-07-04
+
+---
+
+<!-- nav -->
+← Prev: [Compiling Cm to JavaScript](../js/index.html) | [Contents](../index.html) | Next: [SV Backend - Types and Ports](types.html) →

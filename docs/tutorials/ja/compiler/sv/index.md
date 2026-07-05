@@ -211,9 +211,14 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**前の章:** [WASMバックエンド](../wasm/wasm.html)  
+**前の章:** [WASMバックエンド](../wasm/index.html)  
 **次の章:** [型とポート](types.html)
 
 ---
 
 **最終更新:** 2026-07-04
+
+---
+
+<!-- nav -->
+← 前: [CmからJavaScriptへのコンパイル](../js/index.html) ｜ [目次](../index.html) ｜ 次: [SVバックエンド - 型とポート](types.html) →

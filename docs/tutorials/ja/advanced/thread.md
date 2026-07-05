@@ -151,3 +151,8 @@ int main() {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [マクロ](macros.html) ｜ [目次](index.html) ｜ 次: [Cm 標準ライブラリ (Native向け)](../stdlib/index.html) →

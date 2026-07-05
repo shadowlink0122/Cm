@@ -82,3 +82,8 @@ endmodule
   （`::{...}`）やエイリアスは従来どおりフラット化されます
 
 回帰テスト: `tests/sv/hierarchy/hier_top`
+
+---
+
+<!-- nav -->
+← 前: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 状態初期化とシミュレーション](state-sim.html) →

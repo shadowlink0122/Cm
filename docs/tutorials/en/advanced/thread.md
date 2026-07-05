@@ -151,3 +151,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [FFI（Foreign Function Interface）](ffi.html) | [Contents](index.html) | Next: [Constants and Constant Expressions (const)](const.html) →

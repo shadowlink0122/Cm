@@ -68,3 +68,8 @@ panic("unreachable code");  // メッセージを出力して終了
 ---
 
 **関連:** [入出力](io.html) · [メモリ管理](mem.html) · [数学関数](math.html)
+
+---
+
+<!-- nav -->
+← 前: [std::math — 数学関数](math.html) ｜ [目次](index.html) ｜ 次: [std::http - HTTP通信ライブラリ](http.html) →

@@ -128,3 +128,8 @@ string identity__string(string x) { return x; }
 ## Reference
 
 - [Optimization Passes](optimization.html) - Details of each pass.
+
+---
+
+<!-- nav -->
+← Prev: [コンパイラアーキテクチャ](architecture.html) | [Contents](index.html) | Next: [Optimization Pass Details](optimization.html) →

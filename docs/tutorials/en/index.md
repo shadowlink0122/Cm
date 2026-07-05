@@ -72,9 +72,9 @@ Estimated Time: 3 hours
 
 4. **[Compiler](compiler/common/usage.html)** - Build and backends
    - [Usage](compiler/common/usage.html) - Commands and options
-   - [LLVM Backend](compiler/native/llvm.html) - Native compilation
-   - [WASM Backend](compiler/wasm/wasm.html) - WebAssembly output
-   - [JS Backend](compiler/js/js-compilation.html) - JavaScript output
+   - [LLVM Backend](compiler/native/index.html) - Native compilation
+   - [WASM Backend](compiler/wasm/index.html) - WebAssembly output
+   - [JS Backend](compiler/js/index.html) - JavaScript output
    - [SV Backend](compiler/sv/index.html) - SystemVerilog / FPGA output 🆕
    - [UEFI Baremetal](compiler/native/uefi.html) - UEFI application development (no_std)
    - [Preprocessor](compiler/common/preprocessor.html) - Conditional compilation
@@ -137,3 +137,13 @@ Estimated Time: 3 hours
 
 ---
 [日本語](../ja/)
+
+---
+
+<!-- nav -->
+Next: [Basics](basics/index.html) →
+
+---
+
+<!-- nav -->
+Next: [Basics](basics/index.html) →

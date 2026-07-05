@@ -223,7 +223,7 @@ Source Code → ImportPreprocessor → ConditionalPreprocessor → Lexer → Par
 
 ---
 
-**Previous:** [Wasm](../wasm/wasm.html)  
+**Previous:** [Wasm](../wasm/index.html)  
 **Next:** [Optimization](optimization.html)
 
 ## Related Topics
@@ -234,3 +234,8 @@ Source Code → ImportPreprocessor → ConditionalPreprocessor → Lexer → Par
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Compiler - Usage](usage.html) | [Contents](../index.html) | Next: [Linter (cm lint)](linter.html) →

@@ -212,3 +212,8 @@ incorrect register reuse during inlining.
 - [Inline assembly](../../../ja/advanced/inline-asm.html) — details of `__asm__`
 - [Release notes v0.14.0](../../../../releases/v0.14.0.html) — UEFI support changes
 - [UEFI specification](https://uefi.org/specs/UEFI/2.10/) — official spec
+
+---
+
+<!-- nav -->
+← Prev: [Compiler - LLVM Backend](index.html) | [Contents](index.html) | Next: [Compiler - WASM Backend](../wasm/index.html) →

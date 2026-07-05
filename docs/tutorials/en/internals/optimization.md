@@ -181,3 +181,8 @@ bb2:
 ## Reference Implementation
 
 - [`src/mir/optimization/`](https://github.com/shadowlink0122/Cm/tree/main/src/mir/optimization) - Implementation of all optimization passes.
+
+---
+
+<!-- nav -->
+← Prev: [Compiler Algorithms](algorithms.html) | [Contents](index.html)

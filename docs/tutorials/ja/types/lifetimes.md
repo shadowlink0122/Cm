@@ -63,3 +63,8 @@ int main() {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [型システム編 - 所有権と借用](ownership.html) ｜ [目次](index.html) ｜ 次: [高度な機能編](../advanced/index.html) →

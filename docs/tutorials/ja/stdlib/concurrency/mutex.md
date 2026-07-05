@@ -114,3 +114,8 @@ int main() {
 ---
 
 **関連:** [スレッド](thread.html) · [Channel](channel.html) · [Atomic](atomic.html)
+
+---
+
+<!-- nav -->
+← 前: [std::thread - スレッド管理](thread.html) ｜ [目次](index.html) ｜ 次: [std::sync::channel - メッセージパッシング](channel.html) →

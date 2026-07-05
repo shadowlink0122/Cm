@@ -3,7 +3,7 @@ title: WASMバックエンド
 parent: Tutorials
 ---
 
-[English](../../../en/compiler/wasm/wasm.html)
+[English](../../../en/compiler/wasm/index.html)
 
 # コンパイラ編 - WASMバックエンド
 
@@ -87,9 +87,14 @@ wasmtime program.wasm
 
 ---
 
-**前の章:** [LLVMバックエンド](../native/llvm.html)  
+**前の章:** [LLVMバックエンド](../native/index.html)  
 **完了:** チュートリアル修了！
 
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [UEFIベアメタル開発チュートリアル](../native/uefi.html) ｜ [目次](../index.html) ｜ 次: [CmからJavaScriptへのコンパイル](../js/index.html) →

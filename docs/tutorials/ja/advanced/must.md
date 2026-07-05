@@ -129,3 +129,8 @@ store volatile i32 200, ptr %x
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [定数と定数式 (const)](const.html) ｜ [目次](index.html) ｜ 次: [マクロ](macros.html) →

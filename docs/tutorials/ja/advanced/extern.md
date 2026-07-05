@@ -179,3 +179,8 @@ cm compile main.cm gpu_runtime.o -o main -framework Metal
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [FFI（Foreign Function Interface）](ffi.html) ｜ [目次](index.html) ｜ 次: [インラインアセンブリ](inline-asm.html) →

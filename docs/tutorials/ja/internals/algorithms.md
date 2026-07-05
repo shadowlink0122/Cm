@@ -150,3 +150,8 @@ string identity__string(string x) { return x; }
 - [最適化パス](optimization.html) - 各パスの詳細
 - [Engineering a Compiler](https://www.elsevier.com/books/engineering-a-compiler/cooper/978-0-12-815412-0) - Cooper & Torczon
 - [SSA-based Compiler Design](https://link.springer.com/book/10.1007/978-3-030-80515-9) - SSAの詳細
+
+---
+
+<!-- nav -->
+← 前: [コンパイラアーキテクチャ](architecture.html) ｜ [目次](index.html) ｜ 次: [最適化パス詳細](optimization.html) →

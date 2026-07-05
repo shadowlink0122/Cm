@@ -127,3 +127,8 @@ int main() {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [must キーワード](must.html) ｜ [目次](index.html) ｜ 次: [スレッド (std::thread)](thread.html) →

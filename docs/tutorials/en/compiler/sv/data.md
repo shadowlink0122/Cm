@@ -125,4 +125,5 @@ utiny ch = TITLE[i] as utiny;
 
 ---
 
-← [Control Flow and Loops](control-flow.html) | [State Initialization and Simulation](state-sim.html) →
+<!-- nav -->
+← Prev: [SV Backend - Control Flow and Loops](control-flow.html) | [Contents](index.html) | Next: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) →

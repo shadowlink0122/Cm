@@ -80,3 +80,8 @@ use libc {
 ---
 
 **関連:** [入出力](io.html) · [数学関数](math.html) · [コアユーティリティ](core-utils.html)
+
+---
+
+<!-- nav -->
+← 前: [std::io — 入出力](io.html) ｜ [目次](index.html) ｜ 次: [std::math — 数学関数](math.html) →

@@ -241,3 +241,8 @@ import ./utils::add;
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [ポインタ（Pointers）](pointers.html) ｜ [目次](index.html) ｜ 次: [基本編 - 文字列補間](string-interpolation.html) →

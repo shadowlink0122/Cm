@@ -193,3 +193,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-09
+
+---
+
+<!-- nav -->
+← Prev: [Types - Enums](enums.html) | [Contents](index.html) | Next: [Types - Generics](generics.html) →

@@ -120,3 +120,8 @@ people.sort((Person a, Person b) => {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Advanced - Function Pointers](function-pointers.html) | [Contents](index.html) | Next: [Advanced - String Operations](strings.html) →

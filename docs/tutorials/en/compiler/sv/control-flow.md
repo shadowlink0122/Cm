@@ -161,4 +161,5 @@ if ((r_qm & 256) == 0) { ... }
 
 ---
 
-← [Processes and Assignments](processes.html) | [Data Structures](data.html) →
+<!-- nav -->
+← Prev: [SV Backend - Processes and Assignments](processes.html) | [Contents](index.html) | Next: [SV Backend - Data Structures](data.html) →

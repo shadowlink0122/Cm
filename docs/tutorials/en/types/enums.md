@@ -414,3 +414,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Types - Structs](structs.html) | [Contents](index.html) | Next: [Types - typedef](typedef.html) →

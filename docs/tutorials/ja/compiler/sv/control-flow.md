@@ -182,4 +182,5 @@ if ((r_qm & 256) == 0) { ... }
 
 ---
 
-← [プロセスと代入](processes.html) | [データ構造](data.html) →
+<!-- nav -->
+← 前: [SVバックエンド - プロセスと代入](processes.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - データ構造](data.html) →

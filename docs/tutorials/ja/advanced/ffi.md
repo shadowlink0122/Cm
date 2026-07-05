@@ -136,7 +136,12 @@ extern "C" {
 ## 次のステップ
 
 - [ポインタ](../basics/pointers.html) - ポインタ操作の基礎
-- [WASMバックエンド](../compiler/wasm/wasm.html) - WASI FFI
+- [WASMバックエンド](../compiler/wasm/index.html) - WASI FFI
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [スライス型](slices.html) ｜ [目次](index.html) ｜ 次: [extern宣言 — 外部関数の呼び出し](extern.html) →

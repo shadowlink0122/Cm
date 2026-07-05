@@ -155,3 +155,8 @@ int bits = 0xF0;
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [extern宣言 — 外部関数の呼び出し](extern.html) ｜ [目次](index.html) ｜ 次: [定数と定数式 (const)](const.html) →

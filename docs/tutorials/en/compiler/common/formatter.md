@@ -143,3 +143,8 @@ To check code style in CI:
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Linter (cm lint)](linter.html) | [Contents](../index.html) | Next: [MIR最適化パス](optimization.html) →

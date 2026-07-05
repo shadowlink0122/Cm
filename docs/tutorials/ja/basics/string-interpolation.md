@@ -105,4 +105,5 @@ SystemVerilog ターゲットでは、文字列は packed ベクトル定数と�
 
 ---
 
-← [変数と型](variables.html) | [演算子](operators.html) →
+<!-- nav -->
+← 前: [モジュールシステム](modules.html) ｜ [目次](index.html) ｜ 次: [型システム編](../types/index.html) →

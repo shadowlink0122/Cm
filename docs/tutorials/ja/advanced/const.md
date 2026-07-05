@@ -91,3 +91,8 @@ int[SUM] data;  // int[30]
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [インラインアセンブリ](inline-asm.html) ｜ [目次](index.html) ｜ 次: [must キーワード](must.html) →

@@ -123,3 +123,8 @@ entries: [  ][K1:V1][  ][  ][K2:V2][  ][K3:V3][  ]...
 ---
 
 **関連:** [Vector](vector.html) · [Queue](queue.html)
+
+---
+
+<!-- nav -->
+← 前: [std::collections::queue - FIFOキュー](queue.html) ｜ [目次](../index.html) ｜ 次: [標準ライブラリの拡張方法](../extending.html) →

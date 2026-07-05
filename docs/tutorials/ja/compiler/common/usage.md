@@ -162,20 +162,25 @@ gdb ./program_debug
 ✅ デバッグ方法がわかった  
 ✅ 最適化オプションを知った  
 ✅ ターゲット（Native/WASM/JS）を理解した  
-⏭️ 次は [LLVMバックエンド](../native/llvm.html) を学びましょう
+⏭️ 次は [LLVMバックエンド](../native/index.html) を学びましょう
 
 ## 関連リンク
 
 - [環境構築](../../basics/setup.html) - makeコマンド一覧
 - [Linter](linter.html) - 静的解析
 - [Formatter](formatter.html) - コードフォーマット
-- [JSバックエンド](../js/js-compilation.html) - JavaScript出力
+- [JSバックエンド](../js/index.html) - JavaScript出力
 
 ---
 
 **前の章:** [文字列操作](../../advanced/strings.html)  
-**次の章:** [LLVMバックエンド](../native/llvm.html)
+**次の章:** [LLVMバックエンド](../native/index.html)
 
 ---
 
 **最終更新:** 2026-02-10
+
+---
+
+<!-- nav -->
+← 前: [コンパイラ編](../index.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - プリプロセッサ（条件付きコンパイル）](preprocessor.html) →

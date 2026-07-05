@@ -30,20 +30,20 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 
 | タイトル | 難易度 | 内容 |
 |---------|--------|------|
-| [LLVMバックエンド](native/llvm.html) | 🟡 中級 | ネイティブコンパイル |
+| [LLVMバックエンド](native/index.html) | 🟡 中級 | ネイティブコンパイル |
 | [UEFIベアメタル開発](native/uefi.html) | 🔴 上級 | UEFIアプリケーション開発（no_std） |
 
 ## WebAssembly（wasm/）
 
 | タイトル | 難易度 | 内容 |
 |---------|--------|------|
-| [WASMバックエンド](wasm/wasm.html) | 🟡 中級 | WebAssembly出力 |
+| [WASMバックエンド](wasm/index.html) | 🟡 中級 | WebAssembly出力 |
 
 ## JavaScript（js/）
 
 | タイトル | 難易度 | 内容 |
 |---------|--------|------|
-| [JSバックエンド](js/js-compilation.html) | 🟡 中級 | JavaScript出力 |
+| [JSバックエンド](js/index.html) | 🟡 中級 | JavaScript出力 |
 
 ## SystemVerilog / FPGA（sv/）
 
@@ -61,4 +61,5 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 
 ---
 
-← [標準ライブラリ編](../stdlib/) | **次のセクション:** [内部構造編](../internals/) →
+<!-- nav -->
+← 前: [標準ライブラリの拡張方法](../stdlib/extending.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - コンパイラの使い方](common/usage.html) →

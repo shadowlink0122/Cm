@@ -57,3 +57,8 @@ The initial values stay managed in Cm source while the generated SV
 references `$readmemh`, keeping the SV small for large ROMs.
 
 Regression tests: `tests/sv/memory/array_init`, `tests/sv/memory/readmemh`
+
+---
+
+<!-- nav -->
+← Prev: [SV Backend - Data Structures](data.html) | [Contents](index.html) | Next: [SV Backend - Preserving Module Hierarchy](hierarchy.html) →

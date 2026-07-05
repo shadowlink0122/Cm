@@ -196,3 +196,8 @@ main();
 - ブラウザで実行する場合、`console.log`が利用可能な環境が必要です
 - パフォーマンスはネイティブコンパイルより低下しますが、portable性が向上します
 - 数値型はすべてJavaScriptのNumber型に変換されます（64bit floatの精度制限あり）
+
+---
+
+<!-- nav -->
+← 前: [コンパイラ編 - WASMバックエンド](../wasm/index.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - SystemVerilogバックエンド](../sv/index.html) →

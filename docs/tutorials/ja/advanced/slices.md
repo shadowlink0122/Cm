@@ -136,3 +136,8 @@ Person[] people = [
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [高度な機能編 - 文字列操作](strings.html) ｜ [目次](index.html) ｜ 次: [FFI（Foreign Function Interface）](ffi.html) →

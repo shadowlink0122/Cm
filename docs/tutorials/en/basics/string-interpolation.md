@@ -105,4 +105,5 @@ See the [SV Backend Semantic Guarantees](../compiler/sv/semantics.html) for deta
 
 ---
 
-← [Variables and Types](variables.html) | [Operators](operators.html) →
+<!-- nav -->
+← Prev: [Basics - Modules](modules.html) | [Contents](index.html) | Next: [Type System](../types/index.html) →

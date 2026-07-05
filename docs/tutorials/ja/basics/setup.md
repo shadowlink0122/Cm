@@ -739,7 +739,7 @@ make build ARCH=x86_64
 - [コンパイラの使い方](../compiler/common/usage.html)
 - [Linter](../compiler/common/linter.html) - 静的解析ツール
 - [Formatter](../compiler/common/formatter.html) - コードフォーマッター
-- [JSバックエンド](../compiler/js/js-compilation.html) - JavaScript出力
+- [JSバックエンド](../compiler/js/index.html) - JavaScript出力
 
 ---
 
@@ -748,3 +748,8 @@ make build ARCH=x86_64
 ---
 
 **最終更新:** 2026-02-13
+
+---
+
+<!-- nav -->
+← 前: [はじめに - Cm言語とは](introduction.html) ｜ [目次](index.html) ｜ 次: [基本編 - Hello, World!](hello-world.html) →

@@ -162,20 +162,25 @@ gdb ./program_debug
 ✅ Learned debugging methods  
 ✅ Learned optimization options  
 ✅ Understood targets (Native/WASM/JS)  
-⏭️ Next, learn about [LLVM Backend](../native/llvm.html)
+⏭️ Next, learn about [LLVM Backend](../native/index.html)
 
 ## Related Links
 
 - [Environment Setup](../../basics/setup.html) - Make command reference
 - [Linter](linter.html) - Static analysis
 - [Formatter](formatter.html) - Code formatting
-- [JS Backend](../js/js-compilation.html) - JavaScript output
+- [JS Backend](../js/index.html) - JavaScript output
 
 ---
 
 **Previous:** [String Operations](../../advanced/strings.html)  
-**Next:** [LLVM Backend](../native/llvm.html)
+**Next:** [LLVM Backend](../native/index.html)
 
 ---
 
 **Last Updated:** 2026-02-10
+
+---
+
+<!-- nav -->
+← Prev: [Compiler](../index.html) | [Contents](../index.html) | Next: [Compiler - Preprocessor (Conditional Compilation)](preprocessor.html) →

@@ -31,20 +31,20 @@ and `sv/` (SystemVerilog / FPGA).
 
 | Title | Level | Contents |
 |-------|-------|----------|
-| [LLVM backend](native/llvm.html) | 🟡 Intermediate | Native compilation |
+| [LLVM backend](native/index.html) | 🟡 Intermediate | Native compilation |
 | [UEFI bare-metal](native/uefi.html) | 🔴 Advanced | UEFI application development (no_std) |
 
 ## WebAssembly (wasm/)
 
 | Title | Level | Contents |
 |-------|-------|----------|
-| [WASM backend](wasm/wasm.html) | 🟡 Intermediate | WebAssembly output |
+| [WASM backend](wasm/index.html) | 🟡 Intermediate | WebAssembly output |
 
 ## JavaScript (js/)
 
 | Title | Level | Contents |
 |-------|-------|----------|
-| [JS backend](js/js-compilation.html) | 🟡 Intermediate | JavaScript output |
+| [JS backend](js/index.html) | 🟡 Intermediate | JavaScript output |
 
 ## SystemVerilog / FPGA (sv/)
 
@@ -62,4 +62,5 @@ and `sv/` (SystemVerilog / FPGA).
 
 ---
 
-← [Tutorials home](../index.html) | **Next:** [Internals](../internals/) →
+<!-- nav -->
+← Prev: [Macros](../advanced/macros.html) | [Contents](../index.html) | Next: [Compiler - Usage](common/usage.html) →

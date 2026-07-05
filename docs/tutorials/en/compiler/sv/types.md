@@ -148,4 +148,5 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 ---
 
-← [Overview](index.html) | [Processes and Assignments](processes.html) →
+<!-- nav -->
+← Prev: [Compiler - SystemVerilog Backend](index.html) | [Contents](index.html) | Next: [SV Backend - Processes and Assignments](processes.html) →

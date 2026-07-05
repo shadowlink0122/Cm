@@ -126,3 +126,8 @@ double deg = to_degrees(PI);      // 180.0
 ---
 
 **関連:** [入出力](io.html) · [メモリ管理](mem.html) · [コアユーティリティ](core-utils.html)
+
+---
+
+<!-- nav -->
+← 前: [std::mem — メモリ管理](mem.html) ｜ [目次](index.html) ｜ 次: [std::core — コアユーティリティ](core-utils.html) →

@@ -223,7 +223,7 @@ void process_data(int value) {
 
 ---
 
-**前の章:** [Wasm](../wasm/wasm.html)  
+**前の章:** [Wasm](../wasm/index.html)  
 **次の章:** [最適化](optimization.html)
 
 ## 関連項目
@@ -234,3 +234,8 @@ void process_data(int value) {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [コンパイラ編 - コンパイラの使い方](usage.html) ｜ [目次](../index.html) ｜ 次: [Linter (cm lint)](linter.html) →

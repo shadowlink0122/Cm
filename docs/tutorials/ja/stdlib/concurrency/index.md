@@ -65,3 +65,8 @@ int main() {
     return 0;
 }
 ```
+
+---
+
+<!-- nav -->
+← 前: [std::net - TCP/UDP通信](../network/tcp.html) ｜ [目次](../index.html) ｜ 次: [std::thread - スレッド管理](thread.html) →

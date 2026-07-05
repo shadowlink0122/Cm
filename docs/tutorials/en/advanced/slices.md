@@ -136,3 +136,8 @@ Person[] people = [
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Advanced - String Operations](strings.html) | [Contents](index.html) | Next: [FFI（Foreign Function Interface）](ffi.html) →

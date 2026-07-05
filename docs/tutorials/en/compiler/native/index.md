@@ -3,7 +3,7 @@ title: LLVM Backend
 parent: Tutorials
 ---
 
-[日本語](../../../ja/compiler/native/llvm.html)
+[日本語](../../../ja/compiler/native/index.html)
 
 # Compiler - LLVM Backend
 
@@ -58,7 +58,12 @@ cm compile program.cm -g -o program
 ---
 
 **Previous:** [Compiler Usage](../common/usage.html)  
-**Next:** [WASM Backend](../wasm/wasm.html)
+**Next:** [WASM Backend](../wasm/index.html)
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [MIR最適化パス](../common/optimization.html) | [Contents](../index.html) | Next: [UEFI Bare-Metal Development Tutorial](uefi.html) →

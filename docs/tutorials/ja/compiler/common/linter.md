@@ -108,3 +108,8 @@ warning: unused variable 'x'
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [コンパイラ編 - プリプロセッサ（条件付きコンパイル）](preprocessor.html) ｜ [目次](../index.html) ｜ 次: [Formatter (cm fmt)](formatter.html) →

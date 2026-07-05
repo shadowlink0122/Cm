@@ -56,3 +56,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [ラムダ式](lambda.html) | [Contents](index.html) | Next: [スライス型](slices.html) →

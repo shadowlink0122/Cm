@@ -182,3 +182,8 @@ struct Point with Eq + Ord {
 ---
 
 **最終更新:** 2026-02-10
+
+---
+
+<!-- nav -->
+← 前: [withキーワード（自動トレイト実装）](with-keyword.html) ｜ [目次](index.html) ｜ 次: [高度な機能編 - 関数ポインタ](function-pointers.html) →

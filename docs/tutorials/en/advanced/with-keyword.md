@@ -300,3 +300,8 @@ impl Person for Eq {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Advanced - match Expression](match.html) | [Contents](index.html) | Next: [Advanced - Operator Overloading](operators.html) →

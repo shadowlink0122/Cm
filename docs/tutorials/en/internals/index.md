@@ -15,12 +15,13 @@ Tutorials covering the internals of the Cm compiler. Estimated time: 3 hours.
 
 ## 📖 Tutorials
 
-| # | Title | Level | Contents |
-|---|-------|-------|----------|
-| 1 | [Architecture](architecture.html) | 🔴 Advanced | Overall structure and pipeline |
-| 2 | [Algorithms](algorithms.html) | 🔴 Advanced | Analysis and optimization algorithms |
-| 3 | [Optimization](optimization.html) | 🔴 Advanced | MIR/LLVM-level optimizations |
+| Title | Level | Contents |
+|-------|-------|----------|
+| [Architecture](architecture.html) | 🔴 Advanced | Overall structure and pipeline |
+| [Algorithms](algorithms.html) | 🔴 Advanced | Analysis and optimization algorithms |
+| [Optimization](optimization.html) | 🔴 Advanced | MIR/LLVM-level optimizations |
 
 ---
 
-← [Compiler](../compiler/)
+<!-- nav -->
+← Prev: [SV Backend - Semantic Guarantees](../compiler/sv/semantics.html) | [Contents](../index.html) | Next: [コンパイラアーキテクチャ](architecture.html) →

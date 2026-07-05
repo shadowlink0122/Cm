@@ -146,4 +146,5 @@ These semantics are continuously verified by simulation-backed regression tests 
 
 ---
 
-← [State Initialization and Simulation](state-sim.html) | [Back to Overview](index.html) →
+<!-- nav -->
+← Prev: [SV Backend - State Initialization and Simulation](state-sim.html) | [Contents](index.html) | Next: [Internals](../../internals/index.html) →

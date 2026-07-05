@@ -148,3 +148,8 @@ assertions, since hardware has no `exit` (the library function
 definition itself is not emitted to SV).
 
 Regression test: `tests/sv/simulation/assert_immediate`
+
+---
+
+<!-- nav -->
+← Prev: [SV Backend - Preserving Module Hierarchy](hierarchy.html) | [Contents](index.html) | Next: [SV Backend - Semantic Guarantees](semantics.html) →

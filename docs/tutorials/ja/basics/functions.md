@@ -213,3 +213,8 @@ overload int foo(double x) { ... } // OK
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [基本編 - 制御構文](control-flow.html) ｜ [目次](index.html) ｜ 次: [配列（Arrays）](arrays.html) →

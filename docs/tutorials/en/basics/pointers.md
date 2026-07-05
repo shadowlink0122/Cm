@@ -307,7 +307,7 @@ int main() {
 ## Related Links
 
 - [Arrays](arrays.html)
-- [Memory Management](../advanced/memory.html)
+- [Ownership and borrowing](../types/ownership.html)
 
 ---
 
@@ -317,3 +317,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-10
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Arrays](arrays.html) | [Contents](index.html) | Next: [Basics - Modules](modules.html) →

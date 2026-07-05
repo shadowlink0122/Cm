@@ -91,9 +91,9 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 4. **[コンパイラ編](compiler/common/usage.html)** - ビルドとバックエンド
    - [コンパイラの使い方](compiler/common/usage.html) - コマンド・オプション
-   - [LLVMバックエンド](compiler/native/llvm.html) - ネイティブコンパイル
-   - [WASMバックエンド](compiler/wasm/wasm.html) - WebAssembly出力
-   - [JSバックエンド](compiler/js/js-compilation.html) - JavaScript出力
+   - [LLVMバックエンド](compiler/native/index.html) - ネイティブコンパイル
+   - [WASMバックエンド](compiler/wasm/index.html) - WebAssembly出力
+   - [JSバックエンド](compiler/js/index.html) - JavaScript出力
    - [SVバックエンド](compiler/sv/index.html) - SystemVerilog / FPGA出力 🆕
    - [UEFIベアメタル](compiler/native/uefi.html) - UEFIアプリケーション開発（no_std）
    - [プリプロセッサ](compiler/common/preprocessor.html) - 条件付きコンパイル
@@ -169,7 +169,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/common/linter.html) |
 | | Formatter | ✅ | - | - | ✅ [formatter](compiler/common/formatter.html) |
 | | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/common/preprocessor.html) |
-| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js/js-compilation.html) |
+| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js/index.html) |
 | | SVバックエンド | ✅ | ❌ | ❌ | ✅ [sv](compiler/sv/index.html) |
 | | UEFIベアメタル | ✅ | ❌ | ❌ | ✅ [uefi](compiler/native/uefi.html) |
 
@@ -274,3 +274,13 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 [English](../en/)
+
+---
+
+<!-- nav -->
+次: [基本編](basics/index.html) →
+
+---
+
+<!-- nav -->
+次: [基本編](basics/index.html) →

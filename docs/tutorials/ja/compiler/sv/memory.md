@@ -69,3 +69,8 @@ Cmソースで初期値を管理しつつ、生成SVは `$readmemh` 参照にな
 大規模ROMでもSVファイルが肥大化しません。
 
 回帰テスト: `tests/sv/memory/array_init`、`tests/sv/memory/readmemh`
+
+---
+
+<!-- nav -->
+← 前: [SVバックエンド - データ構造](data.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - モジュール階層の保持](hierarchy.html) →

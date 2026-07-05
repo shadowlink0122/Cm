@@ -220,3 +220,8 @@ make test-compile-llvm
 - [最適化パス](optimization.html) - 各最適化の詳細
 - [内部アルゴリズム](algorithms.html) - 使用アルゴリズム
 - [PROJECT_STRUCTURE.md](../../../PROJECT_STRUCTURE.html) - ファイル構成
+
+---
+
+<!-- nav -->
+← 前: [内部構造編](index.html) ｜ [目次](index.html) ｜ 次: [コンパイラ内部アルゴリズム](algorithms.html) →

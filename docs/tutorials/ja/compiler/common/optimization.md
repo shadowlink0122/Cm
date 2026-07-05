@@ -210,8 +210,13 @@ cm build --dump-mir main.cm
 
 ## 次のステップ
 
-- [LLVMバックエンド](../native/llvm.html) - LLVMによる追加最適化
-- [WASMバックエンド](../wasm/wasm.html) - WebAssembly向け最適化
+- [LLVMバックエンド](../native/index.html) - LLVMによる追加最適化
+- [WASMバックエンド](../wasm/index.html) - WebAssembly向け最適化
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [Formatter (cm fmt)](formatter.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - LLVMバックエンド](../native/index.html) →

@@ -3,7 +3,7 @@ title: LLVMバックエンド
 parent: Tutorials
 ---
 
-[English](../../../en/compiler/native/llvm.html)
+[English](../../../en/compiler/native/index.html)
 
 # コンパイラ編 - LLVMバックエンド
 
@@ -58,7 +58,12 @@ cm compile program.cm -g -o program
 ---
 
 **前の章:** [コンパイラの使い方](../common/usage.html)  
-**次の章:** [WASMバックエンド](../wasm/wasm.html)
+**次の章:** [WASMバックエンド](../wasm/index.html)
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [MIR最適化パス](../common/optimization.html) ｜ [目次](../index.html) ｜ 次: [UEFIベアメタル開発チュートリアル](uefi.html) →
