@@ -351,6 +351,9 @@ if(CM_USE_LLVM)
         # LLVM core (shared between native and wasm)
         src/codegen/llvm/core/context.cpp
         src/codegen/llvm/core/mir_to_llvm.cpp
+        src/codegen/llvm/core/statement.cpp
+        src/codegen/llvm/core/rvalue.cpp
+        src/codegen/llvm/core/operand.cpp
         src/codegen/llvm/core/interface.cpp
         src/codegen/llvm/core/terminator.cpp
         src/codegen/llvm/core/print_codegen.cpp

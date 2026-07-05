@@ -192,6 +192,10 @@ JIT実行で `-8 >> 2 == -2` を確認）だが、svバックエンドは常に 
    死蔵コードだったため削除（誤って死蔵側を修正する事故の温床だった）。
 4. **巨大TUの分割**: `codegen/llvm/core/mir_to_llvm.cpp`（約5,000行）、`main.cpp`（約2,000行、
    コマンドラインエントリとしては過大）、`mir/lowering/lowering.cpp` 等。
+   → **✅ 2026-07-05 一部完了**: `main.cpp` からCLIオプション処理を `src/cli/` へ分離。
+   `mir_to_llvm.cpp` を4分割（本体1,975行 + statement.cpp 1,306行 +
+   rvalue.cpp 729行 + operand.cpp 1,095行。純粋な関数移動で挙動変更なし）。
+   `mir/lowering/lowering.cpp` は未対応。
 5. **グローバル可変状態の削減**: `g_module_resolver`（`module/resolver.hpp`）、
    `g_debug_mode`/`g_lang`/`g_debug_level`（`common/debug.hpp` の inline 可変グローバル）。
    コンテキストオブジェクトへの集約を推奨。
