@@ -248,7 +248,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
                     if (!fieldType) {
                         // フォールバック: i32として扱う
-                        if (cm::debug::g_debug_mode) {
+                        if (cm::debug::debug_mode()) {
                             std::cerr << "[DEBUG] fieldType fallback to i32 in "
                                       << (currentMIRFunction ? currentMIRFunction->name : "?")
                                       << " local=" << place.local
@@ -320,7 +320,7 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
             auto val = locals[local];
 
             // デバッグ: main関数でのコピー操作を確認
-            if (cm::debug::g_debug_mode && currentMIRFunction &&
+            if (cm::debug::debug_mode() && currentMIRFunction &&
                 currentMIRFunction->name == "main" && local <= 2) {
                 if (val) {
                     if (llvm::isa<llvm::Function>(val)) {

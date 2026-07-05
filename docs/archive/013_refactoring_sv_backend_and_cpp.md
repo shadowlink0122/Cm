@@ -199,6 +199,11 @@ JIT実行で `-8 >> 2 == -2` を確認）だが、svバックエンドは常に 
 5. **グローバル可変状態の削減**: `g_module_resolver`（`module/resolver.hpp`）、
    `g_debug_mode`/`g_lang`/`g_debug_level`（`common/debug.hpp` の inline 可変グローバル）。
    コンテキストオブジェクトへの集約を推奨。
+   → **✅ 2026-07-05 完了**: いずれもアクセサ関数の関数ローカルstatic
+   （マジックスタティック）へ集約した。`g_module_resolver` は
+   `get_module_resolver()` に、debug系は `debug_mode()` / `lang()` /
+   `debug_level()`（参照返し）に置換（外部78箇所を機械的変換）。
+   externな可変グローバルはゼロになり、初期化順序問題も構造的に解消。
 6. **エラー処理方針の統一**: 例外（throw 65箇所）と `optional`/`Result` が混在。
    コンパイラ本体は診断API + `Result` へ寄せる方針を明文化する。
 

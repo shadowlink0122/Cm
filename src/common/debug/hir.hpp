@@ -375,25 +375,25 @@ inline const char* messages[][2] = {
     {"Unsupported feature", "未サポート機能"}};
 
 inline const char* get(Id id) {
-    return messages[static_cast<int>(id)][::cm::debug::g_lang];
+    return messages[static_cast<int>(id)][::cm::debug::lang()];
 }
 
 inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Hir, level, get(id));
 }
 
 inline void log(Id id, const std::string& detail,
                 ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Hir, level, std::string(get(id)) + ": " + detail);
 }
 
 /// HIRノード情報をダンプ（Traceレベル）
 inline void dump_node(const std::string& node_type, const std::string& info) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Hir, ::cm::debug::Level::Trace,
                      "HIR Node[" + node_type + "]: " + info);
@@ -401,7 +401,7 @@ inline void dump_node(const std::string& node_type, const std::string& info) {
 
 /// 型情報をダンプ（Traceレベル）
 inline void dump_type(const std::string& var_name, const std::string& type_info) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Hir, ::cm::debug::Level::Trace,
                      "Type[" + var_name + "] = " + type_info);
@@ -410,7 +410,7 @@ inline void dump_type(const std::string& var_name, const std::string& type_info)
 /// シンボル情報をダンプ（Traceレベル）
 inline void dump_symbol(const std::string& name, const std::string& scope,
                         const std::string& type = "") {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     std::string msg = "Symbol[" + name + "] @ " + scope;
     if (!type.empty()) {
@@ -421,7 +421,7 @@ inline void dump_symbol(const std::string& name, const std::string& scope,
 
 /// 式情報をダンプ（Traceレベル）
 inline void dump_expr(const std::string& expr_type, const std::string& detail) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Hir, ::cm::debug::Level::Trace,
                      "Expr[" + expr_type + "]: " + detail);
@@ -429,7 +429,7 @@ inline void dump_expr(const std::string& expr_type, const std::string& detail) {
 
 /// 文情報をダンプ（Traceレベル）
 inline void dump_stmt(const std::string& stmt_type, const std::string& detail) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Hir, ::cm::debug::Level::Trace,
                      "Stmt[" + stmt_type + "]: " + detail);
@@ -438,7 +438,7 @@ inline void dump_stmt(const std::string& stmt_type, const std::string& detail) {
 /// 最適化情報をダンプ（Traceレベル）
 inline void dump_optimization(const std::string& pass_name, const std::string& action,
                               int count = -1) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     std::string msg = "Optimization[" + pass_name + "]: " + action;
     if (count >= 0) {
@@ -449,7 +449,7 @@ inline void dump_optimization(const std::string& pass_name, const std::string& a
 
 /// スコープ情報をダンプ（Traceレベル）
 inline void dump_scope(int depth, const std::string& context = "") {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     std::string msg = "Scope depth: " + std::to_string(depth);
     if (!context.empty()) {

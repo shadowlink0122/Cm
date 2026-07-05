@@ -134,19 +134,19 @@ inline const char* messages[][2] = {
 /// メッセージ取得
 inline const char* get(Id id) {
     int idx = static_cast<int>(id);
-    return messages[idx][::cm::debug::g_lang];
+    return messages[idx][::cm::debug::lang()];
 }
 
 /// ログ出力
 inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Lexer, level, get(id));
 }
 
 inline void log(Id id, const std::string& detail,
                 ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Lexer, level, std::string(get(id)) + ": " + detail);
 }
@@ -154,7 +154,7 @@ inline void log(Id id, const std::string& detail,
 /// トークン情報をダンプ（Traceレベル）
 inline void dump_token(const std::string& type, const std::string& value, int line = -1,
                        int col = -1) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     std::string msg = "Token[" + type + "] = \"" + value + "\"";
     if (line >= 0 && col >= 0) {
@@ -165,7 +165,7 @@ inline void dump_token(const std::string& type, const std::string& value, int li
 
 /// 位置情報をダンプ（Traceレベル）
 inline void dump_position(int line, int col, const std::string& context = "") {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     std::string msg = "Position: " + std::to_string(line) + ":" + std::to_string(col);
     if (!context.empty()) {

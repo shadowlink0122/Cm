@@ -1187,7 +1187,7 @@ int main(int argc, char* argv[]) {
         // SVターゲットではMIR最適化をスキップ（合成ツールが最適化を行う）
         // DCE/CopyProp/ConstFoldが一時変数代入を除去しHWロジックが消失するため
         if ((opts.optimization_level > 0 || opts.show_mir_opt || opts.unroll_loops) && !is_sv) {
-            if (cm::debug::g_debug_mode)
+            if (cm::debug::debug_mode())
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
                           << std::endl;
             if (opts.debug)
@@ -1200,7 +1200,7 @@ int main(int argc, char* argv[]) {
             user_opts.unroll_max_trips = opts.unroll_max_trips;
             mir::opt::run_optimization_passes(mir, opts.optimization_level,
                                               opts.debug || opts.verbose, user_opts);
-            if (cm::debug::g_debug_mode)
+            if (cm::debug::debug_mode())
                 std::cerr << "[OPT] Optimization complete" << std::endl;
 
             if (opts.debug)
@@ -1599,7 +1599,7 @@ int main(int argc, char* argv[]) {
                     // 将来 --split-modules オプションで有効化可能
                     cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info_pre;
 
-                    if (cm::debug::g_debug_mode)
+                    if (cm::debug::debug_mode())
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     auto phase_llvm_start = std::chrono::steady_clock::now();
 
@@ -1682,7 +1682,7 @@ int main(int argc, char* argv[]) {
                     auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now() - phase_llvm_start)
                                              .count();
-                    if (cm::debug::g_debug_mode)
+                    if (cm::debug::debug_mode())
                         std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
 
                     // --lir-opt: 最適化後のLLVM IRを表示

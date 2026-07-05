@@ -25,7 +25,7 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
     int adjusted_level =
         MIRPatternDetector::adjustOptimizationLevel(program, options.optimizationLevel);
     if (adjusted_level != options.optimizationLevel) {
-        if (cm::debug::g_debug_mode) {
+        if (cm::debug::debug_mode()) {
             std::cerr << "[MIR] 最適化レベルを O" << options.optimizationLevel << " から O"
                       << adjusted_level << " に変更しました（MIRパターン検出による）\n";
         }
@@ -49,7 +49,7 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
             context->getModule(), options.optimizationLevel);
 
         if (adjusted_level2 != options.optimizationLevel) {
-            if (cm::debug::g_debug_mode) {
+            if (cm::debug::debug_mode()) {
                 std::cerr << "[LLVM] 最適化レベルを O" << options.optimizationLevel << " から O"
                           << adjusted_level2 << " に変更しました\n";
             }
@@ -110,7 +110,7 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
             result.object_path = cache_it->second;
             result.from_cache = true;
 
-            if (cm::debug::g_debug_mode) {
+            if (cm::debug::debug_mode()) {
                 std::cerr << "[MODULE] " << mod_name << ": キャッシュヒット ("
                           << cache_it->second.string() << ")\n";
             }
@@ -119,7 +119,7 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
             std::string obj_filename = mod_name + ".o";
             std::filesystem::path obj_path = output_dir / obj_filename;
 
-            if (cm::debug::g_debug_mode) {
+            if (cm::debug::debug_mode()) {
                 std::cerr << "[MODULE] " << mod_name << ": コンパイル中 ("
                           << mod_program.functions.size() << " 関数)\n";
             }
@@ -321,7 +321,7 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
 #endif
     }
 
-    if (cm::debug::g_debug_mode) {
+    if (cm::debug::debug_mode()) {
         std::cerr << "[LINK] " << linkCmd << "\n";
     }
 

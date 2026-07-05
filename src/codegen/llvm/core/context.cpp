@@ -287,7 +287,7 @@ void LLVMContext::dumpIR() const {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMDump, "LLVM IR", cm::debug::Level::Trace);
 
     // デバッグモードの場合、IRを標準エラー出力に出力
-    if (cm::debug::g_debug_mode && cm::debug::g_debug_level <= cm::debug::Level::Trace) {
+    if (cm::debug::debug_mode() && cm::debug::debug_level() <= cm::debug::Level::Trace) {
         llvm::errs() << ir;
     }
 }

@@ -216,11 +216,11 @@ inline const char* messages[][2] = {
     {"Dumping symbol table", "シンボルテーブルをダンプ"}};
 
 inline const char* get(Id id) {
-    return messages[static_cast<int>(id)][::cm::debug::g_lang];
+    return messages[static_cast<int>(id)][::cm::debug::lang()];
 }
 
 inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
 
     // バックエンドに応じてステージを選択
@@ -238,7 +238,7 @@ inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
 
 inline void log(Id id, const std::string& detail,
                 ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
 
     // バックエンドに応じてステージを選択
@@ -256,7 +256,7 @@ inline void log(Id id, const std::string& detail,
 
 /// 生成コードをダンプ（Traceレベル）
 inline void dump_code(const std::string& context, const std::string& code) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::CodegenCpp, ::cm::debug::Level::Trace,
                      "Generated " + context + ":\n" + code);

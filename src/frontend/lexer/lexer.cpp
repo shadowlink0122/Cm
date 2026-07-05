@@ -18,7 +18,7 @@ std::vector<Token> Lexer::tokenize() {
         // デバッグモード時のみ高コストなログ出力を実行
         // （get_line_number/get_column_number は O(n) 線形スキャンのため、
         //   非デバッグ時は引数評価自体をスキップする）
-        if (::cm::debug::g_debug_mode && ::cm::debug::Level::Trace >= ::cm::debug::g_debug_level) {
+        if (::cm::debug::debug_mode() && ::cm::debug::Level::Trace >= ::cm::debug::debug_level()) {
             debug::lex::dump_position(get_line_number(pos_), get_column_number(pos_),
                                       "Scanning at pos " + std::to_string(pos_));
             std::string tok_value = "";
@@ -234,7 +234,7 @@ void Lexer::skip_whitespace_and_comments() {
 
 // 識別子スキャン
 Token Lexer::scan_identifier(uint32_t start) {
-    if (::cm::debug::g_debug_mode)
+    if (::cm::debug::debug_mode())
         debug::lex::log(debug::lex::Id::ScanStart, "identifier", debug::Level::Trace);
 
     while (!is_at_end() && is_alnum(peek())) {
@@ -242,12 +242,12 @@ Token Lexer::scan_identifier(uint32_t start) {
     }
 
     std::string text(source_.substr(start, pos_ - start));
-    if (::cm::debug::g_debug_mode)
+    if (::cm::debug::debug_mode())
         debug::lex::log(debug::lex::Id::TokenText, text, debug::Level::Trace);
 
     auto it = keywords_.find(text);
     if (it != keywords_.end()) {
-        if (::cm::debug::g_debug_mode) {
+        if (::cm::debug::debug_mode()) {
             debug::lex::log(debug::lex::Id::Keyword, text, debug::Level::Debug);
             debug::lex::log(debug::lex::Id::KeywordMatch,
                             text + " -> " + token_kind_to_string(it->second), debug::Level::Trace);
@@ -255,7 +255,7 @@ Token Lexer::scan_identifier(uint32_t start) {
         return Token(it->second, start, pos_);
     }
 
-    if (::cm::debug::g_debug_mode) {
+    if (::cm::debug::debug_mode()) {
         debug::lex::log(debug::lex::Id::Ident, text, debug::Level::Debug);
         debug::lex::log(debug::lex::Id::IdentCreate, "Variable/Function name: " + text,
                         debug::Level::Trace);
@@ -265,7 +265,7 @@ Token Lexer::scan_identifier(uint32_t start) {
 
 // 数値リテラルスキャン
 Token Lexer::scan_number(uint32_t start) {
-    if (::cm::debug::g_debug_mode)
+    if (::cm::debug::debug_mode())
         debug::lex::log(debug::lex::Id::ScanStart, "number", debug::Level::Trace);
     bool is_float = false;
 
@@ -281,7 +281,7 @@ Token Lexer::scan_number(uint32_t start) {
         int64_t val = static_cast<int64_t>(uval);
         // uint32_t範囲を超える場合はunsignedフラグを設定
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Number, text + " = " + std::to_string(val),
                             debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
@@ -297,7 +297,7 @@ Token Lexer::scan_number(uint32_t start) {
         uint64_t uval = std::stoull(text, nullptr, 8);
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Number, "0o" + text + " = " + std::to_string(val),
                             debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
@@ -313,7 +313,7 @@ Token Lexer::scan_number(uint32_t start) {
         uint64_t uval = std::stoull(text, nullptr, 2);
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Number, "0b" + text + " = " + std::to_string(val),
                             debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
@@ -393,7 +393,7 @@ Token Lexer::scan_number(uint32_t start) {
 
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Number,
                             width_str + "'" + norm_base + value_str + " = " + std::to_string(val),
                             debug::Level::Debug);
@@ -426,14 +426,14 @@ Token Lexer::scan_number(uint32_t start) {
 
     if (is_float) {
         double val = std::stod(text);
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Number, text + " (float) = " + std::to_string(val),
                             debug::Level::Debug);
         return Token(TokenKind::FloatLiteral, start, pos_, val);
     } else {
         uint64_t uval = std::stoull(text);
         int64_t val = static_cast<int64_t>(uval);
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Number, text + " (int) = " + std::to_string(val),
                             debug::Level::Debug);
         return Token(TokenKind::IntLiteral, start, pos_, val);
@@ -570,7 +570,7 @@ char Lexer::scan_escape_char() {
 // 演算子スキャン
 Token Lexer::scan_operator(uint32_t start, char c) {
     auto make = [&](TokenKind kind) {
-        if (::cm::debug::g_debug_mode)
+        if (::cm::debug::debug_mode())
             debug::lex::log(debug::lex::Id::Operator, token_kind_to_string(kind),
                             debug::Level::Trace);
         return Token(kind, start, pos_);

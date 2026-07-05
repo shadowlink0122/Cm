@@ -236,6 +236,7 @@ set(CM_MIR_SOURCES
     src/mir/lowering/context.cpp
     src/mir/lowering/base.cpp
     src/mir/lowering/lowering.cpp
+    src/mir/lowering/auto_impl.cpp
     src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp
     src/mir/lowering/monomorphization_utils.cpp

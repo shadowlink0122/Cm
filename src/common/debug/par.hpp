@@ -236,25 +236,25 @@ inline const char* messages[][2] = {
     {"Syntax error", "構文エラー"}};
 
 inline const char* get(Id id) {
-    return messages[static_cast<int>(id)][::cm::debug::g_lang];
+    return messages[static_cast<int>(id)][::cm::debug::lang()];
 }
 
 inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Parser, level, get(id));
 }
 
 inline void log(Id id, const std::string& detail,
                 ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Parser, level, std::string(get(id)) + ": " + detail);
 }
 
 /// ノード情報をダンプ（Traceレベル）
 inline void dump_node(const std::string& node_type, const std::string& info) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Parser, ::cm::debug::Level::Trace,
                      "Node[" + node_type + "]: " + info);
@@ -262,7 +262,7 @@ inline void dump_node(const std::string& node_type, const std::string& info) {
 
 /// トークン期待値をダンプ（Traceレベル）
 inline void dump_expectation(const std::string& expected, const std::string& got) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Parser, ::cm::debug::Level::Trace,
                      "Expected: " + expected + ", Got: " + got);
@@ -270,7 +270,7 @@ inline void dump_expectation(const std::string& expected, const std::string& got
 
 /// スコープ情報をダンプ（Traceレベル）
 inline void dump_scope(int depth, const std::string& context = "") {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     std::string msg = "Scope depth: " + std::to_string(depth);
     if (!context.empty()) {

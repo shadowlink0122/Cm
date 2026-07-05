@@ -41,7 +41,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
         throw std::runtime_error("Infinite loop detected in convertStatement");
     }
 
-    if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main") {
+    if (cm::debug::debug_mode() && currentMIRFunction && currentMIRFunction->name == "main") {
         debug_msg("MIR",
                   "Processing statement kind: " + std::to_string(static_cast<int>(stmt.kind)));
     }
@@ -140,7 +140,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     // Function*の場合、直接localsに格納（allocaせずにSSA形式で扱う）
                     locals[assign.place.local] = rvalue;
                     // 確認: 実際に格納されたか
-                    if (cm::debug::g_debug_mode && currentMIRFunction &&
+                    if (cm::debug::debug_mode() && currentMIRFunction &&
                         currentMIRFunction->name == "main") {
                         auto func = llvm::cast<llvm::Function>(rvalue);
                         debug_msg("MIR", "Stored function '" + func->getName().str() +

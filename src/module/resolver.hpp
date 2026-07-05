@@ -71,7 +71,9 @@ class ModuleResolver {
 };
 
 // グローバルモジュールリゾルバーのインスタンス
-extern std::unique_ptr<ModuleResolver> g_module_resolver;
+// グローバル可変状態は関数ローカルstaticへ集約した（013 §4.3-5）。
+// インスタンスが必要な場合は get_module_resolver() を使用する
+ModuleResolver& get_module_resolver();
 
 // 初期化
 void initialize_module_resolver();

@@ -15,18 +15,18 @@ inline const char* messages[][2] = {
 };
 
 inline const char* get(Id id) {
-    return messages[static_cast<int>(id)][::cm::debug::g_lang];
+    return messages[static_cast<int>(id)][::cm::debug::lang()];
 }
 
 inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Ast, level, get(id));
 }
 
 inline void log(Id id, const std::string& detail,
                 ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Ast, level, std::string(get(id)) + ": " + detail);
 }

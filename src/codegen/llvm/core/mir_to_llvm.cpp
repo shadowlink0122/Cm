@@ -702,7 +702,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             auto newStructType = llvm::StructType::create(ctx.getContext(), fieldTypes, structName);
             structTypes[structName] = newStructType;
 
-            if (cm::debug::g_debug_mode) {
+            if (cm::debug::debug_mode()) {
                 std::cerr << "[MIR2LLVM] 動的推論: struct " << structName
                           << " (フィールド数: " << numFields << ")" << std::endl;
             }
@@ -1851,7 +1851,7 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
         // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map,
         // skipping\n";
-        if (cm::debug::g_debug_mode) {
+        if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",
                       "Warning: BB " + std::to_string(block.id) + " not in blocks map, skipping");
         }
@@ -1866,7 +1866,7 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
     // ステートメント処理
     // デバッグ: main::bb0のステートメントを確認
-    if (cm::debug::g_debug_mode && currentMIRFunction && currentMIRFunction->name == "main" &&
+    if (cm::debug::debug_mode() && currentMIRFunction && currentMIRFunction->name == "main" &&
         block.id == 0) {
         debug_msg("MIR",
                   "main::bb0 has " + std::to_string(block.statements.size()) + " statements");
@@ -1964,7 +1964,7 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         convertTerminator(*block.terminator);
         // std::cerr << "[MIR2LLVM]       convertTerminator() done!\n";
     } else {
-        if (cm::debug::g_debug_mode) {
+        if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",
                       "ERROR: BB " + std::to_string(block.id) + " has no terminator in MIR!");
         }

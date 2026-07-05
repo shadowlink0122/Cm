@@ -246,25 +246,25 @@ inline const char* messages[][2] = {
     {"Dumping local", "ローカル変数をダンプ"}};
 
 inline const char* get(Id id) {
-    return messages[static_cast<int>(id)][::cm::debug::g_lang];
+    return messages[static_cast<int>(id)][::cm::debug::lang()];
 }
 
 inline void log(Id id, ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Mir, level, get(id));
 }
 
 inline void log(Id id, const std::string& detail,
                 ::cm::debug::Level level = ::cm::debug::Level::Debug) {
-    if (!::cm::debug::g_debug_mode || level < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || level < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Mir, level, std::string(get(id)) + ": " + detail);
 }
 
 /// 値の詳細情報をダンプ（Traceレベル）
 inline void dump_value(const std::string& name, const std::string& value) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Mir, ::cm::debug::Level::Trace,
                      "Value " + name + " = " + value);
@@ -272,7 +272,7 @@ inline void dump_value(const std::string& name, const std::string& value) {
 
 /// ブロックの詳細情報をダンプ（Traceレベル）
 inline void dump_block(const std::string& block_name, const std::string& info) {
-    if (!::cm::debug::g_debug_mode || ::cm::debug::Level::Trace < ::cm::debug::g_debug_level)
+    if (!::cm::debug::debug_mode() || ::cm::debug::Level::Trace < ::cm::debug::debug_level())
         return;
     ::cm::debug::log(::cm::debug::Stage::Mir, ::cm::debug::Level::Trace,
                      "Block " + block_name + ": " + info);
