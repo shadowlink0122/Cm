@@ -3533,15 +3533,12 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     }
 
     // テストシーケンス
-    // テストベンチ出力先と同じディレクトリにVCDを配置
-    std::string vcd_dir;
-    auto last_sep = options_.outputFile.rfind('/');
-    if (last_sep != std::string::npos) {
-        vcd_dir = options_.outputFile.substr(0, last_sep + 1);
-    }
+    // VCDはシミュレーション実行時のカレントディレクトリに出力する。
+    // コンパイル時の-oの相対パスを埋め込むと、シミュレータを別の
+    // ディレクトリから実行したときに開けず異常終了するため
     ss << "    // テストシーケンス\n";
     ss << "    initial begin\n";
-    ss << "        $dumpfile(\"" << vcd_dir << mod.name << "_tb.vcd\");\n";
+    ss << "        $dumpfile(\"" << mod.name << "_tb.vcd\");\n";
     ss << "        $dumpvars(0, " << mod.name << "_tb);\n\n";
 
     // 入力ポート初期化

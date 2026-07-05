@@ -8,6 +8,29 @@ namespace cm::codegen::js {
 
 using ast::TypeKind;
 
+namespace {
+// 狭い整数型（8/16bit）への代入値をラップする。
+// JSの数値は53bit精度のため、tiny等への代入は明示的な
+// 切り詰めがないと 127+1 が 128 のまま格納されてしまう
+std::string wrapNarrowInt(const std::string& expr, const hir::TypePtr& type) {
+    if (!type) {
+        return expr;
+    }
+    switch (type->kind) {
+        case TypeKind::Tiny:
+            return "((" + expr + " << 24) >> 24)";
+        case TypeKind::UTiny:
+            return "((" + expr + ") & 0xFF)";
+        case TypeKind::Short:
+            return "((" + expr + " << 16) >> 16)";
+        case TypeKind::UShort:
+            return "((" + expr + ") & 0xFFFF)";
+        default:
+            return expr;
+    }
+}
+}  // namespace
+
 void JSCodeGen::emitBasicBlock(const mir::BasicBlock& block, const mir::MirFunction& func,
                                [[maybe_unused]] const mir::MirProgram& program) {
     bool needLabels = func.basic_blocks.size() > 1;
@@ -69,6 +92,10 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
             }
 
             std::string rvalue = emitRvalue(*data.rvalue, func);
+            // 狭い整数型（tiny/utiny/short/ushort）への代入は型幅にラップする
+            if (data.place.projections.empty() && target_local < func.locals.size()) {
+                rvalue = wrapNarrowInt(rvalue, func.locals[target_local].type);
+            }
             if (data.place.projections.empty() && declare_on_assign_.count(target_local) > 0 &&
                 declared_locals_.count(target_local) == 0) {
                 emitter_.emitLine("let " + place + " = " + rvalue + ";");
