@@ -70,8 +70,15 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::vector<SVModule> modules_;
 
     // whileループ再構成中のexitブロックIDスタック
-    // （ループ本体内からexitへの分岐を break; として出力するために使用）
+    // （ループ本体内からexitへの分岐をループ脱出として出力するために使用）
     std::vector<size_t> loop_exit_stack_;
+
+    // ループを囲む名前付きブロックの名前スタック。
+    // ループ脱出は break（SV-2005キーワード）ではなく
+    // disable <名前>（Verilog-1995互換）で出力する。
+    // 古いIcarus Verilog（v11以前）やGowin系ツールはbreak未対応のため
+    std::vector<std::string> loop_name_stack_;
+    int loop_name_counter_ = 0;
 
     // 現在出力中の関数のループヘッダ→ラッチ一覧
     // （DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）

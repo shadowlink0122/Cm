@@ -2158,10 +2158,12 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
 void SVCodeGen::emitBlockRecursive(const mir::MirFunction& func, size_t block_id,
                                    std::set<size_t>& visited, std::ostringstream& ss,
                                    size_t merge_block) {
-    // ループ本体の出力中にexitブロックへ到達した場合は break; を出力
-    // （ループからの脱出。exitブロック自体はループ終了後に出力される）
+    // ループ本体の出力中にexitブロックへ到達した場合はループ脱出を出力
+    // （exitブロック自体はループ終了後に出力される）。
+    // break は SV-2005 キーワードで古いIcarus Verilog等が未対応のため、
+    // ループを囲む名前付きブロックへの disable で脱出する（Verilog-1995互換）
     if (!loop_exit_stack_.empty() && block_id == loop_exit_stack_.back()) {
-        ss << indent() << "break;\n";
+        ss << indent() << "disable " << loop_name_stack_.back() << ";\n";
         return;
     }
     // 既に訪問済み、または合流ブロックに到達した場合は停止
@@ -2238,13 +2240,19 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                             size_t exit = true_in_loop ? false_block : true_block;
                             std::string loop_cond = true_in_loop ? cond : "!(" + cond + ")";
 
+                            // ループ脱出（disable）用の名前付きブロックで囲む
+                            std::string loop_name = "__loop" + std::to_string(loop_name_counter_++);
+                            ss << indent() << "begin : " << loop_name << "\n";
+                            increaseIndent();
                             ss << indent() << "while (" << loop_cond << ") begin\n";
                             increaseIndent();
-                            // ループ本体を出力。break（exitへの分岐）を検出できるよう
+                            // ループ本体を出力。ループ脱出（exitへの分岐）を検出できるよう
                             // exitブロックをスタックに積む。ヘッダへの後方エッジは
                             // visited済みのため自然に停止する
                             loop_exit_stack_.push_back(exit);
+                            loop_name_stack_.push_back(loop_name);
                             emitBlockRecursive(func, body, visited, ss, exit);
+                            loop_name_stack_.pop_back();
                             loop_exit_stack_.pop_back();
                             // ヘッダブロックの文（ループ条件の再計算）を本体末尾で
                             // 再実行する。条件のテンポラリが2箇所で代入されることに
@@ -2261,6 +2269,8 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                                     }
                                 }
                             }
+                            decreaseIndent();
+                            ss << indent() << "end\n";
                             decreaseIndent();
                             ss << indent() << "end\n";
 
@@ -3323,6 +3333,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
         throw std::runtime_error("SVターゲットで非合成型が検出されました");
     }
 
+    loop_name_counter_ = 0;
     begin_generation();
 
     // ファイルヘッダー

@@ -1218,8 +1218,8 @@ run_tests_parallel() {
                     # エラーファイルがあれば先頭5行を表示
                     local error_file="${result_file}.error"
                     if [ -f "$error_file" ]; then
-                        echo "  --- Error output (first 5 lines) ---"
-                        head -5 "$error_file" | sed 's/^/  /'
+                        echo "  --- Error output (first 15 lines) ---"
+                        head -15 "$error_file" | sed 's/^/  /'
                         echo "  ---"
                     fi
                     ((FAILED++))
@@ -1530,6 +1530,10 @@ PY
                                         cat "$sim_test_file" >> "$output_file"
                                     else
                                         echo "SIM_FAIL" > "$output_file"
+                                        echo "--- 期待値 ---" >> "$output_file"
+                                        cat "$exp_test_file" >> "$output_file" 2>/dev/null
+                                        echo "--- 実際の値 ---" >> "$output_file"
+                                        cat "$sim_test_file" >> "$output_file" 2>/dev/null
                                         exit_code=1
                                     fi
                                     rm -f "$sim_test_file" "$exp_test_file"
@@ -1539,7 +1543,8 @@ PY
                                     echo "COMPILE_OK" > "$output_file"
                                 fi
                             else
-                                echo "SIM_FAIL" >> "$output_file"
+                                echo "SIM_FAIL (vvp exit=$sim_exit)" >> "$output_file"
+                                cat "$sim_output" >> "$output_file" 2>/dev/null
                                 exit_code=1
                             fi
                         fi
