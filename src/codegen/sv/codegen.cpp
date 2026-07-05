@@ -2801,6 +2801,51 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
+    // 事前パス: extern structインスタンスの出力ポートに接続された信号を収集する。
+    // これらは内部レジスタ宣言で初期値を出力しない
+    // （初期値付き変数への連続代入はiverilog等でエラーになるため）
+    std::set<std::string> instance_driven_signals;
+    for (const auto& gv : program.global_vars) {
+        if (!gv || !gv->type) {
+            continue;
+        }
+        const mir::MirStruct* extern_st = nullptr;
+        for (const auto& st : program.structs) {
+            if (st && st->name == gv->type->name && st->is_extern) {
+                extern_st = st.get();
+                break;
+            }
+        }
+        if (!extern_st) {
+            continue;
+        }
+        for (const auto& field : extern_st->fields) {
+            bool is_output = false;
+            for (const auto& attr : field.attributes) {
+                if (attr == "output" || attr == "inout") {
+                    is_output = true;
+                }
+            }
+            if (!is_output) {
+                continue;
+            }
+            std::string sig = field.name;
+            if (!field.default_value_str.empty()) {
+                sig = field.default_value_str;
+            } else {
+                for (const auto& [fname, fconst] : gv->struct_field_inits) {
+                    if (fname == field.name) {
+                        if (const auto* sval = std::get_if<std::string>(&fconst.value)) {
+                            sig = *sval;
+                        }
+                        break;
+                    }
+                }
+            }
+            instance_driven_signals.insert(sig);
+        }
+    }
+
     // グローバル変数からポートと内部シグナルを生成
     bool has_clk = false;
     bool has_rst = false;
@@ -3097,8 +3142,11 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 std::string reg_decl = mapType(gv->type) + " " + var_name + array_suffix;
                 // 宣言初期値を電源投入時初期値として出力する。
                 // 出力しないとシミュレーションでXのままFSMが進まない
-                // （FPGA合成でもレジスタの初期値として扱われる）
-                if (gv->init_value && array_suffix.empty()) {
+                // （FPGA合成でもレジスタの初期値として扱われる）。
+                // ただしインスタンス出力に接続された信号は連続駆動されるため
+                // 初期値を付けない（iverilog等で二重駆動エラーになる）
+                if (gv->init_value && array_suffix.empty() &&
+                    instance_driven_signals.count(var_name) == 0) {
                     reg_decl +=
                         " = " + emitConstant(*gv->init_value, gv->type, getBitWidth(gv->type));
                 }

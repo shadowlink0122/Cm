@@ -1,0 +1,21 @@
+//! platform: sv
+
+// 階層化テスト用のALUサブモジュール（hier_top.cm からインスタンス化される）
+// op: 0=加算, 1=減算, 2=AND, その他=OR
+
+#[input] uint a;
+#[input] uint b;
+#[input] utiny op;
+#[output] uint result = 0;
+
+void alu_comb() {
+    if (op == 0) {
+        result = a + b;
+    } else if (op == 1) {
+        result = a - b;
+    } else if (op == 2) {
+        result = a & b;
+    } else {
+        result = a | b;
+    }
+}

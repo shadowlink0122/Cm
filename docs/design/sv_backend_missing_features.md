@@ -12,7 +12,30 @@ CmCPU（Tang Console 138K向けCPU開発）での実運用と2026-07-04の調査
 
 ## 1. モジュール階層の保持（最重要）
 
-**現状**: 1コンパイル = 1モジュール。`import` は全シンボルをフラット化して単一モジュールに展開する。インスタンス化できるのは `extern struct`（外部プリミティブ）のみ。CmCPUの `hdmi_text_top` は約6,300行の単一モジュールに展開されており、CPUをALU・デコーダ・レジスタファイルに分割しても合成結果の階層が失われる。
+> **✅ 2026-07-05 Stage 2 実装済み**: `//! sv: hierarchy` ディレクティブで
+> モジュール階層を保持できるようになった。
+> ```cm
+> //! platform: sv
+> //! sv: hierarchy
+> import ./alu;   // フラット化されず別モジュールとして保持される
+>
+> uint alu_out = 0;
+> alu alu0 = alu { a: x, b: y, op: op_code, result: alu_out };
+> ```
+> - 相対import先のポート宣言（`#[input]`/`#[output]`/`#[inout]`）から
+>   extern struct を自動生成してimport文を置換（型名 = ファイル名のstem）
+> - import先は個別にSVコンパイルされ、生成モジュールがトップの.svに連結される
+>   （再帰・循環検出付き。ネストした階層importにも対応）
+> - 構造体リテラル `{ フィールド: 信号名 }` によるnamed port connection を実装
+>   （`MirGlobalVar::struct_field_inits` は未実装のデッドフィールドだったため
+>   MIR loweringで設定するようにした）
+> - インスタンス出力に接続された信号は宣言初期値を出力しないよう修正
+>   （初期値付き変数への連続代入はiverilogでエラーになるため）
+> 回帰テスト: `tests/sv/hierarchy/hier_top`（シミュレーション検証）、`hier_alu`。
+> **未実装（Stage 3）**: `MirProgram::modules` を使った真の複数モジュールMIR、
+> パラメータオーバーライド `#(.WIDTH(8))`（項目2）、選択import・エイリアスの階層化。
+
+**現状（Stage 2まで）**: デフォルトは従来どおりフラット化。`//! sv: hierarchy` 指定時のみ相対importを階層のまま保持する。CmCPUの `hdmi_text_top`（約6,300行の単一モジュール）はディレクティブ追加で分割可能になった。
 
 **実装案**:
 1. `module X { ... }` 相当の単位（現状はファイル）ごとに `SVModule` を生成し、`modules_` ベクタに複数モジュールを保持する（データ構造は既に対応済み）

@@ -336,6 +336,7 @@ list(APPEND CM_SOURCES
 # SystemVerilog backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/codegen/sv/codegen.cpp
+    src/codegen/sv/hierarchy.cpp
 )
 
 # Add LLVM sources if enabled

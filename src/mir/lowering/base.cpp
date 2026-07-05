@@ -197,6 +197,32 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
             //   SVコードジェネレータが使用する）
             mir_gv->init_expr = gv.init.get();
         }
+
+        // 構造体リテラル初期化（extern structインスタンスのポート接続用）:
+        // `alu a0 = alu { a: x, b: y };` のフィールド値を文字列/定数として保持する
+        if (const auto* struct_lit =
+                std::get_if<std::unique_ptr<hir::HirStructLiteral>>(&gv.init->kind)) {
+            if (*struct_lit) {
+                for (const auto& field : (*struct_lit)->fields) {
+                    if (!field.value) {
+                        continue;
+                    }
+                    MirConstant field_const;
+                    if (const auto* var_ref =
+                            std::get_if<std::unique_ptr<hir::HirVarRef>>(&field.value->kind)) {
+                        // 信号名接続（識別子）
+                        if (*var_ref) {
+                            field_const.type = hir::make_string();
+                            field_const.value = (*var_ref)->name;
+                            mir_gv->struct_field_inits.emplace_back(field.name, field_const);
+                        }
+                    } else if (auto fc = try_global_const_eval(*field.value)) {
+                        // 定数（パラメータ値等）
+                        mir_gv->struct_field_inits.emplace_back(field.name, *fc);
+                    }
+                }
+            }
+        }
     }
 
     // グローバル変数名を追跡

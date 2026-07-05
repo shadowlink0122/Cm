@@ -14,6 +14,7 @@
 #include "codegen/js/codegen.hpp"
 
 // MIR validation
+#include "codegen/sv/hierarchy.hpp"
 #include "common/cache_manager.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
@@ -932,6 +933,29 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // ========== SVモジュール階層の保持（//! sv: hierarchy）==========
+    // 相対importをextern struct宣言に置換し、import先を後段で個別コンパイルする
+    std::vector<std::string> sv_hierarchy_submodules;
+    {
+        bool is_sv_early =
+            (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+        if (is_sv_early) {
+            auto hres = codegen::sv::process_sv_hierarchy(code, opts.input_file);
+            if (!hres.error.empty()) {
+                std::cerr << "sv階層化エラー: " << hres.error << "\n";
+                return 1;
+            }
+            if (hres.enabled) {
+                code = hres.transformed_source;
+                sv_hierarchy_submodules = hres.submodule_files;
+                if (opts.verbose && !sv_hierarchy_submodules.empty()) {
+                    std::cout << "sv階層化: " << sv_hierarchy_submodules.size()
+                              << " 個のサブモジュールを検出\n";
+                }
+            }
+        }
+    }
+
     if (opts.verbose) {
         switch (opts.command) {
             case Command::Run:
@@ -1614,6 +1638,22 @@ int main(int argc, char* argv[]) {
                 try {
                     cm::codegen::sv::SVCodeGen codegen(sv_opts);
                     codegen.compile(mir);
+
+                    // sv階層化: サブモジュールを個別コンパイルして連結
+                    if (!sv_hierarchy_submodules.empty()) {
+                        std::string hier_error;
+                        if (!codegen::sv::append_submodules(
+                                argv[0], opts.input_file, sv_hierarchy_submodules,
+                                sv_opts.outputFile, opts.optimization_level, opts.emit_memfile,
+                                hier_error)) {
+                            std::cerr << "sv階層化エラー: " << hier_error << "\n";
+                            return 1;
+                        }
+                        if (!opts.quiet) {
+                            std::cout << "✓ サブモジュール " << sv_hierarchy_submodules.size()
+                                      << " 個を連結\n";
+                        }
+                    }
 
                     if (!opts.quiet) {
                         auto compile_end = std::chrono::steady_clock::now();
