@@ -94,31 +94,55 @@ end
 
 > **旧バージョンの注意:** 以前はバックエッジが消えて「本体最大1回・ループ後コード到達不能」の誤ったSVが生成されていました。回帰テスト `tests/sv/control/for_loop`（シミュレーションで sum=6 を検証）で保証されています。
 
-### break
+### break（disable方式）
 
-ループからの脱出は SV の `break;` として出力されます:
+ループからの脱出は、名前付きブロックへの `disable`（Verilog-1995互換）として
+出力されます。SV-2005の `break` キーワードは古いIcarus Verilog（v11以前）や
+一部の合成ツールが未対応のため使用しません:
 
 ```cm
-while (i < 5) {
+while (true) {
     if (c >= limit) {
         break;
     }
     c = c + 1;
-    i = i + 1;
 }
 ```
 
 ```systemverilog
-while (_t1004) begin
-    if ((c >= limit)) begin
-        break;
-    end else begin
-        c = c + 32'sd1;
-        i = i + 32'sd1;
+begin : __loop0
+    while (1'b1) begin
+        if (c >= limit) begin
+            disable __loop0;   // break相当: 名前付きブロックを脱出
+        end else begin
+            c = c + 32'sd1;
+        end
     end
-    // 条件再計算...
 end
 ```
+
+### 定数ループの静的展開（generate相当）
+
+初期値・境界・増分がすべて定数のループは、SVターゲットのコンパイル時に
+直列のブロック列へ**静的展開**され、生成SVに `while` が残りません
+（合成ツールは動的whileを展開できないため）:
+
+```cm
+for (uint i = 0; i < 4; i = i + 1) {
+    acc = acc ^ (din >> i);
+}
+```
+
+```systemverilog
+// ループ判定なしの直列コードに展開される
+acc = acc ^ din;
+acc = acc ^ (din >> 1);  // i=1相当（実際はテンポラリ経由）
+// ... 4回分
+```
+
+- 展開上限: 1024イテレーション / 展開後50,000文
+- `while (true) + break` や動的境界のループは従来どおり while + disable で出力
+- 回帰テスト: `tests/sv/control/const_loop_unroll`
 
 ### ネストしたループ
 

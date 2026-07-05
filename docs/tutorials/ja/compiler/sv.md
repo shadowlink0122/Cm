@@ -26,7 +26,9 @@ SVバックエンドの詳細はトピック別のページに分かれていま
 | [プロセスと代入](sv-processes.html) | always_ff/comb/latch、代入の自動変換、暗黙的変換 |
 | [制御構文とループ](sv-control-flow.html) | if/case、whileループ再構成、break、演算子と優先順位保証 |
 | [データ構造](sv-data.html) | 連接・複製、enum FSM、配列とBRAM、文字列 |
-| [状態初期化とシミュレーション](sv-state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、テスト実行 |
+| [状態初期化とシミュレーション](sv-state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、アサーション、テスト実行 |
+| [メモリ初期化](sv-memory.html) | 配列初期値、#[sv::memfile]/$readmemh、--emit-memfile |
+| [モジュール階層](sv-hierarchy.html) | //! sv: hierarchy によるサブモジュールのインスタンス化 |
 | [意味論保証](sv-semantics.html) | Cm↔SVの意味論対応の保証事項まとめ（キャスト・符号付き演算等） |
 
 ---
@@ -109,6 +111,13 @@ SVバックエンドを使用するには、ファイル先頭に **必ず** 記
 - 暗黙的SV変換 (代入方式、リテラルビット幅付与 等)
 
 ---
+
+## SVターゲットのコンパイルオプション
+
+| オプション | 内容 |
+|---|---|
+| `--emit-memfile` | 配列リテラル初期値を `.hex` ファイルとして書き出す |
+| `--sv-strict-lint` | lint_off抑止を出力しない（幅警告を可視化して潰す作業用） |
 
 ## コンパイルと検証
 

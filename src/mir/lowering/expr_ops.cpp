@@ -632,6 +632,15 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         if ((!rhs_type || rhs_type->is_error()) && rhs < ctx.func->locals.size()) {
             rhs_type = ctx.func->locals[rhs].type;
         }
+        // ローカルの型もエラー型の場合は「不明」として扱い、
+        // エラー型が結果型に伝播しないようにする（int既定へフォールバック）。
+        // 文字列補間式のパース経由など、型チェッカを通らないHIRで発生する
+        if (lhs_type && lhs_type->is_error()) {
+            lhs_type = nullptr;
+        }
+        if (rhs_type && rhs_type->is_error()) {
+            rhs_type = nullptr;
+        }
 
         if (lhs_type && rhs_type) {
             // doubleがあればdouble

@@ -128,3 +128,23 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 ---
 
 ← [Data Structures](sv-data.html) | [Semantic Guarantees](sv-semantics.html) →
+
+## Assertions (std::debug::assert)
+
+`std::debug::assert` is emitted as an **immediate assertion** for the SV
+target — checked in simulation and ignored by synthesis tools:
+
+```systemverilog
+always @(posedge clk) begin
+    assert (value < 100) else $error("assertion failed: value out of range");
+    out <= value;
+end
+```
+
+On execution backends (JIT/native/WASM/JS) the standard library
+implementation runs instead: it prints `assertion failed: <msg>` and
+calls `exit(1)`. Only the SV target converts call sites to immediate
+assertions, since hardware has no `exit` (the library function
+definition itself is not emitted to SV).
+
+Regression test: `tests/sv/simulation/assert_immediate`

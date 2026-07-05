@@ -27,6 +27,8 @@ The SV backend documentation is split into topic-specific pages:
 | [Control Flow and Loops](sv-control-flow.html) | if/case, while-loop reconstruction, break, operators and precedence guarantees |
 | [Data Structures](sv-data.html) | Concatenation/replication, enum FSMs, arrays and BRAM, strings |
 | [State Initialization and Simulation](sv-state-sim.html) | Register initial values, initial blocks, automatic testbench generation, running tests |
+| [Memory initialization](sv-memory.html) | Array initializers, #[sv::memfile]/$readmemh, --emit-memfile |
+| [Module hierarchy](sv-hierarchy.html) | Submodule instantiation via //! sv: hierarchy |
 | [Semantic Guarantees](sv-semantics.html) | Summary of guaranteed Cm↔SV semantic correspondence (casts, signed arithmetic, etc.) |
 
 ---
@@ -109,6 +111,13 @@ It enables:
 - Implicit SV conversions (assignment style, literal bit-width annotation, etc.)
 
 ---
+
+## SV target compile options
+
+| Option | Description |
+|---|---|
+| `--emit-memfile` | Write array literal initializers out as `.hex` files |
+| `--sv-strict-lint` | Do not emit lint_off suppressions (surface width warnings) |
 
 ## Compilation and Verification
 

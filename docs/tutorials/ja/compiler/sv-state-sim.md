@@ -128,3 +128,31 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 ---
 
 ← [データ構造](sv-data.html) | [意味論保証](sv-semantics.html) →
+
+## アサーション（std::debug::assert）
+
+`std::debug::assert` は SVターゲットでは**即時アサーション**として出力されます。
+シミュレーションで検証され、合成ツールでは無視されます:
+
+```cm
+import std::debug::assert;
+
+async void check(posedge clk) {
+    assert(value < 100, "value out of range");
+    out = value;
+}
+```
+
+```systemverilog
+always @(posedge clk) begin
+    assert (value < 100) else $error("assertion failed: value out of range");
+    out <= value;
+end
+```
+
+- 実行系バックエンド（JIT/native/WASM/JS）では標準ライブラリの実装が実行され、
+  違反時に `assertion failed: <msg>` を出力して `exit(1)` します
+- SVのみ、ハードウェアに `exit` が存在しないため即時アサーションへ変換されます
+  （標準ライブラリの関数定義自体はSV出力されません）
+
+回帰テスト: `tests/sv/simulation/assert_immediate`

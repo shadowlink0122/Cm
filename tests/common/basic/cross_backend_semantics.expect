@@ -1,0 +1,7 @@
+mod = -1
+div = -2
+shr = -4
+cast = 255
+logic ok
+streq ok
+cmp = true

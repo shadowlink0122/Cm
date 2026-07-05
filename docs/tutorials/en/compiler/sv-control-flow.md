@@ -94,31 +94,34 @@ How it works internally:
 
 > **Note about older versions:** Previously the back edge was lost, generating incorrect SV where the body ran "at most once" and post-loop code was unreachable. This is now guaranteed by the regression test `tests/sv/control/for_loop` (verifies sum=6 in simulation).
 
-### break
+### break (disable idiom)
 
-Exiting a loop is emitted as SV `break;`:
-
-```cm
-while (i < 5) {
-    if (c >= limit) {
-        break;
-    }
-    c = c + 1;
-    i = i + 1;
-}
-```
+Loop exits are emitted as `disable` on a named block (Verilog-1995
+compatible). The SV-2005 `break` keyword is not used because older
+Icarus Verilog (v11 and earlier) and some synthesis tools do not
+support it:
 
 ```systemverilog
-while (_t1004) begin
-    if ((c >= limit)) begin
-        break;
-    end else begin
-        c = c + 32'sd1;
-        i = i + 32'sd1;
+begin : __loop0
+    while (1'b1) begin
+        if (c >= limit) begin
+            disable __loop0;   // equivalent to break
+        end else begin
+            c = c + 32'sd1;
+        end
     end
-    // condition recomputation...
 end
 ```
+
+### Static unrolling of constant loops (generate equivalent)
+
+Loops whose initial value, bound, and step are all constants are
+statically unrolled at compile time for the SV target, so no `while`
+remains in the generated SV (synthesis tools cannot unroll dynamic
+while loops). Limits: 1024 iterations / 50,000 statements after
+unrolling. `while (true) + break` and dynamically-bounded loops are
+still emitted as while + disable.
+Regression test: `tests/sv/control/const_loop_unroll`.
 
 ### Nested Loops
 
