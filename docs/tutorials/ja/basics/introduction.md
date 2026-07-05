@@ -171,8 +171,8 @@ match (status) {
 
 ## 関連リンク
 
-- [正式言語仕様](../../design/CANONICAL_SPEC.html)
-- [リリースノート](../../releases/)
+- [正式言語仕様](../../../design/CANONICAL_SPEC.html)
+- [リリースノート](../../../releases/)
 
 ---
 

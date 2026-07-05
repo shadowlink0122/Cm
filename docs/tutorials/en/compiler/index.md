@@ -62,4 +62,4 @@ and `sv/` (SystemVerilog / FPGA).
 
 ---
 
-← [Standard library](../stdlib/) | **Next:** [Internals](../internals/) →
+← [Tutorials home](../index.html) | **Next:** [Internals](../internals/) →

@@ -735,7 +735,7 @@ make build ARCH=x86_64
 
 ## 関連リンク
 
-- [プロジェクト構造](../../PROJECT_STRUCTURE.html)
+- [プロジェクト構造](../../../PROJECT_STRUCTURE.html)
 - [コンパイラの使い方](../compiler/common/usage.html)
 - [Linter](../compiler/common/linter.html) - 静的解析ツール
 - [Formatter](../compiler/common/formatter.html) - コードフォーマッター

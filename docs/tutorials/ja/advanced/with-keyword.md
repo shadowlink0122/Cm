@@ -384,7 +384,7 @@ impl Person for Eq {
 
 - [インターフェース](../types/interfaces.html) - interface/impl構文
 - [演算子オーバーロード](../advanced/operators.html) - operator実装
-- [正式言語仕様](../../design/CANONICAL_SPEC.html) - with構文の仕様
+- [正式言語仕様](../../../design/CANONICAL_SPEC.html) - with構文の仕様
 
 ---
 

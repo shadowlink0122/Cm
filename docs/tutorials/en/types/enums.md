@@ -403,8 +403,8 @@ int main() {
 
 ## Related Links
 
-- [Control Flow](../../basics/control-flow.html)
-- [match Expression](../../advanced/match.html)
+- [Control Flow](../basics/control-flow.html)
+- [match Expression](../advanced/match.html)
 - [Structs](structs.html)
 
 ---
