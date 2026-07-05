@@ -424,6 +424,53 @@ TEST_F(SVCodegenTest, LatchInferenceOneSidedAssignIsLatch) {
     expect_contains(sv, "ラッチ推論: lout が全パスで代入されません");
 }
 
+// 三項演算子の構造的判定（Phase 2b）: 同一変数への単一代入のif/elseは
+// cond ? a : b に、else-ifチェーンは入れ子の三項に畳まれる
+TEST_F(SVCodegenTest, StructuralTernaryChain) {
+    const std::string code = R"(
+        #[input] uint op;
+        #[input] uint a;
+        #[input] uint b;
+        #[output] uint r = 0;
+
+        void pick() {
+            if (op == 0) {
+                r = a + b;
+            } else if (op == 1) {
+                r = a - b;
+            } else {
+                r = a ^ b;
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "r = (op == 32'sd0) ? a + b : (op == 32'sd1) ? a - b : a ^ b;");
+    expect_not_contains(sv, "if (op");
+}
+
+// 複数文の分岐は三項化されずif/elseのまま出力される
+TEST_F(SVCodegenTest, MultiStatementBranchStaysIfElse) {
+    const std::string code = R"(
+        #[input] uint sel;
+        #[input] uint din;
+        #[output] uint q1 = 0;
+        #[output] uint q2 = 0;
+
+        void update() {
+            if (sel == 1) {
+                q1 = din;
+                q2 = 1;
+            } else {
+                q1 = 0;
+                q2 = 2;
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "if (sel == 32'sd1) begin");
+    expect_contains(sv, "end else begin");
+}
+
 // 配列型ポートはアンパックド次元を保持する
 TEST_F(SVCodegenTest, ArrayPortDimension) {
     const std::string code = R"(

@@ -1723,145 +1723,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // （テンポラリ名は関数間で衝突するため、関数単位の除去は誤削除の危険がある）
     std::string block_content = block_ss.str();
 
-    // 三項演算子最適化: if/elseが同一変数への単一代入のみなら cond ? a : b に変換
-    {
-        std::istringstream opt_stream(block_content);
-        std::vector<std::string> opt_lines;
-        std::string opt_line;
-        while (std::getline(opt_stream, opt_line)) {
-            opt_lines.push_back(opt_line);
-        }
-
-        // パターン検出: 連続する行で以下の形式を探す
-        // [i]   if (COND) begin
-        // [i+1]     VAR = A;  (or VAR <= A;)
-        // [i+2] end else begin
-        // [i+3]     VAR = B;  (or VAR <= B;)
-        // [i+4] end
-        std::vector<std::string> optimized;
-        for (size_t i = 0; i < opt_lines.size(); ++i) {
-            std::string trimmed_if = opt_lines[i];
-            auto if_start = trimmed_if.find_first_not_of(' ');
-            if (if_start == std::string::npos || i + 4 >= opt_lines.size()) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-            std::string if_content = trimmed_if.substr(if_start);
-
-            // "if (...) begin" パターンチェック
-            if (if_content.substr(0, 4) != "if (" || if_content.back() != 'n' ||
-                if_content.find(") begin") == std::string::npos) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-
-            // 条件式を抽出
-            auto cond_start_pos = if_content.find('(');
-            auto cond_end_pos = if_content.rfind(") begin");
-            if (cond_start_pos == std::string::npos || cond_end_pos == std::string::npos) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-            std::string cond_expr =
-                if_content.substr(cond_start_pos + 1, cond_end_pos - cond_start_pos - 1);
-
-            // then代入行を解析
-            std::string then_line = opt_lines[i + 1];
-            auto then_start = then_line.find_first_not_of(' ');
-            if (then_start == std::string::npos) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-            std::string then_content = then_line.substr(then_start);
-
-            // "end else begin" チェック
-            std::string else_line = opt_lines[i + 2];
-            auto else_start = else_line.find_first_not_of(' ');
-            if (else_start == std::string::npos) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-            std::string else_content = else_line.substr(else_start);
-            if (else_content != "end else begin") {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-
-            // else代入行を解析
-            std::string else_assign_line = opt_lines[i + 3];
-            auto ea_start = else_assign_line.find_first_not_of(' ');
-            if (ea_start == std::string::npos) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-            std::string ea_content = else_assign_line.substr(ea_start);
-
-            // "end" チェック
-            std::string end_line = opt_lines[i + 4];
-            auto end_start = end_line.find_first_not_of(' ');
-            if (end_start == std::string::npos) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-            std::string end_content = end_line.substr(end_start);
-            if (end_content != "end") {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-
-            // 代入演算子を検出（= または <=）
-            std::string assign_op = " = ";
-            auto then_eq = then_content.find(" = ");
-            auto then_nbeq = then_content.find(" <= ");
-            auto ea_eq = ea_content.find(" = ");
-            auto ea_nbeq = ea_content.find(" <= ");
-
-            std::string then_lhs, then_rhs, else_lhs, else_rhs;
-
-            if (then_nbeq != std::string::npos && ea_nbeq != std::string::npos) {
-                assign_op = " <= ";
-                then_lhs = then_content.substr(0, then_nbeq);
-                then_rhs = then_content.substr(then_nbeq + 4);
-                else_lhs = ea_content.substr(0, ea_nbeq);
-                else_rhs = ea_content.substr(ea_nbeq + 4);
-            } else if (then_eq != std::string::npos && ea_eq != std::string::npos) {
-                then_lhs = then_content.substr(0, then_eq);
-                then_rhs = then_content.substr(then_eq + 3);
-                else_lhs = ea_content.substr(0, ea_eq);
-                else_rhs = ea_content.substr(ea_eq + 3);
-            } else {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-
-            // セミコロン除去
-            if (!then_rhs.empty() && then_rhs.back() == ';')
-                then_rhs.pop_back();
-            if (!else_rhs.empty() && else_rhs.back() == ';')
-                else_rhs.pop_back();
-
-            // 同一変数チェック
-            if (then_lhs != else_lhs || then_lhs.empty()) {
-                optimized.push_back(opt_lines[i]);
-                continue;
-            }
-
-            // 三項演算子に変換 (条件式を括弧で囲み演算子優先順位の問題を回避)
-            std::string indent_str = trimmed_if.substr(0, if_start);
-            optimized.push_back(indent_str + then_lhs + assign_op + "(" + cond_expr + ")" + " ? " +
-                                then_rhs + " : " + else_rhs + ";");
-            i += 4;  // 5行消費
-        }
-
-        // 最適化結果を再構築
-        std::ostringstream opt_ss;
-        for (size_t i = 0; i < optimized.size(); ++i) {
-            opt_ss << optimized[i];
-            if (i + 1 < optimized.size())
-                opt_ss << "\n";
-        }
-        block_content = opt_ss.str();
-    }
+    // 三項演算子化は emitTerminator の構造的判定（Phase 2b）で実施済み
 
     // else if 正規化: "end else begin\n    if (...) begin" → "end else if (...) begin"
     // 結合時にブロック内容のインデントを1レベル浅く調整し、余分なendも除去
@@ -1942,50 +1804,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         block_content = elif_ss.str();
     }
 
-    // 冗長三項演算子除去: "cond ? X : X" → "X"
-    {
-        // 単純な文字列探索で "? X : X" パターンを検出（X が同一値）
-        std::istringstream tern_stream(block_content);
-        std::ostringstream tern_out;
-        std::string tern_line;
-        while (std::getline(tern_stream, tern_line)) {
-            // "expr ? val : val;" パターンを検出
-            auto q_pos = tern_line.find(" ? ");
-            auto c_pos =
-                (q_pos != std::string::npos) ? tern_line.find(" : ", q_pos + 3) : std::string::npos;
-            if (q_pos != std::string::npos && c_pos != std::string::npos) {
-                std::string then_val = tern_line.substr(q_pos + 3, c_pos - q_pos - 3);
-                std::string else_val = tern_line.substr(c_pos + 3);
-                // セミコロンを含む場合は除去して比較
-                std::string else_val_clean = else_val;
-                if (!else_val_clean.empty() && else_val_clean.back() == ';')
-                    else_val_clean.pop_back();
-                if (then_val == else_val_clean && !then_val.empty()) {
-                    // 三項演算子を除去して直接値を使用
-                    // "var = cond ? X : X;" → "var = X;"
-                    auto assign_pos = tern_line.rfind(" = ", q_pos);
-                    auto nb_assign_pos = tern_line.rfind(" <= ", q_pos);
-                    if (assign_pos != std::string::npos || nb_assign_pos != std::string::npos) {
-                        size_t a_pos =
-                            (nb_assign_pos != std::string::npos &&
-                             (assign_pos == std::string::npos || nb_assign_pos > assign_pos))
-                                ? nb_assign_pos
-                                : assign_pos;
-                        std::string a_op =
-                            (a_pos == nb_assign_pos && nb_assign_pos != std::string::npos) ? " <= "
-                                                                                           : " = ";
-                        tern_out << tern_line.substr(0, a_pos) << a_op << then_val << ";\n";
-                        continue;
-                    }
-                }
-            }
-            tern_out << tern_line << "\n";
-        }
-        // 末尾の余分な改行を除去
-        block_content = tern_out.str();
-        if (!block_content.empty() && block_content.back() == '\n')
-            block_content.pop_back();
-    }
+    // 冗長三項（cond ? X : X）は構造的検出が両辺同一時に直接単純代入を
+    // 出力するため、テキストベースの除去パスは不要になった
 
     if (has_explicit_edge || func.is_async ||
         func.always_kind == mir::MirFunction::AlwaysKind::FF) {
@@ -2229,42 +2049,82 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 // 合流ブロックを探す
                 size_t merge = findMergeBlock(func, then_block, else_block);
 
-                if (is_negated) {
-                    // SwitchInt(cond, [(0, then_block)], otherwise=else_block)
-                    // → if (!cond) then_block else else_block
-                    // → if (cond) else_block else then_block (反転)
-                    ss << indent() << "if (" << cond << ") begin\n";
-                    increaseIndent();
-                    emitBlockRecursive(func, else_block, visited, ss, merge);
-                    decreaseIndent();
-                    // else ブロック（空でなければ出力）
-                    std::ostringstream else_ss;
-                    std::set<size_t> else_visited = visited;
-                    increaseIndent();
-                    emitBlockRecursive(func, then_block, else_visited, else_ss, merge);
-                    decreaseIndent();
-                    if (!else_ss.str().empty()) {
-                        ss << indent() << "end else begin\n";
-                        ss << else_ss.str();
-                        visited.insert(else_visited.begin(), else_visited.end());
+                // 条件が真のとき実行される分岐（is_negated時は反転）
+                size_t true_blk = is_negated ? else_block : then_block;
+                size_t false_blk = is_negated ? then_block : else_block;
+
+                // 両分岐をバッファに出力してから if/else か三項演算子かを決める
+                std::ostringstream true_ss;
+                increaseIndent();
+                emitBlockRecursive(func, true_blk, visited, true_ss, merge);
+                decreaseIndent();
+
+                std::ostringstream false_ss;
+                std::set<size_t> false_visited = visited;
+                increaseIndent();
+                emitBlockRecursive(func, false_blk, false_visited, false_ss, merge);
+                decreaseIndent();
+
+                // === 三項演算子の構造的判定（式ツリー化 Phase 2b） ===
+                // 両分岐が「同一placeへの単一代入行」なら cond ? a : b として出力。
+                // 内側の分岐は再帰で先に三項化されるため、else-ifチェーンも
+                // 自然に入れ子の三項として畳まれる
+                // （従来はテキストの5行パターン検出パスで行っていた）
+                auto parse_single_assign = [](const std::string& text, std::string& lhs,
+                                              std::string& rhs, std::string& op) {
+                    // 「1行のみ + 行末が ;」であること
+                    size_t nl = text.find('\n');
+                    if (nl == std::string::npos || nl + 1 != text.size()) {
+                        return false;
+                    }
+                    std::string line = text.substr(0, nl);
+                    size_t first = line.find_first_not_of(' ');
+                    if (first == std::string::npos) {
+                        return false;
+                    }
+                    line = line.substr(first);
+                    if (line.empty() || line.back() != ';') {
+                        return false;
+                    }
+                    // 代入演算子（先に現れた方。右辺の比較 <= と混同しない）
+                    size_t nb = line.find(" <= ");
+                    size_t bl = line.find(" = ");
+                    if (nb != std::string::npos && (bl == std::string::npos || nb < bl)) {
+                        op = " <= ";
+                        lhs = line.substr(0, nb);
+                        rhs = line.substr(nb + 4);
+                    } else if (bl != std::string::npos) {
+                        op = " = ";
+                        lhs = line.substr(0, bl);
+                        rhs = line.substr(bl + 3);
+                    } else {
+                        return false;
+                    }
+                    rhs.pop_back();  // 末尾の ;
+                    return !lhs.empty() && !rhs.empty();
+                };
+                std::string t_lhs, t_rhs, t_op, f_lhs, f_rhs, f_op;
+                if (parse_single_assign(true_ss.str(), t_lhs, t_rhs, t_op) &&
+                    parse_single_assign(false_ss.str(), f_lhs, f_rhs, f_op) && t_lhs == f_lhs &&
+                    t_op == f_op) {
+                    visited.insert(false_visited.begin(), false_visited.end());
+                    if (t_rhs == f_rhs) {
+                        // 両辺同一なら分岐自体が不要（旧・冗長三項除去パス相当）
+                        ss << indent() << t_lhs << t_op << t_rhs << ";\n";
+                    } else {
+                        ss << indent() << t_lhs << t_op << "(" << cond << ") ? " << t_rhs << " : "
+                           << f_rhs << ";\n";
                     }
                 } else {
                     ss << indent() << "if (" << cond << ") begin\n";
-                    increaseIndent();
-                    emitBlockRecursive(func, then_block, visited, ss, merge);
-                    decreaseIndent();
-                    std::ostringstream else_ss;
-                    std::set<size_t> else_visited = visited;
-                    increaseIndent();
-                    emitBlockRecursive(func, else_block, else_visited, else_ss, merge);
-                    decreaseIndent();
-                    if (!else_ss.str().empty()) {
+                    ss << true_ss.str();
+                    if (!false_ss.str().empty()) {
                         ss << indent() << "end else begin\n";
-                        ss << else_ss.str();
-                        visited.insert(else_visited.begin(), else_visited.end());
+                        ss << false_ss.str();
+                        visited.insert(false_visited.begin(), false_visited.end());
                     }
+                    ss << indent() << "end\n";
                 }
-                ss << indent() << "end\n";
 
                 // 合流ブロックを処理
                 // （合流先がループexitの場合はここでは出力しない。
