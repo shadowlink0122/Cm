@@ -181,9 +181,15 @@ JIT実行で `-8 >> 2 == -2` を確認）だが、svバックエンドは常に 
    `src/frontend/parser/generic_inference.hpp`、`src/frontend/types/generic_context.hpp` 等。
    unity buildを維持するとしても、ヘッダー実装はインクリメンタルビルドと
    依存関係の見通しを悪化させる。
+   → **✅ 2026-07-05 完了**: `generic_context.hpp` の実装を `generic_context.cpp` へ分離。
+   `generic_inference.hpp` は未使用の設計例コード（未定義メソッドを持つ
+   `EnhancedParser` を含む）だったため削除。
 3. **重複・死蔵コードの整理**: `src/lint/naming.hpp` はどこからも include されておらず、
    同等ロジックが `TypeChecker`（`frontend/types/checking/utils.cpp`）に重複実装されている。
    どちらかに一本化して削除する。
+   → **✅ 2026-07-05 追加対応**: `src/codegen/llvm/emit/`（terminator/operators/print/
+   intrinsics の4ファイル・約98KB）が `core/` の古い複製でCMake未登録・未参照の
+   死蔵コードだったため削除（誤って死蔵側を修正する事故の温床だった）。
 4. **巨大TUの分割**: `codegen/llvm/core/mir_to_llvm.cpp`（約5,000行）、`main.cpp`（約2,000行、
    コマンドラインエントリとしては過大）、`mir/lowering/lowering.cpp` 等。
 5. **グローバル可変状態の削減**: `g_module_resolver`（`module/resolver.hpp`）、

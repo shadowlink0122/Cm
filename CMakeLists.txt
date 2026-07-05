@@ -276,6 +276,7 @@ set(CM_SOURCES
     ${CM_PARSER_SOURCES}
     # Type checking (分割済み)
     src/frontend/types/scope.cpp
+    src/frontend/types/generic_context.cpp
     src/frontend/types/checking/decl.cpp
     src/frontend/types/checking/stmt.cpp
     src/frontend/types/checking/expr.cpp
