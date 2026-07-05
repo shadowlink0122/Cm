@@ -1039,6 +1039,24 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 break;
             }
             case mir::ProjectionKind::Deref: {
+                // interfaceポインタ（fat pointer値）のDerefは恒等:
+                // fat自体が実装オブジェクトへの参照なのでロード不要
+                if (currentType && currentType->kind == hir::TypeKind::Pointer &&
+                    currentType->element_type &&
+                    currentType->element_type->kind == hir::TypeKind::Struct &&
+                    isInterfaceType(currentType->element_type->name)) {
+                    currentType = currentType->element_type;
+                    // SSA形式（fat値がそのまま束縛されている）場合は
+                    // 一時スピルしてアドレス化する
+                    if (addr && !addr->getType()->isPointerTy()) {
+                        auto fatTy = getInterfaceFatPtrType(currentType->name);
+                        auto spill = builder->CreateAlloca(fatTy, nullptr, "iface_spill");
+                        builder->CreateStore(addr, spill);
+                        addr = spill;
+                    }
+                    break;
+                }
+
                 // デリファレンス：ポインタ変数から実際のポインタ値をロード
                 // LLVM 14+では CreateLoad の第1引数はロードする値の型（pointee type）を指定
                 // ポインタからポインタをロードするため、ポインタ型そのものを指定

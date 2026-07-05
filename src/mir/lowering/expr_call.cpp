@@ -1451,6 +1451,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     interp_specialized_struct_name(obj_type) +
                                                     "__" + member_name;
 
+                                                // interface型レシーバは動的ディスパッチ
+                                                const bool recv_is_iface =
+                                                    ctx.interface_names && obj_type &&
+                                                    ctx.interface_names->count(obj_type->name) > 0;
+
                                                 // メソッド呼び出しのための新しいブロックを作成
                                                 BlockId call_block = ctx.new_block();
                                                 BlockId after_call_block = ctx.new_block();
@@ -1467,7 +1472,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 }
                                                 LocalId result = ctx.new_temp(return_type);
 
-                                                // 引数リスト（selfパラメータ）
+                                                // 引数リスト（selfパラメータ）。
+                                                // interfaceはfat pointer値をそのまま渡す
                                                 std::vector<MirOperandPtr> method_args;
                                                 method_args.push_back(
                                                     MirOperand::copy(MirPlace{*obj_id}));
@@ -1508,9 +1514,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     std::make_optional(MirPlace{result}),
                                                     after_call_block,
                                                     std::nullopt,  // unwindブロックなし
-                                                    "",            // interface_name
-                                                    member_name,   // method_name
-                                                    false  // is_virtual（自動生成メソッドは非仮想）
+                                                    recv_is_iface
+                                                        ? obj_type->name
+                                                        : std::string(),  // interface_name
+                                                    member_name,          // method_name
+                                                    recv_is_iface         // is_virtual
                                                 };
 
                                                 // 現在のブロックから呼び出しブロックへジャンプ

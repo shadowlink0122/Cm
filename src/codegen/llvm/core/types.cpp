@@ -57,6 +57,13 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             return ctx.getPtrType();
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference: {
+            // interface型へのポインタは「実装オブジェクトへのポインタ + vtable」の
+            // fat pointer値として表現する（隠し領域を介さず、dataフィールドが
+            // 実装オブジェクトそのものを指す）
+            if (type->element_type && type->element_type->kind == hir::TypeKind::Struct &&
+                isInterfaceType(type->element_type->name)) {
+                return getInterfaceFatPtrType(type->element_type->name);
+            }
             // LLVM 14+: opaque pointersを使用するが、元の型情報は保持する
             // ポインタ型はctx.getPtrType()を返すが、
             // 内部的には元の型情報（type->element_type）を保持している

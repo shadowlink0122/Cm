@@ -69,7 +69,18 @@ bool CopyPropagation::same_type(const hir::TypePtr& a, const hir::TypePtr& b) co
         return true;
     if (!a || !b)
         return false;
-    return a->kind == b->kind && a->name == b->name;
+    if (a->kind != b->kind || a->name != b->name) {
+        return false;
+    }
+    // ポインタ/参照/配列は要素型まで再帰比較する。
+    // 従来は kind と name（ポインタでは空文字）のみの比較だったため
+    // *Shape と *Sq が同一視され、interface coercion を含むコピーが
+    // 伝播されて型の意味が失われていた
+    if (a->kind == hir::TypeKind::Pointer || a->kind == hir::TypeKind::Reference ||
+        a->kind == hir::TypeKind::Array) {
+        return same_type(a->element_type, b->element_type);
+    }
+    return true;
 }
 
 bool CopyPropagation::process_block(BasicBlock& block, std::unordered_map<LocalId, LocalId>& copies,

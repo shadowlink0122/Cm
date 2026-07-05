@@ -49,6 +49,135 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
         case mir::MirStatement::Assign: {
             auto& assign = std::get<mir::MirStatement::AssignData>(stmt.data);
 
+            // interface型へのcoercion（動的ディスパッチ用 fat pointer 構築）
+            // - Shape sh = sq;      : dest=interface値、src=具象構造体
+            // - Shape* p = &sq;     : dest=interfaceポインタ、src=具象構造体へのRef
+            if (assign.place.projections.empty() && currentMIRFunction &&
+                assign.place.local < currentMIRFunction->locals.size()) {
+                const auto& destType = currentMIRFunction->locals[assign.place.local].type;
+
+                // Case A: interface値への具象構造体の代入
+                if (destType && destType->kind == hir::TypeKind::Struct &&
+                    isInterfaceType(destType->name) && assign.rvalue->kind == mir::MirRvalue::Use) {
+                    auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                    if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                            useData.operand->kind == mir::MirOperand::Move)) {
+                        auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
+                        if (srcPlace.projections.empty() &&
+                            srcPlace.local < currentMIRFunction->locals.size()) {
+                            const auto& srcType = currentMIRFunction->locals[srcPlace.local].type;
+                            if (srcType && srcType->kind == hir::TypeKind::Struct &&
+                                !isInterfaceType(srcType->name)) {
+                                // 具象構造体のallocaをdataポインタとしてfat pointerを構築
+                                auto srcAddr = locals[srcPlace.local];
+                                if (srcAddr) {
+                                    auto fat = createInterfaceFatPtr(srcAddr, srcType->name,
+                                                                     destType->name);
+                                    if (allocatedLocals.count(assign.place.local) > 0 &&
+                                        locals[assign.place.local]) {
+                                        builder->CreateStore(fat, locals[assign.place.local]);
+                                    } else {
+                                        // SSA形式のローカルにはfat値を直接束縛する
+                                        locals[assign.place.local] = fat;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Case B: interfaceポインタへの具象構造体アドレスの代入
+                if (destType && destType->kind == hir::TypeKind::Pointer &&
+                    destType->element_type &&
+                    destType->element_type->kind == hir::TypeKind::Struct &&
+                    isInterfaceType(destType->element_type->name)) {
+                    // Ref rvalue（&sq）またはUse copy（ポインタ変数経由）で
+                    // ソースが具象構造体を指す場合
+                    const std::string& ifaceName = destType->element_type->name;
+                    llvm::Value* dataPtr = nullptr;
+                    std::string concreteName;
+
+                    if (assign.rvalue->kind == mir::MirRvalue::Ref) {
+                        // &sq を直接代入するケース
+                        auto& refData = std::get<mir::MirRvalue::RefData>(assign.rvalue->data);
+                        const auto& refPlace = refData.place;
+                        if (refPlace.projections.empty() &&
+                            refPlace.local < currentMIRFunction->locals.size()) {
+                            const auto& srcType = currentMIRFunction->locals[refPlace.local].type;
+                            if (srcType && srcType->kind == hir::TypeKind::Struct &&
+                                !isInterfaceType(srcType->name) && locals[refPlace.local]) {
+                                dataPtr = locals[refPlace.local];
+                                concreteName = srcType->name;
+                            }
+                        }
+                    } else if (assign.rvalue->kind == mir::MirRvalue::Use) {
+                        // 具象構造体ポインタ変数のコピー
+                        // （&sq が一旦 *Sq テンポラリを経由するケース）
+                        auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                        if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                                useData.operand->kind == mir::MirOperand::Move)) {
+                            auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
+                            if (srcPlace.projections.empty() &&
+                                srcPlace.local < currentMIRFunction->locals.size()) {
+                                const auto& srcType =
+                                    currentMIRFunction->locals[srcPlace.local].type;
+                                if (srcType && srcType->kind == hir::TypeKind::Pointer &&
+                                    srcType->element_type &&
+                                    srcType->element_type->kind == hir::TypeKind::Struct &&
+                                    !isInterfaceType(srcType->element_type->name) &&
+                                    locals[srcPlace.local]) {
+                                    // ポインタ値をロードしてdataポインタとする
+                                    dataPtr = builder->CreateLoad(
+                                        ctx.getPtrType(), locals[srcPlace.local], "iface_src");
+                                    concreteName = srcType->element_type->name;
+                                }
+                            }
+                        }
+                    }
+
+                    if (dataPtr && !concreteName.empty()) {
+                        // Shape* はfat pointer値そのもの:
+                        // dataフィールドが実装オブジェクトを直接指す
+                        auto fat = createInterfaceFatPtr(dataPtr, concreteName, ifaceName);
+                        if (allocatedLocals.count(assign.place.local) > 0 &&
+                            locals[assign.place.local]) {
+                            builder->CreateStore(fat, locals[assign.place.local]);
+                        } else {
+                            // SSA形式のローカルにはfat値を直接束縛する
+                            locals[assign.place.local] = fat;
+                        }
+                        break;
+                    }
+
+                    // &sh（interface値のアドレス取得）: 同じオブジェクトを指す
+                    // fat pointerのコピーとして扱う
+                    if (assign.rvalue->kind == mir::MirRvalue::Ref) {
+                        auto& refData2 = std::get<mir::MirRvalue::RefData>(assign.rvalue->data);
+                        const auto& rp = refData2.place;
+                        if (rp.projections.empty() &&
+                            rp.local < currentMIRFunction->locals.size()) {
+                            const auto& st = currentMIRFunction->locals[rp.local].type;
+                            if (st && st->kind == hir::TypeKind::Struct &&
+                                isInterfaceType(st->name) && locals[rp.local]) {
+                                auto fatType = getInterfaceFatPtrType(st->name);
+                                llvm::Value* fatVal = locals[rp.local];
+                                if (fatVal->getType()->isPointerTy()) {
+                                    fatVal = builder->CreateLoad(fatType, fatVal, "iface_copy");
+                                }
+                                if (allocatedLocals.count(assign.place.local) > 0 &&
+                                    locals[assign.place.local]) {
+                                    builder->CreateStore(fatVal, locals[assign.place.local]);
+                                } else {
+                                    locals[assign.place.local] = fatVal;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Tagged Unionペイロード読み込みの特別処理
             // rvalueがUse/Copyで、ソースがTagged Unionのfield[1]かつターゲットが構造体の場合
             // memcpyを使用して直接コピー

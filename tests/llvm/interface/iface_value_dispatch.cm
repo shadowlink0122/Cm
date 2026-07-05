@@ -1,0 +1,42 @@
+// interface値の動的ディスパッチ:
+// 具象構造体の代入でfat pointer（実装オブジェクトへのポインタ + vtable）が
+// 構築され、メソッド呼び出しがvtable経由で実装先へ届くことを検証
+import std::io::println;
+
+interface Shape {
+    int area();
+    int scaled(int k);
+}
+
+struct Sq { int s; }
+struct Rect { int w; int h; }
+
+impl Sq for Shape {
+    int area() { return self.s * self.s; }
+    int scaled(int k) { return self.s * self.s * k; }
+}
+
+impl Rect for Shape {
+    int area() { return self.w * self.h; }
+    int scaled(int k) { return self.w * self.h * k; }
+}
+
+int main() {
+    Sq sq = Sq { s: 5 };
+    Rect rc = Rect { w: 3, h: 4 };
+
+    // 複数実装のディスパッチ（補間内の仮想呼び出し）
+    Shape a = sq;
+    Shape b = rc;
+    println("value: {a.area()} {b.area()}");
+
+    // 引数付きメソッドと戻り値
+    int s2 = a.scaled(2);
+    int r3 = b.scaled(3);
+    println("args: {s2} {r3}");
+
+    // 再代入で実装が切り替わる
+    a = rc;
+    println("reassign: {a.area()}");
+    return 0;
+}

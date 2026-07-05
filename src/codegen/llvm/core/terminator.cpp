@@ -496,7 +496,9 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                                                                 "vtable_ptr");
                                     }
 
+                                    // インターフェース宣言からメソッド位置とシグネチャを取得
                                     int methodIndex = -1;
+                                    const mir::MirInterfaceMethod* ifaceMethod = nullptr;
                                     if (currentProgram) {
                                         for (const auto& iface : currentProgram->interfaces) {
                                             if (iface && iface->name == actualTypeName) {
@@ -504,6 +506,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                                     if (iface->methods[i].name ==
                                                         callData.method_name) {
                                                         methodIndex = static_cast<int>(i);
+                                                        ifaceMethod = &iface->methods[i];
                                                         break;
                                                     }
                                                 }
@@ -522,9 +525,22 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         llvm::Value* funcPtr = builder->CreateLoad(
                                             ctx.getPtrType(), funcPtrPtr, "func_ptr");
 
+                                        // インターフェース宣言のシグネチャから関数型を構成
+                                        // （旧実装は void(ptr) 固定で戻り値が破棄され、
+                                        //   メソッド引数も渡されなかった）
+                                        llvm::Type* retType = ctx.getVoidType();
+                                        if (ifaceMethod && ifaceMethod->return_type &&
+                                            ifaceMethod->return_type->kind != hir::TypeKind::Void) {
+                                            retType = convertType(ifaceMethod->return_type);
+                                        }
                                         std::vector<llvm::Type*> paramTypes = {ctx.getPtrType()};
-                                        auto funcType = llvm::FunctionType::get(ctx.getVoidType(),
-                                                                                paramTypes, false);
+                                        std::vector<llvm::Value*> callArgs = {dataPtr};
+                                        for (size_t ai = 1; ai < args.size(); ++ai) {
+                                            callArgs.push_back(args[ai]);
+                                            paramTypes.push_back(args[ai]->getType());
+                                        }
+                                        auto funcType =
+                                            llvm::FunctionType::get(retType, paramTypes, false);
 #if LLVM_VERSION_MAJOR < 15
                                         // LLVM 14: typed
                                         // pointerが必要なので関数ポインタ型にキャスト
@@ -533,8 +549,19 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                                                          "func_ptr_cast");
 #endif
 
-                                        std::vector<llvm::Value*> callArgs = {dataPtr};
-                                        builder->CreateCall(funcType, funcPtr, callArgs);
+                                        auto callResult =
+                                            builder->CreateCall(funcType, funcPtr, callArgs);
+
+                                        // 戻り値を宛先ローカルへ格納
+                                        if (!retType->isVoidTy() && callData.destination) {
+                                            auto destLocal = callData.destination->local;
+                                            if (allocatedLocals.count(destLocal) > 0 &&
+                                                locals[destLocal]) {
+                                                builder->CreateStore(callResult, locals[destLocal]);
+                                            } else {
+                                                locals[destLocal] = callResult;
+                                            }
+                                        }
                                     }
 
                                     if (callData.success != mir::INVALID_BLOCK) {

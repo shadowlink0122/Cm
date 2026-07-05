@@ -171,6 +171,8 @@ class MIRToLLVM {
 
     /// インターフェース用のfat pointer型を取得（{i8* data, i8** vtable}）
     llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);
+    llvm::Value* createInterfaceFatPtr(llvm::Value* dataPtr, const std::string& concreteTypeName,
+                                       const std::string& interfaceName);
 
     /// vtableを生成
     void generateVTables(const mir::MirProgram& program);
