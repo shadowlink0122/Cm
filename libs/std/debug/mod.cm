@@ -10,14 +10,21 @@
 //   }
 module std.debug;
 
+import std::io::println;
+
 /// アサーション: 条件が偽ならメッセージを出力して異常終了する。
 ///
-/// 実装はコンパイラ組み込み（バックエンドごとのイントリンシック）:
-///   - 実行系 (JIT / LLVM native / WASM): "assertion failed: msg" を出力して exit(1)
-///   - JS: Error("assertion failed: msg") を throw
-///   - SV: 即時アサーション assert (cond) else $error("assertion failed: msg");
-///     （シミュレーションで検証され、合成ツールでは無視される）
+/// 実行系バックエンド（JIT / LLVM native / WASM / JS）はこの実装が
+/// そのまま実行される: "assertion failed: <msg>" を出力して exit(1)。
+///
+/// SVバックエンドのみ、ハードウェアには exit が存在しないため
+/// コンパイラが呼び出し箇所を即時アサーション
+/// assert (cond) else $error("assertion failed: msg"); に変換する
+/// （シミュレーションで検証され、合成ツールでは無視される。
+///   この関数定義自体はSV出力されない）。
 export void assert(bool cond, string msg) {
-    // 呼び出し箇所はコンパイラがイントリンシックとして展開するため、
-    // この本体が実行されることはない
+    if (!cond) {
+        println("assertion failed: {msg}");
+        exit(1);
+    }
 }

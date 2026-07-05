@@ -153,40 +153,6 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             }
 
             // ============================================================
-            // assert(条件[, メッセージ]): 偽ならメッセージを出力してexit(1)
-            // ============================================================
-            if (funcName == "assert") {
-                if (!callData.args.empty()) {
-                    llvm::Value* cond = convertOperand(*callData.args[0]);
-                    if (cond && cond->getType()->isIntegerTy() &&
-                        !cond->getType()->isIntegerTy(1)) {
-                        cond = builder->CreateICmpNE(
-                            cond, llvm::ConstantInt::get(cond->getType(), 0), "assert.cond");
-                    }
-
-                    auto func = builder->GetInsertBlock()->getParent();
-                    auto failBB = llvm::BasicBlock::Create(ctx.getContext(), "assert.fail", func);
-                    auto okBB = llvm::BasicBlock::Create(ctx.getContext(), "assert.ok", func);
-                    builder->CreateCondBr(cond, okBB, failBB);
-
-                    builder->SetInsertPoint(failBB);
-                    std::string message = "assertion failed";
-                    if (callData.args.size() >= 2 &&
-                        callData.args[1]->kind == mir::MirOperand::Constant) {
-                        const auto& msg_const = std::get<mir::MirConstant>(callData.args[1]->data);
-                        if (const auto* s = std::get_if<std::string>(&msg_const.value)) {
-                            message = "assertion failed: " + *s;
-                        }
-                    }
-                    generatePanic(message);
-
-                    builder->SetInsertPoint(okBB);
-                }
-                builder->CreateBr(blocks[callData.success]);
-                break;
-            }
-
-            // ============================================================
             // Tagged Union Variant Constructor (v0.13.0)
             // ============================================================
             // Color::RGB(255, 128, 64) のようなvariant constructor呼び出しを検出

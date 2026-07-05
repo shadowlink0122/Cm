@@ -164,8 +164,8 @@ bool isBuiltinFunction(const std::string& name) {
         "memset",
         // 低レベルI/O
         "__print__",
-        // アサーション
-        "assert",
+        // プロセス終了
+        "exit",
     };
     return builtins.count(name) > 0;
 }
@@ -181,14 +181,11 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "__cm_str_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";
     }
 
-    // assert(条件[, メッセージ]): 偽なら例外を投げる（式として埋め込める形で出力）
-    if (name == "assert") {
-        std::string cond = argStrs.empty() ? "true" : argStrs[0];
-        std::string msg = "\"assertion failed\"";
-        if (argStrs.size() >= 2) {
-            msg = "\"assertion failed: \" + " + argStrs[1];
-        }
-        return "((" + cond + ") || (() => { throw new Error(" + msg + "); })())";
+    // exit(code): Node.jsでは process.exit、ブラウザ等では例外で停止する
+    if (name == "exit") {
+        std::string code = argStrs.empty() ? "0" : argStrs[0];
+        return "((typeof process !== \"undefined\") ? process.exit(" + code +
+               ") : (() => { throw new Error(\"exit(\" + (" + code + ") + \")\"); })())";
     }
 
     // println系

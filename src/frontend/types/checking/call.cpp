@@ -106,6 +106,20 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_named(ident->name);
         }
 
+        // exit(code) ビルトイン: プロセスを終了する
+        // （HIRビルトインとして各バックエンドが処理する。std::debug::assert等が使用）
+        if (ident->name == "exit") {
+            if (call.args.size() != 1) {
+                error(current_span_, "exit は exit(終了コード) の形式で使用します");
+                return ast::make_void();
+            }
+            auto code_type = infer_type(*call.args[0]);
+            if (code_type && code_type->kind != ast::TypeKind::Bool && !code_type->is_integer()) {
+                error(current_span_, "exit の終了コードは整数型である必要があります");
+            }
+            return ast::make_void();
+        }
+
         // SVバックエンド用ビルトイン関数のバイパス
         if (ident->name == "__builtin_concat" || ident->name == "__builtin_replicate") {
             if (ident->name == "__builtin_replicate") {
