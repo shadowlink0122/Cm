@@ -158,14 +158,14 @@ make tjp
 node output.js
 ```
 
-### v0.14.0 Test Results
+### v0.15.1 Test Results
 
 | Item | Value |
 |------|-------|
-| Total tests | 372 |
-| Pass | 285 (77%) |
+| Total tests | 387 |
+| Pass | 328 (85%) |
 | Fail | 0 |
-| Skipped | 87 |
+| Skipped | 59 |
 
 ## Generated JS Structure
 
