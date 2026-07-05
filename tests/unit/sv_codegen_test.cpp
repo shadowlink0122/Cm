@@ -384,6 +384,46 @@ TEST_F(SVCodegenTest, ImmediateAssertion) {
     expect_contains(sv, "else $error(\"assertion failed: value out of range\");");
 }
 
+// ラッチ推論（Phase 3）: if前にデフォルト代入があれば組み合わせ回路
+// （従来の「if行数 vs else行数」テキスト判定では誤ってラッチ扱いだった）
+TEST_F(SVCodegenTest, LatchInferenceDefaultAssignIsComb) {
+    const std::string code = R"(
+        #[input] uint sel;
+        #[output] uint dout = 0;
+
+        void comb_with_default() {
+            dout = 0;
+            if (sel == 1) {
+                dout = 42;
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_not_contains(sv, "ラッチ推論");
+}
+
+// ラッチ推論（Phase 3）: if/elseがあっても片側でしか代入されない信号はラッチ
+// （従来のテキスト判定ではif/elseが揃っていると見逃していた）
+TEST_F(SVCodegenTest, LatchInferenceOneSidedAssignIsLatch) {
+    const std::string code = R"(
+        #[input] uint sel;
+        #[input] uint din;
+        #[output] uint lout = 0;
+        #[output] uint other = 0;
+
+        void latch_one_side() {
+            if (sel == 1) {
+                lout = din;
+                other = 1;
+            } else {
+                other = 2;
+            }
+        }
+    )";
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "ラッチ推論: lout が全パスで代入されません");
+}
+
 // 配列型ポートはアンパックド次元を保持する
 TEST_F(SVCodegenTest, ArrayPortDimension) {
     const std::string code = R"(

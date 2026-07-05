@@ -193,14 +193,24 @@ importのフラット化は**テキストベースのpreprocessor**（`src/prepr
 > （if条件・配列添字・関数呼び出し引数等）のフォールバックとして残置。
 > ユニットテスト: `SVExprTreeTest` 5件（括弧の要否・結合法則・単項）。
 >
+> **✅ 2026-07-05 Phase 3 実装済み**: always種別（ラッチ）推論を
+> MIRの代入完全性解析（must-assignデータフロー）に置換
+> （`findIncompletelyAssignedSignals`）。entryから各returnまでの全制御パスで
+> 代入されないモジュールレベル信号を検出し、あればalways_latch分類として
+> 生成SVに `// ラッチ推論: <信号> が全パスで代入されません` と要因を注記する。
+> 従来の「if行数 vs else行数」テキスト判定の両方向の誤り
+> （if前のデフォルト代入がある組み合わせ回路を誤ってラッチ扱い /
+> if/else両立だが片側代入の真のラッチを見逃し）を解消。
+> 配列要素等への部分書き込みは全体代入とみなさない（保守的にラッチ）。
+> ユニットテスト: `LatchInferenceDefaultAssignIsComb` /
+> `LatchInferenceOneSidedAssignIsLatch`。
+>
 > **残フェーズ**:
 > - Phase 2: 文レベルのツリー化（if/while/case/代入をSVStmtノード化し、
 >   テキストの一時変数インラインパス・ternary変換・else-if正規化を置換）
-> - Phase 3: always種別（ラッチ）推論をテキストの `if (` カウントから
->   MIRの代入完全性解析へ置換
 
-**現状（Phase 1まで）**: 式レベルはツリー化済み。文レベルの後処理
-（一時変数インラインパスの残置分・ternary変換・else-if正規化・ラッチ推論）は
+**現状（Phase 1・3まで）**: 式レベルのツリー化とラッチ推論のMIR解析化は完了。
+文レベルの後処理（一時変数インラインパスの残置分・ternary変換・else-if正規化）は
 従来どおりテキストベース。
 
 **難易度**: 中（Phase 1完了により段階移行の土台あり）

@@ -2,6 +2,7 @@
 
 #include "../../mir/analysis/dominators.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -1200,6 +1201,173 @@ SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::Mi
     }
 }
 
+// === 代入完全性解析（式ツリー化 Phase 3）===
+// 組み合わせ（Auto）ブロックのラッチ推論に使用する。
+// must-assignデータフロー: MustIn(B) = ∩ MustOut(pred)、
+// MustOut(B) = MustIn(B) ∪ gen(B)。各returnブロックのMustOutに
+// 含まれない書き込み対象信号が「全パスで代入されない信号」= ラッチ要因
+std::vector<std::string> SVCodeGen::findIncompletelyAssignedSignals(const mir::MirFunction& func) {
+    const size_t nblocks = func.basic_blocks.size();
+    if (nblocks == 0) {
+        return {};
+    }
+
+    // 後続ブロックの列挙
+    auto successors = [&](size_t bid) {
+        std::vector<size_t> succs;
+        const auto& bb = func.basic_blocks[bid];
+        if (!bb || !bb->terminator) {
+            return succs;
+        }
+        const auto& term = *bb->terminator;
+        if (std::holds_alternative<mir::MirTerminator::GotoData>(term.data)) {
+            succs.push_back(std::get<mir::MirTerminator::GotoData>(term.data).target);
+        } else if (std::holds_alternative<mir::MirTerminator::SwitchIntData>(term.data)) {
+            const auto& sd = std::get<mir::MirTerminator::SwitchIntData>(term.data);
+            for (const auto& [v, t] : sd.targets) {
+                succs.push_back(t);
+            }
+            succs.push_back(sd.otherwise);
+        } else if (std::holds_alternative<mir::MirTerminator::CallData>(term.data)) {
+            const auto& cd = std::get<mir::MirTerminator::CallData>(term.data);
+            succs.push_back(cd.success);
+            if (cd.unwind) {
+                succs.push_back(*cd.unwind);
+            }
+        }
+        return succs;
+    };
+
+    // 到達可能ブロックと先行ブロックマップ
+    std::vector<bool> reachable(nblocks, false);
+    std::vector<std::vector<size_t>> preds(nblocks);
+    {
+        std::vector<size_t> work = {0};
+        while (!work.empty()) {
+            size_t bid = work.back();
+            work.pop_back();
+            if (bid >= nblocks || !func.basic_blocks[bid] || reachable[bid]) {
+                continue;
+            }
+            reachable[bid] = true;
+            for (size_t s : successors(bid)) {
+                if (s < nblocks) {
+                    preds[s].push_back(bid);
+                    work.push_back(s);
+                }
+            }
+        }
+    }
+
+    // gen集合: 各ブロックで（投影なしで）代入されるモジュールレベル信号。
+    // 配列要素・フィールドへの部分書き込みは全体の代入とみなさない
+    auto is_target_signal = [&](mir::LocalId local) {
+        return local < func.locals.size() && func.locals[local].is_global;
+    };
+    std::vector<std::set<mir::LocalId>> gen(nblocks);
+    std::set<mir::LocalId> universe;
+    for (size_t bid = 0; bid < nblocks; ++bid) {
+        if (!reachable[bid] || !func.basic_blocks[bid]) {
+            continue;
+        }
+        for (const auto& stmt : func.basic_blocks[bid]->statements) {
+            if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                continue;
+            }
+            const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+            if (!is_target_signal(ad.place.local)) {
+                continue;
+            }
+            universe.insert(ad.place.local);
+            if (ad.place.projections.empty()) {
+                gen[bid].insert(ad.place.local);
+            }
+        }
+        // Call戻り先への代入もdefとして扱う
+        const auto& bb = func.basic_blocks[bid];
+        if (bb->terminator &&
+            std::holds_alternative<mir::MirTerminator::CallData>(bb->terminator->data)) {
+            const auto& cd = std::get<mir::MirTerminator::CallData>(bb->terminator->data);
+            if (cd.destination && is_target_signal(cd.destination->local)) {
+                universe.insert(cd.destination->local);
+                if (cd.destination->projections.empty()) {
+                    gen[bid].insert(cd.destination->local);
+                }
+            }
+        }
+    }
+    if (universe.empty()) {
+        return {};
+    }
+
+    // must-assign 固定点反復（entry以外はuniverseで初期化する標準的なmust解析）
+    std::vector<std::set<mir::LocalId>> must_out(nblocks, universe);
+    {
+        bool changed = true;
+        int iterations = 0;
+        while (changed && iterations < 1000) {
+            changed = false;
+            ++iterations;
+            for (size_t bid = 0; bid < nblocks; ++bid) {
+                if (!reachable[bid]) {
+                    continue;
+                }
+                std::set<mir::LocalId> must_in;
+                if (bid == 0) {
+                    // entry: 何も代入されていない
+                } else if (!preds[bid].empty()) {
+                    bool first = true;
+                    for (size_t p : preds[bid]) {
+                        if (first) {
+                            must_in = must_out[p];
+                            first = false;
+                        } else {
+                            std::set<mir::LocalId> tmp;
+                            std::set_intersection(must_in.begin(), must_in.end(),
+                                                  must_out[p].begin(), must_out[p].end(),
+                                                  std::inserter(tmp, tmp.begin()));
+                            must_in = std::move(tmp);
+                        }
+                    }
+                }
+                std::set<mir::LocalId> out = must_in;
+                out.insert(gen[bid].begin(), gen[bid].end());
+                if (out != must_out[bid]) {
+                    must_out[bid] = std::move(out);
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    // 各returnブロックで未代入の信号を収集
+    std::set<mir::LocalId> incomplete;
+    for (size_t bid = 0; bid < nblocks; ++bid) {
+        if (!reachable[bid] || !func.basic_blocks[bid] || !func.basic_blocks[bid]->terminator) {
+            continue;
+        }
+        if (func.basic_blocks[bid]->terminator->kind != mir::MirTerminator::Return) {
+            continue;
+        }
+        for (mir::LocalId g : universe) {
+            if (must_out[bid].count(g) == 0) {
+                incomplete.insert(g);
+            }
+        }
+    }
+
+    std::vector<std::string> names;
+    for (mir::LocalId g : incomplete) {
+        std::string name = func.locals[g].name;
+        auto ns_pos = name.rfind("::");
+        if (ns_pos != std::string::npos) {
+            name = name.substr(ns_pos + 2);
+        }
+        names.push_back(name);
+    }
+    return names;
+}
+
 // === 文の生成 ===
 
 std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunction& func) {
@@ -2260,36 +2428,27 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             // always_comb 明示指定
             mod.always_comb_blocks.push_back(block_content);
         } else {
-            // Auto: CFG解析で判別
-            // 全制御パスで全出力が代入されていれば always_comb、
-            // 一部パスで未代入があれば always_latch
-            // 簡易判定: ifがあってelseがない場合はラッチ推論
-            bool has_incomplete_assign = false;
-            std::istringstream check_stream(block_content);
-            std::string check_line;
-            int if_count = 0;
-            int else_count = 0;
-            while (std::getline(check_stream, check_line)) {
-                // if begin の数と else begin の数をカウント
-                if (check_line.find("if (") != std::string::npos ||
-                    check_line.find("if(") != std::string::npos) {
-                    if_count++;
-                }
-                if (check_line.find("end else begin") != std::string::npos ||
-                    check_line.find("else begin") != std::string::npos) {
-                    else_count++;
-                }
-            }
-            // ifがあるのにelseが少ない → ラッチ推論
-            if (if_count > 0 && else_count < if_count) {
-                has_incomplete_assign = true;
-                // ブロックヘッダを always_latch に置換
+            // Auto: MIRの代入完全性解析で判別（式ツリー化 Phase 3）。
+            // entryから各returnまでの全制御パスで代入されない
+            // モジュールレベル信号があればラッチ推論となる。
+            // （従来は「if行数 vs else行数」のテキストヒューリスティックで、
+            //   if前のデフォルト代入を見落とし、片側代入のif/elseを見逃していた）
+            auto incomplete_signals = findIncompletelyAssignedSignals(func);
+            if (!incomplete_signals.empty()) {
+                // ブロックヘッダを always_latch に置換し、要因の信号を注記する
                 size_t pos = block_content.find("always_comb begin");
                 if (pos != std::string::npos) {
                     block_content.replace(pos, 17, "always_latch begin");
                 }
-            }
-            if (has_incomplete_assign) {
+                std::string note = "    // ラッチ推論: ";
+                for (size_t i = 0; i < incomplete_signals.size(); ++i) {
+                    if (i > 0) {
+                        note += ", ";
+                    }
+                    note += incomplete_signals[i];
+                }
+                note += " が全パスで代入されません\n";
+                block_content = note + block_content;
                 mod.always_latch_blocks.push_back(block_content);
             } else {
                 mod.always_comb_blocks.push_back(block_content);

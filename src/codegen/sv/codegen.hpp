@@ -136,6 +136,12 @@ class SVCodeGen : public BufferedCodeGenerator {
     // 関数内で1回だけ代入されるコンパイラ生成テンポラリ（_tNNN）を収集する
     void collectSingleDefTemps(const mir::MirFunction& func);
 
+    // 組み合わせブロックの代入完全性解析（式ツリー化 Phase 3）。
+    // 関数内で書き込まれるモジュールレベル信号のうち、entryから各returnまでの
+    // すべての制御パスで代入されるとは限らないものを返す（must-assignデータフロー）。
+    // 空でなければラッチ推論となる
+    std::vector<std::string> findIncompletelyAssignedSignals(const mir::MirFunction& func);
+
     std::string emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
                            int target_width = 0);
     // Place（左辺値）を生成
