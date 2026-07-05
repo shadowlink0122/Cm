@@ -1,0 +1,9 @@
+#[input] bool clk = false;
+#[input] uint idx;
+#[output] uint[4] data;
+
+void update(posedge clk) {
+    if (idx < 4) {
+        data[idx] = idx;
+    }
+}

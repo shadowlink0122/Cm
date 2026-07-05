@@ -1,0 +1,8 @@
+#[input] bool clk = false;
+#[input] uint value;
+#[output] uint out = 0;
+
+void check(posedge clk) {
+    assert(value < 100, "value out of range");
+    out = value;
+}

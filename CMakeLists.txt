@@ -669,6 +669,9 @@ if(BUILD_TESTING)
             src/codegen/sv/expr_tree.cpp
         )
         set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        # ゴールデンテスト入力のCmソース断片ディレクトリ
+        target_compile_definitions(sv_codegen_test PRIVATE
+            CM_SV_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/unit/sv_cases")
         target_include_directories(sv_codegen_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(sv_codegen_test gtest_main cm_frontend)
         gtest_discover_tests(sv_codegen_test PROPERTIES LABELS "unit")

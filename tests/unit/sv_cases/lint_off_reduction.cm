@@ -1,0 +1,6 @@
+#[input] uint a;
+#[output] uint y = 0;
+
+void f() {
+    y = a + 1;
+}

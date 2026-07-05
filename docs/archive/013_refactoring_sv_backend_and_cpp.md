@@ -206,6 +206,11 @@ JIT実行で `-8 >> 2 == -2` を確認）だが、svバックエンドは常に 
    externな可変グローバルはゼロになり、初期化順序問題も構造的に解消。
 6. **エラー処理方針の統一**: 例外（throw 65箇所）と `optional`/`Result` が混在。
    コンパイラ本体は診断API + `Result` へ寄せる方針を明文化する。
+   → **✅ 2026-07-05 方針明文化完了**: `docs/design/error_handling_policy.md` を策定。
+   エラーを「ユーザ入力起因（診断API+Result、throw禁止）/ 環境起因
+   （境界でResult化）/ 内部不変条件違反（throw許容、mainで捕捉）」の
+   3分類に固定し、新規コードの規約と既存50箇所の段階的移行計画
+   （Phase B: preprocessor → C: codegen/js → D: codegen/llvm）を記載。
 
 ---
 

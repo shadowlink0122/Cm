@@ -1,0 +1,14 @@
+#[input] uint sel;
+#[input] uint din;
+#[output] uint q1 = 0;
+#[output] uint q2 = 0;
+
+void update() {
+    if (sel == 1) {
+        q1 = din;
+        q2 = 1;
+    } else {
+        q1 = 0;
+        q2 = 2;
+    }
+}

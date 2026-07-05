@@ -1,0 +1,6 @@
+#[input] int s;
+#[output] int shr2 = 0;
+
+void shift() {
+    shr2 = s >> 2;
+}

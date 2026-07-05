@@ -1,0 +1,9 @@
+#[input] uint sel;
+#[output] uint dout = 0;
+
+void comb_with_default() {
+    dout = 0;
+    if (sel == 1) {
+        dout = 42;
+    }
+}

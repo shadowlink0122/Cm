@@ -1,0 +1,13 @@
+#[input] bool clk = false;
+#[input] uint idx;
+#[output] utiny out = 0;
+
+#[sv::bram]
+#[sv::memfile("data.hex")]
+utiny[8] ram;
+
+void read(posedge clk) {
+    if (idx < 8) {
+        out = ram[idx];
+    }
+}
