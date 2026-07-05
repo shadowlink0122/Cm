@@ -78,6 +78,8 @@ help:
 	@echo "  make build-all      - テストを含む全ビルド"
 	@echo "  make configure      - CMake configure (明示的再構成)"
 	@echo "  make release        - リリースビルド"
+	@echo "  make update-docs-version - チュートリアルのバージョン表記をVERSIONに追従"
+	@echo "  make check-docs-version  - バージョン表記の乖離チェック（CI用）"
 	@echo "  make dist           - 配布用アーカイブ作成 (.tar.gz)"
 	@echo "  make install        - ~/.cm/ にインストール"
 	@echo "  make uninstall      - ~/.cm/ からアンインストール"
@@ -239,6 +241,14 @@ release:
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
+
+# チュートリアルのバージョンバッジをVERSIONファイルに追従させる
+.PHONY: update-docs-version check-docs-version
+update-docs-version:
+	@python3 scripts/update_tutorial_version.py
+
+check-docs-version:
+	@python3 scripts/update_tutorial_version.py --check
 
 # 配布物ビルド（tar.gz作成）
 # 含まれるもの: コンパイラ, stdランタイム, VSCode拡張, チュートリアル, examples, README
