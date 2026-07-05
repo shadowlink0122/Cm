@@ -24,102 +24,6 @@ std::string replace_all(std::string str, const std::string& from, const std::str
     return str;
 }
 
-// 式文字列が全体として既に括弧で囲まれているかチェックする
-bool is_fully_parenthesized(const std::string& s) {
-    if (s.size() < 2 || s.front() != '(' || s.back() != ')') {
-        return false;
-    }
-    int depth = 0;
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (s[i] == '(') {
-            depth++;
-        } else if (s[i] == ')') {
-            depth--;
-            // 最後の文字に達する前に depth が 0 になったら、
-            // 全体が一対の括弧で囲まれているわけではない (例: (a) + (b))
-            if (depth == 0 && i < s.size() - 1) {
-                return false;
-            }
-        }
-    }
-    return depth == 0;
-}
-
-// 式文字列から最も優先度の低い最外の二項演算子を特定する
-std::string get_outermost_operator(const std::string& s) {
-    std::vector<std::string> ops_by_precedence = {"||", "&&", "|",  "^", "&", "==",
-                                                  "!=", "<=", ">=", "<", ">", "<<",
-                                                  ">>", "+",  "-",  "*", "/", "%"};
-
-    for (const auto& op : ops_by_precedence) {
-        int d = 0;
-        for (size_t i = 0; i < s.size(); ++i) {
-            // 括弧に加えてビット選択/配列インデックスの [] 内も深さとして扱い、
-            // インデックス式内の演算子を最外演算子と誤認しないようにする
-            if (s[i] == '(' || s[i] == '[') {
-                d++;
-            } else if (s[i] == ')' || s[i] == ']') {
-                d--;
-            } else if (d == 0) {
-                if (s.size() - i >= op.size() && s.substr(i, op.size()) == op) {
-                    return op;
-                }
-            }
-        }
-    }
-    return "";
-}
-
-// 変数の置換位置の直前または直後にある演算子を検索する
-std::string get_parent_operator(const std::string& expr, size_t pos, size_t var_len) {
-    // 直後を探索
-    size_t right = pos + var_len;
-    while (right < expr.size() && expr[right] == ' ') {
-        right++;
-    }
-    if (right < expr.size()) {
-        std::string op;
-        while (right < expr.size() && !std::isalnum(expr[right]) && expr[right] != '_' &&
-               expr[right] != '(' && expr[right] != ')') {
-            op += expr[right];
-            right++;
-        }
-        size_t first = op.find_first_not_of(' ');
-        if (first != std::string::npos) {
-            size_t last = op.find_last_not_of(' ');
-            return op.substr(first, (last - first + 1));
-        }
-    }
-
-    // 直前を探索
-    if (pos > 0) {
-        size_t left = pos - 1;
-        while (left > 0 && expr[left] == ' ') {
-            left--;
-        }
-        std::string op;
-        while (left > 0 && !std::isalnum(expr[left]) && expr[left] != '_' && expr[left] != '(' &&
-               expr[left] != ')') {
-            op = expr[left] + op;
-            if (left == 0)
-                break;
-            left--;
-        }
-        size_t first = op.find_first_not_of(' ');
-        if (first != std::string::npos) {
-            size_t last = op.find_last_not_of(' ');
-            return op.substr(first, (last - first + 1));
-        }
-    }
-    return "";
-}
-
-// 結合法則が成り立つ演算子であるか判定
-bool is_associative_op(const std::string& op) {
-    return op == "+" || op == "*" || op == "&" || op == "|" || op == "^" || op == "&&" ||
-           op == "||";
-}
-
 // 符号付き整数型であるか判定
 bool is_signed_type(const hir::TypePtr& type) {
     if (!type)
@@ -489,12 +393,53 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         emitLine(wire);
     }
 
-    // 内部レジスタ宣言
+    // 内部レジスタ宣言。
+    // どのブロックでも使用されない _tNNN テンポラリ宣言はここで除去する
+    // （式ツリー化によりインライン展開されたテンポラリ。テンポラリ名は
+    //   関数間で衝突するため、全ブロックのテキストを対象に判定する）
+    std::string all_blocks_text;
+    for (const auto* vec : {&mod.always_ff_blocks, &mod.always_comb_blocks,
+                            &mod.always_latch_blocks, &mod.assign_statements, &mod.function_blocks,
+                            &mod.instance_blocks, &mod.initial_blocks}) {
+        for (const auto& b : *vec) {
+            all_blocks_text += b;
+            all_blocks_text += '\n';
+        }
+    }
+    auto temp_used_somewhere = [&](const std::string& name) {
+        size_t pos = 0;
+        while ((pos = all_blocks_text.find(name, pos)) != std::string::npos) {
+            bool at_start = (pos == 0 || (!std::isalnum(all_blocks_text[pos - 1]) &&
+                                          all_blocks_text[pos - 1] != '_'));
+            size_t after = pos + name.size();
+            bool at_end =
+                (after >= all_blocks_text.size() ||
+                 (!std::isalnum(all_blocks_text[after]) && all_blocks_text[after] != '_'));
+            if (at_start && at_end) {
+                return true;
+            }
+            pos += name.size();
+        }
+        return false;
+    };
+    bool emitted_any_reg = false;
     for (const auto& reg : mod.reg_declarations) {
+        auto space_pos = reg.rfind(' ');
+        auto semi_pos = reg.rfind(';');
+        if (space_pos != std::string::npos && semi_pos != std::string::npos &&
+            semi_pos > space_pos) {
+            std::string var_name = reg.substr(space_pos + 1, semi_pos - space_pos - 1);
+            if (var_name.size() > 2 && var_name[0] == '_' && var_name[1] == 't' &&
+                std::isdigit(static_cast<unsigned char>(var_name[2])) &&
+                !temp_used_somewhere(var_name)) {
+                continue;  // 未使用テンポラリ宣言を除去
+            }
+        }
         emitLine(reg);
+        emitted_any_reg = true;
     }
 
-    if (!mod.wire_declarations.empty() || !mod.reg_declarations.empty()) {
+    if (!mod.wire_declarations.empty() || emitted_any_reg) {
         append_line("");
     }
 
@@ -750,7 +695,19 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
         } else if (proj.kind == mir::ProjectionKind::Index) {
             // 配列インデックス: index_localの変数名で添字アクセス
             if (proj.index_local < func.locals.size()) {
-                std::string idx_name = func.locals[proj.index_local].name;
+                std::string idx_name;
+                // 添字が単一定義テンポラリなら式ツリーをスプライスする（Phase 2）。
+                // 文字列スライスの算術式に埋め込まれる場合があるため、
+                // 原子でない式は括弧で囲む
+                auto idx_tree = temp_trees_.find(proj.index_local);
+                if (idx_tree != temp_trees_.end()) {
+                    idx_name = idx_tree->second->to_string();
+                    if (idx_tree->second->kind() != SVExpr::Kind::Atom) {
+                        idx_name = "(" + idx_name + ")";
+                    }
+                } else {
+                    idx_name = func.locals[proj.index_local].name;
+                }
                 // self. プレフィックスを除去
                 if (idx_name.find("self.") == 0)
                     idx_name = idx_name.substr(5);
@@ -806,7 +763,22 @@ std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
         case mir::MirOperand::Copy: {
             // data は variant<MirPlace, MirConstant, string>
             const auto& place = std::get<mir::MirPlace>(operand.data);
-            std::string result = emitPlace(place, func);
+            std::string result;
+            // 単一定義テンポラリは式ツリーをスプライスする（Phase 2）。
+            // 本関数の呼び出し元は if条件・配列添字・呼び出し引数などの
+            // 自己区切りコンテキスト、または括弧を自前で管理するツリー経路のため、
+            // 括弧なしの式文字列で安全
+            bool spliced = false;
+            if (place.projections.empty()) {
+                auto it = temp_trees_.find(place.local);
+                if (it != temp_trees_.end()) {
+                    result = it->second->to_string();
+                    spliced = true;
+                }
+            }
+            if (!spliced) {
+                result = emitPlace(place, func);
+            }
             // target_width が指定されており、変数のビット幅が狭い場合はキャストを挿入
             // (int(32bit) + ushort(16bit) の混合演算での WIDTHEXPAND 警告防止)
             if (target_width > 0 && operand.type) {
@@ -885,6 +857,14 @@ SVExprPtr SVCodeGen::buildOperandTree(const mir::MirOperand& op, const mir::MirF
             if (place->projections.empty()) {
                 auto it = temp_trees_.find(place->local);
                 if (it != temp_trees_.end()) {
+                    // 幅拡張キャストが必要な場合はキャスト構文で原子化する
+                    if (target_width > 0 && op.type) {
+                        int var_width = getBitWidth(op.type);
+                        if (var_width > 0 && var_width < target_width) {
+                            return SVExpr::atom(std::to_string(target_width) + "'(" +
+                                                it->second->to_string() + ")");
+                        }
+                    }
                     return it->second;
                 }
             }
@@ -906,160 +886,11 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             return "0";
         }
 
-        case mir::MirRvalue::BinaryOp: {
-            const auto& bin = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
-            // 相手オペランドの型からターゲットビット幅を推論
-            // 定数側は相手の変数型に合わせたビット幅で出力
-            int lhs_tw = 0, rhs_tw = 0;
-            if (bin.lhs && bin.rhs) {
-                if (bin.lhs->kind == mir::MirOperand::Constant &&
-                    bin.rhs->kind != mir::MirOperand::Constant && bin.rhs->type) {
-                    lhs_tw = getBitWidth(bin.rhs->type);
-                }
-                if (bin.rhs->kind == mir::MirOperand::Constant &&
-                    bin.lhs->kind != mir::MirOperand::Constant && bin.lhs->type) {
-                    rhs_tw = getBitWidth(bin.lhs->type);
-                }
-            }
-            // target_width が設定されている場合（代入先の幅が分かっている場合）、
-            // 変数オペランドにのみ伝播させてキャストが挿入されるようにする
-            // 定数リテラルには伝播しない（相手オペランドの型幅を優先するため）
-            if (target_width > 0) {
-                if (lhs_tw == 0 && bin.lhs && bin.lhs->kind != mir::MirOperand::Constant)
-                    lhs_tw = target_width;
-                if (rhs_tw == 0 && bin.rhs && bin.rhs->kind != mir::MirOperand::Constant)
-                    rhs_tw = target_width;
-            }
-            std::string lhs = bin.lhs ? emitOperand(*bin.lhs, func, lhs_tw) : "0";
-            std::string rhs = bin.rhs ? emitOperand(*bin.rhs, func, rhs_tw) : "0";
-
-            // 混合ビット幅の検出と幅拡張キャスト挿入
-            // int(32bit) と ushort(16bit) の混合演算で Verilator WIDTHEXPAND 警告を防止
-            int lhs_w = 0, rhs_w = 0;
-            if (bin.lhs && bin.lhs->type)
-                lhs_w = getBitWidth(bin.lhs->type);
-            if (bin.rhs && bin.rhs->type)
-                rhs_w = getBitWidth(bin.rhs->type);
-            if (lhs_w > 0 && rhs_w > 0 && lhs_w != rhs_w) {
-                int wider = std::max(lhs_w, rhs_w);
-                if (lhs_w < rhs_w && bin.lhs->kind != mir::MirOperand::Constant) {
-                    lhs = std::to_string(wider) + "'(" + lhs + ")";
-                } else if (rhs_w < lhs_w && bin.rhs->kind != mir::MirOperand::Constant) {
-                    rhs = std::to_string(wider) + "'(" + rhs + ")";
-                }
-            }
-
-            std::string op;
-            switch (bin.op) {
-                case mir::MirBinaryOp::Add:
-                    op = " + ";
-                    break;
-                case mir::MirBinaryOp::Sub:
-                    op = " - ";
-                    break;
-                case mir::MirBinaryOp::Mul:
-                    op = " * ";
-                    break;
-                case mir::MirBinaryOp::Div:
-                    op = " / ";
-                    break;
-                case mir::MirBinaryOp::Mod:
-                    op = " % ";
-                    break;
-                case mir::MirBinaryOp::BitAnd:
-                    op = " & ";
-                    break;
-                case mir::MirBinaryOp::BitOr:
-                    op = " | ";
-                    break;
-                case mir::MirBinaryOp::BitXor:
-                    op = " ^ ";
-                    break;
-                case mir::MirBinaryOp::Shl:
-                    op = " << ";
-                    break;
-                case mir::MirBinaryOp::Shr:
-                    // Cmの>>は符号付き型では算術シフト（LLVMバックエンドのAShrと同一意味論）。
-                    // SVの>>は常に論理シフトのため、符号付きオペランドには>>>を出力する
-                    op = (bin.lhs && is_signed_type(resolve_operand_type(*bin.lhs, func))) ? " >>> "
-                                                                                           : " >> ";
-                    break;
-                case mir::MirBinaryOp::Eq:
-                    op = " == ";
-                    break;
-                case mir::MirBinaryOp::Ne:
-                    op = " != ";
-                    break;
-                case mir::MirBinaryOp::Lt:
-                    op = " < ";
-                    break;
-                case mir::MirBinaryOp::Le:
-                    op = " <= ";
-                    break;
-                case mir::MirBinaryOp::Gt:
-                    op = " > ";
-                    break;
-                case mir::MirBinaryOp::Ge:
-                    op = " >= ";
-                    break;
-                case mir::MirBinaryOp::And:
-                    op = " && ";
-                    break;
-                case mir::MirBinaryOp::Or:
-                    op = " || ";
-                    break;
-                default:
-                    op = " /* unknown op */ ";
-                    break;
-            }
-            // 二項演算は、インライン展開時に優先順位と結合法則を考慮して必要に応じて括弧を付与するため、
-            // ここでは括弧で囲まずにそのまま出力する
-            return lhs + op + rhs;
-        }
-
-        case mir::MirRvalue::UnaryOp: {
-            const auto& unary = std::get<mir::MirRvalue::UnaryOpData>(rvalue.data);
-            std::string operand_str = unary.operand ? emitOperand(*unary.operand, func) : "0";
-            switch (unary.op) {
-                case mir::MirUnaryOp::Neg:
-                    return "-" + operand_str;
-                case mir::MirUnaryOp::Not:
-                    return "~" + operand_str;
-                case mir::MirUnaryOp::BitNot:
-                    return "~" + operand_str;
-                default:
-                    return operand_str;
-            }
-        }
-
-        case mir::MirRvalue::Cast: {
-            const auto& cast = std::get<mir::MirRvalue::CastData>(rvalue.data);
-            if (!cast.operand) {
-                return "0";
-            }
-            std::string operand_str = emitOperand(*cast.operand, func);
-            // 整数型への幅変更キャストはSVのサイズキャストとして明示的に出力する。
-            // 出力しないと式の途中の縮小キャスト（例: (a + 300) as utiny）の
-            // 切り捨てが失われ、計算結果そのものが変わってしまう
-            int target_w = is_integer_type(cast.target_type) ? getBitWidth(cast.target_type) : 0;
-            if (target_w > 0) {
-                hir::TypePtr source_type = resolve_operand_type(*cast.operand, func);
-                int source_w = is_integer_type(source_type) ? getBitWidth(source_type) : 0;
-                std::string result = operand_str;
-                // 幅が異なる（または不明な）場合はサイズキャストを出力
-                if (source_w != target_w) {
-                    result = std::to_string(target_w) + "'(" + result + ")";
-                }
-                // 符号性が変わる場合は$signed/$unsignedで明示する
-                if (source_type &&
-                    is_signed_type(source_type) != is_signed_type(cast.target_type)) {
-                    result = (is_signed_type(cast.target_type) ? "$signed(" : "$unsigned(") +
-                             result + ")";
-                }
-                return result;
-            }
-            return operand_str;
-        }
+        case mir::MirRvalue::BinaryOp:
+        case mir::MirRvalue::UnaryOp:
+        case mir::MirRvalue::Cast:
+            // 式ツリー経由で生成する（優先順位括弧はプリンタが構造から決定）
+            return buildRvalueTree(rvalue, func, target_width)->to_string();
 
         default:
             return "/* unsupported rvalue */";
@@ -1188,8 +1019,41 @@ SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::Mi
             }
         }
 
+        case mir::MirRvalue::Cast: {
+            const auto& cast = std::get<mir::MirRvalue::CastData>(rvalue.data);
+            if (!cast.operand) {
+                return SVExpr::atom("0");
+            }
+            SVExprPtr operand_tree = buildOperandTree(*cast.operand, func);
+            // 整数型への幅変更キャストはSVのサイズキャストとして明示的に出力する。
+            // 出力しないと式の途中の縮小キャスト（例: (a + 300) as utiny）の
+            // 切り捨てが失われ、計算結果そのものが変わってしまう
+            int cast_w = is_integer_type(cast.target_type) ? getBitWidth(cast.target_type) : 0;
+            if (cast_w > 0) {
+                hir::TypePtr source_type = resolve_operand_type(*cast.operand, func);
+                int source_w = is_integer_type(source_type) ? getBitWidth(source_type) : 0;
+                bool need_size_cast = (source_w != cast_w);
+                bool need_sign_cast =
+                    source_type && is_signed_type(source_type) != is_signed_type(cast.target_type);
+                if (need_size_cast || need_sign_cast) {
+                    // キャスト構文は自己完結のため原子として扱う
+                    std::string result = operand_tree->to_string();
+                    if (need_size_cast) {
+                        result = std::to_string(cast_w) + "'(" + result + ")";
+                    }
+                    if (need_sign_cast) {
+                        result = (is_signed_type(cast.target_type) ? "$signed(" : "$unsigned(") +
+                                 result + ")";
+                    }
+                    return SVExpr::atom(result);
+                }
+            }
+            // ラッパー不要ならツリーをそのまま返す（構造・括弧情報を保持）
+            return operand_tree;
+        }
+
         default:
-            // Use/Cast等は既存のテキスト生成に委譲する。
+            // Use等は既存のテキスト生成に委譲する。
             // Useオペランドがツリー化済みテンポラリの場合はスプライスする
             if (rvalue.kind == mir::MirRvalue::Use) {
                 const auto& use_data = std::get<mir::MirRvalue::UseData>(rvalue.data);
@@ -1395,12 +1259,13 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
             // 優先順位括弧はプリンタが構造から決定する）
             SVExprPtr rhs_tree =
                 assign.rvalue ? buildRvalueTree(*assign.rvalue, func, target_w) : SVExpr::atom("0");
-            // 単一定義テンポラリへの代入はツリーを記録し、
-            // 以後の使用箇所でスプライスできるようにする
-            // （行自体も出力し、未使用箇所の置換は従来のテキストパスに委ねる）
+            // 単一定義テンポラリへの代入はツリーを記録し、以後の使用箇所で
+            // 構造的にスプライスする。行自体は出力しない（Phase 2:
+            // 従来のテキストベースのインライン展開パスを置き換える）
             if (assign.place.projections.empty() &&
                 single_def_temps_.count(assign.place.local) > 0) {
                 temp_trees_[assign.place.local] = rhs_tree;
+                return "";
             }
             std::string rhs = rhs_tree->to_string();
             // always_ff、async
@@ -1586,131 +1451,33 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                     pos += flat_func_name.size();
                 }
 
-                // テンポラリ変数のインライン展開（always ブロックと同じロジック）
-                std::istringstream raw_stream(raw_body);
-                std::string line;
-                std::vector<std::string> lines;
-                while (std::getline(raw_stream, line)) {
-                    lines.push_back(line);
-                }
+                // 式ツリー化（Phase 2）により単一定義テンポラリは
+                // 出力時に構造的へインライン展開済み。
+                // テキストベースの再展開パスは不要になった
+                body_content = raw_body;
 
-                // Pass 1: テンポラリ変数の値を収集
-                std::map<std::string, std::string> fn_temp_values;
-                std::map<std::string, int> fn_temp_counts;
-                for (const auto& l : lines) {
-                    std::string tr = l;
-                    size_t start = tr.find_first_not_of(' ');
-                    if (start == std::string::npos)
-                        continue;
-                    tr = tr.substr(start);
-                    if (tr.size() > 2 && tr[0] == '_' && tr[1] == 't' && std::isdigit(tr[2])) {
-                        auto eq_pos = tr.find(" = ");
-                        if (eq_pos != std::string::npos) {
-                            std::string var_name = tr.substr(0, eq_pos);
-                            std::string value = tr.substr(eq_pos + 3);
-                            if (!value.empty() && value.back() == ';')
-                                value.pop_back();
-                            fn_temp_values[var_name] = value;
-                            fn_temp_counts[var_name]++;
+                // 本体で使用されなくなったテンポラリ宣言を除去
+                auto is_word_used = [&](const std::string& name) {
+                    size_t p = 0;
+                    while ((p = body_content.find(name, p)) != std::string::npos) {
+                        bool at_start = (p == 0 || (!std::isalnum(body_content[p - 1]) &&
+                                                    body_content[p - 1] != '_'));
+                        size_t after = p + name.size();
+                        bool at_end =
+                            (after >= body_content.size() ||
+                             (!std::isalnum(body_content[after]) && body_content[after] != '_'));
+                        if (at_start && at_end) {
+                            return true;
                         }
+                        p += name.size();
                     }
-                }
-                for (auto it = fn_temp_values.begin(); it != fn_temp_values.end();) {
-                    if (fn_temp_counts[it->first] > 1) {
-                        it = fn_temp_values.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-
-                // テンポラリ変数を再帰的に展開するラムダ
-                auto fn_inline_temps = [&fn_temp_values](const std::string& expr) -> std::string {
-                    std::string result = expr;
-                    for (int iter = 0; iter < 10; ++iter) {
-                        bool changed = false;
-                        for (const auto& [var, val] : fn_temp_values) {
-                            size_t p = 0;
-                            while ((p = result.find(var, p)) != std::string::npos) {
-                                bool at_start = (p == 0 || (!std::isalnum(result[p - 1]) &&
-                                                            result[p - 1] != '_'));
-                                bool at_end = (p + var.size() >= result.size() ||
-                                               (!std::isalnum(result[p + var.size()]) &&
-                                                result[p + var.size()] != '_'));
-                                if (at_start && at_end) {
-                                    std::string replacement = val;
-                                    if (val.find(' ') != std::string::npos) {
-                                        bool is_full_rhs =
-                                            (p == 0 && p + var.size() == result.size());
-                                        if (!is_full_rhs && !is_fully_parenthesized(val)) {
-                                            std::string parent_op =
-                                                get_parent_operator(result, p, var.size());
-                                            std::string child_op = get_outermost_operator(val);
-                                            bool skip_paren = false;
-                                            if (!parent_op.empty() && parent_op == child_op &&
-                                                is_associative_op(parent_op)) {
-                                                skip_paren = true;
-                                            }
-                                            if (!skip_paren) {
-                                                replacement = "(" + val + ")";
-                                            }
-                                        }
-                                    }
-                                    result.replace(p, var.size(), replacement);
-                                    changed = true;
-                                    p += replacement.size();
-                                } else {
-                                    p += var.size();
-                                }
-                            }
-                        }
-                        if (!changed)
-                            break;
-                    }
-                    return result;
+                    return false;
                 };
-
-                // Pass 2: テンポラリ代入行をスキップし、残りの文をインライン展開
-                std::ostringstream expanded_ss;
-                for (const auto& l : lines) {
-                    std::string tr = l;
-                    size_t start = tr.find_first_not_of(' ');
-                    if (start == std::string::npos) {
-                        expanded_ss << l << "\n";
-                        continue;
-                    }
-                    std::string content = tr.substr(start);
-                    // テンポラリ代入行はスキップ
-                    if (content.size() > 2 && content[0] == '_' && content[1] == 't' &&
-                        std::isdigit(content[2]) && content.find(" = ") != std::string::npos) {
-                        std::string var_name = content.substr(0, content.find(" = "));
-                        if (fn_temp_values.count(var_name)) {
-                            continue;
-                        }
-                    }
-                    // 代入文のインライン展開
-                    std::string line_indent = l.substr(0, start);
-                    auto eq_pos = content.find(" = ");
-                    if (eq_pos != std::string::npos) {
-                        std::string lhs = content.substr(0, eq_pos);
-                        std::string rhs = content.substr(eq_pos + 3);
-                        if (!rhs.empty() && rhs.back() == ';')
-                            rhs.pop_back();
-                        rhs = fn_inline_temps(rhs);
-                        expanded_ss << line_indent << lhs << " = " << rhs << ";\n";
-                    } else {
-                        // if/else等の制御文でもテンポラリをインライン展開
-                        // （代入文と同じ優先順位対応の括弧付与を行う）
-                        expanded_ss << fn_inline_temps(l) << "\n";
-                    }
-                }
-                body_content = expanded_ss.str();
-
-                // テンポラリ変数のローカル宣言をスキップ
                 auto decl_it = local_decls.begin();
                 while (decl_it != local_decls.end()) {
                     auto& local = func.locals[decl_it->first];
                     if (local.name.size() > 2 && local.name[0] == '_' && local.name[1] == 't' &&
-                        std::isdigit(local.name[2]) && fn_temp_values.count(local.name)) {
+                        std::isdigit(local.name[2]) && !is_word_used(local.name)) {
                         decl_it = local_decls.erase(decl_it);
                     } else {
                         ++decl_it;
@@ -1935,8 +1702,6 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     increaseIndent();
 
     // CFG再帰走査でブロックを構造化出力
-    // まず一時変数のマッピングを構築（インライン展開用）
-    std::map<std::string, std::string> temp_values;
     std::ostringstream raw_ss;
     if (!func.basic_blocks.empty() && func.basic_blocks[0]) {
         // ループヘッダ情報とテンポラリ情報を関数ごとに1回だけ計算する
@@ -1946,211 +1711,17 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         emitBlockRecursive(func, 0, visited, raw_ss);
     }
 
-    // 一時変数のインライン展開処理
-    // _tXXXX = expr; の形式を検出し、後続の使用箇所で直接式に置換
-    std::istringstream raw_stream(raw_ss.str());
-    std::string line;
-    std::vector<std::string> lines;
-    while (std::getline(raw_stream, line)) {
-        lines.push_back(line);
-    }
-
-    // Pass 1: 一時変数の値を収集
-    std::map<std::string, int> temp_counts;
-    for (const auto& l : lines) {
-        // インデントを除去して解析
-        std::string trimmed = l;
-        size_t start = trimmed.find_first_not_of(' ');
-        if (start == std::string::npos)
-            continue;
-        trimmed = trimmed.substr(start);
-
-        // "_tXXXX = expr;" または "_tXXXX <= expr;" パターンを検出
-        if (trimmed.size() > 2 && trimmed[0] == '_' && trimmed[1] == 't' &&
-            std::isdigit(trimmed[2])) {
-            // ブロッキング代入 (=) を検出
-            auto eq_pos = trimmed.find(" = ");
-            // ノンブロッキング代入 (<=) を検出
-            auto nbeq_pos = trimmed.find(" <= ");
-            if (eq_pos != std::string::npos) {
-                std::string var_name = trimmed.substr(0, eq_pos);
-                std::string value = trimmed.substr(eq_pos + 3);
-                if (!value.empty() && value.back() == ';') {
-                    value.pop_back();
-                }
-                temp_values[var_name] = value;
-                temp_counts[var_name]++;
-            } else if (nbeq_pos != std::string::npos) {
-                std::string var_name = trimmed.substr(0, nbeq_pos);
-                std::string value = trimmed.substr(nbeq_pos + 4);
-                if (!value.empty() && value.back() == ';') {
-                    value.pop_back();
-                }
-                temp_values[var_name] = value;
-                temp_counts[var_name]++;
-            }
-        }
-    }
-    for (auto it = temp_values.begin(); it != temp_values.end();) {
-        if (temp_counts[it->first] > 1) {
-            it = temp_values.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    // 一時変数を再帰的に展開する関数
-    auto inline_temps = [&temp_values](const std::string& expr) -> std::string {
-        std::string result = expr;
-        // 最大10回の反復で再帰的に展開
-        for (int iter = 0; iter < 10; ++iter) {
-            bool changed = false;
-            for (const auto& [var, val] : temp_values) {
-                size_t pos = 0;
-                while ((pos = result.find(var, pos)) != std::string::npos) {
-                    // 変数名の境界チェック
-                    bool at_start =
-                        (pos == 0 || (!std::isalnum(result[pos - 1]) && result[pos - 1] != '_'));
-                    bool at_end = (pos + var.size() >= result.size() ||
-                                   (!std::isalnum(result[pos + var.size()]) &&
-                                    result[pos + var.size()] != '_'));
-                    if (at_start && at_end) {
-                        // 値に演算子が含まれる場合は括弧で囲む
-                        std::string replacement = val;
-                        if (val.find(' ') != std::string::npos &&
-                            (pos > 0 || pos + var.size() < result.size())) {
-                            // 単純代入の右辺値でなければ括弧付き
-                            // ただし代入文の右辺全体なら括弧不要
-                            bool is_full_rhs = (pos == 0 && pos + var.size() == result.size());
-                            if (!is_full_rhs && !is_fully_parenthesized(val)) {
-                                std::string parent_op =
-                                    get_parent_operator(result, pos, var.size());
-                                std::string child_op = get_outermost_operator(val);
-                                bool skip_paren = false;
-                                if (!parent_op.empty() && parent_op == child_op &&
-                                    is_associative_op(parent_op)) {
-                                    skip_paren = true;
-                                }
-                                if (!skip_paren) {
-                                    replacement = "(" + val + ")";
-                                }
-                            }
-                        }
-                        result.replace(pos, var.size(), replacement);
-                        changed = true;
-                        pos += replacement.size();
-                    } else {
-                        pos += var.size();
-                    }
-                }
-            }
-            if (!changed)
-                break;
-        }
-        return result;
-    };
-
-    // Pass 2: 一時変数代入を除外し、残りの文の一時変数をインライン展開
-    for (const auto& l : lines) {
-        std::string trimmed = l;
-        size_t start = trimmed.find_first_not_of(' ');
-        if (start == std::string::npos) {
-            block_ss << l << "\n";
-            continue;
-        }
-        std::string content = trimmed.substr(start);
-
-        // 一時変数への代入行はスキップ（= と <= の両方対応）
-        if (content.size() > 2 && content[0] == '_' && content[1] == 't' &&
-            std::isdigit(content[2]) &&
-            (content.find(" = ") != std::string::npos ||
-             content.find(" <= ") != std::string::npos)) {
-            std::string var_name;
-            auto eq_pos = content.find(" = ");
-            auto nbeq_pos = content.find(" <= ");
-            if (eq_pos != std::string::npos) {
-                var_name = content.substr(0, eq_pos);
-            } else {
-                var_name = content.substr(0, nbeq_pos);
-            }
-            if (temp_values.count(var_name)) {
-                continue;
-            }
-        }
-
-        // 非一時変数の代入文をインライン展開
-        // 元の行のインデントを保持
-        std::string line_indent = l.substr(0, start);
-        auto eq_pos = content.find(" = ");
-        if (eq_pos != std::string::npos) {
-            std::string lhs = content.substr(0, eq_pos);
-            std::string rhs = content.substr(eq_pos + 3);
-            // 末尾セミコロン除去
-            if (!rhs.empty() && rhs.back() == ';') {
-                rhs.pop_back();
-            }
-            // 左辺にも配列インデックス内のテンポラリ変数がある場合に展開
-            lhs = inline_temps(lhs);
-            rhs = inline_temps(rhs);
-            block_ss << line_indent << lhs << " = " << rhs << ";\n";
-        } else if (content.find(" <= ") != std::string::npos) {
-            // ノンブロッキング代入のインライン展開
-            auto nbeq_pos = content.find(" <= ");
-            std::string lhs = content.substr(0, nbeq_pos);
-            std::string rhs = content.substr(nbeq_pos + 4);
-            if (!rhs.empty() && rhs.back() == ';') {
-                rhs.pop_back();
-            }
-            // 左辺にも配列インデックス内のテンポラリ変数がある場合に展開
-            lhs = inline_temps(lhs);
-            rhs = inline_temps(rhs);
-            block_ss << line_indent << lhs << " <= " << rhs << ";\n";
-        } else {
-            // if/else等の構造制御文でも一時変数をインライン展開
-            // 代入文と同じ括弧付与ロジックを通し、展開後に演算子優先順位で
-            // 意味が変わらないようにする（例: if ((a & 256) == 0)）
-            block_ss << inline_temps(l) << "\n";
-        }
-    }
+    // 式ツリー化（Phase 2）により単一定義テンポラリは出力時に
+    // 構造的へインライン展開済み。テキストベースのインライン展開パス
+    // （Pass1/Pass2）は不要になった
+    block_ss << raw_ss.str();
 
     decreaseIndent();
     block_ss << indent() << "end\n";
 
-    // インライン展開後に使われなくなった一時変数宣言を除去
+    // 未使用テンポラリ宣言の除去はモジュール出力時に全ブロックを対象に行う
+    // （テンポラリ名は関数間で衝突するため、関数単位の除去は誤削除の危険がある）
     std::string block_content = block_ss.str();
-    auto it = mod.reg_declarations.begin();
-    while (it != mod.reg_declarations.end()) {
-        // _tXXXX パターンの変数名を抽出
-        auto space_pos = it->rfind(' ');
-        auto semi_pos = it->rfind(';');
-        if (space_pos != std::string::npos && semi_pos != std::string::npos) {
-            std::string var_name = it->substr(space_pos + 1, semi_pos - space_pos - 1);
-            if (var_name.size() > 2 && var_name[0] == '_' && var_name[1] == 't' &&
-                std::isdigit(var_name[2])) {
-                // alwaysブロック内で実際に使われているか確認
-                bool used = false;
-                size_t pos = 0;
-                while ((pos = block_content.find(var_name, pos)) != std::string::npos) {
-                    // 変数名の境界チェック
-                    bool at_start = (pos == 0 || (!std::isalnum(block_content[pos - 1]) &&
-                                                  block_content[pos - 1] != '_'));
-                    bool at_end = (pos + var_name.size() >= block_content.size() ||
-                                   (!std::isalnum(block_content[pos + var_name.size()]) &&
-                                    block_content[pos + var_name.size()] != '_'));
-                    if (at_start && at_end) {
-                        used = true;
-                        break;
-                    }
-                    pos += var_name.size();
-                }
-                if (!used) {
-                    it = mod.reg_declarations.erase(it);
-                    continue;
-                }
-            }
-        }
-        ++it;
-    }
 
     // 三項演算子最適化: if/elseが同一変数への単一代入のみなら cond ? a : b に変換
     {
@@ -2826,6 +2397,14 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     if (const_it != const_map.end()) {
                         return emitConstant(const_it->second.first, const_it->second.second);
                     }
+                    // ツリー化済みテンポラリはスプライスする（Phase 2:
+                    // 定義行が出力されないため、名前参照のままだと未定義になる）
+                    if (place.projections.empty()) {
+                        auto tree_it = temp_trees_.find(place.local);
+                        if (tree_it != temp_trees_.end()) {
+                            return tree_it->second->to_string();
+                        }
+                    }
                     return emitPlace(place, func);
                 } else if (op.kind == mir::MirOperand::Constant) {
                     return emitConstant(std::get<mir::MirConstant>(op.data), op.type);
@@ -3088,22 +2667,13 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     }
                 }
 
-                // 引数リスト構築
+                // 引数リスト構築（emitOperandがツリー化済みテンポラリをスプライスする）
                 std::string args_str;
                 for (size_t i = 0; i < cd.args.size(); ++i) {
                     if (i > 0)
                         args_str += ", ";
                     if (cd.args[i]) {
-                        if (cd.args[i]->kind == mir::MirOperand::Move ||
-                            cd.args[i]->kind == mir::MirOperand::Copy) {
-                            const auto& place = std::get<mir::MirPlace>(cd.args[i]->data);
-                            args_str += emitPlace(place, func);
-                        } else if (cd.args[i]->kind == mir::MirOperand::Constant) {
-                            args_str += emitConstant(std::get<mir::MirConstant>(cd.args[i]->data),
-                                                     cd.args[i]->type);
-                        } else {
-                            args_str += "0";
-                        }
+                        args_str += emitOperand(*cd.args[i], func);
                     }
                 }
 
