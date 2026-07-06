@@ -90,28 +90,22 @@ int main() {
 
 ---
 
-## 関数オーバーロード
+## 関数オーバーロード（未対応）
 
-同じ名前で、異なるパラメータ（型または数）を持つ関数を定義できます。
-`overload` キーワードを付ける必要があります。
+**自由関数のオーバーロードは現在未対応です。** 同じ名前で異なるシグネチャの
+関数を定義するとコンパイルエラーになります:
 
 ```cm
-overload int max(const int a, const int b) {
-    return a > b ? a : b;
-}
-
-overload double max(const double a, const double b) {
-    return a > b ? a : b;
-}
-
-int main() {
-    const int maxInt = max(10, 20);
-    const double maxDouble = max(3.14, 2.71);
-    println("max int: {}", maxInt);
-    println("max double: {}", maxDouble);
-    return 0;
-}
+int process(int x) { return x; }
+double process(double x) { return x; }
+// エラー: 関数 'process' は既に異なるシグネチャで定義されています
 ```
+
+型ごとに別名を使用してください（例: `max_int` / `max_double`）。
+
+なお、**コンストラクタのオーバーロード**は `overload self(...)` 構文で
+対応しています（[構造体](../types/structs.html)参照）。
+自由関数のオーバーロードは将来のバージョンで検討されます。
 
 ---
 

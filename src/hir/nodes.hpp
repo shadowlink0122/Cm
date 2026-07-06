@@ -355,6 +355,9 @@ struct HirStmt {
 struct HirParam {
     std::string name;
     TypePtr type;
+    // デフォルト引数の式（nullなら必須引数）。
+    // 呼び出し側で引数が省略された場合にMIR loweringが補完に使用する
+    std::shared_ptr<HirExpr> default_value;
 };
 
 // ジェネリック型パラメータ

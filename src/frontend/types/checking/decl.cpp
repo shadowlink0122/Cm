@@ -177,6 +177,35 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         scopes_.global().define_function(func->name, std::move(param_types), func->return_type,
                                          required_params);
 
+        // 本体を持つ同名関数の重複定義を検出する。
+        // 自由関数のオーバーロードは未対応であり、従来は診断なしで
+        // LLVMの検証エラー（不正なコード生成）まで到達していた。
+        // モジュールのフラット化により同一定義が複数回現れることがあるため、
+        // シグネチャ（引数型・戻り値型・本体文数）が完全一致する重複は許容し、
+        // 異なるシグネチャの同名定義のみをエラーとする
+        if (!func->body.empty() && !func->is_extern && func->generic_params.empty()) {
+            auto type_sig = [](const ast::TypePtr& t) -> std::string {
+                if (!t) {
+                    return "?";
+                }
+                return std::to_string(static_cast<int>(t->kind)) + t->name;
+            };
+            std::string sig = type_sig(func->return_type) + "(";
+            for (const auto& p : func->params) {
+                sig += type_sig(p.type) + ",";
+            }
+            sig += ")#" + std::to_string(func->body.size());
+
+            auto [it, inserted] = defined_function_sigs_.emplace(func->name, sig);
+            if (!inserted && it->second != sig) {
+                Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
+                error(name_pos, "関数 '" + func->name +
+                                    "' は既に異なるシグネチャで定義されています"
+                                    "（自由関数のオーバーロードは未対応です。"
+                                    "別名を使用してください）");
+            }
+        }
+
         // L100: 関数名はsnake_caseであるべき
         // main関数とネームスペース付き関数は除外
         if (enable_lint_warnings_ && func->name != "main" &&

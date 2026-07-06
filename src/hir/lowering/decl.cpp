@@ -102,7 +102,14 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     debug::hir::log(debug::hir::Id::FunctionParams, "count=" + std::to_string(func.params.size()),
                     debug::Level::Trace);
     for (const auto& param : func.params) {
-        hir_func->params.push_back({param.name, param.type});
+        HirParam hp;
+        hp.name = param.name;
+        hp.type = param.type;
+        // デフォルト引数式を保持（呼び出し省略時のMIR側補完に使用）
+        if (param.default_value) {
+            hp.default_value = lower_expr(*param.default_value);
+        }
+        hir_func->params.push_back(std::move(hp));
         debug::hir::dump_symbol(param.name, func.name,
                                 param.type ? type_to_string(*param.type) : "auto");
     }

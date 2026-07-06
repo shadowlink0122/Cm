@@ -98,59 +98,69 @@ where句は、関数シグネチャの後でインターフェース境界を指
 
 **注意**: 境界はインターフェースを指定します。具体的な型（int, stringなど）を直接境界として使用することはできません。
 
-## 3. オーバーロード修飾子
+## 3. オーバーロード（2026-07-06 実装準拠改訂）
 
-**正式規則：明示的な`overload`キーワード必須**
+### 3.0 自由関数のオーバーロード: 未対応
+
+**自由関数のオーバーロードは実装されていない。** 同名で異なるシグネチャの
+自由関数を定義するとコンパイルエラーになる（v0.15.1で診断を追加。
+それ以前は診断なしで不正なコード生成に至っていた）:
 
 ```cm
-// 正しい：全ての宣言にoverloadが必要
-overload int add(int a, int b) { return a + b; }
-overload double add(double a, double b) { return a + b; }
-overload string add(string a, string b) { return a + b; }
-
-// 間違い：overloadなしで同名関数
-int process(int x) { }
-double process(double x) { }  // ❌ エラー
+int process(int x) { return x; }
+double process(double x) { return x; }
+// エラー: 関数 'process' は既に異なるシグネチャで定義されています
 ```
 
-### 3.1 コンストラクタのオーバーロード
+旧仕様にあった自由関数への `overload` キーワードはパーサが受理しない。
+将来オーバーロードを導入する場合の構文として予約する。
+
+### 3.1 コンストラクタのオーバーロード（実装済み）
+
+コンストラクタのみ `overload` キーワードによる多重定義が可能:
 
 ```cm
-impl<T> Vec<T> {
+struct Resource { int value; }
+
+impl Resource {
     // デフォルトコンストラクタ（overload不要）
     self() {
-        this.data = null;
-        this.size = 0;
+        self.value = 0;
     }
 
     // 追加コンストラクタ（overload必須）
-    overload self(size_t capacity) {
-        this.data = new T[capacity];
-        this.size = 0;
-        this.capacity = capacity;
-    }
-
-    overload self(const Vec<T>& other) {
-        // コピーコンストラクタ
+    overload self(int v) {
+        self.value = v;
     }
 
     // デストラクタ（オーバーロード不可）
     ~self() {
-        delete[] this.data;
+        // 解放処理
     }
 }
 ```
 
-### 3.2 演算子オーバーロード
+メモリ管理は `malloc`/`free`（`use libc`）とスライスを使用する。
+旧仕様の `new T[n]` / `delete[]` 構文は存在しない。
 
-**演算子は暗黙的にoverload可能（キーワード不要）**
+### 3.2 演算子オーバーロード（実装済み・interface経由）
+
+演算子はinterface内で `operator 戻り値型 演算子(引数)` として宣言し、
+`with` または `impl ... for` で実装する:
 
 ```cm
-// 正しい：演算子にoverloadは不要
-Complex operator+(const Complex& a, const Complex& b) { }
-Complex operator+(const Complex& a, double b) { }
-Complex operator+(double a, const Complex& b) { }
+interface Eq<T> {
+    operator bool ==(T other);
+}
+
+struct Point with Eq {
+    int x;
+    int y;
+}
 ```
+
+旧仕様の自由関数形式 `Complex operator+(const Complex& a, ...)` は
+存在しない（`const T&` 参照型も未実装。ポインタ `T*` を使用する）。
 
 ## 4. impl ブロック構文
 
@@ -395,3 +405,5 @@ T max(T a, T b) {  // Tは自動的にジェネリックと認識
 ## 更新履歴
 
 - 2025-12-XX: 初版作成（矛盾解決版）
+- 2026-07-06: 第3節を実装準拠に全面改訂（自由関数オーバーロード未対応の明記、
+  new/delete・const参照・自由関数operator構文の削除、実在構文への差し替え）

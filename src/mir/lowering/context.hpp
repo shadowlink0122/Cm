@@ -67,6 +67,8 @@ class LoweringContext {
 
     // インターフェース名のセット - 親クラスから参照
     const std::unordered_set<std::string>* interface_names = nullptr;
+    // HIR関数定義（デフォルト引数補完用）
+    const std::unordered_map<std::string, const hir::HirFunction*>* hir_func_defs = nullptr;
 
     // Tagged Union名のセット - 親クラスから参照
     const std::unordered_set<std::string>* tagged_union_names = nullptr;

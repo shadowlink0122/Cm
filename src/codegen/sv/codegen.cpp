@@ -1337,7 +1337,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
     // std::debug::assert はイントリンシック（呼び出し箇所で即時アサーションに展開）。
     // 定義本体は出力しない（assertはSVの予約語でもある）
-    if (func.name == "assert")
+    if (func.name == "assert" || func.name == "panic")
         return;
 
     // 非always/非async関数で、非void（戻り値あり）の場合 → SV function automatic

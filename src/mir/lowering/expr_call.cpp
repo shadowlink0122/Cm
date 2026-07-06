@@ -8,7 +8,6 @@
 #include "expr.hpp"
 
 #include <functional>
-#include <regex>
 
 namespace cm::mir {
 
@@ -55,14 +54,6 @@ static bool interp_content_is_expression(const std::string& s) {
         // 括弧外の as キャスト（例: (*pc) as int）は式として扱う
         if (c == ' ' && s.compare(i, 4, " as ") == 0) {
             return true;
-        }
-        // 呼び出し括弧: 単純なメソッド呼び出し（obj.method(...) / a.b.method(...)）は
-        // 専用ハンドラ（特殊化名対応済み）で処理し、それ以外（キャスト併用・
-        // 関数呼び出しを含む複合式等）は本物の式パーサで処理する
-        if (c == '(') {
-            static const std::regex simple_method_call(
-                R"(^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\([^()]*\)$)");
-            return !std::regex_match(s, simple_method_call);
         }
         switch (c) {
             case '+':
@@ -2290,6 +2281,26 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                         lower_interp_call_arg(ctx, arg_str));
                                                 }
 
+                                                // デフォルト引数の補完（{greet(1)} 等、
+                                                // 省略された末尾引数をHIR関数定義から評価）
+                                                if (ctx.hir_func_defs) {
+                                                    auto fit = ctx.hir_func_defs->find(func_name);
+                                                    if (fit != ctx.hir_func_defs->end() &&
+                                                        fit->second) {
+                                                        const auto* hf = fit->second;
+                                                        for (size_t di = func_args.size();
+                                                             di < hf->params.size(); ++di) {
+                                                            if (hf->params[di].default_value) {
+                                                                LocalId dv = lower_expression(
+                                                                    *hf->params[di].default_value,
+                                                                    ctx);
+                                                                call_args.push_back(
+                                                                    MirOperand::copy(MirPlace{dv}));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
                                                 // 関数呼び出しのターミネータを作成
                                                 auto call_term = std::make_unique<MirTerminator>();
                                                 call_term->kind = MirTerminator::Call;
@@ -3074,6 +3085,23 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     } else {
         // 直接呼び出し: 関数参照を使用
         func_operand = MirOperand::function_ref(effective_call_name);
+    }
+
+    // デフォルト引数の補完。
+    // 通常はHIR loweringが適用するが、文字列補間式のミニパイプライン経由の
+    // 呼び出しでは関数定義情報が無く未補完のまま到達するため、
+    // ここでHIR関数定義のデフォルト式を評価して不足分を追加する
+    if (ctx.hir_func_defs && !call.func_name.empty()) {
+        auto fit = ctx.hir_func_defs->find(call.func_name);
+        if (fit != ctx.hir_func_defs->end() && fit->second) {
+            const auto* hf = fit->second;
+            for (size_t di = call.args.size(); di < hf->params.size(); ++di) {
+                if (hf->params[di].default_value) {
+                    LocalId dv = lower_expression(*hf->params[di].default_value, ctx);
+                    args.push_back(MirOperand::copy(MirPlace{dv}));
+                }
+            }
+        }
     }
 
     // キャプチャ引数を通常の引数の前に挿入

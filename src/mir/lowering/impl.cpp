@@ -83,6 +83,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.hir_func_defs = &hir_functions;
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
@@ -190,6 +191,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.typedef_defs = &typedef_defs;
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
+    ctx.hir_func_defs = &hir_functions;
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 

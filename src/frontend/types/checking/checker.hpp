@@ -211,6 +211,8 @@ class TypeChecker {
 
     // ジェネリック関数の登録情報（関数名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_functions_;
+    // 本体を持つ非ジェネリック関数の定義済みシグネチャ（重複定義検出用）
+    std::unordered_map<std::string, std::string> defined_function_sigs_;
 
     // ジェネリック関数の制約情報（関数名 → GenericParamリスト）
     std::unordered_map<std::string, std::vector<ast::GenericParam>> generic_function_constraints_;

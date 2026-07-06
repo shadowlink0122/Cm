@@ -29,7 +29,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [変数と型](basics/variables.html) - プリミティブ型、const/static
    - [演算子](basics/operators.html) - 算術・比較・論理演算
    - [制御構文](basics/control-flow.html) - if/while/for/switch/defer
-   - [関数](basics/functions.html) - 定義・オーバーロード・デフォルト引数
+   - [関数](basics/functions.html) - 定義・デフォルト引数（自由関数のオーバーロードは未対応）
    - [配列](basics/arrays.html) - 宣言・メソッド・for-in
    - [ポインタ](basics/pointers.html) - アドレス・デリファレンス・Array Decay
    - [モジュール](basics/modules.html) - import/export
@@ -144,14 +144,16 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 |---------|------|------|------|-----|---------------|
 | **基本** | プリミティブ型 | ✅ | ✅ | ✅ | ✅ [variables](basics/variables.html) |
 | | 制御構文 | ✅ | ✅ | ✅ | ✅ [control-flow](basics/control-flow.html) |
-| | 関数 | ✅ | ✅ | ✅ | ✅ [functions](basics/functions.html) |
+| | 関数・デフォルト引数 | ✅ | ✅ | ✅ | ✅ [functions](basics/functions.html) |
+| | 関数オーバーロード | ❌ | ❌ | ❌ | 未対応（重複定義はエラー診断） |
 | | モジュール | ✅ | ✅ | ✅ | ✅ [modules](basics/modules.html) |
 | **データ** | 構造体 | ✅ | ✅ | ✅ | ✅ [structs](types/structs.html) |
 | | Enum/Tagged Union | ✅ | ✅ | ✅ | ✅ [enums](types/enums.html) |
 | | 配列 | ✅ | ✅ | ✅ | ✅ [arrays](basics/arrays.html) |
 | | ポインタ | ✅ | ✅ | ❌ | ✅ [pointers](basics/pointers.html) |
 | **型** | ジェネリクス | ✅ | ✅ | ✅ | ✅ [generics](types/generics.html) |
-| | インターフェース | ✅ | ✅ | ✅ | ✅ [interfaces](types/interfaces.html) |
+| | インターフェース（静的） | ✅ | ✅ | ✅ | ✅ [interfaces](types/interfaces.html) |
+| | インターフェース動的ディスパッチ | ✅ | ✅ | ✅(値/引数) | ポインタ経由はLLVM系のみ |
 | | 型制約 | ✅ | ✅ | ✅ | ✅ [constraints](types/constraints.html) |
 | **高度** | match式・ガード | ✅ | ✅ | ✅ | ✅ [match](advanced/match.html) |
 | | with自動実装 | ✅ | ✅ | ✅ | ✅ [with](advanced/with-keyword.html) |

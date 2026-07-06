@@ -70,6 +70,39 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
 
             std::string place = emitPlace(data.place, func);
 
+            // interface値へのcoercion: Shape sh = sq; を {data, vtable} で表現する。
+            // 引数渡し（Castで処理される）と同様に、代入でもfatオブジェクトを構築する
+            if (data.place.projections.empty() && target_local < func.locals.size() &&
+                data.rvalue->kind == mir::MirRvalue::Use) {
+                const auto& destType = func.locals[target_local].type;
+                const bool dest_is_iface =
+                    destType && (destType->kind == TypeKind::Interface ||
+                                 (destType->kind == TypeKind::Struct &&
+                                  interface_names_.count(destType->name) > 0));
+                if (dest_is_iface) {
+                    const auto& useData = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+                    if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                            useData.operand->kind == mir::MirOperand::Move)) {
+                        hir::TypePtr srcType = getOperandType(*useData.operand, func);
+                        if (srcType && srcType->kind == TypeKind::Struct &&
+                            interface_names_.count(srcType->name) == 0) {
+                            std::string src = emitOperand(*useData.operand, func);
+                            std::string vtableName = sanitizeIdentifier(srcType->name) + "_" +
+                                                     sanitizeIdentifier(destType->name) + "_vtable";
+                            std::string fat = "{ data: " + src + ", vtable: " + vtableName + " }";
+                            if (declare_on_assign_.count(target_local) > 0 &&
+                                declared_locals_.count(target_local) == 0) {
+                                emitter_.emitLine("let " + place + " = " + fat + ";");
+                                declared_locals_.insert(target_local);
+                            } else {
+                                emitter_.emitLine(place + " = " + fat + ";");
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             // クロージャ変数への代入かチェック
             if (target_local < func.locals.size() && data.place.projections.empty() &&
                 func.locals[target_local].is_closure && data.rvalue->kind == mir::MirRvalue::Use) {

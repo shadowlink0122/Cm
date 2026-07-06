@@ -2399,6 +2399,19 @@ void MirLowering::generate_auto_operator_impl(const hir::HirStruct& st,
 
 // 通常の関数をlowering
 void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
+    // 事前パス: 全HIR関数を登録する。
+    // 後方の関数を呼ぶ呼び出しでもデフォルト引数補完（lower_call）が
+    // 参照できるようにするため、本体のlowering前にマップを完成させる
+    for (const auto& decl : hir_program.declarations) {
+        if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
+            hir_functions[(*func)->name] = func->get();
+        } else if (auto* eb = std::get_if<std::unique_ptr<hir::HirExternBlock>>(&decl->kind)) {
+            for (const auto& func : (*eb)->functions) {
+                hir_functions[func->name] = func.get();
+            }
+        }
+    }
+
     for (const auto& decl : hir_program.declarations) {
         if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
             if (auto mir_func = lower_function(**func)) {

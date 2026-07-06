@@ -28,3 +28,10 @@ export void assert(bool cond, string msg) {
         exit(1);
     }
 }
+
+/// 回復不能なエラー: メッセージを出力して即座に異常終了する。
+/// 全実行系バックエンド共通の実装（"panic: <msg>" を出力して exit(1)）
+export void panic(string msg) {
+    println("panic: {msg}");
+    exit(1);
+}

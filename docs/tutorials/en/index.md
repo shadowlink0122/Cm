@@ -29,7 +29,7 @@ Estimated Time: 3-4 hours
    - [Variables and Types](basics/variables.html) - Primitive types, const/static
    - [Operators](basics/operators.html) - Arithmetic, comparison, logical operations
    - [Control Flow](basics/control-flow.html) - if/while/for/switch/defer
-   - [Functions](basics/functions.html) - Definition, overloading, default arguments
+   - [Functions](basics/functions.html) - Definition, default arguments (free-function overloading not supported)
    - [Arrays](basics/arrays.html) - Declaration, methods, for-in
    - [Pointers](basics/pointers.html) - Addresses, dereference, Array Decay
    - [Modules](basics/modules.html) - Module system and imports
