@@ -96,9 +96,9 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 #[output] uint[4] data;   // → output logic [31:0] data [0:3]
 ```
 
-> 配列の**初期値**（`$readmemh` 等）は未対応です。フォントROM等は
-> const 関数（lookupテーブル）として記述してください
-> （[実装提案](../../../../design/sv_backend_missing_features.html)参照）。
+> 配列の**初期値**は initial ブロックとして出力され、`#[sv::memfile]` /
+> `--emit-memfile` による `$readmemh` にも対応しています（v0.15.1）。
+> 詳細は[メモリ初期化](memory.html)を参照してください。
 
 ---
 
@@ -121,7 +121,7 @@ utiny ch = TITLE[i] as utiny;
 
 - **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。
   3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください
-  （[実装提案](../../../../design/sv_backend_missing_features.html)で拡張を検討中）。
+  （[v0.16.0ロードマップ](../../../../design/v0.16.0/roadmap.html)で長さの型化を検討中）。
 
 ---
 

@@ -1,5 +1,3 @@
-[English](README.en.html)
-
 # Cm言語ドキュメント
 
 *最終更新: 2026年2月*
@@ -42,7 +40,7 @@ docs/
 
 1. **[QUICKSTART.md](QUICKSTART.html)** - 5分でCm言語を始める
 2. **[design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.html)** - 正式言語仕様
-3. **[features/README.md](features/README.html)** - 機能リファレンス
+3. **[features/README.md](FEATURES.html)** - 機能リファレンス
 
 ## 📖 重要なドキュメント
 
@@ -50,18 +48,15 @@ docs/
 |------------|------|
 | [design/CANONICAL_SPEC.md](design/CANONICAL_SPEC.html) | **正式言語仕様**（最優先） |
 | [QUICKSTART.md](QUICKSTART.html) | クイックスタート |
-| [features/README.md](features/README.html) | 機能リファレンス |
+| [features/README.md](FEATURES.html) | 機能リファレンス |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.html) | プロジェクト構造 |
 | [DEVELOPMENT.md](DEVELOPMENT.html) | 開発環境 |
 
 ## 🔍 トピック別
 
 ### モジュールシステム
-- [design/MODULE_SYSTEM_FINAL.md](design/MODULE_SYSTEM_FINAL.html) - 設計
-- [guides/MODULE_USER_GUIDE.md](guides/MODULE_USER_GUIDE.html) - 使い方
 
 ### LLVMバックエンド
-- [llvm/llvm_backend_implementation.md](llvm/llvm_backend_implementation.html)
 
 ### テスト
 - `make tip` - インタプリタテスト

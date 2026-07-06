@@ -5,7 +5,6 @@ nav_order: 3
 has_children: true
 ---
 
-[English](index.en.html)
 
 # リリースノート
 

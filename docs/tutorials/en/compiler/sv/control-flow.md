@@ -131,7 +131,7 @@ Nested loops are also reconstructed correctly (an inner loop is identified by it
 
 - If the loop count is **statically known**, synthesis tools (Gowin/Vivado, etc.) unroll the loop during synthesis
 - If the loop count depends on inputs, most synthesis tools report an error (simulation still works). For work that does not have to complete within one clock cycle, we recommend writing an FSM that advances one step per clock
-- Loops with an **unconditional header**, such as `while (true)` + `break`, are not yet supported (see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html))
+- Loops with an unconditional header such as `while (true)` + `break` are also reconstructed via named blocks + `disable` (supported since v0.15.1)
 
 ---
 

@@ -96,9 +96,9 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 #[output] uint[4] data;   // → output logic [31:0] data [0:3]
 ```
 
-> Array **initial values** (e.g. `$readmemh`) are not yet supported. Write font ROMs and
-> similar as const functions (lookup tables)
-> (see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
+> Array **initial values** are emitted as initial blocks, and `#[sv::memfile]` /
+> `--emit-memfile` provide `$readmemh` support (since v0.15.1).
+> See [Memory initialization](memory.html).
 
 ---
 
@@ -121,7 +121,7 @@ utiny ch = TITLE[i] as utiny;
 
 - **Non-const string variables, function arguments, and return values are fixed at `logic [23:0]` (3 characters)**.
   Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants
-  (an extension is being considered in the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
+  (typed string lengths are being considered in the [v0.16.0 roadmap](../../../../design/v0.16.0/roadmap.html)).
 
 ---
 

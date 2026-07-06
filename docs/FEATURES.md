@@ -3,8 +3,6 @@ layout: default
 title: Features
 ---
 
-[English](FEATURES.en.html)
-
 # Cm言語 実装済み機能一覧 (v0.14.0)
 
 Cm言語コンパイラおよびランタイムで現在利用可能な機能の一覧です。

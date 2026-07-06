@@ -3,8 +3,6 @@ layout: default
 title: Development
 ---
 
-[English](DEVELOPMENT.en.html)
-
 # 開発環境ガイド
 
 *最終更新: 2026年2月*

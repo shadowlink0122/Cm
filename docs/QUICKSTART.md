@@ -3,8 +3,6 @@ layout: default
 title: Quick Start
 ---
 
-[English](QUICKSTART.en.html)
-
 # Cm言語コンパイラ - クイックスタート
 
 ## 🚀 ビルド方法
@@ -86,7 +84,7 @@ node hello.js
 ./cm fmt -w hello.cm
 ```
 
-> 📖 各ツールの詳細は [Linter](tutorials/ja/compiler/linter.html) / [Formatter](tutorials/ja/compiler/formatter.html) を参照。
+> 📖 各ツールの詳細は [Linter](tutorials/ja/compiler/common/linter.html) / [Formatter](tutorials/ja/compiler/common/formatter.html) を参照。
 
 ## 📊 サンプルプログラム
 
@@ -197,8 +195,8 @@ docker compose run --rm test
 |------------|------|
 | [チュートリアル](tutorials/ja/) | 40+ファイルの段階的な学習ガイド |
 | [環境構築](tutorials/ja/basics/setup.html) | 依存関係・makeコマンド一覧 |
-| [コンパイラの使い方](tutorials/ja/compiler/usage.html) | コマンド・オプション |
-| [JSバックエンド](tutorials/ja/compiler/js-compilation.html) | JavaScript出力ガイド |
+| [コンパイラの使い方](tutorials/ja/compiler/common/usage.html) | コマンド・オプション |
+| [JSバックエンド](tutorials/ja/compiler/js/index.html) | JavaScript出力ガイド |
 | [VSCode拡張機能](../vscode-extension/README.html) | 構文ハイライト・アイコン・開発ガイド |
 | [機能リファレンス](FEATURES.html) | 実装済み機能一覧 |
 | [言語仕様](design/CANONICAL_SPEC.html) | 完全な言語仕様 |
