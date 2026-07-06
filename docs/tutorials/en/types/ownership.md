@@ -167,7 +167,6 @@ int main() {
 ---
 
 **Previous:** [Enums](enums.html)  
-**Next:** [Lifetimes](lifetimes.html)
 
 ---
 

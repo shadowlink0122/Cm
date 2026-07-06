@@ -260,7 +260,6 @@ This optimization provides:
 ---
 
 **Previous:** [Functions](functions.html)  
-**Next:** [Pointers](pointers.html)
 
 ---
 

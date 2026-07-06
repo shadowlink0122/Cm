@@ -49,7 +49,6 @@ int main() {
 ---
 
 **Previous:** [Environment Setup](setup.html)  
-**Next:** [Variables and Types](variables.html)
 
 ---
 

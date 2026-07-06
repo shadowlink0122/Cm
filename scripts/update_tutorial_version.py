@@ -16,6 +16,7 @@
 # 「v0.11.0以降」「（v0.14.0で追加）」やリリースノートへのリンクなど、
 # 機能の導入時期を示す履歴的言及は意図的に対象外とする。
 
+import datetime
 import os
 import re
 import sys
@@ -37,11 +38,25 @@ BADGE_PATTERNS = [
 ]
 
 
+# 最終更新日を更新するルートページ（バージョン更新時に同時スタンプ）
+DATE_STAMP_FILES = [
+    os.path.join("docs", "index.md"),
+    os.path.join("docs", "en", "index.md"),
+    os.path.join("docs", "tutorials", "ja", "index.md"),
+    os.path.join("docs", "tutorials", "en", "index.md"),
+]
+DATE_PATTERNS = [
+    (r"(\*\*最終更新:\*\* )(?:v[\d.]+ \()?[\d-]+\)?", r"\g<1>{V} ({D})"),
+    (r"(\*\*Last Updated:\*\* )(?:v[\d.]+ \()?[\d-]+\)?", r"\g<1>{V} ({D})"),
+]
+
+
 def main() -> int:
     check_only = "--check" in sys.argv
 
     with open(os.path.join(ROOT, "VERSION")) as f:
         version = "v" + f.read().strip()
+    today = datetime.date.today().isoformat()
 
     changed = []
     for root, _dirs, files in os.walk(TUTORIALS):
@@ -59,6 +74,24 @@ def main() -> int:
                 if not check_only:
                     with open(path, "w") as f:
                         f.write(updated)
+
+    # ルートページの最終更新日（--checkでは検査しない: 日付は実行日に依存するため）
+    if not check_only:
+        for rel in DATE_STAMP_FILES:
+            fp = os.path.join(ROOT, rel)
+            if not os.path.exists(fp):
+                continue
+            with open(fp) as f:
+                original = f.read()
+            updated = original
+            for pat, repl in DATE_PATTERNS:
+                updated = re.sub(
+                    pat, repl.replace("{V}", version).replace("{D}", today), updated)
+            if updated != original:
+                with open(fp, "w") as f:
+                    f.write(updated)
+                if rel not in changed:
+                    changed.append(rel)
 
     if check_only:
         if changed:

@@ -174,7 +174,6 @@ gdb ./program_debug
 ---
 
 **Previous:** [String Operations](../../advanced/strings.html)  
-**Next:** [LLVM Backend](../native/index.html)
 
 ---
 

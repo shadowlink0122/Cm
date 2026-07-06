@@ -217,7 +217,6 @@ int main() {
 ---
 
 **Previous:** [Control Flow](control-flow.html)  
-**Next:** [Arrays](arrays.html)
 
 ---
 

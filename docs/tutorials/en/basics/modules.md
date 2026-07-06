@@ -223,7 +223,6 @@ import ./utils::internal_helper;
 ---
 
 **Previous:** [Pointers](pointers.html)  
-**Next:** [Type System](../types/structs.html)
 ---
 
 **Last Updated:** 2026-02-08

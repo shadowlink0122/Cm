@@ -413,7 +413,6 @@ int main() {
 ---
 
 **Previous:** [Variables and Types](variables.html)  
-**Next:** [Control Flow](control-flow.html)
 
 ---
 

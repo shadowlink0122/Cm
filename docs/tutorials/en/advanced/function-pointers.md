@@ -83,7 +83,6 @@ int main() {
 ---
 
 **Previous:** [Operator Overloading](operators.html)  
-**Next:** [String Operations](strings.html)
 
 ---
 

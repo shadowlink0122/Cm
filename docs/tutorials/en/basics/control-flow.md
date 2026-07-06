@@ -633,7 +633,6 @@ int main() {
 ---
 
 **Previous:** [Operators](operators.html)  
-**Next:** [Functions](functions.html)
 
 ---
 

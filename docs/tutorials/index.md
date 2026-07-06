@@ -5,10 +5,11 @@ nav_order: 2
 has_children: true
 ---
 
+<meta http-equiv="refresh" content="0; url=ja/index.html">
+
 # Tutorials
 
-Please select your language:
+[日本語チュートリアルへ移動します](ja/index.html)（自動遷移しない場合はクリックしてください）
 
-- [English](en/)
-- [日本語](ja/)
-
+- [日本語（デフォルト）](ja/index.html)
+- [English](en/index.html)

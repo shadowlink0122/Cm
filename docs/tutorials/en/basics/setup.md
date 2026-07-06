@@ -410,7 +410,6 @@ For cross-compilation or explicit architecture targeting. Usually auto-detection
 ---
 
 **Previous:** [Introduction](introduction.html)  
-**Next:** [Hello, World!](hello-world.html)
 ---
 
 **Last Updated:** 2026-02-10
